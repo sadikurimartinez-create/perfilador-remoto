@@ -398,21 +398,22 @@ export function PhotoAlbum({
         setEditableProfile(markdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
       } catch (err) {
-        console.error(err);
-        const rawMessage =
-          err instanceof Error ? err.message : "Error al generar el perfil criminológico con IA.";
-        const lower = rawMessage.toLowerCase();
-        const isQuotaError =
-          lower.includes("429") ||
-          lower.includes("too many requests") ||
-          lower.includes("quota");
+          console.error("ERROR REAL PERFILADOR:", err);
+        
+          const rawMessage =
+            err instanceof Error ? err.message : "Error al generar el perfil criminológico con IA.";
+          const lower = rawMessage.toLowerCase();
+          const isQuotaError =
+            lower.includes("429") ||
+            lower.includes("too many requests") ||
+            lower.includes("quota");
 
-        setError(
-          isQuotaError
-            ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
-            : "Error de comunicación con el Cuartel General. Reintente."
-        );
-      }
+          setError(
+            isQuotaError
+              ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
+              : "Error de comunicación con el Cuartel General. Reintente."
+          );
+        }
     } finally {
       setIsGeneratingAI(false);
     }
