@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -14,7 +16,7 @@ import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
 import { GEMINI_API_KEY as GEMINI_KEY, GEMINI_MODEL } from "@/lib/geminiEnv";
 import { buildSystemPrompt } from "@/lib/promptBuilder";
 
-export const runtime = "nodejs";
+
 
 type PhotoInput = {
   id: string;
