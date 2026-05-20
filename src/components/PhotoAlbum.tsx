@@ -113,6 +113,7 @@ export function PhotoAlbum({
   const [analysisRadius, setAnalysisRadius] = useState(500);
   const [aiSuggestions, setAiSuggestions] = useState("");
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
+  const [analysisContextExtra, setAnalysisContextExtra] = useState("");
   const [isRefining, setIsRefining] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [profileRiskLevel, setProfileRiskLevel] = useState<
@@ -1006,35 +1007,53 @@ export function PhotoAlbum({
                   </p>
                   <div className="grid grid-cols-1 gap-1 text-xs text-slate-200">
                     {[
-                      "Incidencia Delictiva Histórica",
-                      "Giros Comerciales (Bares, Cantinas, Chatarreras)",
-                      "Escuelas / Entornos Educativos",
-                      "Terrenos Baldíos / Zonas de Abandono",
-                      "Rutas de Escape / Callejones",
-                      "Deficiencia de Servicios Públicos (Iluminación, Pavimentación)",
-                    ].map((label) => (
-                      <label
-                        key={label}
-                        className="flex items-center gap-2 rounded-md bg-slate-900/60 border border-slate-700 px-2 py-1"
-                      >
-                        <input
-                          type="checkbox"
-                          className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
-                          checked={focusAreas.includes(label)}
-                          onChange={(e) => {
-                            setFocusAreas((prev) =>
-                              e.target.checked
-                                ? [...prev, label]
-                                : prev.filter((x) => x !== label)
-                            );
-                          }}
+                      const analysisOptions = [
+                        "Incidencia Delictiva Histórica",
+                        "Giros Comerciales",
+                        "Bares",
+                        "Cantinas",
+                        "Chatarreras",
+                        "Escuelas / Entornos Educativos",
+                        "Terrenos Baldíos",
+                        "Zonas de Abandono",
+                        "Rutas de Escape / Callejones",
+                        "Deficiencia de Servicios Públicos",
+                        "Iluminación",
+                        "Pavimentación",
+                        "Otro"
+                  ];
+
+                       <div className="grid grid-cols-1 gap-1 text-xs text-slate-200">
+                        {analysisOptions.map((label) => (
+                           <label
+                              key={label}
+                              className="flex items-center gap-2 rounded-md bg-slate-900/60 px-2 py-1"
+                          >
+                              <input
+                                 type="checkbox"
+                                 checked={focusAreas.includes(label)}
+                                 onChange={(e) => {
+                                  setFocusAreas((prev) =>
+                                    e.target.checked
+                                      ? [...prev, label]
+                                      : prev.filter((x) => x !== label)
+                                  );
+                                }}
+                                className="h-3 w-3 rounded border-slate-600 bg-slate-900"
+                              />
+                              <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {focusAreas.includes("Otro") && (
+                         <textarea
+                           placeholder="Especifique otros objetivos prioritarios del análisis..."
+                           value={analysisContextExtra ?? ""}
+                           onChange={(e) => setAnalysisContextExtra(e.target.value)}
+                           className="mt-2 w-full rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                           rows={3}
                         />
-                        <span className="text-[11px] text-slate-200">
-                          {label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                      )}
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <label className="block text-xs font-medium text-slate-300">
