@@ -1,0 +1,117 @@
+﻿MANUAL DE GOBERNANZA OPERACIONAL Y ANALÍTICA
+PERFILADOR REMOTO
+VERSIÓN 1.0
+DOCUMENTO RECTOR OPERACIONAL, FUNCIONAL Y DE GOBERNANZA
+
+CLASIFICACIÓN DEL DOCUMENTO
+Documento rector institucional.
+Constituye:
+LA FUENTE OFICIAL DE GOBERNANZA DEL PERFILADOR REMOTO
+para:
+• operación;
+• administración;
+• seguridad;
+• trazabilidad;
+• uso de IA;
+• generación de informes;
+• control de acceso;
+• evolución funcional.
+
+I. PRINCIPIOS RECTORES
+
+1. CONSERVACIÓN OPERACIONAL
+El flujo actual del sistema:
+NO DEBE SER ALTERADO
+Toda mejora deberá:
+• adaptarse al ecosistema existente;
+• integrarse progresivamente;
+• preservar estabilidad operativa.
+
+2. SUPERVISIÓN HUMANA OBLIGATORIA
+Toda inferencia relevante:
+REQUIERE VALIDACIÓN HUMANA
+La IA:
+• asiste;
+• organiza;
+• correlaciona.
+Pero:
+LA DECISIÓN OPERACIONAL FINAL ES HUMANA
+
+3. TRAZABILIDAD
+Toda operación relevante deberá registrar:
+☑ usuario
+☑ fecha
+☑ acción
+☑ módulo
+☑ resultado generado
+
+4. SEGURIDAD OPERACIONAL
+La plataforma deberá:
+☑ controlar accesos
+☑ limitar privilegios
+☑ restringir sesiones simultáneas
+☑ proteger información contextual
+
+II. GOBERNANZA DE IA
+
+REGLA CENTRAL
+La IA opera bajo:
+ASISTENCIA ANALÍTICA CONTROLADA
+
+LA IA PUEDE
+☑ resumir
+☑ correlacionar
+☑ clasificar
+☑ organizar
+☑ redactar borradores
+
+LA IA NO PUEDE
+☒ modificar evidencia
+☒ alterar registros
+☒ eliminar información
+☒ emitir decisiones definitivas
+☒ sustituir validación humana
+
+III. GOBERNANZA DE INFORMES
+
+LOS INFORMES DEBERÁN
+☑ mantener formato homologado
+☑ conservar trazabilidad
+☑ distinguir hechos de inferencias
+☑ registrar intervención humana
+
+IV. GOBERNANZA DE USUARIOS
+
+ADMINISTRADORES
+Responsables de:
+☑ control institucional
+☑ administración de accesos
+☑ supervisión operativa
+
+USUARIOS
+Responsables de:
+☑ administración de sus proyectos
+☑ integridad de información
+☑ validación de análisis
+
+V. CONTROL DE EVOLUCIÓN
+
+TODA NUEVA FUNCIÓN
+deberá cumplir:
+☑ compatibilidad
+☑ estabilidad
+☑ trazabilidad
+☑ supervisión humana
+☑ seguridad operacional
+
+VI. DECLARACIÓN FINAL
+El Perfilador Remoto constituye:
+UNA PLATAFORMA OPERACIONAL DE PERFILAMIENTO ANALÍTICO Y PRODUCCIÓN ASISTIDA DE INFORMES
+basada en:
+• supervisión humana;
+• estabilidad operacional;
+• trazabilidad;
+• seguridad;
+• evolución progresiva;
+• y asistencia inteligente controlada.
+

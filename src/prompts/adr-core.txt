@@ -1,0 +1,256 @@
+﻿ADR v1.0 — ARQUITECTURA DE DECISIONES Y RAZONAMIENTO DEL PERFILADOR REMOTO
+PERFILADOR REMOTO
+DOCUMENTO RECTOR DE ARQUITECTURA OPERACIONAL, ANALÍTICA Y FUNCIONAL
+VERSIÓN 1.0
+
+ESTATUS DEL DOCUMENTO
+☑ OFICIAL
+☑ RECTOR
+☑ OPERACIONAL
+☑ VINCULANTE PARA TODA LA ARQUITECTURA DEL PERFILADOR REMOTO
+
+PROPÓSITO DEL ADR
+Este documento define:
+• la arquitectura oficial del Perfilador Remoto;
+• la lógica operacional del sistema;
+• la estructura analítica;
+• las decisiones técnicas fundamentales;
+• el modelo de generación de informes;
+• la gobernanza funcional;
+• la interacción entre IA y persona perfiladora;
+• y la estructura de evolución controlada del sistema.
+
+I. PRINCIPIO FUNDAMENTAL DEL SISTEMA
+
+DECISIÓN CENTRAL
+El Perfilador Remoto constituye:
+UNA PLATAFORMA DE PERFILAMIENTO ANALÍTICO Y PRODUCCIÓN ASISTIDA DE INFORMES OPERACIONALES
+orientada a:
+• análisis contextual;
+• correlación de información;
+• apoyo operativo;
+• interpretación analítica;
+• generación documental;
+• visualización de información;
+• y fortalecimiento de capacidades analíticas institucionales.
+
+PRINCIPIO ARQUITECTÓNICO
+El sistema:
+CONSERVA ÍNTEGRAMENTE SU FLUJO OPERACIONAL ACTUAL
+
+IMPLICACIÓN
+La evolución del sistema:
+• NO modifica el flujo ya diseñado;
+• NO altera la lógica operacional existente;
+• NO reconstruye la arquitectura funcional principal;
+• NO sustituye módulos actualmente operativos.
+Las mejoras deberán:
+ADAPTARSE AL FLUJO EXISTENTE
+
+II. CONSERVACIÓN DEL FLUJO OPERACIONAL
+
+DECISIÓN
+El flujo actual del Perfilador Remoto constituye:
+EL NÚCLEO OPERACIONAL VALIDADO DEL SISTEMA
+
+REGLA OBLIGATORIA
+Toda nueva funcionalidad deberá:
+• integrarse al flujo actual;
+• respetar la secuencia operacional existente;
+• mantener compatibilidad funcional;
+• preservar estabilidad operativa.
+
+PROHIBICIONES
+Queda prohibido:
+• rediseñar el flujo principal;
+• alterar secuencias funcionales críticas;
+• sustituir módulos estables sin causa operativa justificada;
+• incorporar arquitectura experimental que comprometa estabilidad.
+
+III. MODELO ANALÍTICO DEL PERFILADOR
+
+DEFINICIÓN
+El Perfilador Remoto opera mediante:
+PERFILAMIENTO ANALÍTICO CONTEXTUAL
+
+OBJETIVO
+Asistir a la persona perfiladora en:
+• análisis de información;
+• organización contextual;
+• correlación analítica;
+• interpretación operacional;
+• identificación de relaciones;
+• generación estructurada de informes.
+
+FUENTES DE INFORMACIÓN
+El sistema podrá integrar:
+☑ Información textual
+☑ Archivos CSV
+☑ Metadatos EXIF
+☑ Geolocalización
+☑ Información cartográfica
+☑ Documentos contextuales
+☑ Imágenes
+☑ Narrativa humana
+☑ Datos estructurados
+☑ Información operacional
+
+IV. PAPEL DE LA PERSONA PERFILADORA
+
+DECISIÓN
+La persona perfiladora constituye:
+EL CENTRO DE LA INTERPRETACIÓN OPERACIONAL
+
+LA IA:
+☑ asiste
+☑ organiza
+☑ correlaciona
+☑ resume
+☑ propone inferencias
+Pero:
+NO SUSTITUYE EL CRITERIO HUMANO
+
+FACULTADES DE LA PERSONA PERFILADORA
+☑ Incorporar información
+☑ Definir hipótesis
+☑ Orientar análisis
+☑ Validar inferencias
+☑ Generar informes
+☑ Ajustar narrativa
+☑ Supervisar resultados
+
+V. PRINCIPIOS DE INTELIGENCIA ARTIFICIAL
+
+DECISIÓN
+La IA del Perfilador Remoto opera bajo:
+ASISTENCIA ANALÍTICA CONTROLADA
+
+FUNCIONES AUTORIZADAS
+☑ Correlación de información
+☑ Clasificación contextual
+☑ Organización documental
+☑ Generación de borradores
+☑ Identificación de patrones
+☑ Resumen operativo
+☑ Apoyo narrativo
+
+FUNCIONES PROHIBIDAS
+La IA NO podrá:
+☒ modificar información original;
+☒ alterar evidencia;
+☒ generar conclusiones autónomas definitivas;
+☒ eliminar registros;
+☒ cambiar configuraciones operacionales;
+☒ aplicar decisiones críticas sin validación humana.
+
+VI. GENERACIÓN DE INFORMES
+
+DECISIÓN
+El Perfilador Remoto opera mediante:
+PRODUCCIÓN ASISTIDA DE INFORMES OPERACIONALES
+
+PRINCIPIOS
+Los informes deberán:
+• mantener estructura homologada;
+• conservar trazabilidad;
+• reflejar contexto operativo;
+• diferenciar inferencias de hechos;
+• registrar participación humana.
+
+COMPONENTES POSIBLES
+☑ Portada
+☑ Resumen ejecutivo
+☑ Desarrollo analítico
+☑ Mapas
+☑ Gráficas
+☑ Evidencia visual
+☑ Metadatos
+☑ Hipótesis
+☑ Conclusiones operacionales
+
+VII. CONTROL DE ACCESO Y SEGURIDAD
+
+DECISIÓN
+La plataforma operará mediante:
+CONTROL DE ACCESO BASADO EN ROLES
+
+ROLES OFICIALES
+A. ADMINISTRADOR
+Facultades:
+☑ Alta de usuarios
+☑ Administración de credenciales
+☑ Supervisión general
+☑ Descarga de informes
+☑ Acceso administrativo
+Restricciones:
+☒ No modifica proyectos ajenos
+☒ No altera análisis de terceros
+
+B. USUARIO
+Facultades:
+☑ Crear proyectos propios
+☑ Editar proyectos propios
+☑ Generar informes propios
+Restricciones:
+☒ No accede a proyectos ajenos
+☒ No administra usuarios
+☒ No modifica configuración global
+
+VIII. CONTROL DE SESIONES
+
+DECISIÓN
+La plataforma implementará:
+CONTROL DE SESIONES ACTIVAS
+
+REGLAS
+☑ Un usuario no podrá mantener múltiples sesiones simultáneas
+☑ El sistema registrará accesos activos
+☑ Las sesiones previas podrán cerrarse automáticamente
+☑ Se conservará trazabilidad básica de accesos
+
+IX. OBSERVABILIDAD Y TRAZABILIDAD
+
+DECISIÓN
+Toda operación relevante deberá registrar:
+☑ usuario
+☑ fecha
+☑ módulo utilizado
+☑ acción realizada
+☑ versión del sistema
+☑ origen de la información
+☑ generación de informes
+
+JUSTIFICACIÓN
+Toda actividad analítica:
+DEBE SER AUDITABLE
+
+X. EVOLUCIÓN DEL SISTEMA
+
+DECISIÓN
+La evolución del Perfilador Remoto será:
+CONTROLADA, PROGRESIVA Y COMPATIBLE
+
+PRINCIPIOS DE EVOLUCIÓN
+Las mejoras deberán:
+• preservar estabilidad;
+• evitar reconstrucciones innecesarias;
+• mantener compatibilidad funcional;
+• respetar arquitectura validada;
+• priorizar continuidad operacional.
+
+XI. DECLARACIÓN OPERACIONAL FINAL
+El Perfilador Remoto constituye oficialmente:
+UNA PLATAFORMA DE PERFILAMIENTO ANALÍTICO, CORRELACIÓN DE INFORMACIÓN Y PRODUCCIÓN ASISTIDA DE INFORMES OPERACIONALES
+orientada a:
+• fortalecimiento analítico;
+• apoyo operacional;
+• organización contextual;
+• interpretación de información;
+• generación documental;
+• y asistencia inteligente supervisada.
+La plataforma:
+NO SUSTITUYE EL CRITERIO HUMANO
+La plataforma:
+POTENCIA LAS CAPACIDADES ANALÍTICAS DE LA PERSONA PERFILADORA
+
+
