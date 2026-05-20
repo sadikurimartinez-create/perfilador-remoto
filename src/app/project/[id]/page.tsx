@@ -139,7 +139,12 @@ export default function ProjectWorkspacePage() {
       projectId,
       content,
       createdAt: Date.now(),
+
+      // Trazabilidad institucional
       createdBy: user.username,
+      createdById: user.id,
+      createdByRole: user.role,
+
       attachedPhotos: attachedPhotos ?? [],
     });
     // Actualizar contador de fotos del proyecto en Firestore
