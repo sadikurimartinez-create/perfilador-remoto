@@ -20,6 +20,10 @@ export const buildReport = (project: any): ConsolidatedReport => {
         photoId: item.photoId,
         riskLevel: item.riskLevel,
         note: item.note,
+        timestamp:
+          item.timestamp ||
+          item.createdAt ||
+          new Date().toISOString(),
         latitude: item.latitude,
         longitude: item.longitude,
       })) || [],

@@ -2,6 +2,7 @@ export interface ReportFinding {
   photoId: string;
   riskLevel: 'low' | 'medium' | 'high';
   note: string;
+  timestamp?: string;
   latitude?: number;
   longitude?: number;
 }
