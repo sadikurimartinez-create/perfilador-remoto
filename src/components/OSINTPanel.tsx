@@ -14,6 +14,8 @@ import ThreatIntelligencePanel
   from './ThreatIntelligencePanel';
 import NarrativeFusionPanel
   from './NarrativeFusionPanel';
+import VisualAnalysisPanel
+  from './VisualAnalysisPanel';
 
 interface Props {
   project: any;
@@ -97,6 +99,10 @@ const OSINTPanel: React.FC<Props> = ({
           <NarrativeFusionPanel
             project={project}
             osintResults={results}
+          />
+
+          <VisualAnalysisPanel
+            project={project}
           />
 
           <GeointFusionPanel
