@@ -4,6 +4,9 @@ import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import AnalysisPanel from "./AnalysisPanel";
 import StatisticsDashboard from './StaticsDashboard';
+import {
+  HeatmapLayer,
+} from '@react-google-maps/api';
 
 type ProjectMapProps = {
   geometryType: "individual" | "lineal" | "poligono";
@@ -18,11 +21,12 @@ const containerStyle = {
   height: "320px",
 };
 
-const MAP_LIBRARIES: ("visualization" | "drawing")[] = ["visualization", "drawing"];
+const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
 export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, album, project }: ProjectMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(true);
 
   const center = useMemo(() => {
     if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };
@@ -87,6 +91,41 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     if (onUpdateCoordinates) onUpdateCoordinates(newCoords);
   };
 
+  const heatmapData = useMemo(() => {
+    if (!isLoaded || typeof window === "undefined" || !(window as any).google) return [];
+    
+    return project?.iaAnalysis
+      ?.filter(
+        (item: any) =>
+          item.latitude &&
+          item.longitude
+      )
+      .map((item: any) => {
+
+        let weight = 1;
+
+        if (
+          item.riskLevel === 'high' ||
+          item.riskLevel === 'alto'
+        ) {
+          weight = 5;
+        } else if (
+          item.riskLevel === 'medium' ||
+          item.riskLevel === 'medio'
+        ) {
+          weight = 3;
+        }
+
+        return {
+          location: new (window as any).google.maps.LatLng(
+            item.latitude,
+            item.longitude
+          ),
+          weight,
+        };
+      }) || [];
+  }, [isLoaded, project?.iaAnalysis]);
+
   // Validación mínima de fotos según geometría
   const minValidMessage = () => {
     if (geometryType === "individual" && coordinates.length < 1) return "Debe agregar al menos 1 foto";
@@ -99,6 +138,18 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
   return (
     <div className="flex flex-col gap-4 mt-4">
+      {heatmapData.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowHeatmap(!showHeatmap)}
+            className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded text-xs transition-colors shadow-sm"
+          >
+            {showHeatmap ? 'Ocultar Heatmap' : 'Mostrar Heatmap'}
+          </button>
+        </div>
+      )}
+
       <div id="project-map-capture" className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50 map-container">
         <GoogleMap
         mapContainerStyle={containerStyle}
@@ -163,6 +214,16 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               fillColor: "#8b5cf6",
               fillOpacity: 0.35,
             }}
+          />
+        )}
+
+        {showHeatmap && heatmapData.length > 0 && (
+          <HeatmapLayer 
+            data={heatmapData} 
+            options={{ 
+              radius: 40,
+              opacity: 0.7 
+            }} 
           />
         )}
       </GoogleMap>
