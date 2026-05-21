@@ -20,6 +20,8 @@ import MultiUserPanel
   from './MultiUserPanel';
 import PredictivePanel
   from './PredictivePanel';
+import OSINTPanel
+  from './OSINTPanel';
 import {
   createSession,
   appendSessionAction,
@@ -383,6 +385,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             sessions={[session]}
           />
           <PredictivePanel
+            project={project}
+          />
+          <OSINTPanel
             project={project}
           />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
