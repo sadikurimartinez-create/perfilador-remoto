@@ -17,6 +17,10 @@ import { getPhotoDataURLs } from './capturePhotos';
 import { calculateRisk } from './scoring';
 import { generateNarrative } from './narrative';
 import { classifyCriminology } from './criminologyClassifier';
+import {
+  createAuditLog,
+  appendAuditLog,
+} from './auditLogger';
 
 export const exportWord = async (
   report: ConsolidatedReport
@@ -166,6 +170,22 @@ export const exportWord = async (
   });
 
   const blob = await Packer.toBlob(doc);
+
+  if ((report as any).projectRef) {
+
+    const log =
+      createAuditLog(
+        'Exportación Word',
+        (report as any).userRole || 'USER',
+        (report as any).username || 'Usuario',
+        `Se exportó el informe Word del proyecto ${report.projectName}`
+      );
+
+    appendAuditLog(
+      (report as any).projectRef,
+      log
+    );
+  }
 
   saveAs(blob, `Informe_${report.projectName}.docx`);
 };

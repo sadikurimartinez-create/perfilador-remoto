@@ -5,6 +5,10 @@ import { getPhotoDataURLs } from './capturePhotos';
 import { calculateRisk } from './scoring';
 import { generateNarrative } from './narrative';
 import { classifyCriminology } from './criminologyClassifier';
+import {
+  createAuditLog,
+  appendAuditLog,
+} from './auditLogger';
 
 export const exportPDF = async (
   report: ConsolidatedReport
@@ -157,6 +161,19 @@ for (let i = 0; i < photoDataURLs.length; i++) {
       y = 20;
     }
   });
+
+  if ((report as any).projectRef) {
+    const log = createAuditLog(
+      'Exportación PDF',
+      (report as any).userRole || 'USER',
+      (report as any).username || 'Usuario',
+      `Se exportó el informe PDF del proyecto ${report.projectName}`
+    );
+    appendAuditLog(
+      (report as any).projectRef,
+      log
+    );
+  }
 
   doc.save(`Informe_${report.projectName}.pdf`);
 };

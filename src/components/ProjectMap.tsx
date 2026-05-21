@@ -12,6 +12,8 @@ import MultimodalPanel from './MultimodalPanel';
 import ExecutiveDashboard from './ExecutiveDashboard';
 import RoleGuard from './RoleGuard';
 import { usePermissions } from '../hooks/usePermissions';
+import AuditPanel from './AuditPanel';
+import { createAuditLog, appendAuditLog } from '../utils/auditLogger';
 import {
   HeatmapLayer,
 } from '@react-google-maps/api';
@@ -40,6 +42,20 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
   const userRole = project?.userRole || 'USER';
   const permissions = usePermissions(userRole);
+
+  useEffect(() => {
+    if (!project) return;
+
+    if (!project.auditLogs) {
+      const initialLog = createAuditLog(
+        'Proyecto visualizado',
+        userRole,
+        project?.username || 'Usuario',
+        'Acceso al módulo ProjectMap'
+      );
+      appendAuditLog(project, initialLog);
+    }
+  }, [project, userRole]);
 
   const center = useMemo(() => {
     if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };
@@ -331,6 +347,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           <RoleGuard allowed={permissions.canViewExecutiveDashboard}>
             <ExecutiveDashboard projects={projects || []} />
           </RoleGuard>
+          <AuditPanel auditLogs={project.auditLogs || []} />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
