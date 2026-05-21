@@ -5,6 +5,8 @@ import { exportPDF } from '../utils/exportPDF';
 import { exportWord } from '../utils/exportWord';
 
 import { buildReport } from '../utils/buildReport';
+import RoleGuard from './RoleGuard';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface Props {
   iaAnalysis: any[];
@@ -20,6 +22,12 @@ const AnalysisPanel: React.FC<Props> = ({
 
   const report = buildReport(project);
 
+  const userRole =
+    project?.userRole || 'USER';
+
+  const permissions =
+    usePermissions(userRole);
+
   return (
     <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-4 mt-2">
 
@@ -31,6 +39,11 @@ const AnalysisPanel: React.FC<Props> = ({
 
         <div className="flex flex-wrap gap-2">
 
+          <RoleGuard
+            allowed={
+              permissions.canExportReports
+            }
+          >
           <button
             onClick={() => exportCSV(iaAnalysis)}
             className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors"
@@ -51,6 +64,7 @@ const AnalysisPanel: React.FC<Props> = ({
           >
             Exportar Word
           </button>
+          </RoleGuard>
 
         </div>
       </div>

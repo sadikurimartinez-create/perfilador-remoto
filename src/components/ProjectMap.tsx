@@ -10,6 +10,8 @@ import CorrelationPanel from './CorrelationPanel';
 import TimelinePanel from './TimelinePanel';
 import MultimodalPanel from './MultimodalPanel';
 import ExecutiveDashboard from './ExecutiveDashboard';
+import RoleGuard from './RoleGuard';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   HeatmapLayer,
 } from '@react-google-maps/api';
@@ -35,6 +37,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const [mapReady, setMapReady] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showClusters, setShowClusters] = useState(true);
+
+  const userRole = project?.userRole || 'USER';
+  const permissions = usePermissions(userRole);
 
   const center = useMemo(() => {
     if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };
@@ -323,7 +328,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           />
           <TimelinePanel iaAnalysis={project.iaAnalysis || []} />
           <MultimodalPanel project={project} />
-          <ExecutiveDashboard projects={projects || []} />
+          <RoleGuard allowed={permissions.canViewExecutiveDashboard}>
+            <ExecutiveDashboard projects={projects || []} />
+          </RoleGuard>
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
