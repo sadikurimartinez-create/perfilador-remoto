@@ -376,7 +376,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       )}
       </div>
 
-      {project?.iaAnalysis && project.iaAnalysis.length > 0 && (
+      {project?.iaAnalysis && project.iaAnalysis.length > 0 ? (
         <div className="space-y-4">
           <StatisticsDashboard iaAnalysis={project.iaAnalysis || []} />
           <CorrelationPanel
@@ -390,6 +390,14 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           </RoleGuard>
           <AuditPanel auditLogs={project.auditLogs || []} />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center shadow-inner">
+          <span className="text-4xl block mb-3 opacity-50">⏳</span>
+          <h4 className="text-lg font-semibold text-slate-300">Paneles Analíticos en Espera</h4>
+          <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">
+            Para visualizar el Dashboard Estadístico, el Heatmap de Riesgo y el Panel de Correlaciones, primero debes subir las fotografías requeridas y hacer clic en <strong>"Generar Análisis Criminológico"</strong>.
+          </p>
         </div>
       )}
 
