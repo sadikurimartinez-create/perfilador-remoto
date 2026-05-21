@@ -2,6 +2,8 @@ import React from 'react';
 
 import { runOSINTScan }
   from '../utils/osintEngine';
+import NewsIntelligencePanel
+  from './NewsIntelligencePanel';
 
 interface Props {
   project: any;
@@ -67,6 +69,10 @@ const OSINTPanel: React.FC<Props> = ({
             </p>
 
           </div>
+
+          <NewsIntelligencePanel
+            osintResults={results}
+          />
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 
