@@ -33,6 +33,51 @@ export function ProjectManager() {
     setShowPrompt(false);
   };
 
+  // ==========================
+  // FASE 4 - Generación de análisis IA
+  // ==========================
+  const handleGenerateAIAnalysis = async () => {
+    if (!project) return;
+
+    // 1️⃣ Construir payload unificado
+    const payload = {
+      projectId: project.id,
+      geometryType: project.geometryType,
+      photos: album.map(photo => ({
+        url: photo.previewUrl, // Adaptado al modelo actual (previewUrl y lat/lng)
+        lat: photo.lat,
+        lng: photo.lng
+      })),
+      objectives: (project as any).objectives || [],       // checkbox
+      notes: {
+        text: (project as any).textNotes || "",           // texto tecleado
+        voice: (project as any).voiceNotes || ""          // dictado de micrófono
+      }
+    };
+
+    try {
+      // 2️⃣ Llamar al endpoint de IA
+      const response = await fetch("/api/analyze-environment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error("Error en análisis IA");
+
+      const result = await response.json();
+
+      // 3️⃣ Guardar resultados en project (Firestore y Dexie ya implementados)
+      (project as any).iaAnalysis = result;
+
+      // Actualizar UI (por ejemplo, alert o panel lateral)
+      alert("Análisis de IA completado correctamente.");
+    } catch (error) {
+      console.error("Error al generar análisis IA:", error);
+      alert("Ocurrió un error al generar el análisis de IA.");
+    }
+  };
+
   if (!project) {
     return (
       <div className="space-y-6">
