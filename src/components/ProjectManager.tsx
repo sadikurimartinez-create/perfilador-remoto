@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "./CaptureAndAddPhoto";
 import { PhotoAlbum } from "./PhotoAlbum";
+import { ProjectMap } from "./ProjectMap";
 
 export function ProjectManager() {
-  const { project, createProject, closeProject } = useProject();
+  const { project, album, createProject, closeProject } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
@@ -153,6 +154,19 @@ export function ProjectManager() {
 
       <CaptureAndAddPhoto />
       <PhotoAlbum />
+      
+      {album.length > 0 && (
+        <ProjectMap
+          geometryType={project.geometryType}
+          coordinates={album
+            .filter((photo) => photo.lat != null && photo.lng != null)
+            .map((photo) => ({
+              lat: photo.lat as number,
+              lng: photo.lng as number,
+            }))}
+        />
+      )}
+
     </div>
   );
 }
