@@ -14,6 +14,11 @@ import {
 
 } from './osintProviders';
 
+import {
+  searchReddit,
+  searchX,
+} from './socialProviders';
+
 export const runOSINTScan = async (
   project: any
 ) => {
@@ -42,6 +47,12 @@ export const runOSINTScan = async (
 
   const thenews =
     await searchTheNewsAPI(query);
+
+  const reddit =
+    await searchReddit(query);
+
+  const x =
+    await searchX(query);
 
   let denue: any[] = [];
 
@@ -72,13 +83,19 @@ export const runOSINTScan = async (
 
     denue,
 
+    reddit,
+
+    x,
+
     totalResults:
       serp.length +
       news.length +
       gnews.length +
       newsdata.length +
       thenews.length +
-      denue.length,
+      denue.length +
+      reddit.length +
+      x.length,
 
   };
 
