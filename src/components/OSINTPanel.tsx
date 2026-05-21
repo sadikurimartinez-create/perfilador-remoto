@@ -8,6 +8,8 @@ import SocialIntelligencePanel
   from './SocialIntelligencePanel';
 import UrbanIntelligencePanel
   from './UrbanIntelligencePanel';
+import GeointFusionPanel
+  from './GeointFusionPanel';
 
 interface Props {
   project: any;
@@ -75,6 +77,11 @@ const OSINTPanel: React.FC<Props> = ({
           </div>
 
           <NewsIntelligencePanel
+            osintResults={results}
+          />
+
+          <GeointFusionPanel
+            project={project}
             osintResults={results}
           />
 
