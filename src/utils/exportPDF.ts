@@ -4,6 +4,7 @@ import { ConsolidatedReport } from '../types/Report';
 import { getPhotoDataURLs } from './capturePhotos';
 import { calculateRisk } from './scoring';
 import { generateNarrative } from './narrative';
+import { classifyCriminology } from './criminologyClassifier';
 
 export const exportPDF = async (
   report: ConsolidatedReport
@@ -34,6 +35,11 @@ export const exportPDF = async (
 
   const risk = calculateRisk(report.findings);
   const narrative = generateNarrative(report);
+  const classification =
+    classifyCriminology(
+      report.findings,
+      report.geometryType
+    );
   y += 10;
 
   doc.setFontSize(14);
@@ -60,6 +66,29 @@ export const exportPDF = async (
   }
 
   doc.text(`Nivel de riesgo global: ${risk.classification} (Promedio: ${risk.averageScore.toFixed(2)})`, 20, y);
+  
+  y += 10;
+
+  doc.setFontSize(14);
+  doc.text('CLASIFICACIÓN CRIMINOLÓGICA', 20, y);
+
+  y += 10;
+
+  doc.setFontSize(12);
+  const classificationLines = doc.splitTextToSize(
+    `${classification.category}: ${classification.interpretation}`,
+    170
+  );
+
+  classificationLines.forEach((line: string) => {
+    if (y > 275) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.text(line, 20, y);
+    y += 7;
+  });
+
   y += 15;
 
  if (mapImage) {

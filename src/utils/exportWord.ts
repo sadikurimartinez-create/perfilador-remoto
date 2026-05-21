@@ -16,6 +16,7 @@ import { getPhotoDataURLs } from './capturePhotos';
 
 import { calculateRisk } from './scoring';
 import { generateNarrative } from './narrative';
+import { classifyCriminology } from './criminologyClassifier';
 
 export const exportWord = async (
   report: ConsolidatedReport
@@ -72,6 +73,10 @@ export const exportWord = async (
 
   const risk = calculateRisk(report.findings);
   const narrative = generateNarrative(report);
+  const classification = classifyCriminology(
+    report.findings,
+    report.geometryType
+  );
 
   const narrativeParagraphs = [
     new Paragraph({
@@ -81,6 +86,16 @@ export const exportWord = async (
     }),
     ...narrative.split('. ').filter(Boolean).map(sentence => new Paragraph({ text: sentence.trim() + (sentence.endsWith('.') ? '' : '.') })),
     new Paragraph({ text: `Nivel de riesgo global: ${risk.classification} (Promedio: ${risk.averageScore.toFixed(2)})` }),
+  ];
+
+  const classificationParagraphs = [
+    new Paragraph({
+      children: [
+        new TextRun({ text: 'CLASIFICACIÓN CRIMINOLÓGICA', bold: true }),
+      ],
+    }),
+    new Paragraph({ text: classification.category }),
+    new Paragraph({ text: classification.interpretation }),
   ];
 
   const doc = new Document({
@@ -143,6 +158,7 @@ export const exportWord = async (
               ]
             : []),
           ...photoParagraphs,
+          ...classificationParagraphs,
           ...findingsParagraphs,
         ],
       },
