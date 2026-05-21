@@ -8,6 +8,7 @@ import Supercluster from 'supercluster';
 import StatisticsDashboard from './StaticsDashboard';
 import CorrelationPanel from './CorrelationPanel';
 import TimelinePanel from './TimelinePanel';
+import MultimodalPanel from './MultimodalPanel';
 import {
   HeatmapLayer,
 } from '@react-google-maps/api';
@@ -320,6 +321,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             allProjects={projects || []}
           />
           <TimelinePanel iaAnalysis={project.iaAnalysis || []} />
+          <MultimodalPanel project={project} />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
