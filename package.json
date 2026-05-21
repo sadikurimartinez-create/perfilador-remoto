@@ -21,6 +21,7 @@
     "file-saver": "^2.0.5",
     "firebase": "^12.10.0",
     "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "next": "^14.2.35",
     "papaparse": "^5.5.3",
     "pg": "^8.20.0",

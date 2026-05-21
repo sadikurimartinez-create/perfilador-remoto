@@ -172,7 +172,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       </div>
 
       {project?.iaAnalysis && project.iaAnalysis.length > 0 && (
-        <AnalysisPanel iaAnalysis={project.iaAnalysis} />
+        <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
       )}
     </div>
   );
