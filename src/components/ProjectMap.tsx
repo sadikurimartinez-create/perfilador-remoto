@@ -6,6 +6,7 @@ import AnalysisPanel from "./AnalysisPanel";
 // @ts-ignore
 import Supercluster from 'supercluster';
 import StatisticsDashboard from './StaticsDashboard';
+import CorrelationPanel from './CorrelationPanel';
 import {
   HeatmapLayer,
 } from '@react-google-maps/api';
@@ -16,6 +17,7 @@ type ProjectMapProps = {
   onUpdateCoordinates?: (coords: { lat: number; lng: number }[]) => void;
   album?: { id: string; lat: number | null; lng: number | null }[];
   project?: any;
+  projects?: any[];
 };
 
 const containerStyle = {
@@ -25,7 +27,7 @@ const containerStyle = {
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
-export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, album, project }: ProjectMapProps) {
+export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, album, project, projects = [] }: ProjectMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
@@ -312,6 +314,10 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       {project?.iaAnalysis && project.iaAnalysis.length > 0 && (
         <div className="space-y-4">
           <StatisticsDashboard iaAnalysis={project.iaAnalysis || []} />
+          <CorrelationPanel
+            currentProject={project}
+            allProjects={projects || []}
+          />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
