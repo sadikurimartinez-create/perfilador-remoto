@@ -3,6 +3,8 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import AnalysisPanel from "./AnalysisPanel";
+// @ts-ignore
+import Supercluster from 'supercluster';
 import StatisticsDashboard from './StaticsDashboard';
 import {
   HeatmapLayer,
@@ -27,6 +29,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showClusters, setShowClusters] = useState(true);
 
   const center = useMemo(() => {
     if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };
@@ -126,6 +129,39 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       }) || [];
   }, [isLoaded, project?.iaAnalysis]);
 
+  const clusterPoints =
+    project?.iaAnalysis
+      ?.filter(
+        (item: any) =>
+          item.latitude &&
+          item.longitude
+      )
+      .map((item: any) => ({
+        type: 'Feature',
+        properties: {
+          riskLevel: item.riskLevel,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [
+            item.longitude,
+            item.latitude,
+          ],
+        },
+      })) || [];
+
+  const supercluster = new Supercluster({
+    radius: 60,
+    maxZoom: 20,
+  });
+
+  supercluster.load(clusterPoints as any);
+
+  const clusters = supercluster.getClusters(
+    [-180, -85, 180, 85],
+    10
+  );
+
   // Validación mínima de fotos según geometría
   const minValidMessage = () => {
     if (geometryType === "individual" && coordinates.length < 1) return "Debe agregar al menos 1 foto";
@@ -139,13 +175,20 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   return (
     <div className="flex flex-col gap-4 mt-4">
       {heatmapData.length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={() => setShowHeatmap(!showHeatmap)}
             className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded text-xs transition-colors shadow-sm"
           >
             {showHeatmap ? 'Ocultar Heatmap' : 'Mostrar Heatmap'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowClusters(!showClusters)}
+            className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded text-xs transition-colors shadow-sm"
+          >
+            {showClusters ? 'Ocultar Clusters' : 'Mostrar Clusters'}
           </button>
         </div>
       )}
@@ -226,6 +269,39 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             }} 
           />
         )}
+
+        {showClusters && clusters.map((cluster: any, index: number) => {
+          const [longitude, latitude] = cluster.geometry.coordinates;
+          const isCluster = cluster.properties.cluster;
+
+          if (isCluster) {
+            return (
+              <Marker
+                key={`cluster-${index}`}
+                position={{
+                  lat: latitude,
+                  lng: longitude,
+                }}
+                label={{
+                  text: String(cluster.properties.point_count),
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                }}
+                icon={{
+                  path: google.maps.SymbolPath.CIRCLE,
+                  fillColor: '#dc2626',
+                  fillOpacity: 0.8,
+                  strokeWeight: 1,
+                  strokeColor: '#ffffff',
+                  scale: Math.max(20, cluster.properties.point_count / 2),
+                }}
+              />
+            );
+          }
+
+          return null;
+        })}
       </GoogleMap>
 
       {validationMsg && (
