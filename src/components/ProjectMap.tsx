@@ -18,6 +18,8 @@ import OperationalTimeline
   from './OperationalTimeline';
 import MultiUserPanel
   from './MultiUserPanel';
+import PredictivePanel
+  from './PredictivePanel';
 import {
   createSession,
   appendSessionAction,
@@ -379,6 +381,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           />
           <MultiUserPanel
             sessions={[session]}
+          />
+          <PredictivePanel
+            project={project}
           />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
