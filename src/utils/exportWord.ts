@@ -12,6 +12,8 @@ import { ConsolidatedReport } from '../types/Report';
 
 import { captureMapImage } from './captureMpas';
 
+import { getPhotoDataURLs } from './capturePhotos';
+
 export const exportWord = async (
   report: ConsolidatedReport
 ) => {
@@ -36,40 +38,41 @@ export const exportWord = async (
     ]
   );
 
+  const photoDataURLs = await getPhotoDataURLs(report.findings);
+
+  const photoParagraphs = photoDataURLs.flatMap((dataURL, index) => {
+    // Prevenimos que explote si no hay URL o base64 válido
+    if (!dataURL || !dataURL.includes(',')) return [];
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Evidencia Foto ${index + 1}`,
+            bold: true,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new ImageRun({
+            data: Uint8Array.from(
+              atob(dataURL.split(',')[1]),
+              (c) => c.charCodeAt(0)
+            ),
+            transformation: { width: 250, height: 180 },
+            type: 'png',
+          }),
+        ],
+      }),
+    ];
+  });
+
   const doc = new Document({
     sections: [
       {
         properties: {},
 
         children: [
-          ...(mapImage
-            ? [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: 'MAPA DEL PROYECTO',
-                      bold: true,
-                    }),
-                  ],
-                }),
-
-                new Paragraph({
-                  children: [
-                    new ImageRun({
-                      data: Uint8Array.from(
-                        atob(mapImage.split(',')[1]),
-                        c => c.charCodeAt(0)
-                      ),
-                      transformation: {
-                        width: 500,
-                        height: 250,
-                      },
-                      type: 'png',
-                    }),
-                  ],
-                }),
-              ]
-            : []),
           new Paragraph({
             children: [
               new TextRun({
@@ -96,6 +99,31 @@ export const exportWord = async (
             text: ' ',
           }),
 
+          ...(mapImage
+            ? [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: 'MAPA DEL PROYECTO',
+                      bold: true,
+                    }),
+                  ],
+                }),
+                new Paragraph({
+                  children: [
+                    new ImageRun({
+                      data: Uint8Array.from(
+                        atob(mapImage.split(',')[1]),
+                        c => c.charCodeAt(0)
+                      ),
+                      transformation: { width: 500, height: 250 },
+                      type: 'png',
+                    }),
+                  ],
+                }),
+              ]
+            : []),
+          ...photoParagraphs,
           ...findingsParagraphs,
         ],
       },

@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { captureMapImage } from './captureMpas';
 import { ConsolidatedReport } from '../types/Report';
+import { getPhotoDataURLs } from './capturePhotos';
 
 export const exportPDF = async (
   report: ConsolidatedReport
@@ -54,6 +55,24 @@ export const exportPDF = async (
   doc.text('HALLAZGOS', 20, y);
 
   y += 10;
+
+const photoDataURLs = await getPhotoDataURLs(report.findings);
+
+for (let i = 0; i < photoDataURLs.length; i++) {
+  const dataURL = photoDataURLs[i];
+  if (dataURL) {
+    y += 5;
+    doc.setFontSize(12);
+    doc.text(`Evidencia Foto ${i + 1}`, 20, y);
+    y += 5;
+    doc.addImage(dataURL, 'PNG', 20, y, 60, 45);
+    y += 50;
+    if (y > 260) {
+      doc.addPage();
+      y = 20;
+    }
+  }
+}
 
   report.findings.forEach((finding, index) => {
     doc.setFontSize(11);
