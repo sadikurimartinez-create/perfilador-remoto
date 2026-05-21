@@ -85,7 +85,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       'Acceso al mapa criminológico'
     );
 
-  }, []);
+  }, [session]);
 
   const center = useMemo(() => {
     if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };

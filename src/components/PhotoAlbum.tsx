@@ -134,8 +134,9 @@ const minimumPhotos = {
   poligono: 3,
 } as const;
 
+const geom = (project?.geometryType as keyof typeof minimumPhotos) || "individual";
 const requiredPhotos =
-  minimumPhotos[project?.geometryType || "individual"];
+  minimumPhotos[geom] || 1;
 
 const currentPhotos = album.length;
 

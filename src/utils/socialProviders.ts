@@ -4,7 +4,7 @@ const REDDIT_USER_AGENT =
   process.env.PGP_REDDIT_USER_AGENT || process.env.NEXT_PUBLIC_PGP_REDDIT_USER_AGENT || "";
 
 const X_BEARER =
-  process.env.PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || "";
+  process.env.PGP_X_BEARER_TOKEN || process.env.NEXT_PUBLIC_PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.NEXT_PUBLIC_PGP_X_ACCESS_TOKEN || "";
 
 export const searchReddit = async (
   query: string

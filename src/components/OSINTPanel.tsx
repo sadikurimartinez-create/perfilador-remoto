@@ -6,6 +6,8 @@ import NewsIntelligencePanel
   from './NewsIntelligencePanel';
 import SocialIntelligencePanel
   from './SocialIntelligencePanel';
+import UrbanIntelligencePanel
+  from './UrbanIntelligencePanel';
 
 interface Props {
   project: any;
@@ -22,16 +24,16 @@ const OSINTPanel: React.FC<Props> = ({
     React.useState<any>(null);
 
   const executeOSINT = async () => {
-
     setLoading(true);
 
-    const data =
-      await runOSINTScan(project);
-
-    setResults(data);
-
-    setLoading(false);
-
+    try {
+      const data = await runOSINTScan(project);
+      setResults(data);
+    } catch (error) {
+      console.error("OSINT Error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -76,6 +78,18 @@ const OSINTPanel: React.FC<Props> = ({
             osintResults={results}
           />
 
+          <UrbanIntelligencePanel
+            denue={
+              results.denue || []
+            }
+            overpass={
+              results.overpass || []
+            }
+            googlePlaces={
+              results.googlePlaces || []
+            }
+          />
+
           <SocialIntelligencePanel
             redditResults={
               results.reddit || []
@@ -93,7 +107,7 @@ const OSINTPanel: React.FC<Props> = ({
               </p>
 
               <p className="text-xl text-cyan-300 font-bold">
-                {results.serp.length}
+                {results.serp?.length || 0}
               </p>
             </div>
 
@@ -103,7 +117,7 @@ const OSINTPanel: React.FC<Props> = ({
               </p>
 
               <p className="text-xl text-fuchsia-300 font-bold">
-                {results.news.length}
+                {results.news?.length || 0}
               </p>
             </div>
 
@@ -113,7 +127,7 @@ const OSINTPanel: React.FC<Props> = ({
               </p>
 
               <p className="text-xl text-emerald-300 font-bold">
-                {results.gnews.length}
+                {results.gnews?.length || 0}
               </p>
             </div>
 
@@ -123,7 +137,7 @@ const OSINTPanel: React.FC<Props> = ({
               </p>
 
               <p className="text-xl text-orange-300 font-bold">
-                {results.newsdata.length}
+                {results.newsdata?.length || 0}
               </p>
             </div>
 
@@ -133,7 +147,7 @@ const OSINTPanel: React.FC<Props> = ({
               </p>
 
               <p className="text-xl text-red-300 font-bold">
-                {results.thenews.length}
+                {results.thenews?.length || 0}
               </p>
             </div>
 
@@ -143,7 +157,7 @@ const OSINTPanel: React.FC<Props> = ({
               </p>
 
               <p className="text-xl text-yellow-300 font-bold">
-                {results.denue.length}
+                {results.denue?.length || 0}
               </p>
             </div>
 

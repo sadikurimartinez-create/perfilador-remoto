@@ -19,6 +19,11 @@ import {
   searchX,
 } from './socialProviders';
 
+import {
+  searchOverpass,
+  searchGooglePlaces,
+} from './urbanProviders';
+
 export const runOSINTScan = async (
   project: any
 ) => {
@@ -56,6 +61,10 @@ export const runOSINTScan = async (
 
   let denue: any[] = [];
 
+  let overpass: any[] = [];
+
+  let googlePlaces: any[] = [];
+
   if (
     project?.latitude &&
     project?.longitude
@@ -63,6 +72,18 @@ export const runOSINTScan = async (
 
     denue =
       await searchDENUE(
+        project.latitude,
+        project.longitude
+      );
+
+    overpass =
+      await searchOverpass(
+        project.latitude,
+        project.longitude
+      );
+
+    googlePlaces =
+      await searchGooglePlaces(
         project.latitude,
         project.longitude
       );
@@ -87,15 +108,21 @@ export const runOSINTScan = async (
 
     x,
 
+    overpass,
+
+    googlePlaces,
+
     totalResults:
-      serp.length +
-      news.length +
-      gnews.length +
-      newsdata.length +
-      thenews.length +
-      denue.length +
-      reddit.length +
-      x.length,
+      (serp?.length || 0) +
+      (news?.length || 0) +
+      (gnews?.length || 0) +
+      (newsdata?.length || 0) +
+      (thenews?.length || 0) +
+      (denue?.length || 0) +
+      (reddit?.length || 0) +
+      (x?.length || 0) +
+      (overpass?.length || 0) +
+      (googlePlaces?.length || 0),
 
   };
 
