@@ -40,8 +40,24 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
 }
 
 export function CaptureAndAddPhoto() {
-  const { addPhotoToAlbum, project } = useProject();
+  const { addPhotoToAlbum, project, album } = useProject();
   const [file, setFile] = useState<File | null>(null);
+  const minimumPhotos = {
+    individual: 1,
+    lineal: 2,
+    poligono: 3,
+  } as const;
+
+  const requiredPhotos =
+    minimumPhotos[project?.geometryType || "individual"];
+
+  const currentPhotos = album.length;
+
+  const remainingPhotos =
+    requiredPhotos - currentPhotos;
+
+  const hasMinimumPhotos =
+    currentPhotos >= requiredPhotos;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
   const [tipo, setTipo] = useState<string>(TIPOS_IMAGEN[0]);
@@ -275,6 +291,40 @@ export function CaptureAndAddPhoto() {
   };
 
   return (
+  <>
+
+    {project && !hasMinimumPhotos && (
+      <div className="mb-4 rounded-lg border border-amber-500 bg-amber-950/40 p-3 text-sm text-amber-200">
+        
+        <div className="font-semibold mb-1">
+          Validación de geometría operacional
+        </div>
+
+        <div>
+          La geometría{" "}
+          <strong>{project.geometryType?.toUpperCase()}</strong>{" "}
+          requiere mínimo{" "}
+          <strong>{requiredPhotos}</strong>{" "}
+          evidencia(s) fotográfica(s) georreferenciada(s).
+        </div>
+
+        <div className="mt-1">
+          Actualmente hay{" "}
+          <strong>{currentPhotos}</strong>{" "}
+          evidencia(s) cargada(s).
+        </div>
+
+        {remainingPhotos > 0 && (
+          <div className="mt-1">
+            Faltan{" "}
+            <strong>{remainingPhotos}</strong>{" "}
+            fotografía(s) para continuar.
+          </div>
+        )}
+
+      </div>
+    )}
+
     <section className="card p-4 md:p-6 space-y-4">
       <header className="space-y-1">
         <h3 className="text-lg font-semibold text-slate-100">
@@ -387,5 +437,6 @@ export function CaptureAndAddPhoto() {
         </div>
       )}
     </section>
+  </>
   );
 }

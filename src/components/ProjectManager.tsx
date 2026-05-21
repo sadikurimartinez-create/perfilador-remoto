@@ -9,6 +9,7 @@ export function ProjectManager() {
   const { project, createProject, closeProject } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
+  const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
@@ -18,9 +19,10 @@ export function ProjectManager() {
   const handleConfirmarNombre = () => {
     const nombre = nombreInput.trim();
     if (nombre) {
-      createProject(nombre);
-      setShowPrompt(false);
-      setNombreInput("");
+      createProject({
+        nombre,
+        geometryType,
+      });
     }
   };
 
@@ -69,6 +71,43 @@ export function ProjectManager() {
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
             </label>
+
+          <div className="geometry-selector mt-4">
+            <label className="block font-semibold mb-2">Tipo de geometría operacional</label>
+            <div className="flex flex-col gap-2">
+              <label>
+                <input
+                  type="radio"
+                  name="geometryType"
+                  value="individual"
+                  checked={geometryType === "individual"}
+                  onChange={() => setGeometryType("individual")}
+              />{" "}
+               Individual
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="geometryType"
+                  value="lineal"
+                  checked={geometryType === "lineal"}
+                  onChange={() => setGeometryType("lineal")}
+                />{" "}
+                Lineal
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="geometryType"
+                  value="poligono"
+                  checked={geometryType === "poligono"}
+                  onChange={() => setGeometryType("poligono")}
+              />{" "}
+              Polígono
+            </label>
+          </div>
+       </div>
+
             <div className="flex gap-2">
               <button
                 type="button"

@@ -92,6 +92,7 @@ export function PhotoAlbum({
     setPortalTarget(document.getElementById(C4_RIGHT_COLUMN_ID));
   }, [splitLayout]);
   const {
+    project,
     album,
     selectedIds,
     analysisResult,
@@ -128,7 +129,23 @@ export function PhotoAlbum({
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
   const [debugData, setDebugData] = useState<any>(null);
   const [showMonitor, setShowMonitor] = useState(false);
+  // Validación mínima de fotografías según geometría
+const minimumPhotos = {
+  individual: 1,
+  lineal: 2,
+  poligono: 3,
+} as const;
 
+const requiredPhotos =
+  minimumPhotos[project?.geometryType || "individual"];
+
+const currentPhotos = album.length;
+
+const hasMinimumPhotos =
+  currentPhotos >= requiredPhotos;
+
+const remainingPhotos =
+  requiredPhotos - currentPhotos;
   const uploadSelectedPhotosToStorage = async (
     projectId: string,
     selectedPhotoIds: string[]
@@ -232,6 +249,17 @@ export function PhotoAlbum({
     if (selectedIds.length === 0) {
       setError("Seleccione al menos una fotografía.");
       return;
+    }
+
+    if (!hasMinimumPhotos) {
+
+     setError(
+       `La geometría ${
+         project?.geometryType?.toUpperCase() || "INDIVIDUAL"
+      } requiere mínimo ${requiredPhotos} fotografía(s) georreferenciada(s).`
+     );
+
+     return;
     }
     setError(null);
     setShowConfigModal(true);

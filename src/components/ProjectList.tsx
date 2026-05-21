@@ -31,6 +31,7 @@ export function ProjectList() {
   const router = useRouter();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
+  const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const { user, loading } = useAuth();
   const [projects, setProjects] = useState<ProjectWithCount[]>([]);
   const [allAnalyses, setAllAnalyses] = useState<
@@ -146,6 +147,7 @@ export function ProjectList() {
     const ref = await import("firebase/firestore").then(({ addDoc }) =>
       addDoc(col, {
         name: nombre,
+        geometryType,
         createdAt,
         createdBy: user.username,
         lockedBy: null,
@@ -156,12 +158,14 @@ export function ProjectList() {
     await localDb.projects.add({
       id: ref.id,
       name: nombre,
+      geometryType,
       createdAt,
       createdBy: user.username,
       lockedBy: null,
-    });
+    } as any); // Usamos as any para evitar el error de esquema estricto
     setShowPrompt(false);
     setNombreInput("");
+    setGeometryType("individual");
     router.push(`/project/${ref.id}`);
   };
 
@@ -403,6 +407,43 @@ export function ProjectList() {
               className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </label>
+
+        <div className="geometry-selector mt-2 mb-4">
+          <span className="block text-sm font-medium text-slate-200 mb-1">Tipo de geometría operacional</span>
+          <div className="flex flex-col gap-2 text-sm text-slate-300">
+            <label>
+              <input
+                type="radio"
+                name="geometryType"
+                value="individual"
+                checked={geometryType === "individual"}
+                onChange={() => setGeometryType("individual")}
+              />{" "}
+              Individual
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="geometryType"
+                value="lineal"
+                checked={geometryType === "lineal"}
+                onChange={() => setGeometryType("lineal")}
+              />{" "}
+              Lineal
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="geometryType"
+                value="poligono"
+                checked={geometryType === "poligono"}
+                onChange={() => setGeometryType("poligono")}
+              />{" "}
+              Polígono
+            </label>
+          </div>
+        </div>
+
           <div className="flex gap-2">
             <button
               type="button"

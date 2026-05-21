@@ -46,6 +46,7 @@ export type AlbumPhoto = {
 export type Project = {
   id: string;
   nombre: string;
+  geometryType: "individual" | "lineal" | "poligono";
 };
 
 export type PerPhotoFinding = {
@@ -73,7 +74,14 @@ type ProjectContextValue = {
   album: AlbumPhoto[];
   selectedIds: string[];
   analysisResult: AnalysisResult | null;
-  createProject: (nombre: string) => void;
+  createProject: ({
+    nombre,
+    geometryType,
+  }: {
+    nombre: string;
+    geometryType: "individual" | "lineal" | "poligono";
+  }) => void;
+
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
   addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">, id?: string) => void;
@@ -97,11 +105,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysisResult, setAnalysisResultState] = useState<AnalysisResult | null>(null);
 
-  const createProject = useCallback((nombre: string) => {
-    setProject({ id: generateId(), nombre: nombre.trim() || "Sin nombre" });
+  const createProject = useCallback(({
+    nombre,
+    geometryType,
+  }: {
+    nombre: string;
+    geometryType: "individual" | "lineal" | "poligono";
+  }) => {
+
+    setProject({
+      id: generateId(),
+      nombre: nombre.trim() || "Sin nombre",
+      geometryType,
+    });
+
     setAlbum([]);
     setSelectedIds([]);
     setAnalysisResultState(null);
+
   }, []);
 
   const closeProject = useCallback(() => {
@@ -118,9 +139,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const ref = doc(firestore, "projects", projectId);
       const snap = await getDoc(ref);
       if (!snap.exists()) return;
-      const data = snap.data() as { name?: string; createdAt?: number; createdBy?: string };
+      const data = snap.data() as {
+        name?: string;
+        createdAt?: number;
+        geometryType?: "individual" | "lineal" | "poligono";
+      };
+
       const name = data.name ?? "Sin nombre";
-      projectRow = { id: projectId, name, createdAt: data.createdAt ?? Date.now(), createdBy: data.createdBy };
+      projectRow = {
+        id: projectId,
+        name,
+        geometryType: data.geometryType || "individual",
+        createdAt: data.createdAt
+      } as any; // Evitamos el error de esquema estricto de localDb
+
       await db.projects.put({ ...projectRow, lockedBy: null });
     }
     const photoRows = await db.photos.where("projectId").equals(projectId).toArray();
@@ -141,7 +173,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         comentario: p.comments,
         file: new File([p.imageBlob], "photo.jpg", { type: p.imageBlob.type }),
       }));
-    setProject({ id: projectRow.id, nombre: projectRow.name });
+    setProject({
+      id: projectRow.id,
+      nombre: projectRow.name,
+      geometryType: (projectRow as any).geometryType || "individual", // Le decimos a TS que confíe
+    });
     setAlbum(albumPhotos);
     setSelectedIds([]);
     setAnalysisResultState(null);
