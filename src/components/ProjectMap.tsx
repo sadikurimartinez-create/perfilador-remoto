@@ -98,7 +98,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
   return (
     <div className="flex flex-col gap-4 mt-4">
-      <div className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50">
+      <div id="project-map-capture" className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50 map-container">
         <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}

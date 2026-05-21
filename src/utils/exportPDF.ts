@@ -1,8 +1,15 @@
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
+import { captureMapImage } from './captureMpas';
 import { ConsolidatedReport } from '../types/Report';
 
-export const exportPDF = (report: ConsolidatedReport) => {
+export const exportPDF = async (
+  report: ConsolidatedReport
+) => {
   const doc = new jsPDF();
+
+  const mapImage = await captureMapImage(
+    'project-map-capture'
+  );
 
   let y = 20;
 
@@ -23,6 +30,27 @@ export const exportPDF = (report: ConsolidatedReport) => {
   y += 15;
 
   doc.setFontSize(14);
+
+ if (mapImage) {
+
+  doc.setFontSize(14);
+
+  doc.text('MAPA DEL PROYECTO', 20, y);
+
+  y += 10;
+
+  doc.addImage(
+    mapImage,
+    'PNG',
+    20,
+    y,
+    170,
+    90
+  );
+
+  y += 100;
+} 
+
   doc.text('HALLAZGOS', 20, y);
 
   y += 10;
@@ -31,14 +59,14 @@ export const exportPDF = (report: ConsolidatedReport) => {
     doc.setFontSize(11);
 
     doc.text(
-      `${index + 1}. Riesgo: ${finding.riskLevel.toUpperCase()}`,
+      `${index + 1}. Riesgo: ${(finding.riskLevel || 'N/A').toUpperCase()}`,
       20,
       y
     );
 
     y += 8;
 
-    doc.text(`Observación: ${finding.note}`, 25, y);
+    doc.text(`Observación: ${finding.note || 'Sin observación'}`, 25, y);
 
     y += 12;
 
