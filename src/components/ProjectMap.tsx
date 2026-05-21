@@ -389,6 +389,12 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             <ExecutiveDashboard projects={projects || []} />
           </RoleGuard>
           <AuditPanel auditLogs={project.auditLogs || []} />
+          <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
+        </div>
+      )}
+
+      {project && (
+        <div className="space-y-4">
           <OperationalTimeline
             session={session}
           />
@@ -404,7 +410,6 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               setOsintResults
             }
           />
-          <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
     </div>
