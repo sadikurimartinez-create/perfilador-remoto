@@ -9,6 +9,7 @@ import StatisticsDashboard from './StaticsDashboard';
 import CorrelationPanel from './CorrelationPanel';
 import TimelinePanel from './TimelinePanel';
 import MultimodalPanel from './MultimodalPanel';
+import ExecutiveDashboard from './ExecutiveDashboard';
 import {
   HeatmapLayer,
 } from '@react-google-maps/api';
@@ -322,6 +323,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           />
           <TimelinePanel iaAnalysis={project.iaAnalysis || []} />
           <MultimodalPanel project={project} />
+          <ExecutiveDashboard projects={projects || []} />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
