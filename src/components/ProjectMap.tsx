@@ -22,6 +22,8 @@ import PredictivePanel
   from './PredictivePanel';
 import OSINTPanel
   from './OSINTPanel';
+import ThreatMapOverlay
+  from './ThreatMapOverlay';
 import {
   createSession,
   appendSessionAction,
@@ -63,6 +65,10 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         'ProjectMap'
       )
     );
+
+  const [osintResults,
+    setOsintResults] =
+      React.useState<any>(null);
 
   useEffect(() => {
     if (!project) return;
@@ -358,6 +364,11 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
           return null;
         })}
+
+        <ThreatMapOverlay
+          project={project}
+          osintResults={osintResults}
+        />
       </GoogleMap>
 
       {validationMsg && (
@@ -389,6 +400,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           />
           <OSINTPanel
             project={project}
+            setOsintResults={
+              setOsintResults
+            }
           />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>

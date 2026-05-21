@@ -15,10 +15,14 @@ import ThreatIntelligencePanel
 
 interface Props {
   project: any;
+  setOsintResults?: (
+    data: any
+  ) => void;
 }
 
 const OSINTPanel: React.FC<Props> = ({
   project,
+  setOsintResults,
 }) => {
 
   const [loading, setLoading] =
@@ -32,6 +36,7 @@ const OSINTPanel: React.FC<Props> = ({
 
     try {
       const data = await runOSINTScan(project);
+      setOsintResults?.(data);
       setResults(data);
     } catch (error) {
       console.error("OSINT Error:", error);
