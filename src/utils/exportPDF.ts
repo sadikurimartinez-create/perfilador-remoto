@@ -2,6 +2,8 @@ import { jsPDF } from 'jspdf';
 import { captureMapImage } from './captureMpas';
 import { ConsolidatedReport } from '../types/Report';
 import { getPhotoDataURLs } from './capturePhotos';
+import { calculateRisk } from './scoring';
+import { generateNarrative } from './narrative';
 
 export const exportPDF = async (
   report: ConsolidatedReport
@@ -30,10 +32,42 @@ export const exportPDF = async (
   doc.text(`Fecha: ${report.createdAt}`, 20, y);
   y += 15;
 
+  const risk = calculateRisk(report.findings);
+  const narrative = generateNarrative(report);
+  y += 10;
+
   doc.setFontSize(14);
+  doc.text('NARRATIVA CRIMINOLÓGICA', 20, y);
+  y += 10;
+
+  doc.setFontSize(12);
+  const lines = doc.splitTextToSize(narrative, 170);
+  lines.forEach((line: string) => {
+    // Salto de página automático si la narrativa es muy larga
+    if (y > 275) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.text(line, 20, y);
+    y += 7;
+  });
+  
+  if (y > 270) {
+    doc.addPage();
+    y = 20;
+  } else {
+    y += 10;
+  }
+
+  doc.text(`Nivel de riesgo global: ${risk.classification} (Promedio: ${risk.averageScore.toFixed(2)})`, 20, y);
+  y += 15;
 
  if (mapImage) {
-
+  // Evitamos que el mapa quede cortado por la mitad en el borde inferior
+  if (y > 170) {
+    doc.addPage();
+    y = 20;
+  }
   doc.setFontSize(14);
 
   doc.text('MAPA DEL PROYECTO', 20, y);

@@ -14,6 +14,9 @@ import { captureMapImage } from './captureMpas';
 
 import { getPhotoDataURLs } from './capturePhotos';
 
+import { calculateRisk } from './scoring';
+import { generateNarrative } from './narrative';
+
 export const exportWord = async (
   report: ConsolidatedReport
 ) => {
@@ -67,6 +70,19 @@ export const exportWord = async (
     ];
   });
 
+  const risk = calculateRisk(report.findings);
+  const narrative = generateNarrative(report);
+
+  const narrativeParagraphs = [
+    new Paragraph({
+      children: [
+        new TextRun({ text: 'NARRATIVA CRIMINOLÓGICA', bold: true }),
+      ],
+    }),
+    ...narrative.split('. ').filter(Boolean).map(sentence => new Paragraph({ text: sentence.trim() + (sentence.endsWith('.') ? '' : '.') })),
+    new Paragraph({ text: `Nivel de riesgo global: ${risk.classification} (Promedio: ${risk.averageScore.toFixed(2)})` }),
+  ];
+
   const doc = new Document({
     sections: [
       {
@@ -98,6 +114,9 @@ export const exportWord = async (
           new Paragraph({
             text: ' ',
           }),
+
+          ...narrativeParagraphs,
+          new Paragraph({ text: ' ' }),
 
           ...(mapImage
             ? [
