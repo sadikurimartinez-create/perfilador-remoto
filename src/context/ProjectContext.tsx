@@ -139,21 +139,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const ref = doc(firestore, "projects", projectId);
       const snap = await getDoc(ref);
       if (!snap.exists()) return;
-      const data = snap.data() as {
-        name?: string;
-        createdAt?: number;
-        geometryType?: "individual" | "lineal" | "poligono";
-      };
+      const data = snap.data() as any;
 
       const name = data.name ?? "Sin nombre";
       projectRow = {
-        id: projectId,
-        name,
-        geometryType: data.geometryType || "individual",
-        createdAt: data.createdAt
-      } as any; // Evitamos el error de esquema estricto de localDb
+         id: projectId || generateId(),      // asegura que siempre tenga string
+         name: name || "Sin nombre",         // asegura que siempre tenga string
+         geometryType: data.geometryType || "individual",
+         createdAt: data.createdAt || Date.now(),
+         createdBy: data.createdBy || "Desconocido",
+         lockedBy: data.lockedBy || null,
+       } as any;
 
-      await db.projects.put({ ...projectRow, lockedBy: null });
+      await db.projects.put(projectRow as any);
     }
     const photoRows = await db.photos.where("projectId").equals(projectId).toArray();
     const albumPhotos: AlbumPhoto[] = photoRows
@@ -174,9 +172,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         file: new File([p.imageBlob], "photo.jpg", { type: p.imageBlob.type }),
       }));
     setProject({
-      id: projectRow.id,
-      nombre: projectRow.name,
-      geometryType: (projectRow as any).geometryType || "individual", // Le decimos a TS que confíe
+      id: projectRow?.id || generateId(),
+      nombre: projectRow?.name || "Sin nombre",
+      geometryType: (projectRow as any)?.geometryType || "individual",
     });
     setAlbum(albumPhotos);
     setSelectedIds([]);

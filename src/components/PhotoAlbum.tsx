@@ -7,7 +7,6 @@ import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
 import { CrimeCharts } from "./CrimeCharts";
 import { exportToWord } from "@/lib/exportToWord";
-import { getStorageInstance } from "@/lib/firebase";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -102,7 +101,6 @@ export function PhotoAlbum({
     setAnalysisResult,
     updatePhotoMeta,
   } = useProject();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [editableProfile, setEditableProfile] = useState<string>("");
@@ -146,121 +144,19 @@ const hasMinimumPhotos =
 
 const remainingPhotos =
   requiredPhotos - currentPhotos;
-  const uploadSelectedPhotosToStorage = async (
-    projectId: string,
-    selectedPhotoIds: string[]
-  ): Promise<string[]> => {
-    const storage = getStorageInstance();
-    const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-    const selected = album.filter((p) => selectedPhotoIds.includes(p.id));
-    const uploads = selected.map(async (photo) => {
-      try {
-        let blob: Blob | null = null;
-        if (photo.file instanceof Blob) {
-          blob = photo.file;
-        } else if (photo.previewUrl && photo.previewUrl.startsWith("http")) {
-          const resp = await fetch(photo.previewUrl);
-          if (resp.ok) {
-            blob = await resp.blob();
-          }
-        }
-        if (!blob) return null;
-        const path = `projects/${projectId}/${photo.id}-${Date.now()}`;
-        const storageRef = ref(storage, path);
-        await uploadBytes(storageRef, blob);
-        const url = await getDownloadURL(storageRef);
-        return url;
-      } catch (err) {
-        console.error("[PhotoAlbum] Error subiendo foto a Storage:", err);
-        return null;
-      }
-    });
-    const results = await Promise.all(uploads);
-    return results.filter((u): u is string => typeof u === "string" && u.length > 0);
-  };
-
-  const handleGenerarAnalisis = async () => {
-    if (selectedIds.length === 0) {
-      setError("Seleccione al menos una fotografía.");
-      return;
-    }
-    setError(null);
-    setIsAnalyzing(true);
-    try {
-      const selected = album.filter((p) => selectedIds.includes(p.id));
-      const photosPayload = await Promise.all(
-        selected.map(async (p) => {
-          let imageBase64: string | null = null;
-          if (p.file) {
-            try {
-              imageBase64 = await resizeImageToBase64(p.file, 640, 0.5);
-            } catch {
-              const sizeMb = p.file.size / (1024 * 1024);
-              if (sizeMb <= 2) imageBase64 = await readFileAsBase64(p.file);
-            }
-          }
-          return {
-            id: p.id,
-            lat: p.lat,
-            lng: p.lng,
-            tipo: p.tipo,
-            comentario: p.comentario,
-            imageBase64: imageBase64 ?? undefined
-          };
-        })
-      );
-
-      // Capturamos los datos crudos que se mandarán a los endpoints
-      setDebugData({
-        photos: photosPayload,
-        analysisRadius,
-        analysisContext,
-        focusAreas,
-      });
-
-      const res = await fetch("/api/analyze-selection", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photos: photosPayload,
-          analysisRadius,
-          analysisPolygon,
-          manualPois,
-        })
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || "Error al generar el análisis");
-      }
-      const data = await res.json();
-      setAnalysisResult(data);
-      setAiProfile(null);
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Error al analizar la selección.");
-      setAnalysisResult(null);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleGenerateAIProfile = () => {
+  const handleOpenConfigModal = () => {
     if (selectedIds.length === 0) {
       setError("Seleccione al menos una fotografía.");
       return;
     }
 
     if (!hasMinimumPhotos) {
-
-     setError(
-       `La geometría ${
-         project?.geometryType?.toUpperCase() || "INDIVIDUAL"
-      } requiere mínimo ${requiredPhotos} fotografía(s) georreferenciada(s).`
-     );
-
-     return;
+      setError(
+        `La geometría ${project?.geometryType?.toUpperCase() || "INDIVIDUAL"} requiere mínimo ${requiredPhotos} fotografía(s) georreferenciada(s).`
+      );
+      return;
     }
+
     setError(null);
     setShowConfigModal(true);
   };
@@ -348,7 +244,12 @@ const remainingPhotos =
       const mapRes = await fetch("/api/analyze-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: photosPayload, analysisRadius }),
+        body: JSON.stringify({ 
+          photos: photosPayload, 
+          analysisRadius,
+          analysisPolygon,
+          manualPois
+        }),
       });
       if (mapRes.ok) {
         const mapData = await mapRes.json();
@@ -742,7 +643,7 @@ const remainingPhotos =
                       </span>
                     </span>
                   )}
-                  {visionData[p.id]?.faces?.count > 0 && (
+                  {(visionData[p.id]?.faces?.count ?? 0) > 0 && (
                     <span className="mt-0.5 inline-flex items-center gap-1 bg-red-900/80 text-red-200 text-[10px] px-2 py-0.5 rounded border border-red-700">
                       👤 Rostros: {visionData[p.id].faces.count}
                     </span>
@@ -797,7 +698,7 @@ const remainingPhotos =
       <div className="pt-2 border-t border-slate-800 space-y-2">
         <button
           type="button"
-          onClick={handleGenerateAIProfile}
+          onClick={handleOpenConfigModal}
           disabled={isGeneratingAI || selectedIds.length === 0}
           className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
