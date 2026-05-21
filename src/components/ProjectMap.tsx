@@ -2,11 +2,14 @@
 
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-google-maps/api";
+import AnalysisPanel from "./AnalysisPanel";
 
 type ProjectMapProps = {
   geometryType: "individual" | "lineal" | "poligono";
   coordinates: { lat: number; lng: number }[];
   onUpdateCoordinates?: (coords: { lat: number; lng: number }[]) => void;
+  album?: { id: string; lat: number | null; lng: number | null }[];
+  project?: any;
 };
 
 const containerStyle = {
@@ -16,7 +19,7 @@ const containerStyle = {
 
 const MAP_LIBRARIES: ("visualization" | "drawing")[] = ["visualization", "drawing"];
 
-export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates }: ProjectMapProps) {
+export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, album, project }: ProjectMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
@@ -94,8 +97,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates }: P
   const validationMsg = minValidMessage();
 
   return (
-    <div className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50 mt-4">
-      <GoogleMap
+    <div className="flex flex-col gap-4 mt-4">
+      <div className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50">
+        <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
         zoom={15}
@@ -107,22 +111,35 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates }: P
           mapTypeId: "hybrid",
         }}
       >
-        {coordinates.map((c, idx) => (
-          <Marker
-            key={`coord-${idx}`}
-            position={c}
-            draggable
-            onDragEnd={(e) => handleMarkerDrag(idx, e.latLng!.lat(), e.latLng!.lng())}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#dc2626",
-              fillOpacity: 1,
-              strokeColor: "#fef2f2",
-              strokeWeight: 2,
-            }}
-          />
-        ))}
+        {coordinates.map((c, idx) => {
+          const photo = album?.[idx];
+          const analysis = photo && project?.iaAnalysis ? project.iaAnalysis.find((a: any) => a.photoId === photo.id) : null;
+          
+          let pinColor = 'blue'; // default
+          if (analysis?.riskLevel === 'high' || analysis?.riskLevel === 'alto') pinColor = 'red';
+          else if (analysis?.riskLevel === 'medium' || analysis?.riskLevel === 'medio') pinColor = 'orange';
+          else if (analysis?.riskLevel === 'low' || analysis?.riskLevel === 'bajo') pinColor = 'green';
+
+          return (
+            <Marker
+              key={photo ? photo.id : `coord-${idx}`}
+              position={c}
+              draggable
+              onDragEnd={(e) => handleMarkerDrag(idx, e.latLng!.lat(), e.latLng!.lng())}
+              icon={project?.iaAnalysis ? {
+                url: `/pins/${pinColor}-pin.png`,
+                scaledSize: new (window as any).google.maps.Size(30, 30),
+              } : {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 8,
+                fillColor: "#dc2626",
+                fillOpacity: 1,
+                strokeColor: "#fef2f2",
+                strokeWeight: 2,
+              }}
+            />
+          );
+        })}
 
         {geometryType === "lineal" && coordinates.length > 1 && (
           <Polyline
@@ -151,6 +168,11 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates }: P
 
       {validationMsg && (
         <p className="text-xs text-amber-400 mt-2 px-2 pb-2 font-medium">{validationMsg}</p>
+      )}
+      </div>
+
+      {project?.iaAnalysis && project.iaAnalysis.length > 0 && (
+        <AnalysisPanel iaAnalysis={project.iaAnalysis} />
       )}
     </div>
   );

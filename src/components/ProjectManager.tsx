@@ -203,6 +203,8 @@ export function ProjectManager() {
       
       {album.length > 0 && (
         <ProjectMap
+          project={project}
+          album={validPhotos}
           geometryType={project.geometryType}
           coordinates={validPhotos.map((photo) => ({
             lat: photo.lat as number,
