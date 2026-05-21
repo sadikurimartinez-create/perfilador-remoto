@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import AnalysisPanel from "./AnalysisPanel";
 // @ts-ignore
@@ -14,6 +14,14 @@ import RoleGuard from './RoleGuard';
 import { usePermissions } from '../hooks/usePermissions';
 import AuditPanel from './AuditPanel';
 import { createAuditLog, appendAuditLog } from '../utils/auditLogger';
+import OperationalTimeline
+  from './OperationalTimeline';
+import MultiUserPanel
+  from './MultiUserPanel';
+import {
+  createSession,
+  appendSessionAction,
+} from '../utils/sessionTracker';
 import {
   HeatmapLayer,
 } from '@react-google-maps/api';
@@ -43,6 +51,15 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const userRole = project?.userRole || 'USER';
   const permissions = usePermissions(userRole);
 
+  const [session] =
+    React.useState(() =>
+      createSession(
+        project?.username || 'Usuario',
+        userRole,
+        'ProjectMap'
+      )
+    );
+
   useEffect(() => {
     if (!project) return;
 
@@ -56,6 +73,15 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       appendAuditLog(project, initialLog);
     }
   }, [project, userRole]);
+
+  React.useEffect(() => {
+
+    appendSessionAction(
+      session,
+      'Acceso al mapa criminológico'
+    );
+
+  }, []);
 
   const center = useMemo(() => {
     if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };
@@ -348,6 +374,12 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             <ExecutiveDashboard projects={projects || []} />
           </RoleGuard>
           <AuditPanel auditLogs={project.auditLogs || []} />
+          <OperationalTimeline
+            session={session}
+          />
+          <MultiUserPanel
+            sessions={[session]}
+          />
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       )}
