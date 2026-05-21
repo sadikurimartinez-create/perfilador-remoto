@@ -12,6 +12,7 @@ export function ProjectManager() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
+  const [isAnalyzingIA, setIsAnalyzingIA] = useState(false);
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
@@ -38,6 +39,7 @@ export function ProjectManager() {
   // ==========================
   const handleGenerateAIAnalysis = async () => {
     if (!project) return;
+    setIsAnalyzingIA(true);
 
     // 1️⃣ Construir payload unificado
     const payload = {
@@ -76,6 +78,7 @@ export function ProjectManager() {
       console.error("Error al generar análisis IA:", error);
       alert("Ocurrió un error al generar el análisis de IA.");
     }
+    setIsAnalyzingIA(false);
   };
 
   if (!project) {
@@ -221,6 +224,19 @@ export function ProjectManager() {
         />
       )}
 
+      {/* Botón para detonar el análisis rápido */}
+      {album.length > 0 && (
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={() => void handleGenerateAIAnalysis()}
+            disabled={isAnalyzingIA}
+            className="btn-primary"
+          >
+            {isAnalyzingIA ? "Procesando IA..." : "Generar Análisis IA Rápido"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

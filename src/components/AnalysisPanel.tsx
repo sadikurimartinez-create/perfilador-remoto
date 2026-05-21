@@ -7,7 +7,6 @@ interface Props {
 
 const AnalysisPanel: React.FC<Props> = ({ iaAnalysis }) => {
   if (!iaAnalysis || iaAnalysis.length === 0) return null;
-
   return (
     <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-4 mt-2">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

@@ -12,7 +12,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
