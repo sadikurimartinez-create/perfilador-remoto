@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import AnalysisPanel from "./AnalysisPanel";
+import StatisticsDashboard from './StaticsDashboard';
 
 type ProjectMapProps = {
   geometryType: "individual" | "lineal" | "poligono";
@@ -172,7 +173,10 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       </div>
 
       {project?.iaAnalysis && project.iaAnalysis.length > 0 && (
-        <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
+        <div className="space-y-4">
+          <StatisticsDashboard iaAnalysis={project.iaAnalysis || []} />
+          <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
+        </div>
       )}
     </div>
   );
