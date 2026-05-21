@@ -7,10 +7,11 @@ import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
 
 export function ProjectManager() {
-  const { project, album, createProject, closeProject } = useProject();
+  const { project, album, createProject, closeProject, updatePhotoCoordinates } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
+  const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
@@ -158,12 +159,18 @@ export function ProjectManager() {
       {album.length > 0 && (
         <ProjectMap
           geometryType={project.geometryType}
-          coordinates={album
-            .filter((photo) => photo.lat != null && photo.lng != null)
-            .map((photo) => ({
-              lat: photo.lat as number,
-              lng: photo.lng as number,
-            }))}
+          coordinates={validPhotos.map((photo) => ({
+            lat: photo.lat as number,
+            lng: photo.lng as number,
+          }))}
+          onUpdateCoordinates={(newCoords) => {
+            newCoords.forEach((coord, idx) => {
+              const photo = validPhotos[idx];
+              if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
+                void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
+              }
+            });
+          }}
         />
       )}
 

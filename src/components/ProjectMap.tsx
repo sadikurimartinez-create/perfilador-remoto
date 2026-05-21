@@ -6,6 +6,7 @@ import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-goo
 type ProjectMapProps = {
   geometryType: "individual" | "lineal" | "poligono";
   coordinates: { lat: number; lng: number }[];
+  onUpdateCoordinates?: (coords: { lat: number; lng: number }[]) => void;
 };
 
 const containerStyle = {
@@ -13,7 +14,9 @@ const containerStyle = {
   height: "320px",
 };
 
-export function ProjectMap({ geometryType, coordinates }: ProjectMapProps) {
+const MAP_LIBRARIES: ("visualization" | "drawing")[] = ["visualization", "drawing"];
+
+export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates }: ProjectMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
@@ -46,6 +49,7 @@ export function ProjectMap({ geometryType, coordinates }: ProjectMapProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: "project-map",
     googleMapsApiKey: apiKey,
+    libraries: MAP_LIBRARIES,
   });
 
   if (!apiKey) {
@@ -73,6 +77,22 @@ export function ProjectMap({ geometryType, coordinates }: ProjectMapProps) {
     );
   }
 
+  const handleMarkerDrag = (index: number, lat: number, lng: number) => {
+    const newCoords = [...coordinates];
+    newCoords[index] = { lat, lng };
+    if (onUpdateCoordinates) onUpdateCoordinates(newCoords);
+  };
+
+  // Validación mínima de fotos según geometría
+  const minValidMessage = () => {
+    if (geometryType === "individual" && coordinates.length < 1) return "Debe agregar al menos 1 foto";
+    if (geometryType === "lineal" && coordinates.length < 2) return "Debe agregar al menos 2 fotos";
+    if (geometryType === "poligono" && coordinates.length < 3) return "Debe agregar al menos 3 fotos";
+    return null;
+  };
+
+  const validationMsg = minValidMessage();
+
   return (
     <div className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50 mt-4">
       <GoogleMap
@@ -91,6 +111,8 @@ export function ProjectMap({ geometryType, coordinates }: ProjectMapProps) {
           <Marker
             key={`coord-${idx}`}
             position={c}
+            draggable
+            onDragEnd={(e) => handleMarkerDrag(idx, e.latLng!.lat(), e.latLng!.lng())}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
               scale: 8,
@@ -126,6 +148,10 @@ export function ProjectMap({ geometryType, coordinates }: ProjectMapProps) {
           />
         )}
       </GoogleMap>
+
+      {validationMsg && (
+        <p className="text-xs text-amber-400 mt-2 px-2 pb-2 font-medium">{validationMsg}</p>
+      )}
     </div>
   );
 }

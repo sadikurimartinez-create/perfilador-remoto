@@ -87,6 +87,7 @@ type ProjectContextValue = {
   addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">, id?: string) => void;
   removePhotoFromAlbum: (id: string) => void;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
+  updatePhotoCoordinates: (id: string, lat: number, lng: number) => Promise<void>;
   togglePhotoSelection: (id: string) => void;
   selectAllPhotos: () => void;
   clearSelection: () => void;
@@ -210,6 +211,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const updatePhotoCoordinates = useCallback(async (id: string, lat: number, lng: number) => {
+    try {
+      await db.photos.update(id, { lat, lng });
+      setAlbum((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, lat, lng } : p))
+      );
+    } catch (err) {
+      console.error("[ProjectContext] Error al actualizar coordenadas:", err);
+    }
+  }, []);
+
   const togglePhotoSelection = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -241,6 +253,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addPhotoToAlbum,
       removePhotoFromAlbum,
       updatePhotoMeta,
+      updatePhotoCoordinates,
       togglePhotoSelection,
       selectAllPhotos,
       clearSelection,
@@ -257,6 +270,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addPhotoToAlbum,
       removePhotoFromAlbum,
       updatePhotoMeta,
+      updatePhotoCoordinates,
       togglePhotoSelection,
       selectAllPhotos,
       clearSelection,
