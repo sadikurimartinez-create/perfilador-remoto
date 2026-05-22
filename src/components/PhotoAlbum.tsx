@@ -578,8 +578,8 @@ const hasMinimumPhotos =
       return;
     }
     try {
-      // @ts-ignore
-      const html2pdf = (await import("html2pdf.js")).default;
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = (html2pdfModule.default || html2pdfModule) as any;
       const safeName = project?.nombre?.replace(/\s+/g, "_") || "Dictamen";
       const opt = {
         margin: 10,
@@ -829,7 +829,7 @@ const hasMinimumPhotos =
               onChange={(e) => setDocContext(e.target.value)}
               placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
               className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
-            ></textarea>
+            />
             
             <div className="flex items-center gap-2">
               <button
@@ -874,7 +874,7 @@ const hasMinimumPhotos =
                   value={docSuggestions}
                   onChange={(e) => setDocSuggestions(e.target.value)}
                   className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                ></textarea>
+                />
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
@@ -1503,7 +1503,7 @@ const hasMinimumPhotos =
           {mapSnapshots.map((snap, idx) => (
             <div key={idx} className="mb-8 break-inside-avoid">
               <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">ATLAS CARTOGRÁFICO: {snap.title.toUpperCase()}</h3>
-              <img src={snap.dataUrl} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
+              <img src={snap.dataUrl} alt={snap.title} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
             </div>
           ))}
 
@@ -1514,7 +1514,7 @@ const hasMinimumPhotos =
               <div className="grid grid-cols-2 gap-6">
                 {album.filter(p => selectedIds.includes(p.id)).map(p => (
                   <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
-                    <img src={p.previewUrl} className="w-full h-48 object-cover rounded mb-3 border border-slate-200" />
+                    <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-48 object-cover rounded mb-3 border border-slate-200" />
                     <p className="text-xs font-bold text-slate-800 uppercase mb-1">{p.tipo}</p>
                     <p className="text-[11px] text-slate-600 mb-2 leading-tight">{p.comentario || "Sin comentario."}</p>
                     <p className="text-[9px] font-mono text-slate-500">GPS: {p.lat}, {p.lng}</p>
