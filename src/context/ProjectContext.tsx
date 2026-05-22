@@ -319,9 +319,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             text: `Evidencia de campo: ${projectRow.name}`,
           });
           return; // Compartido exitosamente, salimos de la función
-        } catch (shareErr) {
-          console.log("[ProjectContext] Web Share cancelado o fallido, usando fallback de descarga:", shareErr);
-          triggerDownload();
+        } catch (shareErr: any) {
+          console.log("[ProjectContext] Web Share cancelado o fallido:", shareErr);
+          // Si el usuario cerró el menú de compartir nativo (AbortError), no forzamos la descarga.
+          if (shareErr.name !== "AbortError") {
+            triggerDownload();
+          }
           return;
         }
       }

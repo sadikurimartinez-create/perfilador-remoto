@@ -39,6 +39,13 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
   });
 }
 
+function generateSafeId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export function CaptureAndAddPhoto() {
   const { addPhotoToAlbum, project, album } = useProject();
   const [file, setFile] = useState<File | null>(null);
@@ -241,7 +248,7 @@ export function CaptureAndAddPhoto() {
         lng = fallback.lng;
       }
 
-      const photoId = crypto.randomUUID();
+      const photoId = generateSafeId();
       const projectId = project.id;
       const preview = URL.createObjectURL(compressed);
 
@@ -327,6 +334,18 @@ export function CaptureAndAddPhoto() {
     )}
 
     <section className="card p-4 md:p-6 space-y-4">
+      {isFetchingGPS && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
+            <div className="relative w-16 h-16 mb-4">
+              <div className="absolute inset-0 border-4 border-sky-500/20 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <p className="text-lg text-slate-200 font-semibold tracking-tight">Procesando imagen...</p>
+            <p className="text-sm text-slate-400 mt-1">Comprimiendo y extrayendo GPS</p>
+          </div>
+        </div>
+      )}
       <header className="space-y-1">
         <h3 className="text-lg font-semibold text-slate-100">
           Captura / Subida de fotografía
@@ -379,9 +398,6 @@ export function CaptureAndAddPhoto() {
         </button>
       </div>
 
-      {isReading && (
-        <p className="text-sm text-sky-400">Leyendo metadatos EXIF…</p>
-      )}
       {error && <p className="text-sm text-red-400">{error}</p>}
     </section>
   </>
