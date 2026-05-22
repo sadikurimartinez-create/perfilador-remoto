@@ -485,14 +485,14 @@ ${visionResumen}
 ## ANÁLISIS MICRO-ECONÓMICO Y DE ATRACTORES (DENUE INEGI Y PLACES - BARRIDO A 1KM)
 ${irregularidadesTexto || "No se identificaron unidades económicas registradas ni atractores relevantes en el perímetro de 1 kilómetro."}
 
-[MANDATO TÁCTICO MULTIDIMENSIONAL]:
-1. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos" (concentran masas), "Atractores de Delitos" (atraen infractores motivados) o "Nodos de Miedo". NO hagas un simple inventario.
-2. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y el registro formal de DENUE. Argumenta cómo la irregularidad comercial debilita el control social (ausencia de guardianes formales) y fomenta "ventanas rotas" a nivel socioeconómico.
-3. CORRELACIÓN ESTADÍSTICA: Cruza OBLIGATORIAMENTE los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares/chatarreras = mercados de bienes ilícitos; Lesiones + expendios de alcohol = catalizadores de violencia).
-4. OSINT Y SENTIMIENTO CIUDADANO (GOOGLE): Analiza minuciosamente las reseñas ciudadanas extraídas de Google Places para detectar focos de conflicto social, reportes de inseguridad, narcomenudeo, ruido, peleas o tensión comunitaria.
-5. OSINT EN TIEMPO REAL (X/TWITTER): Audita los tuits ciudadanos para identificar eventos de alto impacto (detonaciones, operativos) y la percepción de inseguridad inmediata en la zona. Correlaciona estos reportes con la estadística formal.
-6. HEMEROTECA Y NOTA ROJA: Cruza las noticias detectadas en los medios con los hallazgos visuales. Si hay cateos u homicidios reportados recientemente, correlaciónalo con la desorganización social de la colonia.
-4. ACTIVIDADES RUTINARIAS: Relaciona la tipología del comercio con la previsibilidad de las víctimas en horarios específicos (bancos, farmacias 24h, tiendas de conveniencia).
+[MANDATO TÁCTICO MULTIDIMENSIONAL Y TRANSVERSALIDAD OBLIGATORIA]:
+1. CORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Hipótesis del Analista", los "Comentarios de las Fotos" y las "Evidencias Multimodales" con los datos de las APIs (OSINT, DENUE, INEGI). No analices las fuentes por separado; fusiónalas. (Ej. Cruza el desempleo del INEGI con los reportes de Twitter, la evidencia documental anexa y el deterioro visual de las fotos).
+2. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos", "Atractores" o "Nodos de Miedo".
+3. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y DENUE. Argumenta cómo la irregularidad debilita el control social formal y fomenta "ventanas rotas".
+4. CORRELACIÓN ESTADÍSTICA: Cruza los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares = mercados ilícitos).
+5. OSINT Y SENTIMIENTO CIUDADANO: Analiza minuciosamente las reseñas de Google y los tuits de X/Twitter para detectar focos de conflicto social, narcomenudeo o tensión comunitaria. Correlaciónalos con la estadística oficial.
+6. HEMEROTECA Y NOTA ROJA: Cruza las noticias detectadas en los medios con la Hipótesis del Analista. Si hay cateos u homicidios reportados recientemente, correlaciónalo con la desorganización social.
+7. ACTIVIDADES RUTINARIAS: Relaciona la tipología del comercio con la previsibilidad de las víctimas en horarios específicos.
 
 ## ESTRATEGIA ANALÍTICA SEGÚN TIPO DE PUNTO
 ${strategySummary || "Aplicar análisis general conforme a las cuatro teorías indicadas."}
@@ -522,11 +522,11 @@ INSTRUCCIÓN FINAL:
 Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objetivo. Estructura OBLIGATORIAMENTE en las siguientes secciones (con estos títulos en mayúsculas), en este orden:
 
 1. OBJETIVO DEL DICTAMEN — Una oración que indique el propósito del perfil y la zona analizada.
-2. CONTEXTO ESPACIAL Y SOCIODEMOGRÁFICO — Descripción de la colonia, radio de análisis y cruce OBLIGATORIO con la demografía del INEGI (presión poblacional, jóvenes, desocupación).
-3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de lo detectado por Vision en las fotos; sin repetir listas crudas.
+2. CONTEXTO ESPACIAL, SOCIODEMOGRÁFICO Y MULTIMODAL — Descripción de la colonia, cruce con demografía (INEGI) y síntesis analítica de las Evidencias Multimodales de Gabinete aportadas por el analista junto con su Hipótesis inicial.
+3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de las fotografías CRUZADA OBLIGATORIAMENTE con los comentarios del investigador y las detecciones de Vision API.
 4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE Y OSINT) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia, vacíos de control formal (negocios irregulares) y extrae el sentimiento ciudadano de las reseñas de fuentes abiertas (Google, X/Twitter). Usa imágenes de POIs.
 5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional.
-6. RIESGOS IDENTIFICADOS — Puntos concretos de riesgo derivados del análisis, sin repetir párrafos anteriores.
+6. CORRELACIÓN TRANSVERSAL DE RIESGOS — Puntos de riesgo resultantes de fusionar TODOS los vectores de inteligencia (Hipótesis humana + Fotos + Documentos Anexos + APIs).
 7. RECOMENDACIONES — Medidas accionables y vinculadas a los hallazgos.
 8. INFORMACIÓN PREDICTIVA — Estimación de probabilidad de incremento delictivo a 6 meses si no se interviene (baja/media/alta o porcentual), con justificación criminológica breve.
 
