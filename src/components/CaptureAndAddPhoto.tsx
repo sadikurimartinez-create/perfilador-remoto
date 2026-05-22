@@ -76,24 +76,11 @@ export function CaptureAndAddPhoto() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (previewUrl && previewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    if (!selected) return;
+    if (!selected || !project) return;
 
     setError(null);
-    setGps(null);
-    if (previewUrl && previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
     setIsReading(true);
     setIsFetchingGPS(true);
 
@@ -102,12 +89,8 @@ export function CaptureAndAddPhoto() {
       compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
     } catch (err) {
       console.error(err);
-      // Fallback: usar la imagen original si la compresión falla
       setError("No se pudo comprimir la imagen. Se usará la foto original.");
     }
-
-    setFile(compressed);
-    setPreviewUrl(URL.createObjectURL(compressed));
 
     try {
       const exifGps = await exifr.gps(compressed).catch(() => null);
@@ -123,36 +106,19 @@ export function CaptureAndAddPhoto() {
           lng = fullExif.longitude as number;
         }
       }
-      if (lat != null && lng != null) {
-        setGps({ lat, lng });
-        setError(null);
-      } else {
+      if (lat == null || lng == null) {
         const fallback = await getFallbackLocation();
-        setGps(fallback);
-        setError(
-          fallback.lat === 0 && fallback.lng === 0
-            ? "No hay coordenadas en la imagen. Se agregará con ubicación (0, 0). Puede activar GPS/cámara para la próxima."
-            : null
-        );
+        lat = fallback.lat;
+        lng = fallback.lng;
+        if (lat === 0 && lng === 0) {
+           setError("No se encontraron coordenadas GPS. Se agregó la foto con ubicación (0, 0).");
+        }
       }
-    } catch (err) {
-      console.error(err);
-      const fallback = await getFallbackLocation();
-      setGps(fallback);
-      setError("No se pudieron leer coordenadas. Se usará ubicación por defecto.");
-    } finally {
-      setIsReading(false);
-      setIsFetchingGPS(false);
-    }
-  };
 
-  const handleAgregarAlAlbum = async () => {
-    if (!previewUrl || !gps || !project || !file) return;
+      const photoId = generateSafeId();
+      const projectId = project.id;
+      const preview = URL.createObjectURL(compressed);
 
-    const photoId = crypto.randomUUID();
-    const projectId = project.id;
-
-    try {
       await db.transaction("rw", db.projects, db.photos, async () => {
         const existing = await db.projects.get(projectId);
         if (!existing) {
@@ -165,38 +131,34 @@ export function CaptureAndAddPhoto() {
         await db.photos.add({
           id: photoId,
           projectId,
-          imageBlob: file,
-          tag: tipo,
-          comments: comentario.trim(),
-          lat: gps.lat,
-          lng: gps.lng,
+          imageBlob: compressed,
+          tag: TIPOS_IMAGEN[0],
+          comments: "",
+          lat,
+          lng,
           timestamp: Date.now(),
         });
       });
-    } catch (e) {
-      console.error("[CaptureAndAddPhoto] Error guardando en IndexedDB:", e);
-      setError("No se pudo guardar en el dispositivo (poca memoria o espacio). Libere espacio e intente de nuevo.");
-      return;
+
+      addPhotoToAlbum(
+        {
+          previewUrl: preview,
+          lat,
+          lng,
+          tipo: TIPOS_IMAGEN[0],
+          comentario: "",
+          file: compressed,
+        },
+        photoId
+      );
+    } catch (err) {
+      console.error(err);
+      setError("Ocurrió un error al guardar la foto.");
+    } finally {
+      setIsReading(false);
+      setIsFetchingGPS(false);
+      if (e.target) e.target.value = "";
     }
-
-    addPhotoToAlbum(
-      {
-        previewUrl,
-        lat: gps.lat,
-        lng: gps.lng,
-        tipo,
-        comentario: comentario.trim(),
-        file,
-      },
-      photoId
-    );
-
-    setFile(null);
-    setPreviewUrl(null);
-    setGps(null);
-    setComentario("");
-    setTipo(TIPOS_IMAGEN[0]);
-    setError(null);
   };
 
   const handleGalleryUpload = async (
@@ -398,7 +360,7 @@ export function CaptureAndAddPhoto() {
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
     </section>
   </>
   );

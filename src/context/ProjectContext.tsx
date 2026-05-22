@@ -296,8 +296,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         photos: photosData
       };
 
-      const fileName = `${projectRow.name.replace(/\s+/g, '_')}_Gabinete.json`;
-      const fileToShare = new File([JSON.stringify(payload)], fileName, { type: "application/json" });
+      const fileName = `${projectRow.name.replace(/\s+/g, '_')}_Gabinete.txt`;
+      const fileToShare = new File([JSON.stringify(payload)], fileName, { type: "text/plain" });
 
       const triggerDownload = () => {
         const url = URL.createObjectURL(fileToShare);
