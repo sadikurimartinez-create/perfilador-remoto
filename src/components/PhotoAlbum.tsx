@@ -120,6 +120,7 @@ export function PhotoAlbum({
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [analysisContextExtra, setAnalysisContextExtra] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+  const [isAuditing, setIsAuditing] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [profileRiskLevel, setProfileRiskLevel] = useState<
     "bajo" | "medio" | "alto" | null
@@ -855,139 +856,143 @@ const hasMinimumPhotos =
         </div>
       )}
 
-      {analysisResult && (
-        <div className="space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4">
-          <h4 className="text-lg font-bold text-sky-200 tracking-tight">
-            Análisis Espacial y Estadístico
-          </h4>
-          {!splitLayout && (
-            <>
-              {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-                <CrimeCharts crimes={analysisResult.historicalCrimes} />
+      {(analysisResult || aiProfile) && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+          {analysisResult && (
+            <div className="flex flex-col space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4">
+              <h4 className="text-lg font-bold text-sky-200 tracking-tight">
+                Análisis Espacial y Estadístico
+              </h4>
+              {!splitLayout && (
+                <>
+                  {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
+                    <CrimeCharts crimes={analysisResult.historicalCrimes} />
+                  )}
+                  <div id="map-export-container" className="flex-1 mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
+                    <div className="relative p-0 flex-1">
+                      <AnalysisMap
+                        album={album.filter((p) => selectedIds.includes(p.id))}
+                        analysisResult={analysisResult}
+                        analysisRadius={analysisRadius}
+                        analysisPolygon={analysisPolygon}
+                        setAnalysisPolygon={setAnalysisPolygon}
+                        manualPois={manualPois}
+                        setManualPois={setManualPois}
+                        isPreliminary={false}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3 print:hidden">
+                    <button
+                      type="button"
+                      onClick={handleDownloadMap}
+                      className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
+                    >
+                      Descargar Mapa Oficial
+                    </button>
+                  </div>
+                </>
               )}
-              <div id="map-export-container" className="mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden">
-                <div className="relative p-0">
-                  <AnalysisMap
-                    album={album.filter((p) => selectedIds.includes(p.id))}
-                    analysisResult={analysisResult}
-                    analysisRadius={analysisRadius}
-                    analysisPolygon={analysisPolygon}
-                    setAnalysisPolygon={setAnalysisPolygon}
-                    manualPois={manualPois}
-                    setManualPois={setManualPois}
-                    isPreliminary={false}
-                  />
-                </div>
+            </div>
+          )}
+
+          {aiProfile && (
+            <div className="flex flex-col space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-base font-bold text-indigo-200">
+                  Perfil criminológico ambiental (IA completa)
+                </h4>
+                {profileRiskLevel && (
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-1.5"
+                    title="Nivel de riesgo según incidencia en la zona"
+                  >
+                    <span className="text-xs font-medium text-slate-400">
+                      Riesgo:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={`inline-block h-3 w-3 rounded-full ${
+                          profileRiskLevel === "bajo"
+                            ? "bg-emerald-500 ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900"
+                            : "bg-emerald-500/40"
+                        }`}
+                        aria-hidden
+                      />
+                      <span
+                        className={`inline-block h-3 w-3 rounded-full ${
+                          profileRiskLevel === "medio"
+                            ? "bg-amber-500 ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900"
+                            : "bg-amber-500/40"
+                        }`}
+                        aria-hidden
+                      />
+                      <span
+                        className={`inline-block h-3 w-3 rounded-full ${
+                          profileRiskLevel === "alto"
+                            ? "bg-red-500 ring-2 ring-red-400 ring-offset-1 ring-offset-slate-900"
+                            : "bg-red-500/40"
+                        }`}
+                        aria-hidden
+                      />
+                    </div>
+                    <span
+                      className={`text-xs font-semibold capitalize ${
+                        profileRiskLevel === "bajo"
+                          ? "text-emerald-400"
+                          : profileRiskLevel === "medio"
+                            ? "text-amber-400"
+                            : "text-red-400"
+                      }`}
+                    >
+                      {profileRiskLevel}
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div className="space-y-1 flex-1 flex flex-col">
+                <label className="block text-xs font-semibold text-slate-200">
+                  Dictamen editable por el analista
+                </label>
+                <textarea
+                  value={editableProfile}
+                  onChange={(e) => setEditableProfile(e.target.value)}
+                  disabled={isReadOnly}
+                  className="w-full flex-1 min-h-[500px] md:min-h-[750px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1 print:hidden">
+                {!isReadOnly && projectId && (
+                  <button
+                    type="button"
+                    onClick={handleSaveAnalysis}
+                    disabled={isSavingAnalysis}
+                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isSavingAnalysis
+                      ? "Guardando análisis en expediente…"
+                      : hasSavedAnalysis
+                      ? "Guardado en expediente"
+                      : "Guardar Análisis en Expediente"}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleDownloadMap}
-                  className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
+                  onClick={() => void handleExportToWord()}
+                  className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
                 >
-                  Descargar Mapa Oficial
+                  Exportar a Word
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportToPDF}
+                  className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
+                >
+                  Descargar PDF
                 </button>
               </div>
-            </>
+            </div>
           )}
-        </div>
-      )}
-
-      {aiProfile && (
-        <div className="space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-base font-bold text-indigo-200">
-              Perfil criminológico ambiental (IA completa)
-            </h4>
-            {profileRiskLevel && (
-              <div
-                className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-1.5"
-                title="Nivel de riesgo según incidencia en la zona"
-              >
-                <span className="text-xs font-medium text-slate-400">
-                  Riesgo:
-                </span>
-                <div className="flex items-center gap-1">
-                  <span
-                    className={`inline-block h-3 w-3 rounded-full ${
-                      profileRiskLevel === "bajo"
-                        ? "bg-emerald-500 ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900"
-                        : "bg-emerald-500/40"
-                    }`}
-                    aria-hidden
-                  />
-                  <span
-                    className={`inline-block h-3 w-3 rounded-full ${
-                      profileRiskLevel === "medio"
-                        ? "bg-amber-500 ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900"
-                        : "bg-amber-500/40"
-                    }`}
-                    aria-hidden
-                  />
-                  <span
-                    className={`inline-block h-3 w-3 rounded-full ${
-                      profileRiskLevel === "alto"
-                        ? "bg-red-500 ring-2 ring-red-400 ring-offset-1 ring-offset-slate-900"
-                        : "bg-red-500/40"
-                    }`}
-                    aria-hidden
-                  />
-                </div>
-                <span
-                  className={`text-xs font-semibold capitalize ${
-                    profileRiskLevel === "bajo"
-                      ? "text-emerald-400"
-                      : profileRiskLevel === "medio"
-                        ? "text-amber-400"
-                        : "text-red-400"
-                  }`}
-                >
-                  {profileRiskLevel}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-200">
-              Dictamen editable por el analista
-            </label>
-            <textarea
-              value={editableProfile}
-              onChange={(e) => setEditableProfile(e.target.value)}
-              disabled={isReadOnly}
-              className="w-full min-h-[70vh] md:min-h-[800px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2 pt-1 print:hidden">
-            {!isReadOnly && projectId && (
-              <button
-                type="button"
-                onClick={handleSaveAnalysis}
-                disabled={isSavingAnalysis}
-                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSavingAnalysis
-                  ? "Guardando análisis en expediente…"
-                  : hasSavedAnalysis
-                  ? "Guardado en expediente"
-                  : "Guardar Análisis en Expediente"}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => void handleExportToWord()}
-              className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
-            >
-              Exportar a Word
-            </button>
-            <button
-              type="button"
-              onClick={handleExportToPDF}
-              className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
-            >
-              Descargar PDF
-            </button>
-          </div>
         </div>
       )}
 
@@ -1141,11 +1146,14 @@ const hasMinimumPhotos =
                 </div>
                 {aiSuggestions && (
                   <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2">
-                    <p className="font-semibold mb-1">Sugerencias de IA:</p>
-                    <p className="whitespace-pre-wrap">{aiSuggestions}</p>
+                    <p className="font-semibold mb-1">Borrador y Sugerencias de IA (Editable):</p>
+                    <textarea
+                      value={aiSuggestions}
+                      onChange={(e) => setAiSuggestions(e.target.value)}
+                      className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 text-sm text-yellow-100 min-h-[140px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+                    />
                     <p className="mt-1 text-[10px] text-yellow-300/80">
-                      Revise estas ideas y, si lo considera útil, incorpórelas
-                      en su contexto antes de ejecutar el análisis final.
+                      Edite el texto libremente. Puede pedir a la IA que audite y mejore su redacción técnica antes de aplicarlo al contexto principal.
                     </p>
                     <div className="flex flex-wrap gap-2 pt-2">
                       <button
@@ -1155,7 +1163,38 @@ const hasMinimumPhotos =
                         }}
                         className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
                       >
-                        Ignorar Sugerencia
+                        Descartar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsAuditing(true);
+                          setError(null);
+                          try {
+                            const res = await fetch("/api/refine-context", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                context: aiSuggestions,
+                                mode: "audit"
+                              }),
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setAiSuggestions(data.suggestions ?? "");
+                            } else {
+                              setError(data.error || "Error al auditar sugerencia.");
+                            }
+                          } catch (err) {
+                            setError("Error de comunicación al auditar.");
+                          } finally {
+                            setIsAuditing(false);
+                          }
+                        }}
+                        disabled={isAuditing || !aiSuggestions.trim()}
+                        className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+                      >
+                        {isAuditing ? "Auditando y Mejorando..." : "Auditar y Mejorar Redacción"}
                       </button>
                       <button
                         type="button"
@@ -1163,19 +1202,10 @@ const hasMinimumPhotos =
                           setAnalysisContext((prev) => (prev ? `${prev}\n\n${aiSuggestions}` : aiSuggestions));
                           setAiSuggestions("");
                         }}
-                        className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+                        disabled={isAuditing}
+                        className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                       >
-                        Aplicar 100%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAnalysisContext(aiSuggestions);
-                          setAiSuggestions("");
-                        }}
-                        className="rounded-md bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-600"
-                      >
-                        Editar Sugerencia
+                        Aplicar al Contexto Principal
                       </button>
                     </div>
                   </div>
