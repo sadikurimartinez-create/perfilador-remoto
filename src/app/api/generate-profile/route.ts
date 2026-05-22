@@ -12,6 +12,7 @@ import { getStreetViewComparison } from "@/lib/googleStreetView";
 import { getPool } from "@/lib/db";
 import { getInegiDemographics, type InegiDemographics } from "@/lib/inegiIndicators";
 import { searchXTweets, type XOsintResult } from "./xOsint";
+import { searchNewsOsint, type NewsOsintResult } from "@/lib/newsOsint";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
@@ -328,6 +329,7 @@ function buildPromptForGemini(params: {
   streetViewUrl: string | null;
   strategySummary: string;
   xOsintResult: XOsintResult;
+  newsOsintResult: NewsOsintResult;
   osintReviewsTexto: string;
   analysisContext?: string;
   analysisRadius: number;
@@ -346,6 +348,7 @@ function buildPromptForGemini(params: {
     streetViewUrl,
     strategySummary,
     xOsintResult,
+    newsOsintResult,
     osintReviewsTexto,
     analysisContext,
     analysisRadius,
@@ -405,6 +408,10 @@ function buildPromptForGemini(params: {
     ? `${xOsintResult.resumen}\n` + xOsintResult.tweetsRelevantes.map(t => ` - [${t.autor}]: "${t.texto}"`).join('\n')
     : `Análisis OSINT en X/Twitter: ${xOsintResult.resumen}`;
 
+  const newsOsintTexto = newsOsintResult.exito
+    ? `${newsOsintResult.resumen}\n` + newsOsintResult.noticiasRelevantes.map(n => ` - [${n.fecha} | ${n.fuente}]: "${n.titular}"`).join('\n')
+    : `Análisis Hemerográfico: ${newsOsintResult.resumen}`;
+
   const focusAreasTexto =
     focusAreas && focusAreas.length > 0
       ? focusAreas.join(", ")
@@ -455,6 +462,9 @@ ${inegiTexto}
 ## INTELIGENCIA DE FUENTES ABIERTAS (OSINT - X/Twitter)
 ${xOsintTexto}
 
+## INTELIGENCIA HEMEROGRÁFICA (OSINT - Noticias y Nota Roja)
+${newsOsintTexto}
+
 ## INTELIGENCIA DE FUENTES ABIERTAS (OSINT - Comentarios Ciudadanos)
 ${osintReviewsTexto}
 
@@ -464,12 +474,13 @@ ${visionResumen}
 ## ANÁLISIS MICRO-ECONÓMICO Y DE ATRACTORES (DENUE INEGI Y PLACES - BARRIDO A 1KM)
 ${irregularidadesTexto || "No se identificaron unidades económicas registradas ni atractores relevantes en el perímetro de 1 kilómetro."}
 
-[MANDATO TÁCTICO PARA CRUCE COMERCIAL Y DENUE]:
+[MANDATO TÁCTICO MULTIDIMENSIONAL]:
 1. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos" (concentran masas), "Atractores de Delitos" (atraen infractores motivados) o "Nodos de Miedo". NO hagas un simple inventario.
 2. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y el registro formal de DENUE. Argumenta cómo la irregularidad comercial debilita el control social (ausencia de guardianes formales) y fomenta "ventanas rotas" a nivel socioeconómico.
 3. CORRELACIÓN ESTADÍSTICA: Cruza OBLIGATORIAMENTE los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares/chatarreras = mercados de bienes ilícitos; Lesiones + expendios de alcohol = catalizadores de violencia).
 4. OSINT Y SENTIMIENTO CIUDADANO (GOOGLE): Analiza minuciosamente las reseñas ciudadanas extraídas de Google Places para detectar focos de conflicto social, reportes de inseguridad, narcomenudeo, ruido, peleas o tensión comunitaria.
 5. OSINT EN TIEMPO REAL (X/TWITTER): Audita los tuits ciudadanos para identificar eventos de alto impacto (detonaciones, operativos) y la percepción de inseguridad inmediata en la zona. Correlaciona estos reportes con la estadística formal.
+6. HEMEROTECA Y NOTA ROJA: Cruza las noticias detectadas en los medios con los hallazgos visuales. Si hay cateos u homicidios reportados recientemente, correlaciónalo con la desorganización social de la colonia.
 4. ACTIVIDADES RUTINARIAS: Relaciona la tipología del comercio con la previsibilidad de las víctimas en horarios específicos (bancos, farmacias 24h, tiendas de conveniencia).
 
 ## ESTRATEGIA ANALÍTICA SEGÚN TIPO DE PUNTO
@@ -605,6 +616,7 @@ export async function POST(req: Request) {
 
     const inegiPromise = geocodingPromise.then((geo) => getInegiDemographics(geo.municipio, geo.estado));
     const xOsintPromise = geocodingPromise.then((geo) => searchXTweets(geo.colonia, geo.municipio));
+    const newsOsintPromise = geocodingPromise.then((geo) => searchNewsOsint(geo.colonia, geo.municipio, geo.estado));
 
     const bibliographyPromise = readBibliographyContext();
 
@@ -615,6 +627,7 @@ export async function POST(req: Request) {
       { resumen: incidenciaResumen, detalles: incidenciaDetalles },
       inegiDemographics,
       xOsintResult,
+      newsOsintResult,
       bibliographyContext,
     ] = await Promise.all([
       geocodingPromise,
@@ -623,6 +636,7 @@ export async function POST(req: Request) {
       historialPromise,
       inegiPromise,
       xOsintPromise,
+      newsOsintPromise,
       bibliographyPromise,
     ]);
 
@@ -793,6 +807,7 @@ export async function POST(req: Request) {
       streetViewUrl,
       strategySummary,
       xOsintResult,
+      newsOsintResult,
       osintReviewsTexto,
       analysisContext: body.analysisContext,
       analysisRadius: radiusMeters,
