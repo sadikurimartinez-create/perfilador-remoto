@@ -127,31 +127,6 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     libraries: MAP_LIBRARIES,
   });
 
-  if (!apiKey) {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-amber-400 mt-4">
-        <p className="font-semibold">Mapa no disponible</p>
-        <p className="mt-1">Falta la clave de Google Maps (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY).</p>
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-red-400 mt-4">
-        <p className="font-semibold">Error al cargar el mapa</p>
-      </div>
-    );
-  }
-
-  if (!isLoaded) {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-400 min-h-[200px] flex items-center justify-center mt-4">
-        Cargando mapa de Google…
-      </div>
-    );
-  }
-
   const handleMarkerDrag = (index: number, lat: number, lng: number) => {
     const newCoords = [...coordinates];
     newCoords[index] = { lat, lng };
@@ -238,7 +213,23 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
   return (
     <div className="flex flex-col gap-4 mt-4">
-      {heatmapData.length > 0 && (
+      {!apiKey ? (
+        <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-amber-400">
+          <p className="font-semibold">Mapa no disponible</p>
+          <p className="mt-1">Falta la clave de Google Maps.</p>
+        </div>
+      ) : loadError ? (
+        <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-red-400">
+          <p className="font-semibold">Error al cargar el mapa</p>
+          <p className="mt-1">Google Maps está bloqueando la API Key. Debe permitir el dominio en Google Cloud Console.</p>
+        </div>
+      ) : !isLoaded ? (
+        <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-400 min-h-[200px] flex items-center justify-center">
+          Cargando mapa de Google…
+        </div>
+      ) : (
+        <>
+          {heatmapData.length > 0 && (
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -370,6 +361,8 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         <p className="text-xs text-amber-400 mt-2 px-2 pb-2 font-medium">{validationMsg}</p>
       )}
       </div>
+        </>
+      )}
 
       <div className="hidden md:block">
         <MultimodalPanel project={project} />
