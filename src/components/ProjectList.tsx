@@ -46,6 +46,7 @@ export function ProjectList() {
     }[]
   >([]);
 
+  const [localPhotoCounts, setLocalPhotoCounts] = useState<Record<string, number>>({});
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [selectedPreview, setSelectedPreview] = useState<any>(null);
 
@@ -132,6 +133,18 @@ export function ProjectList() {
     });
     return () => unsub();
   }, [loading, user]);
+
+  // Cargar conteo real desde la base de datos local (Offline)
+  useEffect(() => {
+    const fetchCounts = async () => {
+      const counts: Record<string, number> = {};
+      for (const p of projects) {
+        counts[p.id] = await localDb.photos.where("projectId").equals(p.id).count();
+      }
+      setLocalPhotoCounts(counts);
+    };
+    if (projects.length > 0) fetchCounts();
+  }, [projects]);
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
@@ -310,7 +323,7 @@ export function ProjectList() {
                       0) as number),
                   0
                 );
-                const photoCountDisplay = Math.max(p.photoCount, photosFromAnalyses);
+            const photoCountDisplay = Math.max(p.photoCount, photosFromAnalyses, localPhotoCounts[p.id] || 0);
                 return (
                   <li
                     key={p.id}

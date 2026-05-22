@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "./CaptureAndAddPhoto";
 import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
 
 export function ProjectManager() {
+  const router = useRouter();
   const { project, album, createProject, closeProject, updatePhotoCoordinates, exportProjectData } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
@@ -35,6 +37,7 @@ export function ProjectManager() {
   const handleCerrarProyecto = () => {
     closeProject();
     setShowPrompt(false);
+    router.push("/");
   };
 
   // ==========================

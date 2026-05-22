@@ -112,7 +112,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     coordinates.forEach((pt) => bounds.extend(new g.maps.LatLng(pt.lat, pt.lng)));
     if (coordinates.length > 1) {
       mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
-    } else {
+    } else if (coordinates.length === 1) {
       mapRef.current.setCenter(coordinates[0]);
       mapRef.current.setZoom(15);
     }

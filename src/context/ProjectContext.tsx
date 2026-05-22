@@ -282,7 +282,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             });
           };
           reader.onerror = reject;
-          reader.readAsDataURL(p.imageBlob);
+          if (!p.imageBlob) {
+            resolve({ id: p.id, tag: p.tag, comments: p.comments, lat: p.lat, lng: p.lng, timestamp: p.timestamp, base64: null });
+          } else {
+            reader.readAsDataURL(p.imageBlob);
+          }
         });
       }));
 
@@ -295,6 +299,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const fileName = `${projectRow.name.replace(/\s+/g, '_')}_Gabinete.json`;
       const fileToShare = new File([JSON.stringify(payload)], fileName, { type: "application/json" });
 
+      const triggerDownload = () => {
+        const url = URL.createObjectURL(fileToShare);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      };
+
       // Intentar compartir directamente a apps (WhatsApp, Telegram, etc.) en celulares
       if (navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
         try {
@@ -306,12 +321,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           return; // Compartido exitosamente, salimos de la función
         } catch (shareErr) {
           console.log("[ProjectContext] Web Share cancelado o fallido, usando fallback de descarga:", shareErr);
+          triggerDownload();
+          return;
         }
       }
 
-      // Fallback: Descarga clásica para PC o navegadores sin soporte de compartir
-      const { saveAs } = await import("file-saver");
-      saveAs(fileToShare, fileName);
+      // Fallback: Descarga nativa para PC o navegadores sin soporte de compartir
+      triggerDownload();
     } catch (err) {
       console.error("[ProjectContext] Error exportando:", err);
       alert("Error al exportar el expediente.");
