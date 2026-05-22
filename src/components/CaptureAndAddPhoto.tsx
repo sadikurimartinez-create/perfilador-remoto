@@ -73,93 +73,7 @@ export function CaptureAndAddPhoto() {
   const [error, setError] = useState<string | null>(null);
   const [isReading, setIsReading] = useState(false);
   const [isFetchingGPS, setIsFetchingGPS] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected || !project) return;
-
-    setError(null);
-    setIsReading(true);
-    setIsFetchingGPS(true);
-
-    let compressed: File = selected;
-    try {
-      compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
-    } catch (err) {
-      console.error(err);
-      setError("No se pudo comprimir la imagen. Se usará la foto original.");
-    }
-
-    try {
-      const exifGps = await exifr.gps(compressed).catch(() => null);
-      let lat: number | null = null;
-      let lng: number | null = null;
-      if (exifGps && typeof exifGps.latitude === "number" && typeof exifGps.longitude === "number") {
-        lat = exifGps.latitude;
-        lng = exifGps.longitude;
-      } else {
-        const fullExif = await exifr.parse(compressed, { gps: true }).catch(() => null) as Record<string, unknown> | null;
-        if (fullExif?.latitude != null && fullExif?.longitude != null) {
-          lat = fullExif.latitude as number;
-          lng = fullExif.longitude as number;
-        }
-      }
-      if (lat == null || lng == null) {
-        const fallback = await getFallbackLocation();
-        lat = fallback.lat;
-        lng = fallback.lng;
-        if (lat === 0 && lng === 0) {
-           setError("No se encontraron coordenadas GPS. Se agregó la foto con ubicación (0, 0).");
-        }
-      }
-
-      const photoId = generateSafeId();
-      const projectId = project.id;
-      const preview = URL.createObjectURL(compressed);
-
-      await db.transaction("rw", db.projects, db.photos, async () => {
-        const existing = await db.projects.get(projectId);
-        if (!existing) {
-          await db.projects.add({
-            id: projectId,
-            name: project.nombre,
-            createdAt: Date.now(),
-          });
-        }
-        await db.photos.add({
-          id: photoId,
-          projectId,
-          imageBlob: compressed,
-          tag: TIPOS_IMAGEN[0],
-          comments: "",
-          lat,
-          lng,
-          timestamp: Date.now(),
-        });
-      });
-
-      addPhotoToAlbum(
-        {
-          previewUrl: preview,
-          lat,
-          lng,
-          tipo: TIPOS_IMAGEN[0],
-          comentario: "",
-          file: compressed,
-        },
-        photoId
-      );
-    } catch (err) {
-      console.error(err);
-      setError("Ocurrió un error al guardar la foto.");
-    } finally {
-      setIsReading(false);
-      setIsFetchingGPS(false);
-      if (e.target) e.target.value = "";
-    }
-  };
 
   const handleGalleryUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -171,19 +85,12 @@ export function CaptureAndAddPhoto() {
     setIsFetchingGPS(true);
 
     for (const selected of files) {
-      let compressed: File = selected;
-      try {
-        compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
-      } catch (err) {
-        console.error("[CaptureAndAddPhoto] Error comprimiendo:", err);
-        // Fallback: mantener la imagen original para no bloquear la subida
-        setError("No se pudo comprimir una imagen. Se usará la foto original.");
-      }
-
+      // IMPORTANTE: Extraer GPS de la imagen ORIGINAL antes de comprimir, 
+      // ya que la compresión borra los metadatos EXIF.
       let lat: number | null = null;
       let lng: number | null = null;
       try {
-        const exifGps = await exifr.gps(compressed).catch(() => null);
+        const exifGps = await exifr.gps(selected).catch(() => null);
         if (
           exifGps &&
           typeof exifGps.latitude === "number" &&
@@ -193,7 +100,7 @@ export function CaptureAndAddPhoto() {
           lng = exifGps.longitude;
         } else {
           const fullExif = (await exifr
-            .parse(compressed, { gps: true })
+            .parse(selected, { gps: true })
             .catch(() => null)) as Record<string, unknown> | null;
           if (fullExif?.latitude != null && fullExif?.longitude != null) {
             lat = fullExif.latitude as number;
@@ -208,6 +115,15 @@ export function CaptureAndAddPhoto() {
         const fallback = await getFallbackLocation();
         lat = fallback.lat;
         lng = fallback.lng;
+      }
+
+      let compressed: File = selected;
+      try {
+        compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
+      } catch (err) {
+        console.error("[CaptureAndAddPhoto] Error comprimiendo:", err);
+        // Fallback: mantener la imagen original para no bloquear la subida
+        setError("No se pudo comprimir una imagen. Se usará la foto original.");
       }
 
       const photoId = generateSafeId();
@@ -310,10 +226,10 @@ export function CaptureAndAddPhoto() {
       )}
       <header className="space-y-1">
         <h3 className="text-lg font-semibold text-slate-100">
-          Captura / Subida de fotografía
+          Evidencia Fotográfica
         </h3>
         <p className="text-sm text-slate-400">
-          Tome una foto con la cámara o suba desde la galería. Si la imagen no tiene ubicación, se usará su posición actual o (0, 0).
+          Tome las fotos con la cámara normal de su teléfono (para que se guarden en su carrete) y luego súbalas aquí. El sistema extraerá el GPS original de las fotografías.
         </p>
       </header>
 
@@ -324,15 +240,6 @@ export function CaptureAndAddPhoto() {
       )}
 
       <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-
-      <input
         ref={galleryInputRef}
         type="file"
         accept="image/*"
@@ -341,22 +248,14 @@ export function CaptureAndAddPhoto() {
         onChange={handleGalleryUpload}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled={!project}
-          onClick={() => project && fileInputRef.current?.click()}
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Tomar foto (Cámara)
-        </button>
+      <div className="grid grid-cols-1 gap-2">
         <button
           type="button"
           disabled={!project}
           onClick={() => project && galleryInputRef.current?.click()}
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 px-3 py-3 text-base font-semibold hover:bg-sky-800/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
         >
-          Subir desde galería
+          📸 Seleccionar fotos del Carrete / Galería
         </button>
       </div>
 
