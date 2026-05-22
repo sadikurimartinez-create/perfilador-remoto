@@ -7,8 +7,7 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
     let imgSrc = imageUrl;
 
     // Si es una URL HTTP/HTTPS, descargar vía fetch para evitar CORS/taint
-    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-      const response = await fetch(imageUrl, { mode: "cors" });
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {      const response = await fetch(imageUrl, { mode: "cors", cache: "no-cache" });
       if (!response.ok) {
         throw new Error(`No se pudo descargar la imagen (${response.status}). Configure las reglas CORS en Firebase Storage.`);
       }

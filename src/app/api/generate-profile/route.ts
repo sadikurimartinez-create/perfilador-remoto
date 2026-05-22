@@ -200,7 +200,7 @@ async function reverseGeocode(
   lat: number,
   lng: number
 ): Promise<GeocodingResult> {
-  const key = "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // FORZADO IGNORANDO VERCEL ENV
+  const key = process.env.GOOGLE_MAPS_API_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   if (!key) {
     console.warn(
       "[generate-profile] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY para Geocoding."
@@ -663,7 +663,7 @@ export async function POST(req: Request) {
           "Puntos de interés fusionados (DENUE + Google Places):\n" +
           resumenPOI;
 
-        const mapsKey = "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // FORZADO IGNORANDO VERCEL ENV
+        const mapsKey = process.env.GOOGLE_MAPS_API_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
         if (mapsKey) {
           poiImages = mergedPois.slice(0, 12).map((p) => ({
             name: p.name,

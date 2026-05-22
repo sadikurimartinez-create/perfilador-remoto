@@ -102,6 +102,9 @@ export function PhotoAlbum({
     updatePhotoMeta,
     removePhotoFromAlbum,
     removeAllPhotosFromAlbum,
+    documents,
+    uploadDocument,
+    removeDocument,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -129,6 +132,9 @@ export function PhotoAlbum({
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
   const [debugData, setDebugData] = useState<any>(null);
   const [showMonitor, setShowMonitor] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docContext, setDocContext] = useState("");
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   // Validación mínima de fotografías según geometría
 const minimumPhotos = {
   individual: 1,
@@ -441,7 +447,6 @@ const remainingPhotos =
     try {
       const canvas = await html2canvas(el, {
         useCORS: true,
-        allowTaint: true,
         scale: 2,
       });
       const dataUrl = canvas.toDataURL("image/png");
@@ -470,7 +475,6 @@ const remainingPhotos =
         try {
           const canvas = await html2canvas(mapEl, {
             useCORS: true,
-            allowTaint: true,
             scale: 1.5,
           });
           mapDataUrl = canvas.toDataURL("image/png");
@@ -719,7 +723,53 @@ const remainingPhotos =
         ))}
       </div>
 
-      <div className="pt-2 border-t border-slate-800 space-y-2 hidden md:block print:hidden">
+      {/* ANEXOS DOCUMENTALES */}
+      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Anexos Documentales (PDF, Excel, Videos)</h4>
+          <p className="text-xs text-slate-400">Adjunte archivos adicionales de inteligencia (se omite del análisis geográfico automático, pero quedan en el expediente). <strong className="text-amber-400">Obligatorio contextualizar.</strong></p>
+        </header>
+        <div className="flex flex-col md:flex-row gap-4 items-start">
+          <div className="w-full md:w-1/2 space-y-3 p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+            <input id="doc-upload-input" type="file" onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800" accept=".pdf,.xls,.xlsx,.doc,.docx,.mp4,.avi,.mkv" />
+            <textarea value={docContext} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[60px]" />
+            <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc} onClick={async () => {
+              if (!docFile || !docContext.trim()) return;
+              setIsUploadingDoc(true);
+              setError(null);
+              try {
+                await uploadDocument(docFile, docContext);
+                setDocFile(null);
+                setDocContext("");
+                const fileInput = document.getElementById("doc-upload-input") as HTMLInputElement;
+                if (fileInput) fileInput.value = "";
+              } catch (e: any) {
+                setError("Error al subir documento: " + e.message);
+              } finally {
+                setIsUploadingDoc(false);
+              }
+            }} className="w-full bg-sky-700 hover:bg-sky-600 text-white py-1.5 px-4 rounded text-xs font-semibold disabled:opacity-50 transition">
+              {isUploadingDoc ? "Subiendo Anexo..." : "Subir Anexo Contextualizado"}
+            </button>
+          </div>
+          <div className="w-full md:w-1/2 space-y-2">
+            {documents && documents.length > 0 ? documents.map(d => (
+              <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
+                <div className="flex justify-between items-start gap-2">
+                  <a href={d.url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold text-[11px] truncate flex-1" title={d.name}>📄 {d.name}</a>
+                  <button onClick={() => removeDocument(d.id)} className="text-red-400 hover:text-red-300 text-[10px] shrink-0">Eliminar</button>
+                </div>
+                <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
+              </div>
+            )) : (
+              <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-700 rounded-lg">No hay anexos documentales en este expediente.</div>
+            )}
+          </div>
+        </div>
+      </div>
+      {/* FIN ANEXOS DOCUMENTALES */}
+
+      <div className="pt-4 border-t border-slate-800 space-y-2 hidden md:block print:hidden">
         <button
           type="button"
           onClick={handleOpenConfigModal}

@@ -94,7 +94,7 @@ export function AnalysisMap({
     mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
   }, [mapReady, boundsPoints]);
 
-  const apiKey = "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // FORZADO IGNORANDO VERCEL ENV
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,

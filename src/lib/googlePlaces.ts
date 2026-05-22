@@ -25,7 +25,11 @@ const GOOGLE_PLACES_BASE_URL =
   "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
 
 function getMapsApiKey(): string | null {
-  return "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // FORZADO IGNORANDO VERCEL ENV
+  return (
+    process.env.GOOGLE_MAPS_API_KEY ??
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
+    null
+  );
 }
 
 function classifyPlace(types: string[], name: string): PlaceCategory {

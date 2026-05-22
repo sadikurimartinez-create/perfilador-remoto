@@ -71,6 +71,15 @@ export type AnalysisResult = {
   raw?: unknown;
 };
 
+export type ProjectDocument = {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  context: string;
+  createdAt: number;
+};
+
 type ProjectContextValue = {
   project: Project | null;
   album: AlbumPhoto[];
@@ -95,6 +104,9 @@ type ProjectContextValue = {
   setAnalysisResult: (result: AnalysisResult | null) => void;
   exportProjectData: (projectId: string) => Promise<void>;
   importProjectData: (file: File, username: string) => Promise<void>;
+  documents: ProjectDocument[];
+  uploadDocument: (file: File, context: string) => Promise<void>;
+  removeDocument: (id: string) => Promise<void>;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -116,6 +128,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [album, setAlbum] = useState<AlbumPhoto[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysisResult, setAnalysisResultState] = useState<AnalysisResult | null>(null);
+  const [documents, setDocuments] = useState<ProjectDocument[]>([]);
 
   const createProject = useCallback(async ({
     nombre,
@@ -145,6 +158,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setAlbum([]);
       setSelectedIds([]);
       setAnalysisResultState(null);
+      setDocuments([]);
     } catch (err: any) {
       console.error("Error creando proyecto:", err);
       alert("Error al crear expediente: " + err.message);
@@ -156,6 +170,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setAlbum([]);
     setSelectedIds([]);
     setAnalysisResultState(null);
+    setDocuments([]);
   }, []);
 
   const loadProject = useCallback(async (projectId: string) => {
@@ -193,6 +208,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       });
       setAlbum(albumPhotos);
       setSelectedIds(albumPhotos.map((p) => p.id));
+
+      const docsColRef = collection(firestore, "projects", projectId, "documents");
+      const docsSnap = await getDocs(query(docsColRef, orderBy("createdAt", "asc")));
+      const projectDocs: ProjectDocument[] = docsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as ProjectDocument));
+      setDocuments(projectDocs);
 
       if (projectData.iaAnalysis) {
         setAnalysisResultState(projectData.iaAnalysis);
@@ -268,6 +291,34 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }, photoDocRef.id);
 
   }, [project, addPhotoToAlbum]);
+
+  const uploadDocument = useCallback(async (file: File, context: string) => {
+    if (!project) throw new Error("No hay un proyecto activo para subir el anexo.");
+    const storage = getStorage();
+    const docId = generateId();
+    const storageRef = ref(storage, `projects/${project.id}/documents/${docId}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+
+    const firestore = getDb();
+    const docsColRef = collection(firestore, "projects", project.id, "documents");
+    const docData = {
+      name: file.name,
+      url: downloadURL,
+      type: file.type || "unknown",
+      context,
+      createdAt: Date.now()
+    };
+    const docRef = await addDoc(docsColRef, docData);
+    setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);
+  }, [project]);
+
+  const removeDocument = useCallback(async (id: string) => {
+    if (!project) return;
+    const firestore = getDb();
+    await deleteDoc(doc(firestore, "projects", project.id, "documents", id));
+    setDocuments(prev => prev.filter(d => d.id !== id));
+  }, [project]);
 
   const removePhotoFromAlbum = useCallback(async (id: string) => {
     try {
@@ -449,7 +500,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       clearSelection,
       setAnalysisResult,
       exportProjectData,
-      importProjectData
+      importProjectData,
+      documents,
+      uploadDocument,
+      removeDocument
     }),
     [
       project,
@@ -470,7 +524,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       clearSelection,
       setAnalysisResult,
       exportProjectData,
-      importProjectData
+      importProjectData,
+      documents,
+      uploadDocument,
+      removeDocument
     ]
   );
 
