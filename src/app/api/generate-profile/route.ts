@@ -130,6 +130,8 @@ type GenerateProfileBody = {
   incidenciaLocal?: any[];
   /** Bibliografía adicional (concatenada desde carpetas protegidas) enviada desde /api/incidencia (auditoría). */
   bibliografiaLocal?: string;
+  /** Contexto y directrices de las evidencias multimodales adjuntas. */
+  multimodalContext?: string;
 };
 
 type GeocodingResult = {
@@ -332,6 +334,7 @@ function buildPromptForGemini(params: {
   newsOsintResult: NewsOsintResult;
   osintReviewsTexto: string;
   analysisContext?: string;
+  multimodalContext?: string;
   analysisRadius: number;
   focusAreas: string[];
   poiImages: Array<{ name: string; category: string; streetViewUrl: string }>;
@@ -351,6 +354,7 @@ function buildPromptForGemini(params: {
     newsOsintResult,
     osintReviewsTexto,
     analysisContext,
+    multimodalContext,
     analysisRadius,
     focusAreas,
     poiImages,
@@ -431,6 +435,10 @@ function buildPromptForGemini(params: {
     analysisContext?.trim() ||
     "[El analista no proporcionó hipótesis ni contexto adicional.]";
 
+  const multimodalTexto =
+    multimodalContext?.trim() ||
+    "[No se adjuntaron evidencias multimodales o de gabinete en esta ocasión.]";
+
   const clasificacionesTexto = photos
     .map(
       (p, idx) =>
@@ -448,6 +456,9 @@ ${comentariosInvestigador}
 
 ## HIPÓTESIS O CONTEXTO DEL ANALISTA (incorporar en el análisis)
 ${hipotesisTexto}
+
+## EVIDENCIAS MULTIMODALES Y DE GABINETE (Analizar e integrar al dictamen)
+${multimodalTexto}
 
 ## CLASIFICACIÓN HUMANA DE LA EVIDENCIA
 ${clasificacionesTexto}
@@ -810,6 +821,7 @@ export async function POST(req: Request) {
       newsOsintResult,
       osintReviewsTexto,
       analysisContext: body.analysisContext,
+      multimodalContext: body.multimodalContext,
       analysisRadius: radiusMeters,
       focusAreas: body.focusAreas ?? [],
       poiImages,

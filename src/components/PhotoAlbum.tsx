@@ -308,6 +308,9 @@ const hasMinimumPhotos =
         console.error("[PhotoAlbum] Error /api/incidencia:", e);
       }
 
+      // Empaquetar las instrucciones de la Evidencia Multimodal para la IA
+      const multimodalContext = documents.map(d => `[Archivo Adjunto al Expediente: ${d.name} | Tipo: ${d.type}]\nInstrucción Táctica del Analista: ${d.context}`).join("\n\n");
+
       try {
         const res = await fetch("/api/generate-profile", {
           method: "POST",
@@ -319,6 +322,7 @@ const hasMinimumPhotos =
             focusAreas,
             incidenciaLocal,
             bibliografiaLocal,
+            multimodalContext,
           }),
         });
 

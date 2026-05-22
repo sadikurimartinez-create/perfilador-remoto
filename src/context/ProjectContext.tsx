@@ -120,6 +120,7 @@ const COMPRESSION_OPTIONS = {
   useWebWorker: true,
   initialQuality: 0.7,
   alwaysKeepResolution: true,
+  preserveExif: true,
 } as const;
 
 function generateId(): string {
