@@ -16,11 +16,7 @@ const ELEVATION_BASE_URL =
   "https://maps.googleapis.com/maps/api/elevation/json";
 
 function getMapsApiKey(): string | null {
-  return (
-    process.env.GOOGLE_MAPS_API_KEY ??
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA" // HARDCODED TEMPORAL PARA VERCEL
-  );
+  return "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // FORZADO IGNORANDO VERCEL ENV
 }
 
 function inferUnpavedOrRural(summary: string): boolean {

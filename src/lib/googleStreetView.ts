@@ -10,10 +10,7 @@ export function buildStreetViewUrl(
   lng: number,
   options?: { size?: string; fov?: number; pitch?: number; heading?: number }
 ): string | null {
-  const apiKey =
-    process.env.GOOGLE_MAPS_API_KEY ??
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // HARDCODED TEMPORAL PARA VERCEL
+  const apiKey = "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // FORZADO IGNORANDO VERCEL ENV
   if (!apiKey) {
     console.warn(
       "[googleStreetView] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY en variables de entorno."
