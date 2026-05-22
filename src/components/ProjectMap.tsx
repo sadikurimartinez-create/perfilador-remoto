@@ -122,7 +122,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
   const { isLoaded, loadError } = useJsApiLoader({
-    id: "project-map",
+    id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries: MAP_LIBRARIES,
   });
