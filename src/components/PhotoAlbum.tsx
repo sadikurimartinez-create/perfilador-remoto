@@ -499,6 +499,10 @@ const remainingPhotos =
     }
   };
 
+  const handleExportToPDF = () => {
+    window.print();
+  };
+
   if (album.length === 0) {
     return (
       <section className="card p-6 text-center text-slate-400 text-sm">
@@ -538,7 +542,7 @@ const remainingPhotos =
       <button
         type="button"
         onClick={handleDownloadMap}
-        className="w-full inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors"
+        className="w-full inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
       >
         Descargar Mapa Oficial
       </button>
@@ -548,7 +552,7 @@ const remainingPhotos =
   return (
     <>
       <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <h3 className="text-lg font-semibold text-slate-100">Álbum fotográfico</h3>
         <div className="flex gap-2">
           <button
@@ -715,7 +719,7 @@ const remainingPhotos =
         ))}
       </div>
 
-      <div className="pt-2 border-t border-slate-800 space-y-2 hidden md:block">
+      <div className="pt-2 border-t border-slate-800 space-y-2 hidden md:block print:hidden">
         <button
           type="button"
           onClick={handleOpenConfigModal}
@@ -835,14 +839,14 @@ const remainingPhotos =
                 <button
                   type="button"
                   onClick={() => setIsPreliminaryMapConfirmed(true)}
-                  className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
+                  className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors print:hidden"
                 >
                   Confirmar perímetro y analizar
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadMap}
-                  className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors"
+                  className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
                 >
                   Descargar Mapa Oficial
                 </button>
@@ -916,7 +920,7 @@ const remainingPhotos =
               className="w-full min-h-[500px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y"
             />
           </div>
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1 print:hidden">
             {projectId && (
               <button
                 type="button"
@@ -937,6 +941,13 @@ const remainingPhotos =
               className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
             >
               Exportar a Word
+            </button>
+            <button
+              type="button"
+              onClick={handleExportToPDF}
+              className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
+            >
+              Descargar PDF
             </button>
           </div>
         </div>

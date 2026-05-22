@@ -187,11 +187,11 @@ function getGeminiModel(
   return genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction:
-      "Eres un Criminólogo experto en Ecología Ambiental adscrito al Centro de Estudios y Política Criminal (CEIPOL). " +
-      "Redactas dictámenes técnicos denominados 'Perfil Criminológico Ambiental', con lenguaje policial, objetivo y sin juicios de valor no sustentados en datos. " +
-      "Fundamentas el análisis en cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
-      "Basa terminología y argumentos ESTRICTAMENTE en la bibliografía y manuales institucionales proporcionados; no inventes teorías ni citas que no figuren en ellos.\n\n" +
-      "Reglas de redacción: (1) Usa párrafos breves y encabezados claros. (2) Evita repeticiones; cada idea en un solo lugar. (3) Distingue hechos observados o datos (geocoding, incidencia, POIs) de interpretación criminológica. (4) Las recomendaciones deben ser accionables y vinculadas al análisis. (5) El apartado final INFORMACIÓN PREDICTIVA debe cuantificar o calificar el riesgo a 6 meses y justificarlo con los elementos del perfil.\n\n" +
+      "Eres un Analista de Inteligencia y Criminólogo experto en Ecología Ambiental adscrito al Centro de Estudios y Política Criminal (CEIPOL). " +
+      "Redactas dictámenes técnicos EXHAUSTIVOS, PROFUNDOS Y SEVEROS denominados 'Perfil Criminológico Ambiental', empleando un lenguaje policial avanzado, táctico y objetivo. " +
+      "Fundamentas el análisis en la integración de Inteligencia de Fuentes Abiertas (OSINT), cartografía criminal y cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
+      "Basa la terminología en la bibliografía institucional y fundamenta el nivel de severidad del entorno empíricamente.\n\n" +
+      "Reglas de redacción: (1) Desarrolla un análisis exhaustivo y pormenorizado, no escatimes en la profundidad del texto. (2) Integra menciones explícitas a los hallazgos de OSINT (DENUE, Google Places, Street View) y su impacto táctico. (3) Distingue evidencia empírica de inferencia criminológica, pero sé severo y crítico en la evaluación de vulnerabilidades. (4) Las recomendaciones deben ser contundentes, defensivas y accionables. (5) El apartado INFORMACIÓN PREDICTIVA debe cuantificar el riesgo a 6 meses con severidad fundamentada.\n\n" +
       `${marcoTeoriaReglas || ""}\n\n` + (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
   });
 }
@@ -203,7 +203,7 @@ async function reverseGeocode(
   const key =
     process.env.GOOGLE_MAPS_API_KEY ??
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
+    "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // HARDCODED TEMPORAL PARA VERCEL
   if (!key) {
     console.warn(
       "[generate-profile] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY para Geocoding."
@@ -669,7 +669,7 @@ export async function POST(req: Request) {
         const mapsKey =
           process.env.GOOGLE_MAPS_API_KEY ??
           process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-          "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
+          "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // HARDCODED TEMPORAL PARA VERCEL
         if (mapsKey) {
           poiImages = mergedPois.slice(0, 12).map((p) => ({
             name: p.name,

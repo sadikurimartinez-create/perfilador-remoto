@@ -19,7 +19,7 @@ function getMapsApiKey(): string | null {
   return (
     process.env.GOOGLE_MAPS_API_KEY ??
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    null
+    "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA" // HARDCODED TEMPORAL PARA VERCEL
   );
 }
 
@@ -151,4 +151,3 @@ export async function analyzeEscapeRoutes(
     rawElevation: elevationJson
   };
 }
-

@@ -10,7 +10,7 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
       const response = await fetch(imageUrl, { mode: "cors" });
       if (!response.ok) {
-        throw new Error(`No se pudo descargar la imagen (${response.status})`);
+        throw new Error(`No se pudo descargar la imagen (${response.status}). Configure las reglas CORS en Firebase Storage.`);
       }
       const blob = await response.blob();
       objectUrl = URL.createObjectURL(blob);
@@ -264,4 +264,3 @@ export async function exportToWord(
 
   saveAs(blob, `Dictamen_${safeName}.docx`);
 }
-

@@ -38,27 +38,28 @@ export async function POST(req: Request) {
     const cleanedContext = (context ?? "").trim();
 
     const prompt = `
-El analista escribió este contexto (puede estar vacío si aún no ha redactado nada):
+Eres un Analista de Inteligencia Senior adscrito al CEIPOL. Un investigador de campo está redactando la hipótesis o contexto operacional para un Perfil Criminológico Ambiental.
 
-"${cleanedContext || "(sin contexto inicial; generar sugerencias solo a partir de la geografía)"}"
+Contexto preliminar del analista:
+"${cleanedContext || "(El analista aún no ha redactado una hipótesis, genera sugerencias de enfoque táctico a partir de la geografía y teoría criminológica)"}"
 
 Coordenadas aproximadas de las fotos:
 ${coordsText}
 
-Revisa el contexto y las coordenadas. Da 2 o 3 sugerencias breves y concretas
-sobre elementos visibles o esperables en las imágenes (iluminación, vandalismo,
-rutas de escape, accesibilidad, presencia de cámaras, flujo peatonal/vehicular, etc.)
-que el analista debería agregar a su contexto para mejorar el perfil criminológico.
+Instrucción:
+Proporciona 3 o 4 sugerencias PROFUNDAS, TÁCTICAS y SEVERAS basadas en la Criminología Ambiental (Actividades Rutinarias, Ventanas Rotas, Elección Racional, Patrón Delictivo).
+Indícale al analista qué elementos clave DEBE observar e incluir en su contexto (ej. cruce con OSINT, rutas de escape, atractores de riesgo, barreras físicas, nivel de vigilancia natural, presencia de halconeo o deterioro urbano).
 
-Responde en español, en forma de viñetas cortas, sin repetir el contexto original.
+Responde en español, usando viñetas cortas, con lenguaje policial/táctico. NO repitas el contexto original, solo dile qué agregar o en qué enfocarse para robustecer su hipótesis.
 `.trim();
 
     // Si no hay clave de Gemini, devolvemos sugerencias genéricas para no romper el flujo de la UI.
     if (!apiKey) {
       const fallback =
-        "• Describa iluminación (natural/artificial), visibilidad y puntos ciegos.\n" +
-        "• Señale rutas de acceso/escape, barreras físicas y posibles puntos de vigilancia.\n" +
-        "• Mencione presencia o ausencia de cámaras, flujo peatonal/vehicular y signos de deterioro (grafiti, basura, vidrios rotos).";
+        "• Analice e integre los vectores de movilidad táctica (rutas de aproximación y escape) y la presencia de barreras físicas.\n" +
+        "• Evalúe el nivel de deterioro urbano (Ventanas Rotas) y su correlación con la percepción de impunidad en el polígono.\n" +
+        "• Identifique atractores delictivos cercanos (giros negros, zonas de abandono) y cruce con Inteligencia de Fuentes Abiertas (OSINT).\n" +
+        "• Describa la presencia o ausencia de guardianes formales e informales (Cámaras C5i, iluminación, vigilancia vecinal).";
       return NextResponse.json({ suggestions: fallback });
     }
 
@@ -72,10 +73,9 @@ Responde en español, en forma de viñetas cortas, sin repetir el contexto origi
     console.error("[api/refine-context] Error:", err);
     // Degradación elegante: si Gemini falla, devolvemos sugerencias genéricas en vez de 500.
     const fallback =
-      "• Añada observaciones sobre patrones de movimiento, horarios críticos y concentración de personas.\n" +
-      "• Vincule las características físicas del entorno con oportunidades y riesgos para el delito.\n" +
-      "• Incluya hipótesis sobre cómo el espacio favorece u obstaculiza la vigilancia natural y formal.";
+      "• Evalúe las vulnerabilidades espaciales basándose en las Actividades Rutinarias de la zona (flujos de víctimas e infractores).\n" +
+      "• Considere la Teoría de Elección Racional: describa qué elementos del entorno facilitan la decisión delictiva.\n" +
+      "• Determine la conectividad del sitio con posibles rutas de huida o zonas de impunidad.";
     return NextResponse.json({ suggestions: fallback });
   }
 }
-

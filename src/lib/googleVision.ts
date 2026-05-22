@@ -114,7 +114,7 @@ export async function analyzeBrokenWindowsWithVision(
     process.env.GOOGLE_CLOUD_VISION_API_KEY ||
     process.env.GOOGLE_MAPS_API_KEY ||
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
-    "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
+    "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA"; // HARDCODED TEMPORAL PARA VERCEL
 
   if (!apiKey.trim()) {
     console.warn(
