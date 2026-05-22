@@ -129,7 +129,7 @@ export async function exportToWord(
           }),
         ],
       }),
-          new Paragraph({})
+      new Paragraph({ children: [new TextRun({ text: "" })] })
     );
   }
 
@@ -138,11 +138,11 @@ export async function exportToWord(
       const headerChildren: any[] = [];
 
   if (sspLogoBuffer) {
-    headerChildren.push(new ImageRun({ data: sspLogoBuffer, transformation: { width: 80, height: 80 } }));
+    headerChildren.push(new ImageRun({ data: sspLogoBuffer, transformation: { width: 80, height: 80 } } as any));
     headerChildren.push(new TextRun({ text: "        " })); // espacio
   }
   if (ceipolLogoBuffer) {
-    headerChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 80, height: 80 } }));
+    headerChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 80, height: 80 } } as any));
   }
 
   if (headerChildren.length > 0) {
@@ -151,8 +151,8 @@ export async function exportToWord(
         alignment: AlignmentType.CENTER,
         children: headerChildren,
       }),
-          new Paragraph({}),
-          new Paragraph({})
+      new Paragraph({ children: [new TextRun({ text: "" })] }),
+      new Paragraph({ children: [new TextRun({ text: "" })] })
     );
   }
 
