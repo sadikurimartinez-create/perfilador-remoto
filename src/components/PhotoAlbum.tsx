@@ -138,6 +138,8 @@ export function PhotoAlbum({
   const [isRefiningDoc, setIsRefiningDoc] = useState(false);
   const [docSuggestions, setDocSuggestions] = useState("");
   const [isAuditingDoc, setIsAuditingDoc] = useState(false);
+  const [mapViewMode, setMapViewMode] = useState<"HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL">("HEATMAP");
+  const [mapSnapshots, setMapSnapshots] = useState<{ title: string; dataUrl: string }[]>([]);
   // Validación mínima de fotografías según geometría
 const minimumPhotos = {
   individual: 1,
@@ -494,20 +496,56 @@ const hasMinimumPhotos =
     }
   };
 
+  const handleAttachMapSnapshot = async () => {
+    const el = document.getElementById("map-export-container");
+    if (!el) return;
+    try {
+      // Ocultar la botonera de pestañas temporalmente para la foto
+      const buttons = el.querySelector('.bg-slate-100.border-b');
+      if (buttons) (buttons as HTMLElement).style.display = 'none';
+
+      const canvas = await html2canvas(el, { useCORS: true, scale: 1.5 });
+      
+      if (buttons) (buttons as HTMLElement).style.display = 'flex';
+
+      const dataUrl = canvas.toDataURL("image/png");
+      
+      let title = "Mapa Criminológico";
+      if (mapViewMode === "HEATMAP") title = "Mapa de Zonas Calientes (Heatmap)";
+      if (mapViewMode === "ECOLOGY") title = "Mapa de Ecología y Atractores (DENUE)";
+      if (mapViewMode === "MOBILITY") title = "Mapa de Topografía y Rutas";
+      if (mapViewMode === "ALL") title = "Atlas Criminológico Completo";
+
+      setMapSnapshots(prev => [...prev, { title, dataUrl }]);
+    } catch (err) {
+      console.error("[PhotoAlbum] Error al capturar mapa:", err);
+    }
+  };
+
   const handleExportToWord = async () => {
     const content = editableProfile || aiProfile;
     if (!content) return;
     setError(null);
-    let mapDataUrl: string | undefined;
-    if (analysisResult) {
+    
+    const snapshotsToExport = [...mapSnapshots];
+    if (snapshotsToExport.length === 0 && analysisResult) {
       const mapEl = document.getElementById("map-export-container");
       if (mapEl) {
         try {
+          const buttons = mapEl.querySelector('.bg-slate-100.border-b');
+          if (buttons) (buttons as HTMLElement).style.display = 'none';
+
           const canvas = await html2canvas(mapEl, {
             useCORS: true,
             scale: 1.5,
           });
-          mapDataUrl = canvas.toDataURL("image/png");
+
+          if (buttons) (buttons as HTMLElement).style.display = 'flex';
+
+          snapshotsToExport.push({
+            title: "MAPA DEL ANÁLISIS",
+            dataUrl: canvas.toDataURL("image/png")
+          });
         } catch (e) {
           console.warn("[PhotoAlbum] No se pudo capturar el mapa para Word:", e);
         }
@@ -523,7 +561,7 @@ const hasMinimumPhotos =
         "Dictamen_criminologico_ambiental",
         photoUrls.length > 0 ? photoUrls : undefined,
         profileRiskLevel ?? undefined,
-        mapDataUrl
+        snapshotsToExport.length > 0 ? snapshotsToExport : undefined
       );
     } catch (err) {
       console.error("[PhotoAlbum] Error al exportar a Word:", err);
@@ -962,6 +1000,32 @@ const hasMinimumPhotos =
                     <CrimeCharts crimes={analysisResult.historicalCrimes} />
                   )}
                   <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
+                    <div className="bg-slate-100 border-b border-slate-300 p-2 flex flex-wrap gap-2 print:hidden justify-center shadow-sm">
+                      <button 
+                        onClick={() => setMapViewMode("HEATMAP")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'HEATMAP' ? 'bg-red-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                      >
+                        🔥 Zonas Calientes
+                      </button>
+                      <button 
+                        onClick={() => setMapViewMode("ECOLOGY")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ECOLOGY' ? 'bg-sky-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                      >
+                        🏪 Atractores (DENUE)
+                      </button>
+                      <button 
+                        onClick={() => setMapViewMode("MOBILITY")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'MOBILITY' ? 'bg-emerald-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                      >
+                        🛣️ Topografía y Rutas
+                      </button>
+                      <button 
+                        onClick={() => setMapViewMode("ALL")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ALL' ? 'bg-indigo-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                      >
+                        🗺️ Atlas Completo
+                      </button>
+                    </div>
                     <div className="relative p-0 w-full">
                       <AnalysisMap
                         album={album.filter((p) => selectedIds.includes(p.id))}
@@ -972,18 +1036,38 @@ const hasMinimumPhotos =
                         manualPois={manualPois}
                         setManualPois={setManualPois}
                         isPreliminary={false}
+                        viewMode={mapViewMode}
                       />
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3 print:hidden">
                     <button
                       type="button"
+                      onClick={handleAttachMapSnapshot}
+                      className="inline-flex items-center justify-center rounded-md bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 transition-colors"
+                    >
+                      📸 Añadir vista actual al informe
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleDownloadMap}
                       className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
                     >
-                      Descargar Mapa Oficial
+                      Descargar Imagen Suelta
                     </button>
                   </div>
+                  {mapSnapshots.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700">
+                      <div className="w-full text-xs font-semibold text-slate-300 mb-1">Mapas adjuntos al reporte Word:</div>
+                      {mapSnapshots.map((snap, idx) => (
+                        <div key={idx} className="relative group rounded border border-sky-500 overflow-hidden w-28 h-20 bg-black">
+                          <img src={snap.dataUrl} alt={snap.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                          <button onClick={() => setMapSnapshots(prev => prev.filter((_, i) => i !== idx))} className="absolute top-0 right-0 bg-red-600 text-white text-[10px] px-1.5 py-0.5 hover:bg-red-500 rounded-bl" title="Quitar mapa del reporte">×</button>
+                          <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center truncate px-1 py-0.5">{snap.title.replace("Mapa de ", "")}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>

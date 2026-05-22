@@ -101,7 +101,7 @@ export async function exportToWord(
   projectName: string,
   attachedPhotos?: string[],
   riskLevel?: "bajo" | "medio" | "alto",
-  mapImageDataUrl?: string
+  mapSnapshots?: { title: string; dataUrl: string }[]
 ) {
   const lines = content.split(/\r?\n/);
 
@@ -231,56 +231,55 @@ export async function exportToWord(
     }
   }
 
-  if (mapImageDataUrl && mapImageDataUrl.startsWith("data:image")) {
-    try {
-      // Crear imagen temporal para respetar proporción del mapa
-      const tmpImg = new Image();
-      tmpImg.src = mapImageDataUrl;
-      await new Promise<void>((resolve, reject) => {
-        tmpImg.onload = () => resolve();
-        tmpImg.onerror = () =>
-          reject(
-            new Error(
-              "[exportToWord] No se pudieron leer dimensiones del mapa para Word"
-            )
-          );
-      });
-      const MAP_MAX_WIDTH = 600;
-      const originalWidth = tmpImg.width || tmpImg.naturalWidth || MAP_MAX_WIDTH;
-      const originalHeight =
-        tmpImg.height || tmpImg.naturalHeight || MAP_MAX_WIDTH;
-      const ratio = originalHeight / originalWidth || 1;
-      const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
+  if (mapSnapshots && mapSnapshots.length > 0) {
+    for (const snapshot of mapSnapshots) {
+      if (snapshot.dataUrl && snapshot.dataUrl.startsWith("data:image")) {
+        try {
+          const tmpImg = new Image();
+          tmpImg.src = snapshot.dataUrl;
+          await new Promise<void>((resolve, reject) => {
+            tmpImg.onload = () => resolve();
+            tmpImg.onerror = () =>
+              reject(new Error("[exportToWord] No se pudieron leer dimensiones del mapa para Word"));
+          });
+          const MAP_MAX_WIDTH = 600;
+          const originalWidth = tmpImg.width || tmpImg.naturalWidth || MAP_MAX_WIDTH;
+          const originalHeight = tmpImg.height || tmpImg.naturalHeight || MAP_MAX_WIDTH;
+          const ratio = originalHeight / originalWidth || 1;
+          const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
-      const mapBuffer = dataUrlToArrayBuffer(mapImageDataUrl);
-      sections.push({
-        children: [
-          new Paragraph({
+          const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
+          sections.push({
             children: [
-              new TextRun({
-                text: "MAPA DEL ANÁLISIS",
-                bold: true,
-                size: 32,
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: snapshot.title.toUpperCase(),
+                    bold: true,
+                    size: 28,
+                  }),
+                ],
               }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new ImageRun({
-                ...({
-                  data: mapBuffer,
-                  transformation: {
-                    width: MAP_MAX_WIDTH,
-                    height: proportionalHeight,
-                  },
-                } as any),
+              new Paragraph({
+                children: [
+                  new ImageRun({
+                    ...({
+                      data: mapBuffer,
+                      transformation: {
+                        width: MAP_MAX_WIDTH,
+                        height: proportionalHeight,
+                      },
+                    } as any),
+                  }),
+                ],
               }),
+              new Paragraph({ children: [new TextRun({ text: "" })] }),
             ],
-          }),
-        ],
-      });
-    } catch (e) {
-      console.warn("[exportToWord] No se pudo incluir el mapa:", e);
+          });
+        } catch (e) {
+          console.warn("[exportToWord] No se pudo incluir el mapa:", e);
+        }
+      }
     }
   }
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
+export type MapViewMode = "HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL";
+
 type AnalysisMapProps = {
   album: AlbumPhoto[];
   analysisResult: AnalysisResult | null;
@@ -17,6 +19,8 @@ type AnalysisMapProps = {
   setManualPois?: (value: { lat: number; lng: number; label?: string }[]) => void;
   /** Controla si el mapa está en modo preliminar (se muestran herramientas de dibujo y toolbar). */
   isPreliminary?: boolean;
+  /** Controla qué capas tácticas se muestran. */
+  viewMode?: MapViewMode;
 };
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
@@ -45,6 +49,7 @@ export function AnalysisMap({
   manualPois,
   setManualPois,
   isPreliminary = false,
+  viewMode = "ALL",
 }: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -127,7 +132,7 @@ export function AnalysisMap({
     }
     return Array.from(grid.values()).map(({ lat, lng, count }) => ({
       location: new g.maps.LatLng(lat, lng),
-      weight: Math.min(count * 1.5, 10),
+      weight: Math.min(count * 2, 10),
     }));
   }, [analysisResult?.historicalCrimes, isLoaded]);
 
@@ -245,7 +250,7 @@ export function AnalysisMap({
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: false,
-          mapTypeId: "hybrid",
+          mapTypeId: viewMode === "MOBILITY" ? "terrain" : "hybrid",
         }}
       >
         {!isPreliminary && (
@@ -295,7 +300,7 @@ export function AnalysisMap({
         )}
 
         {/* Delitos: puntos carmesí con cruz táctica */}
-        {crimesWithCoords.map((c, idx) => (
+        {(viewMode === "HEATMAP" || viewMode === "ALL") && crimesWithCoords.map((c, idx) => (
           <Marker
             key={`crime-${idx}`}
             position={{ lat: c.lat as number, lng: c.lng as number }}
@@ -318,7 +323,7 @@ export function AnalysisMap({
         ))}
 
         {/* POIs / atractores: íconos inteligentes por categoría */}
-        {poisWithCoords.map((p, idx) => {
+        {(viewMode === "ECOLOGY" || viewMode === "ALL") && poisWithCoords.map((p, idx) => {
           const { emoji, bg } = getPoiIcon(p.category as string | undefined);
           return (
             <Marker
