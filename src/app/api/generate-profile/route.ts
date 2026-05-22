@@ -10,6 +10,7 @@ import { searchDenueAround } from "@/lib/denueInegi";
 import { buildIrregularBusinesses } from "@/lib/environmentProfile";
 import { getStreetViewComparison } from "@/lib/googleStreetView";
 import { getPool } from "@/lib/db";
+import { getInegiDemographics, type InegiDemographics } from "@/lib/inegiIndicators";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
@@ -132,6 +133,8 @@ type GenerateProfileBody = {
 type GeocodingResult = {
   formattedAddress: string | null;
   colonia: string | null;
+  municipio: string | null;
+  estado: string | null;
 };
 
 type HistoricalSummary = {
@@ -205,7 +208,7 @@ async function reverseGeocode(
     console.warn(
       "[generate-profile] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY para Geocoding."
     );
-    return { formattedAddress: null, colonia: null };
+    return { formattedAddress: null, colonia: null, municipio: null, estado: null };
   }
 
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
@@ -216,14 +219,16 @@ async function reverseGeocode(
     const res = await fetch(url.toString());
     if (!res.ok) {
       console.warn("[generate-profile] Geocoding status:", res.status);
-      return { formattedAddress: null, colonia: null };
+      return { formattedAddress: null, colonia: null, municipio: null, estado: null };
     }
     const json = (await res.json()) as any;
     const result = json.results?.[0];
-    if (!result) return { formattedAddress: null, colonia: null };
+    if (!result) return { formattedAddress: null, colonia: null, municipio: null, estado: null };
 
     const formattedAddress = result.formatted_address ?? null;
     let colonia: string | null = null;
+    let municipio: string | null = null;
+    let estado: string | null = null;
     const components: any[] = result.address_components ?? [];
     for (const c of components) {
       const types: string[] = c.types ?? [];
@@ -234,12 +239,18 @@ async function reverseGeocode(
       if (types.includes("neighborhood") && !colonia) {
         colonia = c.long_name;
       }
+      if (types.includes("locality") || types.includes("administrative_area_level_2")) {
+        municipio = c.long_name;
+      }
+      if (types.includes("administrative_area_level_1")) {
+        estado = c.long_name;
+      }
     }
 
-    return { formattedAddress, colonia };
+    return { formattedAddress, colonia, municipio, estado };
   } catch (err) {
     console.error("[generate-profile] Error en Geocoding:", err);
-    return { formattedAddress: null, colonia: null };
+    return { formattedAddress: null, colonia: null, municipio: null, estado: null };
   }
 }
 
@@ -310,6 +321,7 @@ function buildPromptForGemini(params: {
     texto: string[];
   }>;
   irregularidadesTexto: string;
+  inegiDemographics?: InegiDemographics;
   incidencia: HistoricalSummary;
   incidenciaArchivosTexto: string;
   streetViewUrl: string | null;
@@ -325,6 +337,7 @@ function buildPromptForGemini(params: {
     geocoding,
     visionPorFoto,
     irregularidadesTexto,
+    inegiDemographics,
     incidencia,
     incidenciaArchivosTexto,
     streetViewUrl,
@@ -379,6 +392,10 @@ function buildPromptForGemini(params: {
     ? `Imagen de referencia de Street View (histórica/visual): ${streetViewUrl}`
     : "No se cuenta con imagen de Street View para este punto.";
 
+  const inegiTexto = inegiDemographics && inegiDemographics.exito
+    ? `Municipio: ${inegiDemographics.municipioNombre} | Población Total: ${inegiDemographics.poblacionTotal} habitantes.\nContexto Estructural: ${inegiDemographics.datosExtra}`
+    : "Datos sociodemográficos a nivel municipal no extraídos. Aterriza las inferencias económicas basándote exclusivamente en el deterioro visual.";
+
   const focusAreasTexto =
     focusAreas && focusAreas.length > 0
       ? focusAreas.join(", ")
@@ -423,6 +440,9 @@ ${clasificacionesTexto}
 ${direccionTexto}
 Radio de análisis utilizado: ${analysisRadius} metros.
 
+## DEMOGRAFÍA Y VULNERABILIDAD SOCIAL (INEGI)
+${inegiTexto}
+
 ## DETERIORO URBANO (Vision API - Ventanas Rotas)
 ${visionResumen}
 
@@ -463,7 +483,7 @@ INSTRUCCIÓN FINAL:
 Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objetivo. Estructura OBLIGATORIAMENTE en las siguientes secciones (con estos títulos en mayúsculas), en este orden:
 
 1. OBJETIVO DEL DICTAMEN — Una oración que indique el propósito del perfil y la zona analizada.
-2. CONTEXTO ESPACIAL — Descripción del área (dirección, colonia, entorno) y del radio de análisis.
+2. CONTEXTO ESPACIAL Y SOCIODEMOGRÁFICO — Descripción de la colonia, radio de análisis y cruce OBLIGATORIO con la demografía del INEGI (presión poblacional, jóvenes, desocupación).
 3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de lo detectado por Vision en las fotos; sin repetir listas crudas.
 4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia y vacíos de control formal (negocios irregulares). Usa imágenes de POIs.
 5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional.
@@ -566,6 +586,8 @@ export async function POST(req: Request) {
       radiusMeters
     );
 
+    const inegiPromise = geocodingPromise.then((geo) => getInegiDemographics(geo.municipio, geo.estado));
+
     const bibliographyPromise = readBibliographyContext();
 
     const [
@@ -573,12 +595,14 @@ export async function POST(req: Request) {
       placesAndDenueSettled,
       streetViewUrl,
       { resumen: incidenciaResumen, detalles: incidenciaDetalles },
+      inegiDemographics,
       bibliographyContext,
     ] = await Promise.all([
       geocodingPromise,
       Promise.allSettled([denueTimedPromise, placesPromise]),
       streetViewPromise,
       historialPromise,
+      inegiPromise,
       bibliographyPromise,
     ]);
 
@@ -725,6 +749,7 @@ export async function POST(req: Request) {
       geocoding,
       visionPorFoto,
       irregularidadesTexto,
+      inegiDemographics,
       incidencia: incidenciaResumen,
       incidenciaArchivosTexto,
       streetViewUrl,
