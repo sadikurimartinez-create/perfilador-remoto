@@ -283,17 +283,10 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               position={c}
               draggable
               onDragEnd={(e) => handleMarkerDrag(idx, e.latLng!.lat(), e.latLng!.lng())}
-              icon={project?.iaAnalysis ? {
+              icon={project?.iaAnalysis && pinColor ? {
                 url: `/pins/${pinColor}-pin.png`,
                 scaledSize: new (window as any).google.maps.Size(30, 30),
-              } : {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 8,
-                fillColor: "#dc2626",
-                fillOpacity: 1,
-                strokeColor: "#fef2f2",
-                strokeWeight: 2,
-              }}
+              } : undefined}
             />
           );
         })}

@@ -14,6 +14,9 @@ export function ProjectManager() {
   const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
   const [isAnalyzingIA, setIsAnalyzingIA] = useState(false);
 
+  const requiredPhotos = project?.geometryType === 'poligono' ? 3 : project?.geometryType === 'lineal' ? 2 : 1;
+  const hasMinimumPhotos = album.length >= requiredPhotos;
+
   const handleNuevoProyecto = () => {
     setNombreInput("");
     setShowPrompt(true);
@@ -195,17 +198,11 @@ export function ProjectManager() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => void exportProjectData(project.id)}
-            className="text-sm px-3 py-1.5 rounded-lg border border-amber-600/50 bg-amber-900/20 text-amber-400 hover:bg-amber-900/40 md:hidden"
-          >
-            📤 Exportar
-          </button>
-          <button
-            type="button"
             onClick={handleCerrarProyecto}
-            className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800"
+          disabled={!hasMinimumPhotos}
+          className="text-sm px-4 py-2 rounded-lg font-bold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
           >
-            Cerrar Proyecto
+          ✅ Guardar y Salir al Lobby
           </button>
         </div>
       </div>

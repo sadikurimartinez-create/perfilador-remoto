@@ -587,7 +587,7 @@ const remainingPhotos =
               selectedIds.includes(p.id) ? "border-sky-500 ring-1 ring-sky-500/50" : "border-slate-700"
             }`}
           >
-            <label className="flex flex-col cursor-pointer">
+            <div className="flex flex-col">
               <div className="flex items-start gap-1 p-1">
                 <input
                   type="checkbox"
@@ -645,8 +645,16 @@ const remainingPhotos =
                       <line x1="14" y1="11" x2="14" y2="17" />
                     </svg>
                   </button>
-                  <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5 hidden md:block">{p.tipo}</p>
-                  <p className="text-[10px] text-slate-500 truncate hidden md:block">{p.comentario || "—"}</p>
+                  
+                  {/* Campo de comentarios (Opcional) - Visible en móvil y PC */}
+                  <input
+                    type="text"
+                    placeholder="Comentario (opcional)..."
+                    value={p.comentario}
+                    onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
+                    className="w-full mt-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md p-2 text-xs outline-none focus:border-sky-500"
+                  />
+
                   {visionData[p.id]?.extractedText && (
                     <span className="mt-0.5 inline-flex items-center gap-1 bg-blue-900/80 text-blue-200 text-[10px] px-2 py-0.5 rounded border border-blue-700">
                       🏷️ OCR:{" "}
@@ -702,7 +710,7 @@ const remainingPhotos =
                   </p>
                 </div>
               </div>
-            </label>
+          </div>
           </div>
         ))}
       </div>
