@@ -19,6 +19,8 @@ type AnalysisMapProps = {
   isPreliminary?: boolean;
 };
 
+const MAP_LIBRARIES: ("visualization" | "drawing")[] = ["visualization", "drawing"];
+
 const containerStyle: React.CSSProperties = {
   width: "100%",
   minHeight: "280px",
@@ -96,7 +98,7 @@ export function AnalysisMap({
   const { isLoaded, loadError } = useJsApiLoader({
     id: "analysis-map",
     googleMapsApiKey: apiKey,
-    libraries: ["visualization", "drawing"],
+    libraries: MAP_LIBRARIES,
   });
 
   const heatmapCrimeData = useMemo(() => {
