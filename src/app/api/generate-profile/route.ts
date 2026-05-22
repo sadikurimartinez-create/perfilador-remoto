@@ -326,6 +326,7 @@ function buildPromptForGemini(params: {
   incidenciaArchivosTexto: string;
   streetViewUrl: string | null;
   strategySummary: string;
+  osintReviewsTexto: string;
   analysisContext?: string;
   analysisRadius: number;
   focusAreas: string[];
@@ -342,6 +343,7 @@ function buildPromptForGemini(params: {
     incidenciaArchivosTexto,
     streetViewUrl,
     strategySummary,
+    osintReviewsTexto,
     analysisContext,
     analysisRadius,
     focusAreas,
@@ -443,6 +445,9 @@ Radio de análisis utilizado: ${analysisRadius} metros.
 ## DEMOGRAFÍA Y VULNERABILIDAD SOCIAL (INEGI)
 ${inegiTexto}
 
+## INTELIGENCIA DE FUENTES ABIERTAS (OSINT - Comentarios Ciudadanos)
+${osintReviewsTexto}
+
 ## DETERIORO URBANO (Vision API - Ventanas Rotas)
 ${visionResumen}
 
@@ -453,6 +458,7 @@ ${irregularidadesTexto || "No se identificaron unidades económicas registradas 
 1. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos" (concentran masas), "Atractores de Delitos" (atraen infractores motivados) o "Nodos de Miedo". NO hagas un simple inventario.
 2. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y el registro formal de DENUE. Argumenta cómo la irregularidad comercial debilita el control social (ausencia de guardianes formales) y fomenta "ventanas rotas" a nivel socioeconómico.
 3. CORRELACIÓN ESTADÍSTICA: Cruza OBLIGATORIAMENTE los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares/chatarreras = mercados de bienes ilícitos; Lesiones + expendios de alcohol = catalizadores de violencia).
+4. OSINT Y SENTIMIENTO CIUDADANO: Analiza minuciosamente las reseñas ciudadanas extraídas de Google Places para detectar focos de conflicto social, reportes de inseguridad, narcomenudeo, ruido, peleas o tensión comunitaria.
 4. ACTIVIDADES RUTINARIAS: Relaciona la tipología del comercio con la previsibilidad de las víctimas en horarios específicos (bancos, farmacias 24h, tiendas de conveniencia).
 
 ## ESTRATEGIA ANALÍTICA SEGÚN TIPO DE PUNTO
@@ -485,7 +491,7 @@ Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objeti
 1. OBJETIVO DEL DICTAMEN — Una oración que indique el propósito del perfil y la zona analizada.
 2. CONTEXTO ESPACIAL Y SOCIODEMOGRÁFICO — Descripción de la colonia, radio de análisis y cruce OBLIGATORIO con la demografía del INEGI (presión poblacional, jóvenes, desocupación).
 3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de lo detectado por Vision en las fotos; sin repetir listas crudas.
-4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia y vacíos de control formal (negocios irregulares). Usa imágenes de POIs.
+4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE Y OSINT) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia, vacíos de control formal (negocios irregulares) y extrae el sentimiento ciudadano de las reseñas de fuentes abiertas (OSINT). Usa imágenes de POIs.
 5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional.
 6. RIESGOS IDENTIFICADOS — Puntos concretos de riesgo derivados del análisis, sin repetir párrafos anteriores.
 7. RECOMENDACIONES — Medidas accionables y vinculadas a los hallazgos.
@@ -614,6 +620,24 @@ export async function POST(req: Request) {
       placesAndDenueSettled[1].status === "fulfilled"
         ? placesAndDenueSettled[1].value
         : null;
+        
+    let osintReviewsTexto = "";
+    if (placesResult) {
+      const allPlaces = [
+        ...placesResult.escuelas,
+        ...placesResult.expendiosAlcohol,
+        ...placesResult.chatarrerasOTalleres,
+        ...placesResult.otros,
+      ];
+      const placesWithReviews = allPlaces.filter(p => p.resenasOsint && p.resenasOsint.length > 0);
+      if (placesWithReviews.length > 0) {
+        osintReviewsTexto = placesWithReviews.map(p => {
+          return `Lugar: ${p.nombre} (${p.categoria})\nComentarios (OSINT):\n` +
+                 p.resenasOsint!.map(r => ` - "${r}"`).join("\n");
+        }).join("\n\n");
+      }
+    }
+    if (!osintReviewsTexto) osintReviewsTexto = "No se encontraron reseñas o quejas ciudadanas relevantes en fuentes abiertas.";
 
     let incidenciaArchivosTexto = "";
     let totalIncidenciaCSV = 0;
@@ -754,6 +778,7 @@ export async function POST(req: Request) {
       incidenciaArchivosTexto,
       streetViewUrl,
       strategySummary,
+      osintReviewsTexto,
       analysisContext: body.analysisContext,
       analysisRadius: radiusMeters,
       focusAreas: body.focusAreas ?? [],

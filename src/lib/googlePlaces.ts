@@ -12,6 +12,7 @@ export type PlaceSummary = {
   lng: number;
   categoria: PlaceCategory;
   fuente: "GOOGLE_PLACES";
+  resenasOsint?: string[];
 };
 
 export type PlacesAnalysisResult = {
@@ -23,6 +24,9 @@ export type PlacesAnalysisResult = {
 
 const GOOGLE_PLACES_BASE_URL =
   "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
+
+const GOOGLE_PLACE_DETAILS_URL =
+  "https://maps.googleapis.com/maps/api/place/details/json";
 
 function getMapsApiKey(): string | null {
   return (
@@ -98,7 +102,33 @@ export async function searchPlacesAround(
   }
 
   const data = (await response.json()) as any;
-  const results: any[] = data.results ?? [];
+  const rawResults: any[] = data.results ?? [];
+  
+  // Limitamos a los 10 lugares más relevantes para no saturar los tiempos de respuesta ni los tokens de IA
+  const topResults = rawResults.slice(0, 10);
+
+  // Extraer las reseñas (OSINT) de los lugares seleccionados
+  const results = await Promise.all(topResults.map(async (place) => {
+    if (!place.place_id) return place;
+    try {
+      const dUrl = new URL(GOOGLE_PLACE_DETAILS_URL);
+      dUrl.searchParams.set("key", apiKey);
+      dUrl.searchParams.set("place_id", place.place_id);
+      dUrl.searchParams.set("fields", "reviews");
+      dUrl.searchParams.set("language", "es");
+      const dRes = await fetch(dUrl.toString());
+      if (dRes.ok) {
+        const dData = await dRes.json();
+        if (dData.result?.reviews) {
+          // Guardamos un máximo de 3 reseñas útiles por lugar
+          place.reviews = dData.result.reviews.map((r: any) => r.text).filter((t: string) => t && t.trim().length > 0).slice(0, 3);
+        }
+      }
+    } catch (e) {
+      console.warn("[googlePlaces] No se pudieron obtener reseñas para", place.place_id);
+    }
+    return place;
+  }));
 
   const escuelas: PlaceSummary[] = [];
   const expendiosAlcohol: PlaceSummary[] = [];
@@ -123,7 +153,8 @@ export async function searchPlacesAround(
       lat: latP,
       lng: lngP,
       categoria,
-      fuente: "GOOGLE_PLACES"
+      fuente: "GOOGLE_PLACES",
+      resenasOsint: place.reviews ?? []
     };
 
     switch (categoria) {
