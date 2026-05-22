@@ -5,12 +5,12 @@ import exifr from "exifr";
 import { useProject } from "@/context/ProjectContext";
 
 function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (typeof navigator?.geolocation?.getCurrentPosition !== "function") {
-      resolve({ lat: 0, lng: 0 });
+      reject(new Error("El navegador de este celular no soporta geolocalización."));
       return;
     }
-    const timeout = setTimeout(() => resolve({ lat: 0, lng: 0 }), 5000);
+    const timeout = setTimeout(() => reject(new Error("Tiempo de espera agotado buscando satélites GPS. Acérquese a un área despejada.")), 10000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timeout);
@@ -19,11 +19,11 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
           lng: pos.coords.longitude,
         });
       },
-      () => {
+      (err) => {
         clearTimeout(timeout);
-        resolve({ lat: 0, lng: 0 });
+        reject(new Error("Permiso de ubicación DENEGADO. Por favor, permita el acceso al GPS en la configuración de su navegador (Chrome/Safari)."));
       },
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
     );
   });
 }
@@ -108,9 +108,18 @@ export function CaptureAndAddPhoto() {
       }
 
       if (lat == null || lng == null) {
-        const fallback = await getFallbackLocation();
-        lat = fallback.lat;
-        lng = fallback.lng;
+        try {
+          const fallback = await getFallbackLocation();
+          lat = fallback.lat;
+          lng = fallback.lng;
+        } catch (fbErr: any) {
+          setError(
+            `El celular borró el GPS de la foto por privacidad y el respaldo falló: ${fbErr.message}`
+          );
+          setIsFetchingGPS(false);
+          e.target.value = "";
+          return; // Abortamos la subida de esta foto inútil
+        }
       }
 
       try {
