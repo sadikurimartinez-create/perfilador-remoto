@@ -13,6 +13,7 @@ function getGeminiKey(): string {
 type RefineBody = {
   context: string;
   photos?: { lat: number | null; lng: number | null }[];
+  mode?: "suggest" | "audit";
 };
 
 function formatCoord(n: number | null | undefined): string {
@@ -22,7 +23,7 @@ function formatCoord(n: number | null | undefined): string {
 
 export async function POST(req: Request) {
   try {
-    const { context, photos } = (await req.json()) as RefineBody;
+    const { context, photos, mode } = (await req.json()) as RefineBody;
 
     const apiKey = getGeminiKey();
     const coordsText =
@@ -37,7 +38,20 @@ export async function POST(req: Request) {
 
     const cleanedContext = (context ?? "").trim();
 
-    const prompt = `
+    let prompt = "";
+    
+    if (mode === "audit") {
+      prompt = `
+Eres un Analista de Inteligencia Senior adscrito al CEIPOL.
+El investigador de campo ha redactado o editado la siguiente hipótesis operativa:
+"${cleanedContext}"
+
+Instrucción:
+Audita, pule y mejora esta hipótesis. Eleva el nivel técnico, corrige redacción, asegura que suene altamente profesional, severo y enfocado en Criminología Ambiental.
+Devuelve ÚNICAMENTE el texto mejorado, listo para ser copiado y pegado en el informe final. No uses viñetas introductorias, solo el párrafo o párrafos refinados.
+`.trim();
+    } else {
+      prompt = `
 Eres un Analista de Inteligencia Senior adscrito al CEIPOL. Un investigador de campo está redactando la hipótesis o contexto operacional para un Perfil Criminológico Ambiental.
 
 Contexto preliminar del analista:
@@ -52,9 +66,13 @@ Indícale al analista qué elementos clave DEBE observar e incluir en su context
 
 Responde en español, usando viñetas cortas, con lenguaje policial/táctico. NO repitas el contexto original, solo dile qué agregar o en qué enfocarse para robustecer su hipótesis.
 `.trim();
+    }
 
     // Si no hay clave de Gemini, devolvemos sugerencias genéricas para no romper el flujo de la UI.
     if (!apiKey) {
+      if (mode === "audit") {
+        return NextResponse.json({ suggestions: cleanedContext + "\n\n(Nota: Auditoría no disponible por falta de API Key)" });
+      }
       const fallback =
         "• Analice e integre los vectores de movilidad táctica (rutas de aproximación y escape) y la presencia de barreras físicas.\n" +
         "• Evalúe el nivel de deterioro urbano (Ventanas Rotas) y su correlación con la percepción de impunidad en el polígono.\n" +
@@ -72,6 +90,9 @@ Responde en español, usando viñetas cortas, con lenguaje policial/táctico. NO
   } catch (err) {
     console.error("[api/refine-context] Error:", err);
     // Degradación elegante: si Gemini falla, devolvemos sugerencias genéricas en vez de 500.
+    if ((req as any).mode === "audit") {
+      return NextResponse.json({ suggestions: "Error al auditar. Intente de nuevo." });
+    }
     const fallback =
       "• Evalúe las vulnerabilidades espaciales basándose en las Actividades Rutinarias de la zona (flujos de víctimas e infractores).\n" +
       "• Considere la Teoría de Elección Racional: describa qué elementos del entorno facilitan la decisión delictiva.\n" +

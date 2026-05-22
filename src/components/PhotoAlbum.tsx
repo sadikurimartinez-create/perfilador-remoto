@@ -749,8 +749,8 @@ const hasMinimumPhotos =
           <h4 className="text-base font-semibold text-slate-200">Evidencias</h4>
           <p className="text-xs text-slate-400">Adjunte archivos de evidencia adicionales (documentos, imágenes, audios, videos). <strong className="text-amber-400">Obligatorio contextualizar.</strong></p>
         </header>
-        <div className="flex flex-col md:flex-row gap-4 items-start">
-          <div className="w-full md:w-1/2 space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
+        <div className="flex flex-col gap-4 items-start w-full">
+          <div className="w-full space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
             <input id="doc-upload-input" type="file" disabled={isReadOnly} onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50" accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a" />
             <textarea value={docContext} disabled={isReadOnly} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50" />
             <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly} onClick={async () => {
@@ -772,7 +772,7 @@ const hasMinimumPhotos =
               {isUploadingDoc ? "Subiendo Evidencia..." : "Subir Evidencia Contextualizada"}
             </button>
           </div>
-          <div className="w-full md:w-1/2 space-y-2">
+          <div className="w-full space-y-2">
             {documents && documents.length > 0 ? documents.map(d => (
               <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
                 <div className="flex justify-between items-start gap-2">
@@ -857,9 +857,9 @@ const hasMinimumPhotos =
       )}
 
       {(analysisResult || aiProfile) && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+        <div className="flex flex-col space-y-6 w-full">
           {analysisResult && (
-            <div className="flex flex-col space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4">
+            <div className="flex flex-col space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4 w-full">
               <h4 className="text-lg font-bold text-sky-200 tracking-tight">
                 Análisis Espacial y Estadístico
               </h4>
@@ -868,8 +868,8 @@ const hasMinimumPhotos =
                   {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
                     <CrimeCharts crimes={analysisResult.historicalCrimes} />
                   )}
-                  <div id="map-export-container" className="flex-1 mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
-                    <div className="relative p-0 flex-1">
+                  <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
+                    <div className="relative p-0 w-full">
                       <AnalysisMap
                         album={album.filter((p) => selectedIds.includes(p.id))}
                         analysisResult={analysisResult}
@@ -897,7 +897,7 @@ const hasMinimumPhotos =
           )}
 
           {aiProfile && (
-            <div className="flex flex-col space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4">
+            <div className="flex flex-col space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4 w-full">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-base font-bold text-indigo-200">
                   Perfil criminológico ambiental (IA completa)
@@ -950,7 +950,7 @@ const hasMinimumPhotos =
                   </div>
                 )}
               </div>
-              <div className="space-y-1 flex-1 flex flex-col">
+              <div className="space-y-1 w-full flex flex-col">
                 <label className="block text-xs font-semibold text-slate-200">
                   Dictamen editable por el analista
                 </label>
@@ -958,7 +958,7 @@ const hasMinimumPhotos =
                   value={editableProfile}
                   onChange={(e) => setEditableProfile(e.target.value)}
                   disabled={isReadOnly}
-                  className="w-full flex-1 min-h-[500px] md:min-h-[750px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
+                  className="w-full min-h-[500px] md:min-h-[750px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
                 />
               </div>
               <div className="flex flex-wrap gap-2 pt-1 print:hidden">
