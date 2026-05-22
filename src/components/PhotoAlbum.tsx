@@ -135,6 +135,9 @@ export function PhotoAlbum({
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docContext, setDocContext] = useState("");
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [isRefiningDoc, setIsRefiningDoc] = useState(false);
+  const [docSuggestions, setDocSuggestions] = useState("");
+  const [isAuditingDoc, setIsAuditingDoc] = useState(false);
   // Validación mínima de fotografías según geometría
 const minimumPhotos = {
   individual: 1,
@@ -753,6 +756,96 @@ const hasMinimumPhotos =
           <div className="w-full space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
             <input id="doc-upload-input" type="file" disabled={isReadOnly} onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50" accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a" />
             <textarea value={docContext} disabled={isReadOnly} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50" />
+            
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsRefiningDoc(true);
+                  setDocSuggestions("");
+                  try {
+                    const selected = album.filter((p) => selectedIds.includes(p.id));
+                    const minimalPhotos = selected.map((p) => ({ lat: p.lat, lng: p.lng }));
+                    const res = await fetch("/api/refine-context", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        context: docContext,
+                        photos: minimalPhotos,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                      setDocSuggestions(data.suggestions ?? "");
+                    } else {
+                      setError(data.error || "No se pudieron obtener sugerencias de IA.");
+                    }
+                  } catch (err) {
+                    setError("Error de comunicación con IA.");
+                  } finally {
+                    setIsRefiningDoc(false);
+                  }
+                }}
+                disabled={isRefiningDoc || !docContext.trim() || isReadOnly}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+              >
+                {isRefiningDoc ? "Consultando IA..." : "Pedir Sugerencias y Auditar Contexto"}
+              </button>
+            </div>
+
+            {docSuggestions && (
+              <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2 w-full">
+                <p className="font-semibold mb-1">Borrador y Sugerencias de IA (Editable):</p>
+                <textarea
+                  value={docSuggestions}
+                  onChange={(e) => setDocSuggestions(e.target.value)}
+                  className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+                />
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDocSuggestions("")}
+                    className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
+                  >
+                    Descartar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsAuditingDoc(true);
+                      setError(null);
+                      try {
+                        const res = await fetch("/api/refine-context", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ context: docSuggestions, mode: "audit" }),
+                        });
+                        const data = await res.json();
+                        if (res.ok) setDocSuggestions(data.suggestions ?? "");
+                        else setError(data.error || "Error al auditar sugerencia.");
+                      } catch (err) { setError("Error de comunicación al auditar."); }
+                      finally { setIsAuditingDoc(false); }
+                    }}
+                    disabled={isAuditingDoc || !docSuggestions.trim()}
+                    className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+                  >
+                    {isAuditingDoc ? "Auditando..." : "Auditar y Mejorar Redacción"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDocContext((prev) => (prev ? `${prev}\n\n${docSuggestions}` : docSuggestions));
+                      setDocSuggestions("");
+                    }}
+                    disabled={isAuditingDoc}
+                    className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                  >
+                    Aplicar al Contexto
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly} onClick={async () => {
               if (!docFile || !docContext.trim()) return;
               setIsUploadingDoc(true);
