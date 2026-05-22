@@ -425,21 +425,14 @@ export function AnalysisMap({
             Verde (baja) → Amarillo → Naranja → Rojo (alta concentración de incidencia).
           </p>
         )}
-        <p className="text-sm text-slate-300 mt-1 text-justify leading-relaxed">
-          Análisis geoespacial pericial: el presente mapa ilustra un radio de proximidad de{" "}
-          <span className="font-semibold">
-            {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
-          </span>{" "}
-          en torno a las coordenadas de los indicios fotográficos
-          considerados en el expediente. Se han georreferenciado{" "}
-          <span className="font-semibold">{poisWithCoords.length}</span>{" "}
-          atractores de riesgo o puntos de interés (comercios, servicios, espacios públicos) y{" "}
-          <span className="font-semibold">
-            {analysisResult?.historicalCrimes?.length ?? 0}
-          </span>{" "}
-          eventos de incidencia delictiva histórica. La convergencia espacial de estos elementos permite visualizar
-          patrones de oportunidad criminal, rutas de vulnerabilidad y zonas críticas para la focalización de
-          estrategias de disuasión y prevención situacional.
+        <p className="text-xs text-slate-400 mt-1 text-justify leading-relaxed">
+          <strong className="text-slate-300">Análisis Espacial Pericial:</strong> Radio de {" "}
+          <span className="font-semibold text-slate-200">
+            {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} m`}
+          </span>. 
+          Se muestran <span className="font-semibold text-slate-200">{poisWithCoords.length}</span> atractores de riesgo (comercios, servicios) 
+          y <span className="font-semibold text-slate-200">{analysisResult?.historicalCrimes?.length ?? 0}</span> eventos de incidencia histórica. 
+          La convergencia ilustra patrones de oportunidad criminal y rutas de vulnerabilidad para focalizar estrategias de disuasión.
         </p>
       </div>
     </div>

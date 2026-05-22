@@ -521,21 +521,8 @@ const remainingPhotos =
       {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
         <CrimeCharts crimes={analysisResult.historicalCrimes} />
       )}
-      <div id="map-export-container" className="rounded-xl border border-slate-700/50 bg-white text-black overflow-hidden min-h-[320px]">
-        <header className="flex items-center justify-between w-full px-4 py-3 border-b border-slate-300 bg-slate-50">
-          <div className="flex items-center gap-2">
-            <img src="/logos/logo-ssp.png" alt="SSP" className="h-10 w-auto object-contain" />
-            <div className="text-center">
-              <p className="text-[11px] font-semibold text-slate-700">PERFILADOR CRIMINOLÓGICO AMBIENTAL</p>
-              <p className="text-[10px] font-semibold text-slate-600">CEIPOL · SSP AGS</p>
-            </div>
-            <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-10 w-auto object-contain" />
-          </div>
-        </header>
-        <div className="relative p-2">
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-10">
-            <img src="/logos/logo-ssp.png" alt="" className="h-20 w-auto" />
-          </div>
+      <div id="map-export-container" className="rounded-xl border border-slate-700 bg-white text-black overflow-hidden">
+        <div className="relative p-0">
           <AnalysisMap
             album={album.filter((p) => selectedIds.includes(p.id))}
             analysisResult={analysisResult}
@@ -730,9 +717,9 @@ const remainingPhotos =
           <p className="text-xs text-slate-400">Adjunte archivos adicionales de inteligencia (se omite del análisis geográfico automático, pero quedan en el expediente). <strong className="text-amber-400">Obligatorio contextualizar.</strong></p>
         </header>
         <div className="flex flex-col md:flex-row gap-4 items-start">
-          <div className="w-full md:w-1/2 space-y-3 p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+          <div className="w-full md:w-1/2 space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
             <input id="doc-upload-input" type="file" onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800" accept=".pdf,.xls,.xlsx,.doc,.docx,.mp4,.avi,.mkv" />
-            <textarea value={docContext} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[60px]" />
+            <textarea value={docContext} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px]" />
             <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc} onClick={async () => {
               if (!docFile || !docContext.trim()) return;
               setIsUploadingDoc(true);
@@ -836,43 +823,16 @@ const remainingPhotos =
 
       {analysisResult && (
         <div className="space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4">
-          <h4 className="text-base font-bold text-sky-200 font-mono tracking-tight">
-            Perfil criminológico generado
+          <h4 className="text-lg font-bold text-sky-200 tracking-tight">
+            Análisis Espacial y Estadístico
           </h4>
-          <p className="text-xs text-slate-400">
-            Resumen del análisis de la selección (Vision, Places, DENUE).
-          </p>
-          {analysisResult.unifiedProfile && (
-            <div className="text-sm text-slate-300 whitespace-pre-wrap bg-slate-900/80 rounded-lg p-3 border border-slate-700">
-              {analysisResult.unifiedProfile}
-            </div>
-          )}
           {!splitLayout && (
             <>
               {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
                 <CrimeCharts crimes={analysisResult.historicalCrimes} />
               )}
-              <div id="map-export-container" className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden min-h-[320px]">
-                <header className="flex items-center justify-between w-full px-6 py-4 border-b border-slate-300 bg-slate-50">
-                  <div className="flex items-center justify-center">
-                    <img src="/logos/logo-ssp.png" alt="SSP" className="h-16 w-auto object-contain" />
-                  </div>
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <p className="text-[13px] font-semibold tracking-wide text-slate-700">PERFILADOR CRIMINOLÓGICO AMBIENTAL</p>
-                    <p className="text-[12px] font-semibold tracking-wide text-slate-700">CEIPOL</p>
-                    <p className="text-[10px] font-semibold tracking-wide text-slate-600">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES</p>
-                  </div>
-                  <div className="flex items-center justify-center">
-                    <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-16 w-auto object-contain" />
-                  </div>
-                </header>
-                <div className="relative p-2">
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-10">
-                    <div className="flex flex-col items-center gap-4">
-                      <img src="/logos/logo-ssp.png" alt="" className="h-32 w-auto" />
-                      <img src="/logos/logo-ceipol.png" alt="" className="h-24 w-auto" />
-                    </div>
-                  </div>
+              <div id="map-export-container" className="mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden">
+                <div className="relative p-0">
                   <AnalysisMap
                     album={album.filter((p) => selectedIds.includes(p.id))}
                     analysisResult={analysisResult}
@@ -967,7 +927,7 @@ const remainingPhotos =
             <textarea
               value={editableProfile}
               onChange={(e) => setEditableProfile(e.target.value)}
-              className="w-full min-h-[500px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y"
+              className="w-full min-h-[70vh] md:min-h-[800px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-6 text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner"
             />
           </div>
           <div className="flex flex-wrap gap-2 pt-1 print:hidden">
@@ -1004,8 +964,8 @@ const remainingPhotos =
       )}
 
       {showConfigModal && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80">
-          <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 px-5 py-6 space-y-4">
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 px-6 py-8 space-y-5 my-auto">
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
@@ -1090,8 +1050,8 @@ const remainingPhotos =
                 <textarea
                   value={analysisContext}
                   onChange={(e) => setAnalysisContext(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-3 py-2 text-sm resize-none"
+                  rows={6}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-4 py-3 text-base resize-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
                 />
                 <div className="flex items-center justify-between gap-3">
