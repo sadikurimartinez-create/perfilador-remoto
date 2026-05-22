@@ -211,8 +211,7 @@ export function ProjectManager() {
       </div>
 
       <CaptureAndAddPhoto />
-      <PhotoAlbum />
-      
+
       {album.length > 0 && (
         <ProjectMap
           project={project}
@@ -232,6 +231,8 @@ export function ProjectManager() {
           }}
         />
       )}
+
+      <PhotoAlbum />
 
       {/* Botón para detonar el análisis rápido */}
       {album.length > 0 && (

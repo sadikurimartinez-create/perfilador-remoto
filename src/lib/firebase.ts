@@ -1,49 +1,43 @@
-import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getFirestore, type Firestore } from "firebase/firestore";
-import { getAuth, type Auth } from "firebase/auth";
-import { getStorage, type FirebaseStorage } from "firebase/storage";
+"use client";
 
-// Configuración tomada del objeto generado por Firebase
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getAnalytics, type Analytics } from "firebase/analytics";
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCX8sRh4Km8FLFz1XI-LtbkhzdfhXeAVpw",
   authDomain: "perfilador-remoto.firebaseapp.com",
+  databaseURL: "https://perfilador-remoto-default-rtdb.firebaseio.com",
   projectId: "perfilador-remoto",
-  storageBucket: "perfilador-remoto.firebasestorage.app",
+  storageBucket: "perfilador-remoto.appspot.com",
   messagingSenderId: "1062636354921",
   appId: "1:1062636354921:web:89ebc4ad940d93015e91f8",
-  measurementId: "G-WLKXSYNJJ9",
+  measurementId: "G-WLKXSYNJJ9"
 };
 
-let appInstance: FirebaseApp;
-let dbInstance: Firestore;
-let authInstance: Auth;
-let storageInstance: FirebaseStorage;
+let app: FirebaseApp;
+let db: Firestore;
+let storage: FirebaseStorage;
+let analytics: Analytics | null = null;
 
-export function getFirebaseApp(): FirebaseApp {
-  if (!appInstance) {
-    appInstance =
-      getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+if (typeof window !== "undefined") {
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
   }
-  return appInstance;
+  db = getFirestore(app);
+  storage = getStorage(app);
+  if (firebaseConfig.measurementId) {
+    analytics = getAnalytics(app);
+  }
 }
 
 export function getDb(): Firestore {
-  if (!dbInstance) {
-    dbInstance = getFirestore(getFirebaseApp());
-  }
-  return dbInstance;
+  return db;
 }
 
-export function getAuthInstance(): Auth {
-  if (!authInstance) {
-    authInstance = getAuth(getFirebaseApp());
-  }
-  return authInstance;
-}
-
-export function getStorageInstance(): FirebaseStorage {
-  if (!storageInstance) {
-    storageInstance = getStorage(getFirebaseApp());
-  }
-  return storageInstance;
-}
+export { app, db, storage, analytics };

@@ -1,19 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import exifr from "exifr";
-import imageCompression from "browser-image-compression";
 import { useProject } from "@/context/ProjectContext";
-import { TIPOS_IMAGEN } from "@/context/ProjectContext";
-import { db } from "@/lib/localDb";
-
-const COMPRESSION_OPTIONS = {
-  maxSizeMB: 0.8,
-  maxWidthOrHeight: 1280,
-  useWebWorker: true,
-  initialQuality: 0.7,
-  alwaysKeepResolution: true,
-} as const;
 
 function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve) => {
@@ -47,8 +36,7 @@ function generateSafeId(): string {
 }
 
 export function CaptureAndAddPhoto() {
-  const { addPhotoToAlbum, project, album } = useProject();
-  const [file, setFile] = useState<File | null>(null);
+  const { uploadAndAddPhoto, project, album } = useProject();
   const minimumPhotos = {
     individual: 1,
     lineal: 2,
@@ -66,20 +54,28 @@ export function CaptureAndAddPhoto() {
 
   const hasMinimumPhotos =
     currentPhotos >= requiredPhotos;
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
-  const [tipo, setTipo] = useState<string>(TIPOS_IMAGEN[0]);
-  const [comentario, setComentario] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isReading, setIsReading] = useState(false);
   const [isFetchingGPS, setIsFetchingGPS] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isIndividual = project?.geometryType === 'individual';
 
   const handleGalleryUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const files = Array.from(e.target.files ?? []);
+    let files = Array.from(e.target.files ?? []);
     if (!project || files.length === 0) return;
+
+    // REGLA DE NEGOCIO: Forzar una sola foto para modo 'individual'
+    if (isIndividual) {
+      if (album.length >= 1) {
+        setError("El modo 'Individual' solo permite una fotografía. Borre la existente para agregar una nueva.");
+        e.target.value = ""; // Limpiar el input para permitir nueva selección
+        return;
+      }
+      // Si el usuario seleccionó varias, solo tomamos la primera.
+      files = files.slice(0, 1);
+    }
 
     setError(null);
     setIsFetchingGPS(true);
@@ -117,59 +113,14 @@ export function CaptureAndAddPhoto() {
         lng = fallback.lng;
       }
 
-      let compressed: File = selected;
       try {
-        compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
+        await uploadAndAddPhoto(selected, lat, lng);
       } catch (err) {
-        console.error("[CaptureAndAddPhoto] Error comprimiendo:", err);
-        // Fallback: mantener la imagen original para no bloquear la subida
-        setError("No se pudo comprimir una imagen. Se usará la foto original.");
+        console.error("[CaptureAndAddPhoto] Error subiendo foto:", err);
+        setError(err instanceof Error ? err.message : "Error al subir la fotografía.");
+        // Detener el bucle si una foto falla
+        break;
       }
-
-      const photoId = generateSafeId();
-      const projectId = project.id;
-      const preview = URL.createObjectURL(compressed);
-
-      try {
-        await db.transaction("rw", db.projects, db.photos, async () => {
-          const existing = await db.projects.get(projectId);
-          if (!existing) {
-            await db.projects.add({
-              id: projectId,
-              name: project.nombre,
-              createdAt: Date.now(),
-            });
-          }
-          await db.photos.add({
-            id: photoId,
-            projectId,
-            imageBlob: compressed,
-            tag: tipo,
-            comments: comentario.trim(),
-            lat,
-            lng,
-            timestamp: Date.now(),
-          });
-        });
-      } catch (err) {
-        console.error("[CaptureAndAddPhoto] Error guardando en IndexedDB:", err);
-        if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
-        setError("No se pudo guardar en el dispositivo (poca memoria o espacio). Libere espacio e intente con menos fotos.");
-        e.target.value = "";
-        return;
-      }
-
-      addPhotoToAlbum(
-        {
-          previewUrl: preview,
-          lat,
-          lng,
-          tipo,
-          comentario: comentario.trim(),
-          file: compressed,
-        },
-        photoId
-      );
     }
 
     setIsFetchingGPS(false);
@@ -243,7 +194,7 @@ export function CaptureAndAddPhoto() {
         ref={galleryInputRef}
         type="file"
         accept="image/*"
-        multiple
+        multiple={!isIndividual}
         className="hidden"
         onChange={handleGalleryUpload}
       />
