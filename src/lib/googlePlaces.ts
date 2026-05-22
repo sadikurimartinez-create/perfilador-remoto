@@ -28,7 +28,7 @@ function getMapsApiKey(): string | null {
   return (
     process.env.GOOGLE_MAPS_API_KEY ??
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    null
+    "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc" // HARDCODED TEMPORAL PARA VERCEL
   );
 }
 
@@ -148,4 +148,3 @@ export async function searchPlacesAround(
     otros
   };
 }
-

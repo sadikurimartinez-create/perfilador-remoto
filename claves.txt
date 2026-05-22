@@ -1,0 +1,10 @@
+# CLAVES PARA MAPAS Y LUGARES (Requerido para que cargue el mapa y Google Places)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyTuClaveRealAqui...
+
+# CLAVES PARA LA INTELIGENCIA ARTIFICIAL (Requerido para generar el perfil criminológico)
+GEMINI_API_KEY=AIzaSyTuClaveDeGeminiRealAqui...
+NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyTuClaveDeGeminiRealAqui...
+
+# BASE DE DATOS (Requerido para la estadística e incidencia - PostgreSQL)
+# (Busca en tu archivo local la variable de conexión a tu base de datos)
+DATABASE_URL=postgresql://usuario:Cocipe2009@host:puerto/basededatos

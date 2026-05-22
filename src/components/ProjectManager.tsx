@@ -7,7 +7,7 @@ import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
 
 export function ProjectManager() {
-  const { project, album, createProject, closeProject, updatePhotoCoordinates } = useProject();
+  const { project, album, createProject, closeProject, updatePhotoCoordinates, exportProjectData } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
@@ -189,16 +189,25 @@ export function ProjectManager() {
             {project.nombre}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Espacio de trabajo · Agregue fotos y genere el análisis de selección.
+            Espacio de trabajo · Modo Campo (celular) o Modo Gabinete (PC).
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleCerrarProyecto}
-          className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800"
-        >
-          Cerrar Proyecto / Nuevo Proyecto
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void exportProjectData(project.id)}
+            className="text-sm px-3 py-1.5 rounded-lg border border-amber-600/50 bg-amber-900/20 text-amber-400 hover:bg-amber-900/40 md:hidden"
+          >
+            📤 Exportar
+          </button>
+          <button
+            type="button"
+            onClick={handleCerrarProyecto}
+            className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800"
+          >
+            Cerrar Proyecto
+          </button>
+        </div>
       </div>
 
       <CaptureAndAddPhoto />
@@ -226,7 +235,7 @@ export function ProjectManager() {
 
       {/* Botón para detonar el análisis rápido */}
       {album.length > 0 && (
-        <div className="flex justify-end mt-4">
+        <div className="flex justify-end mt-4 hidden md:flex">
           <button
             type="button"
             onClick={() => void handleGenerateAIAnalysis()}

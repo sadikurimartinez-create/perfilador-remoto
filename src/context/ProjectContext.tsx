@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode
 } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection } from "firebase/firestore";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
 
@@ -85,13 +85,16 @@ type ProjectContextValue = {
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
   addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">, id?: string) => void;
-  removePhotoFromAlbum: (id: string) => void;
+  removePhotoFromAlbum: (id: string) => Promise<void>;
+  removeAllPhotosFromAlbum: (projectId: string) => Promise<void>;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
   updatePhotoCoordinates: (id: string, lat: number, lng: number) => Promise<void>;
   togglePhotoSelection: (id: string) => void;
   selectAllPhotos: () => void;
   clearSelection: () => void;
   setAnalysisResult: (result: AnalysisResult | null) => void;
+  exportProjectData: (projectId: string) => Promise<void>;
+  importProjectData: (file: File, username: string) => Promise<void>;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -200,9 +203,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const removePhotoFromAlbum = useCallback((id: string) => {
-    setAlbum((prev) => prev.filter((p) => p.id !== id));
-    setSelectedIds((prev) => prev.filter((x) => x !== id));
+  const removePhotoFromAlbum = useCallback(async (id: string) => {
+    try {
+      await db.photos.delete(id);
+      setAlbum((prev) => prev.filter((p) => p.id !== id));
+      setSelectedIds((prev) => prev.filter((x) => x !== id));
+    } catch (err) {
+      console.error("[ProjectContext] Error al eliminar foto:", err);
+    }
+  }, []);
+
+  const removeAllPhotosFromAlbum = useCallback(async (projectId: string) => {
+    try {
+      await db.photos.where("projectId").equals(projectId).delete();
+      setAlbum([]);
+      setSelectedIds([]);
+    } catch (err) {
+      console.error("[ProjectContext] Error al eliminar todas las fotos:", err);
+    }
   }, []);
 
   const updatePhotoMeta = useCallback((id: string, meta: { tipo: string; comentario: string }) => {
@@ -241,6 +259,86 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setAnalysisResultState(result);
   }, []);
 
+  const exportProjectData = useCallback(async (projectId: string) => {
+    try {
+      const projectRow = await db.projects.get(projectId);
+      if (!projectRow) throw new Error("Proyecto no encontrado localmente.");
+
+      const photoRows = await db.photos.where("projectId").equals(projectId).toArray();
+      
+      // Convertir Blobs a Base64 para empaquetar en JSON
+      const photosData = await Promise.all(photoRows.map((p) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve({
+              id: p.id,
+              tag: p.tag,
+              comments: p.comments,
+              lat: p.lat,
+              lng: p.lng,
+              timestamp: p.timestamp,
+              base64: reader.result
+            });
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(p.imageBlob);
+        });
+      }));
+
+      const payload = {
+        version: "1.0",
+        project: projectRow,
+        photos: photosData
+      };
+
+      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+      const { saveAs } = await import("file-saver");
+      saveAs(blob, `${projectRow.name.replace(/\s+/g, '_')}_Gabinete.json`);
+    } catch (err) {
+      console.error("[ProjectContext] Error exportando:", err);
+      alert("Error al exportar el expediente.");
+    }
+  }, []);
+
+  const importProjectData = useCallback(async (file: File, username: string) => {
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+
+      if (payload.version !== "1.0" || !payload.project || !payload.photos) {
+        throw new Error("El archivo no es un expediente válido del Perfilador.");
+      }
+
+      const proj = payload.project;
+      const firestore = getDb();
+      const col = collection(firestore, "projects");
+      const projectRef = doc(col, proj.id);
+
+      // Guardar en la nube (para que aparezca en la lista)
+      await setDoc(projectRef, {
+        name: proj.name,
+        geometryType: proj.geometryType || "individual",
+        createdAt: proj.createdAt || Date.now(),
+        createdBy: username,
+        lockedBy: null,
+        photoCount: payload.photos.length,
+      });
+
+      // Guardar local (para la evidencia)
+      await db.projects.put(proj);
+      const photoPromises = payload.photos.map(async (p: any) => {
+        const res = await fetch(p.base64);
+        const blob = await res.blob();
+        return { ...p, imageBlob: blob, projectId: proj.id };
+      });
+      const photosToSave = await Promise.all(photoPromises);
+      await db.photos.bulkPut(photosToSave);
+    } catch (err) {
+      throw err;
+    }
+  }, []);
+
   const value = useMemo<ProjectContextValue>(
     () => ({
       project,
@@ -252,12 +350,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       loadProject,
       addPhotoToAlbum,
       removePhotoFromAlbum,
+      removeAllPhotosFromAlbum,
       updatePhotoMeta,
       updatePhotoCoordinates,
       togglePhotoSelection,
       selectAllPhotos,
       clearSelection,
-      setAnalysisResult
+      setAnalysisResult,
+      exportProjectData,
+      importProjectData
     }),
     [
       project,
@@ -269,12 +370,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       loadProject,
       addPhotoToAlbum,
       removePhotoFromAlbum,
+      removeAllPhotosFromAlbum,
       updatePhotoMeta,
       updatePhotoCoordinates,
       togglePhotoSelection,
       selectAllPhotos,
       clearSelection,
-      setAnalysisResult
+      setAnalysisResult,
+      exportProjectData,
+      importProjectData
     ]
   );
 

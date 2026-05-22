@@ -118,7 +118,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     }
   }, [mapReady, coordinates]);
 
-  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
   const { isLoaded, loadError } = useJsApiLoader({
     id: "project-map",
     googleMapsApiKey: apiKey,
@@ -377,7 +377,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       </div>
 
       {project?.iaAnalysis && project.iaAnalysis.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4 hidden md:block">
           <StatisticsDashboard iaAnalysis={project.iaAnalysis || []} />
           <CorrelationPanel
             currentProject={project}
@@ -392,7 +392,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
         </div>
       ) : (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center shadow-inner">
+        <div className="mt-4 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center shadow-inner hidden md:block">
           <span className="text-4xl block mb-3 opacity-50">⏳</span>
           <h4 className="text-lg font-semibold text-slate-300">Paneles Analíticos en Espera</h4>
           <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">
@@ -402,7 +402,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       )}
 
       {project && (
-        <div className="space-y-4">
+        <div className="space-y-4 hidden md:block">
           <OperationalTimeline
             session={session}
           />

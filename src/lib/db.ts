@@ -7,7 +7,8 @@ let poolInstance: Pool | null = null;
  * Así el build de Vercel no falla al importar este módulo.
  */
 export function getPool(): Pool {
-  const connectionString = process.env.DATABASE_URL;
+  // Inyectado temporalmente para Vercel usando la IP pública de Namecheap
+  const connectionString = process.env.DATABASE_URL || "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
   if (!connectionString) {
     throw new Error(
       "Falta la variable de entorno DATABASE_URL para conectar a PostgreSQL."

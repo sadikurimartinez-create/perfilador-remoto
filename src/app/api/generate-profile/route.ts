@@ -175,7 +175,7 @@ function getGeminiModel(
   const fromProcess =
     (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
     (typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.trim()) ||
-    "";
+    "AIzaSyBX14H2DcXGpAMKT3A1hm7flHVeS8gpt2U"; // HARDCODED TEMPORAL PARA VERCEL
   const apiKey = fromModule || fromProcess;
   if (!apiKey) {
     throw new Error(
@@ -203,7 +203,7 @@ async function reverseGeocode(
   const key =
     process.env.GOOGLE_MAPS_API_KEY ??
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    null;
+    "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
   if (!key) {
     console.warn(
       "[generate-profile] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY para Geocoding."
@@ -669,7 +669,7 @@ export async function POST(req: Request) {
         const mapsKey =
           process.env.GOOGLE_MAPS_API_KEY ??
           process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
-          null;
+          "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc"; // HARDCODED TEMPORAL PARA VERCEL
         if (mapsKey) {
           poiImages = mergedPois.slice(0, 12).map((p) => ({
             name: p.name,

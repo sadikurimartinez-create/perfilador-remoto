@@ -9,7 +9,7 @@ const b = (g.GEMINI_API_KEY ?? "") as string;
 export const GEMINI_API_KEY =
   (typeof a === "string" && a.trim() ? a.trim() : null) ||
   (typeof b === "string" && b.trim() ? b.trim() : null) ||
-  "";
+  "AIzaSyBX14H2DcXGpAMKT3A1hm7flHVeS8gpt2U"; // HARDCODED TEMPORAL PARA VERCEL
 
 /** Modelo por defecto si no se define GEMINI_MODEL en el entorno. */
 const DEFAULT_GEMINI_MODEL = "models/gemini-2.5-flash";

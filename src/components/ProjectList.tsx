@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useProject } from "@/context/ProjectContext";
 import { db as localDb } from "@/lib/localDb";
 import {
   collection,
@@ -27,6 +28,8 @@ type ProjectWithCount = {
 
 export function ProjectList() {
   const router = useRouter();
+  const { exportProjectData, importProjectData } = useProject();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
@@ -249,7 +252,30 @@ export function ProjectList() {
 
       {!showPrompt ? (
         <>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !user) return;
+                const btn = document.getElementById("btn-importar");
+                if (btn) btn.innerText = "⏳ Importando...";
+                await importProjectData(file, user.username).then(() => alert("¡Expediente importado exitosamente!")).catch(err => alert("Error importando: " + err.message));
+                if (btn) btn.innerText = "📥 Importar desde Campo";
+                e.target.value = "";
+              }}
+            />
+            <button
+              id="btn-importar"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-sm hover:bg-slate-700 transition-colors shadow-md"
+            >
+              📥 Importar desde Campo
+            </button>
             <button
               type="button"
               onClick={handleNuevoProyecto}
@@ -314,6 +340,14 @@ export function ProjectList() {
                       </p>
                       </div>
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void exportProjectData(p.id)}
+                          title="Descargar archivo para enviarlo a Gabinete"
+                          className="p-2 rounded text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-900/30 transition-colors border border-transparent hover:border-amber-700/50"
+                        >
+                          📤 Exportar a Gabinete
+                        </button>
                         <button
                           type="button"
                           onClick={() => void handleDeleteProject(p.id)}

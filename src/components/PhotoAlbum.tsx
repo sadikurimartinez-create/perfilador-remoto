@@ -100,6 +100,8 @@ export function PhotoAlbum({
     clearSelection,
     setAnalysisResult,
     updatePhotoMeta,
+    removePhotoFromAlbum,
+    removeAllPhotosFromAlbum,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -552,16 +554,27 @@ const remainingPhotos =
           <button
             type="button"
             onClick={selectAllPhotos}
-            className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800"
+            className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800 hidden md:block"
           >
             Seleccionar todas
           </button>
           <button
             type="button"
             onClick={clearSelection}
-            className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800"
+            className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800 hidden md:block"
           >
             Limpiar selección
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("¿Seguro que desea borrar TODAS las fotografías de este proyecto?")) {
+                if (project) void removeAllPhotosFromAlbum(project.id);
+              }
+            }}
+            className="text-xs px-2 py-1 rounded border border-red-900/50 text-red-400 hover:bg-red-900/30"
+          >
+            Borrar todas
           </button>
         </div>
       </header>
@@ -615,25 +628,23 @@ const remainingPhotos =
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   </div>
-                  {onDeletePhoto && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        void onDeletePhoto(p.id);
-                      }}
-                      className="absolute top-0 right-0 rounded p-1 bg-red-600/90 text-white hover:bg-red-500"
-                      title="Eliminar fotografía"
-                      aria-label="Eliminar fotografía"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        <line x1="10" y1="11" x2="10" y2="17" />
-                        <line x1="14" y1="11" x2="14" y2="17" />
-                      </svg>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void removePhotoFromAlbum(p.id);
+                    }}
+                    className="absolute top-0 right-0 rounded p-1 bg-red-600/90 text-white hover:bg-red-500"
+                    title="Eliminar fotografía"
+                    aria-label="Eliminar fotografía"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                  </button>
                   <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5">{p.tipo}</p>
                   <p className="text-[10px] text-slate-500 truncate">{p.comentario || "—"}</p>
                   {visionData[p.id]?.extractedText && (
@@ -696,7 +707,7 @@ const remainingPhotos =
         ))}
       </div>
 
-      <div className="pt-2 border-t border-slate-800 space-y-2">
+      <div className="pt-2 border-t border-slate-800 space-y-2 hidden md:block">
         <button
           type="button"
           onClick={handleOpenConfigModal}
