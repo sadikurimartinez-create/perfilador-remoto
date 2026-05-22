@@ -426,8 +426,14 @@ Radio de análisis utilizado: ${analysisRadius} metros.
 ## DETERIORO URBANO (Vision API - Ventanas Rotas)
 ${visionResumen}
 
-## CONTROLES Y ATRACTORES (Places + DENUE)
-${irregularidadesTexto || "No se identificaron comercios irregulares ni atractores relevantes en la zona analizada."}
+## ANÁLISIS MICRO-ECONÓMICO Y DE ATRACTORES (DENUE INEGI Y PLACES - BARRIDO A 1KM)
+${irregularidadesTexto || "No se identificaron unidades económicas registradas ni atractores relevantes en el perímetro de 1 kilómetro."}
+
+[MANDATO TÁCTICO PARA CRUCE COMERCIAL Y DENUE]:
+1. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos" (concentran masas), "Atractores de Delitos" (atraen infractores motivados) o "Nodos de Miedo". NO hagas un simple inventario.
+2. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y el registro formal de DENUE. Argumenta cómo la irregularidad comercial debilita el control social (ausencia de guardianes formales) y fomenta "ventanas rotas" a nivel socioeconómico.
+3. CORRELACIÓN ESTADÍSTICA: Cruza OBLIGATORIAMENTE los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares/chatarreras = mercados de bienes ilícitos; Lesiones + expendios de alcohol = catalizadores de violencia).
+4. ACTIVIDADES RUTINARIAS: Relaciona la tipología del comercio con la previsibilidad de las víctimas en horarios específicos (bancos, farmacias 24h, tiendas de conveniencia).
 
 ## ESTRATEGIA ANALÍTICA SEGÚN TIPO DE PUNTO
 ${strategySummary || "Aplicar análisis general conforme a las cuatro teorías indicadas."}
@@ -459,7 +465,7 @@ Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objeti
 1. OBJETIVO DEL DICTAMEN — Una oración que indique el propósito del perfil y la zona analizada.
 2. CONTEXTO ESPACIAL — Descripción del área (dirección, colonia, entorno) y del radio de análisis.
 3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de lo detectado por Vision en las fotos; sin repetir listas crudas.
-4. ATRACTORES, CONTROLES Y GUARDIANES — Comercios, POIs y su relación con rutinas y oportunidades delictivas; usa las imágenes de POIs donde aporten.
+4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia y vacíos de control formal (negocios irregulares). Usa imágenes de POIs.
 5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional.
 6. RIESGOS IDENTIFICADOS — Puntos concretos de riesgo derivados del análisis, sin repetir párrafos anteriores.
 7. RECOMENDACIONES — Medidas accionables y vinculadas a los hallazgos.
@@ -540,7 +546,7 @@ export async function POST(req: Request) {
     );
 
     const denueTimedPromise = withTimeout(
-      searchDenueAround(centerLat, centerLng, radiusMeters),
+      searchDenueAround(centerLat, centerLng, Math.max(radiusMeters, 1000)),
       4000
     );
 
@@ -663,7 +669,7 @@ export async function POST(req: Request) {
           .join("\n");
         irregularidadesTexto +=
           (irregularidadesTexto ? "\n\n" : "") +
-          "Puntos de interés fusionados (DENUE + Google Places):\n" +
+          "Puntos de interés y unidades económicas fusionadas (DENUE a 1KM + Google Places):\n" +
           resumenPOI;
 
         const mapsKey = process.env.GOOGLE_MAPS_API_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
