@@ -105,6 +105,7 @@ export function PhotoAlbum({
     documents,
     uploadDocument,
     removeDocument,
+    isReadOnly,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -125,8 +126,6 @@ export function PhotoAlbum({
   >(null);
   const [analysisPolygon, setAnalysisPolygon] = useState<google.maps.LatLngLiteral[]>([]);
   const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
-  const [isPreliminaryMapConfirmed, setIsPreliminaryMapConfirmed] = useState(false);
-  const [showPreliminaryMap, setShowPreliminaryMap] = useState(false);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
@@ -151,8 +150,6 @@ const currentPhotos = album.length;
 const hasMinimumPhotos =
   currentPhotos >= requiredPhotos;
 
-const remainingPhotos =
-  requiredPhotos - currentPhotos;
   const handleOpenConfigModal = () => {
     if (selectedIds.length === 0) {
       setError("Seleccione al menos una fotografía.");
@@ -260,8 +257,11 @@ const remainingPhotos =
           manualPois
         }),
       });
+      
+      let currentAnalysisResult = analysisResult;
       if (mapRes.ok) {
         const mapData = await mapRes.json();
+        currentAnalysisResult = mapData;
         setAnalysisResult(mapData);
       }
 
@@ -330,12 +330,38 @@ const remainingPhotos =
 
         const data = (await res.json()) as {
           markdown: string;
-          meta?: { riskLevel?: "bajo" | "medio" | "alto" };
+          meta?: { 
+            riskLevel?: "bajo" | "medio" | "alto";
+            incidenciaDetalles?: any[];
+            pois?: any[];
+          };
         };
         const markdown = data.markdown ?? "";
         setAiProfile(markdown);
         setEditableProfile(markdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
+
+        // Integrar datos para asegurar que las gráficas y el mapa (Dashboard) se pinten
+        const combinedCrimes = [
+          ...(data.meta?.incidenciaDetalles || []).map((c: any) => ({
+            lat: c.lat,
+            lng: c.lng,
+            tipoDelito: c.incidente || c.tipoDelito || "Delito",
+            rangoHorario: c.rango_horario || c.rangoHorario || "Sin rango",
+          })),
+          ...incidenciaLocal.map((c: any) => ({
+            lat: c.lat,
+            lng: c.lng,
+            tipoDelito: c.tipo || c.incidente || c.tipoDelito || "Delito",
+            rangoHorario: c.rangoHorario || c.rango_horario || "Sin rango",
+          })),
+        ];
+
+        setAnalysisResult({
+          ...(currentAnalysisResult || {}),
+          historicalCrimes: combinedCrimes,
+          pois: data.meta?.pois || currentAnalysisResult?.pois || [],
+        });
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
         
@@ -560,17 +586,19 @@ const remainingPhotos =
           >
             Limpiar selección
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm("¿Seguro que desea borrar TODAS las fotografías de este proyecto?")) {
-                if (project) void removeAllPhotosFromAlbum(project.id);
-              }
-            }}
-            className="text-xs px-2 py-1 rounded border border-red-900/50 text-red-400 hover:bg-red-900/30"
-          >
-            Borrar todas
-          </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("¿Seguro que desea borrar TODAS las fotografías de este proyecto?")) {
+                  if (project) void removeAllPhotosFromAlbum(project.id);
+                }
+              }}
+              className="text-xs px-2 py-1 rounded border border-red-900/50 text-red-400 hover:bg-red-900/30"
+            >
+              Borrar todas
+            </button>
+          )}
         </div>
       </header>
 
@@ -623,31 +651,34 @@ const remainingPhotos =
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      void removePhotoFromAlbum(p.id);
-                    }}
-                    className="absolute top-0 right-0 rounded p-1 bg-red-600/90 text-white hover:bg-red-500"
-                    title="Eliminar fotografía"
-                    aria-label="Eliminar fotografía"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      <line x1="10" y1="11" x2="10" y2="17" />
-                      <line x1="14" y1="11" x2="14" y2="17" />
-                    </svg>
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void removePhotoFromAlbum(p.id);
+                      }}
+                      className="absolute top-0 right-0 rounded p-1 bg-red-600/90 text-white hover:bg-red-500"
+                      title="Eliminar fotografía"
+                      aria-label="Eliminar fotografía"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <line x1="10" y1="11" x2="10" y2="17" />
+                        <line x1="14" y1="11" x2="14" y2="17" />
+                      </svg>
+                    </button>
+                  )}
                   
                   {/* Campo de comentarios (Opcional) - Visible en móvil y PC */}
                   <input
                     type="text"
                     placeholder="Comentario (opcional)..."
                     value={p.comentario}
+                    disabled={isReadOnly}
                     onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
-                    className="w-full mt-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md p-2 text-xs outline-none focus:border-sky-500"
+                    className="w-full mt-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50"
                   />
 
                   {visionData[p.id]?.extractedText && (
@@ -671,7 +702,8 @@ const remainingPhotos =
                         comentario: p.comentario,
                       })
                     }
-                    className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block"
+                    disabled={isReadOnly}
+                    className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block disabled:opacity-50"
                   >
                     <option value="">Selecciona clasificación...</option>
                     <option value="Escuela / Entorno Educativo">
@@ -718,9 +750,9 @@ const remainingPhotos =
         </header>
         <div className="flex flex-col md:flex-row gap-4 items-start">
           <div className="w-full md:w-1/2 space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
-            <input id="doc-upload-input" type="file" onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800" accept=".pdf,.xls,.xlsx,.doc,.docx,.mp4,.avi,.mkv" />
-            <textarea value={docContext} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px]" />
-            <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc} onClick={async () => {
+            <input id="doc-upload-input" type="file" disabled={isReadOnly} onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50" accept=".pdf,.xls,.xlsx,.doc,.docx,.mp4,.avi,.mkv" />
+            <textarea value={docContext} disabled={isReadOnly} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50" />
+            <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly} onClick={async () => {
               if (!docFile || !docContext.trim()) return;
               setIsUploadingDoc(true);
               setError(null);
@@ -744,7 +776,9 @@ const remainingPhotos =
               <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
                 <div className="flex justify-between items-start gap-2">
                   <a href={d.url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold text-[11px] truncate flex-1" title={d.name}>📄 {d.name}</a>
-                  <button onClick={() => removeDocument(d.id)} className="text-red-400 hover:text-red-300 text-[10px] shrink-0">Eliminar</button>
+                  {!isReadOnly && (
+                    <button onClick={() => removeDocument(d.id)} className="text-red-400 hover:text-red-300 text-[10px] shrink-0">Eliminar</button>
+                  )}
                 </div>
                 <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
               </div>
@@ -760,7 +794,7 @@ const remainingPhotos =
         <button
           type="button"
           onClick={handleOpenConfigModal}
-          disabled={isGeneratingAI || selectedIds.length === 0}
+          disabled={isGeneratingAI || selectedIds.length === 0 || isReadOnly}
           className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isGeneratingAI ? (
@@ -779,7 +813,7 @@ const remainingPhotos =
               Procesando inteligencia... Por favor espere
             </>
           ) : aiProfile ? (
-            "Análisis Generado"
+            isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Análisis Criminológico"
           ) : (
             "Generar Análisis Criminológico"
           )}
@@ -846,13 +880,6 @@ const remainingPhotos =
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsPreliminaryMapConfirmed(true)}
-                  className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors print:hidden"
-                >
-                  Confirmar perímetro y analizar
-                </button>
                 <button
                   type="button"
                   onClick={handleDownloadMap}
@@ -927,11 +954,12 @@ const remainingPhotos =
             <textarea
               value={editableProfile}
               onChange={(e) => setEditableProfile(e.target.value)}
-              className="w-full min-h-[70vh] md:min-h-[800px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-6 text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner"
+              disabled={isReadOnly}
+              className="w-full min-h-[70vh] md:min-h-[800px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-6 text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
             />
           </div>
           <div className="flex flex-wrap gap-2 pt-1 print:hidden">
-            {projectId && (
+            {!isReadOnly && projectId && (
               <button
                 type="button"
                 onClick={handleSaveAnalysis}

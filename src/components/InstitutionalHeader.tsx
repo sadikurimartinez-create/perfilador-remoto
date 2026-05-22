@@ -24,14 +24,14 @@ export function InstitutionalHeader() {
             PERFILADOR REMOTO
           </h1>
           <p className="text-[10px] font-medium text-slate-300 sm:text-xs mt-0.5">
-            Centro de Estudios y Política Criminal
+            NOMBRE DE TU CENTRO O INSTITUCIÓN
           </p>
           <p className="text-[10px] text-slate-400 sm:text-xs">
-            Secretaría de Seguridad Pública del Estado de Aguascalientes
+            NOMBRE DE TU DEPENDENCIA O SECRETARÍA
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-3">
-          {user && user.role === "ADMIN" && (
+          {user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
             <button
               type="button"
               onClick={() => {

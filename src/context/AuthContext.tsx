@@ -14,7 +14,7 @@ import { getDb } from "@/lib/firebase";
 type AuthUser = {
   id: number | string;
   username: string;
-  role: "ADMIN" | "USER";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
   name: string;
 };
 
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const authUser: AuthUser = {
             id: docSnap.id,
             username: username.trim(),
-            role: (data.role as "USER") || "USER",
+            role: (data.role as "SUPER_ADMIN" | "ADMIN" | "USER") || "USER",
             name: (data.name as string) || username.trim(),
           };
           window.localStorage.setItem(
@@ -141,4 +141,3 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
-

@@ -13,6 +13,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "fire
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
+import { useAuth } from "@/context/AuthContext";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -49,6 +50,7 @@ export type Project = {
   id: string;
   nombre: string;
   geometryType: "individual" | "lineal" | "poligono";
+  createdBy?: string;
 };
 
 export type PerPhotoFinding = {
@@ -107,6 +109,7 @@ type ProjectContextValue = {
   documents: ProjectDocument[];
   uploadDocument: (file: File, context: string) => Promise<void>;
   removeDocument: (id: string) => Promise<void>;
+  isReadOnly: boolean;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -124,6 +127,8 @@ function generateId(): string {
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [album, setAlbum] = useState<AlbumPhoto[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -144,7 +149,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         name: nombre.trim() || "Sin nombre",
         geometryType,
         createdAt: Date.now(),
-        createdBy: "Usuario Local",
+        createdBy: user?.username || "Usuario Local",
         lockedBy: null,
         photoCount: 0,
       });
@@ -153,17 +158,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         id: docRef.id,
         nombre: nombre.trim() || "Sin nombre",
         geometryType,
+        createdBy: user?.username || "Usuario Local",
       });
 
       setAlbum([]);
       setSelectedIds([]);
       setAnalysisResultState(null);
       setDocuments([]);
+      setIsReadOnly(false);
     } catch (err: any) {
       console.error("Error creando proyecto:", err);
       alert("Error al crear expediente: " + err.message);
     }
-  }, []);
+  }, [user?.username]);
 
   const closeProject = useCallback(() => {
     setProject(null);
@@ -171,6 +178,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setSelectedIds([]);
     setAnalysisResultState(null);
     setDocuments([]);
+    setIsReadOnly(false);
   }, []);
 
   const loadProject = useCallback(async (projectId: string) => {
@@ -181,9 +189,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       if (!projectSnap.exists()) {
         console.error("El proyecto no existe en Firestore.");
-        return;
+        throw new Error("El proyecto no existe en la base de datos.");
       }
       const projectData = projectSnap.data();
+      const creator = projectData.createdBy;
+
+      // REGLAS DE ACCESO (ADR)
+      if (user?.role === "USER" && creator !== user?.username) {
+        throw new Error("Acceso denegado: El expediente pertenece a otro analista y su rol no permite visualización de terceros.");
+      }
+
+      const canModify = user?.role === "SUPER_ADMIN" || creator === user?.username;
+      setIsReadOnly(!canModify);
 
       const photosColRef = collection(firestore, "projects", projectId, "photos");
       const photosQuery = query(photosColRef, orderBy("createdAt", "asc"));
@@ -225,8 +242,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       console.error("Error cargando proyecto:", err);
       alert("Error al abrir expediente: " + err.message);
+      setProject(null);
+      setAlbum([]);
     }
-  }, []);
+  }, [user]);
 
   const addPhotoToAlbum = useCallback(
     (photo: Omit<AlbumPhoto, "id">, id?: string) => {
@@ -247,6 +266,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const uploadAndAddPhoto = useCallback(async (file: File, lat: number, lng: number) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
     if (!project) throw new Error("No hay un proyecto activo para subir la foto.");
 
     // 1. Comprimir imagen
@@ -290,9 +310,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       file: compressedFile,
     }, photoDocRef.id);
 
-  }, [project, addPhotoToAlbum]);
+  }, [project, addPhotoToAlbum, isReadOnly]);
 
   const uploadDocument = useCallback(async (file: File, context: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
     if (!project) throw new Error("No hay un proyecto activo para subir el anexo.");
     const storage = getStorage();
     const docId = generateId();
@@ -311,16 +332,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
     const docRef = await addDoc(docsColRef, docData);
     setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);
-  }, [project]);
+  }, [project, isReadOnly]);
 
   const removeDocument = useCallback(async (id: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
     if (!project) return;
     const firestore = getDb();
     await deleteDoc(doc(firestore, "projects", project.id, "documents", id));
     setDocuments(prev => prev.filter(d => d.id !== id));
-  }, [project]);
+  }, [project, isReadOnly]);
 
   const removePhotoFromAlbum = useCallback(async (id: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
     try {
       if (!project) return;
       const firestore = getDb();
@@ -339,20 +362,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [project]);
 
   const removeAllPhotosFromAlbum = useCallback(async (projectId: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
     // This needs to be re-implemented to delete all photos from the subcollection in Firestore and Storage.
     // It's a more complex operation (batch delete). For now, I'll just clear the local state.
     console.warn("removeAllPhotosFromAlbum no está completamente implementado para Firebase.");
     setAlbum([]);
     setSelectedIds([]);
-  }, []);
+  }, [isReadOnly]);
 
   const updatePhotoMeta = useCallback((id: string, meta: { tipo: string; comentario: string }) => {
+    if (isReadOnly) return;
     setAlbum((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...meta } : p))
     );
-  }, []);
+  }, [isReadOnly]);
 
   const updatePhotoCoordinates = useCallback(async (id: string, lat: number, lng: number) => {
+    if (isReadOnly) return;
     if (!project) return;
     try {
       const firestore = getDb();
@@ -363,7 +389,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("[ProjectContext] Error al actualizar coordenadas:", err);
     }
-  }, [project]);
+  }, [project, isReadOnly]);
 
   const togglePhotoSelection = useCallback((id: string) => {
     setSelectedIds((prev) =>
@@ -456,6 +482,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const col = collection(firestore, "projects");
       const projectRef = doc(col, proj.id); // Use existing ID
 
+      const snap = await getDoc(projectRef);
+      if (snap.exists() && snap.data().createdBy !== user?.username && user?.role !== "SUPER_ADMIN") {
+         throw new Error("No puedes sobrescribir un expediente de auditoría que pertenece a otro usuario.");
+      }
+
       // Guardar en la nube (para que aparezca en la lista)
       await setDoc(projectRef, {
         name: proj.name,
@@ -474,11 +505,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         const { id, ...photoData } = p;
         return setDoc(photoDocRef, photoData, { merge: true });
       });
-      const photosToSave = await Promise.all(photoPromises);
+      await Promise.all(photoPromises);
     } catch (err) {
       throw err;
     }
-  }, []);
+  }, [user]);
 
   const value = useMemo<ProjectContextValue>(
     () => ({
@@ -503,7 +534,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProjectData,
       documents,
       uploadDocument,
-      removeDocument
+      removeDocument,
+      isReadOnly
     }),
     [
       project,
@@ -527,7 +559,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProjectData,
       documents,
       uploadDocument,
-      removeDocument
+      removeDocument,
+      isReadOnly
     ]
   );
 

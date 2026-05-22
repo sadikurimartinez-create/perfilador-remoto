@@ -255,7 +255,9 @@ async function getHistoricalSummary(
         incidente,
         rango_horario,
         fecha,
-        hora
+        hora,
+        ST_Y(geometria::geometry) as lat,
+        ST_X(geometria::geometry) as lng
       FROM incidencia_estadistica
       WHERE ST_DWithin(
         geometria,
@@ -565,7 +567,7 @@ export async function POST(req: Request) {
       geocoding,
       placesAndDenueSettled,
       streetViewUrl,
-      { resumen: incidenciaResumen },
+      { resumen: incidenciaResumen, detalles: incidenciaDetalles },
       bibliographyContext,
     ] = await Promise.all([
       geocodingPromise,
@@ -613,6 +615,7 @@ export async function POST(req: Request) {
     let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
     let numIrregulares = 0;
     let numPois = 0;
+    let mergedPoisResult: PointOfInterest[] = [];
     try {
       const irregs = buildIrregularBusinesses(placesResult, denueResult);
       numIrregulares = irregs.posiblesIrregulares.length;
@@ -650,6 +653,7 @@ export async function POST(req: Request) {
         : [];
       const mergedPois = mergeAndDeduplicatePOIs(denuePois, placesPois);
       numPois = mergedPois.length;
+      mergedPoisResult = mergedPois;
       if (mergedPois.length > 0) {
         const resumenPOI = mergedPois
           .slice(0, 50)
@@ -788,6 +792,8 @@ export async function POST(req: Request) {
         meta: {
           center: { lat: centerLat, lng: centerLng },
           incidencia: incidenciaResumen,
+          incidenciaDetalles,
+          pois: mergedPoisResult,
           riskLevel,
         },
       },

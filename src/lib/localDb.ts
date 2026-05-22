@@ -31,7 +31,7 @@ export type UserRow = {
   id?: number;
   username: string;
   passwordHash: string;
-  role: "ADMIN" | "USER";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
   name: string;
 };
 
@@ -62,4 +62,3 @@ class LocalPerfiladorDB extends Dexie {
 }
 
 export const db = new LocalPerfiladorDB();
-

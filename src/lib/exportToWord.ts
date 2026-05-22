@@ -48,7 +48,7 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
     ctx.textBaseline = "middle";
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate(-Math.PI / 4);
-    ctx.fillText("SSP AGS - CEIPOL", 0, 0);
+    ctx.fillText("SIGLAS DE TU DEPENDENCIA AQUÍ", 0, 0);
     ctx.restore();
 
     // 5. Devolver ArrayBuffer para docx
