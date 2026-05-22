@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
-import { db as localDb } from "@/lib/localDb";
 import {
   collection,
   deleteDoc,
@@ -62,13 +61,12 @@ export function ProjectList() {
     let photos: string[] = attached;
     if (!photos.length) {
       try {
-        const photoRows = await localDb.photos
-          .where("projectId")
-          .equals(project.id)
-          .toArray();
-        photos = photoRows.map((p) => URL.createObjectURL(p.imageBlob));
+        const firestore = getDb();
+        const photosCol = collection(firestore, "projects", project.id, "photos");
+        const snap = await getDocs(photosCol);
+        photos = snap.docs.map((d) => d.data().url);
       } catch (e) {
-        console.error("[ProjectList] Error obteniendo fotos locales:", e);
+        console.error("[ProjectList] Error obteniendo fotos de Firebase:", e);
         photos = [];
       }
     }
@@ -144,30 +142,25 @@ export function ProjectList() {
     const firestore = getDb();
     const col = collection(firestore, "projects");
     const createdAt = Date.now();
-    // Firestore generará el id, luego navegamos a ese proyecto
-    const ref = await import("firebase/firestore").then(({ addDoc }) =>
-      addDoc(col, {
-        name: nombre,
-        geometryType,
-        createdAt,
-        createdBy: user.username,
-        lockedBy: null,
-        photoCount: 0,
-      })
-    );
-    // Crear espejo local en Dexie para que el Workspace cargue proyecto y fotos
-    await localDb.projects.add({
-      id: ref.id,
-      name: nombre,
-      geometryType,
-      createdAt,
-      createdBy: user.username,
-      lockedBy: null,
-    } as any); // Usamos as any para evitar el error de esquema estricto
-    setShowPrompt(false);
-    setNombreInput("");
-    setGeometryType("individual");
-    router.push(`/project/${ref.id}`);
+    try {
+      const ref = await import("firebase/firestore").then(({ addDoc }) =>
+        addDoc(col, {
+          name: nombre,
+          geometryType,
+          createdAt,
+          createdBy: user.username,
+          lockedBy: null,
+          photoCount: 0,
+        })
+      );
+      setShowPrompt(false);
+      setNombreInput("");
+      setGeometryType("individual");
+      router.push(`/project/${ref.id}`);
+    } catch (err: any) {
+      console.error("Error creando proyecto:", err);
+      alert("Error al crear expediente: " + err.message);
+    }
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -197,22 +190,14 @@ export function ProjectList() {
       analysesSnap.forEach((d) => {
         deletePromises.push(deleteDoc(d.ref));
       });
+      const photosCol = collection(firestore, "projects", projectId, "photos");
+      const photosSnap = await getDocs(photosCol);
+      photosSnap.forEach((d) => {
+        deletePromises.push(deleteDoc(d.ref));
+      });
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises);
       }
-
-      // Eliminar espejo local en Dexie: proyecto, fotos y análisis asociados
-      await localDb.transaction(
-        "rw",
-        localDb.projects,
-        localDb.photos,
-        localDb.analyses,
-        async () => {
-          await localDb.photos.where("projectId").equals(projectId).delete();
-          await localDb.analyses.where("projectId").equals(projectId).delete();
-          await localDb.projects.delete(projectId);
-        }
-      );
     } catch (err) {
       console.error(
         "[ProjectList] Error al eliminar expediente y su evidencia:",

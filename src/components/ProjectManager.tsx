@@ -9,7 +9,7 @@ import { ProjectMap } from "./ProjectMap";
 
 export function ProjectManager() {
   const router = useRouter();
-  const { project, album, createProject, closeProject, updatePhotoCoordinates, exportProjectData } = useProject();
+  const { project, album, createProject, closeProject, updatePhotoCoordinates } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
@@ -24,13 +24,17 @@ export function ProjectManager() {
     setShowPrompt(true);
   };
 
-  const handleConfirmarNombre = () => {
+  const handleConfirmarNombre = async () => {
     const nombre = nombreInput.trim();
     if (nombre) {
-      createProject({
-        nombre,
-        geometryType,
-      });
+      try {
+        await createProject({
+          nombre,
+          geometryType,
+        });
+      } catch (e: any) {
+        // El error ya lo avisa el context con un alert
+      }
     }
   };
 

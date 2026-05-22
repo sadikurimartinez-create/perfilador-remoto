@@ -76,13 +76,10 @@ type ProjectContextValue = {
   album: AlbumPhoto[];
   selectedIds: string[];
   analysisResult: AnalysisResult | null;
-  createProject: ({
-    nombre,
-    geometryType,
-  }: {
+  createProject: (params: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
-  }) => void;
+  }) => Promise<void>;
 
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
@@ -120,24 +117,38 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysisResult, setAnalysisResultState] = useState<AnalysisResult | null>(null);
 
-  const createProject = useCallback(({
+  const createProject = useCallback(async ({
     nombre,
     geometryType,
   }: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
   }) => {
+    try {
+      const firestore = getDb();
+      const col = collection(firestore, "projects");
+      const docRef = await addDoc(col, {
+        name: nombre.trim() || "Sin nombre",
+        geometryType,
+        createdAt: Date.now(),
+        createdBy: "Usuario Local",
+        lockedBy: null,
+        photoCount: 0,
+      });
 
-    setProject({
-      id: generateId(),
-      nombre: nombre.trim() || "Sin nombre",
-      geometryType,
-    });
+      setProject({
+        id: docRef.id,
+        nombre: nombre.trim() || "Sin nombre",
+        geometryType,
+      });
 
-    setAlbum([]);
-    setSelectedIds([]);
-    setAnalysisResultState(null);
-
+      setAlbum([]);
+      setSelectedIds([]);
+      setAnalysisResultState(null);
+    } catch (err: any) {
+      console.error("Error creando proyecto:", err);
+      alert("Error al crear expediente: " + err.message);
+    }
   }, []);
 
   const closeProject = useCallback(() => {
@@ -148,40 +159,44 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProject = useCallback(async (projectId: string) => {
-    const firestore = getDb();
-    const projectRef = doc(firestore, "projects", projectId);
-    const projectSnap = await getDoc(projectRef);
+    try {
+      const firestore = getDb();
+      const projectRef = doc(firestore, "projects", projectId);
+      const projectSnap = await getDoc(projectRef);
 
-    if (!projectSnap.exists()) {
-      console.error("El proyecto no existe en Firestore.");
-      return;
+      if (!projectSnap.exists()) {
+        console.error("El proyecto no existe en Firestore.");
+        return;
+      }
+      const projectData = projectSnap.data();
+
+      const photosColRef = collection(firestore, "projects", projectId, "photos");
+      const photosQuery = query(photosColRef, orderBy("createdAt", "asc"));
+      const photosSnap = await getDocs(photosQuery);
+
+      const albumPhotos: AlbumPhoto[] = photosSnap.docs.map((photoDoc) => {
+        const data = photoDoc.data();
+        return {
+          id: photoDoc.id,
+          previewUrl: data.url,
+          lat: data.lat,
+          lng: data.lng,
+          tipo: data.tipo,
+          comentario: data.comentario,
+        };
+      });
+      setProject({
+        id: projectId,
+        nombre: projectData.name,
+        geometryType: projectData.geometryType,
+      });
+      setAlbum(albumPhotos);
+      setSelectedIds([]);
+      setAnalysisResultState(null);
+    } catch (err: any) {
+      console.error("Error cargando proyecto:", err);
+      alert("Error al abrir expediente: " + err.message);
     }
-    const projectData = projectSnap.data();
-
-    const photosColRef = collection(firestore, "projects", projectId, "photos");
-    const photosQuery = query(photosColRef, orderBy("createdAt", "asc"));
-    const photosSnap = await getDocs(photosQuery);
-
-    const albumPhotos: AlbumPhoto[] = photosSnap.docs.map((photoDoc) => {
-      const data = photoDoc.data();
-      return {
-        id: photoDoc.id,
-        previewUrl: data.url,
-        lat: data.lat,
-        lng: data.lng,
-        tipo: data.tipo,
-        comentario: data.comentario,
-        // El archivo 'file' no se almacena en Firestore, será undefined al cargar.
-      };
-    });
-    setProject({
-      id: projectId,
-      nombre: projectData.name,
-      geometryType: projectData.geometryType,
-    });
-    setAlbum(albumPhotos);
-    setSelectedIds([]);
-    setAnalysisResultState(null);
   }, []);
 
   const addPhotoToAlbum = useCallback(
