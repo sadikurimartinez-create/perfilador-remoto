@@ -9,6 +9,8 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
+  getDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 
@@ -27,9 +29,13 @@ export default function AdminPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [users, setUsers] = useState<UserDoc[]>([]);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [role, setRole] = useState("USER");
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [pwdMessage, setPwdMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== "ADMIN") return;
+    if (!user || user.role !== "SUPER_ADMIN") return;
     const db = getDb();
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
       const list: UserDoc[] = snap.docs
@@ -48,11 +54,11 @@ export default function AdminPage() {
     return () => unsub();
   }, [user]);
 
-  if (!user || user.role !== "ADMIN") {
+  if (!user || user.role !== "SUPER_ADMIN") {
     return (
       <div className="card p-6 text-center space-y-3">
         <p className="text-sm text-red-400 font-semibold">
-          Acceso restringido. Solo el ADMIN puede gestionar usuarios.
+          Acceso restringido. Solo el SUPER_ADMIN puede gestionar usuarios y roles.
         </p>
         <Link
           href="/"
@@ -68,19 +74,28 @@ export default function AdminPage() {
     e.preventDefault();
     if (!username.trim() || !password.trim() || !name.trim()) return;
     setMessage(null);
+
+    if (role === "ADMIN") {
+      const adminCount = users.filter((u) => u.role === "ADMIN").length;
+      if (adminCount >= 2) {
+        setMessage({ type: "error", text: "El sistema solo permite un máximo de 2 Administradores." });
+        return;
+      }
+    }
+
     try {
       const db = getDb();
       await addDoc(collection(db, "users"), {
         username: username.trim(),
         passwordHash: password,
-        role: "USER",
+        role: role,
         name: name.trim(),
         createdAt: Date.now(),
       });
       setUsername("");
       setPassword("");
       setName("");
-      setMessage({ type: "ok", text: "Analista registrado correctamente." });
+      setMessage({ type: "ok", text: "Usuario registrado correctamente." });
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || "No se pudo registrar." });
     }
@@ -88,12 +103,42 @@ export default function AdminPage() {
 
   const handleDeleteUser = async (id: string) => {
     if (!confirm("¿Eliminar este usuario?")) return;
+    const userToDelete = users.find((u) => u.id === id);
+    if (userToDelete?.role === "SUPER_ADMIN") {
+      setMessage({ type: "error", text: "Medida de seguridad: No se puede eliminar al Super Administrador." });
+      return;
+    }
     try {
       const db = getDb();
       await deleteDoc(doc(db, "users", id));
       setMessage({ type: "ok", text: "Usuario eliminado." });
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || "No se pudo eliminar." });
+    }
+  };
+
+  const handleChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!currentPwd || !newPwd) return;
+    setPwdMessage(null);
+    try {
+      const db = getDb();
+      const userRef = doc(db, "users", String(user.id));
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) {
+         throw new Error("Usuario no encontrado en la base de datos.");
+      }
+      if (snap.data().passwordHash !== currentPwd) {
+         throw new Error("La contraseña actual es incorrecta.");
+      }
+      await updateDoc(userRef, {
+         passwordHash: newPwd
+      });
+      setCurrentPwd("");
+      setNewPwd("");
+      setPwdMessage({ type: "ok", text: "Contraseña actualizada exitosamente." });
+    } catch (err: any) {
+      setPwdMessage({ type: "error", text: err?.message || "Error al actualizar contraseña." });
     }
   };
 
@@ -105,7 +150,7 @@ export default function AdminPage() {
             Administración de usuarios
           </h2>
           <p className="text-xs text-slate-400">
-            Solo disponible para el rol ADMIN.
+            Gestión exclusiva del SUPER_ADMIN.
           </p>
         </div>
         <Link
@@ -121,9 +166,9 @@ export default function AdminPage() {
         className="card p-4 space-y-3 border border-slate-800"
       >
         <h3 className="text-sm font-semibold text-slate-100">
-          Alta de analistas (rol USER)
+          Alta de analistas y administradores
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label className="block text-[11px] text-slate-300 mb-1">
               Nombre completo
@@ -166,6 +211,19 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+          <div>
+            <label className="block text-[11px] text-slate-300 mb-1">
+              Rol del sistema
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:ring-sky-500"
+            >
+              <option value="USER">Perfilador (USER)</option>
+              <option value="ADMIN">Administrador (ADMIN)</option>
+            </select>
+          </div>
         </div>
         {message && (
           <p
@@ -180,7 +238,55 @@ export default function AdminPage() {
           type="submit"
           className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
         >
-          Registrar Analista
+          Registrar Usuario
+        </button>
+      </form>
+
+      <form
+        onSubmit={handleChangePassword}
+        className="card p-4 space-y-3 border border-slate-800"
+      >
+        <h3 className="text-sm font-semibold text-slate-100">
+          Cambiar mi contraseña (SUPER_ADMIN)
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-lg">
+          <div>
+            <label className="block text-[11px] text-slate-300 mb-1">
+              Contraseña Actual
+            </label>
+            <input
+              type="password"
+              value={currentPwd}
+              onChange={(e) => setCurrentPwd(e.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:ring-sky-500"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-300 mb-1">
+              Nueva Contraseña
+            </label>
+            <input
+              type="password"
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:ring-sky-500"
+            />
+          </div>
+        </div>
+        {pwdMessage && (
+          <p
+            className={`text-xs ${
+              pwdMessage.type === "ok" ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {pwdMessage.text}
+          </p>
+        )}
+        <button
+          type="submit"
+          className="inline-flex items-center justify-center rounded-md bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+        >
+          Actualizar Contraseña
         </button>
       </form>
 
@@ -203,13 +309,15 @@ export default function AdminPage() {
                 </p>
                 <p className="text-[11px] text-slate-400">{u.name}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => handleDeleteUser(u.id)}
-                className="text-[11px] text-red-400 hover:text-red-300"
-              >
-                Eliminar
-              </button>
+              {u.role !== "SUPER_ADMIN" && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteUser(u.id)}
+                  className="text-[11px] text-red-400 hover:text-red-300"
+                >
+                  Eliminar
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -217,4 +325,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

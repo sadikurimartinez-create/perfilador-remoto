@@ -87,15 +87,7 @@ export default function LoginPage() {
             {submitting ? "Ingresando…" : "Iniciar sesión"}
           </button>
         </form>
-        <div className="mt-2 text-[10px] text-slate-500 space-y-1">
-          <p className="font-semibold text-slate-300">
-            Cuentas de prueba locales:
-          </p>
-          <p>Admin: admin / Admin2026!</p>
-          <p>Analista: analista1 / Analista2026!</p>
-        </div>
       </div>
     </div>
   );
 }
-
