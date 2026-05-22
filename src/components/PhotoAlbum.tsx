@@ -955,7 +955,7 @@ const hasMinimumPhotos =
               value={editableProfile}
               onChange={(e) => setEditableProfile(e.target.value)}
               disabled={isReadOnly}
-              className="w-full min-h-[70vh] md:min-h-[800px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-6 text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
+              className="w-full min-h-[70vh] md:min-h-[800px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
             />
           </div>
           <div className="flex flex-wrap gap-2 pt-1 print:hidden">
@@ -993,7 +993,7 @@ const hasMinimumPhotos =
 
       {showConfigModal && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 px-6 py-8 space-y-5 my-auto">
+          <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-900 px-8 py-10 space-y-6 my-auto">
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
@@ -1050,8 +1050,8 @@ const hasMinimumPhotos =
                             placeholder="Especifique otros objetivos prioritarios del análisis..."
                             value={analysisContextExtra ?? ""}
                             onChange={(e) => setAnalysisContextExtra(e.target.value)}
-                            className="mt-2 w-full rounded-md border border-slate-700 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                            rows={3}
+                            className="mt-2 w-full rounded-md border border-slate-700 px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            rows={4}
                           />
                         )}
                       </>
@@ -1078,8 +1078,8 @@ const hasMinimumPhotos =
                 <textarea
                   value={analysisContext}
                   onChange={(e) => setAnalysisContext(e.target.value)}
-                  rows={6}
-                  className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-4 py-3 text-base resize-none focus:ring-2 focus:ring-sky-500"
+                  rows={8}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-5 py-4 text-base md:text-lg resize-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
                 />
                 <div className="flex items-center justify-between gap-3">

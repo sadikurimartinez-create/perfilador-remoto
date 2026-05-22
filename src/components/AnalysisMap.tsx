@@ -23,8 +23,8 @@ const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "vi
 
 const containerStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "280px",
-  height: "320px",
+  minHeight: "500px",
+  height: "65vh",
 };
 
 function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolean {
