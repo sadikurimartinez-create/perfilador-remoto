@@ -9,12 +9,11 @@ import { ProjectMap } from "./ProjectMap";
 
 export function ProjectManager() {
   const router = useRouter();
-  const { project, album, createProject, closeProject, updatePhotoCoordinates } = useProject();
+  const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
-  const [isAnalyzingIA, setIsAnalyzingIA] = useState(false);
 
   const requiredPhotos = project?.geometryType === 'poligono' ? 3 : project?.geometryType === 'lineal' ? 2 : 1;
   const hasMinimumPhotos = album.length >= requiredPhotos;
@@ -44,52 +43,6 @@ export function ProjectManager() {
     router.push("/");
   };
 
-  // ==========================
-  // FASE 4 - Generación de análisis IA
-  // ==========================
-  const handleGenerateAIAnalysis = async () => {
-    if (!project) return;
-    setIsAnalyzingIA(true);
-
-    // 1️⃣ Construir payload unificado
-    const payload = {
-      projectId: project.id,
-      geometryType: project.geometryType,
-      photos: album.map(photo => ({
-        url: photo.previewUrl, // Adaptado al modelo actual (previewUrl y lat/lng)
-        lat: photo.lat,
-        lng: photo.lng
-      })),
-      objectives: (project as any).objectives || [],       // checkbox
-      notes: {
-        text: (project as any).textNotes || "",           // texto tecleado
-        voice: (project as any).voiceNotes || ""          // dictado de micrófono
-      }
-    };
-
-    try {
-      // 2️⃣ Llamar al endpoint de IA
-      const response = await fetch("/api/analyze-environment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) throw new Error("Error en análisis IA");
-
-      const result = await response.json();
-
-      // 3️⃣ Guardar resultados en project (Firestore y Dexie ya implementados)
-      (project as any).iaAnalysis = result;
-
-      // Actualizar UI (por ejemplo, alert o panel lateral)
-      alert("Análisis de IA completado correctamente.");
-    } catch (error) {
-      console.error("Error al generar análisis IA:", error);
-      alert("Ocurrió un error al generar el análisis de IA.");
-    }
-    setIsAnalyzingIA(false);
-  };
 
   if (!project) {
     return (
@@ -236,21 +189,18 @@ export function ProjectManager() {
         />
       )}
 
-      <PhotoAlbum />
-
-      {/* Botón para detonar el análisis rápido */}
-      {album.length > 0 && (
-        <div className="flex justify-end mt-4 hidden md:flex">
-          <button
-            type="button"
-            onClick={() => void handleGenerateAIAnalysis()}
-            disabled={isAnalyzingIA}
-            className="btn-primary"
-          >
-            {isAnalyzingIA ? "Procesando IA..." : "Generar Análisis IA Rápido"}
-          </button>
-        </div>
-      )}
+      <PhotoAlbum 
+        projectId={project.id}
+        onSaveAnalysisToCloud={async (content) => {
+          const { getDb } = await import("@/lib/firebase");
+          const { doc, updateDoc } = await import("firebase/firestore");
+          const firestore = getDb();
+          await updateDoc(doc(firestore, "projects", project.id), {
+            analysisContent: content,
+            iaAnalysis: analysisResult
+          });
+        }}
+      />
     </div>
   );
 }

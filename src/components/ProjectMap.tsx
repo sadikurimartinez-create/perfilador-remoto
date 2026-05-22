@@ -11,6 +11,7 @@ import TimelinePanel from './TimelinePanel';
 import MultimodalPanel from './MultimodalPanel';
 import ExecutiveDashboard from './ExecutiveDashboard';
 import RoleGuard from './RoleGuard';
+import { useProject } from "@/context/ProjectContext";
 import { usePermissions } from '../hooks/usePermissions';
 import AuditPanel from './AuditPanel';
 import { createAuditLog, appendAuditLog } from '../utils/auditLogger';
@@ -53,6 +54,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const [mapReady, setMapReady] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showClusters, setShowClusters] = useState(true);
+  const { analysisResult } = useProject();
 
   const userRole = project?.userRole || 'USER';
   const permissions = usePermissions(userRole);
@@ -369,20 +371,23 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       )}
       </div>
 
-      {project?.iaAnalysis && project.iaAnalysis.length > 0 ? (
+      <div className="hidden md:block">
+        <MultimodalPanel project={project} />
+      </div>
+
+      {analysisResult || (project?.iaAnalysis && project.iaAnalysis.length > 0) ? (
         <div className="space-y-4 hidden md:block">
-          <StatisticsDashboard iaAnalysis={project.iaAnalysis || []} />
+          <StatisticsDashboard iaAnalysis={analysisResult?.perPhotoFindings || project?.iaAnalysis || []} />
           <CorrelationPanel
             currentProject={project}
             allProjects={projects || []}
           />
-          <TimelinePanel iaAnalysis={project.iaAnalysis || []} />
-          <MultimodalPanel project={project} />
+          <TimelinePanel iaAnalysis={analysisResult?.perPhotoFindings || project?.iaAnalysis || []} />
           <RoleGuard allowed={permissions.canViewExecutiveDashboard}>
             <ExecutiveDashboard projects={projects || []} />
           </RoleGuard>
           <AuditPanel auditLogs={project.auditLogs || []} />
-          <AnalysisPanel iaAnalysis={project.iaAnalysis} project={project} />
+          <AnalysisPanel iaAnalysis={analysisResult?.perPhotoFindings || project?.iaAnalysis || []} project={project} />
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center shadow-inner hidden md:block">

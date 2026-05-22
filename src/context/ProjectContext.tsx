@@ -189,10 +189,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         id: projectId,
         nombre: projectData.name,
         geometryType: projectData.geometryType,
+        ...projectData,
       });
       setAlbum(albumPhotos);
-      setSelectedIds([]);
-      setAnalysisResultState(null);
+      setSelectedIds(albumPhotos.map((p) => p.id));
+
+      if (projectData.iaAnalysis) {
+        setAnalysisResultState(projectData.iaAnalysis);
+      } else {
+        setAnalysisResultState(null);
+      }
     } catch (err: any) {
       console.error("Error cargando proyecto:", err);
       alert("Error al abrir expediente: " + err.message);
