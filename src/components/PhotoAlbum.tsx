@@ -617,7 +617,7 @@ const remainingPhotos =
                       }
                     }
                   }}
-                  className="mt-1 rounded border-slate-600"
+                    className="mt-1 rounded border-slate-600 hidden md:block"
                 />
                 <div className="flex-1 min-w-0 relative">
                   <div className="aspect-square relative rounded overflow-hidden bg-black">
@@ -645,8 +645,8 @@ const remainingPhotos =
                       <line x1="14" y1="11" x2="14" y2="17" />
                     </svg>
                   </button>
-                  <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5">{p.tipo}</p>
-                  <p className="text-[10px] text-slate-500 truncate">{p.comentario || "—"}</p>
+                  <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5 hidden md:block">{p.tipo}</p>
+                  <p className="text-[10px] text-slate-500 truncate hidden md:block">{p.comentario || "—"}</p>
                   {visionData[p.id]?.extractedText && (
                     <span className="mt-0.5 inline-flex items-center gap-1 bg-blue-900/80 text-blue-200 text-[10px] px-2 py-0.5 rounded border border-blue-700">
                       🏷️ OCR:{" "}
@@ -668,7 +668,7 @@ const remainingPhotos =
                         comentario: p.comentario,
                       })
                     }
-                    className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500"
+                    className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block"
                   >
                     <option value="">Selecciona clasificación...</option>
                     <option value="Escuela / Entorno Educativo">

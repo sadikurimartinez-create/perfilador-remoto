@@ -383,60 +383,6 @@ export function CaptureAndAddPhoto() {
         <p className="text-sm text-sky-400">Leyendo metadatos EXIF…</p>
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-
-      {previewUrl && gps && (
-        <div className="space-y-4">
-          <div className="flex gap-3">
-            <div className="rounded-lg overflow-hidden border border-slate-800 bg-black flex-shrink-0 w-28 h-28">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl} alt="Vista previa" className="w-full h-full object-cover" />
-            </div>
-            <div className="text-xs text-slate-400 flex-1 min-w-0">
-              <p className="font-mono">Lat {gps.lat.toFixed(5)}</p>
-              <p className="font-mono">Lng {gps.lng.toFixed(5)}</p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Tipo de imagen</label>
-            <select
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm"
-            >
-              {TIPOS_IMAGEN.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Comentario o anotación</label>
-            <textarea
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              placeholder="Anotación específica sobre esta fotografía…"
-              rows={2}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm resize-none"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void handleAgregarAlAlbum()}
-            disabled={isFetchingGPS}
-            className={`btn-primary w-full ${
-              isFetchingGPS
-                ? "bg-gray-600 opacity-50 cursor-not-allowed animate-pulse"
-                : ""
-            }`}
-          >
-            {isFetchingGPS
-              ? "Obteniendo coordenadas GPS..."
-              : "Agregar al álbum"}
-          </button>
-        </div>
-      )}
     </section>
   </>
   );

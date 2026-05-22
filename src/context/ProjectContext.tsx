@@ -292,9 +292,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         photos: photosData
       };
 
-      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+      const fileName = `${projectRow.name.replace(/\s+/g, '_')}_Gabinete.json`;
+      const fileToShare = new File([JSON.stringify(payload)], fileName, { type: "application/json" });
+
+      // Intentar compartir directamente a apps (WhatsApp, Telegram, etc.) en celulares
+      if (navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
+        try {
+          await navigator.share({
+            files: [fileToShare],
+            title: 'Expediente Táctico Exportado',
+            text: `Evidencia de campo: ${projectRow.name}`,
+          });
+          return; // Compartido exitosamente, salimos de la función
+        } catch (shareErr) {
+          console.log("[ProjectContext] Web Share cancelado o fallido, usando fallback de descarga:", shareErr);
+        }
+      }
+
+      // Fallback: Descarga clásica para PC o navegadores sin soporte de compartir
       const { saveAs } = await import("file-saver");
-      saveAs(blob, `${projectRow.name.replace(/\s+/g, '_')}_Gabinete.json`);
+      saveAs(fileToShare, fileName);
     } catch (err) {
       console.error("[ProjectContext] Error exportando:", err);
       alert("Error al exportar el expediente.");
