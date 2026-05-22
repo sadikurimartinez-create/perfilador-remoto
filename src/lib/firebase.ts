@@ -13,7 +13,7 @@ const firebaseConfig = {
   authDomain: "perfilador-remoto.firebaseapp.com",
   databaseURL: "https://perfilador-remoto-default-rtdb.firebaseio.com",
   projectId: "perfilador-remoto",
-  storageBucket: "perfilador-remoto.appspot.com",
+  storageBucket: "perfilador-remoto.firebasestorage.app",
   messagingSenderId: "1062636354921",
   appId: "1:1062636354921:web:89ebc4ad940d93015e91f8",
   measurementId: "G-WLKXSYNJJ9"
