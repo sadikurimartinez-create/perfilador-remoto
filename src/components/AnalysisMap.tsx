@@ -99,6 +99,7 @@ export function AnalysisMap({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries: MAP_LIBRARIES,
+    version: "3.64",
   });
 
   const heatmapCrimeData = useMemo(() => {
@@ -391,11 +392,6 @@ export function AnalysisMap({
       </GoogleMap>
 
       <div className="p-3 border-t border-slate-700 space-y-2">
-        <p className="text-xs text-slate-400">
-          {photosWithCoords.length} foto(s) seleccionada(s),{" "}
-          {analysisResult?.historicalCrimes?.length ?? 0} delitos y{" "}
-          {poisWithCoords.length} atractores (POIs) en el mapa.
-        </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-3 w-3 rounded-full bg-red-500" />
@@ -425,15 +421,6 @@ export function AnalysisMap({
             Verde (baja) → Amarillo → Naranja → Rojo (alta concentración de incidencia).
           </p>
         )}
-        <p className="text-xs text-slate-400 mt-1 text-justify leading-relaxed">
-          <strong className="text-slate-300">Análisis Espacial Pericial:</strong> Radio de {" "}
-          <span className="font-semibold text-slate-200">
-            {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} m`}
-          </span>. 
-          Se muestran <span className="font-semibold text-slate-200">{poisWithCoords.length}</span> atractores de riesgo (comercios, servicios) 
-          y <span className="font-semibold text-slate-200">{analysisResult?.historicalCrimes?.length ?? 0}</span> eventos de incidencia histórica. 
-          La convergencia ilustra patrones de oportunidad criminal y rutas de vulnerabilidad para focalizar estrategias de disuasión.
-        </p>
       </div>
     </div>
   );

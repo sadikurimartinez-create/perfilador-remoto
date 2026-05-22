@@ -742,15 +742,15 @@ const hasMinimumPhotos =
         ))}
       </div>
 
-      {/* ANEXOS DOCUMENTALES */}
+      {/* EVIDENCIAS ADICIONALES */}
       <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Anexos Documentales (PDF, Excel, Videos)</h4>
-          <p className="text-xs text-slate-400">Adjunte archivos adicionales de inteligencia (se omite del análisis geográfico automático, pero quedan en el expediente). <strong className="text-amber-400">Obligatorio contextualizar.</strong></p>
+          <h4 className="text-base font-semibold text-slate-200">Evidencias</h4>
+          <p className="text-xs text-slate-400">Adjunte archivos de evidencia adicionales (documentos, imágenes, audios, videos). <strong className="text-amber-400">Obligatorio contextualizar.</strong></p>
         </header>
         <div className="flex flex-col md:flex-row gap-4 items-start">
           <div className="w-full md:w-1/2 space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
-            <input id="doc-upload-input" type="file" disabled={isReadOnly} onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50" accept=".pdf,.xls,.xlsx,.doc,.docx,.mp4,.avi,.mkv" />
+            <input id="doc-upload-input" type="file" disabled={isReadOnly} onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50" accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a" />
             <textarea value={docContext} disabled={isReadOnly} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50" />
             <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly} onClick={async () => {
               if (!docFile || !docContext.trim()) return;
@@ -768,7 +768,7 @@ const hasMinimumPhotos =
                 setIsUploadingDoc(false);
               }
             }} className="w-full bg-sky-700 hover:bg-sky-600 text-white py-1.5 px-4 rounded text-xs font-semibold disabled:opacity-50 transition">
-              {isUploadingDoc ? "Subiendo Anexo..." : "Subir Anexo Contextualizado"}
+              {isUploadingDoc ? "Subiendo Evidencia..." : "Subir Evidencia Contextualizada"}
             </button>
           </div>
           <div className="w-full md:w-1/2 space-y-2">
@@ -783,12 +783,12 @@ const hasMinimumPhotos =
                 <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
               </div>
             )) : (
-              <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-700 rounded-lg">No hay anexos documentales en este expediente.</div>
+              <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-700 rounded-lg">No hay evidencias adicionales en este expediente.</div>
             )}
           </div>
         </div>
       </div>
-      {/* FIN ANEXOS DOCUMENTALES */}
+      {/* FIN EVIDENCIAS ADICIONALES */}
 
       <div className="pt-4 border-t border-slate-800 space-y-2 hidden md:block print:hidden">
         <button
