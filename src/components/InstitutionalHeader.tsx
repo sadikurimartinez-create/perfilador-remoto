@@ -24,10 +24,10 @@ export function InstitutionalHeader() {
             PERFILADOR REMOTO
           </h1>
           <p className="text-[10px] font-medium text-slate-300 sm:text-xs mt-0.5">
-            NOMBRE DE TU CENTRO O INSTITUCIÓN
+            CENTRO DE ESTUDIOS EN SEGURIDAD PÚBLICA
           </p>
           <p className="text-[10px] text-slate-400 sm:text-xs">
-            NOMBRE DE TU DEPENDENCIA O SECRETARÍA
+            SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-3">

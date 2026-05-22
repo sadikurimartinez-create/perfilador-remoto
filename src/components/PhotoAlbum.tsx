@@ -571,8 +571,28 @@ const hasMinimumPhotos =
     }
   };
 
-  const handleExportToPDF = () => {
-    window.print();
+  const handleExportToPDF = async () => {
+    const element = document.getElementById("official-pdf-content");
+    if (!element) {
+      setError("No se pudo encontrar el contenedor del PDF.");
+      return;
+    }
+    try {
+      // @ts-ignore
+      const html2pdf = (await import("html2pdf.js")).default;
+      const safeName = project?.nombre?.replace(/\s+/g, "_") || "Dictamen";
+      const opt = {
+        margin: 10,
+        filename: `Dictamen_Criminologico_${safeName}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      };
+      html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error("Error al exportar a PDF:", err);
+      setError("Error al exportar. Compruebe la conexión o instale html2pdf.js");
+    }
   };
 
   if (album.length === 0) {
@@ -788,12 +808,28 @@ const hasMinimumPhotos =
       <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Evidencias</h4>
-          <p className="text-xs text-slate-400">Adjunte archivos de evidencia adicionales (documentos, imágenes, audios, videos). <strong className="text-amber-400">Obligatorio contextualizar.</strong></p>
+          <p className="text-xs text-slate-400">
+            Adjunte archivos de evidencia adicionales (documentos, imágenes, audios, videos).{" "}
+            <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+          </p>
         </header>
         <div className="flex flex-col gap-4 items-start w-full">
           <div className="w-full space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
-            <input id="doc-upload-input" type="file" disabled={isReadOnly} onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50" accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a" />
-            <textarea value={docContext} disabled={isReadOnly} onChange={(e) => setDocContext(e.target.value)} placeholder="Contexto, justificación o descripción del documento (Obligatorio)..." className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50" />
+            <input
+              id="doc-upload-input"
+              type="file"
+              disabled={isReadOnly}
+              onChange={(e) => setDocFile(e.target.files ? e.target.files[0] : null)}
+              className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50"
+              accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
+            />
+            <textarea
+              value={docContext}
+              disabled={isReadOnly}
+              onChange={(e) => setDocContext(e.target.value)}
+              placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
+              className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
+            ></textarea>
             
             <div className="flex items-center gap-2">
               <button
@@ -838,7 +874,7 @@ const hasMinimumPhotos =
                   value={docSuggestions}
                   onChange={(e) => setDocSuggestions(e.target.value)}
                   className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                />
+                ></textarea>
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
@@ -884,22 +920,27 @@ const hasMinimumPhotos =
               </div>
             )}
 
-            <button type="button" disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly} onClick={async () => {
-              if (!docFile || !docContext.trim()) return;
-              setIsUploadingDoc(true);
-              setError(null);
-              try {
-                await uploadDocument(docFile, docContext);
-                setDocFile(null);
-                setDocContext("");
-                const fileInput = document.getElementById("doc-upload-input") as HTMLInputElement;
-                if (fileInput) fileInput.value = "";
-              } catch (e: any) {
-                setError("Error al subir documento: " + e.message);
-              } finally {
-                setIsUploadingDoc(false);
-              }
-            }} className="w-full bg-sky-700 hover:bg-sky-600 text-white py-1.5 px-4 rounded text-xs font-semibold disabled:opacity-50 transition">
+            <button
+              type="button"
+              disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly}
+              onClick={async () => {
+                if (!docFile || !docContext.trim()) return;
+                setIsUploadingDoc(true);
+                setError(null);
+                try {
+                  await uploadDocument(docFile, docContext);
+                  setDocFile(null);
+                  setDocContext("");
+                  const fileInput = document.getElementById("doc-upload-input") as HTMLInputElement;
+                  if (fileInput) fileInput.value = "";
+                } catch (e: any) {
+                  setError("Error al subir documento: " + e.message);
+                } finally {
+                  setIsUploadingDoc(false);
+                }
+              }}
+              className="w-full bg-sky-700 hover:bg-sky-600 text-white py-1.5 px-4 rounded text-xs font-semibold disabled:opacity-50 transition"
+            >
               {isUploadingDoc ? "Subiendo Evidencia..." : "Subir Evidencia Contextualizada"}
             </button>
           </div>
@@ -1423,6 +1464,67 @@ const hasMinimumPhotos =
       )}
     </section>
       {portalTarget && rightColumnContent && createPortal(rightColumnContent, portalTarget)}
+      {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
+      <div className="absolute left-[-9999px] top-[-9999px]">
+        <div id="official-pdf-content" className="w-[794px] bg-white text-black p-10 font-sans">
+          <div className="flex justify-between items-center border-b-2 border-slate-800 pb-4 mb-6">
+            <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-20 object-contain" />
+            <div className="flex-1 text-center px-4">
+              <h1 className="text-xl font-black text-slate-900 tracking-wide">PERFIL CRIMINOLÓGICO AMBIENTAL</h1>
+              <h2 className="text-sm font-bold text-slate-700 mt-1">CENTRO DE ESTUDIOS EN SEGURIDAD PÚBLICA</h2>
+              <h3 className="text-[11px] font-semibold text-slate-500 mt-0.5">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO</h3>
+            </div>
+            <img src="/logos/logo-ssp.png" alt="SSP" className="h-20 object-contain" />
+          </div>
+
+          {profileRiskLevel && (
+            <div className="mb-6 p-4 border border-slate-300 bg-slate-50 rounded-lg flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Epicentro de Análisis</p>
+                <p className="text-sm font-semibold">{project?.nombre || "Polígono Operativo"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Radio de Cobertura</p>
+                <p className="text-sm font-semibold">{analysisRadius} metros</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-slate-500 uppercase">Nivel de Riesgo</p>
+                <p className={`text-base font-black uppercase ${profileRiskLevel === 'alto' ? 'text-red-600' : profileRiskLevel === 'medio' ? 'text-amber-500' : 'text-emerald-600'}`}>{profileRiskLevel}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-8">
+            <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
+            <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">{editableProfile || aiProfile}</div>
+          </div>
+
+          {mapSnapshots.length > 0 && <div className="html2pdf__page-break"></div>}
+          {mapSnapshots.map((snap, idx) => (
+            <div key={idx} className="mb-8 break-inside-avoid">
+              <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">ATLAS CARTOGRÁFICO: {snap.title.toUpperCase()}</h3>
+              <img src={snap.dataUrl} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
+            </div>
+          ))}
+
+          {album.filter(p => selectedIds.includes(p.id)).length > 0 && (
+            <>
+              <div className="html2pdf__page-break"></div>
+              <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-4 pb-1">ANEXO FOTOGRÁFICO Y DE DETERIORO URBANO</h3>
+              <div className="grid grid-cols-2 gap-6">
+                {album.filter(p => selectedIds.includes(p.id)).map(p => (
+                  <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
+                    <img src={p.previewUrl} className="w-full h-48 object-cover rounded mb-3 border border-slate-200" />
+                    <p className="text-xs font-bold text-slate-800 uppercase mb-1">{p.tipo}</p>
+                    <p className="text-[11px] text-slate-600 mb-2 leading-tight">{p.comentario || "Sin comentario."}</p>
+                    <p className="text-[9px] font-mono text-slate-500">GPS: {p.lat}, {p.lng}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </>
   );
 }

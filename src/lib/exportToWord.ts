@@ -149,6 +149,19 @@ export async function exportToWord(
     paragraphs.unshift(
       new Paragraph({
         alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({ text: "CENTRO DE ESTUDIOS EN SEGURIDAD PÚBLICA", bold: true, size: 24 }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({ text: "SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO", size: 20 }),
+        ],
+      }),
+      new Paragraph({ children: [new TextRun({ text: "" })] }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
         children: headerChildren,
       }),
       new Paragraph({ children: [new TextRun({ text: "" })] }),
