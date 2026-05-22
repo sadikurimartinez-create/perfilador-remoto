@@ -356,10 +356,9 @@ function buildPromptForGemini(params: {
     .join("\n");
 
   const direccionTexto =
-    geocoding.formattedAddress ||
-    (geocoding.colonia
-      ? `Colonia ${geocoding.colonia} (dirección aproximada no disponible)`
-      : "Dirección no disponible (solo coordenadas GPS).");
+    geocoding.formattedAddress
+      ? `Polígono centrado en: ${geocoding.formattedAddress}. ` + (geocoding.colonia ? `FOCALIZAR ANÁLISIS ESTRICTAMENTE EN: Colonia/Sector ${geocoding.colonia}.` : "")
+      : "Dirección exacta no disponible (solo coordenadas GPS).";
 
   const radioTexto =
     analysisRadius >= 1000
@@ -461,7 +460,7 @@ Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objeti
 2. CONTEXTO ESPACIAL — Descripción del área (dirección, colonia, entorno) y del radio de análisis.
 3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de lo detectado por Vision en las fotos; sin repetir listas crudas.
 4. ATRACTORES, CONTROLES Y GUARDIANES — Comercios, POIs y su relación con rutinas y oportunidades delictivas; usa las imágenes de POIs donde aporten.
-5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional con los datos de incidencia y ubicación.
+5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional.
 6. RIESGOS IDENTIFICADOS — Puntos concretos de riesgo derivados del análisis, sin repetir párrafos anteriores.
 7. RECOMENDACIONES — Medidas accionables y vinculadas a los hallazgos.
 8. INFORMACIÓN PREDICTIVA — Estimación de probabilidad de incremento delictivo a 6 meses si no se interviene (baja/media/alta o porcentual), con justificación criminológica breve.
@@ -755,6 +754,7 @@ export async function POST(req: Request) {
     ==================================================
 
     - Mantén narrativa analítica profesional.
+    - REGLA DE ESCALA ESPACIAL: Prohibido generalizar a nivel municipal o estatal. Centra tus inferencias ESTRICTAMENTE en las manzanas y cuadras que componen el radio de ${radiusMeters} metros alrededor de la evidencia.
     - Diferencia hechos de inferencias.
     - No emitas conclusiones absolutas.
     - Prioriza análisis contextual.
