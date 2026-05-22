@@ -1,5 +1,16 @@
-import { Document, ImageRun, Packer, Paragraph, TextRun } from "docx";
+import { Document, ImageRun, Packer, Paragraph, TextRun, AlignmentType } from "docx";
 import { saveAs } from "file-saver";
+
+async function fetchLocalImageBuffer(path: string): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await blob.arrayBuffer();
+  } catch (e) {
+    return null;
+  }
+}
 
 async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
   let objectUrl: string | null = null;
@@ -118,7 +129,30 @@ export async function exportToWord(
           }),
         ],
       }),
-      new Paragraph({ children: [new TextRun("")] })
+          new Paragraph({})
+    );
+  }
+
+  const sspLogoBuffer = await fetchLocalImageBuffer("/logos/logo-ssp.png");
+  const ceipolLogoBuffer = await fetchLocalImageBuffer("/logos/logo-ceipol.png");
+      const headerChildren: any[] = [];
+
+  if (sspLogoBuffer) {
+    headerChildren.push(new ImageRun({ data: sspLogoBuffer, transformation: { width: 80, height: 80 } }));
+    headerChildren.push(new TextRun({ text: "        " })); // espacio
+  }
+  if (ceipolLogoBuffer) {
+    headerChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 80, height: 80 } }));
+  }
+
+  if (headerChildren.length > 0) {
+    paragraphs.unshift(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: headerChildren,
+      }),
+          new Paragraph({}),
+          new Paragraph({})
     );
   }
 

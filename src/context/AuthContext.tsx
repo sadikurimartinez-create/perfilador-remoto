@@ -63,6 +63,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         where("username", "==", username.trim())
       );
       const snap = await getDocs(q);
+
+      // BOOTSTRAP: Si la base de datos no tiene a "admin", lo creamos como SUPER_ADMIN oficial
+      if (snap.empty && username.trim() === "admin" && password === "Admin2026!") {
+        const newDocRef = await addDoc(collection(db, "users"), {
+          username: "admin",
+          passwordHash: "Admin2026!",
+          role: "SUPER_ADMIN",
+          name: "Super Administrador",
+          createdAt: Date.now()
+        });
+        const authUser: AuthUser = {
+          id: newDocRef.id,
+          username: "admin",
+          role: "SUPER_ADMIN",
+          name: "Super Administrador",
+        };
+        window.localStorage.setItem("perfilador.currentUser", JSON.stringify(authUser));
+        setUser(authUser);
+        router.push("/");
+        return;
+      }
+
       const docSnap = snap.docs[0];
       if (docSnap) {
         const data = docSnap.data() as { passwordHash?: string; role?: string; name?: string };
