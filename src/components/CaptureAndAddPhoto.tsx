@@ -63,13 +63,21 @@ export function CaptureAndAddPhoto() {
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [manualCoords, setManualCoords] = useState({ lat: "", lng: "" });
 
+  // FASE 1: Secuencialidad. Validar que el proyecto tenga Nombre, Geometría y Explicación.
+  const isProjectReady = Boolean(
+    // Utilizamos type assertion (any) y fallback para evitar errores de TS y empatar con la DB
+    ((project as any)?.nombre || (project as any)?.name)?.trim() &&
+    project?.geometryType &&
+    ((project as any)?.descripcion || (project as any)?.description)?.trim()
+  );
+
   const isIndividual = project?.geometryType === 'individual';
 
   const handlePhotoUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     isLiveCapture: boolean = false
   ) => {
-    let files = Array.from(e.target.files ?? []);
+    let files = e.target.files ? Array.from(e.target.files) : [];
     if (!project || files.length === 0) return;
 
     // REGLA DE NEGOCIO: Forzar una sola foto para modo 'individual'
@@ -236,10 +244,16 @@ export function CaptureAndAddPhoto() {
         </p>
       </header>
 
-      {!project && (
-        <p className="text-sm text-amber-400">
-          Cree o abra un proyecto para poder agregar fotos.
-        </p>
+      {(!project || !isProjectReady) && (
+        <div className="mb-4 rounded-lg border border-amber-500 bg-amber-950/40 p-3 text-sm text-amber-200">
+          <div className="font-semibold mb-1">Paso previo requerido</div>
+          <p>
+            Para habilitar la carga de evidencias fotográficas, primero debe completar la información del proyecto:
+            <br/>1. Nombre del proyecto.
+            <br/>2. Tipo de geometría operacional.
+            <br/>3. Explicación del proyecto (tecleada o dictada).
+          </p>
+        </div>
       )}
 
       <input
@@ -284,8 +298,8 @@ export function CaptureAndAddPhoto() {
       <div className="grid grid-cols-1 gap-2">
         <button
           type="button"
-          disabled={!project}
-          onClick={() => project && cameraInputRef.current?.click()}
+          disabled={!isProjectReady}
+          onClick={() => isProjectReady && cameraInputRef.current?.click()}
           className="w-full rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 px-3 py-3 text-base font-semibold hover:bg-emerald-800/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
         >
           📷 Tomar Foto In-Situ (Cámara)
@@ -293,8 +307,8 @@ export function CaptureAndAddPhoto() {
 
         <button
           type="button"
-          disabled={!project}
-          onClick={() => project && galleryInputRef.current?.click()}
+          disabled={!isProjectReady}
+          onClick={() => isProjectReady && galleryInputRef.current?.click()}
           className="w-full rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 px-3 py-3 text-base font-semibold hover:bg-sky-800/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
         >
           📸 Seleccionar fotos del Carrete / Galería
