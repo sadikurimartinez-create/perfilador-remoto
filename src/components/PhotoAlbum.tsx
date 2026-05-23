@@ -142,6 +142,7 @@ export function PhotoAlbum({
     uploadDocument,
     removeDocument,
     isReadOnly,
+    markAsPrinted,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -538,6 +539,8 @@ const hasMinimumPhotos =
         profileRiskLevel ?? undefined,
         snapshotsToExport.length > 0 ? snapshotsToExport : undefined
       );
+
+      if (!isReadOnly) await markAsPrinted();
     } catch (err) {
       console.error("[PhotoAlbum] Error al exportar a Word:", err);
       setError(
@@ -580,7 +583,9 @@ const hasMinimumPhotos =
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       };
-      html2pdf().set(opt).from(element).save();
+      html2pdf().set(opt).from(element).save().then(() => {
+        if (!isReadOnly) void markAsPrinted();
+      });
     } catch (err) {
       console.error("Error al exportar a PDF:", err);
       setError("Error al exportar. Compruebe la conexión o instale html2pdf.js");

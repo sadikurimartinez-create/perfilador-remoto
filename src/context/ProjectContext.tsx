@@ -52,6 +52,7 @@ export type Project = {
   geometryType: "individual" | "lineal" | "poligono";
   descripcion?: string;
   createdBy?: string;
+  printedAt?: number;
 };
 
 export type PerPhotoFinding = {
@@ -117,6 +118,7 @@ type ProjectContextValue = {
   documents: ProjectDocument[];
   uploadDocument: (file: File, context: string) => Promise<void>;
   removeDocument: (id: string) => Promise<void>;
+  markAsPrinted: () => Promise<void>;
   isReadOnly: boolean;
 };
 
@@ -194,6 +196,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setIsReadOnly(false);
   }, []);
 
+  const markAsPrinted = useCallback(async () => {
+    if (!project || isReadOnly) return;
+    try {
+      const firestore = getDb();
+      const projectRef = doc(firestore, "projects", project.id);
+      const snap = await getDoc(projectRef);
+      if (snap.exists() && !snap.data().printedAt) {
+        const printedAt = Date.now();
+        await updateDoc(projectRef, { printedAt });
+        setProject((prev) => (prev ? { ...prev, printedAt } : prev));
+      }
+    } catch (err) {
+      console.error("[ProjectContext] Error al marcar como impreso:", err);
+    }
+  }, [project, isReadOnly]);
+
   const loadProject = useCallback(async (projectId: string) => {
     try {
       const firestore = getDb();
@@ -207,13 +225,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const projectData = projectSnap.data();
       const creator = projectData.createdBy;
 
-      // REGLAS DE ACCESO (ADR)
+      // REGLAS DE ACCESO DE ROLES Y TEMPORALIDAD (FASE 3)
       if (user?.role === "USER" && creator !== user?.username) {
         throw new Error("Acceso denegado: El expediente pertenece a otro analista y su rol no permite visualización de terceros.");
       }
 
-      const canModify = user?.role === "SUPER_ADMIN" || creator === user?.username;
+      let canModify = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || creator === user?.username;
+      let isLockedByTime = false;
+
+      // Lógica de 24 horas: Inmutabilidad para analistas operativos tras su impresión
+      if (projectData.printedAt && user?.role !== "SUPER_ADMIN" && user?.role !== "ADMIN") {
+        const hoursSincePrint = (Date.now() - projectData.printedAt) / (1000 * 60 * 60);
+        if (hoursSincePrint > 24) {
+          canModify = false;
+          isLockedByTime = true;
+        }
+      }
+
       setIsReadOnly(!canModify);
+      
+      if (isLockedByTime) {
+        setTimeout(() => alert("Este expediente fue impreso hace más de 24 horas y ahora es de solo lectura. Solo un Administrador puede reabrirlo/modificarlo."), 500);
+      }
 
       const photosColRef = collection(firestore, "projects", projectId, "photos");
       const photosQuery = query(photosColRef, orderBy("createdAt", "asc"));
@@ -554,6 +587,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       documents,
       uploadDocument,
       removeDocument,
+      markAsPrinted,
       isReadOnly
     }),
     [
@@ -579,6 +613,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       documents,
       uploadDocument,
       removeDocument,
+      markAsPrinted,
       isReadOnly
     ]
   );
