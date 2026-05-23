@@ -66,6 +66,42 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+/** Tatúa/Quema las coordenadas GPS directamente en los píxeles de la imagen para que nunca se pierdan en Word/PDF */
+async function burnGpsOnImage(srcUrl: string, lat: number | null, lng: number | null, tipo: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(srcUrl);
+
+      ctx.drawImage(img, 0, 0);
+
+      // Dibujar barra semi-transparente en la parte inferior
+      const barHeight = Math.max(30, canvas.height * 0.08);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
+
+      // Dibujar texto GPS en color ámbar
+      ctx.fillStyle = "#fbbf24";
+      const fontSize = Math.max(14, canvas.height * 0.035);
+      ctx.font = `bold ${fontSize}px monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      const gpsText = (lat != null && lng != null) ? `LAT: ${lat.toFixed(5)} | LNG: ${lng.toFixed(5)} | ${tipo.toUpperCase()}` : `⚠️ GPS NO DISPONIBLE | ${tipo.toUpperCase()}`;
+      ctx.fillText(gpsText, canvas.width / 2, canvas.height - (barHeight / 2));
+      
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    img.onerror = () => resolve(srcUrl);
+    img.src = srcUrl;
+  });
+}
+
 const C4_RIGHT_COLUMN_ID = "c4-right-column";
 
 type PhotoAlbumProps = {
@@ -473,10 +509,15 @@ const hasMinimumPhotos =
         }
       }
     }
-    const photoUrls = album
-      .filter((p) => selectedIds.includes(p.id))
-      .map((p) => p.previewUrl)
-      .filter((u): u is string => typeof u === "string" && u.length > 0);
+
+    const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
+    const photoUrls: string[] = [];
+
+    for (const p of photosToExport) {
+      const burnedUrl = await burnGpsOnImage(p.previewUrl as string, p.lat, p.lng, p.tipo || "Evidencia");
+      photoUrls.push(burnedUrl);
+    }
+
     try {
       await exportToWord(
         content,
@@ -678,6 +719,14 @@ const hasMinimumPhotos =
                       alt=""
                       className="absolute inset-0 w-full h-full object-cover"
                     />
+                    {/* Overlay con GPS quemado visualmente en los casilleros de la UI */}
+                    <div className="absolute bottom-0 inset-x-0 bg-black/70 py-0.5 px-1 text-center">
+                      <p className="text-[8px] font-mono text-amber-400 font-semibold truncate">
+                        {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
+                          ? `GPS: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`
+                          : "⚠️ SIN GPS"}
+                      </p>
+                    </div>
                   </div>
                   {!isReadOnly && (
                     <button
@@ -760,17 +809,12 @@ const hasMinimumPhotos =
                       </>
                     )}
                   </select>
-                  <p className="text-[9px] font-mono tracking-tight text-blue-300">
-                    {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
-                      ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`
-                      : "Sin GPS"}
-                  </p>
                 </div>
               </div>
           </div>
           </div>
         ))}
-      </div>
+            </div>
           </div>
         ));
       })()}
@@ -1530,10 +1574,16 @@ const hasMinimumPhotos =
                     <div className="grid grid-cols-2 gap-4">
                       {group.photos.map(p => (
                         <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
-                          <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-40 object-cover rounded mb-2 border border-slate-200" />
-                          <p className="text-[10px] font-bold text-slate-800 uppercase mb-1 truncate">{p.tipo}</p>
+                          <div className="relative w-full h-40 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
+                            <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
+                            {/* Render visual del GPS para el PDF final */}
+                            <div className="absolute bottom-0 inset-x-0 bg-black/60 py-1 flex items-center justify-center">
+                              <p className="text-[9px] font-mono text-amber-400 font-bold m-0 leading-none">
+                                {p.lat != null && p.lng != null ? `LAT: ${p.lat.toFixed(5)} | LNG: ${p.lng.toFixed(5)}` : "⚠️ SIN GPS"}
+                              </p>
+                            </div>
+                          </div>
                           <p className="text-[10px] text-slate-600 mb-1 leading-tight">{p.comentario || "Sin comentario."}</p>
-                          <p className="text-[8px] font-mono text-slate-500">GPS: {p.lat}, {p.lng}</p>
                         </div>
                       ))}
                     </div>

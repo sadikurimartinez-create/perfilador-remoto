@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import exifr from "exifr";
 import { useProject } from "@/context/ProjectContext";
 
@@ -57,11 +57,17 @@ export function CaptureAndAddPhoto() {
   const [error, setError] = useState<string | null>(null);
   const [isFetchingGPS, setIsFetchingGPS] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Estados para el Fallback Manual
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [manualCoords, setManualCoords] = useState({ lat: "", lng: "" });
 
   const isIndividual = project?.geometryType === 'individual';
 
-  const handleGalleryUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
+  const handlePhotoUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isLiveCapture: boolean = false
   ) => {
     let files = Array.from(e.target.files ?? []);
     if (!project || files.length === 0) return;
@@ -80,31 +86,49 @@ export function CaptureAndAddPhoto() {
     setError(null);
     setIsFetchingGPS(true);
 
+    // Si es captura en vivo desde la cámara del perfilador, obtenemos el GPS del navegador 
+    // inmediatamente, ya que iOS/Android a veces borran el EXIF en el navegador por privacidad.
+    let liveLat: number | null = null;
+    let liveLng: number | null = null;
+    if (isLiveCapture) {
+      try {
+        const fallback = await getFallbackLocation();
+        liveLat = fallback.lat;
+        liveLng = fallback.lng;
+      } catch (err) {
+        console.warn("No se pudo obtener GPS en vivo, se intentará leer el EXIF de la foto.", err);
+      }
+    }
+
     for (const selected of files) {
       // IMPORTANTE: Extraer GPS de la imagen ORIGINAL antes de comprimir, 
       // ya que la compresión borra los metadatos EXIF.
-      let lat: number | null = null;
-      let lng: number | null = null;
-      try {
-        const exifGps = await exifr.gps(selected).catch(() => null);
-        if (
-          exifGps &&
-          typeof exifGps.latitude === "number" &&
-          typeof exifGps.longitude === "number"
-        ) {
-          lat = exifGps.latitude;
-          lng = exifGps.longitude;
-        } else {
-          const fullExif = (await exifr
-            .parse(selected, { gps: true })
-            .catch(() => null)) as Record<string, unknown> | null;
-          if (fullExif?.latitude != null && fullExif?.longitude != null) {
-            lat = fullExif.latitude as number;
-            lng = fullExif.longitude as number;
+      let lat: number | null = liveLat;
+      let lng: number | null = liveLng;
+      
+      // Si la captura NO fue en vivo o falló el GPS del navegador, intentamos leer el EXIF de la imagen
+      if (lat == null || lng == null) {
+        try {
+          const exifGps = await exifr.gps(selected).catch(() => null);
+          if (
+            exifGps &&
+            typeof exifGps.latitude === "number" &&
+            typeof exifGps.longitude === "number"
+          ) {
+            lat = exifGps.latitude;
+            lng = exifGps.longitude;
+          } else {
+            const fullExif = (await exifr
+              .parse(selected, { gps: true })
+              .catch(() => null)) as Record<string, unknown> | null;
+            if (fullExif?.latitude != null && fullExif?.longitude != null) {
+              lat = fullExif.latitude as number;
+              lng = fullExif.longitude as number;
+            }
           }
+        } catch {
+          // ignorar error EXIF; lat/lng siguen null
         }
-      } catch {
-        // ignorar error EXIF; lat/lng siguen null
       }
 
       if (lat == null || lng == null) {
@@ -113,12 +137,11 @@ export function CaptureAndAddPhoto() {
           lat = fallback.lat;
           lng = fallback.lng;
         } catch (fbErr: any) {
-          setError(
-            `El celular borró el GPS de la foto por privacidad y el respaldo falló: ${fbErr.message}`
-          );
+          // SI FALLA EL GPS DEL NAVEGADOR, MOSTRAMOS EL FORMULARIO MANUAL
           setIsFetchingGPS(false);
-          e.target.value = "";
-          return; // Abortamos la subida de esta foto inútil
+          setPendingPhoto(selected);
+          setError(`No se pudo obtener la ubicación automáticamente (${fbErr.message}). Ingrese las coordenadas manualmente para continuar.`);
+          return; // Pausamos el bucle esperando la entrada del usuario
         }
       }
 
@@ -134,6 +157,26 @@ export function CaptureAndAddPhoto() {
 
     setIsFetchingGPS(false);
     e.target.value = "";
+  };
+
+  const handleManualSubmit = async () => {
+    if (!pendingPhoto) return;
+    
+    const latNum = parseFloat(manualCoords.lat);
+    const lngNum = parseFloat(manualCoords.lng);
+    
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      setError("Por favor, ingrese coordenadas numéricas válidas.");
+      return;
+    }
+
+    try {
+      await uploadAndAddPhoto(pendingPhoto, latNum, lngNum);
+      setPendingPhoto(null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al subir la fotografía manualmente.");
+    }
   };
 
   return (
@@ -205,10 +248,49 @@ export function CaptureAndAddPhoto() {
         accept="image/*"
         multiple={!isIndividual}
         className="hidden"
-        onChange={handleGalleryUpload}
+        onChange={(e) => handlePhotoUpload(e, false)}
       />
+      
+      {/* Input oculto para forzar la apertura de la cámara trasera */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => handlePhotoUpload(e, true)}
+      />
+      
+      {/* MODAL / SECCIÓN DE INGRESO MANUAL */}
+      {pendingPhoto && (
+        <div className="mt-4 p-4 border border-sky-500 bg-slate-800 rounded-lg space-y-3">
+          <p className="text-sm text-sky-300 font-semibold">
+            Acción Requerida: Ubicación Manual
+          </p>
+          <p className="text-xs text-slate-400">
+            La imagen "{pendingPhoto.name}" no tiene GPS. Ingrese la latitud y longitud.
+          </p>
+          <div className="flex gap-2">
+            <input type="number" placeholder="Latitud (ej. 21.8853)" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
+            <input type="number" placeholder="Longitud (ej. -102.2916)" value={manualCoords.lng} onChange={(e) => setManualCoords({ ...manualCoords, lng: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleManualSubmit} className="flex-1 bg-sky-600 text-white py-2 rounded text-sm font-semibold">Guardar y Subir</button>
+            <button onClick={() => { setPendingPhoto(null); setError(null); }} className="flex-1 bg-slate-700 text-white py-2 rounded text-sm font-semibold">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-2">
+        <button
+          type="button"
+          disabled={!project}
+          onClick={() => project && cameraInputRef.current?.click()}
+          className="w-full rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 px-3 py-3 text-base font-semibold hover:bg-emerald-800/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
+        >
+          📷 Tomar Foto In-Situ (Cámara)
+        </button>
+
         <button
           type="button"
           disabled={!project}
