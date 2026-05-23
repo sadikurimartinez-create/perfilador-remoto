@@ -121,14 +121,11 @@ export function PhotoAlbum({
   const [analysisContextExtra, setAnalysisContextExtra] = useState("");
   const [isRefining, setIsRefining] = useState(false);
   const [isAuditing, setIsAuditing] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [profileRiskLevel, setProfileRiskLevel] = useState<
     "bajo" | "medio" | "alto" | null
   >(null);
   const [analysisPolygon, setAnalysisPolygon] = useState<google.maps.LatLngLiteral[]>([]);
   const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
-  const recognitionRef = useRef<any | null>(null);
-  const lastTranscriptRef = useRef<string>("");
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
   const [debugData, setDebugData] = useState<any>(null);
   const [showMonitor, setShowMonitor] = useState(false);
@@ -323,6 +320,8 @@ const hasMinimumPhotos =
             incidenciaLocal,
             bibliografiaLocal,
             multimodalContext,
+            geometryType: project?.geometryType || "individual",
+            projectDescription: project?.descripcion || "",
           }),
         });
 
@@ -344,6 +343,7 @@ const hasMinimumPhotos =
             riskLevel?: "bajo" | "medio" | "alto";
             incidenciaDetalles?: any[];
             pois?: any[];
+            inegiDemographics?: any;
           };
         };
         const markdown = data.markdown ?? "";
@@ -371,6 +371,7 @@ const hasMinimumPhotos =
           ...(currentAnalysisResult || {}),
           historicalCrimes: combinedCrimes,
           pois: data.meta?.pois || currentAnalysisResult?.pois || [],
+          inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
         });
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
@@ -391,89 +392,6 @@ const hasMinimumPhotos =
         }
     } finally {
       setIsGeneratingAI(false);
-    }
-  };
-
-  const handleToggleDictation = () => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError(
-        "Este navegador no soporta dictado por voz. Use la versión de escritorio o Chrome/Android."
-      );
-      return;
-    }
-
-    try {
-      if (!recognitionRef.current) {
-        const recognition = new SpeechRecognition();
-        recognition.lang = "es-MX";
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-
-        recognition.onstart = () => setIsListening(true);
-        recognition.onerror = (event: any) => {
-          console.error("Error en micrófono:", event?.error);
-          setIsListening(false);
-        };
-        recognition.onend = () => {
-          // Si el usuario sigue con la intención de dictar, reiniciamos el micrófono
-          if (isListening) {
-            try {
-              recognition.start();
-            } catch (e) {
-              console.error("Error reiniciando micrófono:", e);
-              setIsListening(false);
-            }
-          } else {
-            setIsListening(false);
-          }
-        };
-        recognition.onresult = (event: any) => {
-          let interimTranscript = "";
-          let finalTranscript = "";
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const res = event.results[i];
-            const text = (res[0]?.transcript as string | undefined)?.trim();
-            if (!text) continue;
-            if (res.isFinal) {
-              finalTranscript += text + " ";
-            } else {
-              interimTranscript += text + " ";
-            }
-          }
-
-          if (finalTranscript) {
-            const normalized = finalTranscript.trim();
-            if (!normalized) return;
-            // Evitar repetir exactamente la misma frase varias veces
-            if (normalized === lastTranscriptRef.current) return;
-            lastTranscriptRef.current = normalized;
-
-            setAnalysisContext((prev) =>
-              prev ? `${prev.trim()} ${normalized}` : normalized
-            );
-          }
-          // El interimTranscript se puede usar para mostrar texto en vivo si se desea.
-        };
-
-        recognitionRef.current = recognition;
-      }
-
-      const recognition = recognitionRef.current as any;
-      if (isListening) {
-        recognition.stop();
-      } else {
-        lastTranscriptRef.current = "";
-        recognition.start();
-      }
-    } catch (e) {
-      console.error("[PhotoAlbum] Error al iniciar reconocimiento de voz:", e);
-      setIsListening(false);
     }
   };
 
@@ -581,6 +499,23 @@ const hasMinimumPhotos =
       setError("No se pudo encontrar el contenedor del PDF.");
       return;
     }
+
+    let currentSnapshots = [...mapSnapshots];
+    if (currentSnapshots.length === 0 && analysisResult) {
+      const mapEl = document.getElementById("map-export-container");
+      if (mapEl) {
+        try {
+          const buttons = mapEl.querySelector('.bg-slate-100.border-b');
+          if (buttons) (buttons as HTMLElement).style.display = 'none';
+          const canvas = await html2canvas(mapEl, { useCORS: true, scale: 1.5 });
+          if (buttons) (buttons as HTMLElement).style.display = 'flex';
+          currentSnapshots.push({ title: "MAPA DEL ANÁLISIS", dataUrl: canvas.toDataURL("image/png") });
+          setMapSnapshots(currentSnapshots);
+          await new Promise(r => setTimeout(r, 500)); // Esperar a que el DOM se actualice con la imagen antes de imprimir
+        } catch(e) {}
+      }
+    }
+
     try {
       const html2pdfModule = await import("html2pdf.js");
       const html2pdf = (html2pdfModule.default || html2pdfModule) as any;
@@ -668,8 +603,35 @@ const hasMinimumPhotos =
         </div>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {album.map((p) => (
+      {(() => {
+        let groups: { title: string; photos: typeof album }[] = [];
+        if (project?.geometryType === "lineal") {
+          groups = [
+            { title: "Nodo Inicial", photos: album.filter((p) => p.tipo === "Nodo Inicial") },
+            { title: "Corredor", photos: album.filter((p) => p.tipo === "Corredor") },
+            { title: "Nodo Final", photos: album.filter((p) => p.tipo === "Nodo Final") },
+            { title: "Sin Clasificar / Otros", photos: album.filter((p) => !["Nodo Inicial", "Corredor", "Nodo Final"].includes(p.tipo)) },
+          ];
+        } else if (project?.geometryType === "poligono") {
+          groups = [
+            { title: "Perímetro", photos: album.filter((p) => p.tipo === "Perímetro") },
+            { title: "Interior", photos: album.filter((p) => p.tipo === "Interior") },
+            { title: "Sin Clasificar / Otros", photos: album.filter((p) => !["Perímetro", "Interior"].includes(p.tipo)) },
+          ];
+        } else {
+          groups = [
+            { title: "Nodo y Entorno", photos: album }
+          ];
+        }
+        groups = groups.filter((g) => g.photos.length > 0);
+
+        return groups.map((group, gIdx) => (
+          <div key={gIdx} className="mb-4">
+            {project?.geometryType !== "individual" && (
+              <h4 className="text-sm font-semibold text-sky-300 mb-2 border-b border-slate-700 pb-1">{group.title}</h4>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {group.photos.map((p) => (
           <div
             key={p.id}
             className={`rounded-lg border overflow-hidden bg-slate-900/80 ${
@@ -771,30 +733,32 @@ const hasMinimumPhotos =
                     disabled={isReadOnly}
                     className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block disabled:opacity-50"
                   >
-                    <option value="">Selecciona clasificación...</option>
-                    <option value="Escuela / Entorno Educativo">
-                      Escuela / Entorno Educativo
-                    </option>
-                    <option value="Templo / Centro Religioso">
-                      Templo / Centro Religioso
-                    </option>
-                    <option value="Comercio / Negocio">
-                      Comercio / Negocio
-                    </option>
-                    <option value="Terreno Baldío / Abandono">
-                      Terreno Baldío / Abandono
-                    </option>
-                    <option value="Vivienda">Vivienda</option>
-                    <option value="Vía Pública / Callejón">
-                      Vía Pública / Callejón
-                    </option>
-                    <option value="Rostro / Persona de Interés">
-                      Rostro / Persona de Interés
-                    </option>
-                    <option value="Placa Vehicular / Número Económico">
-                      Placa Vehicular / Número Económico
-                    </option>
-                    <option value="Otro">Otro</option>
+                    {project?.geometryType === "lineal" ? (
+                      <>
+                        <option value="">Selecciona rol...</option>
+                        <option value="Nodo Inicial">Nodo Inicial</option>
+                        <option value="Corredor">Corredor</option>
+                        <option value="Nodo Final">Nodo Final</option>
+                        <option value="Otro">Otro</option>
+                      </>
+                    ) : project?.geometryType === "poligono" ? (
+                      <>
+                        <option value="">Selecciona rol...</option>
+                        <option value="Perímetro">Perímetro</option>
+                        <option value="Interior">Interior</option>
+                        <option value="Otro">Otro</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="">Selecciona rol...</option>
+                        <option value="Nodo Principal">Nodo Principal</option>
+                        <option value="Atractor de Riesgo">Atractor de Riesgo</option>
+                        <option value="Ruta de Acceso/Escape">Ruta de Acceso/Escape</option>
+                        <option value="Lugar de Acecho">Lugar de Acecho</option>
+                        <option value="Frontera/Límite">Frontera/Límite</option>
+                        <option value="Otro">Otro</option>
+                      </>
+                    )}
                   </select>
                   <p className="text-[9px] font-mono tracking-tight text-blue-300">
                     {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
@@ -807,6 +771,9 @@ const hasMinimumPhotos =
           </div>
         ))}
       </div>
+          </div>
+        ));
+      })()}
 
       {/* EVIDENCIAS ADICIONALES */}
       <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
@@ -850,6 +817,8 @@ const hasMinimumPhotos =
                       body: JSON.stringify({
                         context: docContext,
                         photos: minimalPhotos,
+                        geometryType: project?.geometryType || "individual",
+                        projectDescription: project?.descripcion || "",
                       }),
                     });
                     const data = await res.json();
@@ -896,7 +865,12 @@ const hasMinimumPhotos =
                         const res = await fetch("/api/refine-context", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ context: docSuggestions, mode: "audit" }),
+                          body: JSON.stringify({ 
+                            context: docSuggestions, 
+                            mode: "audit",
+                            geometryType: project?.geometryType || "individual",
+                            projectDescription: project?.descripcion || "",
+                          }),
                         });
                         const data = await res.json();
                         if (res.ok) setDocSuggestions(data.suggestions ?? "");
@@ -1042,7 +1016,7 @@ const hasMinimumPhotos =
               {!splitLayout && (
                 <>
                   {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-                    <CrimeCharts crimes={analysisResult.historicalCrimes} />
+                    <CrimeCharts crimes={analysisResult.historicalCrimes} inegi={analysisResult.inegiDemographics} />
                   )}
                   <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
                     <div className="bg-slate-100 border-b border-slate-300 p-2 flex flex-wrap gap-2 print:hidden justify-center shadow-sm">
@@ -1082,6 +1056,7 @@ const hasMinimumPhotos =
                         setManualPois={setManualPois}
                         isPreliminary={false}
                         viewMode={mapViewMode}
+                        geometryType={project?.geometryType}
                       />
                     </div>
                   </div>
@@ -1289,18 +1264,6 @@ const hasMinimumPhotos =
                   <label className="block text-xs font-medium text-slate-300">
                     Hipótesis del investigador (contexto del cruce de ubicaciones)
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleToggleDictation}
-                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
-                      isListening
-                        ? "border-red-500 text-red-300 bg-red-900/40"
-                        : "border-slate-600 text-slate-200 bg-slate-900"
-                    }`}
-                  >
-                    <span aria-hidden="true">🎙️</span>
-                    <span>{isListening ? "Escuchando…" : "Dictar contexto"}</span>
-                  </button>
                 </div>
                 <textarea
                   value={analysisContext}
@@ -1329,6 +1292,8 @@ const hasMinimumPhotos =
                           body: JSON.stringify({
                             context: analysisContext,
                             photos: minimalPhotos,
+                            geometryType: project?.geometryType || "individual",
+                            projectDescription: project?.descripcion || "",
                           }),
                         });
                         const data = await res.json();
@@ -1398,7 +1363,9 @@ const hasMinimumPhotos =
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
                                 context: aiSuggestions,
-                                mode: "audit"
+                                mode: "audit",
+                                geometryType: project?.geometryType || "individual",
+                                projectDescription: project?.descripcion || "",
                               }),
                             });
                             const data = await res.json();
@@ -1498,35 +1465,83 @@ const hasMinimumPhotos =
             </div>
           )}
 
+          {project?.descripcion && (
+            <div className="mb-6 p-4 border border-slate-300 bg-slate-50 rounded-lg break-inside-avoid">
+              <p className="text-xs font-bold text-slate-500 uppercase">Explicación del Proyecto (Voz)</p>
+              <p className="text-sm font-semibold text-slate-800">{project.descripcion}</p>
+            </div>
+          )}
+
+          {mapSnapshots.length > 0 && (
+             <div className="mb-6 break-inside-avoid">
+               <h3 className="text-sm font-bold text-slate-500 uppercase mb-2">MAPA TÁCTICO DE CONTEXTO</h3>
+               <img src={mapSnapshots[0].dataUrl} alt="Mapa Principal" className="w-full h-auto max-h-[350px] object-contain border border-slate-300 rounded-lg shadow-sm" />
+               <p className="text-[10px] text-slate-500 mt-1 italic">
+                 {project?.geometryType === 'lineal' ? 'Análisis de Corredor (Ruta y Trayecto)' : project?.geometryType === 'poligono' ? 'Análisis de Polígono (Perímetro e Interior)' : 'Análisis Nodal (Punto focal)'}
+               </p>
+             </div>
+          )}
+
           <div className="mb-8">
             <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
             <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">{editableProfile || aiProfile}</div>
           </div>
 
-          {mapSnapshots.length > 0 && <div className="html2pdf__page-break"></div>}
-          {mapSnapshots.map((snap, idx) => (
+          {mapSnapshots.length > 1 && <div className="html2pdf__page-break"></div>}
+          {mapSnapshots.slice(1).map((snap, idx) => (
             <div key={idx} className="mb-8 break-inside-avoid">
               <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">ATLAS CARTOGRÁFICO: {snap.title.toUpperCase()}</h3>
               <img src={snap.dataUrl} alt={snap.title} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
             </div>
           ))}
 
-          {album.filter(p => selectedIds.includes(p.id)).length > 0 && (
-            <>
-              <div className="html2pdf__page-break"></div>
-              <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-4 pb-1">ANEXO FOTOGRÁFICO Y DE DETERIORO URBANO</h3>
-              <div className="grid grid-cols-2 gap-6">
-                {album.filter(p => selectedIds.includes(p.id)).map(p => (
-                  <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
-                    <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-48 object-cover rounded mb-3 border border-slate-200" />
-                    <p className="text-xs font-bold text-slate-800 uppercase mb-1">{p.tipo}</p>
-                    <p className="text-[11px] text-slate-600 mb-2 leading-tight">{p.comentario || "Sin comentario."}</p>
-                    <p className="text-[9px] font-mono text-slate-500">GPS: {p.lat}, {p.lng}</p>
+          {(() => {
+            const selectedPhotos = album.filter(p => selectedIds.includes(p.id));
+            if (selectedPhotos.length === 0) return null;
+
+            let groups: { title: string; photos: typeof album }[] = [];
+            if (project?.geometryType === "lineal") {
+              groups = [
+                { title: "NODO INICIAL", photos: selectedPhotos.filter((p) => p.tipo === "Nodo Inicial") },
+                { title: "CORREDOR", photos: selectedPhotos.filter((p) => p.tipo === "Corredor") },
+                { title: "NODO FINAL", photos: selectedPhotos.filter((p) => p.tipo === "Nodo Final") },
+                { title: "EVIDENCIA ADICIONAL", photos: selectedPhotos.filter((p) => !["Nodo Inicial", "Corredor", "Nodo Final"].includes(p.tipo)) },
+              ];
+            } else if (project?.geometryType === "poligono") {
+              groups = [
+                { title: "PERÍMETRO", photos: selectedPhotos.filter((p) => p.tipo === "Perímetro") },
+                { title: "INTERIOR", photos: selectedPhotos.filter((p) => p.tipo === "Interior") },
+                { title: "EVIDENCIA ADICIONAL", photos: selectedPhotos.filter((p) => !["Perímetro", "Interior"].includes(p.tipo)) },
+              ];
+            } else {
+              groups = [
+                { title: "NODO Y ENTORNO", photos: selectedPhotos }
+              ];
+            }
+            groups = groups.filter((g) => g.photos.length > 0);
+
+            return (
+              <>
+                <div className="html2pdf__page-break"></div>
+                <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-4 pb-1">ANEXO FOTOGRÁFICO Y DE DETERIORO URBANO</h3>
+                {groups.map((group, gIdx) => (
+                  <div key={gIdx} className="mb-6 break-inside-avoid">
+                    <h4 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide border-l-4 border-slate-500 pl-2">{group.title}</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      {group.photos.map(p => (
+                        <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
+                          <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-40 object-cover rounded mb-2 border border-slate-200" />
+                          <p className="text-[10px] font-bold text-slate-800 uppercase mb-1 truncate">{p.tipo}</p>
+                          <p className="text-[10px] text-slate-600 mb-1 leading-tight">{p.comentario || "Sin comentario."}</p>
+                          <p className="text-[8px] font-mono text-slate-500">GPS: {p.lat}, {p.lng}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
-              </div>
-            </>
-          )}
+              </>
+            );
+          })()}
         </div>
       </div>
     </>

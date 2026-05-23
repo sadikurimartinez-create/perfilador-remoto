@@ -30,8 +30,12 @@ export function ProjectList() {
   const { exportProjectData, importProjectData } = useProject();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [nombreInput, setNombreInput] = useState("");
+  const [descripcionInput, setDescripcionInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any | null>(null);
+  const lastTranscriptRef = useRef<string>("");
   const { user, loading } = useAuth();
   const [projects, setProjects] = useState<ProjectWithCount[]>([]);
   const [allAnalyses, setAllAnalyses] = useState<
@@ -131,8 +135,68 @@ export function ProjectList() {
     return () => unsub();
   }, [loading, user]);
 
+  const handleToggleDictation = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Este navegador no soporta dictado por voz. Use la versión de escritorio o Chrome/Android.");
+      return;
+    }
+
+    try {
+      if (!recognitionRef.current) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = "es-MX";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onerror = (event: any) => {
+          console.error("Error en micrófono:", event?.error);
+          setIsListening(false);
+        };
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+        recognition.onresult = (event: any) => {
+          let finalTranscript = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const res = event.results[i];
+            const text = (res[0]?.transcript as string | undefined)?.trim();
+            if (!text) continue;
+            if (res.isFinal) {
+              finalTranscript += text + " ";
+            }
+          }
+          if (finalTranscript) {
+            const normalized = finalTranscript.trim();
+            if (!normalized) return;
+            if (normalized === lastTranscriptRef.current) return;
+            lastTranscriptRef.current = normalized;
+            setDescripcionInput((prev) => prev ? `${prev.trim()} ${normalized}` : normalized);
+          }
+        };
+        recognitionRef.current = recognition;
+      }
+      const recognition = recognitionRef.current as any;
+      if (isListening) {
+        recognition.stop();
+      } else {
+        lastTranscriptRef.current = "";
+        recognition.start();
+      }
+    } catch (e) {
+      console.error("Error al iniciar reconocimiento de voz:", e);
+      setIsListening(false);
+    }
+  };
+
   const handleNuevoProyecto = () => {
     setNombreInput("");
+    setDescripcionInput("");
     setShowPrompt(true);
   };
 
@@ -147,6 +211,7 @@ export function ProjectList() {
         addDoc(col, {
           name: nombre,
           geometryType,
+          descripcion: descripcionInput,
           createdAt,
           createdBy: user.username,
           lockedBy: null,
@@ -155,6 +220,7 @@ export function ProjectList() {
       );
       setShowPrompt(false);
       setNombreInput("");
+      setDescripcionInput("");
       setGeometryType("individual");
       router.push(`/project/${ref.id}`);
     } catch (err: any) {
@@ -460,6 +526,30 @@ export function ProjectList() {
             </label>
           </div>
         </div>
+
+          <div className="mt-2 mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <span className="block text-sm font-medium text-slate-200">Explicación del Proyecto</span>
+              <button
+                type="button"
+                onClick={handleToggleDictation}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
+                  isListening
+                    ? "border-red-500 text-red-300 bg-red-900/40"
+                    : "border-slate-600 text-slate-200 bg-slate-900"
+                }`}
+              >
+                <span aria-hidden="true">🎙️</span>
+                <span>{isListening ? "Detener grabación" : "Grabar explicación"}</span>
+              </button>
+            </div>
+            <textarea
+              value={descripcionInput}
+              onChange={(e) => setDescripcionInput(e.target.value)}
+              placeholder="La transcripción aparecerá aquí..."
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[80px]"
+            />
+          </div>
 
           <div className="flex gap-2">
             <button

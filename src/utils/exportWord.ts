@@ -29,57 +29,74 @@ export const exportWord = async (
     'project-map-capture'
   );
 
-  const findingsParagraphs = report.findings.flatMap(
-    (finding, index) => [
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `${index + 1}. Riesgo: ${(finding.riskLevel || 'N/A').toUpperCase()}`,
-            bold: true,
-          }),
-        ],
-      }),
-
-      new Paragraph({
-        text: `Observación: ${finding.note || 'Sin observación'}`,
-      }),
-    ]
-  );
-
   const photoDataURLs = await getPhotoDataURLs(report.findings);
 
-  const photoParagraphs = photoDataURLs.flatMap((dataURL, index) => {
-    // Prevenimos que explote si no hay URL o base64 válido
-    if (!dataURL || !dataURL.includes(',')) return [];
-    return [
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `Evidencia Foto ${index + 1}`,
-            bold: true,
-          }),
-        ],
-      }),
-      new Paragraph({
-        children: [
-          new ImageRun({
-            data: Uint8Array.from(
-              atob(dataURL.split(',')[1]),
-              (c) => c.charCodeAt(0)
-            ),
-            transformation: { width: 250, height: 180 },
-            type: 'png',
-          }),
-        ],
-      }),
+  let groups: { title: string; items: { finding: any; dataURL: string; index: number }[] }[] = [];
+
+  const findingsWithPhotos = report.findings.map((finding, idx) => ({
+    finding,
+    dataURL: photoDataURLs[idx],
+    index: idx
+  }));
+
+  if ((report as any).geometryType === "lineal") {
+    groups = [
+      { title: "NODO INICIAL", items: findingsWithPhotos.filter(f => (f.finding as any).tipo === "Nodo Inicial") },
+      { title: "CORREDOR", items: findingsWithPhotos.filter(f => (f.finding as any).tipo === "Corredor") },
+      { title: "NODO FINAL", items: findingsWithPhotos.filter(f => (f.finding as any).tipo === "Nodo Final") },
+      { title: "EVIDENCIA ADICIONAL", items: findingsWithPhotos.filter(f => !["Nodo Inicial", "Corredor", "Nodo Final"].includes((f.finding as any).tipo)) },
     ];
+  } else if ((report as any).geometryType === "poligono") {
+    groups = [
+      { title: "PERÍMETRO", items: findingsWithPhotos.filter(f => (f.finding as any).tipo === "Perímetro") },
+      { title: "INTERIOR", items: findingsWithPhotos.filter(f => (f.finding as any).tipo === "Interior") },
+      { title: "EVIDENCIA ADICIONAL", items: findingsWithPhotos.filter(f => !["Perímetro", "Interior"].includes((f.finding as any).tipo)) },
+    ];
+  } else {
+    groups = [
+      { title: "NODO Y ENTORNO", items: findingsWithPhotos }
+    ];
+  }
+
+  groups = groups.filter(g => g.items.length > 0);
+
+  const photoBlockParagraphs = groups.flatMap(group => {
+    const groupHeader = new Paragraph({
+      children: [new TextRun({ text: group.title, bold: true, size: 24 })],
+      spacing: { before: 400, after: 200 }
+    });
+
+    const groupItems = group.items.flatMap(item => {
+      if (!item.dataURL || !item.dataURL.includes(',')) return [];
+      return [
+        new Paragraph({
+          children: [new TextRun({ text: `Evidencia Foto ${item.index + 1} - ${(item.finding as any).tipo || 'Sin clasificar'}`, bold: true })],
+          spacing: { before: 200, after: 100 }
+        }),
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: Uint8Array.from(atob(item.dataURL.split(',')[1]), c => c.charCodeAt(0)),
+              transformation: { width: 250, height: 180 },
+              type: 'png'
+            })
+          ]
+        }),
+        new Paragraph({
+          text: `Riesgo: ${(item.finding.riskLevel || 'N/A').toUpperCase()} | Observación: ${item.finding.note || 'Sin observación'}`,
+          spacing: { after: 300 }
+        })
+      ];
+    });
+
+    return [groupHeader, ...groupItems];
   });
 
   const risk = calculateRisk(report.findings);
   const narrative = generateNarrative(report);
   const classification = classifyCriminology(
     report.findings,
-    report.geometryType
+    (report as any).geometryType
   );
 
   const narrativeParagraphs = [
@@ -102,6 +119,22 @@ export const exportWord = async (
     new Paragraph({ text: classification.interpretation }),
   ];
 
+  const explanationParagraphs: Paragraph[] = [];
+  const explanationText = (report as any).descripcion || (report.voiceNotes && report.voiceNotes.length > 0 ? report.voiceNotes.join('\n') : "");
+  if (explanationText) {
+    explanationParagraphs.push(
+      new Paragraph({
+        children: [new TextRun({ text: 'EXPLICACIÓN DEL PROYECTO (VOZ)', bold: true })],
+        spacing: { before: 200, after: 100 }
+      })
+    );
+    explanationText.split('\n').forEach((note: string) => {
+      if (note.trim()) {
+        explanationParagraphs.push(new Paragraph({ text: note.trim() }));
+      }
+    });
+  }
+
   const doc = new Document({
     sections: [
       {
@@ -123,7 +156,7 @@ export const exportWord = async (
           }),
 
           new Paragraph({
-            text: `Tipo de geometría: ${report.geometryType}`,
+            text: `Tipo de geometría: ${(report as any).geometryType}`,
           }),
 
           new Paragraph({
@@ -134,7 +167,7 @@ export const exportWord = async (
             text: ' ',
           }),
 
-          ...narrativeParagraphs,
+          ...explanationParagraphs,
           new Paragraph({ text: ' ' }),
 
           ...(mapImage
@@ -161,9 +194,13 @@ export const exportWord = async (
                 }),
               ]
             : []),
-          ...photoParagraphs,
+          
+          new Paragraph({ text: ' ' }),
+          ...narrativeParagraphs,
+          new Paragraph({ text: ' ' }),
           ...classificationParagraphs,
-          ...findingsParagraphs,
+          new Paragraph({ text: ' ' }),
+          ...photoBlockParagraphs,
         ],
       },
     ],

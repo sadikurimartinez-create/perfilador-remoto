@@ -14,6 +14,8 @@ type RefineBody = {
   context: string;
   photos?: { lat: number | null; lng: number | null }[];
   mode?: "suggest" | "audit";
+  geometryType?: "individual" | "lineal" | "poligono";
+  projectDescription?: string;
 };
 
 function formatCoord(n: number | null | undefined): string {
@@ -23,7 +25,7 @@ function formatCoord(n: number | null | undefined): string {
 
 export async function POST(req: Request) {
   try {
-    const { context, photos, mode } = (await req.json()) as RefineBody;
+    const { context, photos, mode, geometryType, projectDescription } = (await req.json()) as RefineBody;
 
     const apiKey = getGeminiKey();
     const coordsText =
@@ -38,33 +40,53 @@ export async function POST(req: Request) {
 
     const cleanedContext = (context ?? "").trim();
 
+    let geoInstruction = "";
+    if (geometryType === "individual") {
+      geoInstruction = "REGLA OPERACIONAL: El análisis es INDIVIDUAL (Nodal). Toda la atención, teorías y deducciones deben concentrarse ESTRICTAMENTE en el nodo principal de análisis. Busca atractores de riesgo, rutas hacia y desde el nodo, rutas de escape, lugares de acecho y fronteras directamente relacionadas.";
+    } else if (geometryType === "lineal") {
+      geoInstruction = "REGLA OPERACIONAL: El análisis es LINEAL (Corredor). Se enfoca en un TRAYECTO (ej. desde un origen a un destino). Identifica agresivamente riesgos a lo largo del corredor, incidentes de movilidad, cruce de vulnerabilidades (lotes baldíos, cantinas, pandillas) y dinámica temporal del desplazamiento.";
+    } else if (geometryType === "poligono") {
+      geoInstruction = "REGLA OPERACIONAL: El análisis es POLIGONAL (Zona). Se requiere un barrido intensivo y exhaustivo dentro del perímetro definido. Establece de manera particular los riesgos internos, dinámica de fronteras y focos de infección criminal contenidos en la zona.";
+    }
+
+    const descContext = projectDescription 
+      ? `Directriz Inicial del Investigador (Dictado de voz - PUNTO DE PARTIDA OBLIGATORIO):\n"${projectDescription}"\n` 
+      : "";
+
     let prompt = "";
     
     if (mode === "audit") {
       prompt = `
-Eres un Analista de Inteligencia Senior adscrito al CEIPOL.
-El investigador de campo ha redactado o editado la siguiente hipótesis operativa:
+Eres un Analista de Inteligencia Táctica Senior adscrito al CEIPOL.
+El investigador de campo ha redactado la siguiente hipótesis operativa:
 "${cleanedContext}"
 
+${descContext}
+${geoInstruction}
+
 Instrucción:
-Audita, pule y mejora esta hipótesis. Eleva el nivel técnico, corrige redacción, asegura que suene altamente profesional, severo y enfocado en Criminología Ambiental.
-Devuelve ÚNICAMENTE el texto mejorado, listo para ser copiado y pegado en el informe final. No uses viñetas introductorias, solo el párrafo o párrafos refinados.
+Audita, pule y mejora radicalmente esta hipótesis. Eleva el nivel técnico, corrige redacción, asegura que suene altamente profesional, AGRESIVO, PROFUNDO y estrictamente enfocado en Criminología Ambiental.
+Asegúrate de que la hipótesis auditada integre la directriz de voz y la directriz geométrica sin desviarse.
+Devuelve ÚNICAMENTE el texto mejorado, sin preámbulos, listo para ser copiado y pegado en el informe final.
 `.trim();
     } else {
       prompt = `
-Eres un Analista de Inteligencia Senior adscrito al CEIPOL. Un investigador de campo está redactando la hipótesis o contexto operacional para un Perfil Criminológico Ambiental.
+Eres un Analista de Inteligencia Táctica Senior adscrito al CEIPOL. Un investigador de campo necesita contexto operacional para un Perfil Criminológico Ambiental.
 
-Contexto preliminar del analista:
+Contexto preliminar del analista (si existe):
 "${cleanedContext || "(El analista aún no ha redactado una hipótesis, genera sugerencias de enfoque táctico a partir de la geografía y teoría criminológica)"}"
 
 Coordenadas aproximadas de las fotos:
 ${coordsText}
 
-Instrucción:
-Proporciona 3 o 4 sugerencias PROFUNDAS, TÁCTICAS y SEVERAS basadas en la Criminología Ambiental (Actividades Rutinarias, Ventanas Rotas, Elección Racional, Patrón Delictivo).
-Indícale al analista qué elementos clave DEBE observar e incluir en su contexto (ej. cruce con OSINT, rutas de escape, atractores de riesgo, barreras físicas, nivel de vigilancia natural, presencia de halconeo o deterioro urbano).
+${descContext}
+${geoInstruction}
 
-Responde en español, usando viñetas cortas, con lenguaje policial/táctico. NO repitas el contexto original, solo dile qué agregar o en qué enfocarse para robustecer su hipótesis.
+Instrucción:
+Proporciona 3 o 4 sugerencias PROFUNDAS, TÁCTICAS, AGRESIVAS y SEVERAS basadas en la Criminología Ambiental.
+Instruye al analista con mandatos estrictos sobre qué DEBE observar e incluir en su hipótesis basándose en la geometría (${geometryType || "individual"}).
+
+Responde en español, usando viñetas directas, con lenguaje de inteligencia policial/táctico. NO repitas el contexto original, indícale qué agregar para robustecer su hipótesis.
 `.trim();
     }
 

@@ -50,6 +50,7 @@ export type Project = {
   id: string;
   nombre: string;
   geometryType: "individual" | "lineal" | "poligono";
+  descripcion?: string;
   createdBy?: string;
 };
 
@@ -70,6 +71,12 @@ export type AnalysisResult = {
     rangoHorario: string | null;
   }>;
   pois?: Array<{ lat: number; lng: number; name: string; category?: string }>;
+  inegiDemographics?: {
+    exito: boolean;
+    municipioNombre: string;
+    poblacionTotal: string;
+    datosExtra: string;
+  };
   raw?: unknown;
 };
 
@@ -90,6 +97,7 @@ type ProjectContextValue = {
   createProject: (params: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
+    descripcion?: string;
   }) => Promise<void>;
 
   closeProject: () => void;
@@ -139,9 +147,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const createProject = useCallback(async ({
     nombre,
     geometryType,
+    descripcion,
   }: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
+    descripcion?: string;
   }) => {
     try {
       const firestore = getDb();
@@ -149,6 +159,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const docRef = await addDoc(col, {
         name: nombre.trim() || "Sin nombre",
         geometryType,
+        descripcion: descripcion || "",
         createdAt: Date.now(),
         createdBy: user?.username || "Usuario Local",
         lockedBy: null,
@@ -159,6 +170,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         id: docRef.id,
         nombre: nombre.trim() || "Sin nombre",
         geometryType,
+        descripcion: descripcion || "",
         createdBy: user?.username || "Usuario Local",
       });
 
@@ -222,6 +234,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         id: projectId,
         nombre: projectData.name,
         geometryType: projectData.geometryType,
+        descripcion: projectData.descripcion || "",
         ...projectData,
       });
       setAlbum(albumPhotos);
@@ -280,6 +293,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const snapshot = await uploadBytes(storageRef, compressedFile);
     const downloadURL = await getDownloadURL(snapshot.ref);
 
+    let defaultTipo = "Nodo Principal";
+    if (project.geometryType === "lineal") defaultTipo = "Corredor";
+    else if (project.geometryType === "poligono") defaultTipo = "Interior";
+
     // 3. Guardar metadatos en Firestore
     const firestore = getDb();
     const photosColRef = collection(firestore, "projects", project.id, "photos");
@@ -290,7 +307,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       lng,
       projectId: project.id,
       createdAt: Date.now(),
-      tipo: TIPOS_IMAGEN[0], // Default
+      tipo: defaultTipo,
       comentario: "",
     };
     const photoDocRef = await addDoc(photosColRef, photoDocData);
@@ -306,7 +323,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       previewUrl: downloadURL,
       lat,
       lng,
-      tipo: TIPOS_IMAGEN[0],
+      tipo: defaultTipo,
       comentario: "",
       file: compressedFile,
     }, photoDocRef.id);
@@ -492,6 +509,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       await setDoc(projectRef, {
         name: proj.name,
         geometryType: proj.geometryType || "individual",
+        descripcion: proj.descripcion || "",
         createdAt: proj.createdAt || Date.now(),
         createdBy: username,
         lockedBy: null,

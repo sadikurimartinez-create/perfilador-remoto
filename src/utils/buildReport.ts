@@ -1,13 +1,15 @@
 import { ConsolidatedReport } from '../types/Report';
 
 export const buildReport = (project: any): ConsolidatedReport => {
-  return {
+  const report: any = {
     projectId: project.id || '',
     projectName: project.name || 'Sin nombre',
 
     createdAt: new Date().toISOString(),
 
     geometryType: project.geometryType || 'individual',
+
+    descripcion: project.descripcion || project.voiceNotes?.join('\n') || '',
 
     objectives: project.objectives || [],
 
@@ -26,6 +28,7 @@ export const buildReport = (project: any): ConsolidatedReport => {
           new Date().toISOString(),
         latitude: item.latitude,
         longitude: item.longitude,
+        tipo: item.tipo || item.photoType || 'Sin clasificar',
       })) || [],
 
     conclusions: [],
@@ -34,4 +37,6 @@ export const buildReport = (project: any): ConsolidatedReport => {
 
     analyst: project.analyst || 'CEIPOL',
   };
+
+  return report as ConsolidatedReport;
 };

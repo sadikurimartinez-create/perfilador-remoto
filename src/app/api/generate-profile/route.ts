@@ -132,6 +132,8 @@ type GenerateProfileBody = {
   bibliografiaLocal?: string;
   /** Contexto y directrices de las evidencias multimodales adjuntas. */
   multimodalContext?: string;
+  geometryType?: "individual" | "lineal" | "poligono";
+  projectDescription?: string;
 };
 
 type GeocodingResult = {
@@ -339,6 +341,8 @@ function buildPromptForGemini(params: {
   focusAreas: string[];
   poiImages: Array<{ name: string; category: string; streetViewUrl: string }>;
   visionDataTactica?: { texto: string; rostros: number };
+  geometryType?: "individual" | "lineal" | "poligono";
+  projectDescription?: string;
 }): string {
   const {
     photos,
@@ -359,6 +363,8 @@ function buildPromptForGemini(params: {
     focusAreas,
     poiImages,
     visionDataTactica,
+    geometryType,
+    projectDescription,
   } = params;
 
   const comentariosInvestigador = photos
@@ -450,7 +456,22 @@ function buildPromptForGemini(params: {
     ? `Inteligencia Visual Automatizada: en las fotografías de la escena se ha detectado mediante OCR el siguiente texto (evalúa si corresponden a placas vehiculares o números económicos de taxis/patrullas): "${visionDataTactica.texto}". Además, se detectó la presencia de ${visionDataTactica.rostros} rostro(s). Cruza esta información con los Puntos de Interés (POIs) y la incidencia delictiva. Analiza si la presencia de estos vehículos o individuos coincide con tácticas de 'halconeo', transporte pirata o vigilancia en la zona.`
     : "Inteligencia Visual Automatizada: no se detectó texto relevante ni rostros significativos en las imágenes procesadas.";
 
+  let geoInstruction = "";
+  if (geometryType === "individual") {
+    geoInstruction = "MANDATO OPERACIONAL DE GEOMETRÍA: ANÁLISIS INDIVIDUAL (NODAL).\nTodo tu análisis, la aplicación de teorías de la Criminología Ambiental y deducciones DEBEN CONCENTRARSE ESTRICTAMENTE en el NODO principal analizado. Busca de manera incisiva los atractores del nodo, las rutas y senderos hacia y desde el nodo, rutas de escape, lugares de acecho, fronteras y todo aquello que relacione al entorno con este punto focal.";
+  } else if (geometryType === "lineal") {
+    geoInstruction = "MANDATO OPERACIONAL DE GEOMETRÍA: ANÁLISIS LINEAL (CORREDOR).\nEstás analizando un TRAYECTO entre nodos (ej. un nodo inicial y uno final). Tu misión es detectar TODOS los RIESGOS que pudieran existir en ese trayecto. Realiza un barrido implacable para detectar amenazas en el desplazamiento: bares, cantinas, moteles, terrenos baldíos, concentración de incidencia, presencia de pandillas, y correlaciona los horarios de movilidad con las vulnerabilidades a lo largo del corredor.";
+  } else if (geometryType === "poligono") {
+    geoInstruction = "MANDATO OPERACIONAL DE GEOMETRÍA: ANÁLISIS DE POLÍGONO (ZONA).\nSe ha establecido un PERÍMETRO a partir de las imágenes de sus límites y su interior. Realiza un BARRIDO INTENSIVO Y EXHAUSTIVO para establecer de manera particular los riesgos, vulnerabilidades y focos de infección criminal que existen al INTERIOR de dicho polígono y en sus dinámicas fronterizas.";
+  }
+
+  const descContext = projectDescription
+    ? `\n## EXPLICACIÓN DEL PROYECTO (DICTADO DE VOZ - DIRECTRIZ OBLIGATORIA E INELUDIBLE)\n"${projectDescription}"\nESTA EXPLICACIÓN Y LAS CONTEXTUALIZACIONES SON TU PUNTO DE PARTIDA OBLIGATORIO. TODO TU ANÁLISIS Y SUGERENCIAS DEBEN ESTAR ENFOCADAS EN ESTOS PARÁMETROS.\n`
+    : "";
+
   const prompt = `
+${descContext}
+
 ## DATOS DEL INVESTIGADOR (fotos y comentarios)
 ${comentariosInvestigador}
 
@@ -486,7 +507,8 @@ ${visionResumen}
 ${irregularidadesTexto || "No se identificaron unidades económicas registradas ni atractores relevantes en el perímetro de 1 kilómetro."}
 
 [MANDATO TÁCTICO MULTIDIMENSIONAL Y TRANSVERSALIDAD OBLIGATORIA]:
-1. CORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Hipótesis del Analista", los "Comentarios de las Fotos" y las "Evidencias Multimodales" con los datos de las APIs (OSINT, DENUE, INEGI). No analices las fuentes por separado; fusiónalas. (Ej. Cruza el desempleo del INEGI con los reportes de Twitter, la evidencia documental anexa y el deterioro visual de las fotos).
+0. REGLA FUNDAMENTAL: LAS IMÁGENES INYECTADAS POR EL USUARIO NO SON LIMITATIVAS. Tómalas SOLO como punto de partida, pero DEBES APOYARTE DE MANERA AGRESIVA Y PROFUNDA en TODOS los medios proporcionados (OSINT, DENUE, Incidencia, Textos) para construir tu análisis. Se exige profundidad y amplitud.
+1. ${geoInstruction}\nCORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Explicación del Proyecto", "Hipótesis del Analista", y las "Evidencias Multimodales" con los datos de las APIs (OSINT, DENUE, INEGI). No analices las fuentes por separado; fusiónalas.
 2. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos", "Atractores" o "Nodos de Miedo".
 3. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y DENUE. Argumenta cómo la irregularidad debilita el control social formal y fomenta "ventanas rotas".
 4. CORRELACIÓN ESTADÍSTICA: Cruza los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares = mercados ilícitos).
@@ -826,6 +848,8 @@ export async function POST(req: Request) {
       focusAreas: body.focusAreas ?? [],
       poiImages,
       visionDataTactica: (body as any).visionDataTactica ?? undefined,
+      geometryType: body.geometryType,
+      projectDescription: body.projectDescription,
     });
 
     const marcoTeoriaReglas =
@@ -893,6 +917,7 @@ export async function POST(req: Request) {
           incidenciaDetalles,
           pois: mergedPoisResult,
           riskLevel,
+          inegiDemographics,
         },
       },
       { status: 200 }

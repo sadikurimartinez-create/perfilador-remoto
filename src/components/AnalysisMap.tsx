@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
+import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 export type MapViewMode = "HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL";
@@ -21,6 +21,8 @@ type AnalysisMapProps = {
   isPreliminary?: boolean;
   /** Controla qué capas tácticas se muestran. */
   viewMode?: MapViewMode;
+  /** Geometría del proyecto para trazar rutas o perímetros automáticos */
+  geometryType?: "individual" | "lineal" | "poligono";
 };
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
@@ -50,6 +52,7 @@ export function AnalysisMap({
   setManualPois,
   isPreliminary = false,
   viewMode = "ALL",
+  geometryType,
 }: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -253,16 +256,44 @@ export function AnalysisMap({
           mapTypeId: viewMode === "MOBILITY" ? "terrain" : "hybrid",
         }}
       >
-        {!isPreliminary && (
+        {!isPreliminary && geometryType !== "lineal" && geometryType !== "poligono" && (
           <Circle
             center={center}
-            radius={500}
+            radius={analysisRadius}
             options={{
               strokeColor: "#ef4444",
               strokeOpacity: 0.9,
               strokeWeight: 2,
               fillColor: "#ef4444",
               fillOpacity: 0.1,
+            }}
+          />
+        )}
+
+        {!isPreliminary && geometryType === "lineal" && photosWithCoords.length > 1 && (
+          <Polyline
+            path={photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }))}
+            options={{
+              strokeColor: "#3b82f6",
+              strokeOpacity: 0.8,
+              strokeWeight: 4,
+            }}
+          />
+        )}
+
+        {!isPreliminary && geometryType === "poligono" && photosWithCoords.length > 2 && (
+          <Polygon
+            paths={
+              photosWithCoords.filter(p => p.tipo === "Perímetro").length >= 3
+                ? photosWithCoords.filter(p => p.tipo === "Perímetro").map(p => ({ lat: p.lat, lng: p.lng }))
+                : photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }))
+            }
+            options={{
+              strokeColor: "#8b5cf6",
+              strokeOpacity: 0.8,
+              strokeWeight: 3,
+              fillColor: "#8b5cf6",
+              fillOpacity: 0.35,
             }}
           />
         )}
