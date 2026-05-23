@@ -173,6 +173,10 @@ export function PhotoAlbum({
   const [isAuditingDoc, setIsAuditingDoc] = useState(false);
   const [mapViewMode, setMapViewMode] = useState<"HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL">("HEATMAP");
   const [mapSnapshots, setMapSnapshots] = useState<{ title: string; dataUrl: string }[]>([]);
+
+  // FASE 2: Estados de validación de auditoría (semáforo)
+  const [isDocContextAudited, setIsDocContextAudited] = useState(false);
+  const [isAnalysisContextAudited, setIsAnalysisContextAudited] = useState(false);
   // Validación mínima de fotografías según geometría
 const minimumPhotos = {
   individual: 1,
@@ -849,7 +853,10 @@ const hasMinimumPhotos =
             <textarea
               value={docContext}
               disabled={isReadOnly}
-              onChange={(e) => setDocContext(e.target.value)}
+              onChange={(e) => {
+                setDocContext(e.target.value);
+                setIsDocContextAudited(false);
+              }}
               placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
               className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
             />
@@ -903,10 +910,13 @@ const hasMinimumPhotos =
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setDocSuggestions("")}
+                    onClick={() => {
+                      setDocSuggestions("");
+                      setIsDocContextAudited(true);
+                    }}
                     className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
                   >
-                    Descartar
+                    Descartar (Usar Original)
                   </button>
                   <button
                     type="button"
@@ -940,6 +950,7 @@ const hasMinimumPhotos =
                     onClick={() => {
                       setDocContext((prev) => (prev ? `${prev}\n\n${docSuggestions}` : docSuggestions));
                       setDocSuggestions("");
+                      setIsDocContextAudited(true);
                     }}
                     disabled={isAuditingDoc}
                     className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
@@ -950,9 +961,16 @@ const hasMinimumPhotos =
               </div>
             )}
 
+            {docContext.trim() && !isDocContextAudited && !docSuggestions && (
+              <p className="text-xs text-amber-400 mt-1">⚠️ Requiere solicitar sugerencias y auditar el contexto antes de poder subir la evidencia.</p>
+            )}
+            {isDocContextAudited && (
+              <p className="text-xs text-emerald-400 mt-1">✅ Contexto auditado y validado. Listo para subir.</p>
+            )}
+
             <button
               type="button"
-              disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly}
+              disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly || !isDocContextAudited}
               onClick={async () => {
                 if (!docFile || !docContext.trim()) return;
                 setIsUploadingDoc(true);
@@ -961,6 +979,7 @@ const hasMinimumPhotos =
                   await uploadDocument(docFile, docContext);
                   setDocFile(null);
                   setDocContext("");
+                  setIsDocContextAudited(false);
                   const fileInput = document.getElementById("doc-upload-input") as HTMLInputElement;
                   if (fileInput) fileInput.value = "";
                 } catch (e: any) {
@@ -1319,7 +1338,10 @@ const hasMinimumPhotos =
                 </div>
                 <textarea
                   value={analysisContext}
-                  onChange={(e) => setAnalysisContext(e.target.value)}
+                  onChange={(e) => {
+                    setAnalysisContext(e.target.value);
+                    setIsAnalysisContextAudited(false);
+                  }}
                   rows={8}
                   className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-5 py-4 text-base md:text-lg resize-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
@@ -1399,10 +1421,11 @@ const hasMinimumPhotos =
                         type="button"
                         onClick={() => {
                           setAiSuggestions("");
+                          setIsAnalysisContextAudited(true);
                         }}
                         className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
                       >
-                        Descartar
+                        Descartar (Usar Original)
                       </button>
                       <button
                         type="button"
@@ -1442,6 +1465,7 @@ const hasMinimumPhotos =
                         onClick={() => {
                           setAnalysisContext((prev) => (prev ? `${prev}\n\n${aiSuggestions}` : aiSuggestions));
                           setAiSuggestions("");
+                          setIsAnalysisContextAudited(true);
                         }}
                         disabled={isAuditing}
                         className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
@@ -1473,14 +1497,23 @@ const hasMinimumPhotos =
                 </span>
               </p>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => void confirmAndGenerateProfile()}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
-              >
-                Comenzar Análisis
-              </button>
+            <div className="flex flex-col gap-2 pt-2">
+              {!isAnalysisContextAudited && !aiSuggestions && (
+                <p className="text-xs text-amber-400 text-right">⚠️ Debe pedir sugerencias y auditar la hipótesis antes de comenzar el análisis.</p>
+              )}
+              {isAnalysisContextAudited && (
+                <p className="text-xs text-emerald-400 text-right">✅ Hipótesis contextual auditada y validada.</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void confirmAndGenerateProfile()}
+                  disabled={!isAnalysisContextAudited}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Comenzar Análisis
+                </button>
+              </div>
             </div>
           </div>
         </div>
