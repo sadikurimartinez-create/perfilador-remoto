@@ -202,6 +202,14 @@ const hasMinimumPhotos =
       return;
     }
 
+    // FASE 1: Validación estricta de Contextualización en Fotografías
+    const selectedPhotos = album.filter((p) => selectedIds.includes(p.id));
+    const isMissingContext = selectedPhotos.some((p) => !p.tipo || !p.comentario?.trim());
+    if (isMissingContext) {
+      setError("Todas las fotografías seleccionadas deben estar contextualizadas (Tipo y Comentario son obligatorios).");
+      return;
+    }
+
     setError(null);
     setShowConfigModal(true);
   };
@@ -748,14 +756,14 @@ const hasMinimumPhotos =
                     </button>
                   )}
                   
-                  {/* Campo de comentarios (Opcional) - Visible en móvil y PC */}
+                  {/* Campo de comentarios (Obligatorio) - Visible en móvil y PC */}
                   <input
                     type="text"
-                    placeholder="Comentario (opcional)..."
-                    value={p.comentario}
+                    placeholder="Comentario (Obligatorio)..."
+                    value={p.comentario || ""}
                     disabled={isReadOnly}
                     onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
-                    className="w-full mt-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50"
+                    className={`w-full mt-2 bg-slate-800 text-slate-200 border rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50 ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
                   />
 
                   {visionData[p.id]?.extractedText && (
@@ -772,7 +780,7 @@ const hasMinimumPhotos =
                     </span>
                   )}
                   <select
-                    value={p.tipo}
+                    value={p.tipo || ""}
                     onChange={(e) =>
                       updatePhotoMeta(p.id, {
                         tipo: e.target.value,
@@ -780,7 +788,7 @@ const hasMinimumPhotos =
                       })
                     }
                     disabled={isReadOnly}
-                    className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block disabled:opacity-50"
+                    className={`w-full mt-2 bg-gray-800 text-gray-200 border rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block disabled:opacity-50 ${!p.tipo ? 'border-amber-500/70 bg-amber-900/10' : 'border-gray-600'}`}
                   >
                     {project?.geometryType === "lineal" ? (
                       <>
