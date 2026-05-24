@@ -572,8 +572,8 @@ export function ProjectList() {
       )}
 
       {previewModalOpen && selectedPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-5xl bg-gray-900 border border-gray-700 p-6 rounded-xl shadow-2xl overflow-y-auto max-h-[90vh] relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-8">
+          <div className="w-full h-full max-w-[100vw] bg-gray-900 border border-gray-700 p-6 rounded-xl shadow-2xl overflow-y-auto relative flex flex-col">
             <button
               type="button"
               onClick={() => setPreviewModalOpen(false)}
@@ -604,16 +604,16 @@ export function ProjectList() {
                       (src: string, idx: number) => (
                         <div
                           key={`${src}-${idx}`}
-                          className="aspect-video rounded-lg overflow-hidden border border-gray-700 shadow-md bg-black relative"
+                    className="w-full h-auto rounded-lg overflow-hidden border border-gray-700 shadow-md bg-black relative flex items-center justify-center"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={src}
                             alt={`Evidencia ${idx + 1}`}
-                            className="object-cover w-full h-full"
+                      className="object-contain w-full h-auto max-h-[70vh]"
                           />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                            <span className="text-white/30 font-bold text-3xl sm:text-5xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                      <span className="text-white/30 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
                               SSPA-CEIPOL
                             </span>
                           </div>

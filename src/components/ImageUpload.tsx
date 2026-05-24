@@ -91,7 +91,7 @@ export function ImageUpload() {
   };
 
   return (
-    <section className="card p-4 md:p-6 space-y-4">
+    <section className="card p-4 md:p-6 space-y-4 col-span-full w-full">
       <header className="space-y-1">
         <h1 className="text-xl md:text-2xl font-semibold">
           Captura / Subida de Evidencia Fotográfica
@@ -143,10 +143,10 @@ export function ImageUpload() {
               <img
                 src={previewUrl}
                 alt="Vista previa de la evidencia"
-                className="h-auto max-h-[500px] w-full object-contain bg-black"
+              className="h-auto max-h-[75vh] w-full object-contain bg-black"
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                <span className="text-white/30 font-bold text-3xl md:text-5xl -rotate-45 select-none tracking-widest drop-shadow-md">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                <span className="text-white/30 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
                   SSPA-CEIPOL
                 </span>
               </div>

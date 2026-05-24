@@ -222,7 +222,7 @@ export function CaptureAndAddPhoto() {
       </div>
     )}
 
-    <section className="card p-4 md:p-6 space-y-4">
+    <section className="card p-4 md:p-6 space-y-4 col-span-full w-full">
       {isFetchingGPS && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
           <div className="flex flex-col items-center bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">

@@ -611,7 +611,7 @@ const hasMinimumPhotos =
 
   return (
     <>
-      <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-4">
+      <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-4 col-span-full w-full">
       <header className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <h3 className="text-lg font-semibold text-slate-100">Álbum fotográfico</h3>
         <div className="flex gap-2">
@@ -681,7 +681,7 @@ const hasMinimumPhotos =
             }`}
           >
             <div className="flex flex-col">
-              <div className="flex flex-col items-start gap-4 p-4 w-full">
+              <div className="flex flex-col items-center gap-4 p-4 w-full">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(p.id)}
@@ -718,11 +718,11 @@ const hasMinimumPhotos =
                     <img
                       src={p.previewUrl}
                       alt=""
-                      className="w-full h-auto max-h-[600px] object-contain"
+                      className="w-full h-auto max-h-[75vh] object-contain"
                     />
                     {/* Sello de agua visual en UI */}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                      <span className="text-white/30 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                      <span className="text-white/30 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
                         SSPA-CEIPOL
                       </span>
                     </div>
@@ -1631,8 +1631,8 @@ const hasMinimumPhotos =
                           <div className="relative w-full h-40 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
                             <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
                             {/* Sello de agua en PDF */}
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                              <span className="text-white/30 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                              <span className="text-white/30 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">
                                 SSPA-CEIPOL
                               </span>
                             </div>
