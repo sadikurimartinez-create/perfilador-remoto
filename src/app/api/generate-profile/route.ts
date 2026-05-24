@@ -427,34 +427,17 @@ function buildPromptForGemini(params: {
       ? focusAreas.join(", ")
       : "no se marcaron objetivos prioritarios específicos; debes evaluar integralmente todos los elementos disponibles.";
 
-  const poiImagesMarkdown =
-    poiImages.length > 0
-      ? poiImages
-          .map(
-            (p, idx) =>
-              `![POI ${idx + 1} - ${p.name} (${p.category})](${p.streetViewUrl})`
-          )
-          .join("\n")
-      : "[No se proporcionaron imágenes externas de POIs para este caso.]";
-
-  const hipotesisTexto =
-    analysisContext?.trim() ||
-    "[El analista no proporcionó hipótesis ni contexto adicional.]";
-
-  const multimodalTexto =
-    multimodalContext?.trim() ||
-    "[No se adjuntaron evidencias multimodales o de gabinete en esta ocasión.]";
-
+  const hipotesisTexto = analysisContext?.trim() || "No se proporcionó una hipótesis u observaciones previas por el analista.";
+  
+  const multimodalTexto = multimodalContext?.trim() || "No se adjuntaron evidencias documentales o multimodales.";
+  
   const clasificacionesTexto = photos
-    .map(
-      (p, idx) =>
-        `Foto ${idx + 1}: ${p.tipo || "Sin clasificación humana registrada."}`
-    )
+    .map((p) => `- Foto ${p.id}: ${p.tipo}`)
     .join("\n");
-
+    
   const visionTacticaTexto = visionDataTactica
-    ? `Inteligencia Visual Automatizada: en las fotografías de la escena se ha detectado mediante OCR el siguiente texto (evalúa si corresponden a placas vehiculares o números económicos de taxis/patrullas): "${visionDataTactica.texto}". Además, se detectó la presencia de ${visionDataTactica.rostros} rostro(s). Cruza esta información con los Puntos de Interés (POIs) y la incidencia delictiva. Analiza si la presencia de estos vehículos o individuos coincide con tácticas de 'halconeo', transporte pirata o vigilancia en la zona.`
-    : "Inteligencia Visual Automatizada: no se detectó texto relevante ni rostros significativos en las imágenes procesadas.";
+    ? `Análisis visual táctico detectado por IA: ${visionDataTactica.texto}. Rostros detectados: ${visionDataTactica.rostros}.`
+    : "Sin inteligencia visual táctica adjunta.";
 
   let geoInstruction = "";
   if (geometryType === "individual") {
@@ -534,11 +517,6 @@ ${visionTacticaTexto}
 ## OBJETIVOS PRIORITARIOS MARCADOS POR EL ANALISTA
 ${focusAreasTexto}
 
-## IMÁGENES DE POIs (Markdown)
-Incrusta en el dictamen las imágenes donde sea relevante usando: ![Descripción](URL).
-Listado:
-${poiImagesMarkdown}
-
 ---
 INSTRUCCIÓN FINAL:
 Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objetivo. Estructura OBLIGATORIAMENTE en las siguientes secciones (con estos títulos en mayúsculas), en este orden:
@@ -547,12 +525,7 @@ Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objeti
 2. CONTEXTO ESPACIAL, SOCIODEMOGRÁFICO Y MULTIMODAL — Descripción de la colonia, cruce con demografía (INEGI) y síntesis analítica de las Evidencias Multimodales de Gabinete aportadas por el analista junto con su Hipótesis inicial.
 3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de las fotografías CRUZADA OBLIGATORIAMENTE con los comentarios del investigador y las detecciones de Vision API.
 4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE Y OSINT) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia, vacíos de control formal (negocios irregulares) y extrae el sentimiento ciudadano de las reseñas de fuentes abiertas (Google, X/Twitter). Usa imágenes de POIs.
-5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional.
-6. CORRELACIÓN TRANSVERSAL DE RIESGOS — Puntos de riesgo resultantes de fusionar TODOS los vectores de inteligencia (Hipótesis humana + Fotos + Documentos Anexos + APIs).
-7. RECOMENDACIONES — Medidas accionables y vinculadas a los hallazgos.
-8. INFORMACIÓN PREDICTIVA — Estimación de probabilidad de incremento delictivo a 6 meses si no se interviene (baja/media/alta o porcentual), con justificación criminológica breve.
-
-No inventes datos ni teorías ajenas a la bibliografía. Evita redundancia entre secciones; cada idea una sola vez.
+5. RUTINAS Y OPORTUNIDADES — Evalúa las actividades rutinarias y la oportunidad criminal. No incluyas teorías ajenas a la bibliografía. Evita redundancia entre secciones; cada idea una sola vez.
 `.trim();
 
   return prompt;
@@ -562,11 +535,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as GenerateProfileBody;
     const { photos } = body;
-    const incidenciaLocal = body.incidenciaLocal ?? [];
-    const bibliografiaLocal =
-      typeof body.bibliografiaLocal === "string" ? body.bibliografiaLocal : "";
-
-    if (!Array.isArray(photos) || photos.length === 0) {
+    if (!photos || photos.length === 0) {
       return NextResponse.json(
         { error: "Se requiere un array 'photos' con al menos una fotografía." },
         { status: 400 }
@@ -853,11 +822,11 @@ export async function POST(req: Request) {
     });
 
     const marcoTeoriaReglas =
-      bibliografiaLocal?.trim() && Array.isArray(incidenciaLocal)
+      body.bibliografiaLocal?.trim() && Array.isArray(body.incidenciaLocal)
         ? "MARCO TEÓRICO Y REGLAS PERICIALES: Ten en cuenta la siguiente bibliografía oficial para fundamentar tu dictamen: \n" +
-          `${bibliografiaLocal}\n\n` +
+          `${body.bibliografiaLocal}\n\n` +
           "BASE DE DATOS POLICIAL (Radio 1KM): Se han registrado los siguientes incidentes en la zona extraídos de múltiples fuentes: " +
-          `${JSON.stringify(incidenciaLocal)}. ` +
+          `${JSON.stringify(body.incidenciaLocal)}. ` +
           "Tienes la obligación de cruzar esta información táctica con los hallazgos visuales de las fotos y la teoría criminológica para tu dictamen."
         : "";
 

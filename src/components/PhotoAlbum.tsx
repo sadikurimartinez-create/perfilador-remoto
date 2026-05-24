@@ -505,35 +505,51 @@ const hasMinimumPhotos =
     }
   };
 
-  const handleExportToWord = async () => {
-    const content = editableProfile || aiProfile;
-    if (!content) return;
-    setError(null);
-    
-    const snapshotsToExport = [...mapSnapshots];
-    if (snapshotsToExport.length === 0 && analysisResult) {
+  const autoCaptureSnapshots = async () => {
+    let currentSnapshots = [...mapSnapshots];
+    let changed = false;
+
+    // Capturar Gráficas
+    if (!currentSnapshots.some(s => s.title === "GRÁFICAS ESTADÍSTICAS") && analysisResult?.historicalCrimes && analysisResult.historicalCrimes.length > 0) {
+      const chartsEl = document.getElementById("charts-export-container");
+      if (chartsEl) {
+        try {
+          const canvas = await html2canvas(chartsEl, { useCORS: true, scale: 1.5, backgroundColor: "#0f172a" });
+          currentSnapshots.unshift({ title: "GRÁFICAS ESTADÍSTICAS", dataUrl: canvas.toDataURL("image/png") });
+          changed = true;
+        } catch(e) {}
+      }
+    }
+
+    // Capturar Mapa
+    if (!currentSnapshots.some(s => s.title.includes("MAPA")) && analysisResult) {
       const mapEl = document.getElementById("map-export-container");
       if (mapEl) {
         try {
           const buttons = mapEl.querySelector('.bg-slate-100.border-b');
           if (buttons) (buttons as HTMLElement).style.display = 'none';
-
-          const canvas = await html2canvas(mapEl, {
-            useCORS: true,
-            scale: 1.5,
-          });
-
+          const canvas = await html2canvas(mapEl, { useCORS: true, scale: 1.5 });
           if (buttons) (buttons as HTMLElement).style.display = 'flex';
-
-          snapshotsToExport.push({
-            title: "MAPA DEL ANÁLISIS",
-            dataUrl: canvas.toDataURL("image/png")
-          });
-        } catch (e) {
-          console.warn("[PhotoAlbum] No se pudo capturar el mapa para Word:", e);
-        }
+          currentSnapshots.push({ title: "MAPA DEL ANÁLISIS", dataUrl: canvas.toDataURL("image/png") });
+          changed = true;
+        } catch(e) {}
       }
     }
+
+    if (changed) {
+      setMapSnapshots(currentSnapshots);
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return currentSnapshots;
+  };
+
+  const handleExportToWord = async () => {
+    const rawContent = editableProfile || aiProfile;
+    if (!rawContent) return;
+    setError(null);
+    
+    const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
+    const snapshotsToExport = await autoCaptureSnapshots();
 
     const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
     const photoUrls: string[] = [];
@@ -562,26 +578,12 @@ const hasMinimumPhotos =
   };
 
   const handleExportToPDF = async () => {
+    await autoCaptureSnapshots();
+
     const element = document.getElementById("official-pdf-content");
     if (!element) {
       setError("No se pudo encontrar el contenedor del PDF.");
       return;
-    }
-
-    let currentSnapshots = [...mapSnapshots];
-    if (currentSnapshots.length === 0 && analysisResult) {
-      const mapEl = document.getElementById("map-export-container");
-      if (mapEl) {
-        try {
-          const buttons = mapEl.querySelector('.bg-slate-100.border-b');
-          if (buttons) (buttons as HTMLElement).style.display = 'none';
-          const canvas = await html2canvas(mapEl, { useCORS: true, scale: 1.5 });
-          if (buttons) (buttons as HTMLElement).style.display = 'flex';
-          currentSnapshots.push({ title: "MAPA DEL ANÁLISIS", dataUrl: canvas.toDataURL("image/png") });
-          setMapSnapshots(currentSnapshots);
-          await new Promise(r => setTimeout(r, 500)); // Esperar a que el DOM se actualice con la imagen antes de imprimir
-        } catch(e) {}
-      }
     }
 
     try {
@@ -1110,7 +1112,9 @@ const hasMinimumPhotos =
               {!splitLayout && (
                 <>
                   {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-                    <CrimeCharts crimes={analysisResult.historicalCrimes} inegi={analysisResult.inegiDemographics} />
+                    <div id="charts-export-container" className="w-full bg-[#0f172a] rounded-xl p-4 mb-3 border border-slate-700">
+                      <CrimeCharts crimes={analysisResult.historicalCrimes} inegi={analysisResult.inegiDemographics} />
+                    </div>
                   )}
                   <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
                     <div className="bg-slate-100 border-b border-slate-300 p-2 flex flex-wrap gap-2 print:hidden justify-center shadow-sm">
@@ -1580,28 +1584,47 @@ const hasMinimumPhotos =
             </div>
           )}
 
-          {mapSnapshots.length > 0 && (
-             <div className="mb-6 break-inside-avoid">
-               <h3 className="text-sm font-bold text-slate-500 uppercase mb-2">MAPA TÁCTICO DE CONTEXTO</h3>
-               <img src={mapSnapshots[0].dataUrl} alt="Mapa Principal" className="w-full h-auto max-h-[350px] object-contain border border-slate-300 rounded-lg shadow-sm" />
-               <p className="text-[10px] text-slate-500 mt-1 italic">
-                 {project?.geometryType === 'lineal' ? 'Análisis de Corredor (Ruta y Trayecto)' : project?.geometryType === 'poligono' ? 'Análisis de Polígono (Perímetro e Interior)' : 'Análisis Nodal (Punto focal)'}
-               </p>
-             </div>
-          )}
+          {(() => {
+            const firstMapIndex = mapSnapshots.findIndex(s => s.title.includes("MAPA"));
+            if (firstMapIndex === -1 && mapSnapshots.length > 0) return null;
+            const mainMap = mapSnapshots[firstMapIndex !== -1 ? firstMapIndex : 0];
+            return mainMap && (
+              <div className="mb-6 break-inside-avoid">
+                <h3 className="text-sm font-bold text-slate-500 uppercase mb-2">MAPA TÁCTICO DE CONTEXTO</h3>
+                <img src={mainMap.dataUrl} alt="Mapa Principal" className="w-full h-auto max-h-[350px] object-contain border border-slate-300 rounded-lg shadow-sm" />
+                <p className="text-[10px] text-slate-500 mt-1 italic">
+                  {project?.geometryType === 'lineal' ? 'Análisis de Corredor (Ruta y Trayecto)' : project?.geometryType === 'poligono' ? 'Análisis de Polígono (Perímetro e Interior)' : 'Análisis Nodal (Punto focal)'}
+                </p>
+              </div>
+            );
+          })()}
 
           <div className="mb-8">
             <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
-            <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">{editableProfile || aiProfile}</div>
+            <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">
+              {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
+            </div>
           </div>
 
-          {mapSnapshots.length > 1 && <div className="html2pdf__page-break"></div>}
-          {mapSnapshots.slice(1).map((snap, idx) => (
-            <div key={idx} className="mb-8 break-inside-avoid">
-              <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">ATLAS CARTOGRÁFICO: {snap.title.toUpperCase()}</h3>
-              <img src={snap.dataUrl} alt={snap.title} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
-            </div>
-          ))}
+          {(() => {
+            const firstMapIndex = mapSnapshots.findIndex(s => s.title.includes("MAPA"));
+            const idxToExclude = firstMapIndex !== -1 ? firstMapIndex : -1;
+            const remaining = mapSnapshots.filter((_, i) => i !== idxToExclude);
+            
+            if (remaining.length === 0) return null;
+            
+            return (
+              <>
+                <div className="html2pdf__page-break"></div>
+                {remaining.map((snap, idx) => (
+                  <div key={idx} className="mb-8 break-inside-avoid">
+                    <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">ANEXO ESTADÍSTICO Y CARTOGRÁFICO: {snap.title.toUpperCase()}</h3>
+                    <img src={snap.dataUrl} alt={snap.title} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
+                  </div>
+                ))}
+              </>
+            );
+          })()}
 
           {(() => {
             const selectedPhotos = album.filter(p => selectedIds.includes(p.id));
