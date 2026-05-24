@@ -133,11 +133,6 @@ export function PhotoAlbum({
   onSaveAnalysisToCloud,
   splitLayout = false,
 }: PhotoAlbumProps = {}) {
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!splitLayout || typeof document === "undefined") return;
-    setPortalTarget(document.getElementById(C4_RIGHT_COLUMN_ID));
-  }, [splitLayout]);
   const {
     project,
     album,
@@ -614,31 +609,6 @@ const hasMinimumPhotos =
     );
   }
 
-  const rightColumnContent = analysisResult && (
-    <div className="space-y-4 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4">
-      <h4 className="text-base font-bold text-sky-200 font-mono tracking-tight">Mapa y gráficas</h4>
-      {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-        <CrimeCharts crimes={analysisResult.historicalCrimes} />
-      )}
-      <div id="map-export-container" className="rounded-xl border border-slate-700 bg-white text-black overflow-hidden">
-        <div className="relative p-0">
-          <AnalysisMap
-            album={album.filter((p) => selectedIds.includes(p.id))}
-            analysisResult={analysisResult}
-            analysisRadius={analysisRadius}
-          />
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={handleDownloadMap}
-        className="w-full inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
-      >
-        Descargar Mapa Oficial
-      </button>
-    </div>
-  );
-
   return (
     <>
       <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-4">
@@ -1104,92 +1074,6 @@ const hasMinimumPhotos =
 
       {(analysisResult || aiProfile) && (
         <div className="flex flex-col space-y-6 w-full">
-          {analysisResult && (
-            <div className="flex flex-col space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4 w-full">
-              <h4 className="text-lg font-bold text-sky-200 tracking-tight">
-                Análisis Espacial y Estadístico
-              </h4>
-              {!splitLayout && (
-                <>
-                  {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-                    <div id="charts-export-container" className="w-full bg-[#0f172a] rounded-xl p-4 mb-3 border border-slate-700">
-                      <CrimeCharts crimes={analysisResult.historicalCrimes} inegi={analysisResult.inegiDemographics} />
-                    </div>
-                  )}
-                  <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
-                    <div className="bg-slate-100 border-b border-slate-300 p-2 flex flex-wrap gap-2 print:hidden justify-center shadow-sm">
-                      <button 
-                        onClick={() => setMapViewMode("HEATMAP")}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'HEATMAP' ? 'bg-red-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                      >
-                        🔥 Zonas Calientes
-                      </button>
-                      <button 
-                        onClick={() => setMapViewMode("ECOLOGY")}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ECOLOGY' ? 'bg-sky-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                      >
-                        🏪 Atractores (DENUE)
-                      </button>
-                      <button 
-                        onClick={() => setMapViewMode("MOBILITY")}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'MOBILITY' ? 'bg-emerald-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                      >
-                        🛣️ Topografía y Rutas
-                      </button>
-                      <button 
-                        onClick={() => setMapViewMode("ALL")}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ALL' ? 'bg-indigo-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                      >
-                        🗺️ Atlas Completo
-                      </button>
-                    </div>
-                    <div className="relative p-0 w-full">
-                      <AnalysisMap
-                        album={album.filter((p) => selectedIds.includes(p.id))}
-                        analysisResult={analysisResult}
-                        analysisRadius={analysisRadius}
-                        analysisPolygon={analysisPolygon}
-                        setAnalysisPolygon={setAnalysisPolygon}
-                        manualPois={manualPois}
-                        setManualPois={setManualPois}
-                        isPreliminary={false}
-                        viewMode={mapViewMode}
-                        geometryType={project?.geometryType}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-3 print:hidden">
-                    <button
-                      type="button"
-                      onClick={handleAttachMapSnapshot}
-                      className="inline-flex items-center justify-center rounded-md bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 transition-colors"
-                    >
-                      📸 Añadir vista actual al informe
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadMap}
-                      className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
-                    >
-                      Descargar Imagen Suelta
-                    </button>
-                  </div>
-                  {mapSnapshots.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700">
-                      <div className="w-full text-xs font-semibold text-slate-300 mb-1">Mapas adjuntos al reporte Word:</div>
-                      {mapSnapshots.map((snap, idx) => (
-                        <div key={idx} className="relative group rounded border border-sky-500 overflow-hidden w-28 h-20 bg-black">
-                          <img src={snap.dataUrl} alt={snap.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                          <button onClick={() => setMapSnapshots(prev => prev.filter((_, i) => i !== idx))} className="absolute top-0 right-0 bg-red-600 text-white text-[10px] px-1.5 py-0.5 hover:bg-red-500 rounded-bl" title="Quitar mapa del reporte">×</button>
-                          <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center truncate px-1 py-0.5">{snap.title.replace("Mapa de ", "")}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
 
           {aiProfile && (
             <div className="flex flex-col space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4 w-full">
@@ -1256,6 +1140,14 @@ const hasMinimumPhotos =
                   className="w-full min-h-[500px] md:min-h-[750px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
                 />
               </div>
+            </div>
+          )}
+
+          {analysisResult && (
+            <div className="flex flex-col space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4 w-full">
+              <h4 className="text-lg font-bold text-sky-200 tracking-tight">
+                Análisis Espacial y Estadístico
+              </h4>
               <div className="flex flex-wrap gap-2 pt-1 print:hidden">
                 {!isReadOnly && projectId && (
                   <button
@@ -1286,6 +1178,82 @@ const hasMinimumPhotos =
                   Descargar PDF
                 </button>
               </div>
+
+              {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
+                <div id="charts-export-container" className="w-full bg-[#0f172a] rounded-xl p-4 mb-3 border border-slate-700">
+                  <CrimeCharts crimes={analysisResult.historicalCrimes} inegi={analysisResult.inegiDemographics} />
+                </div>
+              )}
+              <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
+                <div className="bg-slate-100 border-b border-slate-300 p-2 flex flex-wrap gap-2 print:hidden justify-center shadow-sm">
+                  <button 
+                    onClick={() => setMapViewMode("HEATMAP")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'HEATMAP' ? 'bg-red-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                  >
+                    🔥 Zonas Calientes
+                  </button>
+                  <button 
+                    onClick={() => setMapViewMode("ECOLOGY")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ECOLOGY' ? 'bg-sky-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                  >
+                    🏪 Atractores (DENUE)
+                  </button>
+                  <button 
+                    onClick={() => setMapViewMode("MOBILITY")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'MOBILITY' ? 'bg-emerald-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                  >
+                    🛣️ Topografía y Rutas
+                  </button>
+                  <button 
+                    onClick={() => setMapViewMode("ALL")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ALL' ? 'bg-indigo-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                  >
+                    🗺️ Atlas Completo
+                  </button>
+                </div>
+                <div className="relative p-0 w-full">
+                  <AnalysisMap
+                    album={album.filter((p) => selectedIds.includes(p.id))}
+                    analysisResult={analysisResult}
+                    analysisRadius={analysisRadius}
+                    analysisPolygon={analysisPolygon}
+                    setAnalysisPolygon={setAnalysisPolygon}
+                    manualPois={manualPois}
+                    setManualPois={setManualPois}
+                    isPreliminary={false}
+                    viewMode={mapViewMode}
+                    geometryType={project?.geometryType}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-3 print:hidden">
+                <button
+                  type="button"
+                  onClick={handleAttachMapSnapshot}
+                  className="inline-flex items-center justify-center rounded-md bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 transition-colors"
+                >
+                  📸 Añadir vista actual al informe
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadMap}
+                  className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
+                >
+                  Descargar Imagen Suelta
+                </button>
+              </div>
+              {mapSnapshots.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700">
+                  <div className="w-full text-xs font-semibold text-slate-300 mb-1">Mapas adjuntos al reporte Word:</div>
+                  {mapSnapshots.map((snap, idx) => (
+                    <div key={idx} className="relative group rounded border border-sky-500 overflow-hidden w-28 h-20 bg-black">
+                      <img src={snap.dataUrl} alt={snap.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                      <button onClick={() => setMapSnapshots(prev => prev.filter((_, i) => i !== idx))} className="absolute top-0 right-0 bg-red-600 text-white text-[10px] px-1.5 py-0.5 hover:bg-red-500 rounded-bl" title="Quitar mapa del reporte">×</button>
+                      <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center truncate px-1 py-0.5">{snap.title.replace("Mapa de ", "")}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1546,7 +1514,6 @@ const hasMinimumPhotos =
         </div>
       )}
     </section>
-      {portalTarget && rightColumnContent && createPortal(rightColumnContent, portalTarget)}
       {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
       <div className="absolute left-[-9999px] top-[-9999px]">
         <div id="official-pdf-content" className="w-[794px] bg-white text-black p-10 font-sans">

@@ -78,7 +78,7 @@ export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
         <h4 className="text-xs font-bold text-sky-400 text-center mb-2 tracking-widest">
           CRONOCRIMINOGRAMA (Horarios Críticos)
         </h4>
-        <div className="flex-1 min-h-0">
+        <div className="w-full h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="70%" data={byTime}>
               <PolarGrid stroke="#334155" />
@@ -95,7 +95,7 @@ export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
         <h4 className="text-xs font-bold text-sky-400 text-center mb-2 tracking-widest">
           TIPOLOGÍA DELICTIVA (Top 7 Delitos)
         </h4>
-        <div className="flex-1 min-h-0">
+        <div className="w-full h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byType} layout="vertical" margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={true} vertical={false} />
@@ -121,7 +121,7 @@ export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
         <h4 className="text-xs font-bold text-sky-400 text-center mb-4 mt-2 tracking-widest">
           CORRELACIÓN FRECUENCIA VS GRAVEDAD
         </h4>
-        <div className="flex-1 min-h-[220px]">
+        <div className="w-full h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={correlationData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
