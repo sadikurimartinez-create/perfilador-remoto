@@ -42,6 +42,17 @@ function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolea
   );
 }
 
+const getMarkerColor = (tipo?: string) => {
+  switch (tipo) {
+    case "Nodo Inicial": return "#10b981"; // Verde
+    case "Nodo Final": return "#ef4444"; // Rojo
+    case "Corredor": return "#3b82f6"; // Azul
+    case "Perímetro": return "#8b5cf6"; // Morado
+    case "Interior": return "#f97316"; // Naranja
+    default: return "#dc2626"; // Rojo por defecto
+  }
+};
+
 export function AnalysisMap({
   album,
   analysisResult,
@@ -180,7 +191,13 @@ export function AnalysisMap({
   };
 
   return (
-    <div className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50">
+    <div className="relative rounded-xl border-2 border-slate-700 shadow-xl overflow-hidden bg-slate-900/50">
+      {/* Sello de agua oficial */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
+        <span className="text-white/30 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+          SSPA-CEIPOL
+        </span>
+      </div>
       {isPreliminary && (
         <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 shadow-lg">
           <span className="font-semibold tracking-tight text-emerald-300">
@@ -262,10 +279,10 @@ export function AnalysisMap({
             radius={analysisRadius}
             options={{
               strokeColor: "#ef4444",
-              strokeOpacity: 0.9,
-              strokeWeight: 2,
+              strokeOpacity: 0.8,
+              strokeWeight: 3,
               fillColor: "#ef4444",
-              fillOpacity: 0.1,
+              fillOpacity: 0.15,
             }}
           />
         )}
@@ -275,8 +292,8 @@ export function AnalysisMap({
             path={photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }))}
             options={{
               strokeColor: "#3b82f6",
-              strokeOpacity: 0.8,
-              strokeWeight: 4,
+              strokeOpacity: 0.9,
+              strokeWeight: 6,
             }}
           />
         )}
@@ -290,30 +307,33 @@ export function AnalysisMap({
             }
             options={{
               strokeColor: "#8b5cf6",
-              strokeOpacity: 0.8,
-              strokeWeight: 3,
+              strokeOpacity: 0.9,
+              strokeWeight: 4,
               fillColor: "#8b5cf6",
-              fillOpacity: 0.35,
+              fillOpacity: 0.4,
             }}
           />
         )}
 
-        {/* Pines rojos: una foto seleccionada = un pin destacado (evidencia fotográfica) */}
-        {photosWithCoords.map((p) => (
-          <Marker
-            key={p.id}
-            position={{ lat: p.lat, lng: p.lng }}
-            title={`${p.tipo} - ${p.comentario ?? ""}`}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: "#dc2626",
-              fillOpacity: 1,
-              strokeColor: "#fef2f2",
-              strokeWeight: 2,
-            }}
-          />
-        ))}
+        {/* Pines tácticos: se basan en el tipo de evidencia seleccionada */}
+        {photosWithCoords.map((p) => {
+          const pinColor = getMarkerColor(p.tipo);
+          return (
+            <Marker
+              key={p.id}
+              position={{ lat: p.lat, lng: p.lng }}
+              title={`${p.tipo} - ${p.comentario ?? ""}`}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: pinColor,
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+              }}
+            />
+          );
+        })}
 
         {photosWithCoords.length > 0 && (
           <Marker
@@ -427,15 +447,28 @@ export function AnalysisMap({
         )}
       </GoogleMap>
 
-      <div className="p-3 border-t border-slate-700 space-y-2">
+      <div className="p-3 border-t border-slate-700 bg-slate-900/90 space-y-2">
         <div className="flex flex-col gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-3 w-3 rounded-full bg-red-500" />
-            <span className="text-slate-400">
-              <span className="font-semibold text-slate-200">Evidencia:</span>{" "}
-              Ubicación de las fotografías tomadas.
-            </span>
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-slate-200">Simbología Táctica de Evidencia:</span>
+            <div className="flex flex-wrap items-center gap-3">
+              {geometryType === "lineal" ? (
+                <>
+                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#10b981] border border-white" /> Nodo Inicial</span>
+                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#3b82f6] border border-white" /> Corredor</span>
+                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#ef4444] border border-white" /> Nodo Final</span>
+                </>
+              ) : geometryType === "poligono" ? (
+                <>
+                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#8b5cf6] border border-white" /> Perímetro</span>
+                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#f97316] border border-white" /> Interior</span>
+                </>
+              ) : (
+                <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#dc2626] border border-white" /> Nodo Principal</span>
+              )}
+            </div>
           </div>
+          <div className="h-px w-full bg-slate-700 my-1" />
           <div className="flex items-center gap-2">
             <span className="inline-flex h-3 w-3 rounded-full bg-sky-400" />
             <span className="text-slate-400">
@@ -444,17 +477,17 @@ export function AnalysisMap({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-3 w-3 rounded-full bg-red-900" />
+            <span className="text-[10px]">❌</span>
             <span className="text-slate-400">
               <span className="font-semibold text-slate-200">Incidencia:</span>{" "}
-              Delitos históricos (puntos y heatmap de concentración).
+              Delitos históricos (Puntos individuales).
             </span>
           </div>
         </div>
         {heatmapCrimeData.length > 0 && (
-          <p className="text-xs text-slate-500 flex items-center gap-2">
+          <p className="text-[11px] text-slate-500 flex items-center gap-2 mt-1">
             <span className="font-medium text-slate-400">Heatmap:</span>
-            Verde (baja) → Amarillo → Naranja → Rojo (alta concentración de incidencia).
+            Verde (baja) → Amarillo → Rojo (alta concentración).
           </p>
         )}
       </div>

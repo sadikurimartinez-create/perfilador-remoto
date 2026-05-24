@@ -37,7 +37,7 @@ type ProjectMapProps = {
   geometryType: "individual" | "lineal" | "poligono";
   coordinates: { lat: number; lng: number }[];
   onUpdateCoordinates?: (coords: { lat: number; lng: number }[]) => void;
-  album?: { id: string; lat: number | null; lng: number | null }[];
+  album?: { id: string; lat: number | null; lng: number | null; tipo?: string }[];
   project?: any;
   projects?: any[];
 };
@@ -49,6 +49,17 @@ const containerStyle = {
 };
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
+
+const getMarkerColor = (tipo?: string) => {
+  switch (tipo) {
+    case "Nodo Inicial": return "#10b981"; // Verde Esmeralda
+    case "Nodo Final": return "#ef4444"; // Rojo
+    case "Corredor": return "#3b82f6"; // Azul
+    case "Perímetro": return "#8b5cf6"; // Morado
+    case "Interior": return "#f97316"; // Naranja
+    default: return "#dc2626"; // Rojo estándar
+  }
+};
 
 export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, album, project, projects = [] }: ProjectMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -249,7 +260,13 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         </div>
       )}
 
-      <div id="project-map-capture" className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50 map-container">
+      <div id="project-map-capture" className="relative rounded-xl border-2 border-slate-700 shadow-xl overflow-hidden bg-slate-900/50 map-container">
+        {/* Sello de agua oficial */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
+          <span className="text-white/30 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+            SSPA-CEIPOL
+          </span>
+        </div>
         <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
@@ -264,12 +281,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       >
         {coordinates.map((c, idx) => {
           const photo = album?.[idx];
-          const analysis = photo && project?.iaAnalysis ? project.iaAnalysis.find((a: any) => a.photoId === photo.id) : null;
-          
-          let pinColor = 'blue'; // default
-          if (analysis?.riskLevel === 'high' || analysis?.riskLevel === 'alto') pinColor = 'red';
-          else if (analysis?.riskLevel === 'medium' || analysis?.riskLevel === 'medio') pinColor = 'orange';
-          else if (analysis?.riskLevel === 'low' || analysis?.riskLevel === 'bajo') pinColor = 'green';
+          const pinColor = getMarkerColor(photo?.tipo);
 
           return (
             <Marker
@@ -277,10 +289,14 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               position={c}
               draggable
               onDragEnd={(e) => handleMarkerDrag(idx, e.latLng!.lat(), e.latLng!.lng())}
-              icon={project?.iaAnalysis && pinColor ? {
-                url: `/pins/${pinColor}-pin.png`,
-                scaledSize: new (window as any).google.maps.Size(30, 30),
-              } : undefined}
+              icon={{
+                path: (window as any).google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: pinColor,
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+              }}
             />
           );
         })}
@@ -290,8 +306,8 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             path={coordinates}
             options={{
               strokeColor: "#3b82f6",
-              strokeOpacity: 0.8,
-              strokeWeight: 4,
+              strokeOpacity: 0.9,
+              strokeWeight: 6,
             }}
           />
         )}
@@ -302,9 +318,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             options={{
               strokeColor: "#8b5cf6",
               strokeOpacity: 0.8,
-              strokeWeight: 3,
+              strokeWeight: 4,
               fillColor: "#8b5cf6",
-              fillOpacity: 0.35,
+              fillOpacity: 0.4,
             }}
           />
         )}
