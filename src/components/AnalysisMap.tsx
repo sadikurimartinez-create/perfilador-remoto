@@ -428,7 +428,7 @@ export function AnalysisMap({
       </GoogleMap>
 
       <div className="p-3 border-t border-slate-700 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+        <div className="flex flex-col gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-3 w-3 rounded-full bg-red-500" />
             <span className="text-slate-400">

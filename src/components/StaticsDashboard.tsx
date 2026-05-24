@@ -68,7 +68,7 @@ const StatisticsDashboard: React.FC<Props> = ({
         Dashboard Criminológico
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="flex flex-col gap-4 mb-6">
 
         <div className="bg-slate-800 rounded p-4">
           <p className="text-xs text-slate-400">
@@ -102,7 +102,7 @@ const StatisticsDashboard: React.FC<Props> = ({
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="flex flex-col gap-6">
 
         <div className="bg-slate-800 rounded p-4 h-80">
 

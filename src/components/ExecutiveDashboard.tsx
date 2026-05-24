@@ -61,7 +61,7 @@ const ExecutiveDashboard: React.FC<Props> = ({
         Consola Ejecutiva CEIPOL
       </h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="flex flex-col gap-4 mb-6">
 
         <div className="bg-slate-800 rounded-lg p-4">
 
@@ -113,7 +113,7 @@ const ExecutiveDashboard: React.FC<Props> = ({
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="flex flex-col gap-6">
 
         <div className="bg-slate-800 rounded-lg p-4 h-96">
 

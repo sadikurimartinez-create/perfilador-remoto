@@ -44,7 +44,8 @@ type ProjectMapProps = {
 
 const containerStyle = {
   width: "100%",
-  height: "320px",
+  height: "60vh",
+  minHeight: "500px",
 };
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];

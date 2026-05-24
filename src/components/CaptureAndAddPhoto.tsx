@@ -284,18 +284,18 @@ export function CaptureAndAddPhoto() {
           <p className="text-xs text-slate-400">
             La imagen "{pendingPhoto.name}" no tiene GPS. Ingrese la latitud y longitud.
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-3">
             <input type="number" placeholder="Latitud (ej. 21.8853)" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
             <input type="number" placeholder="Longitud (ej. -102.2916)" value={manualCoords.lng} onChange={(e) => setManualCoords({ ...manualCoords, lng: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-3 mt-2">
             <button onClick={handleManualSubmit} className="flex-1 bg-sky-600 text-white py-2 rounded text-sm font-semibold">Guardar y Subir</button>
             <button onClick={() => { setPendingPhoto(null); setError(null); }} className="flex-1 bg-slate-700 text-white py-2 rounded text-sm font-semibold">Cancelar</button>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-2">
+      <div className="flex flex-col gap-4">
         <button
           type="button"
           disabled={!isProjectReady}

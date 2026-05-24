@@ -73,8 +73,8 @@ export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
   if (!crimes || crimes.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 w-full h-auto xl:h-[350px]">
-      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner">
+    <div className="flex flex-col gap-6 w-full">
+      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner min-h-[350px]">
         <h4 className="text-xs font-bold text-sky-400 text-center mb-2 tracking-widest">
           CRONOCRIMINOGRAMA (Horarios Críticos)
         </h4>
@@ -91,7 +91,7 @@ export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
         </div>
       </div>
 
-      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner">
+      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner min-h-[350px]">
         <h4 className="text-xs font-bold text-sky-400 text-center mb-2 tracking-widest">
           TIPOLOGÍA DELICTIVA (Top 7 Delitos)
         </h4>
@@ -112,7 +112,7 @@ export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
         </div>
       </div>
 
-      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner relative overflow-hidden">
+      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner relative overflow-hidden min-h-[400px]">
         {inegi && inegi.exito && (
           <div className="absolute top-0 right-0 bg-emerald-900/80 text-emerald-200 text-[9px] px-2 py-1 rounded-bl-lg font-mono border-b border-l border-emerald-700/50 z-10">
             INEGI: {inegi.municipioNombre.toUpperCase()} ({inegi.poblacionTotal} HAB)

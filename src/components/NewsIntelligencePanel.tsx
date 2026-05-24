@@ -27,7 +27,7 @@ React.FC<Props> = ({
         News Intelligence
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      <div className="flex flex-col gap-4 mb-4">
 
         <div className="bg-slate-800 rounded p-4">
 

@@ -131,7 +131,7 @@ const OSINTPanel: React.FC<Props> = ({
             }
           />
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-4">
 
             <div className="bg-slate-800 rounded p-3">
               <p className="text-xs text-slate-400">

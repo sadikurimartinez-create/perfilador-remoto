@@ -95,6 +95,18 @@ async function burnGpsOnImage(srcUrl: string, lat: number | null, lng: number | 
       const gpsText = (lat != null && lng != null) ? `LAT: ${lat.toFixed(5)} | LNG: ${lng.toFixed(5)} | ${tipo.toUpperCase()}` : `⚠️ GPS NO DISPONIBLE | ${tipo.toUpperCase()}`;
       ctx.fillText(gpsText, canvas.width / 2, canvas.height - (barHeight / 2));
       
+      // Sello de agua SSPA-CEIPOL
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+      const watermarkSize = Math.max(30, canvas.width * 0.1);
+      ctx.font = `bold ${watermarkSize}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SSPA-CEIPOL", 0, 0);
+      ctx.restore();
+      
       resolve(canvas.toDataURL("image/jpeg", 0.9));
     };
     img.onerror = () => resolve(srcUrl);
@@ -688,7 +700,7 @@ const hasMinimumPhotos =
             {project?.geometryType !== "individual" && (
               <h4 className="text-sm font-semibold text-sky-300 mb-2 border-b border-slate-700 pb-1">{group.title}</h4>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div className="flex flex-col gap-6">
               {group.photos.map((p) => (
           <div
             key={p.id}
@@ -697,7 +709,7 @@ const hasMinimumPhotos =
             }`}
           >
             <div className="flex flex-col">
-              <div className="flex items-start gap-1 p-1">
+              <div className="flex flex-col items-start gap-4 p-4 w-full">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(p.id)}
@@ -728,14 +740,20 @@ const hasMinimumPhotos =
                   }}
                     className="mt-1 rounded border-slate-600 hidden md:block"
                 />
-                <div className="flex-1 min-w-0 relative">
-                  <div className="aspect-square relative rounded overflow-hidden bg-black">
+                <div className="flex-1 w-full min-w-0 relative">
+                  <div className="w-full relative rounded overflow-hidden bg-black">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={p.previewUrl}
                       alt=""
-                      className="absolute inset-0 w-full h-full object-cover"
+                      className="w-full h-auto max-h-[600px] object-contain"
                     />
+                    {/* Sello de agua visual en UI */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                      <span className="text-white/30 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                        SSPA-CEIPOL
+                      </span>
+                    </div>
                     {/* Overlay con GPS quemado visualmente en los casilleros de la UI */}
                     <div className="absolute bottom-0 inset-x-0 bg-black/70 py-0.5 px-1 text-center">
                       <p className="text-[8px] font-mono text-amber-400 font-semibold truncate">
@@ -1617,11 +1635,17 @@ const hasMinimumPhotos =
                 {groups.map((group, gIdx) => (
                   <div key={gIdx} className="mb-6 break-inside-avoid">
                     <h4 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide border-l-4 border-slate-500 pl-2">{group.title}</h4>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-6">
                       {group.photos.map(p => (
                         <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
                           <div className="relative w-full h-40 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
                             <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
+                            {/* Sello de agua en PDF */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                              <span className="text-white/30 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                                SSPA-CEIPOL
+                              </span>
+                            </div>
                             {/* Render visual del GPS para el PDF final */}
                             <div className="absolute bottom-0 inset-x-0 bg-black/60 py-1 flex items-center justify-center">
                               <p className="text-[9px] font-mono text-amber-400 font-bold m-0 leading-none">

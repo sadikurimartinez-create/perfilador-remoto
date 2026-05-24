@@ -349,7 +349,7 @@ export function ProjectList() {
               </button>
             </div>
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="flex flex-col gap-4">
               {list.map((p) => {
                 const analysesForProject = allAnalyses.filter(
                   (a) => a.projectId === p.id
@@ -583,7 +583,7 @@ export function ProjectList() {
               ✕
             </button>
 
-            <div className="grid lg:grid-cols-2 gap-6">
+            <div className="flex flex-col gap-6">
               <div className="min-w-0">
                 <h3 className="text-xl font-bold text-gray-200 mb-4">
                   {selectedPreview.title}
@@ -599,12 +599,12 @@ export function ProjectList() {
                 </h3>
                 {Array.isArray(selectedPreview.photos) &&
                   selectedPreview.photos.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <div className="flex flex-col gap-6">
                     {selectedPreview.photos.map(
                       (src: string, idx: number) => (
                         <div
                           key={`${src}-${idx}`}
-                          className="aspect-video rounded-lg overflow-hidden border border-gray-700 shadow-md bg-black"
+                          className="aspect-video rounded-lg overflow-hidden border border-gray-700 shadow-md bg-black relative"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -612,6 +612,11 @@ export function ProjectList() {
                             alt={`Evidencia ${idx + 1}`}
                             className="object-cover w-full h-full"
                           />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                            <span className="text-white/30 font-bold text-3xl sm:text-5xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                              SSPA-CEIPOL
+                            </span>
+                          </div>
                         </div>
                       )
                     )}

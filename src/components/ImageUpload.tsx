@@ -133,22 +133,27 @@ export function ImageUpload() {
       )}
 
       {previewUrl && (
-        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr),minmax(0,3fr)] items-start">
-          <div className="space-y-2">
+        <div className="flex flex-col gap-4 items-start w-full">
+          <div className="space-y-2 w-full">
             <p className="text-xs text-slate-400 uppercase tracking-wide">
               Vista previa de la evidencia
             </p>
-            <div className="overflow-hidden rounded-lg border border-slate-800 bg-black">
+            <div className="overflow-hidden rounded-lg border border-slate-800 bg-black relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewUrl}
                 alt="Vista previa de la evidencia"
-                className="h-64 w-full object-contain bg-black"
+                className="h-auto max-h-[500px] w-full object-contain bg-black"
               />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                <span className="text-white/30 font-bold text-3xl md:text-5xl -rotate-45 select-none tracking-widest drop-shadow-md">
+                  SSPA-CEIPOL
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 w-full">
             <p className="text-xs text-slate-400 uppercase tracking-wide">
               Coordenadas extraídas
             </p>
@@ -183,4 +188,3 @@ export function ImageUpload() {
     </section>
   );
 }
-
