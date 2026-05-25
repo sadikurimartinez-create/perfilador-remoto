@@ -39,6 +39,10 @@ export const buildNarrativeFusion = (
     (
       osintResults?.x
         ?.length || 0
+    ) +
+    (
+      osintResults?.telegram
+        ?.length || 0
     );
 
   const urbanSignals =
@@ -216,6 +220,17 @@ export const buildNarrativeFusion = (
 
     sources.push(
       'OpenStreetMap Overpass'
+    );
+
+  }
+
+  if (
+    osintResults?.telegram
+      ?.length
+  ) {
+
+    sources.push(
+      'Telegram'
     );
 
   }

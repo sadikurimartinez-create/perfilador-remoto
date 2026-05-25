@@ -80,22 +80,7 @@ async function burnGpsOnImage(srcUrl: string, lat: number | null, lng: number | 
 
       ctx.drawImage(img, 0, 0);
 
-      // Dibujar barra semi-transparente en la parte inferior
-      const barHeight = Math.max(30, canvas.height * 0.08);
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
-
-      // Dibujar texto GPS en color ámbar
-      ctx.fillStyle = "#fbbf24";
-      const fontSize = Math.max(14, canvas.height * 0.035);
-      ctx.font = `bold ${fontSize}px monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      
-      const gpsText = (lat != null && lng != null) ? `LAT: ${lat.toFixed(5)} | LNG: ${lng.toFixed(5)} | ${tipo.toUpperCase()}` : `⚠️ GPS NO DISPONIBLE | ${tipo.toUpperCase()}`;
-      ctx.fillText(gpsText, canvas.width / 2, canvas.height - (barHeight / 2));
-      
-      // Sello de agua SSPA-CEIPOL
+      // Sello de agua Institucional
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate(-Math.PI / 4);
@@ -104,7 +89,7 @@ async function burnGpsOnImage(srcUrl: string, lat: number | null, lng: number | 
       ctx.font = `bold ${watermarkSize}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("SSPA-CEIPOL", 0, 0);
+      ctx.fillText("SSPE-CEIPOL", 0, 0);
       ctx.restore();
       
       resolve(canvas.toDataURL("image/jpeg", 0.9));
@@ -722,17 +707,9 @@ const hasMinimumPhotos =
                     />
                     {/* Sello de agua visual en UI */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
-                      <span className="text-white/30 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
-                        SSPA-CEIPOL
+                      <span className="text-white/40 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+                        SSPE-CEIPOL
                       </span>
-                    </div>
-                    {/* Overlay con GPS quemado visualmente en los casilleros de la UI */}
-                    <div className="absolute bottom-0 inset-x-0 bg-black/70 py-0.5 px-1 text-center">
-                      <p className="text-[8px] font-mono text-amber-400 font-semibold truncate">
-                        {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
-                          ? `GPS: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`
-                          : "⚠️ SIN GPS"}
-                      </p>
                     </div>
                   </div>
                   {!isReadOnly && (
@@ -1632,15 +1609,9 @@ const hasMinimumPhotos =
                             <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
                             {/* Sello de agua en PDF */}
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
-                              <span className="text-white/30 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">
-                                SSPA-CEIPOL
+                              <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+                                SSPE-CEIPOL
                               </span>
-                            </div>
-                            {/* Render visual del GPS para el PDF final */}
-                            <div className="absolute bottom-0 inset-x-0 bg-black/60 py-1 flex items-center justify-center">
-                              <p className="text-[9px] font-mono text-amber-400 font-bold m-0 leading-none">
-                                {p.lat != null && p.lng != null ? `LAT: ${p.lat.toFixed(5)} | LNG: ${p.lng.toFixed(5)}` : "⚠️ SIN GPS"}
-                              </p>
                             </div>
                           </div>
                           <p className="text-[10px] text-slate-600 mb-1 leading-tight">{p.comentario || "Sin comentario."}</p>

@@ -194,8 +194,8 @@ export function AnalysisMap({
     <div className="relative rounded-xl border-2 border-slate-700 shadow-xl overflow-hidden bg-slate-900/50">
       {/* Sello de agua oficial */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
-        <span className="text-white/30 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
-          SSPA-CEIPOL
+        <span className="text-white/40 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+          SSPE-CEIPOL
         </span>
       </div>
       {isPreliminary && (

@@ -613,8 +613,8 @@ export function ProjectList() {
                       className="object-contain w-full h-auto max-h-[70vh]"
                           />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
-                      <span className="text-white/30 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
-                              SSPA-CEIPOL
+                      <span className="text-white/40 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+                              SSPE-CEIPOL
                             </span>
                           </div>
                         </div>

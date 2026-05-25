@@ -8,3 +8,6 @@ NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyTuClaveDeGeminiRealAqui...
 # BASE DE DATOS (Requerido para la estadística e incidencia - PostgreSQL)
 # (Busca en tu archivo local la variable de conexión a tu base de datos)
 DATABASE_URL=postgresql://usuario:Cocipe2009@host:puerto/basededatos
+
+# CLAVES PARA TELEGRAM OSINT
+PGP_TELEGRAM_BOT_TOKEN=8700790125:AAFuS1FG2NDUzAthCZTwfqCAGYosa_RO14Y
