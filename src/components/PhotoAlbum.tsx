@@ -835,6 +835,21 @@ const hasMinimumPhotos =
                     )}
                   </div>
 
+                  <div className="mt-1 mb-2">
+                    <div className="flex justify-between items-center text-[9px] mb-0.5">
+                      <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
+                      <span className={`font-bold ${(p.comentario || "").length < 15 ? "text-red-400" : (p.comentario || "").length < 50 ? "text-amber-400" : "text-emerald-400"}`}>
+                        {(p.comentario || "").length === 0 ? "Sin contexto" : (p.comentario || "").length < 15 ? "Básico" : (p.comentario || "").length < 50 ? "Aceptable" : "Óptimo"}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1">
+                      <div 
+                        className={`h-1 rounded-full transition-all duration-300 ${(p.comentario || "").length < 15 ? "bg-red-500" : (p.comentario || "").length < 50 ? "bg-amber-500" : "bg-emerald-500"}`}
+                        style={{ width: `${Math.min(((p.comentario || "").length / 80) * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
                   {visionData[p.id]?.extractedText && (
                     <span className="mt-0.5 inline-flex items-center gap-1 bg-blue-900/80 text-blue-200 text-[10px] px-2 py-0.5 rounded border border-blue-700">
                       🏷️ OCR:{" "}
@@ -940,6 +955,21 @@ const hasMinimumPhotos =
               />
             </div>
             
+            <div className="mt-1 mb-2">
+              <div className="flex justify-between items-center text-[10px] mb-1">
+                <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
+                <span className={`font-bold ${docContext.length < 20 ? "text-red-400" : docContext.length < 80 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {docContext.length === 0 ? "Sin contexto" : docContext.length < 20 ? "Básico" : docContext.length < 80 ? "Aceptable" : "Óptimo"}
+                </span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-1.5">
+                <div 
+                  className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 20 ? "bg-red-500" : docContext.length < 80 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  style={{ width: `${Math.min((docContext.length / 150) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
