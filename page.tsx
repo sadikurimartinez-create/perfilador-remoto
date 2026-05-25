@@ -31,7 +31,6 @@ const mockMetrics = {
     { tipo: "Captura Street View", cantidad: 80 },
     { tipo: "Documental/Gabinete", cantidad: 52 }
   ],
-  // Métricas adicionales sugeridas
   tasaCorreccionIA: "12%",
   tiempoPromedioContexto: "18 mins"
 };
@@ -39,7 +38,6 @@ const mockMetrics = {
 export default function MonitoreoAdminPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
-      {/* HEADER DE MONITOREO DEL USUARIO */}
       <header className="bg-slate-900 border-b border-slate-800 p-4 md:p-6 sticky top-0 z-10 shadow-md">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -68,10 +66,7 @@ export default function MonitoreoAdminPage() {
         </div>
       </header>
 
-      {/* DASHBOARD DE MÉTRICAS */}
       <section className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-        
-        {/* KPIs Generales */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <MetricCard title="Proyectos Abiertos" value={mockMetrics.proyectosAbiertos} color="text-amber-400" />
           <MetricCard title="Proyectos Cerrados" value={mockMetrics.proyectosCerrados} color="text-emerald-400" />
@@ -79,7 +74,6 @@ export default function MonitoreoAdminPage() {
           <MetricCard title="Tpo. Promedio Contexto" value={mockMetrics.tiempoPromedioContexto} color="text-purple-400" />
         </div>
 
-        {/* Calidad del Analista vs Inteligencia Artificial */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg">
             <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-4">Interacción con IA</h3>
@@ -93,7 +87,6 @@ export default function MonitoreoAdminPage() {
             </p>
           </div>
 
-          {/* Barrido de Fortalezas y Debilidades */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg md:col-span-2">
             <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-4">Registro Conductual y Epistemológico</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -117,7 +110,6 @@ export default function MonitoreoAdminPage() {
           </div>
         </div>
 
-        {/* Desglose de Tipos de Evidencia */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg">
           <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-4">Tipos de Evidencia Aportados</h3>
           <div className="flex flex-col md:flex-row gap-4">
@@ -129,7 +121,6 @@ export default function MonitoreoAdminPage() {
             ))}
           </div>
         </div>
-
       </section>
     </main>
   );
