@@ -17,6 +17,13 @@ export function ProfileGuard({ children }: { children: React.ReactNode }) {
         setIsProfileComplete(null);
         return;
       }
+
+      // Exentar al Superadministrador del bloqueo del perfil operativo
+      if ((user as any).role === "SUPER_ADMIN" || (user as any).role === "ADMIN") {
+        setIsProfileComplete(true);
+        return;
+      }
+
       try {
         // Toma el ID o username que tu AuthContext provea
         const uid = (user as any).uid || (user as any).id || (user as any).username;
