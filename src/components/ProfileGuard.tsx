@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { doc, getDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 export function ProfileGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -18,19 +20,16 @@ export function ProfileGuard({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Exentar al Superadministrador del bloqueo del perfil operativo
-      if ((user as any).role === "SUPER_ADMIN" || (user as any).role === "ADMIN") {
-        setIsProfileComplete(true);
-        return;
-      }
-
       try {
-        // Toma el ID o username que tu AuthContext provea
-        const uid = (user as any).uid || (user as any).id || (user as any).username;
-        const res = await fetch(`/api/profile/status?uid=${uid}`);
-        if (res.ok) {
-          const data = await res.json();
-          setIsProfileComplete(data.isComplete);
+        const db = getDb();
+        const snap = await getDoc(doc(db, "users", String((user as any).id)));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (!data.nombre || !data.apellidoPaterno || !data.apellidoMaterno || !data.grado || !data.id_empleado) {
+            setIsProfileComplete(false);
+          } else {
+            setIsProfileComplete(true);
+          }
         } else {
           setIsProfileComplete(false);
         }
