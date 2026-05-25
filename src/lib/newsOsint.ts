@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Parser from "rss-parser";
 
@@ -57,7 +58,9 @@ export async function searchNewsOsint(
   }
 
   const keywords = ["robo", "asalto", "homicidio", "asesinato", "balacera", "cateo", "operativo", "cártel", "narcomenudeo", "riña", "detenido", "violencia"];
-  const locationKeywords = [colonia, municipio, estado].filter(Boolean).map(k => k!.toLowerCase());
+  const locationKeywords = [colonia, municipio, estado]
+    .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+    .map((k) => k.toLowerCase());
 
   let noticias: { titular: string; fuente: string; fecha: string; url: string }[] = [];
 
@@ -71,7 +74,7 @@ export async function searchNewsOsint(
     if (res && res.ok) {
       const data = await res.json();
       if (data.articles && data.articles.length > 0) {
-        const apiNoticias = data.articles.map((art: any) => ({
+        const apiNoticias = data.articles.map((art: { title: string; source?: { name: string }; publishedAt?: string; url: string }) => ({
           titular: art.title,
           fuente: art.source?.name || "News API",
           fecha: art.publishedAt ? new Date(art.publishedAt).toLocaleDateString("es-MX") : "Reciente",
@@ -90,7 +93,7 @@ export async function searchNewsOsint(
     const rssPromises = RSS_FEEDS.map(async (feed) => {
       try {
         const parsed = await parser.parseURL(feed.url);
-        const articulosLocales = parsed.items.filter((item: any) => {
+        const articulosLocales = parsed.items.filter((item: { title?: string; contentSnippet?: string; pubDate?: string; link?: string }) => {
           if (!item.title) return false;
           const fullText = (item.title + " " + (item.contentSnippet || "")).toLowerCase();
           const hasLocation = locationKeywords.some(lk => fullText.includes(lk));
@@ -98,7 +101,7 @@ export async function searchNewsOsint(
           return hasLocation && hasCrime;
         });
 
-        return articulosLocales.map((art: any) => ({
+        return articulosLocales.map((art: { title?: string; contentSnippet?: string; pubDate?: string; link?: string }) => ({
           titular: art.title || "Sin título",
           fuente: feed.nombre,
           fecha: art.pubDate ? new Date(art.pubDate).toLocaleDateString("es-MX") : "Reciente",
