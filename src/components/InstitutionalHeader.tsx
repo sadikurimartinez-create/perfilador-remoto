@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 
 export function InstitutionalHeader() {
@@ -20,9 +21,11 @@ export function InstitutionalHeader() {
           />
         </div>
         <div className="flex flex-1 flex-col items-center justify-center text-center min-w-0">
-          <h1 className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl">
-            PERFILADOR REMOTO
-          </h1>
+          <Link href="/">
+            <h1 className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl hover:text-sky-400 transition-colors">
+              PERFILADOR REMOTO
+            </h1>
+          </Link>
           <p className="text-[10px] font-medium text-slate-300 sm:text-xs mt-0.5">
             CENTRO DE ESTUDIOS EN SEGURIDAD PÚBLICA
           </p>
@@ -31,16 +34,29 @@ export function InstitutionalHeader() {
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-3">
+          {user && (
+            <Link
+              href="/"
+              className="hidden sm:inline-block text-[11px] sm:text-xs font-medium text-slate-400 hover:text-sky-300 transition-colors"
+            >
+              Lobby
+            </Link>
+          )}
+          {user && (
+            <Link
+              href="/perfil"
+              className="text-[11px] sm:text-xs font-medium text-slate-400 hover:text-sky-300 transition-colors"
+            >
+              Mi Perfil
+            </Link>
+          )}
           {user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = "/admin";
-              }}
+            <Link
+              href="/admin"
               className="text-[11px] sm:text-xs font-medium text-slate-400 hover:text-sky-300 transition-colors"
             >
               Administración
-            </button>
+            </Link>
           )}
           {user && (
             <button
