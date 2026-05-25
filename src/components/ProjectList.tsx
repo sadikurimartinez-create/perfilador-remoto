@@ -88,9 +88,9 @@ export function ProjectList() {
     setPreviewModalOpen(true);
   };
 
-  const handleDownloadDictamen = async (project: ProjectWithCount, analysis: any) => {
+  const handleDownloadDictamen = async (project: ProjectWithCount, analysis: { content: string; attachedPhotos?: string[] }) => {
     try {
-      alert("Generando el dictamen oficial en Word. Esto puede tardar unos segundos dependiendo de las imágenes...");
+      window.alert("Generando el dictamen oficial en Word. Esto puede tardar unos segundos dependiendo de las imágenes...");
       let photos = Array.isArray(analysis?.attachedPhotos) ? analysis.attachedPhotos : [];
       if (!photos.length) {
         const firestore = getDb();
@@ -98,10 +98,10 @@ export function ProjectList() {
         const snap = await getDocs(photosCol);
         photos = snap.docs.map((d) => d.data().url);
       }
-      await exportToWord(analysis.content, project.name, photos);
+      await exportToWord(analysis.content || "", project.name, photos);
     } catch (err) {
       console.error("Error exportando a Word:", err);
-      alert("Ocurrió un error al generar el documento Word.");
+      window.alert("Ocurrió un error al generar el documento Word.");
     }
   };
 
