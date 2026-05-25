@@ -10,9 +10,18 @@ export default function PerfilPage() {
   
   const [formData, setFormData] = useState({
     nombre: "",
+    apellidoPaterno: "",
+    apellidoMaterno: "",
     grado: "",
     id_empleado: "",
-    dependencia: "Secretaría de Seguridad Pública del Estado",
+    adscripcionAnterior: "",
+    aniosSspe: "",
+    bachillerato: "NO",
+    licenciatura: "NO",
+    licenciaturaCual: "",
+    maestria: "NO",
+    maestriaCual: "",
+    fotografia: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -21,9 +30,18 @@ export default function PerfilPage() {
     if (user) {
       setFormData({
         nombre: (user as any).nombre || "",
+        apellidoPaterno: (user as any).apellidoPaterno || "",
+        apellidoMaterno: (user as any).apellidoMaterno || "",
         grado: (user as any).grado || "",
         id_empleado: (user as any).id_empleado || "",
-        dependencia: (user as any).dependencia || "Secretaría de Seguridad Pública del Estado",
+        adscripcionAnterior: (user as any).adscripcionAnterior || "",
+        aniosSspe: (user as any).aniosSspe || "",
+        bachillerato: (user as any).bachillerato || "NO",
+        licenciatura: (user as any).licenciatura || "NO",
+        licenciaturaCual: (user as any).licenciaturaCual || "",
+        maestria: (user as any).maestria || "NO",
+        maestriaCual: (user as any).maestriaCual || "",
+        fotografia: (user as any).fotografia || "",
       });
     }
   }, [user]);
@@ -32,23 +50,45 @@ export default function PerfilPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, fotografia: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setIsLoading(true);
     setMessage("");
 
-    // TODO: Enlazar esto con la función de actualización real de tu AuthContext/API
-    // await updateProfile(formData);
-    
-    setTimeout(() => {
-      setIsLoading(false);
-      setMessage("Perfil guardado correctamente.");
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const { doc, updateDoc } = await import("firebase/firestore");
+      const db = getDb();
       
-      // Si el perfil ya está completo, redirigimos al Dashboard Principal (Mis Expedientes)
-      if (formData.nombre && formData.grado && formData.id_empleado) {
-         setTimeout(() => router.push("/"), 800);
-      }
-    }, 1000);
+      const fullName = `${formData.nombre.trim()} ${formData.apellidoPaterno.trim()} ${formData.apellidoMaterno.trim()}`.trim();
+      
+      await updateDoc(doc(db, "users", String((user as any).id)), {
+        ...formData,
+        name: fullName,
+        perfilCompleto: true
+      });
+
+      setMessage("Perfil guardado correctamente.");
+      // Recargamos la aplicación para que el AuthContext obtenga los nuevos datos de Firebase y permita el acceso al Lobby
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 1000);
+    } catch (error: any) {
+      setMessage("Error al guardar perfil: " + error.message);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -68,18 +108,44 @@ export default function PerfilPage() {
         )}
 
         <div className="space-y-4">
-          <div>
-            <label htmlFor="nombre" className="block text-sm font-medium text-slate-300 mb-1">Nombre Completo</label>
-            <input
-              type="text"
-              id="nombre"
-              name="nombre"
-              required
-              value={formData.nombre}
-              onChange={handleChange}
-              className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
-              placeholder="Ej. Juan Pérez López"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="nombre" className="block text-sm font-medium text-slate-300 mb-1">Nombre(s)</label>
+              <input
+                type="text"
+                id="nombre"
+                name="nombre"
+                required
+                value={formData.nombre}
+                onChange={handleChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                placeholder="Ej. Juan"
+              />
+            </div>
+            <div>
+              <label htmlFor="apellidoPaterno" className="block text-sm font-medium text-slate-300 mb-1">Apellido Paterno</label>
+              <input
+                type="text"
+                id="apellidoPaterno"
+                name="apellidoPaterno"
+                required
+                value={formData.apellidoPaterno}
+                onChange={handleChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="apellidoMaterno" className="block text-sm font-medium text-slate-300 mb-1">Apellido Materno</label>
+              <input
+                type="text"
+                id="apellidoMaterno"
+                name="apellidoMaterno"
+                required
+                value={formData.apellidoMaterno}
+                onChange={handleChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -111,18 +177,88 @@ export default function PerfilPage() {
             </div>
           </div>
 
-          <div>
-            <label htmlFor="dependencia" className="block text-sm font-medium text-slate-300 mb-1">Dependencia de Adscripción</label>
-            <input
-              type="text"
-              id="dependencia"
-              name="dependencia"
-              required
-              value={formData.dependencia}
-              onChange={handleChange}
-              className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
-              placeholder="Ej. Secretaría de Seguridad Pública del Estado"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="adscripcionAnterior" className="block text-sm font-medium text-slate-300 mb-1">Adscripción Inmediata Anterior</label>
+              <input
+                type="text"
+                id="adscripcionAnterior"
+                name="adscripcionAnterior"
+                required
+                value={formData.adscripcionAnterior}
+                onChange={handleChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="aniosSspe" className="block text-sm font-medium text-slate-300 mb-1">Años de pertenecer a la SSPE</label>
+              <input
+                type="number"
+                id="aniosSspe"
+                name="aniosSspe"
+                required
+                min="0"
+                value={formData.aniosSspe}
+                onChange={handleChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3">Historial Académico</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Bachillerato</label>
+                <select name="bachillerato" value={formData.bachillerato} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
+                  <option value="NO">NO</option>
+                  <option value="SI">SI</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-300 mb-1">Licenciatura</label>
+                <select name="licenciatura" value={formData.licenciatura} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
+                  <option value="NO">NO</option>
+                  <option value="SI">SI</option>
+                </select>
+                {formData.licenciatura === "SI" && (
+                  <input type="text" name="licenciaturaCual" value={formData.licenciaturaCual} onChange={handleChange} placeholder="¿Cuál?" required className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100" />
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-300 mb-1">Maestría</label>
+                <select name="maestria" value={formData.maestria} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
+                  <option value="NO">NO</option>
+                  <option value="SI">SI</option>
+                </select>
+                {formData.maestria === "SI" && (
+                  <input type="text" name="maestriaCual" value={formData.maestriaCual} onChange={handleChange} placeholder="¿En qué?" required className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100" />
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3">Fotografía Institucional</h3>
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-24 h-24 rounded-lg bg-slate-950 border border-slate-700 overflow-hidden flex items-center justify-center">
+                {formData.fotografia ? (
+                  <img src={formData.fotografia} alt="Fotografía" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-3xl">👤</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-300 mb-1">Subir imagen</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                />
+                <p className="text-xs text-slate-500 mt-2">La fotografía se guardará en tu perfil operativo.</p>
+              </div>
+            </div>
           </div>
         </div>
 

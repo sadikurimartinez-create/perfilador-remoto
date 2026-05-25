@@ -11,7 +11,13 @@ export default function HomePage() {
   const router = useRouter();
 
   // Evaluamos si el perfil está incompleto (faltan datos base)
-  const isProfileIncomplete = user && (!(user as any).nombre || !(user as any).grado || !(user as any).id_empleado);
+  const isProfileIncomplete = user && (
+    !(user as any).nombre || 
+    !(user as any).apellidoPaterno || 
+    !(user as any).apellidoMaterno || 
+    !(user as any).grado || 
+    !(user as any).id_empleado
+  );
 
   useEffect(() => {
     if (isProfileIncomplete) {

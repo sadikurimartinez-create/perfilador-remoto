@@ -23,6 +23,8 @@ type ProjectWithCount = {
   photoCount: number;
   createdBy?: string;
   lockedBy?: string | null;
+  estado?: string;
+  comentariosSupervisor?: string;
 };
 
 export function ProjectList() {
@@ -52,6 +54,7 @@ export function ProjectList() {
 
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [selectedPreview, setSelectedPreview] = useState<any>(null);
+  const [devueltoProject, setDevueltoProject] = useState<ProjectWithCount | null>(null);
 
   const handleOpenPreview = async (
     project: ProjectWithCount,
@@ -107,6 +110,8 @@ export function ProjectList() {
             lockedBy: data.lockedBy ?? null,
             // campo opcional en Firestore para borrado lógico
             deleted: data.deleted === true,
+            estado: data.estado || "ABIERTO",
+            comentariosSupervisor: data.comentariosSupervisor || "",
           } as ProjectWithCount & { deleted?: boolean };
         })
         .filter((p) => !p.deleted);
@@ -226,6 +231,7 @@ export function ProjectList() {
           createdBy: user.username,
           lockedBy: null,
           photoCount: 0,
+          estado: "ABIERTO",
         })
       );
       setShowPrompt(false);
@@ -283,6 +289,31 @@ export function ProjectList() {
         "Ocurrió un error al eliminar el expediente. Revise la consola o intente de nuevo."
       );
     }
+  };
+
+  const getStatusBadge = (estado: string) => {
+    switch (estado) {
+      case "EN REVISIÓN":
+        return <span className="bg-amber-500/20 text-amber-400 border border-amber-500/50 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">En Revisión</span>;
+      case "CERRADO":
+        return <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Validado</span>;
+      case "DEVUELTO":
+        return <span className="bg-red-500/20 text-red-400 border border-red-500/50 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Devuelto</span>;
+      default:
+        return <span className="bg-slate-500/20 text-slate-400 border border-slate-500/50 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Abierto</span>;
+    }
+  };
+
+  const handleOpenProject = (p: ProjectWithCount) => {
+    if (p.estado === "EN REVISIÓN" || p.estado === "CERRADO") {
+      alert(`El expediente se encuentra en estado: ${p.estado}. No es posible modificarlo en este momento.`);
+      return;
+    }
+    if (p.estado === "DEVUELTO") {
+      setDevueltoProject(p);
+      return;
+    }
+    router.push(`/project/${p.id}`);
   };
 
   const list = projects ?? [];
@@ -379,9 +410,12 @@ export function ProjectList() {
                   >
                     <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-semibold text-slate-100 truncate">
-                        {p.name}
-                      </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-slate-100 truncate">
+                            {p.name}
+                          </h3>
+                          {getStatusBadge(p.estado || "ABIERTO")}
+                        </div>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {new Date(p.createdAt).toLocaleDateString("es-MX", {
                           day: "numeric",
@@ -401,6 +435,7 @@ export function ProjectList() {
                       </p>
                       </div>
                       <div className="flex items-center gap-2">
+                        {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
                         <button
                           type="button"
                           onClick={() => void exportProjectData(p.id)}
@@ -409,6 +444,8 @@ export function ProjectList() {
                         >
                           📤 Exportar a Gabinete
                         </button>
+                        )}
+                        {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
                         <button
                           type="button"
                           onClick={() => void handleDeleteProject(p.id)}
@@ -416,14 +453,13 @@ export function ProjectList() {
                         >
                           Eliminar
                         </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => {
-                            router.push(`/project/${p.id}`);
-                          }}
-                          className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium bg-sky-600 text-white hover:bg-sky-500"
+                          onClick={() => handleOpenProject(p)}
+                          className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${p.estado === "EN REVISIÓN" || p.estado === "CERRADO" ? "bg-slate-700 hover:bg-slate-600" : "bg-sky-600 hover:bg-sky-500"}`}
                         >
-                          Abrir Proyecto
+                          {p.estado === "EN REVISIÓN" ? "En Revisión" : p.estado === "CERRADO" ? "Validado" : "Abrir Proyecto"}
                         </button>
                       </div>
                     </div>
@@ -591,6 +627,28 @@ export function ProjectList() {
             >
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {devueltoProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-red-900 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-red-500 mb-2">Expediente Devuelto</h3>
+            <p className="text-sm text-slate-300 mb-4">
+              Tu supervisor ha devuelto este expediente con las siguientes observaciones. Corrige los puntos señalados y vuelve a enviarlo a revisión.
+            </p>
+            <div className="bg-red-950/30 border border-red-900 p-4 rounded-md mb-6 max-h-48 overflow-y-auto">
+              <p className="text-sm text-red-200 whitespace-pre-wrap">{devueltoProject.comentariosSupervisor}</p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDevueltoProject(null)} className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors">Cancelar</button>
+              <button onClick={() => {
+                const id = devueltoProject.id;
+                setDevueltoProject(null);
+                router.push(`/project/${id}`);
+              }} className="px-4 py-2 text-sm font-bold bg-red-600 hover:bg-red-500 text-white rounded shadow-lg transition-colors">Entendido, corregir expediente</button>
+            </div>
           </div>
         </div>
       )}

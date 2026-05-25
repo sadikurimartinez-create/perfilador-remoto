@@ -6,6 +6,8 @@ import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "./CaptureAndAddPhoto";
 import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
+import { doc, updateDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 export function ProjectManager() {
   const router = useRouter();
@@ -108,6 +110,22 @@ export function ProjectManager() {
     router.push("/");
   };
 
+  const handleEnviarRevision = async () => {
+    if (!project) return;
+    if (!window.confirm("¿Estás seguro de enviar este expediente a revisión? Ya no podrás editarlo hasta que un administrador lo evalúe.")) return;
+    
+    try {
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", project.id), {
+        estado: "EN REVISIÓN",
+        fechaEnvioRevision: Date.now()
+      });
+      window.alert("Expediente enviado a revisión correctamente.");
+      router.push("/");
+    } catch (err: any) {
+      window.alert("Error al enviar a revisión: " + err.message);
+    }
+  };
 
   if (!project) {
     return (
@@ -245,13 +263,22 @@ export function ProjectManager() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {((project as any).estado === "ABIERTO" || (project as any).estado === "DEVUELTO" || !(project as any).estado) && (
+            <button
+              type="button"
+              onClick={handleEnviarRevision}
+              disabled={!hasMinimumPhotos}
+              className="text-sm px-4 py-2 rounded-lg font-bold bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
+            >
+              Enviar a Revisión
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCerrarProyecto}
-          disabled={!hasMinimumPhotos}
-          className="text-sm px-4 py-2 rounded-lg font-bold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
+            className="text-sm px-4 py-2 rounded-lg font-bold bg-slate-700 text-white hover:bg-slate-600 transition-colors shadow-md"
           >
-          ✅ Guardar y Salir al Lobby
+            Volver al Lobby
           </button>
         </div>
       </div>
