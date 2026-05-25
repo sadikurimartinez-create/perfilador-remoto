@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
-export type MapViewMode = "HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL";
+export type MapViewMode = "HEATMAP" | "ECOLOGY" | "MOBILITY";
 
 type AnalysisMapProps = {
   album: AlbumPhoto[];
@@ -19,10 +19,29 @@ type AnalysisMapProps = {
   setManualPois?: (value: { lat: number; lng: number; label?: string }[]) => void;
   /** Controla si el mapa está en modo preliminar (se muestran herramientas de dibujo y toolbar). */
   isPreliminary?: boolean;
-  /** Controla qué capas tácticas se muestran. */
+  /** Controla qué capas tácticas se muestran ("HEATMAP", "ECOLOGY", "MOBILITY"). */
   viewMode?: MapViewMode;
   /** Geometría del proyecto para trazar rutas o perímetros automáticos */
   geometryType?: "individual" | "lineal" | "poligono";
+};
+
+// Ecuaciones para Top 5 Atractores
+const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; 
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+const getSeverityWeight = (crimeName: string) => {
+  const name = crimeName.toLowerCase();
+  if (name.includes("homicidio") || name.includes("secuestro") || name.includes("arma") || name.includes("violación")) return 5;
+  if (name.includes("robo") || name.includes("asalto") || name.includes("extorsión") || name.includes("narcomenudeo")) return 4;
+  if (name.includes("lesiones") || name.includes("violencia") || name.includes("amenaza")) return 3;
+  return 2; 
 };
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
@@ -62,7 +81,7 @@ export function AnalysisMap({
   manualPois,
   setManualPois,
   isPreliminary = false,
-  viewMode = "ALL",
+  viewMode = "HEATMAP",
   geometryType,
 }: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -92,13 +111,29 @@ export function AnalysisMap({
     [analysisResult?.pois]
   );
 
+  const top5Pois = useMemo(() => {
+    if (!poisWithCoords || poisWithCoords.length === 0) return [];
+    return poisWithCoords.map((poi) => {
+      let riskScore = 0;
+      crimesWithCoords.forEach((c) => {
+        if (c.lat != null && c.lng != null && poi.lat != null && poi.lng != null) {
+          const dist = getDistanceInMeters(poi.lat, poi.lng, c.lat, c.lng);
+          if (dist <= 200) riskScore += getSeverityWeight(c.tipoDelito || "");
+        }
+      });
+      return { ...poi, score: riskScore };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  }, [poisWithCoords, crimesWithCoords]);
+
   const boundsPoints = useMemo(() => {
     const points: Array<{ lat: number; lng: number }> = [];
     photosWithCoords.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
     crimesWithCoords.forEach((c) => points.push({ lat: c.lat as number, lng: c.lng as number }));
-    poisWithCoords.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
+    top5Pois.forEach((p) => points.push({ lat: p.lat as number, lng: p.lng as number }));
     return points;
-  }, [photosWithCoords, crimesWithCoords, poisWithCoords]);
+  }, [photosWithCoords, crimesWithCoords, top5Pois]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -135,18 +170,22 @@ export function AnalysisMap({
     if (valid.length === 0) return [];
 
     const cellSize = 0.0001;
-    const grid = new Map<string, { lat: number; lng: number; count: number }>();
+    const grid = new Map<string, { lat: number; lng: number; weight: number }>();
     for (const c of valid) {
       const lat = c.lat as number;
       const lng = c.lng as number;
       const key = `${Math.round(lat / cellSize) * cellSize},${Math.round(lng / cellSize) * cellSize}`;
+      const severity = getSeverityWeight(c.tipoDelito || "");
       const existing = grid.get(key);
-      if (existing) existing.count += 1;
-      else grid.set(key, { lat, lng, count: 1 });
+      if (existing) {
+        existing.weight += severity;
+      } else {
+        grid.set(key, { lat, lng, weight: severity });
+      }
     }
-    return Array.from(grid.values()).map(({ lat, lng, count }) => ({
+    return Array.from(grid.values()).map(({ lat, lng, weight }) => ({
       location: new g.maps.LatLng(lat, lng),
-      weight: Math.min(count * 2, 10),
+      weight: Math.min(weight, 15), 
     }));
   }, [analysisResult?.historicalCrimes, isLoaded]);
 
@@ -239,6 +278,25 @@ export function AnalysisMap({
           )}
         </div>
       )}
+
+      {/* LEYENDA DEL TOP 5 POIs (SOLO MODO ECOLOGY) */}
+      {!isPreliminary && viewMode === "ECOLOGY" && top5Pois.length > 0 && (
+        <div className="absolute top-3 right-3 bg-slate-900/95 border border-slate-600 p-3 rounded-lg shadow-2xl z-20 max-w-[280px]">
+          <h4 className="text-xs font-bold text-amber-400 mb-2 border-b border-slate-600 pb-1 uppercase tracking-wider">Top 5 Atractores de Riesgo</h4>
+          <ul className="text-[10px] text-slate-200 space-y-2">
+            {top5Pois.map((p, i) => (
+              <li key={i} className="leading-tight flex gap-2">
+                <span className="flex-shrink-0 bg-amber-500 text-slate-900 font-bold w-4 h-4 rounded-full flex items-center justify-center">{i+1}</span>
+                <div>
+                  <span className="font-bold text-amber-200 block">{p.name}</span>
+                  <span className="text-slate-400">{p.category}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
@@ -316,7 +374,7 @@ export function AnalysisMap({
         )}
 
         {/* Pines tácticos: se basan en el tipo de evidencia seleccionada */}
-        {photosWithCoords.map((p) => {
+        {viewMode === "MOBILITY" && photosWithCoords.map((p) => {
           const pinColor = getMarkerColor(p.tipo);
           return (
             <Marker
@@ -351,7 +409,7 @@ export function AnalysisMap({
         )}
 
         {/* Delitos: puntos carmesí con cruz táctica */}
-        {(viewMode === "HEATMAP" || viewMode === "ALL") && crimesWithCoords.map((c, idx) => (
+        {viewMode === "HEATMAP" && crimesWithCoords.map((c, idx) => (
           <Marker
             key={`crime-${idx}`}
             position={{ lat: c.lat as number, lng: c.lng as number }}
@@ -373,29 +431,28 @@ export function AnalysisMap({
           />
         ))}
 
-        {/* POIs / atractores: íconos inteligentes por categoría */}
-        {(viewMode === "ECOLOGY" || viewMode === "ALL") && poisWithCoords.map((p, idx) => {
-          const { emoji, bg } = getPoiIcon(p.category as string | undefined);
-          return (
-            <Marker
-              key={`poi-${idx}`}
-              position={{ lat: p.lat, lng: p.lng }}
-              title={p.name}
-              label={{
-                text: emoji,
-                fontSize: "12px",
-              }}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 6,
-                fillColor: bg,
-                fillOpacity: 1,
-                strokeColor: "#020617",
-                strokeWeight: 1,
-              }}
-            />
-          );
-        })}
+        {/* POIs / atractores Top 5: Numerados */}
+        {viewMode === "ECOLOGY" && top5Pois.map((p, idx) => (
+          <Marker
+            key={`top-poi-${idx}`}
+            position={{ lat: p.lat as number, lng: p.lng as number }}
+            title={p.name}
+            label={{
+              text: `${idx + 1}`,
+              color: "#ffffff",
+              fontSize: "12px",
+              fontWeight: "bold",
+            }}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: "#eab308", 
+              fillOpacity: 1,
+              strokeColor: "#000000",
+              strokeWeight: 2,
+            }}
+          />
+        ))}
 
         {/* Polígono de análisis dibujado por el analista */}
         {isPreliminary && analysisPolygon && analysisPolygon.length > 2 && (
@@ -428,7 +485,7 @@ export function AnalysisMap({
           />
         ))}
 
-        {heatmapCrimeData.length > 0 && (
+        {viewMode === "HEATMAP" && heatmapCrimeData.length > 0 && (
           <HeatmapLayer
             data={heatmapCrimeData}
             options={{

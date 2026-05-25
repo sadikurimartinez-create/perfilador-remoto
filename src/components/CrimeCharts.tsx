@@ -1,140 +1,220 @@
-"use client";
+import React, { useMemo } from "react";
 
-import { useMemo } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Cell,
-  ComposedChart,
-  Line,
-  Legend
-} from "recharts";
+type Crime = { tipoDelito?: string; lat?: number | null; lng?: number | null; [key: string]: any };
+type POI = { name?: string; category?: string; lat?: number | null; lng?: number | null; [key: string]: any };
 
-type CrimeChartsProps = {
-  crimes: Array<{
-    lat: number;
-    lng: number;
-    tipoDelito: string;
-    rangoHorario: string | null;
-  }>;
-  inegi?: {
-    exito?: boolean;
-    municipioNombre: string;
-    poblacionTotal: string;
-  };
+// Fórmula de Haversine para calcular distancias en metros entre dos coordenadas
+const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // Radio de la Tierra en metros
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dp / 2) * Math.sin(dp / 2) +
+    Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 };
 
-const COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#6366f1", "#ec4899"];
+// Ponderación de la Gravedad del Delito (Ecuación Base)
+const getSeverityWeight = (crimeName: string) => {
+  const name = crimeName.toLowerCase();
+  if (name.includes("homicidio") || name.includes("secuestro") || name.includes("arma") || name.includes("violación")) return 5;
+  if (name.includes("robo") || name.includes("asalto") || name.includes("extorsión") || name.includes("narcomenudeo")) return 4;
+  if (name.includes("lesiones") || name.includes("violencia") || name.includes("amenaza")) return 3;
+  return 2; // Delitos menores o daños
+};
 
-export function CrimeCharts({ crimes, inegi }: CrimeChartsProps) {
-  const { byType, byTime, correlationData } = useMemo(() => {
-    const typeMap = new Map<string, number>();
-    const timeMap = new Map<string, number>();
-
+export function CrimeCharts({
+  crimes = [],
+  inegi,
+  pois = [],
+}: {
+  crimes: Crime[];
+  inegi?: any;
+  pois?: POI[];
+}) {
+  
+  // 1. ÍNDICE DE CRIMINALIDAD (Top 3 Delitos)
+  const crimeIndexStats = useMemo(() => {
+    const counts: Record<string, { count: number; weight: number }> = {};
     crimes.forEach((c) => {
-      const t = c.tipoDelito || "Desconocido";
-      typeMap.set(t, (typeMap.get(t) || 0) + 1);
-
-      const r = c.rangoHorario || "Sin registro";
-      timeMap.set(r, (timeMap.get(r) || 0) + 1);
+      const type = c.tipoDelito || "Delito No Especificado";
+      if (!counts[type]) {
+        counts[type] = { count: 0, weight: getSeverityWeight(type) };
+      }
+      counts[type].count += 1;
     });
 
-    const byTypeArr = Array.from(typeMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 7); // Top 7 para no saturar
+    const ranked = Object.entries(counts)
+      .map(([name, data]) => ({
+        name,
+        score: data.count * data.weight,
+        count: data.count,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
 
-    const byTimeArr = Array.from(timeMap.entries())
-      .map(([name, value]) => ({ name, value }));
-
-    // Data para la tercera gráfica (Correlación de Gravedad vs Frecuencia)
-    const correlation = byTypeArr.map((d) => {
-      const isHighImpact = ["homicidio", "secuestro", "violencia", "lesiones", "robo", "asalto", "arma", "extorsion", "feminicidio"].some(kw => d.name.toLowerCase().includes(kw));
-      return {
-        name: d.name,
-        Frecuencia: d.value,
-        Gravedad: isHighImpact ? parseFloat((d.value * 2.5).toFixed(1)) : parseFloat((d.value * 0.8).toFixed(1)),
-      };
-    });
-
-    return { byType: byTypeArr, byTime: byTimeArr, correlationData: correlation };
+    const maxScore = Math.max(...ranked.map((r) => r.score), 1);
+    return ranked.map((r) => ({ ...r, percentage: (r.score / maxScore) * 100 }));
   }, [crimes]);
 
-  if (!crimes || crimes.length === 0) return null;
+  // 2. ÍNDICE DE RIESGO DE POIS Y CALLES (Top 3 Atractores)
+  const riskIndexStats = useMemo(() => {
+    if (!pois || pois.length === 0) return [];
+    
+    const ranked = pois.map((poi) => {
+      let riskScore = 0;
+      let associatedCrimes = 0;
+      
+      crimes.forEach((c) => {
+        if (c.lat && c.lng && poi.lat && poi.lng) {
+          const dist = getDistanceInMeters(poi.lat, poi.lng, c.lat, c.lng);
+          if (dist <= 200) {
+            riskScore += getSeverityWeight(c.tipoDelito || "");
+            associatedCrimes += 1;
+          }
+        }
+      });
+
+      return {
+        name: poi.name,
+        category: poi.category,
+        score: riskScore,
+        incidents: associatedCrimes
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+    const maxScore = Math.max(...ranked.map((r) => r.score), 1);
+    return ranked.map((r) => ({ ...r, percentage: (r.score / maxScore) * 100 }));
+  }, [crimes, pois]);
+
+  // 3. PROYECCIÓN DE INCIDENCIA DELICTIVA (Top 3 Incrementos Proyectados)
+  const projectionStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    crimes.forEach((c) => {
+      const type = c.tipoDelito || "Delito No Especificado";
+      counts[type] = (counts[type] || 0) + 1;
+    });
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, currentCount]) => ({
+        name,
+        current: currentCount,
+        projected: Math.ceil(currentCount * 1.20)
+      }));
+  }, [crimes]);
+
+  if (crimes.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-6 w-full">
-      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner min-h-[350px]">
-        <h4 className="text-xs font-bold text-sky-400 text-center mb-2 tracking-widest">
-          CRONOCRIMINOGRAMA (Horarios Críticos)
-        </h4>
-        <div className="w-full h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={byTime}>
-              <PolarGrid stroke="#334155" />
-              <PolarAngleAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 9 }} />
-              <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: "#64748b", fontSize: 10 }} />
-              <Radar name="Delitos" dataKey="value" stroke="#ef4444" fill="#ef4444" fillOpacity={0.5} />
-              <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc', fontSize: '12px' }} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
+    <div className="flex flex-col gap-6 text-slate-200">
+      <div className="border-b border-slate-700 pb-2">
+        <h3 className="text-base font-bold tracking-tight text-slate-100 uppercase flex items-center gap-2">
+          <span>📊</span> Modelos Algorítmicos y Cartografía del Riesgo
+        </h3>
+        <p className="text-xs text-slate-400">
+          Cálculos multivariables basados en severidad, proximidad espacial y proyección a 6 meses.
+        </p>
       </div>
-
-      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner min-h-[350px]">
-        <h4 className="text-xs font-bold text-sky-400 text-center mb-2 tracking-widest">
-          TIPOLOGÍA DELICTIVA (Top 7 Delitos)
-        </h4>
-        <div className="w-full h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={byType} layout="vertical" margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={true} vertical={false} />
-              <XAxis type="number" hide />
-              <YAxis dataKey="name" type="category" width={100} tick={{ fill: "#94a3b8", fontSize: 9 }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: '#1e293b' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc', fontSize: '11px' }} />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                {byType.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex flex-col shadow-inner relative overflow-hidden min-h-[400px]">
-        {inegi && inegi.exito && (
-          <div className="absolute top-0 right-0 bg-emerald-900/80 text-emerald-200 text-[9px] px-2 py-1 rounded-bl-lg font-mono border-b border-l border-emerald-700/50 z-10">
-            INEGI: {inegi.municipioNombre.toUpperCase()} ({inegi.poblacionTotal} HAB)
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 shadow-inner">
+          <h4 className="text-[11px] font-bold text-sky-400 uppercase tracking-wider mb-4 border-b border-sky-900 pb-1">
+            Top 3: Índice de Criminalidad
+          </h4>
+          <div className="space-y-4">
+            {crimeIndexStats.map((item, idx) => (
+              <div key={idx} className="space-y-1">
+                <div className="flex justify-between text-xs items-end">
+                  <span className="font-semibold text-slate-200 truncate pr-2">{item.name}</span>
+                  <span className="text-sky-300 font-mono text-[10px]">Idx: {item.score}</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700">
+                  <div 
+                    className="bg-gradient-to-r from-sky-600 to-sky-400 h-2.5 rounded-full transition-all duration-1000"
+                    style={{ width: `${Math.max(item.percentage, 2)}%` }}
+                  ></div>
+                </div>
+                <p className="text-[9px] text-slate-500">Volumen histórico: {item.count} incidentes</p>
+              </div>
+            ))}
           </div>
-        )}
-        <h4 className="text-xs font-bold text-sky-400 text-center mb-4 mt-2 tracking-widest">
-          CORRELACIÓN FRECUENCIA VS GRAVEDAD
-        </h4>
-        <div className="w-full h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={correlationData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 8 }} angle={-45} textAnchor="end" height={60} interval={0} />
-              <YAxis yAxisId="left" tick={{ fill: "#94a3b8", fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: "#ef4444", fontSize: 9 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f8fafc', fontSize: '11px' }} />
-              <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
-              <Bar yAxisId="left" dataKey="Frecuencia" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
-              <Line yAxisId="right" type="monotone" dataKey="Gravedad" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: "#ef4444" }} />
-            </ComposedChart>
-          </ResponsiveContainer>
         </div>
+
+        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 shadow-inner">
+          <h4 className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-4 border-b border-amber-900 pb-1">
+            Top 3: Riesgo en Nodos (POIs)
+          </h4>
+          {riskIndexStats.length > 0 && riskIndexStats[0].score > 0 ? (
+            <div className="space-y-4">
+              {riskIndexStats.map((item, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex justify-between text-xs items-end">
+                    <span className="font-semibold text-slate-200 truncate pr-2" title={item.name}>{item.name}</span>
+                    <span className="text-amber-300 font-mono text-[10px]">Idx: {item.score}</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700">
+                    <div 
+                      className="bg-gradient-to-r from-amber-600 to-amber-400 h-2.5 rounded-full transition-all duration-1000"
+                      style={{ width: `${Math.max(item.percentage, 2)}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-[9px] text-slate-500 truncate">Cat: {item.category} | Afectación &lt;200m</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-xs text-slate-500 italic text-center pb-4">
+              No hay atractores con actividad delictiva en su periferia cercana (200m).
+            </div>
+          )}
+        </div>
+
+        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 shadow-inner">
+          <h4 className="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-4 border-b border-red-900 pb-1">
+            Proyección a 6 Meses (+20%)
+          </h4>
+          <div className="space-y-4">
+            {projectionStats.map((item, idx) => {
+              const maxVal = Math.max(item.projected, 5);
+              const currentPct = (item.current / maxVal) * 100;
+              const projPct = (item.projected / maxVal) * 100;
+              
+              return (
+                <div key={idx} className="space-y-1">
+                  <div className="flex justify-between text-[11px] items-end">
+                    <span className="font-semibold text-slate-200 truncate pr-2">{item.name}</span>
+                  </div>
+                  <div className="relative w-full bg-slate-800 rounded-sm h-3 border border-slate-700 flex">
+                    <div 
+                      className="bg-slate-500 h-full border-r border-slate-900 z-10 relative flex items-center justify-end pr-1"
+                      style={{ width: `${currentPct}%` }}
+                    >
+                      <span className="text-[8px] font-bold text-white leading-none">{item.current}</span>
+                    </div>
+                    <div 
+                      className="bg-red-500/80 h-full relative flex items-center justify-end pr-1 transition-all duration-1000"
+                      style={{ width: `${projPct - currentPct}%` }}
+                    >
+                      <span className="text-[8px] font-bold text-white leading-none">{item.projected}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-500">
+                    <span>Actual (Gris)</span>
+                    <span className="text-red-400/80">Proyectado (Rojo)</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
       </div>
     </div>
   );

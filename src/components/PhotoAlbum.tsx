@@ -66,8 +66,8 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-/** Tatúa/Quema las coordenadas GPS directamente en los píxeles de la imagen para que nunca se pierdan en Word/PDF */
-async function burnGpsOnImage(srcUrl: string, lat: number | null, lng: number | null, tipo: string): Promise<string> {
+/** Tatúa/Quema el sello de agua directamente en los píxeles de la imagen para que nunca se pierdan en Word/PDF */
+async function burnGpsOnImage(srcUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new window.Image();
     img.crossOrigin = "Anonymous";
@@ -164,7 +164,7 @@ export function PhotoAlbum({
   const [isRefiningDoc, setIsRefiningDoc] = useState(false);
   const [docSuggestions, setDocSuggestions] = useState("");
   const [isAuditingDoc, setIsAuditingDoc] = useState(false);
-  const [mapViewMode, setMapViewMode] = useState<"HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL">("HEATMAP");
+  const [mapViewMode, setMapViewMode] = useState<"HEATMAP" | "ECOLOGY" | "MOBILITY">("HEATMAP");
   const [mapSnapshots, setMapSnapshots] = useState<{ title: string; dataUrl: string }[]>([]);
   const [listeningField, setListeningField] = useState<string | null>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -529,7 +529,6 @@ const hasMinimumPhotos =
       if (mapViewMode === "HEATMAP") title = "Mapa de Zonas Calientes (Heatmap)";
       if (mapViewMode === "ECOLOGY") title = "Mapa de Ecología y Atractores (DENUE)";
       if (mapViewMode === "MOBILITY") title = "Mapa de Topografía y Rutas";
-      if (mapViewMode === "ALL") title = "Atlas Criminológico Completo";
 
       setMapSnapshots(prev => [...prev, { title, dataUrl }]);
     } catch (err) {
@@ -580,14 +579,18 @@ const hasMinimumPhotos =
     if (!rawContent) return;
     setError(null);
     
-    const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
     const snapshotsToExport = await autoCaptureSnapshots();
+    const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
+
+    const mapsSnaps = snapshotsToExport.filter(s => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía"));
+    const chartsSnaps = snapshotsToExport.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica") || !mapsSnaps.includes(s));
+    const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
 
     const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
     const photoUrls: string[] = [];
 
     for (const p of photosToExport) {
-      const burnedUrl = await burnGpsOnImage(p.previewUrl as string, p.lat, p.lng, p.tipo || "Evidencia");
+      const burnedUrl = await burnGpsOnImage(p.previewUrl as string);
       photoUrls.push(burnedUrl);
     }
 
@@ -597,7 +600,7 @@ const hasMinimumPhotos =
         "Dictamen_criminologico_ambiental",
         photoUrls.length > 0 ? photoUrls : undefined,
         profileRiskLevel ?? undefined,
-        snapshotsToExport.length > 0 ? snapshotsToExport : undefined
+        sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined
       );
 
       if (!isReadOnly) await markAsPrinted();
@@ -1256,7 +1259,7 @@ const hasMinimumPhotos =
 
               {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
                 <div id="charts-export-container" className="w-full bg-[#0f172a] rounded-xl p-4 mb-3 border border-slate-700">
-                  <CrimeCharts crimes={analysisResult.historicalCrimes} inegi={analysisResult.inegiDemographics} />
+                  <CrimeCharts crimes={analysisResult.historicalCrimes ?? []} inegi={analysisResult.inegiDemographics} pois={analysisResult.pois ?? []} />
                 </div>
               )}
               <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
@@ -1278,12 +1281,6 @@ const hasMinimumPhotos =
                     className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'MOBILITY' ? 'bg-emerald-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
                   >
                     🛣️ Topografía y Rutas
-                  </button>
-                  <button 
-                    onClick={() => setMapViewMode("ALL")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ALL' ? 'bg-indigo-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                  >
-                    🗺️ Atlas Completo
                   </button>
                 </div>
                 <div className="relative p-0 w-full">
@@ -1655,41 +1652,59 @@ const hasMinimumPhotos =
           )}
 
           {(() => {
-            const firstMapIndex = mapSnapshots.findIndex(s => s.title.includes("MAPA"));
-            if (firstMapIndex === -1 && mapSnapshots.length > 0) return null;
-            const mainMap = mapSnapshots[firstMapIndex !== -1 ? firstMapIndex : 0];
-            return mainMap && (
-              <div className="mb-6 break-inside-avoid">
-                <h3 className="text-sm font-bold text-slate-500 uppercase mb-2">MAPA TÁCTICO DE CONTEXTO</h3>
-                <img src={mainMap.dataUrl} alt="Mapa Principal" className="w-full h-auto max-h-[350px] object-contain border border-slate-300 rounded-lg shadow-sm" />
-                <p className="text-[10px] text-slate-500 mt-1 italic">
-                  {project?.geometryType === 'lineal' ? 'Análisis de Corredor (Ruta y Trayecto)' : project?.geometryType === 'poligono' ? 'Análisis de Polígono (Perímetro e Interior)' : 'Análisis Nodal (Punto focal)'}
-                </p>
+            const mapsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía"));
+            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica") || !mapsSnaps.includes(s));
+            const combined = [...mapsSnaps, ...chartsSnaps];
+            
+            if (combined.length === 0) return (
+              <div className="mb-8">
+                <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
+                <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">
+                  {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
+                </div>
               </div>
             );
-          })()}
-
-          <div className="mb-8">
-            <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
-            <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">
-              {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
-            </div>
-          </div>
-
-          {(() => {
-            const firstMapIndex = mapSnapshots.findIndex(s => s.title.includes("MAPA"));
-            const idxToExclude = firstMapIndex !== -1 ? firstMapIndex : -1;
-            const remaining = mapSnapshots.filter((_, i) => i !== idxToExclude);
             
-            if (remaining.length === 0) return null;
+            const chunks = [];
+            for (let i = 0; i < combined.length; i += 4) chunks.push(combined.slice(i, i + 4));
             
             return (
               <>
+                <div className="mb-8">
+                  <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
+                  <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">
+                    {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
+                  </div>
+                </div>
+
+                {/* NUEVA PORTADA CAPÍTULO MAPAS Y GRÁFICAS */}
                 <div className="html2pdf__page-break"></div>
-                {remaining.map((snap, idx) => (
-                  <div key={idx} className="mb-8 break-inside-avoid">
-                    <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">ANEXO ESTADÍSTICO Y CARTOGRÁFICO: {snap.title.toUpperCase()}</h3>
-                    <img src={snap.dataUrl} alt={snap.title} className="w-full h-auto object-contain border border-slate-300 rounded-lg shadow-sm" />
+                <div className="flex flex-col items-center justify-center h-[1040px] bg-slate-50 border-8 border-slate-800 m-4">
+                  <h1 className="text-5xl font-black text-slate-900 tracking-widest uppercase mb-4 text-center">Mapas y Gráficas</h1>
+                  <div className="w-32 h-2 bg-sky-700 mb-6"></div>
+                  <p className="text-xl font-bold text-slate-500 uppercase tracking-widest text-center">Anexo Geoespacial y Algorítmico</p>
+                </div>
+
+                {/* CUADRÍCULA DE 4 ELEMENTOS POR PÁGINA */}
+                {chunks.map((chunk, cIdx) => (
+                  <div key={`chunk-${cIdx}`} className="html2pdf__page-break flex flex-col justify-center h-[1080px] p-8 bg-white">
+                    <div className="grid grid-cols-2 grid-rows-2 gap-6 h-full w-full">
+                      {Array.from({ length: 4 }).map((_, i) => {
+                        const snap = chunk[i];
+                        return snap ? (
+                          <div key={i} className="border-4 border-slate-800 p-4 rounded-xl flex flex-col h-full bg-slate-50 shadow-sm overflow-hidden">
+                            <h4 className="text-[13px] font-black text-slate-800 text-center mb-3 uppercase tracking-wider border-b-2 border-slate-800 pb-2 truncate">{snap.title}</h4>
+                            <div className="flex-1 overflow-hidden flex items-center justify-center">
+                              <img src={snap.dataUrl} className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div key={i} className="border-4 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center h-full bg-slate-50/50">
+                            <span className="text-slate-300 text-sm font-bold uppercase tracking-widest">Espacio Vacío</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </>
