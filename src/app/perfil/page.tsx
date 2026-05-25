@@ -84,7 +84,7 @@ export default function PerfilPage() {
       // El AuthContext debería actualizarse automáticamente gracias a los listeners de Firebase.
       // Navegamos al Lobby después de un momento para que el usuario vea el mensaje.
       setTimeout(() => {
-        router.push("/");
+        window.location.href = "/";
       }, 1000);
     } catch (error: any) {
       setMessage("Error al guardar perfil: " + error.message);

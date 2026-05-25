@@ -4,28 +4,60 @@ import Link from "next/link";
 import { ProjectList } from "@/components/ProjectList";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 export default function HomePage() {
   const { user } = useAuth();
   const router = useRouter();
-
-  // Evaluamos si el perfil está incompleto (faltan datos base)
-  const isProfileIncomplete = user && (
-    !(user as any).nombre || 
-    !(user as any).apellidoPaterno || 
-    !(user as any).apellidoMaterno || 
-    !(user as any).grado || 
-    !(user as any).id_empleado
-  );
+  const [isChecking, setIsChecking] = useState(true);
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
 
   useEffect(() => {
-    if (isProfileIncomplete) {
+    if (!user) {
+      setIsChecking(false);
+      return;
+    }
+
+    const checkProfile = async () => {
+      try {
+        const db = getDb();
+        const snap = await getDoc(doc(db, "users", String((user as any).id)));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (!data.nombre || !data.apellidoPaterno || !data.apellidoMaterno || !data.grado || !data.id_empleado) {
+            setProfileIncomplete(true);
+          } else {
+            setProfileIncomplete(false);
+          }
+        } else {
+          setProfileIncomplete(true);
+        }
+      } catch (err) {
+        console.error("Error verificando perfil:", err);
+        setProfileIncomplete(false);
+      } finally {
+        setIsChecking(false);
+      }
+    };
+    
+    checkProfile();
+  }, [user]);
+
+  useEffect(() => {
+    if (profileIncomplete) {
       router.push("/perfil");
     }
-  }, [isProfileIncomplete, router]);
+  }, [profileIncomplete, router]);
 
-  if (isProfileIncomplete) return null; // Evita el parpadeo del dashboard antes de redirigir
+  if (isChecking || profileIncomplete) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-slate-400 text-sm animate-pulse">Verificando acceso al sistema...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
