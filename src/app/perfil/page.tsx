@@ -244,6 +244,7 @@ export default function PerfilPage() {
             <div className="flex items-center gap-4">
               <div className="flex-shrink-0 w-24 h-24 rounded-lg bg-slate-950 border border-slate-700 overflow-hidden flex items-center justify-center">
                 {formData.fotografia ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={formData.fotografia} alt="Fotografía" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-3xl">👤</span>

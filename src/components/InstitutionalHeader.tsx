@@ -37,6 +37,7 @@ export function InstitutionalHeader() {
           {user && (
             <div className="flex items-center gap-2 mr-1 sm:mr-3 border-r border-slate-700/50 pr-3 sm:pr-4">
               {(user as any).fotografia ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={(user as any).fotografia} alt="Usuario" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover border border-slate-500 shadow-sm" />
               ) : (
                 <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-sm shadow-sm">👤</div>
