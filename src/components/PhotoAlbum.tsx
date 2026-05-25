@@ -169,6 +169,9 @@ export function PhotoAlbum({
   const [listeningField, setListeningField] = useState<string | null>(null);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
+  const [isValidatingPhotos, setIsValidatingPhotos] = useState(false);
+  const [docAuditScore, setDocAuditScore] = useState<number | null>(null);
+  const [analysisAuditScore, setAnalysisAuditScore] = useState<number | null>(null);
 
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
@@ -238,7 +241,7 @@ const hasMinimumPhotos =
     }
   };
 
-  const handleOpenConfigModal = () => {
+  const handleOpenConfigModal = async () => {
     if (selectedIds.length === 0) {
       setError("Seleccione al menos una fotografía.");
       return;
@@ -258,6 +261,29 @@ const hasMinimumPhotos =
       setError("Todas las fotografías seleccionadas deben estar contextualizadas (Tipo y Comentario son obligatorios).");
       return;
     }
+
+    setIsValidatingPhotos(true);
+    setError(null);
+    try {
+      const photosContext = selectedPhotos.map(p => `[${p.tipo}] ${p.comentario}`).join(" | ");
+      const res = await fetch("/api/refine-context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: photosContext, mode: "validate-photos", geometryType: project?.geometryType || "individual" })
+      });
+      const data = await res.json();
+      if ((data.score ?? 0) < 80) {
+        setError(`⚠️ RECHAZADO (Lógica ${data.score ?? 0}%): ${data.suggestions || "Mejora el rigor técnico de la evidencia."}`);
+        setIsValidatingPhotos(false);
+        return;
+      }
+    } catch (err) {
+      console.error("Error al validar fotos:", err);
+      setError("Error de comunicación al validar evidencia. Intente de nuevo.");
+      setIsValidatingPhotos(false);
+      return;
+    }
+    setIsValidatingPhotos(false);
 
     setError(null);
     setShowConfigModal(true);
@@ -920,6 +946,7 @@ const hasMinimumPhotos =
                 onClick={async () => {
                   setIsRefiningDoc(true);
                   setDocSuggestions("");
+                  setDocAuditScore(null);
                   try {
                     const selected = album.filter((p) => selectedIds.includes(p.id));
                     const minimalPhotos = selected.map((p) => ({ lat: p.lat, lng: p.lng }));
@@ -929,6 +956,7 @@ const hasMinimumPhotos =
                       body: JSON.stringify({
                         context: docContext,
                         photos: minimalPhotos,
+                        mode: "suggest",
                         geometryType: project?.geometryType || "individual",
                         projectDescription: project?.descripcion || "",
                       }),
@@ -936,6 +964,10 @@ const hasMinimumPhotos =
                     const data = await res.json();
                     if (res.ok) {
                       setDocSuggestions(data.suggestions ?? "");
+                      setDocAuditScore(data.score ?? 0);
+                      if ((data.score ?? 0) >= 80) {
+                        setIsDocContextAudited(true);
+                      }
                     } else {
                       setError(data.error || "No se pudieron obtener sugerencias de IA.");
                     }
@@ -954,7 +986,14 @@ const hasMinimumPhotos =
 
             {docSuggestions && (
               <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2 w-full">
-                <p className="font-semibold mb-1">Borrador y Sugerencias de IA (Editable):</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-semibold">Borrador y Sugerencias de IA (Editable):</p>
+                  {docAuditScore !== null && (
+                    <span className={`px-2 py-1 rounded font-bold ${docAuditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                      Lógica: {docAuditScore}%
+                    </span>
+                  )}
+                </div>
             <div className="relative w-full">
               <button
                 type="button"
@@ -974,7 +1013,8 @@ const hasMinimumPhotos =
                     type="button"
                     onClick={() => {
                       setDocSuggestions("");
-                      setIsDocContextAudited(true);
+                      setDocAuditScore(null);
+                      setIsDocContextAudited(false);
                     }}
                     className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
                   >
@@ -997,7 +1037,11 @@ const hasMinimumPhotos =
                           }),
                         });
                         const data = await res.json();
-                        if (res.ok) setDocSuggestions(data.suggestions ?? "");
+                      if (res.ok) {
+                        setDocSuggestions(data.suggestions ?? "");
+                        setDocAuditScore(data.score ?? 0);
+                        if ((data.score ?? 0) >= 80) setIsDocContextAudited(true);
+                      }
                         else setError(data.error || "Error al auditar sugerencia.");
                       } catch (err) { setError("Error de comunicación al auditar."); }
                       finally { setIsAuditingDoc(false); }
@@ -1014,10 +1058,10 @@ const hasMinimumPhotos =
                       setDocSuggestions("");
                       setIsDocContextAudited(true);
                     }}
-                    disabled={isAuditingDoc}
+                    disabled={isAuditingDoc || (docAuditScore !== null && docAuditScore < 80)}
                     className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                   >
-                    Aplicar al Contexto
+                    Aplicar al Contexto {(docAuditScore !== null && docAuditScore < 80) ? '(Requiere 80%)' : ''}
                   </button>
                 </div>
               </div>
@@ -1077,11 +1121,11 @@ const hasMinimumPhotos =
       <div className="pt-4 border-t border-slate-800 space-y-2 hidden md:block print:hidden">
         <button
           type="button"
-          onClick={handleOpenConfigModal}
-          disabled={isGeneratingAI || selectedIds.length === 0 || isReadOnly}
+          onClick={() => void handleOpenConfigModal()}
+          disabled={isGeneratingAI || isValidatingPhotos || selectedIds.length === 0 || isReadOnly}
           className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isGeneratingAI ? (
+          {isGeneratingAI || isValidatingPhotos ? (
             <>
               <svg
                 className="mr-2 h-4 w-4 animate-spin text-slate-100"
@@ -1094,7 +1138,7 @@ const hasMinimumPhotos =
                   d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
                 />
               </svg>
-              Procesando inteligencia... Por favor espere
+              {isValidatingPhotos ? "Auditando evidencia fotográfica..." : "Procesando inteligencia... Por favor espere"}
             </>
           ) : aiProfile ? (
             isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Análisis Criminológico"
@@ -1438,6 +1482,7 @@ const hasMinimumPhotos =
                     onClick={async () => {
                       setIsRefining(true);
                       setAiSuggestions("");
+                      setAnalysisAuditScore(null);
                       try {
                         const selected = album.filter((p) =>
                           selectedIds.includes(p.id)
@@ -1452,6 +1497,7 @@ const hasMinimumPhotos =
                           body: JSON.stringify({
                             context: analysisContext,
                             photos: minimalPhotos,
+                            mode: "suggest",
                             geometryType: project?.geometryType || "individual",
                             projectDescription: project?.descripcion || "",
                           }),
@@ -1459,6 +1505,10 @@ const hasMinimumPhotos =
                         const data = await res.json();
                         if (res.ok) {
                           setAiSuggestions(data.suggestions ?? "");
+                          setAnalysisAuditScore(data.score ?? 0);
+                          if ((data.score ?? 0) >= 80) {
+                            setIsAnalysisContextAudited(true);
+                          }
                         } else {
                           setError(
                             data.error ||
@@ -1493,7 +1543,14 @@ const hasMinimumPhotos =
                 </div>
                 {aiSuggestions && (
                   <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2">
-                    <p className="font-semibold mb-1">Borrador y Sugerencias de IA (Editable):</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-semibold">Borrador y Sugerencias de IA (Editable):</p>
+                      {analysisAuditScore !== null && (
+                        <span className={`px-2 py-1 rounded font-bold ${analysisAuditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                          Lógica: {analysisAuditScore}%
+                        </span>
+                      )}
+                    </div>
                     <div className="relative w-full">
                       <button
                         type="button"
@@ -1516,7 +1573,8 @@ const hasMinimumPhotos =
                         type="button"
                         onClick={() => {
                           setAiSuggestions("");
-                          setIsAnalysisContextAudited(true);
+                          setAnalysisAuditScore(null);
+                          setIsAnalysisContextAudited(false);
                         }}
                         className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
                       >
@@ -1541,6 +1599,10 @@ const hasMinimumPhotos =
                             const data = await res.json();
                             if (res.ok) {
                               setAiSuggestions(data.suggestions ?? "");
+                              setAnalysisAuditScore(data.score ?? 0);
+                              if ((data.score ?? 0) >= 80) {
+                                setIsAnalysisContextAudited(true);
+                              }
                             } else {
                               setError(data.error || "Error al auditar sugerencia.");
                             }
@@ -1562,10 +1624,10 @@ const hasMinimumPhotos =
                           setAiSuggestions("");
                           setIsAnalysisContextAudited(true);
                         }}
-                        disabled={isAuditing}
+                        disabled={isAuditing || (analysisAuditScore !== null && analysisAuditScore < 80)}
                         className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                       >
-                        Aplicar al Contexto Principal
+                        Aplicar al Contexto Principal {(analysisAuditScore !== null && analysisAuditScore < 80) ? '(Requiere 80%)' : ''}
                       </button>
                     </div>
                   </div>

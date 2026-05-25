@@ -13,7 +13,7 @@ function getGeminiKey(): string {
 type RefineBody = {
   context: string;
   photos?: { lat: number | null; lng: number | null }[];
-  mode?: "suggest" | "audit";
+  mode?: "suggest" | "audit" | "validate-photos";
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
 };
@@ -57,24 +57,44 @@ export async function POST(req: Request) {
     
     if (mode === "audit") {
       prompt = `
-Eres un Analista de Inteligencia Táctica Senior adscrito al CEIPOL.
-El investigador de campo ha redactado la siguiente hipótesis operativa:
+Eres un Auditor Experto en Criminología Ambiental adscrito al CEIPOL.
+El investigador ha redactado la siguiente contextualización / hipótesis operativa:
 "${cleanedContext}"
 
 ${descContext}
 ${geoInstruction}
 
 Instrucción:
-Audita, pule y mejora radicalmente esta hipótesis. Eleva el nivel técnico, corrige redacción, asegura que suene altamente profesional, AGRESIVO, PROFUNDO y estrictamente enfocado en Criminología Ambiental.
-Asegúrate de que la hipótesis auditada integre la directriz de voz y la directriz geométrica sin desviarse.
-Devuelve ÚNICAMENTE el texto mejorado, sin preámbulos, listo para ser copiado y pegado en el informe final.
+Audita la lógica, objetividad y utilidad operativa de esta contextualización para un dictamen de Criminología Ambiental.
+Evalúa de 0 a 100 qué tan técnica, lógica y aplicable es. Si el usuario señala cosas subjetivas, vagas, o sin contexto táctico, el score debe ser menor a 80.
+Devuelve un objeto JSON estrictamente con este formato:
+{
+  "score": <número de 0 a 100 evaluando la efectividad>,
+  "suggestions": "<Si score < 80: explica detalladamente por qué es deficiente y qué datos o teorías faltan de forma tajante. Si score >= 80: devuelve ÚNICAMENTE la versión auditada y mejorada, lista para ser insertada.>"
+}
+`.trim();
+    } else if (mode === "validate-photos") {
+      prompt = `
+Eres un Auditor Experto en Criminología Ambiental.
+El investigador ha capturado evidencia fotográfica y las ha contextualizado con los siguientes comentarios:
+"${cleanedContext}"
+
+Instrucción:
+Evalúa la lógica, utilidad operativa y objetividad de estas contextualizaciones fotográficas.
+Si las descripciones son vagas, subjetivas o carecen de valor técnico (ej. "Aquí hay un ladrón", "lugar feo"), el score debe ser menor a 80.
+Si las descripciones aportan datos sobre deterioro urbano, falta de controles, atractores de riesgo, o flujos de movilidad, el score será 80 o mayor.
+Devuelve un objeto JSON estrictamente con este formato:
+{
+  "score": <número de 0 a 100 evaluando la efectividad de la contextualización>,
+  "suggestions": "<Si score < 80: explica detalladamente por qué la evidencia falla y qué debe mejorar de forma tajante. Si score >= 80: indica brevemente 'Validación fotográfica exitosa.'>"
+}
 `.trim();
     } else {
       prompt = `
-Eres un Analista de Inteligencia Táctica Senior adscrito al CEIPOL. Un investigador de campo necesita contexto operacional para un Perfil Criminológico Ambiental.
+Eres un Auditor Experto en Criminología Ambiental adscrito al CEIPOL. Un investigador necesita contexto operacional para un Perfil Criminológico Ambiental.
 
-Contexto preliminar del analista (si existe):
-"${cleanedContext || "(El analista aún no ha redactado una hipótesis, genera sugerencias de enfoque táctico a partir de la geografía y teoría criminológica)"}"
+Contexto preliminar del analista:
+"${cleanedContext || "(Vacío)"}"
 
 Coordenadas aproximadas de las fotos:
 ${coordsText}
@@ -83,24 +103,18 @@ ${descContext}
 ${geoInstruction}
 
 Instrucción:
-Proporciona 3 o 4 sugerencias PROFUNDAS, TÁCTICAS, AGRESIVAS y SEVERAS basadas en la Criminología Ambiental.
-Instruye al analista con mandatos estrictos sobre qué DEBE observar e incluir en su hipótesis basándose en la geometría (${geometryType || "individual"}).
-
-Responde en español, usando viñetas directas, con lenguaje de inteligencia policial/táctico. NO repitas el contexto original, indícale qué agregar para robustecer su hipótesis.
+Evalúa de 0 a 100 qué tan útil y lógica es la contextualización actual. Si está vacía o es muy pobre, el score será muy bajo.
+Proporciona 3 o 4 sugerencias PROFUNDAS, TÁCTICAS y SEVERAS basadas en la Criminología Ambiental.
+Devuelve un objeto JSON estrictamente con este formato:
+{
+  "score": <número de 0 a 100>,
+  "suggestions": "<Si score < 80: provee las sugerencias en viñetas directas con lenguaje policial/táctico sobre QUÉ debe agregar para llegar al 80%. Si score >= 80: provee complementos avanzados.>"
+}
 `.trim();
     }
 
-    // Si no hay clave de Gemini, devolvemos sugerencias genéricas para no romper el flujo de la UI.
     if (!apiKey) {
-      if (mode === "audit") {
-        return NextResponse.json({ suggestions: cleanedContext + "\n\n(Nota: Auditoría no disponible por falta de API Key)" });
-      }
-      const fallback =
-        "• Analice e integre los vectores de movilidad táctica (rutas de aproximación y escape) y la presencia de barreras físicas.\n" +
-        "• Evalúe el nivel de deterioro urbano (Ventanas Rotas) y su correlación con la percepción de impunidad en el polígono.\n" +
-        "• Identifique atractores delictivos cercanos (giros negros, zonas de abandono) y cruce con Inteligencia de Fuentes Abiertas (OSINT).\n" +
-        "• Describa la presencia o ausencia de guardianes formales e informales (Cámaras C5i, iluminación, vigilancia vecinal).";
-      return NextResponse.json({ suggestions: fallback });
+      return NextResponse.json({ score: 100, suggestions: cleanedContext + "\n\n(Nota: Auditoría no disponible por falta de API Key)" });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey.trim());
@@ -108,17 +122,16 @@ Responde en español, usando viñetas directas, con lenguaje de inteligencia pol
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
-    return NextResponse.json({ suggestions: text });
+    let parsed;
+    try {
+      const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      parsed = JSON.parse(cleanText);
+    } catch (e) {
+      parsed = { score: 0, suggestions: "La respuesta de la IA no pudo ser interpretada. Revise su redacción: " + text };
+    }
+    return NextResponse.json(parsed);
   } catch (err) {
     console.error("[api/refine-context] Error:", err);
-    // Degradación elegante: si Gemini falla, devolvemos sugerencias genéricas en vez de 500.
-    if ((req as any).mode === "audit") {
-      return NextResponse.json({ suggestions: "Error al auditar. Intente de nuevo." });
-    }
-    const fallback =
-      "• Evalúe las vulnerabilidades espaciales basándose en las Actividades Rutinarias de la zona (flujos de víctimas e infractores).\n" +
-      "• Considere la Teoría de Elección Racional: describa qué elementos del entorno facilitan la decisión delictiva.\n" +
-      "• Determine la conectividad del sitio con posibles rutas de huida o zonas de impunidad.";
-    return NextResponse.json({ suggestions: fallback });
+    return NextResponse.json({ score: 0, suggestions: "Error interno al auditar. Intente de nuevo." });
   }
 }
