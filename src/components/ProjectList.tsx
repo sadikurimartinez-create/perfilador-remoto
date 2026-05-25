@@ -15,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { exportToWord } from "@/lib/exportToWord";
 
 type ProjectWithCount = {
   id: string;
@@ -85,6 +86,23 @@ export function ProjectList() {
       photos,
     });
     setPreviewModalOpen(true);
+  };
+
+  const handleDownloadDictamen = async (project: ProjectWithCount, analysis: any) => {
+    try {
+      alert("Generando el dictamen oficial en Word. Esto puede tardar unos segundos dependiendo de las imágenes...");
+      let photos = Array.isArray(analysis?.attachedPhotos) ? analysis.attachedPhotos : [];
+      if (!photos.length) {
+        const firestore = getDb();
+        const photosCol = collection(firestore, "projects", project.id, "photos");
+        const snap = await getDocs(photosCol);
+        photos = snap.docs.map((d) => d.data().url);
+      }
+      await exportToWord(analysis.content, project.name, photos);
+    } catch (err) {
+      console.error("Error exportando a Word:", err);
+      alert("Ocurrió un error al generar el documento Word.");
+    }
   };
 
   useEffect(() => {
@@ -510,6 +528,15 @@ export function ProjectList() {
                                 >
                                   👁️ Vista Previa y Evidencia
                                 </button>
+                                {p.estado === "CERRADO" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDownloadDictamen(p, a)}
+                                    className="inline-flex items-center gap-1 rounded-md bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/50 border border-emerald-700/50 px-3 py-1 text-[11px] font-semibold transition-colors"
+                                  >
+                                    📄 Descargar Dictamen Oficial
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
