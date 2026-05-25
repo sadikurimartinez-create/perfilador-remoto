@@ -39,7 +39,7 @@ export function ProfileGuard({ children }: { children: React.ReactNode }) {
   }, [user, loading]);
 
   useEffect(() => {
-    if (!isProfileComplete && !pathname.startsWith("/perfil")) {
+    if (isProfileComplete === false && !pathname.startsWith("/perfil")) {
       router.push("/perfil");
     }
   }, [isProfileComplete, pathname, router]);
