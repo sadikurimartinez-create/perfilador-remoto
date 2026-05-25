@@ -166,6 +166,9 @@ export function PhotoAlbum({
   const [isAuditingDoc, setIsAuditingDoc] = useState(false);
   const [mapViewMode, setMapViewMode] = useState<"HEATMAP" | "ECOLOGY" | "MOBILITY" | "ALL">("HEATMAP");
   const [mapSnapshots, setMapSnapshots] = useState<{ title: string; dataUrl: string }[]>([]);
+  const [listeningField, setListeningField] = useState<string | null>(null);
+  const recognitionRef = useRef<any | null>(null);
+  const lastTranscriptRef = useRef<string>("");
 
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
@@ -185,6 +188,55 @@ const currentPhotos = album.length;
 
 const hasMinimumPhotos =
   currentPhotos >= requiredPhotos;
+
+  const toggleDictation = (fieldId: string, onUpdate: (text: string) => void) => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Este navegador no soporta dictado por voz. Use la versión de escritorio o Chrome/Android.");
+      return;
+    }
+
+    try {
+      if (listeningField === fieldId) {
+        if (recognitionRef.current) recognitionRef.current.stop();
+        setListeningField(null);
+        return;
+      }
+      if (recognitionRef.current && listeningField) {
+        recognitionRef.current.stop();
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "es-MX";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => setListeningField(fieldId);
+      recognition.onerror = () => setListeningField(null);
+      recognition.onend = () => setListeningField(null);
+      recognition.onresult = (event: any) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) finalTranscript += (event.results[i][0]?.transcript || "").trim() + " ";
+        }
+        const normalized = finalTranscript.trim();
+        if (!normalized || normalized === lastTranscriptRef.current) return;
+        lastTranscriptRef.current = normalized;
+        onUpdate(normalized);
+      };
+
+      recognitionRef.current = recognition;
+      lastTranscriptRef.current = "";
+      recognition.start();
+    } catch (e) {
+      console.error("Error micrófono:", e);
+      setListeningField(null);
+    }
+  };
 
   const handleOpenConfigModal = () => {
     if (selectedIds.length === 0) {
@@ -733,14 +785,26 @@ const hasMinimumPhotos =
                   )}
                   
                   {/* Campo de comentarios (Obligatorio) - Visible en móvil y PC */}
-                  <input
-                    type="text"
-                    placeholder="Comentario (Obligatorio)..."
-                    value={p.comentario || ""}
-                    disabled={isReadOnly}
-                    onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
-                    className={`w-full mt-2 bg-slate-800 text-slate-200 border rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50 ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
-                  />
+                  <div className="relative w-full mt-2">
+                    <input
+                      type="text"
+                      placeholder="Comentario (Obligatorio)..."
+                      value={p.comentario || ""}
+                      disabled={isReadOnly}
+                      onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
+                      className={`w-full bg-slate-800 text-slate-200 border rounded-md p-2 pr-8 text-xs outline-none focus:border-sky-500 disabled:opacity-50 ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
+                    />
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => toggleDictation(`comentario-${p.id}`, (text) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: ((p.comentario || "") + " " + text).trim() }))}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 ${listeningField === 'comentario-'+p.id ? 'text-red-400 animate-pulse' : 'text-slate-400 hover:text-sky-400'}`}
+                        title="Dictar comentario por voz"
+                      >
+                        🎙️
+                      </button>
+                    )}
+                  </div>
 
                   {visionData[p.id]?.extractedText && (
                     <span className="mt-0.5 inline-flex items-center gap-1 bg-blue-900/80 text-blue-200 text-[10px] px-2 py-0.5 rounded border border-blue-700">
@@ -822,16 +886,30 @@ const hasMinimumPhotos =
               className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50"
               accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
             />
-            <textarea
-              value={docContext}
-              disabled={isReadOnly}
-              onChange={(e) => {
-                setDocContext(e.target.value);
-                setIsDocContextAudited(false);
-              }}
-              placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
-              className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
-            />
+            <div className="w-full relative">
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => toggleDictation('docContext', (text) => {
+                    setDocContext(prev => (prev ? `${prev.trim()} ${text}` : text));
+                    setIsDocContextAudited(false);
+                  })}
+                  className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'docContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+                >
+                  <span>🎙️</span> {listeningField === 'docContext' ? "Grabando..." : "Dictar"}
+                </button>
+              )}
+              <textarea
+                value={docContext}
+                disabled={isReadOnly}
+                onChange={(e) => {
+                  setDocContext(e.target.value);
+                  setIsDocContextAudited(false);
+                }}
+                placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
+                className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
+              />
+            </div>
             
             <div className="flex items-center gap-2">
               <button
@@ -874,11 +952,20 @@ const hasMinimumPhotos =
             {docSuggestions && (
               <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2 w-full">
                 <p className="font-semibold mb-1">Borrador y Sugerencias de IA (Editable):</p>
-                <textarea
-                  value={docSuggestions}
-                  onChange={(e) => setDocSuggestions(e.target.value)}
-                  className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                />
+            <div className="relative w-full">
+              <button
+                type="button"
+                onClick={() => toggleDictation('docSuggestions', (text) => setDocSuggestions(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'docSuggestions' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
+              >
+                <span>🎙️</span>
+              </button>
+              <textarea
+                value={docSuggestions}
+                onChange={(e) => setDocSuggestions(e.target.value)}
+                className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+              />
+            </div>
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
@@ -1106,10 +1193,21 @@ const hasMinimumPhotos =
                   </div>
                 )}
               </div>
-              <div className="space-y-1 w-full flex flex-col">
-                <label className="block text-xs font-semibold text-slate-200">
-                  Dictamen editable por el analista
-                </label>
+              <div className="space-y-2 w-full flex flex-col">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-semibold text-slate-200">
+                    Dictamen editable por el analista
+                  </label>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => toggleDictation('editableProfile', (text) => setEditableProfile(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'editableProfile' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
+                    >
+                      <span>🎙️</span> {listeningField === 'editableProfile' ? "Grabando..." : "Dictar edición"}
+                    </button>
+                  )}
+                </div>
                 <textarea
                   value={editableProfile}
                   onChange={(e) => setEditableProfile(e.target.value)}
@@ -1291,13 +1389,22 @@ const hasMinimumPhotos =
                         </div>
 
                         {focusAreas.includes("Otro") && (
-                          <textarea
-                            placeholder="Especifique otros objetivos prioritarios del análisis..."
-                            value={analysisContextExtra ?? ""}
-                            onChange={(e) => setAnalysisContextExtra(e.target.value)}
-                            className="mt-2 w-full rounded-md border border-slate-700 px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                            rows={4}
-                          />
+                          <div className="relative mt-2 w-full">
+                            <button
+                              type="button"
+                              onClick={() => toggleDictation('analysisContextExtra', (text) => setAnalysisContextExtra(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                              className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'analysisContextExtra' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+                            >
+                              <span>🎙️</span>
+                            </button>
+                            <textarea
+                              placeholder="Especifique otros objetivos prioritarios del análisis..."
+                              value={analysisContextExtra ?? ""}
+                              onChange={(e) => setAnalysisContextExtra(e.target.value)}
+                              className="w-full rounded-md border border-slate-700 bg-slate-900 px-4 py-3 pr-10 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                              rows={4}
+                            />
+                          </div>
                         )}
                       </>
                     );
@@ -1307,6 +1414,16 @@ const hasMinimumPhotos =
                   <label className="block text-xs font-medium text-slate-300">
                     Hipótesis del investigador (contexto del cruce de ubicaciones)
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('analysisContext', (text) => {
+                      setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
+                      setIsAnalysisContextAudited(false);
+                    })}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
+                  >
+                    <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
+                  </button>
                 </div>
                 <textarea
                   value={analysisContext}
@@ -1380,11 +1497,20 @@ const hasMinimumPhotos =
                 {aiSuggestions && (
                   <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2">
                     <p className="font-semibold mb-1">Borrador y Sugerencias de IA (Editable):</p>
-                    <textarea
-                      value={aiSuggestions}
-                      onChange={(e) => setAiSuggestions(e.target.value)}
-                      className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 text-sm text-yellow-100 min-h-[140px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                    />
+                    <div className="relative w-full">
+                      <button
+                        type="button"
+                        onClick={() => toggleDictation('aiSuggestions', (text) => setAiSuggestions(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                        className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'aiSuggestions' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
+                      >
+                        <span>🎙️</span>
+                      </button>
+                      <textarea
+                        value={aiSuggestions}
+                        onChange={(e) => setAiSuggestions(e.target.value)}
+                        className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[140px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+                      />
+                    </div>
                     <p className="mt-1 text-[10px] text-yellow-300/80">
                       Edite el texto libremente. Puede pedir a la IA que audite y mejore su redacción técnica antes de aplicarlo al contexto principal.
                     </p>

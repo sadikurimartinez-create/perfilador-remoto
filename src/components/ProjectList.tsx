@@ -34,6 +34,7 @@ export function ProjectList() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
+  const [listeningTarget, setListeningTarget] = useState<string>("descripcion");
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const { user, loading } = useAuth();
@@ -135,7 +136,7 @@ export function ProjectList() {
     return () => unsub();
   }, [loading, user]);
 
-  const handleToggleDictation = () => {
+  const handleToggleDictation = (target: string) => {
     if (typeof window === "undefined") return;
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
@@ -146,6 +147,14 @@ export function ProjectList() {
     }
 
     try {
+      if (isListening && listeningTarget === target) {
+        if (recognitionRef.current) recognitionRef.current.stop();
+        setIsListening(false);
+        return;
+      }
+      if (isListening) {
+        if (recognitionRef.current) recognitionRef.current.stop();
+      }
       if (!recognitionRef.current) {
         const recognition = new SpeechRecognition();
         recognition.lang = "es-MX";
@@ -153,7 +162,7 @@ export function ProjectList() {
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
-        recognition.onstart = () => setIsListening(true);
+        recognition.onstart = () => { setIsListening(true); };
         recognition.onerror = (event: any) => {
           console.error("Error en micrófono:", event?.error);
           setIsListening(false);
@@ -176,18 +185,19 @@ export function ProjectList() {
             if (!normalized) return;
             if (normalized === lastTranscriptRef.current) return;
             lastTranscriptRef.current = normalized;
-            setDescripcionInput((prev) => prev ? `${prev.trim()} ${normalized}` : normalized);
+            if (listeningTarget === "nombre") {
+              setNombreInput((prev) => prev ? `${prev.trim()} ${normalized}` : normalized);
+            } else {
+              setDescripcionInput((prev) => prev ? `${prev.trim()} ${normalized}` : normalized);
+            }
           }
         };
         recognitionRef.current = recognition;
       }
       const recognition = recognitionRef.current as any;
-      if (isListening) {
-        recognition.stop();
-      } else {
-        lastTranscriptRef.current = "";
-        recognition.start();
-      }
+      setListeningTarget(target);
+      lastTranscriptRef.current = "";
+      recognition.start();
     } catch (e) {
       console.error("Error al iniciar reconocimiento de voz:", e);
       setIsListening(false);
@@ -479,9 +489,23 @@ export function ProjectList() {
       ) : (
         <div className="card p-6 space-y-4 max-w-md">
           <label className="block">
-            <span className="block text-sm font-medium text-slate-200 mb-1">
-              Nombre del Proyecto
-            </span>
+        <div className="flex items-center justify-between mb-1">
+          <span className="block text-sm font-medium text-slate-200">
+            Nombre del Proyecto
+          </span>
+          <button
+            type="button"
+            onClick={() => handleToggleDictation("nombre")}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
+              isListening && listeningTarget === "nombre"
+                ? "border-red-500 text-red-300 bg-red-900/40"
+                : "border-slate-600 text-slate-200 bg-slate-900"
+            }`}
+          >
+            <span aria-hidden="true">🎙️</span>
+            <span>{isListening && listeningTarget === "nombre" ? "Detener" : "Dictar"}</span>
+          </button>
+        </div>
             <input
               type="text"
               value={nombreInput}
@@ -532,15 +556,15 @@ export function ProjectList() {
               <span className="block text-sm font-medium text-slate-200">Explicación del Proyecto</span>
               <button
                 type="button"
-                onClick={handleToggleDictation}
+            onClick={() => handleToggleDictation("descripcion")}
                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
-                  isListening
+              isListening && listeningTarget === "descripcion"
                     ? "border-red-500 text-red-300 bg-red-900/40"
                     : "border-slate-600 text-slate-200 bg-slate-900"
                 }`}
               >
                 <span aria-hidden="true">🎙️</span>
-                <span>{isListening ? "Detener grabación" : "Grabar explicación"}</span>
+            <span>{isListening && listeningTarget === "descripcion" ? "Detener grabación" : "Grabar explicación"}</span>
               </button>
             </div>
             <textarea
