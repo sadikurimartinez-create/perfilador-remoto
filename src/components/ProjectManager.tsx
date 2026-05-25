@@ -224,9 +224,24 @@ export function ProjectManager() {
             <textarea
               value={descripcionInput}
               onChange={(e) => setDescripcionInput(e.target.value)}
-              placeholder="La transcripción aparecerá aquí..."
+              placeholder="Describa el contexto, hipótesis o detalles relevantes. La transcripción aparecerá aquí..."
               className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[80px]"
             />
+            <div className="mt-2">
+              <div className="flex justify-between items-center text-[10px] mb-1">
+                <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
+                <span className={`font-bold ${descripcionInput.length < 20 ? "text-red-400" : descripcionInput.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {descripcionInput.length === 0 ? "Sin contexto" : descripcionInput.length < 20 ? "Básico" : descripcionInput.length < 100 ? "Aceptable" : "Óptimo"}
+                </span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-1.5">
+                <div 
+                  className={`h-1.5 rounded-full transition-all duration-300 ${descripcionInput.length < 20 ? "bg-red-500" : descripcionInput.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  style={{ width: `${Math.min((descripcionInput.length / 150) * 100, 100)}%` }}
+                ></div>
+              </div>
+              <p className="text-[9px] text-slate-500 mt-1">* Opcional y flexible. Un contexto más amplio guía a la IA a respaldar mejor tus observaciones de campo.</p>
+            </div>
           </div>
 
             <div className="flex gap-2">

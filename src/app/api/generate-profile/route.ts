@@ -200,7 +200,7 @@ function getGeminiModel(
       "Redactas dictámenes técnicos EXHAUSTIVOS, PROFUNDOS Y SEVEROS denominados 'Perfil Criminológico Ambiental', empleando un lenguaje policial avanzado, táctico y objetivo. " +
       "Fundamentas el análisis en la integración de Inteligencia de Fuentes Abiertas (OSINT), cartografía criminal y cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
       "Basa la terminología en la bibliografía institucional y fundamenta el nivel de severidad del entorno empíricamente.\n\n" +
-      "Reglas de redacción: (1) Desarrolla un análisis exhaustivo y pormenorizado, no escatimes en la profundidad del texto. (2) Integra menciones explícitas a los hallazgos de OSINT (DENUE, Google Places, Street View) y su impacto táctico. (3) Distingue evidencia empírica de inferencia criminológica, pero sé severo y crítico en la evaluación de vulnerabilidades. (4) Las recomendaciones deben ser contundentes, defensivas y accionables. (5) El apartado INFORMACIÓN PREDICTIVA debe cuantificar el riesgo a 6 meses con severidad fundamentada.\n\n" +
+      "Reglas de redacción: (1) Desarrolla un análisis exhaustivo y pormenorizado. (2) Integra explícitamente los hallazgos de OSINT (DENUE, Google Places, Street View) y su impacto táctico. (3) FLEXIBILIDAD Y COLABORACIÓN: Toma la 'Hipótesis del Analista' como eje central válido; expande y fundamenta sus observaciones con la data extraída en lugar de auditar rígidamente su redacción. (4) Las recomendaciones deben ser claras y accionables. (5) El apartado INFORMACIÓN PREDICTIVA debe cuantificar el riesgo a 6 meses.\n\n" +
       `${marcoTeoriaReglas || ""}\n\n` + (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
   });
 }
@@ -489,9 +489,9 @@ ${visionResumen}
 ## ANÁLISIS MICRO-ECONÓMICO Y DE ATRACTORES (DENUE INEGI Y PLACES - BARRIDO A 1KM)
 ${irregularidadesTexto || "No se identificaron unidades económicas registradas ni atractores relevantes en el perímetro de 1 kilómetro."}
 
-[MANDATO TÁCTICO MULTIDIMENSIONAL Y TRANSVERSALIDAD OBLIGATORIA]:
+[MANDATO TÁCTICO MULTIDIMENSIONAL Y FLEXIBILIDAD ANALÍTICA]:
 0. REGLA FUNDAMENTAL: LAS IMÁGENES INYECTADAS POR EL USUARIO NO SON LIMITATIVAS. Tómalas SOLO como punto de partida, pero DEBES APOYARTE DE MANERA AGRESIVA Y PROFUNDA en TODOS los medios proporcionados (OSINT, DENUE, Incidencia, Textos) para construir tu análisis. Se exige profundidad y amplitud.
-1. ${geoInstruction}\nCORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Explicación del Proyecto", "Hipótesis del Analista", y las "Evidencias Multimodales" con los datos de las APIs (OSINT, DENUE, INEGI). No analices las fuentes por separado; fusiónalas.
+1. ${geoInstruction}\nCORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Explicación del Proyecto" y la "Hipótesis del Analista" con los datos de las APIs. Da peso y credibilidad a las inferencias humanas del analista de campo; usa la Inteligencia Artificial para enriquecerlas y sostenerlas, no para contradecirlas.
 2. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos", "Atractores" o "Nodos de Miedo".
 3. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y DENUE. Argumenta cómo la irregularidad debilita el control social formal y fomenta "ventanas rotas".
 4. CORRELACIÓN ESTADÍSTICA: Cruza los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares = mercados ilícitos).
