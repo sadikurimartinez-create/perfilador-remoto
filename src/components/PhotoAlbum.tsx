@@ -1024,7 +1024,7 @@ const hasMinimumPhotos =
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        context: docContext,
+                        context: docContext + "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)",
                         photos: minimalPhotos,
                         mode: "suggest",
                         geometryType: project?.geometryType || "individual",
@@ -1033,9 +1033,30 @@ const hasMinimumPhotos =
                     });
                     const data = await res.json();
                     if (res.ok) {
-                      setDocSuggestions(data.suggestions ?? "");
-                      setDocAuditScore(data.score ?? 0);
-                      if ((data.score ?? 0) >= 80) {
+                      let scoreVal = data.score ?? 0;
+                      let suggestionsVal = data.suggestions ?? "";
+                      
+                      if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
+                        try {
+                          const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                          if (match && match[1]) {
+                            const parsed = JSON.parse(match[1]);
+                            if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                            if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                          } else {
+                            const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
+                            if (jsonMatch) {
+                              const parsed = JSON.parse(jsonMatch[0]);
+                              if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                              if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                            }
+                          }
+                        } catch (e) {}
+                      }
+
+                      setDocSuggestions(suggestionsVal);
+                      setDocAuditScore(scoreVal);
+                      if (scoreVal >= 80) {
                         setIsDocContextAudited(true);
                       }
                     } else {
@@ -1100,7 +1121,7 @@ const hasMinimumPhotos =
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ 
-                            context: docSuggestions, 
+                            context: docSuggestions + "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)", 
                             mode: "audit",
                             geometryType: project?.geometryType || "individual",
                             projectDescription: project?.descripcion || "",
@@ -1108,9 +1129,28 @@ const hasMinimumPhotos =
                         });
                         const data = await res.json();
                       if (res.ok) {
-                        setDocSuggestions(data.suggestions ?? "");
-                        setDocAuditScore(data.score ?? 0);
-                        if ((data.score ?? 0) >= 80) setIsDocContextAudited(true);
+                        let scoreVal = data.score ?? 0;
+                        let suggestionsVal = data.suggestions ?? "";
+                        if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
+                          try {
+                            const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                            if (match && match[1]) {
+                              const parsed = JSON.parse(match[1]);
+                              if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                              if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                            } else {
+                              const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
+                              if (jsonMatch) {
+                                const parsed = JSON.parse(jsonMatch[0]);
+                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                              }
+                            }
+                          } catch(e) {}
+                        }
+                        setDocSuggestions(suggestionsVal);
+                        setDocAuditScore(scoreVal);
+                        if (scoreVal >= 80) setIsDocContextAudited(true);
                       }
                         else setError(data.error || "Error al auditar sugerencia.");
                       } catch (err) { setError("Error de comunicación al auditar."); }
@@ -1564,11 +1604,12 @@ const hasMinimumPhotos =
                         let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
                         if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
                         
+                        const jsonInstruction = "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json. NO agregues ningún otro texto exterior.)";
                         let instruction = "";
                         if (qaIteration === 0) {
-                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador crítico. Califica esta hipótesis. Si le asignas un score menor a 80, NO devuelvas un borrador o un texto mejorado. En su lugar, devuelve EXACTAMENTE 5 preguntas claras y directas que la Persona Perfiladora debe responder obligatoriamente para alcanzar la idoneidad y aportar datos de valor. Si el score es 80 o más, solo devuelve un mensaje de validación exitosa.)";
+                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador crítico. Califica esta hipótesis. Si le asignas un score menor a 80, NO devuelvas un borrador o un texto mejorado. En su lugar, devuelve EXACTAMENTE 5 preguntas claras y directas que la Persona Perfiladora debe responder obligatoriamente para alcanzar la idoneidad y aportar datos de valor. Si el score es 80 o más, solo devuelve un mensaje de validación exitosa.)" + jsonInstruction;
                         } else {
-                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas anteriores con lo siguiente:\n"${userAnswers}"\n\nReevalúa la hipótesis integrada con estas respuestas. Si aún no alcanza un score de 80, devuelve EXACTAMENTE 3 nuevas preguntas de profundización. Si ya es 80 o mayor, devuelve un mensaje de validación exitosa.)`;
+                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas anteriores con lo siguiente:\n"${userAnswers}"\n\nReevalúa la hipótesis integrada con estas respuestas. Si aún no alcanza un score de 80, devuelve EXACTAMENTE 3 nuevas preguntas de profundización. Si ya es 80 o mayor, devuelve un mensaje de validación exitosa.)` + jsonInstruction;
                         }
 
                         const res = await fetch("/api/refine-context", {
@@ -1584,8 +1625,31 @@ const hasMinimumPhotos =
                         });
                         const data = await res.json();
                         if (res.ok) {
-                          setAnalysisAuditScore(data.score ?? 0);
-                          if ((data.score ?? 0) >= 80) {
+                          let scoreVal = data.score ?? 0;
+                          let suggestionsVal = data.suggestions ?? "";
+                          
+                          if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
+                            try {
+                              const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                              if (match && match[1]) {
+                                const parsed = JSON.parse(match[1]);
+                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                              } else {
+                                const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
+                                if (jsonMatch) {
+                                  const parsed = JSON.parse(jsonMatch[0]);
+                                  if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                  if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                }
+                              }
+                            } catch (e) {
+                              console.error("No se pudo extraer JSON de la respuesta de IA:", e);
+                            }
+                          }
+
+                          setAnalysisAuditScore(scoreVal);
+                          if (scoreVal >= 80) {
                             setIsAnalysisContextAudited(true);
                             if (userAnswers.trim()) {
                               setAnalysisContext((prev) => prev + "\n\nRespuestas aportadas:\n" + userAnswers);
@@ -1593,7 +1657,7 @@ const hasMinimumPhotos =
                             setAiQuestions("");
                             setUserAnswers("");
                           } else {
-                            setAiQuestions(data.suggestions ?? "");
+                            setAiQuestions(suggestionsVal);
                             setIsAnalysisContextAudited(false);
                             if (userAnswers.trim()) {
                               setAnalysisContext((prev) => prev + "\n\nRespuestas aportadas:\n" + userAnswers);
