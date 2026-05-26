@@ -145,11 +145,12 @@ export function PhotoAlbum({
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
-  const [aiSuggestions, setAiSuggestions] = useState("");
+  const [qaIteration, setQaIteration] = useState(0);
+  const [aiQuestions, setAiQuestions] = useState("");
+  const [userAnswers, setUserAnswers] = useState("");
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [analysisContextExtra, setAnalysisContextExtra] = useState("");
   const [isRefining, setIsRefining] = useState(false);
-  const [isAuditing, setIsAuditing] = useState(false);
   const [profileRiskLevel, setProfileRiskLevel] = useState<
     "bajo" | "medio" | "alto" | null
   >(null);
@@ -286,6 +287,11 @@ const hasMinimumPhotos =
     setIsValidatingPhotos(false);
 
     setError(null);
+    setQaIteration(0);
+    setAiQuestions("");
+    setUserAnswers("");
+    setAnalysisAuditScore(null);
+    setIsAnalysisContextAudited(false);
     setShowConfigModal(true);
   };
 
@@ -545,8 +551,16 @@ const hasMinimumPhotos =
       const buttons = el.querySelector('.bg-slate-100.border-b');
       if (buttons) (buttons as HTMLElement).style.display = 'none';
 
-      const canvas = await html2canvas(el, { useCORS: true, scale: 1.5 });
+      const originalStyle = el.getAttribute("style") || "";
+      // Forzar temporalmente ancho de escritorio y altura para una captura nítida
+      el.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important; height: 800px !important;`);
+      // Esperar a que el mapa procese el cambio de tamaño
+      await new Promise(r => setTimeout(r, 600));
+
+      const canvas = await html2canvas(el, { useCORS: true, scale: 2, windowWidth: 1024 });
       
+      // Restaurar estilo original
+      el.setAttribute("style", originalStyle);
       if (buttons) (buttons as HTMLElement).style.display = 'flex';
 
       const dataUrl = canvas.toDataURL("image/png");
@@ -571,7 +585,26 @@ const hasMinimumPhotos =
       const chartsEl = document.getElementById("charts-export-container");
       if (chartsEl) {
         try {
-          const canvas = await html2canvas(chartsEl, { useCORS: true, scale: 1.5, backgroundColor: "#0f172a" });
+          const originalStyle = chartsEl.getAttribute("style") || "";
+          // Forzar layout de escritorio para evitar que se apriete en móviles
+          chartsEl.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important;`);
+          
+          const gridEl = chartsEl.querySelector('.grid-cols-1');
+          if (gridEl) {
+            gridEl.classList.remove('grid-cols-1', 'md:grid-cols-3');
+            gridEl.classList.add('grid-cols-3');
+          }
+          // Esperar a que terminen las animaciones CSS (transition-all duration-1000)
+          await new Promise(r => setTimeout(r, 1200));
+
+          const canvas = await html2canvas(chartsEl, { useCORS: true, scale: 2, backgroundColor: "#0f172a", windowWidth: 1024 });
+          
+          chartsEl.setAttribute("style", originalStyle);
+          if (gridEl) {
+            gridEl.classList.remove('grid-cols-3');
+            gridEl.classList.add('grid-cols-1', 'md:grid-cols-3');
+          }
+
           currentSnapshots.unshift({ title: "GRÁFICAS ESTADÍSTICAS", dataUrl: canvas.toDataURL("image/png") });
           changed = true;
         } catch(e) {}
@@ -585,7 +618,14 @@ const hasMinimumPhotos =
         try {
           const buttons = mapEl.querySelector('.bg-slate-100.border-b');
           if (buttons) (buttons as HTMLElement).style.display = 'none';
-          const canvas = await html2canvas(mapEl, { useCORS: true, scale: 1.5 });
+
+          const originalStyle = mapEl.getAttribute("style") || "";
+          mapEl.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important; height: 800px !important;`);
+          await new Promise(r => setTimeout(r, 600)); // Recálculo del mapa
+
+          const canvas = await html2canvas(mapEl, { useCORS: true, scale: 2, windowWidth: 1024 });
+          
+          mapEl.setAttribute("style", originalStyle);
           if (buttons) (buttons as HTMLElement).style.display = 'flex';
           currentSnapshots.push({ title: "MAPA DEL ANÁLISIS", dataUrl: canvas.toDataURL("image/png") });
           changed = true;
@@ -838,14 +878,14 @@ const hasMinimumPhotos =
                   <div className="mt-1 mb-2">
                     <div className="flex justify-between items-center text-[9px] mb-0.5">
                       <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-                      <span className={`font-bold ${(p.comentario || "").length < 15 ? "text-red-400" : (p.comentario || "").length < 50 ? "text-amber-400" : "text-emerald-400"}`}>
-                        {(p.comentario || "").length === 0 ? "Sin contexto" : (p.comentario || "").length < 15 ? "Básico" : (p.comentario || "").length < 50 ? "Aceptable" : "Óptimo"}
+                      <span className={`font-bold ${(p.comentario || "").length < 30 ? "text-red-400" : (p.comentario || "").length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
+                        {(p.comentario || "").length === 0 ? "Sin contexto" : (p.comentario || "").length < 30 ? "Básico" : (p.comentario || "").length < 100 ? "Aceptable" : "Óptimo"}
                       </span>
                     </div>
                     <div className="w-full bg-slate-800 rounded-full h-1">
                       <div 
-                        className={`h-1 rounded-full transition-all duration-300 ${(p.comentario || "").length < 15 ? "bg-red-500" : (p.comentario || "").length < 50 ? "bg-amber-500" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(((p.comentario || "").length / 80) * 100, 100)}%` }}
+                        className={`h-1 rounded-full transition-all duration-300 ${(p.comentario || "").length < 30 ? "bg-red-500" : (p.comentario || "").length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
+                        style={{ width: `${Math.min(((p.comentario || "").length / 150) * 100, 100)}%` }}
                       ></div>
                     </div>
                   </div>
@@ -958,14 +998,14 @@ const hasMinimumPhotos =
             <div className="mt-1 mb-2">
               <div className="flex justify-between items-center text-[10px] mb-1">
                 <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-                <span className={`font-bold ${docContext.length < 20 ? "text-red-400" : docContext.length < 80 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {docContext.length === 0 ? "Sin contexto" : docContext.length < 20 ? "Básico" : docContext.length < 80 ? "Aceptable" : "Óptimo"}
+                <span className={`font-bold ${docContext.length < 50 ? "text-red-400" : docContext.length < 150 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {docContext.length === 0 ? "Sin contexto" : docContext.length < 50 ? "Básico" : docContext.length < 150 ? "Aceptable" : "Óptimo"}
                 </span>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5">
                 <div 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 20 ? "bg-red-500" : docContext.length < 80 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{ width: `${Math.min((docContext.length / 150) * 100, 100)}%` }}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 50 ? "bg-red-500" : docContext.length < 150 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  style={{ width: `${Math.min((docContext.length / 250) * 100, 100)}%` }}
                 ></div>
               </div>
             </div>
@@ -1483,7 +1523,7 @@ const hasMinimumPhotos =
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <label className="block text-xs font-medium text-slate-300">
-                    Hipótesis del investigador (contexto del cruce de ubicaciones)
+                    Hipótesis de la Persona Perfiladora (contexto del cruce de ubicaciones)
                   </label>
                   <button
                     type="button"
@@ -1511,7 +1551,6 @@ const hasMinimumPhotos =
                     type="button"
                     onClick={async () => {
                       setIsRefining(true);
-                      setAiSuggestions("");
                       setAnalysisAuditScore(null);
                       try {
                         const selected = album.filter((p) =>
@@ -1521,11 +1560,22 @@ const hasMinimumPhotos =
                           lat: p.lat,
                           lng: p.lng,
                         }));
+                        
+                        let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
+                        if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
+                        
+                        let instruction = "";
+                        if (qaIteration === 0) {
+                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador crítico. Califica esta hipótesis. Si le asignas un score menor a 80, NO devuelvas un borrador o un texto mejorado. En su lugar, devuelve EXACTAMENTE 5 preguntas claras y directas que la Persona Perfiladora debe responder obligatoriamente para alcanzar la idoneidad y aportar datos de valor. Si el score es 80 o más, solo devuelve un mensaje de validación exitosa.)";
+                        } else {
+                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas anteriores con lo siguiente:\n"${userAnswers}"\n\nReevalúa la hipótesis integrada con estas respuestas. Si aún no alcanza un score de 80, devuelve EXACTAMENTE 3 nuevas preguntas de profundización. Si ya es 80 o mayor, devuelve un mensaje de validación exitosa.)`;
+                        }
+
                         const res = await fetch("/api/refine-context", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            context: analysisContext,
+                            context: analysisContext + focusContext + instruction,
                             photos: minimalPhotos,
                             mode: "suggest",
                             geometryType: project?.geometryType || "individual",
@@ -1534,10 +1584,22 @@ const hasMinimumPhotos =
                         });
                         const data = await res.json();
                         if (res.ok) {
-                          setAiSuggestions(data.suggestions ?? "");
                           setAnalysisAuditScore(data.score ?? 0);
                           if ((data.score ?? 0) >= 80) {
                             setIsAnalysisContextAudited(true);
+                            if (userAnswers.trim()) {
+                              setAnalysisContext((prev) => prev + "\n\nRespuestas aportadas:\n" + userAnswers);
+                            }
+                            setAiQuestions("");
+                            setUserAnswers("");
+                          } else {
+                            setAiQuestions(data.suggestions ?? "");
+                            setIsAnalysisContextAudited(false);
+                            if (userAnswers.trim()) {
+                              setAnalysisContext((prev) => prev + "\n\nRespuestas aportadas:\n" + userAnswers);
+                              setUserAnswers("");
+                            }
+                            setQaIteration((prev) => prev + 1);
                           }
                         } else {
                           setError(
@@ -1556,12 +1618,10 @@ const hasMinimumPhotos =
                         setIsRefining(false);
                       }
                     }}
-                    disabled={isRefining || selectedIds.length < 1}
+                    disabled={isRefining || selectedIds.length < 1 || isAnalysisContextAudited}
                     className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
                   >
-                    {isRefining
-                      ? "Pidiendo sugerencias…"
-                      : "Pedir Sugerencias a IA"}
+                    {isRefining ? "Validando..." : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
                   </button>
                   <button
                     type="button"
@@ -1571,94 +1631,30 @@ const hasMinimumPhotos =
                     Cancelar
                   </button>
                 </div>
-                {aiSuggestions && (
-                  <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="font-semibold">Borrador y Sugerencias de IA (Editable):</p>
-                      {analysisAuditScore !== null && (
-                        <span className={`px-2 py-1 rounded font-bold ${analysisAuditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
-                          Lógica: {analysisAuditScore}%
-                        </span>
-                      )}
+                {!isAnalysisContextAudited && aiQuestions && (
+                  <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-sm text-yellow-200 space-y-3">
+                    <div className="flex items-center justify-between border-b border-yellow-800 pb-2">
+                      <p className="font-bold text-yellow-400">⚠️ La hipótesis requiere mayor contexto (Idoneidad: {analysisAuditScore}%)</p>
                     </div>
-                    <div className="relative w-full">
-                      <button
-                        type="button"
-                        onClick={() => toggleDictation('aiSuggestions', (text) => setAiSuggestions(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                        className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'aiSuggestions' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
-                      >
-                        <span>🎙️</span>
-                      </button>
-                      <textarea
-                        value={aiSuggestions}
-                        onChange={(e) => setAiSuggestions(e.target.value)}
-                        className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[140px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                      />
-                    </div>
-                    <p className="mt-1 text-[10px] text-yellow-300/80">
-                      Edite el texto libremente. Puede pedir a la IA que audite y mejore su redacción técnica antes de aplicarlo al contexto principal.
-                    </p>
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAiSuggestions("");
-                          setAnalysisAuditScore(null);
-                          setIsAnalysisContextAudited(false);
-                        }}
-                        className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
-                      >
-                        Descartar (Usar Original)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setIsAuditing(true);
-                          setError(null);
-                          try {
-                            const res = await fetch("/api/refine-context", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                context: aiSuggestions,
-                                mode: "audit",
-                                geometryType: project?.geometryType || "individual",
-                                projectDescription: project?.descripcion || "",
-                              }),
-                            });
-                            const data = await res.json();
-                            if (res.ok) {
-                              setAiSuggestions(data.suggestions ?? "");
-                              setAnalysisAuditScore(data.score ?? 0);
-                              if ((data.score ?? 0) >= 80) {
-                                setIsAnalysisContextAudited(true);
-                              }
-                            } else {
-                              setError(data.error || "Error al auditar sugerencia.");
-                            }
-                          } catch (err) {
-                            setError("Error de comunicación al auditar.");
-                          } finally {
-                            setIsAuditing(false);
-                          }
-                        }}
-                        disabled={isAuditing || !aiSuggestions.trim()}
-                        className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
-                      >
-                        {isAuditing ? "Auditando y Mejorando..." : "Auditar y Mejorar Redacción"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAnalysisContext((prev) => (prev ? `${prev}\n\n${aiSuggestions}` : aiSuggestions));
-                          setAiSuggestions("");
-                          setIsAnalysisContextAudited(true);
-                        }}
-                        disabled={isAuditing || (analysisAuditScore !== null && analysisAuditScore < 80)}
-                        className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
-                      >
-                        Aplicar al Contexto Principal {(analysisAuditScore !== null && analysisAuditScore < 80) ? '(Requiere 80%)' : ''}
-                      </button>
+                    <p className="text-yellow-100 whitespace-pre-wrap leading-relaxed">{aiQuestions}</p>
+                    
+                    <div className="pt-2">
+                      <label className="block text-xs font-medium text-yellow-300 mb-2">Tus respuestas a las preguntas de la IA:</label>
+                      <div className="relative w-full">
+                        <button
+                          type="button"
+                          onClick={() => toggleDictation('userAnswers', (text) => setUserAnswers(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                          className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'userAnswers' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
+                        >
+                          <span>🎙️</span>
+                        </button>
+                        <textarea
+                          value={userAnswers}
+                          onChange={(e) => setUserAnswers(e.target.value)}
+                          className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[120px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+                          placeholder="Responde aquí para robustecer tu hipótesis..."
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1685,11 +1681,11 @@ const hasMinimumPhotos =
               </p>
             </div>
             <div className="flex flex-col gap-2 pt-2">
-              {!isAnalysisContextAudited && !aiSuggestions && (
-                <p className="text-xs text-amber-400 text-right">⚠️ Debe pedir sugerencias y auditar la hipótesis antes de comenzar el análisis.</p>
+              {!isAnalysisContextAudited && !aiQuestions && (
+                <p className="text-xs text-amber-400 text-right">⚠️ Debe validar la hipótesis con la IA antes de comenzar el análisis (Requiere 80%+).</p>
               )}
               {isAnalysisContextAudited && (
-                <p className="text-xs text-emerald-400 text-right">✅ Hipótesis contextual auditada y validada.</p>
+                <p className="text-xs text-emerald-400 text-right">✅ Hipótesis validada con éxito (Idoneidad: {analysisAuditScore}%). Lista para generar el análisis.</p>
               )}
               <div className="flex justify-end gap-2">
                 <button
@@ -1708,153 +1704,139 @@ const hasMinimumPhotos =
     </section>
       {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
       <div className="absolute left-[-9999px] top-[-9999px]">
-        <div id="official-pdf-content" className="w-[794px] bg-white text-black p-10 font-sans">
-          <div className="flex justify-between items-center border-b-2 border-slate-800 pb-4 mb-6">
-            <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-20 object-contain" />
-            <div className="flex-1 text-center px-4">
-              <h1 className="text-xl font-black text-slate-900 tracking-wide">PERFIL CRIMINOLÓGICO AMBIENTAL</h1>
-              <h2 className="text-sm font-bold text-slate-700 mt-1">CENTRO DE ESTUDIOS EN SEGURIDAD PÚBLICA</h2>
-              <h3 className="text-[11px] font-semibold text-slate-500 mt-0.5">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO</h3>
+        <div id="official-pdf-content" className="w-[794px] bg-white text-black font-sans">
+          {/* PÁGINA 1: CARÁTULA */}
+          <div className="w-full h-[1123px] flex flex-col p-10 bg-white">
+            <div className="flex justify-between items-center border-b-2 border-slate-800 pb-4">
+              <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-20 object-contain" />
+              <div className="flex-1 text-center px-4">
+                <h1 className="text-xl font-black text-slate-900 tracking-wide">PERFIL CRIMINOLÓGICO AMBIENTAL</h1>
+                <h2 className="text-sm font-bold text-slate-700 mt-1">CENTRO DE ESTUDIOS Y POLÍTICA CRIMINAL</h2>
+                <h3 className="text-[11px] font-semibold text-slate-500 mt-0.5">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO</h3>
+              </div>
+              <img src="/logos/logo-ssp.png" alt="SSP" className="h-20 object-contain" />
             </div>
-            <img src="/logos/logo-ssp.png" alt="SSP" className="h-20 object-contain" />
+            <div className="flex-1 flex flex-col justify-center items-center text-center">
+              <h1 className="text-4xl font-black text-slate-800 tracking-wider uppercase">{project?.nombre || "Análisis de Polígono"}</h1>
+              <div className="w-48 h-1 bg-sky-700 my-6"></div>
+              <p className="text-lg text-slate-600">Documento generado por el Sistema de Análisis de Información (SAI)</p>
+              <p className="text-lg font-bold text-slate-700 mt-2">PERFILADOR REMOTO</p>
+            </div>
+            <div className="text-center text-sm text-slate-500">
+              {new Date().toLocaleDateString("es-MX", { year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
           </div>
 
-          {profileRiskLevel && (
-            <div className="mb-6 p-4 border border-slate-300 bg-slate-50 rounded-lg flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase">Epicentro de Análisis</p>
-                <p className="text-sm font-semibold">{project?.nombre || "Polígono Operativo"}</p>
+          {/* PÁGINA 2: SÍNTESIS */}
+          <div className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
+            <h2 className="text-2xl font-black text-slate-800 border-b-2 border-slate-500 pb-2 mb-6">SÍNTESIS DEL ANÁLISIS</h2>
+            <div className="space-y-6">
+              <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
+                <p className="text-sm font-bold text-slate-500 uppercase">Explicación del Proyecto (Voz)</p>
+                <p className="text-base text-slate-800 mt-2">{project?.descripcion || "No se proporcionó descripción."}</p>
               </div>
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase">Radio de Cobertura</p>
-                <p className="text-sm font-semibold">{analysisRadius} metros</p>
+              <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
+                <p className="text-sm font-bold text-slate-500 uppercase">Hipótesis del Analista</p>
+                <p className="text-base text-slate-800 mt-2">{analysisContext || "No se proporcionó hipótesis."}</p>
               </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-slate-500 uppercase">Nivel de Riesgo</p>
-                <p className={`text-base font-black uppercase ${profileRiskLevel === 'alto' ? 'text-red-600' : profileRiskLevel === 'medio' ? 'text-amber-500' : 'text-emerald-600'}`}>{profileRiskLevel}</p>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
+                  <p className="text-sm font-bold text-slate-500 uppercase">Parámetros del Análisis</p>
+                  <p className="text-base text-slate-800 mt-2">Radio de Cobertura: <span className="font-bold">{analysisRadius} metros</span></p>
+                  <p className="text-base text-slate-800">Geometría: <span className="font-bold">{project?.geometryType || "No definida"}</span></p>
+                </div>
+                <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
+                  <p className="text-sm font-bold text-slate-500 uppercase">Nivel de Riesgo (IA)</p>
+                  <p className={`text-3xl font-black uppercase mt-2 ${profileRiskLevel === 'alto' ? 'text-red-600' : profileRiskLevel === 'medio' ? 'text-amber-500' : 'text-emerald-600'}`}>{profileRiskLevel || "No calculado"}</p>
+                </div>
               </div>
             </div>
-          )}
+          </div>
 
-          {project?.descripcion && (
-            <div className="mb-6 p-4 border border-slate-300 bg-slate-50 rounded-lg break-inside-avoid">
-              <p className="text-xs font-bold text-slate-500 uppercase">Explicación del Proyecto (Voz)</p>
-              <p className="text-sm font-semibold text-slate-800">{project.descripcion}</p>
+          {/* PÁGINAS DE DICTAMEN */}
+          <div className="html2pdf__page-break p-10 bg-white">
+            <h2 className="text-2xl font-black text-slate-800 border-b-2 border-slate-500 pb-2 mb-6">DICTAMEN TÁCTICO</h2>
+            <div className="text-base text-slate-800 whitespace-pre-wrap leading-relaxed text-justify columns-2 gap-8">
+              {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
             </div>
-          )}
+          </div>
 
+          {/* ANEXOS DE MAPAS Y GRÁFICAS */}
           {(() => {
             const mapsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía"));
-            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica") || !mapsSnaps.includes(s));
-            const combined = [...mapsSnaps, ...chartsSnaps];
-            
-            if (combined.length === 0) return (
-              <div className="mb-8">
-                <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
-                <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">
-                  {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
-                </div>
-              </div>
-            );
-            
-            const chunks = [];
-            for (let i = 0; i < combined.length; i += 4) chunks.push(combined.slice(i, i + 4));
-            
+            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
+
+            const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
+              if (items.length === 0) return null;
+              const chunks = [];
+              for (let i = 0; i < items.length; i += 4) chunks.push(items.slice(i, i + 4));
+
+              return (
+                <>
+                  <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-slate-800 text-white">
+                    <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">{title}</h1>
+                    <div className="w-32 h-2 bg-sky-500"></div>
+                  </div>
+                  {chunks.map((chunk, cIdx) => (
+                    <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
+                      <div className="grid grid-cols-2 grid-rows-2 gap-8 flex-1">
+                        {Array.from({ length: 4 }).map((_, i) => {
+                          const snap = chunk[i];
+                          return snap ? (
+                            <div key={i} className="border-2 border-slate-300 p-3 rounded-lg flex flex-col bg-slate-50 shadow-sm overflow-hidden">
+                              <h4 className="text-sm font-bold text-slate-700 text-center mb-2 uppercase tracking-wider border-b border-slate-300 pb-1 truncate">{snap.title}</h4>
+                              <div className="flex-1 relative bg-slate-200">
+                                <img src={snap.dataUrl} className="absolute top-0 left-0 w-full h-full object-contain" alt={snap.title} />
+                              </div>
+                            </div>
+                          ) : (
+                            <div key={i}></div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              );
+            };
+
             return (
               <>
-                <div className="mb-8">
-                  <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-3 pb-1">DICTAMEN TÁCTICO</h3>
-                  <div className="text-[13px] text-slate-800 whitespace-pre-wrap leading-relaxed text-justify">
-                    {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
-                  </div>
-                </div>
-
-                {/* NUEVA PORTADA CAPÍTULO MAPAS Y GRÁFICAS */}
-                <div className="html2pdf__page-break"></div>
-                <div className="flex flex-col items-center justify-center h-[1040px] bg-slate-50 border-8 border-slate-800 m-4">
-                  <h1 className="text-5xl font-black text-slate-900 tracking-widest uppercase mb-4 text-center">Mapas y Gráficas</h1>
-                  <div className="w-32 h-2 bg-sky-700 mb-6"></div>
-                  <p className="text-xl font-bold text-slate-500 uppercase tracking-widest text-center">Anexo Geoespacial y Algorítmico</p>
-                </div>
-
-                {/* CUADRÍCULA DE 4 ELEMENTOS POR PÁGINA */}
-                {chunks.map((chunk, cIdx) => (
-                  <div key={`chunk-${cIdx}`} className="html2pdf__page-break flex flex-col justify-center h-[1080px] p-8 bg-white">
-                    <div className="grid grid-cols-2 grid-rows-2 gap-6 h-full w-full">
-                      {Array.from({ length: 4 }).map((_, i) => {
-                        const snap = chunk[i];
-                        return snap ? (
-                          <div key={i} className="border-4 border-slate-800 p-4 rounded-xl flex flex-col h-full bg-slate-50 shadow-sm overflow-hidden">
-                            <h4 className="text-[13px] font-black text-slate-800 text-center mb-3 uppercase tracking-wider border-b-2 border-slate-800 pb-2 truncate">{snap.title}</h4>
-                            <div className="flex-1 overflow-hidden flex items-center justify-center">
-                              <img src={snap.dataUrl} className="max-w-full max-h-full object-contain mix-blend-multiply" />
-                            </div>
-                          </div>
-                        ) : (
-                          <div key={i} className="border-4 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center h-full bg-slate-50/50">
-                            <span className="text-slate-300 text-sm font-bold uppercase tracking-widest">Espacio Vacío</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                {renderAnnexPage("Anexo Geoespacial", mapsSnaps)}
+                {renderAnnexPage("Anexo Estadístico", chartsSnaps)}
               </>
             );
           })()}
 
+          {/* ANEXO FOTOGRÁFICO */}
           {(() => {
             const selectedPhotos = album.filter(p => selectedIds.includes(p.id));
             if (selectedPhotos.length === 0) return null;
 
-            let groups: { title: string; photos: typeof album }[] = [];
-            if (project?.geometryType === "lineal") {
-              groups = [
-                { title: "NODO INICIAL", photos: selectedPhotos.filter((p) => p.tipo === "Nodo Inicial") },
-                { title: "CORREDOR", photos: selectedPhotos.filter((p) => p.tipo === "Corredor") },
-                { title: "NODO FINAL", photos: selectedPhotos.filter((p) => p.tipo === "Nodo Final") },
-                { title: "EVIDENCIA ADICIONAL", photos: selectedPhotos.filter((p) => !["Nodo Inicial", "Corredor", "Nodo Final"].includes(p.tipo)) },
-              ];
-            } else if (project?.geometryType === "poligono") {
-              groups = [
-                { title: "PERÍMETRO", photos: selectedPhotos.filter((p) => p.tipo === "Perímetro") },
-                { title: "INTERIOR", photos: selectedPhotos.filter((p) => p.tipo === "Interior") },
-                { title: "EVIDENCIA ADICIONAL", photos: selectedPhotos.filter((p) => !["Perímetro", "Interior"].includes(p.tipo)) },
-              ];
-            } else {
-              groups = [
-                { title: "NODO Y ENTORNO", photos: selectedPhotos }
-              ];
-            }
-            groups = groups.filter((g) => g.photos.length > 0);
-
             return (
               <>
-                <div className="html2pdf__page-break"></div>
-                <h3 className="text-base font-bold text-slate-800 border-b border-slate-300 mb-4 pb-1">ANEXO FOTOGRÁFICO Y DE DETERIORO URBANO</h3>
-                {groups.map((group, gIdx) => (
-                  <div key={gIdx} className="mb-6 break-inside-avoid">
-                    <h4 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide border-l-4 border-slate-500 pl-2">{group.title}</h4>
-                    <div className="flex flex-col gap-6">
-                      {group.photos.map(p => (
-                        <div key={p.id} className="border border-slate-300 rounded-lg p-3 break-inside-avoid bg-slate-50">
-                          <div className="relative w-full h-40 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
-                            <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
-                            {/* Sello de agua en PDF */}
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
-                              <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">
-                                SSPE-CEIPOL
-                              </span>
-                            </div>
+                <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-slate-800 text-white">
+                  <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">Anexo Fotográfico</h1>
+                  <div className="w-32 h-2 bg-sky-500"></div>
+                </div>
+                <div className="html2pdf__page-break p-10 bg-white">
+                  <div className="columns-2 gap-8">
+                    {selectedPhotos.map(p => (
+                      <div key={p.id} className="border border-slate-300 rounded-lg p-3 mb-6 break-inside-avoid bg-slate-50">
+                        <div className="relative w-full h-48 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
+                          <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                            <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">SSPE-CEIPOL</span>
                           </div>
-                          <p className="text-[10px] text-slate-600 mb-1 leading-tight">{p.comentario || "Sin comentario."}</p>
                         </div>
-                      ))}
-                    </div>
+                        <p className="text-xs font-bold text-slate-600">{p.tipo || "Evidencia"}</p>
+                        <p className="text-sm text-slate-800 mt-1 leading-tight">{p.comentario || "Sin comentario."}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </>
-            );
+            )
           })()}
         </div>
       </div>

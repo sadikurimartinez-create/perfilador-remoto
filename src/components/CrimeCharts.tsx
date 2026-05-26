@@ -193,13 +193,13 @@ export function CrimeCharts({
                   </div>
                   <div className="relative w-full bg-slate-800 rounded-sm h-3 border border-slate-700 flex">
                     <div 
-                      className="bg-slate-500 h-full border-r border-slate-900 z-10 relative flex items-center justify-end pr-1"
+                      className="bg-slate-500 h-full border-r border-slate-900 z-10 relative flex items-center justify-end pr-1 overflow-hidden"
                       style={{ width: `${currentPct}%` }}
                     >
                       <span className="text-[8px] font-bold text-white leading-none">{item.current}</span>
                     </div>
                     <div 
-                      className="bg-red-500/80 h-full relative flex items-center justify-end pr-1 transition-all duration-1000"
+                      className="bg-red-500/80 h-full relative flex items-center justify-end pr-1 transition-all duration-1000 overflow-hidden"
                       style={{ width: `${projPct - currentPct}%` }}
                     >
                       <span className="text-[8px] font-bold text-white leading-none">{item.projected}</span>
