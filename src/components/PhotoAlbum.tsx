@@ -469,6 +469,7 @@ const hasMinimumPhotos =
             incidenciaDetalles?: any[];
             pois?: any[];
             inegiDemographics?: any;
+            tacticalStreetViews?: any[];
           };
         };
         const markdown = data.markdown ?? "";
@@ -497,7 +498,8 @@ const hasMinimumPhotos =
           historicalCrimes: combinedCrimes,
           pois: data.meta?.pois || currentAnalysisResult?.pois || [],
           inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
-        });
+          tacticalStreetViews: data.meta?.tacticalStreetViews || (currentAnalysisResult as any)?.tacticalStreetViews,
+        } as any);
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
         
@@ -1042,15 +1044,19 @@ const hasMinimumPhotos =
                         try {
                           const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
                           if (match && match[1]) {
-                            const parsed = JSON.parse(match[1]);
-                            if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                            if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                              const parsed = JSON.parse(match[1]) as Record<string, any>;
+                              if (parsed && typeof parsed === 'object') {
+                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                              }
                           } else {
                             const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
                             if (jsonMatch) {
-                              const parsed = JSON.parse(jsonMatch[0]);
-                              if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                              if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
+                                if (parsed && typeof parsed === 'object') {
+                                  if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                  if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                }
                             }
                           }
                         } catch (e) {}
@@ -1138,15 +1144,19 @@ const hasMinimumPhotos =
                           try {
                             const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
                             if (match && match[1]) {
-                              const parsed = JSON.parse(match[1]);
-                              if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                              if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                              const parsed = JSON.parse(match[1]) as Record<string, any>;
+                              if (parsed && typeof parsed === 'object') {
+                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                              }
                             } else {
                               const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
                               if (jsonMatch) {
-                                const parsed = JSON.parse(jsonMatch[0]);
-                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
+                                if (parsed && typeof parsed === 'object') {
+                                  if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                  if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                }
                               }
                             }
                           } catch(e) {}
@@ -1454,6 +1464,32 @@ const hasMinimumPhotos =
                     viewMode={mapViewMode}
                     geometryType={project?.geometryType}
                   />
+                  {/* Capa de Explicación de Atractores (DENUE/PLACES) */}
+                  {mapViewMode === "ECOLOGY" && analysisResult.pois && analysisResult.pois.length > 0 && (
+                    <div className="absolute bottom-6 left-2 right-2 z-10 pointer-events-none flex justify-center">
+                      <div className="bg-slate-900/95 border border-sky-500/80 rounded-lg p-3 text-white shadow-2xl backdrop-blur-sm w-11/12 max-w-lg">
+                        <p className="text-xs font-bold text-sky-400 mb-2 truncate">🏪 Justificación de Atractores del Delito</p>
+                        <ul className="text-[10px] space-y-1.5">
+                          {analysisResult.pois.slice(0, 3).map((poi: any, idx: number) => (
+                            <li key={idx}><span className="font-semibold text-sky-200">{poi.name} ({poi.category}):</span> Concentra víctimas potenciales y fomenta ventanas de oportunidad criminal en su entorno.</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Capa de Lugares de Acecho y Rutas con Google Street View y Vision API */}
+                  {mapViewMode === "MOBILITY" && (analysisResult as any)?.tacticalStreetViews && (analysisResult as any).tacticalStreetViews.length > 0 && (
+                    <div className="absolute bottom-6 left-2 right-2 flex gap-3 overflow-x-auto z-10 pointer-events-none justify-center px-4">
+                      {(analysisResult as any).tacticalStreetViews.map((sv: any, idx: number) => (
+                        <div key={idx} className="bg-slate-900/95 border border-emerald-500/80 rounded-lg p-2 text-white flex-1 min-w-[160px] max-w-[220px] shadow-2xl backdrop-blur-sm">
+                          <p className="text-[10px] font-bold text-emerald-400 mb-1 truncate" title={sv.name}>📍 Ruta / Acecho: {sv.name}</p>
+                          <img src={sv.streetViewUrl} alt="Street View" className="w-full h-20 object-cover rounded border border-slate-700 mb-1.5" />
+                          <p className="text-[9px] leading-tight text-slate-300 truncate">Puntos Ciegos: {sv.vision?.etiquetasRelevantes?.slice(0, 2).join(", ") || "Vulnerabilidades visuales"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 mt-3 print:hidden">
@@ -1646,11 +1682,13 @@ const hasMinimumPhotos =
                               const match = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
                               const jsonStr = match && match[1] ? match[1] : rawResponse.match(/\{[\s\S]*\}/)?.[0];
                               if (jsonStr) {
-                                const parsed = JSON.parse(jsonStr);
-                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                if (Array.isArray(parsed.questions)) questionsVal = parsed.questions;
-                                else if (typeof parsed.suggestions === 'string') {
-                                  questionsVal = parsed.suggestions.split('\n').filter((q:string) => q.trim().length > 5);
+                                const parsed = JSON.parse(jsonStr) as Record<string, any>;
+                                if (parsed && typeof parsed === 'object') {
+                                  if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                  if (Array.isArray(parsed.questions)) questionsVal = parsed.questions;
+                                  else if (typeof parsed.suggestions === 'string') {
+                                    questionsVal = parsed.suggestions.split('\n').filter((q:string) => q.trim().length > 5);
+                                  }
                                 }
                               }
                             } catch (e) {

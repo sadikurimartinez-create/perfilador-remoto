@@ -36,8 +36,8 @@ export function CrimeCharts({
   pois?: POI[];
 }) {
   
-  // 1. ÍNDICE DE CRIMINALIDAD (Top 3 Delitos)
-  const crimeIndexStats = useMemo(() => {
+  // 1. PROBABILIDAD DE COMISIÓN (Top 3 Delitos)
+  const probabilityStats = useMemo(() => {
     const counts: Record<string, { count: number; weight: number }> = {};
     crimes.forEach((c) => {
       const type = c.tipoDelito || "Delito No Especificado";
@@ -50,17 +50,17 @@ export function CrimeCharts({
     const ranked = Object.entries(counts)
       .map(([name, data]) => ({
         name,
-        score: data.count * data.weight,
+        score: (data.count * data.weight) + (data.weight * 2), // Proyección probabilística basada en severidad
         count: data.count,
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
     const maxScore = Math.max(...ranked.map((r) => r.score), 1);
-    return ranked.map((r) => ({ ...r, percentage: (r.score / maxScore) * 100 }));
+    return ranked.map((r) => ({ ...r, probability: Math.min((r.score / maxScore) * 100, 99) }));
   }, [crimes]);
 
-  // 2. ÍNDICE DE RIESGO DE POIS Y CALLES (Top 3 Atractores)
+  // 2. ATRACTORES DE RIESGO (Top 3 POIs)
   const riskIndexStats = useMemo(() => {
     if (!pois || pois.length === 0) return [];
     
@@ -94,21 +94,14 @@ export function CrimeCharts({
 
   // 3. PROYECCIÓN DE INCIDENCIA DELICTIVA (Top 3 Incrementos Proyectados)
   const projectionStats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    crimes.forEach((c) => {
-      const type = c.tipoDelito || "Delito No Especificado";
-      counts[type] = (counts[type] || 0) + 1;
-    });
-
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([name, currentCount]) => ({
-        name,
-        current: currentCount,
-        projected: Math.ceil(currentCount * 1.20)
-      }));
-  }, [crimes]);
+    // Usar los mismos top 3 delitos más probables para la proyección
+    return probabilityStats.map(stat => ({
+        name: stat.name,
+        current: stat.count,
+        // Proyectar aumento basado en el peso de severidad
+        projected: Math.ceil(stat.count * (1 + (getSeverityWeight(stat.name) * 0.08)))
+    }));
+  }, [probabilityStats]);
 
   if (crimes.length === 0) return null;
 
@@ -125,20 +118,20 @@ export function CrimeCharts({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 shadow-inner">
-          <h4 className="text-[11px] font-bold text-sky-400 uppercase tracking-wider mb-4 border-b border-sky-900 pb-1">
-            Top 3: Índice de Criminalidad
+          <h4 className="text-[11px] font-bold text-sky-400 uppercase tracking-wider mb-4 border-b border-sky-900 pb-1" title="Delitos con mayor probabilidad de comisión futura">
+            Top 3: Probabilidad de Comisión
           </h4>
           <div className="space-y-4">
-            {crimeIndexStats.map((item, idx) => (
+            {probabilityStats.map((item, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex justify-between text-xs items-end">
                   <span className="font-semibold text-slate-200 truncate pr-2">{item.name}</span>
-                  <span className="text-sky-300 font-mono text-[10px]">Idx: {item.score}</span>
+                  <span className="text-sky-300 font-mono text-[10px]">Prob: {item.probability.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700">
                   <div 
                     className="bg-gradient-to-r from-sky-600 to-sky-400 h-2.5 rounded-full transition-all duration-1000"
-                    style={{ width: `${Math.max(item.percentage, 2)}%` }}
+                    style={{ width: `${Math.max(item.probability, 2)}%` }}
                   ></div>
                 </div>
                 <p className="text-[9px] text-slate-500">Volumen histórico: {item.count} incidentes</p>
@@ -148,8 +141,8 @@ export function CrimeCharts({
         </div>
 
         <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 shadow-inner">
-          <h4 className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-4 border-b border-amber-900 pb-1">
-            Top 3: Riesgo en Nodos (POIs)
+          <h4 className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-4 border-b border-amber-900 pb-1" title="Puntos de interés con mayor riesgo de ser atractores del delito">
+            Top 3: Atractores de Riesgo (POIs)
           </h4>
           {riskIndexStats.length > 0 && riskIndexStats[0].score > 0 ? (
             <div className="space-y-4">

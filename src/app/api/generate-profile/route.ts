@@ -135,6 +135,7 @@ type GenerateProfileBody = {
   multimodalContext?: string;
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
+  tacticalStreetViews?: any[];
 };
 
 type GeocodingResult = {
@@ -345,6 +346,7 @@ function buildPromptForGemini(params: {
   visionDataTactica?: { texto: string; rostros: number };
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
+  tacticalStreetViews?: any[];
 }): string {
   const {
     photos,
@@ -368,6 +370,7 @@ function buildPromptForGemini(params: {
     visionDataTactica,
     geometryType,
     projectDescription,
+    tacticalStreetViews = [],
   } = params;
 
   const comentariosInvestigador = photos
@@ -455,6 +458,12 @@ function buildPromptForGemini(params: {
     ? `\n## EXPLICACIÓN DEL PROYECTO (DICTADO DE VOZ - DIRECTRIZ OBLIGATORIA E INELUDIBLE)\n"${projectDescription}"\nESTA EXPLICACIÓN Y LAS CONTEXTUALIZACIONES SON TU PUNTO DE PARTIDA OBLIGATORIO. TODO TU ANÁLISIS Y SUGERENCIAS DEBEN ESTAR ENFOCADAS EN ESTOS PARÁMETROS.\n`
     : "";
 
+  const lugaresAcechoTexto = tacticalStreetViews && tacticalStreetViews.length > 0
+    ? `\n## ANÁLISIS DE STREET VIEW Y LUGARES DE ACECHO\nSe utilizaron coordenadas y Google Street View con Vision API para ubicar rutas de acceso/escape y lugares de acecho en los principales atractores:\n` +
+      (tacticalStreetViews || []).map((sv: any) => `- ${sv.name} (${sv.category}): Etiquetas de vulnerabilidad detectadas: ${sv.vision?.etiquetasRelevantes?.join(", ") || "Ninguna"}.`).join("\n") +
+      `\nUtiliza explícitamente esta información para señalar POR QUÉ fungen como atractores, rutas de acceso, de escape o lugares de acecho en tu dictamen.\n`
+    : "";
+
   const prompt = `
 ${descContext}
 
@@ -519,6 +528,8 @@ ${streetViewTexto}
 
 ## INTELIGENCIA VISUAL AUTOMATIZADA (OCR y Rostros)
 ${visionTacticaTexto}
+
+${lugaresAcechoTexto}
 
 ## OBJETIVOS PRIORITARIOS MARCADOS POR EL ANALISTA
 ${focusAreasTexto}
@@ -708,6 +719,7 @@ export async function POST(req: Request) {
     let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
     let numIrregulares = 0;
     let numPois = 0;
+    const tacticalStreetViews: any[] = [];
     let mergedPoisResult: PointOfInterest[] = [];
     try {
       const irregs = buildIrregularBusinesses(placesResult, denueResult);
@@ -767,6 +779,21 @@ export async function POST(req: Request) {
             category: p.category,
             streetViewUrl: `https://maps.googleapis.com/maps/api/streetview?size=640x400&location=${p.lat},${p.lng}&key=${mapsKey}`,
           }));
+
+          // Extraer imágenes de Street View para Rutas y Acecho
+          for (const poi of poiImages.slice(0, 2)) {
+            try {
+              const svRes = await fetch(poi.streetViewUrl);
+              if (svRes.ok) {
+                const arrayBuffer = await svRes.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString("base64");
+                const visionRes = await analyzeBrokenWindowsWithVision({ imageBase64: base64 });
+                tacticalStreetViews.push({ ...poi, vision: visionRes });
+              }
+            } catch (e) {
+              console.error("[generate-profile] Error Vision en StreetView", e);
+            }
+          }
         }
       }
     } catch (e) {
@@ -834,6 +861,7 @@ export async function POST(req: Request) {
       visionDataTactica: (body as any).visionDataTactica ?? undefined,
       geometryType: body.geometryType,
       projectDescription: body.projectDescription,
+      tacticalStreetViews,
     });
 
     const marcoTeoriaReglas =
@@ -902,6 +930,7 @@ export async function POST(req: Request) {
           pois: mergedPoisResult,
           riskLevel,
           inegiDemographics,
+          tacticalStreetViews,
         },
       },
       { status: 200 }
