@@ -221,6 +221,7 @@ export function ProjectManager() {
               </span>
               <input
                 type="text"
+                spellCheck={true}
                 value={nombreInput}
                 onChange={(e) => setNombreInput(e.target.value)}
                 placeholder="Ej. Diagnóstico Polígono VNSA"
@@ -281,6 +282,7 @@ export function ProjectManager() {
               </button>
             </div>
             <textarea
+              spellCheck={true}
               value={descripcionInput}
               onChange={(e) => setDescripcionInput(e.target.value)}
               placeholder="Describa el contexto, hipótesis o detalles relevantes. La transcripción aparecerá aquí..."
@@ -385,6 +387,7 @@ export function ProjectManager() {
       <div className="card p-4 border-l-4 border-orange-500 bg-orange-950/20">
         <h3 className="text-orange-400 font-bold mb-2 text-sm">Devolver Expediente a Usuario</h3>
         <textarea
+          spellCheck={true}
           value={comentariosAdmin}
           onChange={(e) => setComentariosAdmin(e.target.value)}
           placeholder="Escribe los comentarios, observaciones o correcciones requeridas..."

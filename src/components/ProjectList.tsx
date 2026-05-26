@@ -455,6 +455,7 @@ export function ProjectList() {
               </span>
               <input
                 type="text"
+                spellCheck={true}
                 placeholder="Buscar expediente, estado o analista..."
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
@@ -699,6 +700,7 @@ export function ProjectList() {
         </div>
             <input
               type="text"
+              spellCheck={true}
               value={nombreInput}
               onChange={(e) => setNombreInput(e.target.value)}
               placeholder="Ej. Diagnóstico Polígono VNSA"
@@ -759,6 +761,7 @@ export function ProjectList() {
               </button>
             </div>
             <textarea
+              spellCheck={true}
               value={descripcionInput}
               onChange={(e) => setDescripcionInput(e.target.value)}
               placeholder="Describa el contexto, hipótesis o detalles relevantes. La transcripción aparecerá aquí..."

@@ -146,8 +146,8 @@ export function PhotoAlbum({
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
   const [qaIteration, setQaIteration] = useState(0);
-  const [aiQuestions, setAiQuestions] = useState("");
-  const [userAnswers, setUserAnswers] = useState("");
+  const [aiQuestionsList, setAiQuestionsList] = useState<string[]>([]);
+  const [userAnswersMap, setUserAnswersMap] = useState<Record<number, string>>({});
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [analysisContextExtra, setAnalysisContextExtra] = useState("");
   const [isRefining, setIsRefining] = useState(false);
@@ -288,8 +288,8 @@ const hasMinimumPhotos =
 
     setError(null);
     setQaIteration(0);
-    setAiQuestions("");
-    setUserAnswers("");
+    setAiQuestionsList([]);
+    setUserAnswersMap({});
     setAnalysisAuditScore(null);
     setIsAnalysisContextAudited(false);
     setShowConfigModal(true);
@@ -857,6 +857,7 @@ const hasMinimumPhotos =
                   <div className="relative w-full mt-2">
                     <input
                       type="text"
+                      spellCheck={true}
                       placeholder="Comentario (Obligatorio)..."
                       value={p.comentario || ""}
                       disabled={isReadOnly}
@@ -984,6 +985,7 @@ const hasMinimumPhotos =
                 </button>
               )}
               <textarea
+                spellCheck={true}
                 value={docContext}
                 disabled={isReadOnly}
                 onChange={(e) => {
@@ -1094,6 +1096,7 @@ const hasMinimumPhotos =
                 <span>🎙️</span>
               </button>
               <textarea
+                spellCheck={true}
                 value={docSuggestions}
                 onChange={(e) => setDocSuggestions(e.target.value)}
                 className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
@@ -1366,6 +1369,7 @@ const hasMinimumPhotos =
                   )}
                 </div>
                 <textarea
+                  spellCheck={true}
                   value={editableProfile}
                   onChange={(e) => setEditableProfile(e.target.value)}
                   disabled={isReadOnly}
@@ -1549,6 +1553,7 @@ const hasMinimumPhotos =
                               <span>🎙️</span>
                             </button>
                             <textarea
+                              spellCheck={true}
                               placeholder="Especifique otros objetivos prioritarios del análisis..."
                               value={analysisContextExtra ?? ""}
                               onChange={(e) => setAnalysisContextExtra(e.target.value)}
@@ -1577,6 +1582,7 @@ const hasMinimumPhotos =
                   </button>
                 </div>
                 <textarea
+                  spellCheck={true}
                   value={analysisContext}
                   onChange={(e) => {
                     setAnalysisContext(e.target.value);
@@ -1604,12 +1610,18 @@ const hasMinimumPhotos =
                         let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
                         if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
                         
-                        const jsonInstruction = "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json. NO agregues ningún otro texto exterior.)";
+                        let answersString = Object.entries(userAnswersMap)
+                          .filter(([_, ans]) => ans.trim())
+                          .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
+                          .join("\n\n");
+
+                        const jsonInstruction = "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'questions' (arreglo de strings). NO agregues comillas invertidas de markdown como ```json. NO agregues ningún otro texto exterior.)";
+                        
                         let instruction = "";
                         if (qaIteration === 0) {
-                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador crítico. Califica esta hipótesis. Si le asignas un score menor a 80, NO devuelvas un borrador o un texto mejorado. En su lugar, devuelve EXACTAMENTE 5 preguntas claras y directas que la Persona Perfiladora debe responder obligatoriamente para alcanzar la idoneidad y aportar datos de valor. Si el score es 80 o más, solo devuelve un mensaje de validación exitosa.)" + jsonInstruction;
+                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador analítico empático. Evalúa la pertinencia y claridad de la hipótesis basándote SÓLO en la observación en sitio del analista. No exijas datos estadísticos, criminológicos ni de contexto urbano que la plataforma calculará después automáticamente. Si le asignas un score menor a 80, devuelve EXACTAMENTE entre 2 y 4 preguntas individuales, claras y breves, enfocadas en mejorar la pertinencia y fundamento de la hipótesis de campo. Si el score es 80 o mayor, devuelve el arreglo 'questions' vacío.)" + jsonInstruction;
                         } else {
-                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas anteriores con lo siguiente:\n"${userAnswers}"\n\nReevalúa la hipótesis integrada con estas respuestas. Si aún no alcanza un score de 80, devuelve EXACTAMENTE 3 nuevas preguntas de profundización. Si ya es 80 o mayor, devuelve un mensaje de validación exitosa.)` + jsonInstruction;
+                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas con la siguiente información:\n"${answersString}"\n\nReevalúa la pertinencia de la hipótesis integrada. Si aún no alcanza 80, devuelve 1 o 2 nuevas preguntas breves. Si ya alcanza 80, devuelve 'questions' vacío.)` + jsonInstruction;
                         }
 
                         const res = await fetch("/api/refine-context", {
@@ -1626,42 +1638,42 @@ const hasMinimumPhotos =
                         const data = await res.json();
                         if (res.ok) {
                           let scoreVal = data.score ?? 0;
-                          let suggestionsVal = data.suggestions ?? "";
+                          let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
+                          let rawResponse = data.suggestions || data.questions || "";
                           
-                          if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
+                          if (typeof rawResponse === "string" && (rawResponse.includes("La respuesta de la IA") || rawResponse.includes("```") || rawResponse.includes("{"))) {
                             try {
-                              const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                              if (match && match[1]) {
-                                const parsed = JSON.parse(match[1]);
+                              const match = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                              const jsonStr = match && match[1] ? match[1] : rawResponse.match(/\{[\s\S]*\}/)?.[0];
+                              if (jsonStr) {
+                                const parsed = JSON.parse(jsonStr);
                                 if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
-                              } else {
-                                const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
-                                if (jsonMatch) {
-                                  const parsed = JSON.parse(jsonMatch[0]);
-                                  if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                  if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                if (Array.isArray(parsed.questions)) questionsVal = parsed.questions;
+                                else if (typeof parsed.suggestions === 'string') {
+                                  questionsVal = parsed.suggestions.split('\n').filter((q:string) => q.trim().length > 5);
                                 }
                               }
                             } catch (e) {
                               console.error("No se pudo extraer JSON de la respuesta de IA:", e);
                             }
+                          } else if (typeof rawResponse === "string" && rawResponse.trim()) {
+                            questionsVal = rawResponse.split('\n').filter((q:string) => q.trim().length > 5);
                           }
 
                           setAnalysisAuditScore(scoreVal);
                           if (scoreVal >= 80) {
                             setIsAnalysisContextAudited(true);
-                            if (userAnswers.trim()) {
-                              setAnalysisContext((prev) => prev + "\n\nRespuestas aportadas:\n" + userAnswers);
+                            if (answersString.trim()) {
+                              setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
                             }
-                            setAiQuestions("");
-                            setUserAnswers("");
+                            setAiQuestionsList([]);
+                            setUserAnswersMap({});
                           } else {
-                            setAiQuestions(suggestionsVal);
+                            setAiQuestionsList(questionsVal.length > 0 ? questionsVal : ["¿Podría detallar más los elementos de riesgo observados en el terreno?"]);
                             setIsAnalysisContextAudited(false);
-                            if (userAnswers.trim()) {
-                              setAnalysisContext((prev) => prev + "\n\nRespuestas aportadas:\n" + userAnswers);
-                              setUserAnswers("");
+                            if (answersString.trim()) {
+                              setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
+                              setUserAnswersMap({});
                             }
                             setQaIteration((prev) => prev + 1);
                           }
@@ -1695,31 +1707,32 @@ const hasMinimumPhotos =
                     Cancelar
                   </button>
                 </div>
-                {!isAnalysisContextAudited && aiQuestions && (
-                  <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-sm text-yellow-200 space-y-3">
+                {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
+                  <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-sm text-yellow-200 space-y-4">
                     <div className="flex items-center justify-between border-b border-yellow-800 pb-2">
-                      <p className="font-bold text-yellow-400">⚠️ La hipótesis requiere mayor contexto (Idoneidad: {analysisAuditScore}%)</p>
+                      <p className="font-bold text-yellow-400">⚠️ La hipótesis requiere mayor claridad (Idoneidad: {analysisAuditScore}%)</p>
                     </div>
-                    <p className="text-yellow-100 whitespace-pre-wrap leading-relaxed">{aiQuestions}</p>
-                    
-                    <div className="pt-2">
-                      <label className="block text-xs font-medium text-yellow-300 mb-2">Tus respuestas a las preguntas de la IA:</label>
-                      <div className="relative w-full">
-                        <button
-                          type="button"
-                          onClick={() => toggleDictation('userAnswers', (text) => setUserAnswers(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                          className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'userAnswers' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
-                        >
-                          <span>🎙️</span>
-                        </button>
-                        <textarea
-                          value={userAnswers}
-                          onChange={(e) => setUserAnswers(e.target.value)}
-                          className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[120px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                          placeholder="Responde aquí para robustecer tu hipótesis..."
-                        />
+                    {aiQuestionsList.map((q, idx) => (
+                      <div key={idx} className="space-y-2">
+                        <p className="text-yellow-100 whitespace-pre-wrap leading-relaxed font-semibold">{idx + 1}. {q}</p>
+                        <div className="relative w-full">
+                          <button
+                            type="button"
+                            onClick={() => toggleDictation(`userAnswer-${idx}`, (text) => setUserAnswersMap(prev => ({ ...prev, [idx]: (prev[idx] ? `${prev[idx].trim()} ${text}` : text) })))}
+                            className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === `userAnswer-${idx}` ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
+                          >
+                            <span>🎙️</span>
+                          </button>
+                          <textarea
+                            spellCheck={true}
+                            value={userAnswersMap[idx] || ""}
+                            onChange={(e) => setUserAnswersMap(prev => ({ ...prev, [idx]: e.target.value }))}
+                            className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+                            placeholder="Escribe tu respuesta aquí..."
+                          />
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1745,7 +1758,7 @@ const hasMinimumPhotos =
               </p>
             </div>
             <div className="flex flex-col gap-2 pt-2">
-              {!isAnalysisContextAudited && !aiQuestions && (
+              {!isAnalysisContextAudited && aiQuestionsList.length === 0 && (
                 <p className="text-xs text-amber-400 text-right">⚠️ Debe validar la hipótesis con la IA antes de comenzar el análisis (Requiere 80%+).</p>
               )}
               {isAnalysisContextAudited && (

@@ -147,6 +147,7 @@ export default function MultimodalPanel({ project }: MultimodalPanelProps) {
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-400 uppercase">Instrucción / Prompt Táctico para la IA:</label>
           <textarea
+            spellCheck={true}
             className="w-full bg-slate-950 border border-slate-700 rounded-md p-3 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
             rows={3}
             disabled={isReadOnly}
