@@ -314,7 +314,29 @@ export function ProjectManager() {
               <button type="button" onClick={() => galleryInputRef.current?.click()} className="flex-1 rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors">📸 Usar Galería</button>
             </div>
             {pendingPhotos.length > 0 && (
-              <p className="text-xs text-emerald-400 mt-2 font-medium">✓ {pendingPhotos.length} fotografía(s) lista(s) para ser ingresada(s).</p>
+              <div className="mt-3">
+                <p className="text-xs text-emerald-400 mb-2 font-medium">✓ {pendingPhotos.length} fotografía(s) seleccionada(s) lista(s) para ser ingresada(s).</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {pendingPhotos.map((file, idx) => (
+                    <div key={idx} className="relative group rounded-md overflow-hidden border border-slate-600 aspect-square bg-slate-800 flex items-center justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src={URL.createObjectURL(file)} 
+                        alt="Preview" 
+                        className="object-cover w-full h-full"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPendingPhotos(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-90 hover:opacity-100 shadow-md"
+                        title="Borrar fotografía"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
