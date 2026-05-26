@@ -112,10 +112,10 @@ export function ImageUpload() {
         </div>
         <input
           type="file"
-          accept="image/*"
+          accept="image/jpeg, image/png, image/heic, image/heif, image/*"
           // En móviles, esto sugiere usar directamente la cámara trasera
           capture="environment"
-          className="hidden"
+          className="sr-only"
           onChange={handleFileChange}
         />
       </label>

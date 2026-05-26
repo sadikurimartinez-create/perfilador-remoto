@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
 import { useAuth } from "@/context/AuthContext";
@@ -24,12 +24,21 @@ export function ProjectManager() {
   const [comentariosAdmin, setComentariosAdmin] = useState("");
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
 
   const requiredPhotos = project?.geometryType === 'poligono' ? 3 : project?.geometryType === 'lineal' ? 2 : 1;
   const hasMinimumPhotos = album.length >= requiredPhotos;
+
+  useEffect(() => {
+    if (project && project.descripcion && !descripcionInput) {
+      setDescripcionInput(project.descripcion);
+    }
+  }, [project, descripcionInput]);
 
   const handleToggleDictation = () => {
     if (typeof window === "undefined") return;
@@ -92,7 +101,7 @@ export function ProjectManager() {
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
-    setDescripcionInput("");
+    setPendingPhotos([]);
     setShowPrompt(true);
   };
 
@@ -103,8 +112,11 @@ export function ProjectManager() {
         await createProject({
           nombre,
           geometryType,
-          descripcion: descripcionInput,
+          descripcion: "",
         });
+        if (pendingPhotos.length > 0) {
+          (window as any).pendingProjectPhotos = pendingPhotos;
+        }
       } catch (e: any) {
         // El error ya lo avisa el context con un alert
       }
@@ -115,6 +127,19 @@ export function ProjectManager() {
     closeProject();
     setShowPrompt(false);
     router.push("/");
+  };
+
+  const handleGuardarContexto = async () => {
+    if (!project) return;
+    try {
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", project.id), {
+        descripcion: descripcionInput
+      });
+      window.alert("Contexto operacional guardado correctamente.");
+    } catch (err: any) {
+      window.alert("Error al guardar contexto: " + err.message);
+    }
   };
 
   const handleEnviarRevision = async () => {
@@ -265,44 +290,32 @@ export function ProjectManager() {
           </div>
        </div>
 
-          <div className="mt-2 mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="block text-sm font-medium text-slate-200">Explicación del Proyecto</span>
-              <button
-                type="button"
-                onClick={handleToggleDictation}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
-                  isListening
-                    ? "border-red-500 text-red-300 bg-red-900/40"
-                    : "border-slate-600 text-slate-200 bg-slate-900"
-                }`}
-              >
-                <span aria-hidden="true">🎙️</span>
-                <span>{isListening ? "Detener grabación" : "Grabar explicación"}</span>
-              </button>
+          <div className="mt-4 mb-4">
+            <span className="block text-sm font-medium text-slate-200 mb-2">Captura de fotografías (In-Situ)</span>
+            <div className="flex gap-2">
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                capture="environment"
+                multiple
+                className="sr-only"
+                onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
+              />
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
+              />
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex-1 rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 text-sm font-semibold hover:bg-emerald-800/50 shadow-md transition-colors">📷 Usar Cámara</button>
+              <button type="button" onClick={() => galleryInputRef.current?.click()} className="flex-1 rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors">📸 Usar Galería</button>
             </div>
-            <textarea
-              spellCheck={true}
-              value={descripcionInput}
-              onChange={(e) => setDescripcionInput(e.target.value)}
-              placeholder="Describa el contexto, hipótesis o detalles relevantes. La transcripción aparecerá aquí..."
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[80px]"
-            />
-            <div className="mt-2">
-              <div className="flex justify-between items-center text-[10px] mb-1">
-                <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-                <span className={`font-bold ${descripcionInput.length < 20 ? "text-red-400" : descripcionInput.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {descripcionInput.length === 0 ? "Sin contexto" : descripcionInput.length < 20 ? "Básico" : descripcionInput.length < 100 ? "Aceptable" : "Óptimo"}
-                </span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-1.5">
-                <div 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${descripcionInput.length < 20 ? "bg-red-500" : descripcionInput.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{ width: `${Math.min((descripcionInput.length / 150) * 100, 100)}%` }}
-                ></div>
-              </div>
-              <p className="text-[9px] text-slate-500 mt-1">* Opcional y flexible. Un contexto más amplio guía a la IA a respaldar mejor tus observaciones de campo.</p>
-            </div>
+            {pendingPhotos.length > 0 && (
+              <p className="text-xs text-emerald-400 mt-2 font-medium">✓ {pendingPhotos.length} fotografía(s) lista(s) para ser ingresada(s).</p>
+            )}
           </div>
 
             <div className="flex gap-2">
@@ -418,6 +431,43 @@ export function ProjectManager() {
     )}
     {estadoProyecto === "VALIDADO" && (
       <div className="card p-4 border-l-4 border-emerald-500 bg-emerald-950/20"><h3 className="text-emerald-400 font-bold text-sm">Validado y Cerrado</h3><p className="text-sm text-slate-300 mt-1">Este expediente ha sido aprobado definitivamente por {(project as any).validadoPor}.</p></div>
+    )}
+
+    {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") ? (
+      <div className="card p-4 md:p-6 border border-sky-900/50 bg-slate-900/40">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-slate-100">1. Contextualizar Geometría Operacional</h3>
+          <button
+            type="button"
+            onClick={handleToggleDictation}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold border ${
+              isListening
+                ? "border-red-500 text-red-300 bg-red-900/40"
+                : "border-slate-600 text-slate-200 bg-slate-900"
+            }`}
+          >
+            <span aria-hidden="true">🎙️</span>
+            <span>{isListening ? "Detener grabación" : "Dictar contexto"}</span>
+          </button>
+        </div>
+        <textarea
+          spellCheck={true}
+          value={descripcionInput}
+          onChange={(e) => setDescripcionInput(e.target.value)}
+          placeholder="Describa el contexto, hipótesis o detalles relevantes de la geometría seleccionada..."
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[80px]"
+        />
+        <div className="mt-3 flex justify-end">
+          <button onClick={handleGuardarContexto} className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors">
+            Guardar Contexto
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="card p-4 md:p-6 border border-slate-700 bg-slate-900/40">
+        <h3 className="text-lg font-semibold text-slate-100 mb-2">Contexto Operacional</h3>
+        <p className="text-sm text-slate-300 whitespace-pre-wrap">{project.descripcion || "Sin contexto definido."}</p>
+      </div>
     )}
 
       {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") && (

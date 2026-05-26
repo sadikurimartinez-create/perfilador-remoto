@@ -67,29 +67,13 @@ export function CaptureAndAddPhoto() {
   const isProjectReady = Boolean(
     // Utilizamos type assertion (any) y fallback para evitar errores de TS y empatar con la DB
     ((project as any)?.nombre || (project as any)?.name)?.trim() &&
-    project?.geometryType &&
-    ((project as any)?.descripcion || (project as any)?.description)?.trim()
+    project?.geometryType
   );
 
   const isIndividual = project?.geometryType === 'individual';
 
-  const handlePhotoUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    isLiveCapture: boolean = false
-  ) => {
-    let files = e.target.files ? Array.from(e.target.files) : [];
+  const processFiles = async (files: File[], isLiveCapture: boolean = false) => {
     if (!project || files.length === 0) return;
-
-    // REGLA DE NEGOCIO: Forzar una sola foto para modo 'individual'
-    if (isIndividual) {
-      if (album.length >= 1) {
-        setError("El modo 'Individual' solo permite una fotografía. Borre la existente para agregar una nueva.");
-        e.target.value = ""; // Limpiar el input para permitir nueva selección
-        return;
-      }
-      // Si el usuario seleccionó varias, solo tomamos la primera.
-      files = files.slice(0, 1);
-    }
 
     setError(null);
     setIsFetchingGPS(true);
@@ -164,8 +148,25 @@ export function CaptureAndAddPhoto() {
     }
 
     setIsFetchingGPS(false);
+  };
+
+  const handlePhotoUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isLiveCapture: boolean = false
+  ) => {
+    let files = e.target.files ? Array.from(e.target.files) : [];
+    await processFiles(files, isLiveCapture);
     e.target.value = "";
   };
+
+  useEffect(() => {
+    const pending = (window as any).pendingProjectPhotos;
+    if (project && pending && pending.length > 0) {
+      delete (window as any).pendingProjectPhotos;
+      processFiles(pending, true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
 
   const handleManualSubmit = async () => {
     if (!pendingPhoto) return;
@@ -244,24 +245,12 @@ export function CaptureAndAddPhoto() {
         </p>
       </header>
 
-      {(!project || !isProjectReady) && (
-        <div className="mb-4 rounded-lg border border-amber-500 bg-amber-950/40 p-3 text-sm text-amber-200">
-          <div className="font-semibold mb-1">Paso previo requerido</div>
-          <p>
-            Para habilitar la carga de evidencias fotográficas, primero debe completar la información del proyecto:
-            <br/>1. Nombre del proyecto.
-            <br/>2. Tipo de geometría operacional.
-            <br/>3. Explicación del proyecto (tecleada o dictada).
-          </p>
-        </div>
-      )}
-
       <input
         ref={galleryInputRef}
         type="file"
-        accept="image/*"
-        multiple={!isIndividual}
-        className="hidden"
+        accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+        multiple
+        className="sr-only"
         onChange={(e) => handlePhotoUpload(e, false)}
       />
       
@@ -269,9 +258,9 @@ export function CaptureAndAddPhoto() {
       <input
         ref={cameraInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg, image/png, image/heic, image/heif, image/*"
         capture="environment"
-        className="hidden"
+        className="sr-only"
         onChange={(e) => handlePhotoUpload(e, true)}
       />
       
