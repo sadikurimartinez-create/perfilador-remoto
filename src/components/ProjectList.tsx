@@ -436,7 +436,7 @@ export function ProjectList() {
               </button>
             </div>
           ) : (
-            <ul className="flex flex-col gap-4">
+            <ul className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
               {list.map((p) => {
                 const analysesForProject = allAnalyses.filter(
                   (a) => a.projectId === p.id
@@ -452,35 +452,41 @@ export function ProjectList() {
                 return (
                   <li
                     key={p.id}
-                    className="card p-4 flex flex-col gap-3 border border-slate-800 hover:border-slate-700"
+                    className="card flex flex-col h-full bg-slate-900/40 border border-slate-800 hover:border-slate-600 hover:shadow-xl hover:shadow-sky-900/10 transition-all overflow-hidden"
                   >
-                    <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-slate-100 truncate">
+                    <div className="p-5 flex flex-col flex-1 gap-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <h3 className="text-base font-bold text-slate-100 truncate" title={p.name}>
                             {p.name}
                           </h3>
                           {getStatusBadge(p.estado || "ABIERTO")}
                         </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <span aria-hidden="true">📅</span>
                         {new Date(p.createdAt).toLocaleDateString("es-MX", {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
                         })}
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <span aria-hidden="true">📸</span>
                         {photoCountDisplay}{" "}
                         {photoCountDisplay === 1 ? "foto" : "fotos"}
                       </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                          <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+                            <span aria-hidden="true">👤</span>
                         Creado por:{" "}
                         <span className="font-medium text-slate-300">
                           {p.createdBy ?? "Desconocido"}
                         </span>
                       </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      </div>
+
+                      <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
                         {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
                         <button
                           type="button"
@@ -488,7 +494,7 @@ export function ProjectList() {
                           title="Descargar archivo para enviarlo a Gabinete"
                           className="p-2 rounded text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-900/30 transition-colors border border-transparent hover:border-amber-700/50"
                         >
-                          📤 Exportar a Gabinete
+                          📤 Exportar
                         </button>
                         )}
                         {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
@@ -497,19 +503,19 @@ export function ProjectList() {
                           onClick={() => void handleDeleteProject(p.id)}
                           className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
                         >
-                          Eliminar
+                          🗑️ Eliminar
                         </button>
                         )}
                         <button
                           type="button"
                           onClick={() => handleOpenProject(p)}
-                          className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${p.estado === "EN REVISIÓN" || p.estado === "CERRADO" ? "bg-slate-700 hover:bg-slate-600" : "bg-sky-600 hover:bg-sky-500"}`}
+                          className={`flex-1 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-bold text-white transition-colors shadow-md ${p.estado === "EN REVISIÓN" || p.estado === "CERRADO" ? "bg-slate-700 hover:bg-slate-600" : "bg-sky-600 hover:bg-sky-500"}`}
                         >
                           {p.estado === "EN REVISIÓN" ? "En Revisión" : p.estado === "CERRADO" ? "Validado" : "Abrir Proyecto"}
                         </button>
                       </div>
                     </div>
-                    <div className="mt-2 pt-2 border-t border-slate-800">
+                    <div className="bg-slate-900/80 p-4 border-t border-slate-800/80">
                       {analysesForProject.length === 0 ? (
                         <p className="text-sm text-slate-500 italic">
                           Sin análisis generados aún.
@@ -519,7 +525,7 @@ export function ProjectList() {
                           {analysesForProject.slice(0, 3).map((a) => (
                             <div
                               key={a.id}
-                              className="bg-slate-900/50 p-3 rounded-md border border-slate-800 flex flex-col gap-2"
+                              className="bg-slate-800/40 p-3 rounded-md border border-slate-700/50 flex flex-col gap-2"
                             >
                               <p className="text-[11px] text-sky-400 font-semibold">
                                 {new Date(a.createdAt).toLocaleString("es-MX", {
