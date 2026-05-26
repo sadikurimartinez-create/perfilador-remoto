@@ -12,6 +12,12 @@ import {
   Header,
   Footer,
   PageNumber,
+  Table,
+  TableRow,
+  TableCell,
+  BorderStyle,
+  WidthType,
+  PageOrientation,
 } from "docx";
 import { saveAs } from "file-saver";
 
@@ -110,12 +116,38 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+async function fetchImageToBuffer(imageUrl: string): Promise<ArrayBuffer | null> {
+  try {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = imageUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Error loading image"));
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width || img.naturalWidth || 640;
+    canvas.height = img.height || img.naturalHeight || 640;
+    const ctx = canvas.getContext("2d");
+    ctx?.drawImage(img, 0, 0);
+    return await new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        if (blob) resolve(await blob.arrayBuffer());
+        else resolve(null);
+      }, "image/jpeg", 0.85);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
 /**
  * Analiza el Markdown de Gemini y lo convierte en párrafos estructurados de Word.
  */
-function parseMarkdownToParagraphs(text: string): Paragraph[] {
+async function parseMarkdownToParagraphs(text: string): Promise<Paragraph[]> {
   const lines = text.split(/\r?\n/);
   const paragraphs: Paragraph[] = [];
+  const urlRegex = /(https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\s\)]+)/g;
 
   for (let line of lines) {
     if (!line.trim()) {
@@ -130,15 +162,35 @@ function parseMarkdownToParagraphs(text: string): Paragraph[] {
     else if (line.startsWith("## ")) { headingLevel = HeadingLevel.HEADING_2; line = line.replace(/^## /, ""); }
     else if (line.startsWith("### ")) { headingLevel = HeadingLevel.HEADING_3; line = line.replace(/^### /, ""); }
     else if (line.startsWith("- ") || line.startsWith("* ")) { isBullet = true; line = line.replace(/^[-*]\s/, ""); }
-    else if (line.match(/^\d+\.\s/)) { isBullet = true; }
+    else if (line.match(/^\d+\.\s/)) { isBullet = true; line = line.replace(/^\d+\.\s/, ""); }
 
-    const parts = line.split(/(\*\*.*?\*\*)/g);
-    const runs = parts.map(part => {
-      if (part.startsWith("**") && part.endsWith("**")) {
-        return new TextRun({ text: part.slice(2, -2), bold: true, size: 22, font: "Arial" });
+    // Limpiar sintaxis de links markdown por si Gemini arrojó la url de Street View así: [Street View](https://...)
+    let cleanLine = line.replace(/\[([^\]]*)\]\((https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\)]+)\)/g, "$2");
+    cleanLine = cleanLine.replace(/!\[([^\]]*)\]\((https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\)]+)\)/g, "$2");
+
+    const parts = cleanLine.split(urlRegex);
+    const runs: any[] = [];
+    
+    for (const part of parts) {
+      if (part.startsWith("https://maps.googleapis.com/maps/api/streetview")) {
+        const imgBuf = await fetchImageToBuffer(part);
+        if (imgBuf) {
+          // Imagen cuadrada para la vista de Street View dentro del texto
+          runs.push(new ImageRun({ data: imgBuf, transformation: { width: 400, height: 400 } }));
+        } else {
+          runs.push(new TextRun({ text: "[Error al cargar imagen Street View automática]", color: "FF0000", size: 22 }));
+        }
+      } else if (part) {
+        const bParts = part.split(/(\*\*.*?\*\*)/g);
+        for (const bp of bParts) {
+          if (bp.startsWith("**") && bp.endsWith("**")) {
+            runs.push(new TextRun({ text: bp.slice(2, -2), bold: true, size: 22, font: "Arial" }));
+          } else if (bp) {
+            runs.push(new TextRun({ text: bp, size: 22, font: "Arial" }));
+          }
+        }
       }
-      return new TextRun({ text: part, size: 22, font: "Arial" });
-    });
+    }
 
     if (headingLevel) {
       paragraphs.push(new Paragraph({ children: runs, heading: headingLevel, spacing: { before: 240, after: 120 } }));
@@ -220,13 +272,13 @@ export async function exportToWord(
   coverPageParagraphs.push(new Paragraph({ pageBreakBefore: true })); // Salto de página después de portada
 
   // 3. CUERPO DEL DOCUMENTO (Parseado desde Markdown)
-  const bodyParagraphs = parseMarkdownToParagraphs(content);
+  const bodyParagraphs = await parseMarkdownToParagraphs(content);
 
   // 4. MAPAS (ATLAS CARTOGRÁFICO)
-  const mapParagraphs: Paragraph[] = [];
+  const mapElements: any[] = [];
   if (mapSnapshots && mapSnapshots.length > 0) {
-    mapParagraphs.push(new Paragraph({ pageBreakBefore: true }));
-    mapParagraphs.push(
+    mapElements.push(new Paragraph({ pageBreakBefore: true }));
+    mapElements.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
         children: [new TextRun({ text: "ATLAS CARTOGRÁFICO Y GEOESPACIAL", bold: true, size: 32, font: "Arial" })],
@@ -243,12 +295,13 @@ export async function exportToWord(
             tmpImg.onload = () => resolve();
             tmpImg.onerror = () => reject(new Error("[exportToWord] Error en mapa"));
           });
-          const MAP_MAX_WIDTH = 600;
+          // Al ser Horizontal (Landscape), podemos extender el ancho del mapa a 900
+          const MAP_MAX_WIDTH = 900;
           const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
           const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
           const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
-          mapParagraphs.push(
+          mapElements.push(
             new Paragraph({
               heading: HeadingLevel.HEADING_2,
               children: [new TextRun({ text: snapshot.title.toUpperCase(), bold: true, size: 24, font: "Arial" })],
@@ -269,10 +322,10 @@ export async function exportToWord(
   }
 
   // 5. FOTOGRAFÍAS TÁCTICAS
-  const photoParagraphs: Paragraph[] = [];
+  const photoElements: any[] = [];
   if (attachedPhotos && attachedPhotos.length > 0) {
-    photoParagraphs.push(new Paragraph({ pageBreakBefore: true }));
-    photoParagraphs.push(
+    photoElements.push(new Paragraph({ pageBreakBefore: true }));
+    photoElements.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
         children: [new TextRun({ text: "ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO", bold: true, size: 32, font: "Arial" })],
@@ -280,7 +333,9 @@ export async function exportToWord(
       })
     );
 
-    const WORD_MAX_WIDTH = 500;
+    const WORD_MAX_WIDTH = 450; // Para el Grid 2x2
+    const photoCells: TableCell[] = [];
+
     for (const url of attachedPhotos) {
       try {
         const stampedBuffer = await applyWatermarkForWord(url);
@@ -301,21 +356,62 @@ export async function exportToWord(
         const ratio = originalHeight / originalWidth || 1;
         const proportionalHeight = Math.floor(WORD_MAX_WIDTH * ratio);
 
-        photoParagraphs.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [
-              new ImageRun({
-                ...({ data: stampedBuffer, transformation: { width: WORD_MAX_WIDTH, height: proportionalHeight } } as any),
-              }),
-            ],
-            spacing: { before: 200, after: 400 }
-          })
-        );
+        photoCells.push(new TableCell({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new ImageRun({
+                  ...({ data: stampedBuffer, transformation: { width: WORD_MAX_WIDTH, height: proportionalHeight } } as any),
+                }),
+              ]
+            })
+          ],
+          borders: {
+            top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          },
+          margins: { top: 200, bottom: 200, left: 100, right: 100 },
+        }));
       } catch (err) {
         console.warn("Error procesando foto:", url, err);
       }
     }
+
+    const tableRows: TableRow[] = [];
+    for (let i = 0; i < photoCells.length; i += 2) {
+      const cells = [photoCells[i]];
+      if (i + 1 < photoCells.length) {
+        cells.push(photoCells[i + 1]);
+      } else {
+        // Celda vacía si el número de fotos es impar
+        cells.push(new TableCell({
+          children: [],
+          borders: {
+            top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+            right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          }
+        }));
+      }
+      tableRows.push(new TableRow({ children: cells }));
+    }
+
+    photoElements.push(new Table({
+      rows: tableRows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+      }
+    }));
   }
 
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD
@@ -348,6 +444,13 @@ export async function exportToWord(
     },
     sections: [
       {
+        properties: {
+          page: {
+            size: {
+              orientation: PageOrientation.LANDSCAPE,
+            },
+          },
+        },
         headers: {
           default: new Header({
             children: [
@@ -376,8 +479,8 @@ export async function exportToWord(
         children: [
           ...coverPageParagraphs,
           ...bodyParagraphs,
-          ...mapParagraphs,
-          ...photoParagraphs,
+          ...mapElements,
+          ...photoElements,
         ],
       },
     ],

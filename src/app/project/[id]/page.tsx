@@ -162,9 +162,9 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <header className="contents">
-        <div className="flex flex-wrap items-center justify-between gap-3 lg:col-span-12">
+    <div className="max-w-[1400px] mx-auto p-4 md:p-6 flex flex-col gap-6">
+      <header className="w-full">
+        <div className="flex flex-wrap items-center justify-between gap-3 w-full">
           <div>
             <Link
               href="/"
@@ -189,22 +189,16 @@ export default function ProjectWorkspacePage() {
         </div>
       </header>
 
-      <div className="lg:col-span-7 space-y-6 overflow-y-auto pb-20 lg:pb-0">
+      <div className="w-full space-y-6 overflow-y-auto pb-20 lg:pb-0">
         <CaptureAndAddPhoto />
         <PhotoAlbum
           onDeletePhoto={handleDeletePhoto}
           projectId={project.id}
           onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
-          splitLayout
         />
       </div>
 
-      <div
-        id="c4-right-column"
-        className="lg:col-span-5 space-y-6 lg:sticky lg:top-6 h-fit"
-      />
-
-      <div className="lg:col-span-12">
+      <div className="w-full" id="c4-right-column">
       {analyses && analyses.length > 0 && (
         <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-3 mt-2">
           <h3 className="text-sm font-semibold text-slate-100">

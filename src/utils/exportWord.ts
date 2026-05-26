@@ -4,13 +4,19 @@ import {
   Paragraph,
   TextRun,
   ImageRun,
+  Table,
+  TableRow,
+  TableCell,
+  BorderStyle,
+  WidthType,
+  PageOrientation,
 } from 'docx';
 
 import { saveAs } from 'file-saver';
 
 import { ConsolidatedReport } from '../types/Report';
 
-import { captureMapImage } from './captureMpas';
+import { generateStaticMapBase64, generateStreetViewBase64, generateRiskChartBase64 } from './captureMpas';
 
 import { getPhotoDataURLs } from './capturePhotos';
 
@@ -25,9 +31,8 @@ import {
 export const exportWord = async (
   report: ConsolidatedReport
 ) => {
-  const mapImage = await captureMapImage(
-    'project-map-capture'
-  );
+  const mapImage = await generateStaticMapBase64(report);
+  const chartImage = await generateRiskChartBase64(report.findings);
 
   const photoDataURLs = await getPhotoDataURLs(report.findings);
 
@@ -60,36 +65,68 @@ export const exportWord = async (
 
   groups = groups.filter(g => g.items.length > 0);
 
+  const createPhotoTable = (items: any[]) => {
+    const WORD_MAX_WIDTH = 450;
+    const cells: TableCell[] = items.map((item) => {
+      const imgBuf = Uint8Array.from(atob(item.dataURL.split(',')[1]), c => c.charCodeAt(0));
+      return new TableCell({
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: `Evidencia Foto ${item.index + 1} - ${(item.finding as any).tipo || 'Sin clasificar'}`, bold: true })],
+            spacing: { after: 100 }
+          }),
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: imgBuf,
+                transformation: { width: WORD_MAX_WIDTH, height: Math.floor(WORD_MAX_WIDTH * 0.75) }
+              } as any)
+            ]
+          }),
+          new Paragraph({
+            text: `Riesgo: ${(item.finding.riskLevel || 'N/A').toUpperCase()} | Observación: ${item.finding.note || 'Sin observación'}`,
+            spacing: { before: 100 }
+          })
+        ],
+        borders: {
+          top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+          right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        },
+        margins: { top: 200, bottom: 200, left: 100, right: 100 }
+      });
+    });
+
+    const rows: TableRow[] = [];
+    for (let i = 0; i < cells.length; i += 2) {
+      const rowCells = [cells[i]];
+      if (i + 1 < cells.length) {
+        rowCells.push(cells[i + 1]);
+      } else {
+        rowCells.push(new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } } }));
+      }
+      rows.push(new TableRow({ children: rowCells }));
+    }
+
+    return new Table({
+      rows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: { insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } }
+    });
+  };
+
   const photoBlockParagraphs = groups.flatMap(group => {
     const groupHeader = new Paragraph({
       children: [new TextRun({ text: group.title, bold: true, size: 24 })],
       spacing: { before: 400, after: 200 }
     });
 
-    const groupItems = group.items.flatMap(item => {
-      if (!item.dataURL || !item.dataURL.includes(',')) return [];
-      return [
-        new Paragraph({
-          children: [new TextRun({ text: `Evidencia Foto ${item.index + 1} - ${(item.finding as any).tipo || 'Sin clasificar'}`, bold: true })],
-          spacing: { before: 200, after: 100 }
-        }),
-        new Paragraph({
-          children: [
-            new ImageRun({
-              data: Uint8Array.from(atob(item.dataURL.split(',')[1]), c => c.charCodeAt(0)),
-              transformation: { width: 250, height: 180 },
-              type: 'png'
-            })
-          ]
-        }),
-        new Paragraph({
-          text: `Riesgo: ${(item.finding.riskLevel || 'N/A').toUpperCase()} | Observación: ${item.finding.note || 'Sin observación'}`,
-          spacing: { after: 300 }
-        })
-      ];
-    });
-
-    return [groupHeader, ...groupItems];
+    const validItems = group.items.filter(item => item.dataURL && item.dataURL.includes(','));
+    if (validItems.length > 0) {
+      return [groupHeader, createPhotoTable(validItems)];
+    }
+    return [groupHeader];
   });
 
   const risk = calculateRisk(report.findings);
@@ -135,73 +172,141 @@ export const exportWord = async (
     });
   }
 
+  // STREET VIEW ELEMENTS
+  const svFindings = report.findings.slice(0, 3);
+  const svCells: TableCell[] = [];
+  if (svFindings.length > 0) {
+    for (let i = 0; i < 3; i++) {
+      const f = svFindings[i % svFindings.length];
+      const heading = [0, 90, 180][i];
+      const svDataUrl = await generateStreetViewBase64(Number(f.latitude), Number(f.longitude), heading);
+      if (svDataUrl && svDataUrl.includes(',')) {
+        const imgBuf = Uint8Array.from(atob(svDataUrl.split(',')[1]), c => c.charCodeAt(0));
+        svCells.push(new TableCell({
+          children: [
+            new Paragraph({ children: [new TextRun({ text: `Street View Evidencia ${i + 1}`, bold: true })], spacing: { after: 100 } }),
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: imgBuf,
+                  transformation: { width: 450, height: 300 }
+                } as any)
+              ]
+            })
+          ],
+          borders: { top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } },
+          margins: { top: 200, bottom: 200, left: 100, right: 100 }
+        }));
+      }
+    }
+  }
+  let svTable: Table | null = null;
+  if (svCells.length > 0) {
+    const rows: TableRow[] = [];
+    for (let i = 0; i < svCells.length; i += 2) {
+      const rowCells = [svCells[i]];
+      if (i + 1 < svCells.length) rowCells.push(svCells[i + 1]);
+      else rowCells.push(new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } } }));
+      rows.push(new TableRow({ children: rowCells }));
+    }
+    svTable = new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: { insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } } });
+  }
+
+  // Construimos el arreglo de elementos fuera del Document para evitar sobrecarga de tipado (TS Union Types)
+  const docChildren: (Paragraph | Table)[] = [];
+
+  docChildren.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: 'CEIPOL - INFORME CRIMINOLÓGICO',
+          bold: true,
+          size: 32,
+        }),
+      ],
+    })
+  );
+
+  docChildren.push(new Paragraph({ text: `Proyecto: ${report.projectName}` }));
+  docChildren.push(new Paragraph({ text: `Tipo de geometría: ${(report as any).geometryType}` }));
+  docChildren.push(new Paragraph({ text: `Fecha: ${report.createdAt}` }));
+  docChildren.push(new Paragraph({ text: ' ' }));
+
+  docChildren.push(...explanationParagraphs);
+  docChildren.push(new Paragraph({ text: ' ' }));
+
+  if (chartImage) {
+    docChildren.push(
+      new Paragraph({
+        children: [new TextRun({ text: 'DISTRIBUCIÓN ESTADÍSTICA DE RIESGO', bold: true })],
+        spacing: { before: 200, after: 200 }
+      })
+    );
+    docChildren.push(
+      new Paragraph({
+        children: [
+          new ImageRun({
+            data: Uint8Array.from(atob((chartImage as string).split(',')[1]), c => c.charCodeAt(0)),
+            transformation: { width: 500, height: 250 }
+          } as any)
+        ],
+      })
+    );
+  }
+
+  if (mapImage) {
+    docChildren.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'MAPA DEL PROYECTO',
+            bold: true,
+          }),
+        ],
+      })
+    );
+    docChildren.push(
+      new Paragraph({
+        children: [
+          new ImageRun({
+            data: Uint8Array.from(
+              atob((mapImage as string).split(',')[1]),
+              c => c.charCodeAt(0)
+            ),
+            transformation: { width: 900, height: 500 }
+            } as any),
+        ],
+      })
+    );
+  }
+
+  docChildren.push(new Paragraph({ text: ' ' }));
+  docChildren.push(...narrativeParagraphs);
+  docChildren.push(new Paragraph({ text: ' ' }));
+  docChildren.push(...classificationParagraphs);
+  docChildren.push(new Paragraph({ text: ' ' }));
+  docChildren.push(...photoBlockParagraphs);
+  docChildren.push(new Paragraph({ text: ' ' }));
+
+  if (svTable) {
+    docChildren.push(
+      new Paragraph({
+        children: [new TextRun({ text: 'EVIDENCIA VISUAL DE CONTEXTO - STREET VIEW', bold: true, size: 24 })],
+        spacing: { before: 400, after: 200 },
+        pageBreakBefore: true
+      })
+    );
+    docChildren.push(svTable);
+  }
+
   const doc = new Document({
     sections: [
       {
-        properties: {},
-
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'CEIPOL - INFORME CRIMINOLÓGICO',
-                bold: true,
-                size: 32,
-              }),
-            ],
-          }),
-
-          new Paragraph({
-            text: `Proyecto: ${report.projectName}`,
-          }),
-
-          new Paragraph({
-            text: `Tipo de geometría: ${(report as any).geometryType}`,
-          }),
-
-          new Paragraph({
-            text: `Fecha: ${report.createdAt}`,
-          }),
-
-          new Paragraph({
-            text: ' ',
-          }),
-
-          ...explanationParagraphs,
-          new Paragraph({ text: ' ' }),
-
-          ...(mapImage
-            ? [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: 'MAPA DEL PROYECTO',
-                      bold: true,
-                    }),
-                  ],
-                }),
-                new Paragraph({
-                  children: [
-                    new ImageRun({
-                      data: Uint8Array.from(
-                        atob(mapImage.split(',')[1]),
-                        c => c.charCodeAt(0)
-                      ),
-                      transformation: { width: 500, height: 250 },
-                      type: 'png',
-                    }),
-                  ],
-                }),
-              ]
-            : []),
-          
-          new Paragraph({ text: ' ' }),
-          ...narrativeParagraphs,
-          new Paragraph({ text: ' ' }),
-          ...classificationParagraphs,
-          new Paragraph({ text: ' ' }),
-          ...photoBlockParagraphs,
-        ],
+        properties: {
+          page: { size: { orientation: PageOrientation.LANDSCAPE } }
+        },
+        // Inyectamos el arreglo ya ensamblado y forzamos el tipo 'any' para evitar falsos positivos del tipado
+        children: docChildren as any,
       },
     ],
   });
