@@ -13,6 +13,7 @@ import { getPool } from "@/lib/db";
 import { getInegiDemographics, type InegiDemographics } from "@/lib/inegiIndicators";
 import { searchXTweets, type XOsintResult } from "./xOsint";
 import { searchNewsOsint, type NewsOsintResult } from "@/lib/newsOsint";
+import { searchTelegram } from "@/utils/socialProviders";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
@@ -335,6 +336,7 @@ function buildPromptForGemini(params: {
   xOsintResult: XOsintResult;
   newsOsintResult: NewsOsintResult;
   osintReviewsTexto: string;
+  telegramOsintTexto: string;
   analysisContext?: string;
   multimodalContext?: string;
   analysisRadius: number;
@@ -357,6 +359,7 @@ function buildPromptForGemini(params: {
     xOsintResult,
     newsOsintResult,
     osintReviewsTexto,
+    telegramOsintTexto,
     analysisContext,
     multimodalContext,
     analysisRadius,
@@ -482,6 +485,9 @@ ${newsOsintTexto}
 
 ## INTELIGENCIA DE FUENTES ABIERTAS (OSINT - Comentarios Ciudadanos)
 ${osintReviewsTexto}
+
+## INTELIGENCIA DE FUENTES ABIERTAS (OSINT - Telegram)
+${telegramOsintTexto}
 
 ## DETERIORO URBANO (Vision API - Ventanas Rotas)
 ${visionResumen}
@@ -619,6 +625,7 @@ export async function POST(req: Request) {
     const inegiPromise = geocodingPromise.then((geo) => getInegiDemographics(geo.municipio, geo.estado));
     const xOsintPromise = geocodingPromise.then((geo) => searchXTweets(geo.colonia, geo.municipio));
     const newsOsintPromise = geocodingPromise.then((geo) => searchNewsOsint(geo.colonia, geo.municipio, geo.estado));
+    const telegramOsintPromise = geocodingPromise.then((geo) => searchTelegram(geo.colonia || geo.municipio || ""));
 
     const bibliographyPromise = readBibliographyContext();
 
@@ -630,6 +637,7 @@ export async function POST(req: Request) {
       inegiDemographics,
       xOsintResult,
       newsOsintResult,
+      telegramOsintResult,
       bibliographyContext,
     ] = await Promise.all([
       geocodingPromise,
@@ -639,6 +647,7 @@ export async function POST(req: Request) {
       inegiPromise,
       xOsintPromise,
       newsOsintPromise,
+      telegramOsintPromise,
       bibliographyPromise,
     ]);
 
@@ -767,6 +776,10 @@ export async function POST(req: Request) {
       irregularidadesTexto = "";
     }
 
+    const telegramOsintTexto = telegramOsintResult && telegramOsintResult.length > 0
+      ? `Se detectaron ${telegramOsintResult.length} mensajes relevantes en grupos/canales monitorizados:\n` + telegramOsintResult.map((m: any) => ` - [${m.fecha} | ${m.chat}]: "${m.texto}"`).join('\n')
+      : "No se detectaron mensajes relevantes en Telegram para la zona en el monitoreo actual.";
+
     const visionPorFoto = await Promise.all(
       photos.map(async (p) => {
         if (!p.imageBase64) {
@@ -811,6 +824,7 @@ export async function POST(req: Request) {
       xOsintResult,
       newsOsintResult,
       osintReviewsTexto,
+      telegramOsintTexto,
       analysisContext: body.analysisContext,
       multimodalContext: body.multimodalContext,
       analysisRadius: radiusMeters,

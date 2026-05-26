@@ -116,12 +116,17 @@ export async function searchPlacesAround(
       dUrl.searchParams.set("place_id", place.place_id);
       dUrl.searchParams.set("fields", "reviews");
       dUrl.searchParams.set("language", "es");
+      // Ordenar por las más recientes para detectar focos rojos actuales
+      dUrl.searchParams.set("reviews_sort", "newest");
       const dRes = await fetch(dUrl.toString());
       if (dRes.ok) {
         const dData = await dRes.json();
         if (dData.result?.reviews) {
-          // Guardamos un máximo de 3 reseñas útiles por lugar
-          place.reviews = dData.result.reviews.map((r: any) => r.text).filter((t: string) => t && t.trim().length > 0).slice(0, 3);
+          // Guardamos hasta 5 reseñas incluyendo calificación y fecha relativa
+          place.reviews = dData.result.reviews
+            .filter((r: any) => r.text && r.text.trim().length > 0)
+            .map((r: any) => `[${r.rating}⭐ | ${r.relative_time_description || 'Fecha desconocida'}] ${r.text.trim()}`)
+            .slice(0, 5);
         }
       }
     } catch (e) {

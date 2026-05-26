@@ -67,9 +67,18 @@ export const searchTelegram = async (
     const updates = response.data?.result || [];
 
     // Filtramos localmente por la palabra clave (query) proporcionada
-    return updates.filter((update: any) => {
+    const filtered = updates.filter((update: any) => {
       const text = update.message?.text || update.channel_post?.text || "";
       return text.toLowerCase().includes(query.toLowerCase());
+    });
+
+    return filtered.map((update: any) => {
+      const msg = update.message || update.channel_post || {};
+      return {
+        texto: msg.text || "",
+        chat: msg.chat?.title || msg.chat?.username || "Chat Monitorizado",
+        fecha: new Date((msg.date || Math.floor(Date.now() / 1000)) * 1000).toLocaleString("es-MX")
+      };
     });
 
   } catch (error) {

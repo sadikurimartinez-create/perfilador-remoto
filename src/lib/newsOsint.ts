@@ -57,10 +57,11 @@ export async function searchNewsOsint(
     return { exito: false, resumen: "Sin ubicación suficiente para el rastreo de noticias.", noticiasRelevantes: [] };
   }
 
-  const keywords = ["robo", "asalto", "homicidio", "asesinato", "balacera", "cateo", "operativo", "cártel", "narcomenudeo", "riña", "detenido", "violencia"];
+  const keywords = ["robo", "asalto", "homicidio", "asesinato", "balacera", "cateo", "operativo", "cártel", "narcomenudeo", "riña", "detenido", "violencia", "sicarios", "ejecutado", "feminicidio", "secuestro", "extorsión", "arma", "crimen", "policía"];
   const locationKeywords = [colonia, municipio, estado]
     .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
     .map((k) => k.toLowerCase());
+  const stateKeyword = estado ? estado.toLowerCase() : "";
 
   let noticias: { titular: string; fuente: string; fecha: string; url: string }[] = [];
 
@@ -98,7 +99,8 @@ export async function searchNewsOsint(
           const fullText = (item.title + " " + (item.contentSnippet || "")).toLowerCase();
           const hasLocation = locationKeywords.some(lk => fullText.includes(lk));
           const hasCrime = keywords.some(kw => fullText.includes(kw));
-          return hasLocation && hasCrime;
+        const hasState = stateKeyword ? fullText.includes(stateKeyword) : false;
+        return (hasLocation && hasCrime) || (hasCrime && hasState);
         });
 
         return articulosLocales.map((art: { title?: string; contentSnippet?: string; pubDate?: string; link?: string }) => ({
