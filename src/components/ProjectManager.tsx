@@ -4,6 +4,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
+import { useAuth } from "@/context/AuthContext";
 import { CaptureAndAddPhoto } from "./CaptureAndAddPhoto";
 import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
@@ -13,9 +14,14 @@ import { getDb } from "@/lib/firebase";
 export function ProjectManager() {
   const router = useRouter();
   const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult } = useProject();
+  const { user } = useAuth();
+  const isAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
+  const estadoProyecto = (project as any)?.estado || "ABIERTO";
   const [nombreInput, setNombreInput] = useState("");
   const [descripcionInput, setDescripcionInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
+  const [showDevolverPrompt, setShowDevolverPrompt] = useState(false);
+  const [comentariosAdmin, setComentariosAdmin] = useState("");
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any | null>(null);
@@ -125,6 +131,59 @@ export function ProjectManager() {
       router.push("/");
     } catch (err: any) {
       window.alert("Error al enviar a revisión: " + err.message);
+    }
+  };
+
+  const handleIniciarAuditoria = async () => {
+    if (!project) return;
+    try {
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", project.id), {
+        estado: "EN AUDITORÍA",
+        auditorId: (user as any)?.id || "",
+        auditorNombre: (user as any)?.username || "Administrador",
+        fechaInicioAuditoria: Date.now()
+      });
+    } catch (err: any) {
+      window.alert("Error al iniciar auditoría: " + err.message);
+    }
+  };
+
+  const handleValidarProyecto = async () => {
+    if (!project) return;
+    if (!window.confirm("¿Estás seguro de VALIDAR y cerrar definitivamente este expediente?")) return;
+    try {
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", project.id), {
+        estado: "VALIDADO",
+        fechaValidacion: Date.now(),
+        validadoPor: (user as any)?.username || "Administrador"
+      });
+      window.alert("Expediente validado y cerrado correctamente.");
+    } catch (err: any) {
+      window.alert("Error al validar: " + err.message);
+    }
+  };
+
+  const handleDevolverProyecto = async () => {
+    if (!project) return;
+    if (!comentariosAdmin.trim()) {
+      window.alert("Debes ingresar un comentario justificando la devolución.");
+      return;
+    }
+    try {
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", project.id), {
+        estado: "DEVUELTO",
+        comentariosAuditoria: comentariosAdmin,
+        fechaDevolucion: Date.now(),
+        devueltoPor: (user as any)?.username || "Administrador"
+      });
+      setShowDevolverPrompt(false);
+      setComentariosAdmin("");
+      window.alert("Expediente devuelto al usuario con comentarios.");
+    } catch (err: any) {
+      window.alert("Error al devolver expediente: " + err.message);
     }
   };
 
@@ -278,8 +337,9 @@ export function ProjectManager() {
             Espacio de trabajo · Modo Campo (celular) o Modo Gabinete (PC).
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {((project as any).estado === "ABIERTO" || (project as any).estado === "DEVUELTO" || !(project as any).estado) && (
+      <div className="flex flex-wrap items-center gap-2 justify-end">
+        {/* FLUJO USUARIO */}
+        {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") && (
             <button
               type="button"
               onClick={handleEnviarRevision}
@@ -289,6 +349,27 @@ export function ProjectManager() {
               Enviar a Revisión
             </button>
           )}
+        {/* FLUJO ADMIN: INICIAR AUDITORÍA */}
+        {isAdmin && estadoProyecto === "EN REVISIÓN" && (
+          <button
+            type="button"
+            onClick={handleIniciarAuditoria}
+            className="text-sm px-4 py-2 rounded-lg font-bold bg-purple-600 text-white hover:bg-purple-500 transition-colors shadow-md"
+          >
+            Iniciar Auditoría
+          </button>
+        )}
+        {/* FLUJO ADMIN: DEVOLVER O VALIDAR */}
+        {isAdmin && estadoProyecto === "EN AUDITORÍA" && (
+          <>
+            <button type="button" onClick={() => setShowDevolverPrompt(!showDevolverPrompt)} className="text-sm px-4 py-2 rounded-lg font-bold bg-orange-600 text-white hover:bg-orange-500 transition-colors shadow-md">
+              Devolver
+            </button>
+            <button type="button" onClick={handleValidarProyecto} className="text-sm px-4 py-2 rounded-lg font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-md">
+              Validar y Cerrar
+            </button>
+          </>
+        )}
           <button
             type="button"
             onClick={handleCerrarProyecto}
@@ -299,7 +380,46 @@ export function ProjectManager() {
         </div>
       </div>
 
-      <CaptureAndAddPhoto />
+    {/* BANNERS Y PROMPTS DE ESTADO */}
+    {showDevolverPrompt && (
+      <div className="card p-4 border-l-4 border-orange-500 bg-orange-950/20">
+        <h3 className="text-orange-400 font-bold mb-2 text-sm">Devolver Expediente a Usuario</h3>
+        <textarea
+          value={comentariosAdmin}
+          onChange={(e) => setComentariosAdmin(e.target.value)}
+          placeholder="Escribe los comentarios, observaciones o correcciones requeridas..."
+          className="w-full rounded-lg border border-orange-700/50 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px] mb-3"
+        />
+        <div className="flex gap-2">
+          <button onClick={handleDevolverProyecto} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+            Confirmar Devolución
+          </button>
+          <button onClick={() => setShowDevolverPrompt(false)} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition-colors">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    )}
+    {estadoProyecto === "DEVUELTO" && (
+      <div className="card p-4 border-l-4 border-red-500 bg-red-950/20">
+        <h3 className="text-red-400 font-bold text-sm">Expediente Devuelto</h3>
+        <p className="text-sm text-slate-300 mt-1"><span className="font-semibold">Comentarios de auditoría ({(project as any).devueltoPor}):</span> {(project as any).comentariosAuditoria}</p>
+        <p className="text-xs text-red-300 mt-2">Por favor, subsana las observaciones y vuelve a hacer clic en "Enviar a Revisión".</p>
+      </div>
+    )}
+    {estadoProyecto === "EN REVISIÓN" && (
+      <div className="card p-4 border-l-4 border-blue-500 bg-blue-950/20"><h3 className="text-blue-400 font-bold text-sm">En Revisión</h3><p className="text-sm text-slate-300 mt-1">Este expediente ha sido enviado y está en espera de ser auditado.</p></div>
+    )}
+    {estadoProyecto === "EN AUDITORÍA" && (
+      <div className="card p-4 border-l-4 border-purple-500 bg-purple-950/20"><h3 className="text-purple-400 font-bold text-sm">En Auditoría</h3><p className="text-sm text-slate-300 mt-1">Este expediente está siendo auditado actualmente por {(project as any).auditorNombre}.</p></div>
+    )}
+    {estadoProyecto === "VALIDADO" && (
+      <div className="card p-4 border-l-4 border-emerald-500 bg-emerald-950/20"><h3 className="text-emerald-400 font-bold text-sm">Validado y Cerrado</h3><p className="text-sm text-slate-300 mt-1">Este expediente ha sido aprobado definitivamente por {(project as any).validadoPor}.</p></div>
+    )}
+
+      {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") && (
+        <CaptureAndAddPhoto />
+      )}
 
       {album.length > 0 && (
         <ProjectMap

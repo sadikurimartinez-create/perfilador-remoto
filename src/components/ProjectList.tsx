@@ -349,6 +349,10 @@ export function ProjectList() {
     return null;
   }
 
+  const isAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
+  const devueltosPropios = list.filter(p => p.estado === "DEVUELTO" && p.createdBy === (user as any)?.username);
+  const enRevisionAdmin = list.filter(p => p.estado === "EN REVISIÓN");
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -356,10 +360,33 @@ export function ProjectList() {
           Mis Expedientes
         </h2>
         <p className="text-sm text-slate-400 max-w-2xl">
-          Proyectos guardados localmente. Abra uno para agregar o eliminar
-          fotografías y generar el análisis.
+          Lobby de expedientes en la nube. Puedes crear nuevos o revisar los que están en proceso de auditoría.
         </p>
       </header>
+
+      {devueltosPropios.length > 0 && !showPrompt && (
+        <div className="bg-red-950/40 border border-red-900 border-l-4 border-l-red-500 p-4 rounded-lg shadow-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg animate-pulse">⚠️</span>
+            <h3 className="text-red-400 font-bold text-sm">¡Acción Requerida! Tienes {devueltosPropios.length} expediente(s) devuelto(s)</h3>
+          </div>
+          <p className="text-xs text-red-200 ml-8">
+            Tienes observaciones de auditoría pendientes. Abre el expediente con la etiqueta roja "Devuelto", lee los comentarios y subsánalos.
+          </p>
+        </div>
+      )}
+
+      {isAdmin && enRevisionAdmin.length > 0 && !showPrompt && (
+        <div className="bg-blue-950/40 border border-blue-900 border-l-4 border-l-blue-500 p-4 rounded-lg shadow-lg">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg animate-pulse">📋</span>
+            <h3 className="text-blue-400 font-bold text-sm">Auditoría Pendiente: {enRevisionAdmin.length} expediente(s) en revisión</h3>
+          </div>
+          <p className="text-xs text-blue-200 ml-8">
+            Los analistas han enviado expedientes. Ábrelos para iniciar la auditoría, validarlos o devolverlos.
+          </p>
+        </div>
+      )}
 
       {!showPrompt ? (
         <>
