@@ -177,11 +177,18 @@ export const exportWord = async (
   const svCells: TableCell[] = [];
   if (svFindings.length > 0) {
     for (let i = 0; i < 3; i++) {
-      const f = svFindings[i % svFindings.length];
+      const f = svFindings[i % svFindings.length] as any;
+      if (!f) continue;
       const heading = [0, 90, 180][i];
-      const svDataUrl = await generateStreetViewBase64(Number(f.latitude), Number(f.longitude), heading);
+      const lat = Number(f?.latitude ?? f?.lat);
+      const lng = Number(f?.longitude ?? f?.lng);
+      if (isNaN(lat) || isNaN(lng)) continue;
+
+      const svDataUrl = await generateStreetViewBase64(lat, lng, heading);
       if (svDataUrl && svDataUrl.includes(',')) {
-        const imgBuf = Uint8Array.from(atob(svDataUrl.split(',')[1]), c => c.charCodeAt(0));
+        const base64Data = svDataUrl.split(',')[1];
+        if (!base64Data) continue;
+        const imgBuf = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         svCells.push(new TableCell({
           children: [
             new Paragraph({ children: [new TextRun({ text: `Street View Evidencia ${i + 1}`, bold: true })], spacing: { after: 100 } }),
@@ -235,49 +242,38 @@ export const exportWord = async (
   docChildren.push(...explanationParagraphs);
   docChildren.push(new Paragraph({ text: ' ' }));
 
-  if (chartImage) {
     docChildren.push(
       new Paragraph({
-        children: [new TextRun({ text: 'DISTRIBUCIÓN ESTADÍSTICA DE RIESGO', bold: true })],
+        children: [new TextRun({ text: 'ATLAS CARTOGRÁFICO Y GRÁFICO TÁCTICO (2x2)', bold: true, size: 24 })],
         spacing: { before: 200, after: 200 }
       })
     );
-    docChildren.push(
-      new Paragraph({
-        children: [
-          new ImageRun({
-            data: Uint8Array.from(atob((chartImage as string).split(',')[1]), c => c.charCodeAt(0)),
-            transformation: { width: 500, height: 250 }
-          } as any)
-        ],
-      })
-    );
-  }
 
+  const mapChartCells: TableCell[] = [];
   if (mapImage) {
-    docChildren.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'MAPA DEL PROYECTO',
-            bold: true,
-          }),
-        ],
-      })
-    );
-    docChildren.push(
-      new Paragraph({
-        children: [
-          new ImageRun({
-            data: Uint8Array.from(
-              atob((mapImage as string).split(',')[1]),
-              c => c.charCodeAt(0)
-            ),
-            transformation: { width: 900, height: 500 }
-            } as any),
-        ],
-      })
-    );
+    mapChartCells.push(new TableCell({
+      children: [
+        new Paragraph({ children: [new TextRun({ text: 'Mapa del Proyecto', bold: true })], spacing: { after: 100 } }),
+        new Paragraph({ children: [new ImageRun({ data: Uint8Array.from(atob((mapImage as string).split(',')[1]), c => c.charCodeAt(0)), transformation: { width: 450, height: 250 } } as any)] })
+      ],
+      borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.NONE, size: 0 }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 } },
+      margins: { top: 100, bottom: 100, left: 100, right: 100 }
+    }));
+  }
+  if (chartImage) {
+    mapChartCells.push(new TableCell({
+      children: [
+        new Paragraph({ children: [new TextRun({ text: 'Distribución Estadística', bold: true })], spacing: { after: 100 } }),
+        new Paragraph({ children: [new ImageRun({ data: Uint8Array.from(atob((chartImage as string).split(',')[1]), c => c.charCodeAt(0)), transformation: { width: 400, height: 200 } } as any)] })
+      ],
+      borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.NONE, size: 0 }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 } },
+      margins: { top: 100, bottom: 100, left: 100, right: 100 }
+    }));
+  }
+  if (mapChartCells.length > 0) {
+    if (mapChartCells.length === 1) mapChartCells.push(new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.NONE, size: 0 }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 } } }));
+    const mcTable = new Table({ rows: [new TableRow({ children: mapChartCells })], width: { size: 100, type: WidthType.PERCENTAGE }, borders: { insideHorizontal: { style: BorderStyle.NONE, size: 0 }, insideVertical: { style: BorderStyle.NONE, size: 0 } } });
+    docChildren.push(mcTable);
   }
 
   docChildren.push(new Paragraph({ text: ' ' }));

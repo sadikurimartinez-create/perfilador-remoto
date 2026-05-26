@@ -43,17 +43,19 @@ export const generateStaticMapBase64 = async (report: any): Promise<string | nul
     const risk = (f.riskLevel || "").toLowerCase();
     if (risk === "alto" || risk === "high") color = "red";
     else if (risk === "medio" || risk === "medium") color = "orange";
-    return `markers=color:${color}|label:${idx + 1}|${f.latitude},${f.longitude}`;
+    const lat = f.latitude ?? f.lat;
+    const lng = f.longitude ?? f.lng;
+    return `markers=color:${color}|label:${idx + 1}|${lat},${lng}`;
   }).join("&");
 
   url += "&" + markers;
 
   if (report.geometryType === "lineal" && findings.length >= 2) {
-    const pathCoords = findings.map((f: any) => `${f.latitude},${f.longitude}`).join("|");
+    const pathCoords = findings.map((f: any) => `${f.latitude ?? f.lat},${f.longitude ?? f.lng}`).join("|");
     url += `&path=color:0xff000080|weight:5|${pathCoords}`;
   } else if (report.geometryType === "poligono" && findings.length >= 3) {
-    const pathCoords = findings.map((f: any) => `${f.latitude},${f.longitude}`).join("|");
-    const firstCoord = `${findings[0].latitude},${findings[0].longitude}`;
+    const pathCoords = findings.map((f: any) => `${f.latitude ?? f.lat},${f.longitude ?? f.lng}`).join("|");
+    const firstCoord = `${findings[0].latitude ?? findings[0].lat},${findings[0].longitude ?? findings[0].lng}`;
     url += `&path=color:0xff000080|fillcolor:0xff000030|weight:3|${pathCoords}|${firstCoord}`;
   }
 

@@ -19,7 +19,6 @@ export const exportPDF = async (
   const MARGIN = 20;
   const TEXT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
-  // Usar el nuevo motor de mapas tácticos estáticos (alta resolución)
   const mapImage = await generateStaticMapBase64(report);
   const chartImage = await generateRiskChartBase64(report.findings);
 
@@ -99,47 +98,31 @@ export const exportPDF = async (
 
   y += 15;
 
- if (chartImage) {
-  if (y > PAGE_HEIGHT - 100) {
+  // ÁLBUM 2x2: MAPA Y GRÁFICA (A PETICIÓN DEL USUARIO)
+  if (mapImage || chartImage) {
     doc.addPage();
-    y = 20;
+    y = MARGIN;
+    doc.setFontSize(14);
+    doc.text('ATLAS CARTOGRÁFICO Y GRÁFICO TÁCTICO (2x2)', MARGIN, y);
+    y += 15;
+
+    if (mapImage) {
+      doc.setFontSize(12);
+      doc.text('Mapa del Proyecto', MARGIN, y);
+      doc.addImage(mapImage, 'JPEG', MARGIN, y + 5, 120, 80);
+    }
+    if (chartImage) {
+      doc.setFontSize(12);
+      doc.text('Distribución de Riesgo', 150, y);
+      doc.addImage(chartImage, 'PNG', 150, y + 5, 120, 60);
+    }
   }
-  doc.setFontSize(14);
-  doc.text('DISTRIBUCIÓN ESTADÍSTICA DE RIESGO', 20, y);
-  y += 10;
-  doc.addImage(chartImage, 'PNG', 20, y, 160, 80);
-  y += 90;
- }
-
- if (mapImage) {
-  // Evitamos que el mapa quede cortado por la mitad en el borde inferior
-  if (y > PAGE_HEIGHT - 120) {
-    doc.addPage();
-    y = 20;
-  }
-  doc.setFontSize(14);
-
-  doc.text('MAPA DEL PROYECTO', 20, y);
-
-  y += 10;
-
-  doc.addImage(
-    mapImage,
-    'JPEG',
-    20,
-    y,
-    TEXT_WIDTH,
-    110
-  );
-
-  y += 120;
-} 
 
   // FOTOS 2x2
   doc.addPage();
   y = MARGIN;
   doc.setFontSize(14);
-  doc.text('ANEXO FOTOGRÁFICO', MARGIN, y);
+  doc.text('ANEXO FOTOGRÁFICO Y HALLAZGOS', MARGIN, y);
   y += 10;
 
   const photoDataURLs = await getPhotoDataURLs(report.findings);
@@ -150,43 +133,46 @@ export const exportPDF = async (
   const SPACING_Y = 15;
 
   let photoCount = 0;
-  report.findings.forEach((finding, i) => {
+  report.findings.forEach((finding: any, i: number) => {
     const dataURL = photoDataURLs[i];
     if (dataURL) {
       if (photoCount > 0 && photoCount % 4 === 0) {
         doc.addPage();
         y = MARGIN;
       }
-      
       const col = photoCount % 2;
       const rowInPage = Math.floor((photoCount % 4) / 2);
-      
       const currentX = MARGIN + col * (PHOTO_WIDTH + SPACING_X);
       const currentY = y + rowInPage * (PHOTO_HEIGHT + SPACING_Y);
 
       doc.setFontSize(11);
-      const findingText = `${i + 1}. Riesgo: ${(finding.riskLevel || 'N/A').toUpperCase()} | Observación: ${finding.note || ''}`;
+      const findingText = `${i + 1}. Riesgo: ${(finding?.riskLevel || 'N/A').toUpperCase()} | Observación: ${finding?.note || ''}`;
       const textLines = doc.splitTextToSize(findingText, PHOTO_WIDTH);
-      doc.text(textLines, currentX, currentY);
+      doc.text(textLines as any, currentX, currentY);
       doc.addImage(dataURL, 'PNG', currentX, currentY + 5, PHOTO_WIDTH, PHOTO_HEIGHT);
       photoCount++;
     }
   });
 
-  // STREET VIEW
+  // STREET VIEW 2x2
   doc.addPage();
   y = MARGIN;
   doc.setFontSize(14);
-  doc.text('CONTEXTO VISUAL - STREET VIEW', MARGIN, y);
+  doc.text('CONTEXTO VISUAL - STREET VIEW (2x2)', MARGIN, y);
   y += 10;
 
   let svCount = 0;
   const svFindings = report.findings.slice(0, 3);
   if (svFindings.length > 0) {
     for (let i = 0; i < 3; i++) {
-      const f = svFindings[i % svFindings.length];
+      const f = svFindings[i % svFindings.length] as any;
+      if (!f) continue;
       const heading = [0, 90, 180][i];
-      const svData = await generateStreetViewBase64(Number(f.latitude), Number(f.longitude), heading);
+      const lat = Number(f?.latitude ?? f?.lat);
+      const lng = Number(f?.longitude ?? f?.lng);
+      if (isNaN(lat) || isNaN(lng)) continue;
+      
+      const svData = await generateStreetViewBase64(lat, lng, heading);
       if (svData) {
         if (svCount > 0 && svCount % 4 === 0) {
             doc.addPage();
