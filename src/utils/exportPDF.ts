@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { generateStaticMapBase64, generateStreetViewBase64, generateRiskChartBase64 } from './captureMpas';
+import { captureMapImage } from './captureMpas';
 import { ConsolidatedReport } from '../types/Report';
 import { getPhotoDataURLs } from './capturePhotos';
 import { calculateRisk } from './scoring';
@@ -13,14 +13,11 @@ import {
 export const exportPDF = async (
   report: ConsolidatedReport
 ) => {
-  const doc = new jsPDF({ orientation: 'landscape' });
-  const PAGE_WIDTH = 297;
-  const PAGE_HEIGHT = 210;
-  const MARGIN = 20;
-  const TEXT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+  const doc = new jsPDF();
 
-  const mapImage = await generateStaticMapBase64(report);
-  const chartImage = await generateRiskChartBase64(report.findings);
+  const mapImage = await captureMapImage(
+    'project-map-capture'
+  );
 
   let y = 20;
 
@@ -54,10 +51,10 @@ export const exportPDF = async (
   y += 10;
 
   doc.setFontSize(12);
-  const lines = doc.splitTextToSize(narrative, TEXT_WIDTH);
+  const lines = doc.splitTextToSize(narrative, 170);
   lines.forEach((line: string) => {
     // Salto de página automático si la narrativa es muy larga
-    if (y > PAGE_HEIGHT - 20) {
+    if (y > 275) {
       doc.addPage();
       y = 20;
     }
@@ -65,7 +62,7 @@ export const exportPDF = async (
     y += 7;
   });
   
-  if (y > PAGE_HEIGHT - 30) {
+  if (y > 270) {
     doc.addPage();
     y = 20;
   } else {
@@ -84,11 +81,11 @@ export const exportPDF = async (
   doc.setFontSize(12);
   const classificationLines = doc.splitTextToSize(
     `${classification.category}: ${classification.interpretation}`,
-    TEXT_WIDTH
+    170
   );
 
   classificationLines.forEach((line: string) => {
-    if (y > PAGE_HEIGHT - 20) {
+    if (y > 275) {
       doc.addPage();
       y = 20;
     }
@@ -98,98 +95,72 @@ export const exportPDF = async (
 
   y += 15;
 
-  // ÁLBUM 2x2: MAPA Y GRÁFICA (A PETICIÓN DEL USUARIO)
-  if (mapImage || chartImage) {
+ if (mapImage) {
+  // Evitamos que el mapa quede cortado por la mitad en el borde inferior
+  if (y > 170) {
     doc.addPage();
-    y = MARGIN;
-    doc.setFontSize(14);
-    doc.text('ATLAS CARTOGRÁFICO Y GRÁFICO TÁCTICO (2x2)', MARGIN, y);
-    y += 15;
-
-    if (mapImage) {
-      doc.setFontSize(12);
-      doc.text('Mapa del Proyecto', MARGIN, y);
-      doc.addImage(mapImage, 'JPEG', MARGIN, y + 5, 120, 80);
-    }
-    if (chartImage) {
-      doc.setFontSize(12);
-      doc.text('Distribución de Riesgo', 150, y);
-      doc.addImage(chartImage, 'PNG', 150, y + 5, 120, 60);
-    }
+    y = 20;
   }
-
-  // FOTOS 2x2
-  doc.addPage();
-  y = MARGIN;
   doc.setFontSize(14);
-  doc.text('ANEXO FOTOGRÁFICO Y HALLAZGOS', MARGIN, y);
+
+  doc.text('MAPA DEL PROYECTO', 20, y);
+
   y += 10;
 
-  const photoDataURLs = await getPhotoDataURLs(report.findings);
-  
-  const PHOTO_WIDTH = 120;
-  const PHOTO_HEIGHT = 80;
-  const SPACING_X = 17;
-  const SPACING_Y = 15;
+  doc.addImage(
+    mapImage,
+    'PNG',
+    20,
+    y,
+    170,
+    90
+  );
 
-  let photoCount = 0;
-  report.findings.forEach((finding: any, i: number) => {
-    const dataURL = photoDataURLs[i];
-    if (dataURL) {
-      if (photoCount > 0 && photoCount % 4 === 0) {
-        doc.addPage();
-        y = MARGIN;
-      }
-      const col = photoCount % 2;
-      const rowInPage = Math.floor((photoCount % 4) / 2);
-      const currentX = MARGIN + col * (PHOTO_WIDTH + SPACING_X);
-      const currentY = y + rowInPage * (PHOTO_HEIGHT + SPACING_Y);
+  y += 100;
+} 
 
-      doc.setFontSize(11);
-      const findingText = `${i + 1}. Riesgo: ${(finding?.riskLevel || 'N/A').toUpperCase()} | Observación: ${finding?.note || ''}`;
-      const textLines = doc.splitTextToSize(findingText, PHOTO_WIDTH);
-      doc.text(textLines as any, currentX, currentY);
-      doc.addImage(dataURL, 'PNG', currentX, currentY + 5, PHOTO_WIDTH, PHOTO_HEIGHT);
-      photoCount++;
+  doc.text('HALLAZGOS', 20, y);
+
+  y += 10;
+
+const photoDataURLs = await getPhotoDataURLs(report.findings);
+
+for (let i = 0; i < photoDataURLs.length; i++) {
+  const dataURL = photoDataURLs[i];
+  if (dataURL) {
+    y += 5;
+    doc.setFontSize(12);
+    doc.text(`Evidencia Foto ${i + 1}`, 20, y);
+    y += 5;
+    doc.addImage(dataURL, 'PNG', 20, y, 60, 45);
+    y += 50;
+    if (y > 260) {
+      doc.addPage();
+      y = 20;
+    }
+  }
+}
+
+  report.findings.forEach((finding, index) => {
+    doc.setFontSize(11);
+
+    doc.text(
+      `${index + 1}. Riesgo: ${(finding.riskLevel || 'N/A').toUpperCase()}`,
+      20,
+      y
+    );
+
+    y += 8;
+
+    doc.text(`Observación: ${finding.note || 'Sin observación'}`, 25, y);
+
+    y += 12;
+
+    if (y > 260) {
+      doc.addPage();
+      y = 20;
     }
   });
-
-  // STREET VIEW 2x2
-  doc.addPage();
-  y = MARGIN;
-  doc.setFontSize(14);
-  doc.text('CONTEXTO VISUAL - STREET VIEW (2x2)', MARGIN, y);
-  y += 10;
-
-  let svCount = 0;
-  const svFindings = report.findings.slice(0, 3);
-  if (svFindings.length > 0) {
-    for (let i = 0; i < 3; i++) {
-      const f = svFindings[i % svFindings.length] as any;
-      if (!f) continue;
-      const heading = [0, 90, 180][i];
-      const lat = Number(f?.latitude ?? f?.lat);
-      const lng = Number(f?.longitude ?? f?.lng);
-      if (isNaN(lat) || isNaN(lng)) continue;
-      
-      const svData = await generateStreetViewBase64(lat, lng, heading);
-      if (svData) {
-        if (svCount > 0 && svCount % 4 === 0) {
-            doc.addPage();
-            y = MARGIN;
-        }
-        const col = svCount % 2;
-        const rowInPage = Math.floor((svCount % 4) / 2);
-        const currentX = MARGIN + col * (PHOTO_WIDTH + SPACING_X);
-        const currentY = y + rowInPage * (PHOTO_HEIGHT + SPACING_Y);
-        
-        doc.setFontSize(11);
-        doc.text(`Street View Evidencia ${i + 1}`, currentX, currentY);
-        doc.addImage(svData, 'JPEG', currentX, currentY + 5, PHOTO_WIDTH, PHOTO_HEIGHT);
-        svCount++;
-      }
-    }
-  }
 
   if ((report as any).projectRef) {
     const log = createAuditLog(
@@ -204,5 +175,5 @@ export const exportPDF = async (
     );
   }
 
-  doc.save(`Informe_${report.projectName}.pdf`);
+  doc.save(`Dictamen_Ejecutivo_${report.projectName}.pdf`);
 };

@@ -524,14 +524,15 @@ ${visionTacticaTexto}
 ${focusAreasTexto}
 
 ---
-INSTRUCCIÓN FINAL:
-Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objetivo. Estructura OBLIGATORIAMENTE en las siguientes secciones (con estos títulos en mayúsculas), en este orden:
+INSTRUCCIÓN FINAL (FORMATO ESTRICTAMENTE EJECUTIVO):
+Redacta un PERFIL CRIMINOLÓGICO AMBIENTAL SUMAMENTE EJECUTIVO, DIRECTO Y CONCISO. 
+REGLA DE ORO: NO DEBE EXCEDER 2 CUARTILLAS. Utiliza viñetas (bullet points) para listar hallazgos de forma contundente y elimina cualquier texto de relleno o redundancia.
 
-1. OBJETIVO DEL DICTAMEN — Una oración que indique el propósito del perfil y la zona analizada.
-2. CONTEXTO ESPACIAL, SOCIODEMOGRÁFICO Y MULTIMODAL — Descripción de la colonia, cruce con demografía (INEGI) y síntesis analítica de las Evidencias Multimodales de Gabinete aportadas por el analista junto con su Hipótesis inicial.
-3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de las fotografías CRUZADA OBLIGATORIAMENTE con los comentarios del investigador y las detecciones de Vision API.
-4. ATRACTORES, CONTROLES Y ANÁLISIS ECONÓMICO (DENUE Y OSINT) — Cruce táctico de giros comerciales (1km) con incidencia delictiva. Evalúa mercados ilícitos, catalizadores de violencia, vacíos de control formal (negocios irregulares) y extrae el sentimiento ciudadano de las reseñas de fuentes abiertas (Google, X/Twitter). Usa imágenes de POIs.
-5. RUTINAS Y OPORTUNIDADES — Evalúa las actividades rutinarias y la oportunidad criminal. No incluyas teorías ajenas a la bibliografía. Evita redundancia entre secciones; cada idea una sola vez.
+Estructura OBLIGATORIAMENTE en estas 4 secciones breves:
+1. OBJETIVO Y CONTEXTO ESPACIAL (Máx. 1 párrafo cruzando INEGI y la hipótesis del analista).
+2. DETERIORO FÍSICO Y VENTANAS ROTAS (Viñetas con hallazgos clave de fotos y Vision API).
+3. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT y CSV, identificando riesgos directos).
+4. CONCLUSIONES TÁCTICAS Y PREDICCIÓN (Riesgo a 6 meses expuesto en puntos accionables).
 `.trim();
 
   return prompt;

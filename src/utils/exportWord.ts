@@ -66,7 +66,7 @@ export const exportWord = async (
   groups = groups.filter(g => g.items.length > 0);
 
   const createPhotoTable = (items: any[]) => {
-    const WORD_MAX_WIDTH = 450;
+    const WORD_MAX_WIDTH = 380;
     const cells: TableCell[] = items.map((item) => {
       const imgBuf = Uint8Array.from(atob(item.dataURL.split(',')[1]), c => c.charCodeAt(0));
       return new TableCell({
@@ -196,7 +196,7 @@ export const exportWord = async (
               children: [
                 new ImageRun({
                   data: imgBuf,
-                  transformation: { width: 450, height: 300 }
+                  transformation: { width: 380, height: 250 }
                 } as any)
               ]
             })
@@ -254,7 +254,7 @@ export const exportWord = async (
     mapChartCells.push(new TableCell({
       children: [
         new Paragraph({ children: [new TextRun({ text: 'Mapa del Proyecto', bold: true })], spacing: { after: 100 } }),
-        new Paragraph({ children: [new ImageRun({ data: Uint8Array.from(atob((mapImage as string).split(',')[1]), c => c.charCodeAt(0)), transformation: { width: 450, height: 250 } } as any)] })
+        new Paragraph({ children: [new ImageRun({ data: Uint8Array.from(atob((mapImage as string).split(',')[1]), c => c.charCodeAt(0)), transformation: { width: 380, height: 210 } } as any)] })
       ],
       borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.NONE, size: 0 }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 } },
       margins: { top: 100, bottom: 100, left: 100, right: 100 }
@@ -264,7 +264,7 @@ export const exportWord = async (
     mapChartCells.push(new TableCell({
       children: [
         new Paragraph({ children: [new TextRun({ text: 'Distribución Estadística', bold: true })], spacing: { after: 100 } }),
-        new Paragraph({ children: [new ImageRun({ data: Uint8Array.from(atob((chartImage as string).split(',')[1]), c => c.charCodeAt(0)), transformation: { width: 400, height: 200 } } as any)] })
+        new Paragraph({ children: [new ImageRun({ data: Uint8Array.from(atob((chartImage as string).split(',')[1]), c => c.charCodeAt(0)), transformation: { width: 350, height: 180 } } as any)] })
       ],
       borders: { top: { style: BorderStyle.NONE, size: 0 }, bottom: { style: BorderStyle.NONE, size: 0 }, left: { style: BorderStyle.NONE, size: 0 }, right: { style: BorderStyle.NONE, size: 0 } },
       margins: { top: 100, bottom: 100, left: 100, right: 100 }
