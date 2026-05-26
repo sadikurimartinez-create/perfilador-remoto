@@ -14,12 +14,20 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { jsPDF } from "jspdf";
 
 type UserDoc = {
   id: string;
   username: string;
   role: string;
   name: string;
+  grado?: string;
+  id_empleado?: string;
+  fecha_ingreso?: string;
+  grado_estudio?: string;
+  fortalezas?: string;
+  debilidades?: string;
+  fotografia?: string;
 };
 
 const CHECKLIST_QUESTIONS = [
@@ -32,7 +40,7 @@ const CHECKLIST_QUESTIONS = [
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"supervision" | "usuarios">("supervision");
+  const [activeTab, setActiveTab] = useState<"supervision" | "usuarios" | "desempeno">("supervision");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -50,6 +58,9 @@ export default function AdminPage() {
   const [checklist, setChecklist] = useState<boolean[]>([false, false, false, false, false]);
   const [feedback, setFeedback] = useState("");
   const [evaluationMsg, setEvaluationMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  // Estado para el Dashboard de Desempeño
+  const [selectedUserForPerf, setSelectedUserForPerf] = useState<UserDoc | null>(null);
 
   useEffect(() => {
     if (!user || (user.role !== "SUPER_ADMIN" && user.role !== "ADMIN")) return;
@@ -71,6 +82,13 @@ export default function AdminPage() {
             username: data.username ?? "",
             role: data.role ?? "USER",
             name: data.name ?? "",
+            grado: data.grado || "",
+            id_empleado: data.id_empleado || data.num_empleado || "",
+            fecha_ingreso: data.fecha_ingreso_ceipol || data.anio_ingreso_corp || "",
+            grado_estudio: data.grado_estudio || "",
+            fortalezas: data.fortalezas || "",
+            debilidades: data.debilidades || "",
+            fotografia: data.fotografia || data.foto_url || "",
           };
         })
         .sort((a, b) => b.id.localeCompare(a.id));
@@ -172,6 +190,87 @@ export default function AdminPage() {
     }
   };
 
+  const handleExportPerfPDF = () => {
+    const doc = new jsPDF();
+    let y = 20;
+
+    // 1. Cabecera Ejecutiva
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("REPORTE EJECUTIVO DE DESEMPEÑO DE ANALISTAS", 14, y);
+    y += 8;
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Centro de Estudios en Seguridad Pública y Política Criminal (CEIPOL)", 14, y);
+    y += 6;
+    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString("es-MX")} - ${new Date().toLocaleTimeString("es-MX")}`, 14, y);
+    y += 6;
+    doc.text(`Generado por: ${user?.name || user?.username} (${user?.role})`, 14, y);
+    y += 8;
+
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, y, 196, y);
+    y += 10;
+
+    // 2. Resumen Global
+    const totalProjs = projects.length;
+    const totalValidados = projects.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("MÉTRICAS GLOBALES", 14, y);
+    y += 6;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Fuerza Analítica Total: ${users.length} analistas`, 14, y);
+    doc.text(`Expedientes Totales: ${totalProjs}`, 80, y);
+    doc.text(`Expedientes Validados: ${totalValidados}`, 140, y);
+    y += 10;
+
+    // 3. Tabla de Desempeño (Iterando sobre usuarios)
+    const drawHeaders = (posY: number) => {
+      doc.setFillColor(240, 244, 248);
+      doc.rect(14, posY, 182, 8, "F");
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("ANALISTA", 16, posY + 5.5);
+      doc.text("NO. EMPLEADO", 70, posY + 5.5);
+      doc.text("ABIERTOS", 105, posY + 5.5);
+      doc.text("REVISIÓN", 125, posY + 5.5);
+      doc.text("DEVUELTOS", 150, posY + 5.5);
+      doc.text("VALIDADOS", 175, posY + 5.5);
+      doc.setFont("helvetica", "normal");
+    };
+
+    drawHeaders(y);
+    y += 13;
+
+    users.forEach((u) => {
+      if (y > 275) { doc.addPage(); y = 20; drawHeaders(y); y += 13; }
+      const userProjs = projects.filter(p => p.createdBy === u.username);
+      const pAbiertos = userProjs.filter(p => !p.estado || p.estado === "ABIERTO").length;
+      const pRevision = userProjs.filter(p => p.estado === "EN REVISIÓN").length;
+      const pDevueltos = userProjs.filter(p => p.estado === "DEVUELTO").length;
+      const pValidados = userProjs.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
+
+      const name = (u.name || u.username).substring(0, 26);
+      doc.text(name, 16, y);
+      doc.text(u.id_empleado || "N/A", 70, y);
+      doc.text(String(pAbiertos), 112, y);
+      doc.text(String(pRevision), 132, y);
+      doc.text(String(pDevueltos), 158, y);
+      doc.text(String(pValidados), 183, y);
+      
+      y += 4;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, y, 196, y);
+      y += 7;
+    });
+
+    doc.save(`Desempeño_Analistas_${new Date().getTime()}.pdf`);
+  };
+
   const openEvaluation = (proyecto: any) => {
     setSelectedProject(proyecto);
     setChecklist([false, false, false, false, false]);
@@ -255,6 +354,12 @@ export default function AdminPage() {
           className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${activeTab === "supervision" ? "border-sky-500 text-sky-400" : "border-transparent text-slate-400 hover:text-slate-300"}`}
         >
           Supervisión de Expedientes
+        </button>
+        <button
+          onClick={() => setActiveTab("desempeno")}
+          className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${activeTab === "desempeno" ? "border-fuchsia-500 text-fuchsia-400" : "border-transparent text-slate-400 hover:text-slate-300"}`}
+        >
+          Desempeño y Perfil
         </button>
         {user.role === "SUPER_ADMIN" && (
           <button
@@ -519,6 +624,124 @@ export default function AdminPage() {
           ))}
         </ul>
       </div>
+        </div>
+      )}
+
+      {activeTab === "desempeno" && (
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* Selector de Analistas */}
+          <div className="w-full md:w-1/3 bg-slate-900/60 border border-slate-800 rounded-xl p-4 h-fit">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-700 pb-2">
+              <h3 className="text-sm font-bold text-slate-200">Seleccionar Analista</h3>
+              <button
+                onClick={handleExportPerfPDF}
+                className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded text-[10px] font-bold tracking-wide shadow transition-colors"
+              >
+                📄 Exportar Global
+              </button>
+            </div>
+            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+              {users.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => setSelectedUserForPerf(u)}
+                  className={`w-full text-left p-3 rounded-lg border transition-all flex items-center gap-3 ${selectedUserForPerf?.id === u.id ? 'bg-sky-900/40 border-sky-500' : 'bg-slate-800/50 border-slate-700 hover:border-slate-500'}`}
+                >
+                  {u.fotografia ? (
+                    <img src={u.fotografia} alt="foto" className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs">👤</div>
+                  )}
+                  <div>
+                    <p className="font-bold text-sm text-slate-100">{u.name || u.username}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">{u.role}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dashboard Operativo del Analista */}
+          <div className="w-full md:w-2/3">
+            {!selectedUserForPerf ? (
+              <div className="card p-8 text-center text-slate-400 border border-slate-800 border-dashed">
+                Selecciona un analista de la lista para visualizar su Identidad Operativa, Análisis FODA y Rendimiento.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* ID Card */}
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 select-none">
+                    <span className="text-8xl">🦅</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
+                    <div className="w-32 h-32 rounded-xl overflow-hidden border-4 border-slate-700 bg-slate-950 shrink-0 shadow-lg">
+                      {selectedUserForPerf?.fotografia ? (
+                        <img src={selectedUserForPerf?.fotografia} alt="Foto" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl">👤</div>
+                      )}
+                    </div>
+                    <div className="flex-1 text-center sm:text-left">
+                      <h2 className="text-2xl font-black text-white tracking-tight">{selectedUserForPerf?.name || selectedUserForPerf?.username}</h2>
+                      <p className="text-sky-400 font-bold text-sm tracking-widest uppercase mb-4">{selectedUserForPerf?.grado || "Analista de Inteligencia"}</p>
+
+                      <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs">
+                        <div>
+                          <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">No. Empleado</p>
+                          <p className="text-slate-200 font-medium">{selectedUserForPerf?.id_empleado || "N/A"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Ingreso CEIPOL</p>
+                          <p className="text-slate-200 font-medium">{selectedUserForPerf?.fecha_ingreso || "N/A"}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Grado de Estudios</p>
+                          <p className="text-slate-200 font-medium">{selectedUserForPerf?.grado_estudio || "N/A"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Productividad en Vivo */}
+                {(() => {
+                  const userProjs = projects.filter(p => p.createdBy === selectedUserForPerf?.username);
+                  const pAbiertos = userProjs.filter(p => !p.estado || p.estado === "ABIERTO").length;
+                  const pRevision = userProjs.filter(p => p.estado === "EN REVISIÓN").length;
+                  const pDevueltos = userProjs.filter(p => p.estado === "DEVUELTO").length;
+                  const pValidados = userProjs.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Abiertos</p><p className="text-2xl font-black text-slate-200">{pAbiertos}</p></div>
+                      <div className="bg-blue-950/30 border border-blue-900/50 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-1">En Revisión</p><p className="text-2xl font-black text-blue-300">{pRevision}</p></div>
+                      <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-red-400 font-bold uppercase tracking-wider mb-1">Devueltos</p><p className="text-2xl font-black text-red-300">{pDevueltos}</p></div>
+                      <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Validados</p><p className="text-2xl font-black text-emerald-300">{pValidados}</p></div>
+                    </div>
+                  )
+                })()}
+
+                {/* Análisis FODA Declarado */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-emerald-950/10 border border-emerald-900/30 rounded-xl p-5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3 border-b border-emerald-900/50 pb-2">
+                      <span className="text-emerald-400 text-lg">⚡</span>
+                      <h4 className="font-bold text-emerald-400 tracking-wide">FORTALEZAS</h4>
+                    </div>
+                    <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedUserForPerf?.fortalezas || "No ha declarado fortalezas en su perfil."}</p>
+                  </div>
+                  <div className="bg-orange-950/10 border border-orange-900/30 rounded-xl p-5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3 border-b border-orange-900/50 pb-2">
+                      <span className="text-orange-400 text-lg">🎯</span>
+                      <h4 className="font-bold text-orange-400 tracking-wide">DEBILIDADES / ÁREAS DE MEJORA</h4>
+                    </div>
+                    <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedUserForPerf?.debilidades || "No ha declarado áreas de oportunidad en su perfil."}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

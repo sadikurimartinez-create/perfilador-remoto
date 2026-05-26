@@ -58,6 +58,10 @@ export function ProjectList() {
   const [selectedPreview, setSelectedPreview] = useState<any>(null);
   const [devueltoProject, setDevueltoProject] = useState<ProjectWithCount | null>(null);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 9;
+
   const handleOpenPreview = async (
     project: ProjectWithCount,
     analysis: { content?: string; attachedPhotos?: string[] } | any
@@ -353,6 +357,37 @@ export function ProjectList() {
   const devueltosPropios = list.filter(p => p.estado === "DEVUELTO" && p.createdBy === (user as any)?.username);
   const enRevisionAdmin = list.filter(p => p.estado === "EN REVISIÓN");
 
+  const filteredList = list.filter((p) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(term) ||
+      (p.estado || "ABIERTO").toLowerCase().includes(term) ||
+      (p.createdBy || "").toLowerCase().includes(term)
+    );
+  });
+
+  const totalPages = Math.ceil(filteredList.length / ITEMS_PER_PAGE) || 1;
+  const paginatedList = filteredList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  // Cálculos para la gráfica de distribución de estatus
+  const stats = {
+    abiertos: list.filter(p => !p.estado || p.estado === "ABIERTO").length,
+    enRevision: list.filter(p => p.estado === "EN REVISIÓN").length,
+    enAuditoria: list.filter(p => p.estado === "EN AUDITORÍA").length,
+    devueltos: list.filter(p => p.estado === "DEVUELTO").length,
+    validados: list.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length,
+    total: list.length
+  };
+
+  const pAbiertos = stats.total > 0 ? (stats.abiertos / stats.total) * 100 : 0;
+  const pRevision = stats.total > 0 ? (stats.enRevision / stats.total) * 100 : 0;
+  const pAuditoria = stats.total > 0 ? (stats.enAuditoria / stats.total) * 100 : 0;
+  const pDevueltos = stats.total > 0 ? (stats.devueltos / stats.total) * 100 : 0;
+  const g1 = pAbiertos; const g2 = g1 + pRevision; const g3 = g2 + pAuditoria; const g4 = g3 + pDevueltos;
+  
+  const chartStyle = { background: `conic-gradient(#64748b 0% ${g1}%, #3b82f6 ${g1}% ${g2}%, #a855f7 ${g2}% ${g3}%, #ef4444 ${g3}% ${g4}%, #10b981 ${g4}% 100%)` };
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -363,6 +398,29 @@ export function ProjectList() {
           Lobby de expedientes en la nube. Puedes crear nuevos o revisar los que están en proceso de auditoría.
         </p>
       </header>
+
+      {list.length > 0 && !showPrompt && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-900/40 border border-slate-800 rounded-xl p-6 shadow-lg">
+          <div className="col-span-1 flex items-center justify-center relative">
+            <div className="w-32 h-32 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-transform duration-500 hover:scale-105" style={chartStyle}>
+              <div className="w-24 h-24 bg-slate-900 rounded-full flex flex-col items-center justify-center shadow-inner">
+                <span className="text-2xl font-bold text-slate-100">{stats.total}</span>
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest">Total</span>
+              </div>
+            </div>
+          </div>
+          <div className="col-span-1 md:col-span-2 flex flex-col justify-center">
+            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4 border-b border-slate-700/50 pb-2">Distribución Global de Expedientes</h3>
+            <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+              <div className="flex items-center gap-2 text-sm"><span className="w-3 h-3 rounded-full bg-slate-500 shadow-sm"></span><span className="text-slate-300">Abiertos: <span className="font-bold text-slate-100">{stats.abiertos}</span></span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="w-3 h-3 rounded-full bg-blue-500 shadow-sm"></span><span className="text-slate-300">En Revisión: <span className="font-bold text-slate-100">{stats.enRevision}</span></span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="w-3 h-3 rounded-full bg-purple-500 shadow-sm"></span><span className="text-slate-300">En Auditoría: <span className="font-bold text-slate-100">{stats.enAuditoria}</span></span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="w-3 h-3 rounded-full bg-red-500 shadow-sm"></span><span className="text-slate-300">Devueltos: <span className="font-bold text-slate-100">{stats.devueltos}</span></span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm"></span><span className="text-slate-300">Validados: <span className="font-bold text-slate-100">{stats.validados}</span></span></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {devueltosPropios.length > 0 && !showPrompt && (
         <div className="bg-red-950/40 border border-red-900 border-l-4 border-l-red-500 p-4 rounded-lg shadow-lg">
@@ -390,7 +448,20 @@ export function ProjectList() {
 
       {!showPrompt ? (
         <>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-col sm:flex-row flex-wrap justify-between gap-4 mb-2">
+            <div className="relative w-full sm:max-w-md">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                🔍
+              </span>
+              <input
+                type="text"
+                placeholder="Buscar expediente, estado o analista..."
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="w-full bg-slate-900/80 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors shadow-inner"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
             <input
               type="file"
               accept=".json"
@@ -422,11 +493,12 @@ export function ProjectList() {
               Nuevo Proyecto
             </button>
           </div>
+          </div>
 
-          {list.length === 0 ? (
+          {filteredList.length === 0 ? (
             <div className="card p-8 text-center text-slate-400">
-              <p className="text-sm">No hay expedientes guardados.</p>
-              <p className="text-xs mt-1">Cree un proyecto para comenzar.</p>
+              <p className="text-sm">No se encontraron expedientes con esos criterios.</p>
+              <p className="text-xs mt-1">Cree un proyecto nuevo o modifique su búsqueda.</p>
               <button
                 type="button"
                 onClick={handleNuevoProyecto}
@@ -437,7 +509,7 @@ export function ProjectList() {
             </div>
           ) : (
             <ul className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-              {list.map((p) => {
+              {paginatedList.map((p) => {
                 const analysesForProject = allAnalyses.filter(
                   (a) => a.projectId === p.id
                 );
@@ -581,6 +653,28 @@ export function ProjectList() {
                 );
               })}
             </ul>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-8 pb-4">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-700 hover:text-white text-sm font-semibold transition-colors shadow-sm"
+              >
+                ← Anterior
+              </button>
+              <span className="text-sm text-slate-400 font-medium">
+                Página <span className="text-slate-200">{currentPage}</span> de <span className="text-slate-200">{totalPages}</span>
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-700 hover:text-white text-sm font-semibold transition-colors shadow-sm"
+              >
+                Siguiente →
+              </button>
+            </div>
           )}
         </>
       ) : (
