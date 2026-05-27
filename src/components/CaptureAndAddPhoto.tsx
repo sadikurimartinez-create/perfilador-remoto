@@ -83,6 +83,8 @@ export function CaptureAndAddPhoto() {
     // inmediatamente, ya que iOS/Android a veces borran el EXIF en el navegador por privacidad.
     let liveLat: number | null = null;
     let liveLng: number | null = null;
+    let fallbackFailed = false;
+
     if (isLiveCapture) {
       try {
         const fallback = await getFallbackLocation();
