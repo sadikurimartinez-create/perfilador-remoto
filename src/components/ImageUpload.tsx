@@ -115,7 +115,7 @@ export function ImageUpload() {
           accept="image/jpeg, image/png, image/heic, image/heif, image/*"
           // En móviles, esto sugiere usar directamente la cámara trasera
           capture="environment"
-          className="sr-only"
+          className="hidden"
           onChange={handleFileChange}
         />
       </label>

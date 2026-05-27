@@ -110,7 +110,7 @@ export default function MultimodalPanel({ project }: MultimodalPanelProps) {
             type="file"
             id="multimodal-upload"
             multiple
-            className="sr-only"
+            className="hidden"
             disabled={isReadOnly}
             onChange={handleFileChange}
             accept=".csv, .xlsx, .pdf, image/*, video/*, audio/*"

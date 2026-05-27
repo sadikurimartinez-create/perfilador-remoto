@@ -744,25 +744,27 @@ export function ProjectList() {
           <div className="mt-4 mb-4">
             <span className="block text-sm font-medium text-slate-200 mb-2">Captura de fotografías in-situ (Opcional en este paso)</span>
             <div className="flex gap-2">
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/jpeg, image/png, image/heic, image/heif, image/*"
-                capture="environment"
-                multiple
-                className="sr-only"
-                onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
-              />
-              <input
-                ref={galleryInputRef}
-                type="file"
-                accept="image/jpeg, image/png, image/heic, image/heif, image/*"
-                multiple
-                className="sr-only"
-                onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
-              />
-              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex-1 rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 text-sm font-semibold hover:bg-emerald-800/50 shadow-md transition-colors">📷 Usar Cámara</button>
-              <button type="button" onClick={() => galleryInputRef.current?.click()} className="flex-1 rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors">📸 Usar Galería</button>
+              <label className="flex-1 text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 text-sm font-semibold hover:bg-emerald-800/50 shadow-md transition-colors">
+                📷 Usar Cámara
+                <input
+                  type="file"
+                  accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
+                />
+              </label>
+              <label className="flex-1 text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors">
+                📸 Usar Galería
+                <input
+                  type="file"
+                  accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
+                />
+              </label>
             </div>
             {pendingPhotos.length > 0 && (
               <div className="mt-3">

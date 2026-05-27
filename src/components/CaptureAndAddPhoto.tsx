@@ -58,6 +58,7 @@ export function CaptureAndAddPhoto() {
   const [isFetchingGPS, setIsFetchingGPS] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingProcessed = useRef(false);
   
   // Estados para el Fallback Manual
   const [manualQueue, setManualQueue] = useState<File[]>([]);
@@ -89,6 +90,7 @@ export function CaptureAndAddPhoto() {
         liveLng = fallback.lng;
       } catch (err) {
         console.warn("No se pudo obtener GPS en vivo, se intentará leer el EXIF de la foto.", err);
+        fallbackFailed = true;
       }
     }
 
@@ -124,16 +126,21 @@ export function CaptureAndAddPhoto() {
         }
       }
 
-      if (lat == null || lng == null) {
+      if ((lat == null || lng == null) && !fallbackFailed) {
         try {
           const fallback = await getFallbackLocation();
           lat = fallback.lat;
           lng = fallback.lng;
+          liveLat = fallback.lat;
+          liveLng = fallback.lng;
         } catch (fbErr: any) {
-          // SI FALLA EL GPS DEL NAVEGADOR, MOSTRAMOS EL FORMULARIO MANUAL
+          fallbackFailed = true;
           needsManual.push(selected);
           continue;
         }
+      } else if (lat == null || lng == null) {
+        needsManual.push(selected);
+        continue;
       }
 
       if (lat != null && lng != null) {
@@ -166,9 +173,14 @@ export function CaptureAndAddPhoto() {
 
   useEffect(() => {
     const pending = (window as any).pendingProjectPhotos;
-    if (project && pending && pending.length > 0) {
+    if (project && pending && pending.length > 0 && !pendingProcessed.current) {
+      pendingProcessed.current = true;
+      const filesToProcess = [...pending];
       delete (window as any).pendingProjectPhotos;
-      processFiles(pending, true);
+      
+      setTimeout(() => {
+        processFiles(filesToProcess, false);
+      }, 500);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
@@ -256,25 +268,6 @@ export function CaptureAndAddPhoto() {
         </p>
       </header>
 
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/jpeg, image/png, image/heic, image/heif, image/*"
-        multiple
-        className="sr-only"
-        onChange={(e) => handlePhotoUpload(e, false)}
-      />
-      
-      {/* Input oculto para forzar la apertura de la cámara trasera */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/jpeg, image/png, image/heic, image/heif, image/*"
-        capture="environment"
-        className="sr-only"
-        onChange={(e) => handlePhotoUpload(e, true)}
-      />
-      
       {/* MODAL / SECCIÓN DE INGRESO MANUAL */}
       {manualQueue.length > 0 && (
         <div className="mt-4 p-4 border border-sky-500 bg-slate-800 rounded-lg space-y-3">
@@ -296,23 +289,31 @@ export function CaptureAndAddPhoto() {
       )}
 
       <div className="flex flex-col gap-4">
-        <button
-          type="button"
-          disabled={!isProjectReady}
-          onClick={() => isProjectReady && cameraInputRef.current?.click()}
-          className="w-full rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 px-3 py-3 text-base font-semibold hover:bg-emerald-800/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
+        <label
+          className={`w-full text-center rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 px-3 py-3 text-base font-semibold hover:bg-emerald-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
         >
           📷 Tomar Foto In-Situ (Cámara)
-        </button>
+          <input
+            type="file"
+            accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => handlePhotoUpload(e, true)}
+          />
+        </label>
 
-        <button
-          type="button"
-          disabled={!isProjectReady}
-          onClick={() => isProjectReady && galleryInputRef.current?.click()}
-          className="w-full rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 px-3 py-3 text-base font-semibold hover:bg-sky-800/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
+        <label
+          className={`w-full text-center rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 px-3 py-3 text-base font-semibold hover:bg-sky-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
         >
           📸 Seleccionar fotos del Carrete / Galería
-        </button>
+          <input
+            type="file"
+            accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handlePhotoUpload(e, false)}
+          />
+        </label>
       </div>
 
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
