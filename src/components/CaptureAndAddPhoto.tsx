@@ -60,7 +60,7 @@ export function CaptureAndAddPhoto() {
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   
   // Estados para el Fallback Manual
-  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [manualQueue, setManualQueue] = useState<File[]>([]);
   const [manualCoords, setManualCoords] = useState({ lat: "", lng: "" });
 
   // FASE 1: Secuencialidad. Validar que el proyecto tenga Nombre, Geometría y Explicación.
@@ -92,6 +92,7 @@ export function CaptureAndAddPhoto() {
       }
     }
 
+    const needsManual: File[] = [];
     for (const selected of files) {
       // IMPORTANTE: Extraer GPS de la imagen ORIGINAL antes de comprimir, 
       // ya que la compresión borra los metadatos EXIF.
@@ -130,24 +131,28 @@ export function CaptureAndAddPhoto() {
           lng = fallback.lng;
         } catch (fbErr: any) {
           // SI FALLA EL GPS DEL NAVEGADOR, MOSTRAMOS EL FORMULARIO MANUAL
-          setIsFetchingGPS(false);
-          setPendingPhoto(selected);
-          setError(`No se pudo obtener la ubicación automáticamente (${fbErr.message}). Ingrese las coordenadas manualmente para continuar.`);
-          return; // Pausamos el bucle esperando la entrada del usuario
+          needsManual.push(selected);
+          continue;
         }
       }
 
-      try {
-        await uploadAndAddPhoto(selected, lat, lng);
-      } catch (err) {
-        console.error("[CaptureAndAddPhoto] Error subiendo foto:", err);
-        setError(err instanceof Error ? err.message : "Error al subir la fotografía.");
-        // Detener el bucle si una foto falla
-        break;
+      if (lat != null && lng != null) {
+        try {
+          await uploadAndAddPhoto(selected, lat, lng);
+        } catch (err) {
+          console.error("[CaptureAndAddPhoto] Error subiendo foto:", err);
+          setError(err instanceof Error ? err.message : "Error al subir la fotografía.");
+          break;
+        }
       }
     }
 
     setIsFetchingGPS(false);
+    
+    if (needsManual.length > 0) {
+      setManualQueue(needsManual);
+      setError(`No se pudo obtener la ubicación automáticamente para ${needsManual.length} foto(s). Ingrese las coordenadas manualmente.`);
+    }
   };
 
   const handlePhotoUpload = async (
@@ -169,7 +174,7 @@ export function CaptureAndAddPhoto() {
   }, [project]);
 
   const handleManualSubmit = async () => {
-    if (!pendingPhoto) return;
+    if (manualQueue.length === 0) return;
     
     const latNum = parseFloat(manualCoords.lat);
     const lngNum = parseFloat(manualCoords.lng);
@@ -180,9 +185,15 @@ export function CaptureAndAddPhoto() {
     }
 
     try {
-      await uploadAndAddPhoto(pendingPhoto, latNum, lngNum);
-      setPendingPhoto(null);
-      setError(null);
+      await uploadAndAddPhoto(manualQueue[0], latNum, lngNum);
+      const newQueue = manualQueue.slice(1);
+      setManualQueue(newQueue);
+      if (newQueue.length === 0) {
+        setError(null);
+        setManualCoords({ lat: "", lng: "" });
+      } else {
+        setError(`Faltan ${newQueue.length} foto(s) por ubicar.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al subir la fotografía manualmente.");
     }
@@ -265,13 +276,13 @@ export function CaptureAndAddPhoto() {
       />
       
       {/* MODAL / SECCIÓN DE INGRESO MANUAL */}
-      {pendingPhoto && (
+      {manualQueue.length > 0 && (
         <div className="mt-4 p-4 border border-sky-500 bg-slate-800 rounded-lg space-y-3">
           <p className="text-sm text-sky-300 font-semibold">
-            Acción Requerida: Ubicación Manual
+            Acción Requerida: Ubicación Manual ({manualQueue.length} pendiente(s))
           </p>
           <p className="text-xs text-slate-400">
-            La imagen "{pendingPhoto.name}" no tiene GPS. Ingrese la latitud y longitud.
+            La imagen "{manualQueue[0].name}" no tiene GPS. Ingrese la latitud y longitud.
           </p>
           <div className="flex flex-col gap-3">
             <input type="number" placeholder="Latitud (ej. 21.8853)" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
@@ -279,7 +290,7 @@ export function CaptureAndAddPhoto() {
           </div>
           <div className="flex flex-col gap-3 mt-2">
             <button onClick={handleManualSubmit} className="flex-1 bg-sky-600 text-white py-2 rounded text-sm font-semibold">Guardar y Subir</button>
-            <button onClick={() => { setPendingPhoto(null); setError(null); }} className="flex-1 bg-slate-700 text-white py-2 rounded text-sm font-semibold">Cancelar</button>
+            <button onClick={() => { setManualQueue([]); setError(null); setManualCoords({ lat: "", lng: "" }); }} className="flex-1 bg-slate-700 text-white py-2 rounded text-sm font-semibold">Cancelar</button>
           </div>
         </div>
       )}

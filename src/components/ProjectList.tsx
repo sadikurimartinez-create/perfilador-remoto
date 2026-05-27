@@ -238,6 +238,9 @@ export function ProjectList() {
     const col = collection(firestore, "projects");
     const createdAt = Date.now();
     try {
+      if (pendingPhotos.length > 0) {
+        (window as any).pendingProjectPhotos = pendingPhotos;
+      }
       const ref = await import("firebase/firestore").then(({ addDoc }) =>
         addDoc(col, {
           name: nombre,
@@ -250,15 +253,13 @@ export function ProjectList() {
           estado: "ABIERTO",
         })
       );
-      if (pendingPhotos.length > 0) {
-        (window as any).pendingProjectPhotos = pendingPhotos;
-      }
       setShowPrompt(false);
       setNombreInput("");
       setPendingPhotos([]);
       setGeometryType("individual");
       router.push(`/project/${ref.id}`);
     } catch (err: any) {
+      delete (window as any).pendingProjectPhotos;
       console.error("Error creando proyecto:", err);
       alert("Error al crear expediente: " + err.message);
     }

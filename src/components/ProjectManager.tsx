@@ -109,15 +109,16 @@ export function ProjectManager() {
     const nombre = nombreInput.trim();
     if (nombre) {
       try {
+        if (pendingPhotos.length > 0) {
+          (window as any).pendingProjectPhotos = pendingPhotos;
+        }
         await createProject({
           nombre,
           geometryType,
           descripcion: "",
         });
-        if (pendingPhotos.length > 0) {
-          (window as any).pendingProjectPhotos = pendingPhotos;
-        }
       } catch (e: any) {
+        delete (window as any).pendingProjectPhotos;
         // El error ya lo avisa el context con un alert
       }
     }
