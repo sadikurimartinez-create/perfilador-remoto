@@ -37,7 +37,7 @@ export function ProjectList() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
-  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -225,8 +225,29 @@ export function ProjectList() {
     }
   };
 
+  const handlePendingPhotosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newItems = Array.from(e.target.files).map(file => ({
+        file,
+        url: URL.createObjectURL(file)
+      }));
+      setPendingPhotos(prev => [...prev, ...newItems]);
+    }
+    e.target.value = "";
+  };
+
+  const removePendingPhoto = (index: number) => {
+    setPendingPhotos(prev => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].url);
+      updated.splice(index, 1);
+      return updated;
+    });
+  };
+
   const handleNuevoProyecto = () => {
     setNombreInput("");
+    pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
     setPendingPhotos([]);
     setShowPrompt(true);
   };
@@ -239,7 +260,7 @@ export function ProjectList() {
     const createdAt = Date.now();
     try {
       if (pendingPhotos.length > 0) {
-        (window as any).pendingProjectPhotos = pendingPhotos;
+        (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
       }
       const ref = await import("firebase/firestore").then(({ addDoc }) =>
         addDoc(col, {
@@ -253,6 +274,7 @@ export function ProjectList() {
           estado: "ABIERTO",
         })
       );
+      pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);
       setNombreInput("");
       setPendingPhotos([]);
@@ -752,7 +774,7 @@ export function ProjectList() {
                   capture="environment"
                   multiple
                   className="hidden"
-                  onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
+                  onChange={handlePendingPhotosChange}
                 />
               </label>
               <label className="flex-1 text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors">
@@ -762,7 +784,7 @@ export function ProjectList() {
                   accept="image/jpeg, image/png, image/heic, image/heif, image/*"
                   multiple
                   className="hidden"
-                  onChange={(e) => { if(e.target.files) setPendingPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value=""; }}
+                  onChange={handlePendingPhotosChange}
                 />
               </label>
             </div>
@@ -770,17 +792,17 @@ export function ProjectList() {
               <div className="mt-3">
                 <p className="text-xs text-emerald-400 mb-2 font-medium">✓ {pendingPhotos.length} fotografía(s) seleccionada(s) lista(s) para ser ingresada(s).</p>
                 <div className="grid grid-cols-4 gap-2">
-                  {pendingPhotos.map((file, idx) => (
+                  {pendingPhotos.map((item, idx) => (
                     <div key={idx} className="relative group rounded-md overflow-hidden border border-slate-600 aspect-square bg-slate-800 flex items-center justify-center">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
-                        src={URL.createObjectURL(file)} 
+                        src={item.url} 
                         alt="Preview" 
                         className="object-cover w-full h-full"
                       />
                       <button
                         type="button"
-                        onClick={() => setPendingPhotos(prev => prev.filter((_, i) => i !== idx))}
+                        onClick={() => removePendingPhoto(idx)}
                         className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-90 hover:opacity-100 shadow-md"
                         title="Borrar fotografía"
                       >
