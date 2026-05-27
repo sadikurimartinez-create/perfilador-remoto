@@ -70,16 +70,16 @@ export default function PerfilPage() {
 
     try {
       const { getDb } = await import("@/lib/firebase");
-      const { doc, updateDoc } = await import("firebase/firestore");
+      const { doc, setDoc } = await import("firebase/firestore");
       const db = getDb();
       
       const fullName = `${formData.nombre.trim()} ${formData.apellidoPaterno.trim()} ${formData.apellidoMaterno.trim()}`.trim();
       
-      await updateDoc(doc(db, "users", String((user as any).id)), {
+      await setDoc(doc(db, "users", String((user as any).id)), {
         ...formData,
         name: fullName,
         perfilCompleto: true
-      });
+      }, { merge: true });
 
       setMessage("Perfil guardado correctamente.");
       // El AuthContext debería actualizarse automáticamente gracias a los listeners de Firebase.
