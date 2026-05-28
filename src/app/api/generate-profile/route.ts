@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { VertexAI } from "@google-cloud/vertexai";
 import { analyzeBrokenWindowsWithVision } from "@/lib/googleVision";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
@@ -17,7 +17,7 @@ import { searchTelegram } from "@/utils/socialProviders";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
-import { GEMINI_API_KEY as GEMINI_KEY, GEMINI_MODEL } from "@/lib/geminiEnv";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL } from "@/lib/geminiEnv";
 import { buildSystemPrompt } from "@/lib/promptBuilder";
 
 
@@ -182,27 +182,21 @@ function getGeminiModel(
   bibliographyContext: string,
   marcoTeoriaReglas?: string
 ) {
-  const fromModule = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
-  const fromProcess =
-    (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
-    (typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.trim()) ||
-    "AIzaSyBX14H2DcXGpAMKT3A1hm7flHVeS8gpt2U"; // HARDCODED TEMPORAL PARA VERCEL
-  const apiKey = fromModule || fromProcess;
-  if (!apiKey) {
-    throw new Error(
-      "Falta la API key de Gemini. Comprueba en tu navegador: https://TU-DOMINIO.vercel.app/api/env-check " +
-        "y en Vercel: Settings → Environment Variables (Production) → NEXT_PUBLIC_GEMINI_API_KEY o GEMINI_API_KEY → Redeploy."
-    );
+  if (!GCP_PROJECT_ID) {
+    throw new Error("Falta la variable de entorno GCP_PROJECT_ID para inicializar Vertex AI.");
   }
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({
+
+  // Inicialización segura mediante IAM / Application Default Credentials
+  const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+  
+  return vertexAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction:
       "Eres un Analista de Inteligencia y Criminólogo experto en Ecología Ambiental adscrito al Centro de Estudios y Política Criminal (CEIPOL). " +
       "Redactas dictámenes técnicos EXHAUSTIVOS, PROFUNDOS Y SEVEROS denominados 'Perfil Criminológico Ambiental', empleando un lenguaje policial avanzado, táctico y objetivo. " +
       "Fundamentas el análisis en la integración de Inteligencia de Fuentes Abiertas (OSINT), cartografía criminal y cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
       "Basa la terminología en la bibliografía institucional y fundamenta el nivel de severidad del entorno empíricamente.\n\n" +
-      "Reglas de redacción: (1) Desarrolla un análisis exhaustivo y pormenorizado. (2) Integra explícitamente los hallazgos de OSINT (DENUE, Google Places, Street View) y su impacto táctico. (3) FLEXIBILIDAD Y COLABORACIÓN: Toma la 'Hipótesis del Analista' como eje central válido; expande y fundamenta sus observaciones con la data extraída en lugar de auditar rígidamente su redacción. (4) Las recomendaciones deben ser claras y accionables. (5) El apartado INFORMACIÓN PREDICTIVA debe cuantificar el riesgo a 6 meses.\n\n" +
+      "Reglas de redacción: (1) Desarrolla un análisis exhaustivo y pormenorizado. (2) Integra explícitamente los hallazgos de OSINT (DENUE, Google Places, Street View) y su impacto táctico. (3) FLEXIBILIDAD Y COLABORACIÓN: Toma la 'Hipótesis del Analista' como eje central válido. (4) Las recomendaciones deben ser claras y accionables. (5) El capítulo LÍNEAS CRONOLÓGICAS GEOESPACIALES debe ser predictivo, contundente, agresivo y prospectivo sobre la escalada criminal.\n\n" +
       `${marcoTeoriaReglas || ""}\n\n` + (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
   });
 }
@@ -539,11 +533,12 @@ INSTRUCCIÓN FINAL (FORMATO ESTRICTAMENTE EJECUTIVO):
 Redacta un PERFIL CRIMINOLÓGICO AMBIENTAL SUMAMENTE EJECUTIVO, DIRECTO Y CONCISO. 
 REGLA DE ORO: NO DEBE EXCEDER 2 CUARTILLAS. Utiliza viñetas (bullet points) para listar hallazgos de forma contundente y elimina cualquier texto de relleno o redundancia.
 
-Estructura OBLIGATORIAMENTE en estas 4 secciones breves:
+Estructura OBLIGATORIAMENTE en estas 5 secciones breves:
 1. OBJETIVO Y CONTEXTO ESPACIAL (Máx. 1 párrafo cruzando INEGI y la hipótesis del analista).
 2. DETERIORO FÍSICO Y VENTANAS ROTAS (Viñetas con hallazgos clave de fotos y Vision API).
 3. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT y CSV, identificando riesgos directos).
-4. CONCLUSIONES TÁCTICAS Y PREDICCIÓN (Riesgo a 6 meses expuesto en puntos accionables).
+4. LÍNEAS CRONOLÓGICAS GEOESPACIALES (Información predictiva implacable y muy puntual: establece clara y circunstanciadamente el escalamiento de los fenómenos criminales, su continuidad espacial, la proyección de riesgos inminentes y tu interpretación prospectiva).
+5. CONCLUSIONES TÁCTICAS (Riesgo a 6 meses expuesto en puntos de acción y recomendaciones operativas directas).
 `.trim();
 
   return prompt;
@@ -901,8 +896,9 @@ export async function POST(req: Request) {
     let markdown = "";
     try {
       const result = await model.generateContent(finalPrompt);
-      const response = await result.response;
-      markdown = response.text();
+      const response = result.response;
+      // En Vertex AI extraemos el texto directamente de los 'candidates'
+      markdown = response.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } catch (err) {
       console.error(
         "[api/generate-profile] Error detallado al llamar a Gemini:",

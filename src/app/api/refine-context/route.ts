@@ -1,14 +1,6 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_API_KEY as GEMINI_KEY, GEMINI_MODEL } from "@/lib/geminiEnv";
-function getGeminiKey(): string {
-  const fromModule = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
-  const fromProcess =
-    (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
-    (typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.trim()) ||
-    "";
-  return fromModule || fromProcess;
-}
+import { VertexAI } from "@google-cloud/vertexai";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL } from "@/lib/geminiEnv";
 
 type RefineBody = {
   context: string;
@@ -27,7 +19,6 @@ export async function POST(req: Request) {
   try {
     const { context, photos, mode, geometryType, projectDescription } = (await req.json()) as RefineBody;
 
-    const apiKey = getGeminiKey();
     const coordsText =
       photos && photos.length > 0
         ? photos
@@ -113,14 +104,16 @@ Devuelve un objeto JSON estrictamente con este formato:
 `.trim();
     }
 
-    if (!apiKey) {
-      return NextResponse.json({ score: 100, suggestions: cleanedContext + "\n\n(Nota: Auditoría no disponible por falta de API Key)" });
+    if (!GCP_PROJECT_ID) {
+      return NextResponse.json({ score: 100, suggestions: cleanedContext + "\n\n(Nota: Auditoría no disponible por falta de GCP_PROJECT_ID)" });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+    const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    
+    // Extracción segura para Vertex AI
+    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     let parsed;
     try {

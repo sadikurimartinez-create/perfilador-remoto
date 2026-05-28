@@ -1,15 +1,8 @@
-/**
- * Lee la configuración de Gemini (API key y modelo) una sola vez al cargar el módulo.
- * En Vercel a veces process.env no está disponible dentro de funciones; al leer aquí puede funcionar.
- */
 const g = typeof process !== "undefined" ? process.env : ({} as NodeJS.ProcessEnv);
-const a = (g.NEXT_PUBLIC_GEMINI_API_KEY ?? "") as string;
-const b = (g.GEMINI_API_KEY ?? "") as string;
 
-export const GEMINI_API_KEY =
-  (typeof a === "string" && a.trim() ? a.trim() : null) ||
-  (typeof b === "string" && b.trim() ? b.trim() : null) ||
-  "AIzaSyBX14H2DcXGpAMKT3A1hm7flHVeS8gpt2U"; // HARDCODED TEMPORAL PARA VERCEL
+// Variables para Vertex AI
+export const GCP_PROJECT_ID = typeof g.GCP_PROJECT_ID === "string" ? g.GCP_PROJECT_ID.trim() : "";
+export const GCP_LOCATION = typeof g.GCP_LOCATION === "string" && g.GCP_LOCATION.trim() ? g.GCP_LOCATION.trim() : "us-central1";
 
 /** Modelo por defecto si no se define GEMINI_MODEL en el entorno. */
 const DEFAULT_GEMINI_MODEL = "models/gemini-2.5-flash";
