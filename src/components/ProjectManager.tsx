@@ -351,10 +351,9 @@ export function ProjectManager() {
                 📷 Usar Cámara
                 <input
                   type="file"
-                  accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                accept="image/*"
                   capture="environment"
-                  multiple
-                  className="hidden"
+                className="sr-only"
                   onChange={handlePendingPhotosChange}
                 />
               </label>
@@ -362,9 +361,9 @@ export function ProjectManager() {
                 📸 Usar Galería
                 <input
                   type="file"
-                  accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                accept="image/*"
                   multiple
-                  className="hidden"
+                className="sr-only"
                   onChange={handlePendingPhotosChange}
                 />
               </label>

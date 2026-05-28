@@ -70,7 +70,7 @@ function computeRiskLevel(params: {
   numIrregulares: number;
   numPois: number;
   radioMetros: number;
-}): "bajo" | "medio" | "alto" {
+}): { riskLevel: "bajo" | "medio" | "alto"; mlFeatures: any } {
   const {
     totalIncidenciaDB,
     totalIncidenciaCSV,
@@ -83,11 +83,11 @@ function computeRiskLevel(params: {
   let puntos = 0;
 
   const totalIncidencia = totalIncidenciaDB + totalIncidenciaCSV;
+  const porMilMetros = radioMetros <= 0 ? 0 : totalIncidencia / (radioMetros / 1000);
 
   if (totalIncidencia === 0) {
     puntos = 0;
   } else {
-    const porMilMetros = radioMetros <= 0 ? 0 : totalIncidencia / (radioMetros / 1000);
     if (porMilMetros >= 15) puntos += 3;
     else if (porMilMetros >= 6) puntos += 2;
     else if (porMilMetros >= 1) puntos += 1;
@@ -112,9 +112,20 @@ function computeRiskLevel(params: {
 
   const puntuacion = Math.round(puntos);
 
-  if (puntuacion <= 1) return "bajo";
-  if (puntuacion <= 3) return "medio";
-  return "alto";
+  let riskLevel: "bajo" | "medio" | "alto" = "alto";
+  if (puntuacion <= 1) riskLevel = "bajo";
+  else if (puntuacion <= 3) riskLevel = "medio";
+
+  // Extracción de características (Feature Engineering) para futuro entrenamiento de modelo ML predictivo
+  const mlFeatures = {
+    densidadDelictiva: porMilMetros,
+    frecuenciaGraves: cantidadDelitosGraves,
+    ratioIrregularidad: numPois > 0 ? numIrregulares / numPois : 0,
+    atractoresTotales: numPois,
+    puntajeHeuristicoBase: puntuacion
+  };
+
+  return { riskLevel, mlFeatures };
 }
 
 type GenerateProfileBody = {
@@ -917,7 +928,7 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    const riskLevel = computeRiskLevel({
+    const { riskLevel, mlFeatures } = computeRiskLevel({
       totalIncidenciaDB: incidenciaResumen.total,
       totalIncidenciaCSV,
       porDelito: incidenciaResumen.porDelito,
@@ -934,6 +945,7 @@ export async function POST(req: Request) {
           incidencia: incidenciaResumen,
           incidenciaDetalles,
           pois: mergedPoisResult,
+          mlFeatures,
           riskLevel,
           inegiDemographics,
           tacticalStreetViews,

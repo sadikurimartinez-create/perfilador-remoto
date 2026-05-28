@@ -297,9 +297,9 @@ export function CaptureAndAddPhoto() {
           📷 Tomar Foto In-Situ (Cámara)
           <input
             type="file"
-            accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+            accept="image/*"
             capture="environment"
-            className="hidden"
+            className="sr-only"
             onChange={(e) => handlePhotoUpload(e, true)}
           />
         </label>
@@ -310,9 +310,9 @@ export function CaptureAndAddPhoto() {
           📸 Seleccionar fotos del Carrete / Galería
           <input
             type="file"
-            accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+            accept="image/*"
             multiple
-            className="hidden"
+            className="sr-only"
             onChange={(e) => handlePhotoUpload(e, false)}
           />
         </label>

@@ -28,6 +28,8 @@ type ProjectWithCount = {
   lockedBy?: string | null;
   estado?: string;
   comentariosSupervisor?: string;
+  descripcion?: string;
+  geometryType?: string;
 };
 
 export function ProjectList() {
@@ -137,6 +139,8 @@ export function ProjectList() {
             deleted: data.deleted === true,
             estado: data.estado || "ABIERTO",
             comentariosSupervisor: data.comentariosSupervisor || "",
+            descripcion: data.descripcion || "",
+            geometryType: data.geometryType || "individual",
           } as ProjectWithCount & { deleted?: boolean };
         })
         .filter((p) => !p.deleted);
@@ -301,6 +305,51 @@ export function ProjectList() {
         window.alert("Error al reasignar: " + err.message);
       }
     }
+  };
+
+  const handleExportFineTuningDataset = () => {
+    const validados = projects.filter(p => p.estado === "VALIDADO" || p.estado === "CERRADO");
+    if (validados.length === 0) {
+      window.alert("No hay expedientes validados para exportar al dataset de entrenamiento.");
+      return;
+    }
+
+    let jsonl = "";
+    
+    for (const p of validados) {
+      const analysesForProject = allAnalyses.filter(a => a.projectId === p.id);
+      if (analysesForProject.length === 0) continue;
+      
+      analysesForProject.sort((a, b) => b.createdAt - a.createdAt);
+      const bestAnalysis = analysesForProject[0];
+      
+      const systemText = "Eres un Analista de Inteligencia y Criminólogo experto en Ecología Ambiental adscrito al Centro de Estudios y Política Criminal (CEIPOL). Redactas dictámenes técnicos EXHAUSTIVOS, PROFUNDOS Y SEVEROS denominados 'Perfil Criminológico Ambiental', empleando un lenguaje policial avanzado, táctico y objetivo. Fundamentas el análisis en la integración de Inteligencia de Fuentes Abiertas (OSINT), cartografía criminal y cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas.";
+      
+      const userText = `Genera un Perfil Criminológico Ambiental.\nProyecto: ${p.name}\nGeometría: ${p.geometryType || "individual"}\nDirectriz u observaciones del investigador en campo:\n${p.descripcion || "Sin contexto adicional proporcionado."}`;
+      
+      const row = {
+        systemInstruction: { role: "system", parts: [{ text: systemText }] },
+        contents: [
+          { role: "user", parts: [{ text: userText }] },
+          { role: "model", parts: [{ text: bestAnalysis.content }] }
+        ]
+      };
+      
+      jsonl += JSON.stringify(row) + "\n";
+    }
+
+    if (!jsonl) {
+      window.alert("No se encontraron análisis dentro de los expedientes validados.");
+      return;
+    }
+
+    const blob = new Blob([jsonl], { type: "application/jsonl+json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dataset_gemini_ceipol_${Date.now()}.jsonl`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -501,7 +550,7 @@ export function ProjectList() {
             <input
               type="file"
               accept=".json"
-              className="hidden"
+              className="sr-only"
               ref={fileInputRef}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
@@ -521,6 +570,16 @@ export function ProjectList() {
             >
               📥 Importar desde Campo
             </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleExportFineTuningDataset}
+                className="px-4 py-2 rounded-lg border border-purple-600 bg-purple-900/30 text-purple-200 text-sm font-semibold hover:bg-purple-800/50 transition-colors shadow-md"
+                title="Exportar dictámenes validados para entrenar a Vertex AI"
+              >
+                🧠 Exportar Dataset ML
+              </button>
+            )}
             <button
               type="button"
               onClick={handleNuevoProyecto}
@@ -796,10 +855,9 @@ export function ProjectList() {
                 📷 Usar Cámara
                 <input
                   type="file"
-                  accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                  accept="image/*"
                   capture="environment"
-                  multiple
-                  className="hidden"
+                  className="sr-only"
                   onChange={handlePendingPhotosChange}
                 />
               </label>
@@ -807,9 +865,9 @@ export function ProjectList() {
                 📸 Usar Galería
                 <input
                   type="file"
-                  accept="image/jpeg, image/png, image/heic, image/heif, image/*"
+                  accept="image/*"
                   multiple
-                  className="hidden"
+                  className="sr-only"
                   onChange={handlePendingPhotosChange}
                 />
               </label>

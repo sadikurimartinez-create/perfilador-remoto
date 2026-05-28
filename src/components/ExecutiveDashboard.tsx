@@ -13,6 +13,8 @@ import {
   CartesianGrid,
 } from 'recharts';
 
+import { useAuth } from "@/context/AuthContext";
+
 import { calculateExecutiveMetrics }
   from '../utils/executiveMetrics';
 
@@ -23,6 +25,9 @@ interface Props {
 const ExecutiveDashboard: React.FC<Props> = ({
   projects,
 }) => {
+
+  const { user } = useAuth();
+  const isSuperAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN";
 
   const metrics =
     calculateExecutiveMetrics(
@@ -57,9 +62,20 @@ const ExecutiveDashboard: React.FC<Props> = ({
 
     <div className="bg-slate-950 border border-slate-700 rounded-xl p-5 mt-5">
 
-      <h1 className="text-2xl font-bold text-cyan-300 mb-5">
-        Consola Ejecutiva CEIPOL
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+        <h1 className="text-2xl font-bold text-cyan-300">
+          Consola Ejecutiva CEIPOL
+        </h1>
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => alert("Funcionalidad en desarrollo: Conexiones para el entrenamiento (Fine-Tuning) y exportación de Dataset ML.")}
+            className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors border border-purple-500"
+          >
+            🧠 Entrenamiento de IA (ML)
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-col gap-4 mb-6">
 
