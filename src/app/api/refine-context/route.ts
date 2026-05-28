@@ -1,10 +1,12 @@
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 
 type RefineBody = {
   context: string;
-  photos?: { lat: number | null; lng: number | null }[];
+  photos?: { lat: number | null; lng: number | null; tipo?: string; comentario?: string }[];
   mode?: "suggest" | "audit" | "validate-photos";
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
@@ -24,7 +26,7 @@ export async function POST(req: Request) {
         ? photos
             .map(
               (p, i) =>
-                `Foto ${i + 1}: lat ${formatCoord(p.lat)}, lng ${formatCoord(p.lng)}`
+                `Foto ${i + 1} [${p.tipo || "Sin tipo"}]: ${p.comentario || "Sin comentario"} - lat ${formatCoord(p.lat)}, lng ${formatCoord(p.lng)}`
             )
             .join("\n")
         : "No se proporcionaron coordenadas de fotos.";
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
       prompt = `
 Eres un Auditor Experto en Criminología Ambiental adscrito al CEIPOL.
 El investigador ha redactado la siguiente contextualización / hipótesis operativa:
-"${cleanedContext}"
+"${cleanedContext.replace(/\n\n\(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO.*?\)/g, '')}"
 
 ${descContext}
 ${geoInstruction}
@@ -68,7 +70,7 @@ Devuelve un objeto JSON estrictamente con este formato:
       prompt = `
 Eres un Auditor Experto en Criminología Ambiental.
 El investigador ha capturado evidencia fotográfica y las ha contextualizado con los siguientes comentarios:
-"${cleanedContext}"
+"${cleanedContext.replace(/\n\n\(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO.*?\)/g, '')}"
 
 Instrucción:
 Evalúa la lógica, utilidad operativa y objetividad de estas contextualizaciones fotográficas.
@@ -85,7 +87,7 @@ Devuelve un objeto JSON estrictamente con este formato:
 Eres un Auditor Experto en Criminología Ambiental adscrito al CEIPOL. Un investigador necesita contexto operacional para un Perfil Criminológico Ambiental.
 
 Contexto preliminar del analista:
-"${cleanedContext || "(Vacío)"}"
+"${cleanedContext.replace(/\n\n\(INSTRUCCIÓN DEL SISTEMA:.*?DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO.*?\)/g, '') || "(Vacío)"}"
 
 Coordenadas aproximadas de las fotos:
 ${coordsText}
@@ -93,14 +95,11 @@ ${coordsText}
 ${descContext}
 ${geoInstruction}
 
-Instrucción:
-Evalúa de 0 a 100 qué tan útil y lógica es la contextualización actual. Si está vacía o es muy pobre, el score será muy bajo.
-Proporciona 3 o 4 sugerencias PROFUNDAS, TÁCTICAS y SEVERAS basadas en la Criminología Ambiental.
-Devuelve un objeto JSON estrictamente con este formato:
-{
-  "score": <número de 0 a 100>,
-  "suggestions": "<Si score < 80: provee las sugerencias en viñetas directas con lenguaje policial/táctico sobre QUÉ debe agregar para llegar al 80%. Si score >= 80: provee complementos avanzados.>"
-}
+Instrucción del sistema:
+Evalúa de 0 a 100 qué tan útil y lógica es la contextualización.
+Si detectas que el usuario solicita preguntas para refinar la hipótesis, devuelve las claves "score" y "questions" (arreglo de strings).
+De lo contrario, devuelve "score" y "suggestions" (string con sugerencias profundas, tácticas y severas).
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido.
 `.trim();
     }
 
@@ -119,7 +118,10 @@ Devuelve un objeto JSON estrictamente con este formato:
 
     const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
     const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    });
     
     // Extracción segura para Vertex AI
     const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -132,8 +134,14 @@ Devuelve un objeto JSON estrictamente con este formato:
       parsed = { score: 0, suggestions: "La respuesta de la IA no pudo ser interpretada. Revise su redacción: " + text };
     }
     return NextResponse.json(parsed);
-  } catch (err) {
+  } catch (err: any) {
     console.error("[api/refine-context] Error:", err);
-    return NextResponse.json({ score: 0, suggestions: "Error interno al auditar. Intente de nuevo." });
+    
+    const isAuthError = err.message?.includes("could not load the default credentials") || err.message?.includes("permission denied");
+    
+    return NextResponse.json({ 
+      score: 0, 
+      suggestions: `Error del Servidor: ${isAuthError ? "Problema con las credenciales de Google Cloud (GOOGLE_APPLICATION_CREDENTIALS)." : err.message || "Fallo en la comunicación con Vertex AI."} Verifique la terminal local para más detalles.`
+    });
   }
 }
