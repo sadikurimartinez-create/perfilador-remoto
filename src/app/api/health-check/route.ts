@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_MODEL } from "@/lib/geminiEnv";
+import { VertexAI } from "@google-cloud/vertexai";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL } from "@/lib/geminiEnv";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
 import { getPool } from "@/lib/db";
@@ -149,41 +149,39 @@ export async function GET() {
     }
   }
 
-  // Gemini API
+  // Vertex AI (Gemini)
   {
     const started = Date.now();
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    if (!GCP_PROJECT_ID) {
       services.push({
         id: "gemini",
-        name: "Gemini API",
+        name: "Vertex AI (Gemini)",
         status: "error",
         latencyMs: null,
-        errorMessage: "Falta GEMINI_API_KEY en variables de entorno.",
+        errorMessage: "Falta GCP_PROJECT_ID en variables de entorno para Vertex AI.",
       });
     } else {
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-        const result = await model.generateContent("ping");
-        await result.response;
+        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+        const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
+        await model.generateContent("ping");
         services.push({
           id: "gemini",
-          name: "Gemini API",
+          name: "Vertex AI (Gemini)",
           status: "ok",
           latencyMs: Date.now() - started,
         });
       } catch (error) {
-        console.error("[health-check] Gemini error detallado:", error);
+        console.error("[health-check] Vertex AI error detallado:", error);
         services.push({
           id: "gemini",
-          name: "Gemini API",
+          name: "Vertex AI (Gemini)",
           status: "error",
           latencyMs: Date.now() - started,
           errorMessage:
             error instanceof Error
               ? error.message
-              : "Error desconocido en Gemini",
+              : "Error desconocido en Vertex AI",
         });
       }
     }
@@ -258,4 +256,3 @@ export async function GET() {
     { status: 200 }
   );
 }
-
