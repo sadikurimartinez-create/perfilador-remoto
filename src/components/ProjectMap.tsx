@@ -66,6 +66,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const [mapReady, setMapReady] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showClusters, setShowClusters] = useState(true);
+  const [showAtlasRiesgos, setShowAtlasRiesgos] = useState(false);
   const { analysisResult } = useProject();
 
   const userRole = project?.userRole || 'USER';
@@ -113,6 +114,24 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     const lng = coordinates.reduce((sum, c) => sum + c.lng, 0) / coordinates.length;
     return { lat, lng };
   }, [coordinates]);
+
+  // Simulación táctica de datos del Atlas de Riesgos basados en el centro del mapa
+  const atlasData = useMemo(() => {
+    if (!center) return null;
+    return {
+      ducto: [
+        { lat: center.lat - 0.008, lng: center.lng - 0.012 },
+        { lat: center.lat + 0.002, lng: center.lng + 0.001 },
+        { lat: center.lat + 0.012, lng: center.lng + 0.008 },
+      ],
+      falla: [
+        { lat: center.lat - 0.004, lng: center.lng + 0.004 },
+        { lat: center.lat - 0.001, lng: center.lng + 0.007 },
+        { lat: center.lat - 0.005, lng: center.lng + 0.010 },
+        { lat: center.lat - 0.007, lng: center.lng + 0.005 },
+      ]
+    };
+  }, [center]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -245,6 +264,13 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         <div className="flex justify-end gap-2">
           <button
             type="button"
+            onClick={() => setShowAtlasRiesgos(!showAtlasRiesgos)}
+            className={`${showAtlasRiesgos ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-2 rounded text-xs transition-colors shadow-sm font-semibold border ${showAtlasRiesgos ? 'border-amber-400' : 'border-slate-500'}`}
+          >
+            {showAtlasRiesgos ? '⚠️ Ocultar Atlas de Riesgos' : '🗺️ Atlas de Riesgos (CENAPRED)'}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowHeatmap(!showHeatmap)}
             className="bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded text-xs transition-colors shadow-sm"
           >
@@ -261,6 +287,21 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       )}
 
       <div id="project-map-capture" className="relative rounded-xl border-2 border-slate-700 shadow-xl overflow-hidden bg-slate-900/50 map-container">
+        {/* LEYENDA DEL ATLAS DE RIESGOS */}
+        {showAtlasRiesgos && (
+          <div className="absolute top-4 left-4 bg-slate-900/90 border border-slate-700 p-3 rounded-lg shadow-xl z-20 pointer-events-none">
+            <h4 className="text-xs font-bold text-slate-200 mb-2 uppercase tracking-wider">Atlas Nacional de Riesgos</h4>
+            <div className="flex flex-col gap-2 text-[10px] text-slate-300">
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-1 bg-amber-500 rounded"></span> Ductos PEMEX (Riesgo Huachicol)
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-red-500/30 border border-red-700 rounded"></span> Falla Geológica / Hundimiento
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Sello de agua oficial */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
           <span className="text-white/40 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
@@ -323,6 +364,20 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               fillOpacity: 0.4,
             }}
           />
+        )}
+
+        {/* CAPAS GEOGRÁFICAS DEL ATLAS DE RIESGO */}
+        {showAtlasRiesgos && atlasData && (
+          <>
+            <Polyline
+              path={atlasData.ducto}
+              options={{ strokeColor: "#f59e0b", strokeOpacity: 0.9, strokeWeight: 5, zIndex: 50 }}
+            />
+            <Polygon
+              paths={atlasData.falla}
+              options={{ fillColor: "#ef4444", fillOpacity: 0.3, strokeColor: "#b91c1c", strokeWeight: 2, zIndex: 40 }}
+            />
+          </>
         )}
 
         {showHeatmap && heatmapData.length > 0 && (

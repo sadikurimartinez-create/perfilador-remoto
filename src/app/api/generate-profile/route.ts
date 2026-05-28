@@ -217,7 +217,7 @@ function getGeminiModel(
       "Redactas dictámenes técnicos EXHAUSTIVOS, PROFUNDOS Y SEVEROS denominados 'Perfil Criminológico Ambiental', empleando un lenguaje policial avanzado, táctico y objetivo. " +
       "Fundamentas el análisis en la integración de Inteligencia de Fuentes Abiertas (OSINT), cartografía criminal y cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
       "Basa la terminología en la bibliografía institucional y fundamenta el nivel de severidad del entorno empíricamente.\n\n" +
-      "Reglas de redacción: (1) Desarrolla un análisis exhaustivo y pormenorizado. (2) Integra explícitamente los hallazgos de OSINT (DENUE, Google Places, Street View) y su impacto táctico. (3) FLEXIBILIDAD Y COLABORACIÓN: Toma la 'Hipótesis del Analista' como eje central válido. (4) Las recomendaciones deben ser claras y accionables. (5) El capítulo LÍNEAS CRONOLÓGICAS GEOESPACIALES debe ser predictivo, contundente, agresivo y prospectivo sobre la escalada criminal.\n\n" +
+      "REGLAS SUPREMAS DE SUBORDINACIÓN AL ANALISTA: (1) Tu análisis debe estar ESTRICTAMENTE ANCLADO a las contextualizaciones de las fotografías, al perímetro definido y a la Hipótesis del Analista. (2) FILTRADO QUIRÚRGICO: Procesa todo el OSINT (DENUE, Places, Noticias, Twitter, INEGI), pero DESCARTA cualquier dato que no tenga relación directa y causal con la hipótesis o los hallazgos en sitio. NO arrojes información estadística genérica o irrelevante. (3) Las recomendaciones deben ser operativas y derivadas lógicamente de la evidencia. (4) El capítulo LÍNEAS CRONOLÓGICAS GEOESPACIALES debe ser predictivo, contundente y prospectivo sobre la escalada criminal en ese punto exacto.\n\n" +
       `${marcoTeoriaReglas || ""}\n\n` + (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
   });
 }
@@ -519,9 +519,9 @@ ${visionResumen}
 ## ANÁLISIS MICRO-ECONÓMICO Y DE ATRACTORES (DENUE INEGI Y PLACES - BARRIDO A 1KM)
 ${irregularidadesTexto || "No se identificaron unidades económicas registradas ni atractores relevantes en el perímetro de 1 kilómetro."}
 
-[MANDATO TÁCTICO MULTIDIMENSIONAL Y FLEXIBILIDAD ANALÍTICA]:
-0. REGLA FUNDAMENTAL: LAS IMÁGENES INYECTADAS POR EL USUARIO NO SON LIMITATIVAS. Tómalas SOLO como punto de partida, pero DEBES APOYARTE DE MANERA AGRESIVA Y PROFUNDA en TODOS los medios proporcionados (OSINT, DENUE, Incidencia, Textos) para construir tu análisis. Se exige profundidad y amplitud.
-1. ${geoInstruction}\nCORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Explicación del Proyecto" y la "Hipótesis del Analista" con los datos de las APIs. Da peso y credibilidad a las inferencias humanas del analista de campo; usa la Inteligencia Artificial para enriquecerlas y sostenerlas, no para contradecirlas.
+[MANDATO TÁCTICO MULTIDIMENSIONAL Y FILTRADO ESTRICTO]:
+0. ANCLAJE ESTRATÉGICO AL ANALISTA: Las imágenes, sus comentarios y la "Hipótesis del Analista" son el NÚCLEO INAMOVIBLE de tu dictamen. Utiliza los datos masivos de OSINT, DENUE, Incidencia y Demografía ÚNICA Y EXCLUSIVAMENTE para validar, robustecer o contrastar operativamente lo que el investigador ya observó en campo. Si un dato del OSINT (ej. escuelas a 1km, tuits genéricos) no se relaciona con los riesgos del perímetro, IGNÓRALO por completo.
+1. ${geoInstruction}\nCORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Explicación del Proyecto" y la "Hipótesis del Analista" con los datos de las APIs. Usa la Inteligencia Artificial para enriquecer y sostener las inferencias humanas, eliminando cualquier "paja" informativa.
 2. TEORÍA DEL PATRÓN DELICTIVO: Clasifica los comercios en "Generadores de Delitos", "Atractores" o "Nodos de Miedo".
 3. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y DENUE. Argumenta cómo la irregularidad debilita el control social formal y fomenta "ventanas rotas".
 4. CORRELACIÓN ESTADÍSTICA: Cruza los giros comerciales con la estadística delictiva. (Ej. Robo de autopartes + talleres irregulares = mercados ilícitos).
@@ -554,7 +554,7 @@ INSTRUCCIÓN FINAL (FORMATO ESTRICTAMENTE EJECUTIVO):
 Redacta un PERFIL CRIMINOLÓGICO AMBIENTAL SUMAMENTE EJECUTIVO, DIRECTO Y CONCISO. 
 REGLA DE ORO: NO DEBE EXCEDER 2 CUARTILLAS. Utiliza viñetas (bullet points) para listar hallazgos de forma contundente y elimina cualquier texto de relleno o redundancia.
 
-Estructura OBLIGATORIAMENTE en estas 5 secciones breves:
+Estructura OBLIGATORIAMENTE en estas 5 secciones breves (EVITA arrojar kilos de datos estadísticos si no tienen una inferencia criminal directa para la zona):
 1. OBJETIVO Y CONTEXTO ESPACIAL (Máx. 1 párrafo cruzando INEGI y la hipótesis del analista).
 2. DETERIORO FÍSICO Y VENTANAS ROTAS (Viñetas con hallazgos clave de fotos y Vision API).
 3. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT y CSV, identificando riesgos directos).
