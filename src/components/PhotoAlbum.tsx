@@ -177,6 +177,7 @@ export function PhotoAlbum({
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
   const [isAnalysisContextAudited, setIsAnalysisContextAudited] = useState(false);
+  const [editingPhoto, setEditingPhoto] = useState<any>(null); // Estado para la ventana de edición
   // Validación mínima de fotografías según geometría
 const minimumPhotos = {
   individual: 1,
@@ -514,7 +515,7 @@ const hasMinimumPhotos =
           setError(
             isQuotaError
               ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
-              : "Error de comunicación con el Cuartel General. Reintente."
+              : `Error de Cuartel General: ${rawMessage}`
           );
         }
     } finally {
@@ -737,6 +738,30 @@ const hasMinimumPhotos =
           >
             Limpiar selección
           </button>
+          {!isReadOnly && projectId && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const { getDb } = await import("@/lib/firebase");
+                  const { doc, writeBatch } = await import("firebase/firestore");
+                  const firestore = getDb();
+                  const batch = writeBatch(firestore);
+                  album.forEach(p => {
+                    batch.update(doc(firestore, "projects", projectId, "photos", p.id), { tipo: p.tipo || "", comentario: p.comentario || "" });
+                  });
+                  await batch.commit();
+                  window.alert("Contextualizaciones guardadas correctamente.");
+                } catch (err) {
+                  console.error(err);
+                  window.alert("Error al guardar.");
+                }
+              }}
+              className="text-xs px-2 py-1 rounded border border-emerald-600 text-emerald-100 bg-emerald-900/40 hover:bg-emerald-800"
+            >
+              💾 Guardar Cambios
+            </button>
+          )}
           {!isReadOnly && (
             <button
               type="button"
@@ -864,17 +889,27 @@ const hasMinimumPhotos =
                       value={p.comentario || ""}
                       disabled={isReadOnly}
                       onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
-                      className={`w-full bg-slate-800 text-slate-200 border rounded-md p-2 pr-8 text-xs outline-none focus:border-sky-500 disabled:opacity-50 ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
+                      className={`w-full bg-slate-800 text-slate-200 border rounded-md p-2 pr-14 text-xs outline-none focus:border-sky-500 disabled:opacity-50 ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
                     />
                     {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={() => toggleDictation(`comentario-${p.id}`, (text) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: ((p.comentario || "") + " " + text).trim() }))}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 ${listeningField === 'comentario-'+p.id ? 'text-red-400 animate-pulse' : 'text-slate-400 hover:text-sky-400'}`}
-                        title="Dictar comentario por voz"
-                      >
-                        🎙️
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingPhoto(p)}
+                          className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-400 hover:text-sky-400"
+                          title="Editar en ventana ampliada"
+                        >
+                          🪟
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleDictation(`comentario-${p.id}`, (text) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: ((p.comentario || "") + " " + text).trim() }))}
+                          className={`absolute right-2 top-1/2 -translate-y-1/2 ${listeningField === 'comentario-'+p.id ? 'text-red-400 animate-pulse' : 'text-slate-400 hover:text-sky-400'}`}
+                          title="Dictar comentario por voz"
+                        >
+                          🎙️
+                        </button>
+                      </>
                     )}
                   </div>
 
@@ -1955,6 +1990,31 @@ const hasMinimumPhotos =
           })()}
         </div>
       </div>
+
+      {/* MODAL DE EDICIÓN DE VENTANA */}
+      {editingPhoto && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm print:hidden">
+          <div className="w-full max-w-lg bg-slate-900 border border-sky-600 rounded-xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-sky-200">Ventana de Edición de Contexto</h3>
+            <p className="text-xs text-slate-400">Edite la contextualización de la evidencia de manera cómoda.</p>
+            <textarea
+              spellCheck={true}
+              value={editingPhoto.comentario || ""}
+              onChange={(e) => {
+                updatePhotoMeta(editingPhoto.id, { tipo: editingPhoto.tipo, comentario: e.target.value });
+                setEditingPhoto({ ...editingPhoto, comentario: e.target.value });
+              }}
+              className="w-full min-h-[150px] bg-slate-800 text-slate-100 border border-slate-600 rounded-md p-4 text-sm focus:outline-none focus:border-sky-500 resize-y shadow-inner"
+              placeholder="Escribe el comentario detallado aquí..."
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditingPhoto(null)} className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition-colors shadow-md">
+                Aceptar y Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

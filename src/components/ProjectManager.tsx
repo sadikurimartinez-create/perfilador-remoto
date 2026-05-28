@@ -238,14 +238,29 @@ export function ProjectManager() {
   };
 
   const handleGuardarYSalir = async () => {
-    if (project && descripcionInput !== project.descripcion) {
+    if (project) {
       try {
         const firestore = getDb();
-        await updateDoc(doc(firestore, "projects", project.id), {
-          descripcion: descripcionInput
+        const { writeBatch } = await import("firebase/firestore");
+        const batch = writeBatch(firestore);
+
+        // 1. Guardar contexto general
+        if (descripcionInput !== project.descripcion) {
+          batch.update(doc(firestore, "projects", project.id), { descripcion: descripcionInput });
+        }
+
+        // 2. Guardar TODAS las contextualizaciones fotográficas del álbum
+        album.forEach((photo) => {
+          const photoRef = doc(firestore, "projects", project.id, "photos", photo.id);
+          batch.update(photoRef, {
+            tipo: photo.tipo || "",
+            comentario: photo.comentario || ""
+          });
         });
+
+        await batch.commit();
       } catch (err) {
-        console.error("Error al autoguardar contexto:", err);
+        console.error("Error al autoguardar contexto y álbum:", err);
       }
     }
     handleCerrarProyecto();
@@ -447,6 +462,26 @@ export function ProjectManager() {
               Validar y Cerrar
             </button>
           </>
+        )}
+        {/* BOTÓN EXTRA: HABILITAR EDICIÓN EN CUALQUIER ESTADO BLOQUEADO (ADMIN) */}
+        {isAdmin && (estadoProyecto === "EN REVISIÓN" || estadoProyecto === "EN AUDITORÍA" || estadoProyecto === "VALIDADO") && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (window.confirm("¿Seguro que deseas habilitar la edición manual de este expediente bloqueado?")) {
+                try {
+                  const firestore = getDb();
+                  await updateDoc(doc(firestore, "projects", project.id), { estado: "ABIERTO" });
+                  window.alert("Edición habilitada. El expediente ahora está abierto.");
+                } catch(err: any) {
+                  window.alert("Error: " + err.message);
+                }
+              }
+            }}
+            className="text-sm px-4 py-2 rounded-lg font-bold bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors shadow-md border border-slate-600"
+          >
+            🔓 Habilitar Edición
+          </button>
         )}
           <button
             type="button"
