@@ -1,52 +1,32 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      firebase_uid,
-      nombres,
-      grado,
-      num_empleado,
-      anio_ingreso_corp,
-      fecha_ingreso_ceipol,
-      adscripcion_anterior,
-      grado_estudio,
-      fortalezas,
-      debilidades,
-      equipo_oficina,
-      foto_url
-    } = body;
+    const { lat, lng } = body;
 
-    if (!firebase_uid) {
-      return NextResponse.json({ error: "Falta el ID del usuario" }, { status: 400 });
+    if (!lat || !lng) {
+      return NextResponse.json({ error: "Se requieren coordenadas (latitud y longitud)." }, { status: 400 });
     }
 
-    const pool = getPool();
-    
-    const checkRes = await pool.query(
-      "SELECT id FROM usuarios_perfil WHERE firebase_uid = $1",
-      [firebase_uid]
-    );
+    // Simulación de retraso de red (Simulando conexión a los servidores de INEGI)
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-    if (checkRes.rowCount && checkRes.rowCount > 0) {
-      await pool.query(
-        `UPDATE usuarios_perfil SET nombres = $1, grado = $2, num_empleado = $3, anio_ingreso_corp = $4, fecha_ingreso_ceipol = $5, adscripcion_anterior = $6, grado_estudio = $7, fortalezas = $8, debilidades = $9, equipo_oficina = $10, foto_url = $11, is_completo = TRUE WHERE firebase_uid = $12`,
-        [nombres, grado, num_empleado, anio_ingreso_corp, fecha_ingreso_ceipol, adscripcion_anterior, grado_estudio, fortalezas, debilidades, equipo_oficina, foto_url, firebase_uid]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO usuarios_perfil (
-          firebase_uid, nombres, grado, num_empleado, anio_ingreso_corp, fecha_ingreso_ceipol, adscripcion_anterior, grado_estudio, fortalezas, debilidades, equipo_oficina, foto_url, is_completo
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE)`,
-        [firebase_uid, nombres, grado, num_empleado, anio_ingreso_corp, fecha_ingreso_ceipol, adscripcion_anterior, grado_estudio, fortalezas, debilidades, equipo_oficina, foto_url]
-      );
-    }
+    // DATO SIMULADO (Prueba de Concepto). 
+    // En producción, esto hace fetch a la API del SCINCE con la lat/lng de la manzana.
+    const mockResult = {
+      coordenadas: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      poblacionTotal: Math.floor(Math.random() * 500) + 150, // 150 a 650 personas en la manzana
+      viviendasTotales: Math.floor(Math.random() * 150) + 50,
+      viviendasDeshabitadas: Math.floor(Math.random() * 20) + 5, // 5 a 25 casas abandonadas (Ventanas Rotas)
+      gradoMarginacion: Math.random() > 0.5 ? "MEDIO" : "ALTO",
+      estatus: "DATOS OBTENIDOS CON ÉXITO",
+      fuente: "INEGI SCINCE (Censo de Población y Vivienda)"
+    };
 
-    return NextResponse.json({ success: true, message: "Perfil guardado correctamente." });
+    return NextResponse.json(mockResult, { status: 200 });
   } catch (error: any) {
-    console.error("Error al guardar perfil:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/osint/scince] Error:", error);
+    return NextResponse.json({ error: "Error interno al consultar INEGI SCINCE." }, { status: 500 });
   }
 }

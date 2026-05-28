@@ -174,6 +174,17 @@ export function PhotoAlbum({
   const [docAuditScore, setDocAuditScore] = useState<number | null>(null);
   const [analysisAuditScore, setAnalysisAuditScore] = useState<number | null>(null);
 
+  // Estado para Consulta Vehicular OSINT
+  const [plateQuery, setPlateQuery] = useState("");
+  const [isCheckingPlate, setIsCheckingPlate] = useState(false);
+
+  // Estado para Consulta SAT OSINT (Art. 69-B)
+  const [satQuery, setSatQuery] = useState("");
+  const [isCheckingSat, setIsCheckingSat] = useState(false);
+
+  // Estado para Consulta INEGI SCINCE
+  const [isCheckingScince, setIsCheckingScince] = useState(false);
+
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
   const [isAnalysisContextAudited, setIsAnalysisContextAudited] = useState(false);
@@ -993,6 +1004,162 @@ const hasMinimumPhotos =
           </div>
         ));
       })()}
+
+      {/* MÓDULO DE CONSULTA VEHICULAR OSINT (CheckAuto / REPUVE) */}
+      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Consulta Vehicular (OSINT Automático)</h4>
+          <p className="text-xs text-slate-400">
+            Realice un barrido automatizado simulando la consulta pública de placas vehiculares detectadas en las fotos. El resultado se inyectará en la hipótesis.
+          </p>
+        </header>
+        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+          <input
+            type="text"
+            placeholder="Ingrese placa o NIV..."
+            value={plateQuery}
+            onChange={(e) => setPlateQuery(e.target.value.toUpperCase())}
+            disabled={isCheckingPlate || isReadOnly}
+            className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
+          />
+          <button
+            type="button"
+            disabled={!plateQuery.trim() || isCheckingPlate || isReadOnly}
+            onClick={async () => {
+              setIsCheckingPlate(true);
+              setError(null);
+              try {
+                const res = await fetch("/api/checkauto", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ placa: plateQuery.trim() })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}] Estatus recuperado del barrido: ${data.estatus}. Marca/Modelo: ${data.marca} ${data.modelo}. Observaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setPlateQuery("");
+                  setIsAnalysisContextAudited(false); // Forzar a reevaluar la hipótesis con la IA
+                  alert(`Búsqueda completada: ${data.estatus}. Resultado anexado a la Hipótesis del Analista.`);
+                } else {
+                  setError(data.error || "Error al consultar la placa.");
+                }
+              } catch (err) {
+                setError("Error de red al conectar con el módulo de barrido vehicular.");
+              } finally {
+                setIsCheckingPlate(false);
+              }
+            }}
+            className="w-full md:w-auto bg-sky-700 hover:bg-sky-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingPlate ? "Consultando Base de Datos..." : "🔍 Consultar y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
+
+      {/* MÓDULO DE INTELIGENCIA ECONÓMICA (SAT Art. 69-B) */}
+      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Inteligencia Económica (SAT - Art. 69B)</h4>
+          <p className="text-xs text-slate-400">
+            Consulte negocios detectados contra las listas negras de la SHCP/SAT. Identifique empresas fachada o posibles esquemas de lavado de dinero operando en el polígono.
+          </p>
+        </header>
+        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+          <input
+            type="text"
+            placeholder="Ingrese RFC o Razón Social..."
+            value={satQuery}
+            onChange={(e) => setSatQuery(e.target.value.toUpperCase())}
+            disabled={isCheckingSat || isReadOnly}
+            className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
+          />
+          <button
+            type="button"
+            disabled={!satQuery.trim() || isCheckingSat || isReadOnly}
+            onClick={async () => {
+              setIsCheckingSat(true);
+              setError(null);
+              try {
+                const res = await fetch("/api/osint/sat", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ rfc_o_nombre: satQuery.trim() })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  const newContext = `[INTELIGENCIA ECONÓMICA OSINT - Búsqueda SAT: ${data.busqueda}] Estatus Oficial: ${data.estatus}. Supuesto: ${data.supuesto}. Observaciones tácticas: Este establecimiento fue consultado en las Listas Negras (Art. 69-B CFF). Si aparece como EFOS, debe considerarse un mercado negro y atractor de riesgo grave de desorganización social para el entorno.`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setSatQuery("");
+                  setIsAnalysisContextAudited(false); // Forzar reevaluación por añadir riesgo
+                  alert(`Consulta finalizada: ${data.estatus}. Resultado integrado a la hipótesis.`);
+                } else {
+                  setError(data.error || "Error al consultar el SAT.");
+                }
+              } catch (err) {
+                setError("Error de red al conectar con el módulo SAT.");
+              } finally {
+                setIsCheckingSat(false);
+              }
+            }}
+            className="w-full md:w-auto bg-emerald-700 hover:bg-emerald-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingSat ? "Consultando SAT..." : "💰 Consultar SAT y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
+
+      {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) */}
+      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Demografía y Marginación (INEGI SCINCE)</h4>
+          <p className="text-xs text-slate-400">
+            Extrae datos sociodemográficos a nivel manzana/AGEB basados en el centro de las fotografías seleccionadas. Identifica viviendas deshabitadas y desorganización social.
+          </p>
+        </header>
+        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+          <p className="text-xs text-slate-300 flex-1">
+            {selectedIds.length > 0
+              ? `El barrido se calculará sobre el centroide de las ${selectedIds.length} fotos seleccionadas.`
+              : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
+          </p>
+          <button
+            type="button"
+            disabled={selectedIds.length === 0 || isCheckingScince || isReadOnly}
+            onClick={async () => {
+              setIsCheckingScince(true);
+              setError(null);
+              try {
+                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+                if (selectedPhotos.length === 0) {
+                  setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
+                  setIsCheckingScince(false);
+                  return;
+                }
+                const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
+                const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
+
+                const res = await fetch("/api/osint/scince", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lat: centerLat, lng: centerLng })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setIsAnalysisContextAudited(false); // Forzar reevaluación por la IA
+                  alert(`Consulta SCINCE finalizada. ${data.viviendasDeshabitadas} casas deshabitadas detectadas en la cuadra.`);
+                } else { setError(data.error || "Error al consultar INEGI SCINCE."); }
+              } catch (err) { setError("Error de red al conectar con SCINCE."); } 
+              finally { setIsCheckingScince(false); }
+            }}
+            className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingScince ? "Consultando INEGI..." : "📊 Consultar Cuadra y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
 
       {/* EVIDENCIAS ADICIONALES */}
       <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
