@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
-import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL } from "@/lib/geminiEnv";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 
 type RefineBody = {
   context: string;
@@ -108,7 +108,16 @@ Devuelve un objeto JSON estrictamente con este formato:
       return NextResponse.json({ score: 100, suggestions: cleanedContext + "\n\n(Nota: Auditoría no disponible por falta de GCP_PROJECT_ID)" });
     }
 
-    const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+    const authOptions = GCP_PRIVATE_KEY
+      ? {
+          credentials: {
+            client_email: GCP_CLIENT_EMAIL,
+            private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+          },
+        }
+      : undefined;
+
+    const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
     const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt);
     

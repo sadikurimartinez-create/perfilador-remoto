@@ -17,7 +17,7 @@ import { searchTelegram } from "@/utils/socialProviders";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
-import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL } from "@/lib/geminiEnv";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { buildSystemPrompt } from "@/lib/promptBuilder";
 
 
@@ -186,9 +186,19 @@ function getGeminiModel(
     throw new Error("Falta la variable de entorno GCP_PROJECT_ID para inicializar Vertex AI.");
   }
 
-  // Inicialización segura mediante IAM / Application Default Credentials
-  const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
-  
+  // Si estamos en Vercel, usamos las credenciales en texto. Si estamos en local, usará el archivo JSON.
+  const authOptions = GCP_PRIVATE_KEY
+    ? {
+        credentials: {
+          client_email: GCP_CLIENT_EMAIL,
+          private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+        },
+      }
+    : undefined;
+
+  // Inicialización segura
+  const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+
   return vertexAI.getGenerativeModel({
     model: GEMINI_MODEL,
     systemInstruction:

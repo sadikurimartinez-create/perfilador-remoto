@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
-import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL } from "@/lib/geminiEnv";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
 import { getPool } from "@/lib/db";
@@ -162,7 +162,16 @@ export async function GET() {
       });
     } else {
       try {
-        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+        const authOptions = GCP_PRIVATE_KEY
+          ? {
+              credentials: {
+                client_email: GCP_CLIENT_EMAIL,
+                private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+              },
+            }
+          : undefined;
+
+        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
         const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
         await model.generateContent("ping");
         services.push({

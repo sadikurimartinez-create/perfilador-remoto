@@ -1,9 +1,12 @@
 # CLAVES PARA MAPAS Y LUGARES (Requerido para que cargue el mapa y Google Places)
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA
 
-# CLAVES PARA LA INTELIGENCIA ARTIFICIAL (Requerido para generar el perfil criminológico)
-GEMINI_API_KEY=AIzaSyTuClaveDeGeminiRealAqui...
-NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyTuClaveDeGeminiRealAqui...
+# CLAVES PARA LA INTELIGENCIA ARTIFICIAL (Google Cloud Vertex AI)
+GCP_PROJECT_ID=perfil-remoto
+GCP_LOCATION=us-central1
+# Ruta absoluta al archivo JSON de la Service Account descargado desde Google Cloud Console
+# (Debes colocar el archivo JSON en la carpeta principal del proyecto)
+GOOGLE_APPLICATION_CREDENTIALS=./perfil-remoto-fa3fa74486fa.json
 
 # BASE DE DATOS (Requerido para la estadística e incidencia - PostgreSQL)
 # (Busca en tu archivo local la variable de conexión a tu base de datos)

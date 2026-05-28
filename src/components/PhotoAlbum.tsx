@@ -882,21 +882,20 @@ const hasMinimumPhotos =
                   
                   {/* Campo de comentarios (Obligatorio) - Visible en móvil y PC */}
                   <div className="relative w-full mt-2">
-                    <input
-                      type="text"
+                    <textarea
                       spellCheck={true}
                       placeholder="Comentario (Obligatorio)..."
                       value={p.comentario || ""}
                       disabled={isReadOnly}
                       onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
-                      className={`w-full bg-slate-800 text-slate-200 border rounded-md p-2 pr-14 text-xs outline-none focus:border-sky-500 disabled:opacity-50 ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
+                      className={`w-full bg-slate-800 text-slate-200 border rounded-md p-2 pr-14 text-xs outline-none focus:border-sky-500 disabled:opacity-50 resize-y min-h-[80px] ${!p.comentario?.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-700'}`}
                     />
                     {!isReadOnly && (
                       <>
                         <button
                           type="button"
                           onClick={() => setEditingPhoto(p)}
-                          className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-400 hover:text-sky-400"
+                          className="absolute right-8 top-2 text-slate-400 hover:text-sky-400"
                           title="Editar en ventana ampliada"
                         >
                           🪟
@@ -904,7 +903,7 @@ const hasMinimumPhotos =
                         <button
                           type="button"
                           onClick={() => toggleDictation(`comentario-${p.id}`, (text) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: ((p.comentario || "") + " " + text).trim() }))}
-                          className={`absolute right-2 top-1/2 -translate-y-1/2 ${listeningField === 'comentario-'+p.id ? 'text-red-400 animate-pulse' : 'text-slate-400 hover:text-sky-400'}`}
+                          className={`absolute right-2 top-2 ${listeningField === 'comentario-'+p.id ? 'text-red-400 animate-pulse' : 'text-slate-400 hover:text-sky-400'}`}
                           title="Dictar comentario por voz"
                         >
                           🎙️

@@ -295,8 +295,8 @@ export async function exportToWord(
             tmpImg.onload = () => resolve();
             tmpImg.onerror = () => reject(new Error("[exportToWord] Error en mapa"));
           });
-          // Al ser Horizontal (Landscape), podemos extender el ancho del mapa a 900
-          const MAP_MAX_WIDTH = 900;
+          // Al ser Vertical (Portrait), ajustamos el ancho del mapa a 600
+          const MAP_MAX_WIDTH = 600;
           const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
           const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
@@ -333,7 +333,7 @@ export async function exportToWord(
       })
     );
 
-    const WORD_MAX_WIDTH = 450; // Para el Grid 2x2
+    const WORD_MAX_WIDTH = 300; // Para el Grid 2x2 en formato Vertical
     const photoCells: TableCell[] = [];
 
     for (const url of attachedPhotos) {
@@ -447,7 +447,7 @@ export async function exportToWord(
         properties: {
           page: {
             size: {
-              orientation: PageOrientation.LANDSCAPE,
+              orientation: PageOrientation.PORTRAIT,
             },
           },
         },
