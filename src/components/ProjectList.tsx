@@ -13,6 +13,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
@@ -284,6 +285,21 @@ export function ProjectList() {
       delete (window as any).pendingProjectPhotos;
       console.error("Error creando proyecto:", err);
       alert("Error al crear expediente: " + err.message);
+    }
+  };
+
+  const handleReassignProject = async (projectId: string, currentOwner: string | undefined) => {
+    const newOwner = window.prompt("Administración: Ingrese el nombre de usuario al que desea asignar este expediente:", currentOwner || "");
+    if (newOwner !== null && newOwner.trim() !== "" && newOwner.trim() !== currentOwner) {
+      try {
+        const firestore = getDb();
+        await updateDoc(doc(firestore, "projects", projectId), {
+          createdBy: newOwner.trim()
+        });
+        window.alert(`Expediente reasignado exitosamente a ${newOwner.trim()}.`);
+      } catch (err: any) {
+        window.alert("Error al reasignar: " + err.message);
+      }
     }
   };
 
@@ -597,6 +613,16 @@ export function ProjectList() {
                         >
                           🗑️ Eliminar
                         </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => void handleReassignProject(p.id, p.createdBy)}
+                            className="p-2 rounded text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-900/30 transition-colors"
+                            title="Reasignar expediente a otro analista"
+                          >
+                            🔄 Reasignar
+                          </button>
                         )}
                         <button
                           type="button"

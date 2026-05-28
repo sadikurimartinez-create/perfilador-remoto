@@ -237,6 +237,20 @@ export function ProjectManager() {
     }
   };
 
+  const handleGuardarYSalir = async () => {
+    if (project && descripcionInput !== project.descripcion) {
+      try {
+        const firestore = getDb();
+        await updateDoc(doc(firestore, "projects", project.id), {
+          descripcion: descripcionInput
+        });
+      } catch (err) {
+        console.error("Error al autoguardar contexto:", err);
+      }
+    }
+    handleCerrarProyecto();
+  };
+
   if (!project) {
     return (
       <div className="space-y-6">
@@ -436,10 +450,10 @@ export function ProjectManager() {
         )}
           <button
             type="button"
-            onClick={handleCerrarProyecto}
+            onClick={handleGuardarYSalir}
             className="text-sm px-4 py-2 rounded-lg font-bold bg-slate-700 text-white hover:bg-slate-600 transition-colors shadow-md"
           >
-            Volver al Lobby
+            💾 Guardar y Salir
           </button>
         </div>
       </div>
