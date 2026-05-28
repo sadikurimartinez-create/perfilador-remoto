@@ -268,10 +268,16 @@ const hasMinimumPhotos =
     setError(null);
     try {
       const photosContext = selectedPhotos.map(p => `[${p.tipo}] ${p.comentario}`).join(" | ");
+      const minimalPhotos = selectedPhotos.map((p) => ({
+        lat: p.lat,
+        lng: p.lng,
+        tipo: p.tipo || "",
+        comentario: p.comentario || ""
+      }));
       const res = await fetch("/api/refine-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: photosContext, mode: "validate-photos", geometryType: project?.geometryType || "individual" })
+        body: JSON.stringify({ context: photosContext, photos: minimalPhotos, mode: "validate-photos", geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
       });
       const data = await res.json();
       if ((data.score ?? 0) < 80) {
@@ -1057,7 +1063,13 @@ const hasMinimumPhotos =
                   setDocAuditScore(null);
                   try {
                     const selected = album.filter((p) => selectedIds.includes(p.id));
-                    const minimalPhotos = selected.map((p) => ({ lat: p.lat, lng: p.lng }));
+                    const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
+                    const minimalPhotos = photosToUse.map((p) => ({
+                      lat: p.lat,
+                      lng: p.lng,
+                      tipo: p.tipo || "",
+                      comentario: p.comentario || ""
+                    }));
                     const res = await fetch("/api/refine-context", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -1160,11 +1172,20 @@ const hasMinimumPhotos =
                       setIsAuditingDoc(true);
                       setError(null);
                       try {
+                        const selected = album.filter((p) => selectedIds.includes(p.id));
+                        const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
+                        const minimalPhotos = photosToUse.map((p) => ({
+                          lat: p.lat,
+                          lng: p.lng,
+                          tipo: p.tipo || "",
+                          comentario: p.comentario || ""
+                        }));
                         const res = await fetch("/api/refine-context", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ 
                             context: docSuggestions + "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)", 
+                            photos: minimalPhotos,
                             mode: "audit",
                             geometryType: project?.geometryType || "individual",
                             projectDescription: project?.descripcion || "",
@@ -1675,6 +1696,8 @@ const hasMinimumPhotos =
                         const minimalPhotos = selected.map((p) => ({
                           lat: p.lat,
                           lng: p.lng,
+                          tipo: p.tipo || "",
+                          comentario: p.comentario || ""
                         }));
                         
                         let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
