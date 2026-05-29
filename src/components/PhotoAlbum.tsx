@@ -1621,6 +1621,7 @@ const hasMinimumPhotos =
                   <div className="w-full text-xs font-semibold text-slate-300 mb-1">Mapas adjuntos al reporte Word:</div>
                   {mapSnapshots.map((snap, idx) => (
                     <div key={idx} className="relative group rounded border border-sky-500 overflow-hidden w-28 h-20 bg-black">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={snap.dataUrl} alt={snap.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                       <button onClick={() => setMapSnapshots(prev => prev.filter((_, i) => i !== idx))} className="absolute top-0 right-0 bg-red-600 text-white text-[10px] px-1.5 py-0.5 hover:bg-red-500 rounded-bl" title="Quitar mapa del reporte">×</button>
                       <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center truncate px-1 py-0.5">{snap.title.replace("Mapa de ", "")}</div>
@@ -1957,12 +1958,14 @@ const hasMinimumPhotos =
           {/* PÁGINA 1: CARÁTULA */}
           <div className="w-full h-[1123px] flex flex-col p-10 bg-white">
             <div className="flex justify-between items-center border-b-2 border-slate-800 pb-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-20 object-contain" />
               <div className="flex-1 text-center px-4">
                 <h1 className="text-xl font-black text-slate-900 tracking-wide">PERFIL CRIMINOLÓGICO AMBIENTAL</h1>
                 <h2 className="text-sm font-bold text-slate-700 mt-1">CENTRO DE ESTUDIOS Y POLÍTICA CRIMINAL</h2>
                 <h3 className="text-[11px] font-semibold text-slate-500 mt-0.5">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO</h3>
               </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logos/logo-ssp.png" alt="SSP" className="h-20 object-contain" />
             </div>
             <div className="flex-1 flex flex-col justify-center items-center text-center">
@@ -2032,6 +2035,7 @@ const hasMinimumPhotos =
                         <div key={i} className="flex-1 border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden">
                           <h4 className="text-xl font-bold text-[#0D2B52] text-center mb-3 uppercase tracking-wider border-b-2 border-slate-300 pb-2">{snap.title}</h4>
                           <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
                           </div>
                         </div>
@@ -2066,6 +2070,7 @@ const hasMinimumPhotos =
                     {selectedPhotos.map(p => (
                       <div key={p.id} className="border border-slate-300 rounded-lg p-3 mb-6 break-inside-avoid bg-slate-50">
                         <div className="relative w-full h-48 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
                             <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">SSPE-CEIPOL</span>

@@ -517,7 +517,7 @@ export function ProjectManager() {
       <div className="card p-4 border-l-4 border-red-500 bg-red-950/20">
         <h3 className="text-red-400 font-bold text-sm">Expediente Devuelto</h3>
         <p className="text-sm text-slate-300 mt-1"><span className="font-semibold">Comentarios de auditoría ({(project as any).devueltoPor}):</span> {(project as any).comentariosAuditoria}</p>
-        <p className="text-xs text-red-300 mt-2">Por favor, subsana las observaciones y vuelve a hacer clic en "Enviar a Revisión".</p>
+        <p className="text-xs text-red-300 mt-2">Por favor, subsana las observaciones y vuelve a hacer clic en &quot;Enviar a Revisión&quot;.</p>
       </div>
     )}
     {estadoProyecto === "EN REVISIÓN" && (

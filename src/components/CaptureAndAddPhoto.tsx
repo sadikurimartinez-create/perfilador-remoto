@@ -277,7 +277,7 @@ export function CaptureAndAddPhoto() {
             Acción Requerida: Ubicación Manual ({manualQueue.length} pendiente(s))
           </p>
           <p className="text-xs text-slate-400">
-            La imagen "{manualQueue[0].name}" no tiene GPS. Ingrese la latitud y longitud.
+            La imagen &quot;{manualQueue[0].name}&quot; no tiene GPS. Ingrese la latitud y longitud.
           </p>
           <div className="flex flex-col gap-3">
             <input type="number" placeholder="Latitud (ej. 21.8853)" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />

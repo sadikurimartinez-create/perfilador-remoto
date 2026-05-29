@@ -513,7 +513,7 @@ export function ProjectList() {
             <h3 className="text-red-400 font-bold text-sm">¡Acción Requerida! Tienes {devueltosPropios.length} expediente(s) devuelto(s)</h3>
           </div>
           <p className="text-xs text-red-200 ml-8">
-            Tienes observaciones de auditoría pendientes. Abre el expediente con la etiqueta roja "Devuelto", lee los comentarios y subsánalos.
+            Tienes observaciones de auditoría pendientes. Abre el expediente con la etiqueta roja &quot;Devuelto&quot;, lee los comentarios y subsánalos.
           </p>
         </div>
       )}
