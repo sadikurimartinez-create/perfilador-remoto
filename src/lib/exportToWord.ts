@@ -498,6 +498,7 @@ export async function exportToWord(
       })
     );
 
+    const mapCellsData: any[] = [];
     for (const snapshot of mapSnapshots) {
       if (snapshot.dataUrl && snapshot.dataUrl.startsWith("data:image")) {
         try {
@@ -507,43 +508,55 @@ export async function exportToWord(
             tmpImg.onload = () => resolve();
             tmpImg.onerror = () => reject(new Error("[exportToWord] Error en mapa"));
           });
-          // Ajuste de ancho del mapa al 85% de la página
-          const MAP_MAX_WIDTH = 550;
+          // Ajuste para matriz 2x2 (Mitad del ancho de la página)
+          const MAP_MAX_WIDTH = 270;
           const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
           const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
           const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
-          mapElements.push(
+          mapCellsData.push({snapshot, mapBuffer, width: MAP_MAX_WIDTH, height: proportionalHeight });
+        } catch (e) { console.warn("Error en mapa:", e); }
+      }
+    }
+
+    const mapRows: TableRow[] = [];
+    for (let i = 0; i < mapCellsData.length; i += 2) {
+      const m1 = mapCellsData[i];
+      const m2 = mapCellsData[i + 1];
+
+      const createMapCell = (m: any) => {
+        if (!m) return new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } } });
+        return new TableCell({
+          width: { size: 50, type: WidthType.PERCENTAGE },
+          margins: { top: 100, bottom: 200, left: 100, right: 100 },
+          borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } },
+          children: [
             new Paragraph({
-              heading: HeadingLevel.HEADING_2,
-              children: [new TextRun({ text: snapshot.title.toUpperCase(), bold: true, size: 26, color: "0D2B52", font: "Calibri" })],
-              spacing: { before: 400, after: 200 }
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
+              spacing: { after: 120 }
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [
-                new ImageRun({
-                  ...({ data: mapBuffer, transformation: { width: MAP_MAX_WIDTH, height: proportionalHeight } } as any),
-                }),
-              ],
-              border: {
-                top: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
-                bottom: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
-                left: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
-                right: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
-              }
+              children: [new ImageRun({ data: m.mapBuffer, transformation: { width: m.width, height: m.height } } as any)]
             }),
             new Paragraph({
-               alignment: AlignmentType.CENTER,
-               children: [
-                   new TextRun({ text: "Fuente: Plataforma de Geointeligencia SAI", size: 18, color: "5B6573", bold: true, font: "Calibri" }),
-                   new TextRun({ text: ` | Fecha: ${new Date().toLocaleDateString("es-MX")}`, size: 18, color: "5B6573", font: "Calibri" })
-               ],
-               spacing: { before: 60, after: 400 }
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
+              spacing: { before: 60, after: 200 }
             })
-          );
-        } catch (e) { console.warn("Error en mapa:", e); }
-      }
+          ]
+        });
+      };
+      mapRows.push(new TableRow({ children: [createMapCell(m1), createMapCell(m2)] }));
+    }
+
+    if (mapRows.length > 0) {
+      mapElements.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: mapRows,
+        borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
+      }));
     }
   }
 
@@ -559,6 +572,7 @@ export async function exportToWord(
       })
     );
 
+    const photoCellsData: any[] = [];
     for (let i = 0; i < attachedPhotos.length; i++) {
       const item = attachedPhotos[i];
       const url = typeof item === "string" ? item : item.url;
@@ -578,52 +592,63 @@ export async function exportToWord(
               )
             );
         });
-        const WORD_MAX_WIDTH = 450;
+        const WORD_MAX_WIDTH = 270;
         const originalWidth = img.width || img.naturalWidth || 640;
         const originalHeight = img.height || img.naturalHeight || 480;
         const ratio = originalHeight / originalWidth || 1;
         const proportionalHeight = Math.floor(WORD_MAX_WIDTH * ratio);
 
-        photoElements.push(
-          new Paragraph({
-             alignment: AlignmentType.CENTER,
-             children: [
-                new ImageRun({
-                   data: stampedBuffer,
-                   transformation: { width: WORD_MAX_WIDTH, height: proportionalHeight }
-                })
-             ]
-          }),
-          new Paragraph({
-             alignment: AlignmentType.CENTER,
-             children: [
-                new TextRun({ text: `Imagen ${i + 1} - ${tipo}`, bold: true, size: 22, color: "0D2B52", font: "Calibri" })
-             ],
-             spacing: { before: 120 }
-          }),
-          ...(comentario ? [
-            new Paragraph({
-               alignment: AlignmentType.JUSTIFIED,
-               children: [
-                  new TextRun({ text: comentario, size: 20, font: "Calibri", color: "222222" })
-               ],
-               spacing: { before: 60, after: 60 }
-            })
-          ] : []),
-          new Paragraph({
-             alignment: AlignmentType.CENTER,
-             children: [
-                new TextRun({ text: `Fuente: Trabajo de Campo | Fecha: ${new Date().toLocaleDateString("es-MX")}`, size: 18, color: "5B6573", font: "Calibri" })
-             ],
-             spacing: { after: 600 }
-          })
-        );
-        if ((i + 1) % 2 === 0 && i !== attachedPhotos.length - 1) {
-            photoElements.push(new Paragraph({ pageBreakBefore: true }));
-        }
+        photoCellsData.push({ stampedBuffer, tipo, comentario, width: WORD_MAX_WIDTH, height: proportionalHeight, index: i + 1 });
       } catch (err) {
         console.warn("Error procesando foto:", url, err);
       }
+    }
+
+    const photoRows: TableRow[] = [];
+    for (let i = 0; i < photoCellsData.length; i += 2) {
+      const p1 = photoCellsData[i];
+      const p2 = photoCellsData[i + 1];
+
+      const createPhotoCell = (p: any) => {
+        if (!p) return new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } } });
+        return new TableCell({
+          width: { size: 50, type: WidthType.PERCENTAGE },
+          margins: { top: 100, bottom: 200, left: 100, right: 100 },
+          borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new ImageRun({ data: p.stampedBuffer, transformation: { width: p.width, height: p.height } } as any)]
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: `Imagen ${p.index} - ${p.tipo}`, bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
+              spacing: { before: 80 }
+            }),
+            ...(p.comentario ? [
+              new Paragraph({
+                alignment: AlignmentType.JUSTIFIED,
+                children: [new TextRun({ text: p.comentario, size: 16, font: "Calibri", color: "222222" })],
+                spacing: { before: 40, after: 40 }
+              })
+            ] : []),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: `Trabajo de Campo | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
+              spacing: { after: 200 }
+            })
+          ]
+        });
+      };
+      photoRows.push(new TableRow({ children: [createPhotoCell(p1), createPhotoCell(p2)] }));
+    }
+
+    if (photoRows.length > 0) {
+      photoElements.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: photoRows,
+        borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
+      }));
     }
   }
 

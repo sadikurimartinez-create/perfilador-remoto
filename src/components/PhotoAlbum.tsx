@@ -512,8 +512,7 @@ const hasMinimumPhotos =
           pois: data.meta?.pois || currentAnalysisResult?.pois || [],
           inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
           tacticalStreetViews: data.meta?.tacticalStreetViews || (currentAnalysisResult as any)?.tacticalStreetViews,
-          
-          
+          scinceDemographics: data.meta?.scinceDemographics || (currentAnalysisResult as any)?.scinceDemographics,
         } as any);
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
@@ -2054,7 +2053,7 @@ const hasMinimumPhotos =
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
               const chunks = [];
-              for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
+              for (let i = 0; i < items.length; i += 4) chunks.push(items.slice(i, i + 4));
 
               return (
                 <>
@@ -2063,16 +2062,18 @@ const hasMinimumPhotos =
                     <div className="w-32 h-2 bg-[#D96A00]"></div>
                   </div>
                   {chunks.map((chunk, cIdx) => (
-                    <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white gap-8">
-                      {chunk.map((snap, i) => (
-                        <div key={i} className="flex-1 border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden">
-                          <h4 className="text-xl font-bold text-[#0D2B52] text-center mb-3 uppercase tracking-wider border-b-2 border-slate-300 pb-2">{snap.title}</h4>
-                          <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
+                    <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
+                      <div className="grid grid-cols-2 gap-8 h-full">
+                        {chunk.map((snap, i) => (
+                          <div key={i} className="border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden h-full">
+                            <h4 className="text-sm font-bold text-[#0D2B52] text-center mb-2 uppercase tracking-wider border-b-2 border-slate-300 pb-1">{snap.title}</h4>
+                            <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
+                              <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </>
@@ -2092,29 +2093,36 @@ const hasMinimumPhotos =
             const selectedPhotos = album.filter(p => selectedIds.includes(p.id));
             if (selectedPhotos.length === 0) return null;
 
+            const photoChunks = [];
+            for (let i = 0; i < selectedPhotos.length; i += 4) {
+              photoChunks.push(selectedPhotos.slice(i, i + 4));
+            }
+
             return (
               <>
                 <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-slate-800 text-white">
                   <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">Anexo Fotográfico</h1>
                   <div className="w-32 h-2 bg-sky-500"></div>
                 </div>
-                <div className="html2pdf__page-break p-10 bg-white">
-                  <div className="columns-2 gap-8">
-                    {selectedPhotos.map(p => (
-                      <div key={p.id} className="border border-slate-300 rounded-lg p-3 mb-6 break-inside-avoid bg-slate-50">
-                        <div className="relative w-full h-48 mb-2 rounded border border-slate-200 overflow-hidden bg-black">
+                {photoChunks.map((chunk, idx) => (
+                  <div key={idx} className="html2pdf__page-break w-full h-[1123px] p-10 bg-white flex flex-col">
+                    <div className="grid grid-cols-2 gap-6 h-full">
+                      {chunk.map(p => (
+                        <div key={p.id} className="border border-slate-300 rounded-lg p-3 flex flex-col bg-slate-50 h-full max-h-[500px]">
+                          <div className="relative w-full flex-1 mb-2 rounded border border-slate-200 overflow-hidden bg-black min-h-[200px]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
-                            <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">SSPE-CEIPOL</span>
+                              <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                                <span className="text-white/40 font-bold text-2xl -rotate-45 select-none tracking-widest drop-shadow-lg">SSPE-CEIPOL</span>
+                              </div>
+                            </div>
+                            <p className="text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200 pb-1 mb-1 shrink-0">{p.tipo || "Evidencia"}</p>
+                            <p className="text-xs text-slate-800 leading-snug overflow-hidden line-clamp-6 shrink-0">{p.comentario || "Sin comentario."}</p>
                           </div>
-                        </div>
-                        <p className="text-xs font-bold text-slate-600">{p.tipo || "Evidencia"}</p>
-                        <p className="text-sm text-slate-800 mt-1 leading-tight">{p.comentario || "Sin comentario."}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ))}
               </>
             )
           })()}
