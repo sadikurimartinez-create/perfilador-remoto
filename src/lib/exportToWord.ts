@@ -225,7 +225,7 @@ async function parseMarkdownToParagraphs(text: string): Promise<Paragraph[]> {
 export async function exportToWord(
   content: string,
   projectName: string,
-  attachedPhotos?: string[],
+  attachedPhotos?: ({ url: string; tipo?: string; comentario?: string } | string)[],
   riskLevel?: "bajo" | "medio" | "alto",
   mapSnapshots?: { title: string; dataUrl: string }[]
 ) {
@@ -378,7 +378,10 @@ export async function exportToWord(
     );
 
     for (let i = 0; i < attachedPhotos.length; i++) {
-      const url = attachedPhotos[i];
+      const item = attachedPhotos[i];
+      const url = typeof item === "string" ? item : item.url;
+      const tipo = typeof item === "string" ? "Evidencia Táctica" : (item.tipo || "Evidencia Táctica");
+      const comentario = typeof item === "string" ? "" : (item.comentario || "Sin comentario.");
       try {
         const stampedBuffer = await applyWatermarkForWord(url);
         // Reconstruir un objeto Image para conocer el aspect ratio
@@ -412,10 +415,19 @@ export async function exportToWord(
           new Paragraph({
              alignment: AlignmentType.CENTER,
              children: [
-                new TextRun({ text: `Imagen ${i + 1} - Evidencia Táctica`, bold: true, size: 22, color: "0D2B52", font: "Calibri" })
+                new TextRun({ text: `Imagen ${i + 1} - ${tipo}`, bold: true, size: 22, color: "0D2B52", font: "Calibri" })
              ],
              spacing: { before: 120 }
           }),
+          ...(comentario ? [
+            new Paragraph({
+               alignment: AlignmentType.JUSTIFIED,
+               children: [
+                  new TextRun({ text: comentario, size: 20, font: "Calibri", color: "222222" })
+               ],
+               spacing: { before: 60, after: 60 }
+            })
+          ] : []),
           new Paragraph({
              alignment: AlignmentType.CENTER,
              children: [

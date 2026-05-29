@@ -621,18 +621,22 @@ const hasMinimumPhotos =
     const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
 
     const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
-    const photoUrls: string[] = [];
+    const photosToExportData: { url: string; tipo: string; comentario: string }[] = [];
 
     for (const p of photosToExport) {
       const burnedUrl = await burnGpsOnImage(p.previewUrl as string);
-      photoUrls.push(burnedUrl);
+      photosToExportData.push({
+        url: burnedUrl,
+        tipo: p.tipo || "Evidencia Táctica",
+        comentario: p.comentario || "Sin comentario."
+      });
     }
 
     try {
       await exportToWord(
         content,
         "Dictamen_criminologico_ambiental",
-        photoUrls.length > 0 ? photoUrls : undefined,
+        photosToExportData.length > 0 ? photosToExportData : undefined,
         profileRiskLevel ?? undefined,
         sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined
       );
