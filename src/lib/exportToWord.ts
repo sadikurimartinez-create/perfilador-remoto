@@ -544,8 +544,12 @@ export async function exportToWord(
                 spacing: { before: 200 },
                 children: [
                   new TextRun({ text: new Date().toLocaleDateString("es-MX"), color: "5B6573", size: 18, font: "Calibri" }),
-                  new TextRun({ text: "\tPágina ", color: "5B6573", size: 18, font: "Calibri" }),
-                  new PageNumber(),
+                  new TextRun({ 
+                    children: ["\tPágina ", PageNumber.CURRENT || "1"], 
+                    color: "5B6573", 
+                    size: 18, 
+                    font: "Calibri" 
+                  }),
                   new TextRun({ text: `\tEXP: ${safeName}`, color: "5B6573", size: 18, font: "Calibri" }),
                 ],
               }),
