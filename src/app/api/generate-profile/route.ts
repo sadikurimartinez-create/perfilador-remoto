@@ -664,9 +664,9 @@ export async function POST(req: Request) {
       radiusMeters
     );
 
-    const inegiPromise = geocodingPromise.then((geo) => getInegiDemographics(geo.municipio, geo.estado));
-    const xOsintPromise = geocodingPromise.then((geo) => searchXTweets(geo.colonia, geo.municipio));
-    const newsOsintPromise = geocodingPromise.then((geo) => searchNewsOsint(geo.colonia, geo.municipio, geo.estado));
+  const inegiPromise = geocodingPromise.then((geo) => getInegiDemographics(geo.municipio || "", geo.estado || ""));
+  const xOsintPromise = geocodingPromise.then((geo) => searchXTweets(geo.colonia || "", geo.municipio || ""));
+  const newsOsintPromise = geocodingPromise.then((geo) => searchNewsOsint(geo.colonia || "", geo.municipio || "", geo.estado || ""));
     const telegramOsintPromise = geocodingPromise.then((geo) => searchTelegram(geo.colonia || geo.municipio || ""));
 
     const bibliographyPromise = readBibliographyContext();
