@@ -473,6 +473,13 @@ function buildPromptForGemini(params: {
     ? `\n## EXPLICACIÓN DEL PROYECTO (DICTADO DE VOZ - DIRECTRIZ OBLIGATORIA E INELUDIBLE)\n"${projectDescription}"\nESTA EXPLICACIÓN Y LAS CONTEXTUALIZACIONES SON TU PUNTO DE PARTIDA OBLIGATORIO. TODO TU ANÁLISIS Y SUGERENCIAS DEBEN ESTAR ENFOCADAS EN ESTOS PARÁMETROS.\n`
     : "";
 
+  let geoDemographicInstruction = "Se debe establecer y declarar que la información socio-demográfica corresponde estrictamente al interior del Polígono seleccionado.";
+  if (geometryType === "individual") {
+    geoDemographicInstruction = "Con independencia del radio seleccionado por el analista, se debe establecer y declarar explícitamente que la información socio-demográfica corresponde a un radio de 1.5 kms con respecto al nodo.";
+  } else if (geometryType === "lineal") {
+    geoDemographicInstruction = "Con independencia del radio seleccionado por el analista, se debe establecer y declarar explícitamente que la información socio-demográfica corresponde a un radio de 1.5 kms con respecto al corredor.";
+  }
+
   const lugaresAcechoTexto = tacticalStreetViews && tacticalStreetViews.length > 0
     ? `\n## ANÁLISIS DE STREET VIEW Y LUGARES DE ACECHO\nSe utilizaron coordenadas y Google Street View con Vision API para ubicar rutas de acceso/escape y lugares de acecho en los principales atractores:\n` +
       (tacticalStreetViews || []).map((sv: any) => `- ${sv.name} (${sv.category}): Etiquetas de vulnerabilidad detectadas: ${sv.vision?.etiquetasRelevantes?.join(", ") || "Ninguna"}.`).join("\n") +
@@ -554,12 +561,19 @@ INSTRUCCIÓN FINAL (FORMATO ESTRICTAMENTE EJECUTIVO):
 Redacta un PERFIL CRIMINOLÓGICO AMBIENTAL SUMAMENTE EJECUTIVO, DIRECTO Y CONCISO. 
 REGLA DE ORO: NO DEBE EXCEDER 2 CUARTILLAS. Utiliza viñetas (bullet points) para listar hallazgos de forma contundente y elimina cualquier texto de relleno o redundancia.
 
-Estructura OBLIGATORIAMENTE en estas 5 secciones breves (EVITA arrojar kilos de datos estadísticos si no tienen una inferencia criminal directa para la zona):
-1. OBJETIVO Y CONTEXTO ESPACIAL (Máx. 1 párrafo cruzando INEGI y la hipótesis del analista).
-2. DETERIORO FÍSICO Y VENTANAS ROTAS (Viñetas con hallazgos clave de fotos y Vision API).
-3. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT y CSV, identificando riesgos directos).
-4. LÍNEAS CRONOLÓGICAS GEOESPACIALES (Información predictiva implacable y muy puntual: establece clara y circunstanciadamente el escalamiento de los fenómenos criminales, su continuidad espacial, la proyección de riesgos inminentes y tu interpretación prospectiva).
-5. CONCLUSIONES TÁCTICAS (Riesgo a 6 meses expuesto en puntos de acción y recomendaciones operativas directas).
+Para la SÍNTESIS INICIAL de tu reporte, debes OBLIGATORIAMENTE incluir las siguientes 3 precisiones en este orden exacto al inicio de tu dictamen, adaptando los textos guía al contexto:
+1. EXPLICACIÓN DEL ANÁLISIS: Redacta textualmente: "Se llevó a cabo un trabajo de geo inteligencia sobre el [nodo / polígono / corredor] ubicado en [Dirección / Colonia]..."
+2. SÍNTESIS DE RIESGO: Redacta textualmente: "El [nodo / polígono / corredor] presenta un nivel de riesgo [Bajo/Medio/Alto] ya que..." (Justifica brevemente basado en los datos).
+3. INFORMACIÓN PREDICTIVA INICIAL: Redacta textualmente: "Como resultado del análisis se concluye que en un lapso de [X] meses la incidencia delictiva del delito de [X] puede aumentar / las riñas pueden intensificarse..."
+
+Después de estas 3 precisiones iniciales, estructura el resto del documento OBLIGATORIAMENTE en estas secciones breves (EVITA arrojar kilos de datos estadísticos si no tienen una inferencia criminal directa para la zona):
+
+1. INFORMACIÓN SOCIO-DEMOGRÁFICA: Obligatoriamente debes redactar este capitulado analizando los datos de INEGI SCINCE. REGLA: ${geoDemographicInstruction} (Menciona esto expresamente al iniciar el capítulo).
+2. ANÁLISIS DEL CONTEXTO ESPACIAL (Máx. 1 párrafo integrando la información demográfica con la hipótesis del analista).
+3. DETERIORO FÍSICO Y VENTANAS ROTAS (Viñetas con hallazgos clave de fotos y Vision API).
+4. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT y CSV, identificando riesgos directos).
+5. LÍNEAS CRONOLÓGICAS GEOESPACIALES (Profundización de la información predictiva: establece clara y circunstanciadamente el escalamiento de los fenómenos criminales, su continuidad espacial y la proyección de riesgos inminentes).
+6. CONCLUSIONES TÁCTICAS (Riesgo a 6 meses expuesto en puntos de acción y recomendaciones operativas directas).
 `.trim();
 
   return prompt;

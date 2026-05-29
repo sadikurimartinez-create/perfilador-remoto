@@ -12,12 +12,15 @@ import {
   Header,
   Footer,
   PageNumber,
+  NumberOfPages,
   Table,
   TableRow,
   TableCell,
   BorderStyle,
   WidthType,
   PageOrientation,
+  ShadingType,
+  TabStopType,
 } from "docx";
 import { saveAs } from "file-saver";
 
@@ -148,6 +151,7 @@ async function parseMarkdownToParagraphs(text: string): Promise<Paragraph[]> {
   const lines = text.split(/\r?\n/);
   const paragraphs: Paragraph[] = [];
   const urlRegex = /(https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\s\)]+)/g;
+      let inInfoBox = false;
 
   for (let line of lines) {
     if (!line.trim()) {
@@ -184,20 +188,40 @@ async function parseMarkdownToParagraphs(text: string): Promise<Paragraph[]> {
         const bParts = part.split(/(\*\*.*?\*\*)/g);
         for (const bp of bParts) {
           if (bp.startsWith("**") && bp.endsWith("**")) {
-            runs.push(new TextRun({ text: bp.slice(2, -2), bold: true, size: 22, font: "Arial" }));
+                runs.push(new TextRun({ text: bp.slice(2, -2), bold: true, size: 22, font: "Calibri", color: "222222" }));
           } else if (bp) {
-            runs.push(new TextRun({ text: bp, size: 22, font: "Arial" }));
+                runs.push(new TextRun({ text: bp, size: 22, font: "Calibri", color: "222222" }));
           }
         }
       }
     }
 
     if (headingLevel) {
-      paragraphs.push(new Paragraph({ children: runs, heading: headingLevel, spacing: { before: 240, after: 120 } }));
-    } else if (isBullet) {
-      paragraphs.push(new Paragraph({ children: runs, bullet: { level: 0 }, spacing: { before: 120, after: 120 }, alignment: AlignmentType.JUSTIFIED }));
+          const upperLine = cleanLine.toUpperCase();
+          inInfoBox = upperLine.includes("CONCLUSIONES") || upperLine.includes("HALLAZGOS") || upperLine.includes("PREDICTIVA") || upperLine.includes("RECOMENDACION");
+          paragraphs.push(new Paragraph({ children: runs, heading: headingLevel }));
     } else {
-      paragraphs.push(new Paragraph({ children: runs, spacing: { before: 120, after: 120 }, alignment: AlignmentType.JUSTIFIED }));
+          const paragraphOpts: any = {
+            children: runs,
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { before: 80, after: 80 }
+          };
+          
+          if (inInfoBox && !isBullet && !line.includes("https://maps")) {
+            paragraphOpts.shading = { type: ShadingType.CLEAR, fill: "F2F4F7" };
+            paragraphOpts.border = {
+              top: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
+              bottom: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
+              left: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
+              right: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
+            };
+          }
+          
+          if (isBullet) {
+            paragraphOpts.numbering = { reference: "custom-bullets", level: 0 };
+          }
+          
+          paragraphs.push(new Paragraph(paragraphOpts));
     }
   }
   return paragraphs;
@@ -210,6 +234,8 @@ export async function exportToWord(
   riskLevel?: "bajo" | "medio" | "alto",
   mapSnapshots?: { title: string; dataUrl: string }[]
 ) {
+  const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
+
   // 1. CARGA DE LOGOS
   const sspLogoBuffer = await fetchLocalImageBuffer("/logos/logo-ssp.png");
   const ceipolLogoBuffer = await fetchLocalImageBuffer("/logos/logo-ceipol.png");
@@ -224,51 +250,60 @@ export async function exportToWord(
   }
 
   // 2. CONSTRUCCIÓN DE LA PORTADA
-  const coverPageParagraphs: Paragraph[] = [
-    new Paragraph({ spacing: { before: 1000 } }),
-  ];
-
+  const coverPageParagraphs: Paragraph[] = [];
   if (logoChildren.length > 0) {
     coverPageParagraphs.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         children: logoChildren,
+        spacing: { before: 400, after: 1000 }
+      })
+    );
+  } else {
+    coverPageParagraphs.push(new Paragraph({ spacing: { before: 1400 } }));
+  }
+
+  coverPageParagraphs.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "DICTAMEN TÁCTICO", size: 28, color: "0D2B52", bold: true, font: "Calibri" })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "PERFIL CRIMINOLÓGICO AMBIENTAL", size: 40, color: "0D2B52", bold: true, font: "Calibri" })],
+      spacing: { before: 120, after: 1000 }
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: `EXPEDIENTE: ${projectName.toUpperCase()}`, size: 24, font: "Calibri", color: "222222" })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: `FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-MX")}`, size: 24, font: "Calibri", color: "222222" })],
+      spacing: { after: 1000 }
+    })
+  );
+
+  let riskColor = "B22222"; // CRÍTICO
+  if (riskLevel === "bajo") riskColor = "2E8B57";
+  else if (riskLevel === "medio") riskColor = "E6A700";
+  else if (riskLevel === "alto") riskColor = "D96A00";
+
+  if (riskLevel) {
+    coverPageParagraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: `NIVEL DE RIESGO: ${riskLevel.toUpperCase()}`, bold: true, size: 32, font: "Calibri", color: riskColor })],
+        spacing: { after: 1000 }
       })
     );
   }
 
   coverPageParagraphs.push(
-    new Paragraph({ spacing: { before: 800 } }),
     new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "DICTAMEN TÁCTICO", bold: true, size: 36, font: "Arial", color: "1E293B" })],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "PERFIL CRIMINOLÓGICO AMBIENTAL", bold: true, size: 48, font: "Arial", color: "0F172A" })],
-    }),
-    new Paragraph({ spacing: { before: 400 } }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: `POLÍGONO / EXPEDIENTE: ${projectName.toUpperCase()}`, size: 24, font: "Arial" })],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: `FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-MX")}`, size: 24, font: "Arial" })],
-    }),
-    new Paragraph({ spacing: { before: 800 } })
+        border: { top: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 24 } }
+    })
   );
-
-  if (riskLevel) {
-    const color = riskLevel === "alto" ? "DC2626" : riskLevel === "medio" ? "D97706" : "16A34A";
-    coverPageParagraphs.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: `NIVEL DE RIESGO: ${riskLevel.toUpperCase()}`, bold: true, size: 28, font: "Arial", color })],
-      })
-    );
-  }
-
   coverPageParagraphs.push(new Paragraph({ pageBreakBefore: true })); // Salto de página después de portada
 
   // 3. CUERPO DEL DOCUMENTO (Parseado desde Markdown)
@@ -281,7 +316,7 @@ export async function exportToWord(
     mapElements.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
-        children: [new TextRun({ text: "ATLAS CARTOGRÁFICO Y GEOESPACIAL", bold: true, size: 32, font: "Arial" })],
+        children: [new TextRun({ text: "ATLAS CARTOGRÁFICO Y GEOESPACIAL", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
         spacing: { after: 400 }
       })
     );
@@ -295,8 +330,8 @@ export async function exportToWord(
             tmpImg.onload = () => resolve();
             tmpImg.onerror = () => reject(new Error("[exportToWord] Error en mapa"));
           });
-          // Al ser Vertical (Portrait), ajustamos el ancho del mapa a 600
-          const MAP_MAX_WIDTH = 600;
+          // Ajuste de ancho del mapa al 85% de la página
+          const MAP_MAX_WIDTH = 550;
           const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
           const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
@@ -304,7 +339,7 @@ export async function exportToWord(
           mapElements.push(
             new Paragraph({
               heading: HeadingLevel.HEADING_2,
-              children: [new TextRun({ text: snapshot.title.toUpperCase(), bold: true, size: 24, font: "Arial" })],
+              children: [new TextRun({ text: snapshot.title.toUpperCase(), bold: true, size: 26, color: "0D2B52", font: "Calibri" })],
               spacing: { before: 400, after: 200 }
             }),
             new Paragraph({
@@ -314,6 +349,20 @@ export async function exportToWord(
                   ...({ data: mapBuffer, transformation: { width: MAP_MAX_WIDTH, height: proportionalHeight } } as any),
                 }),
               ],
+              border: {
+                top: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
+                bottom: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
+                left: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
+                right: { color: "5B6573", space: 1, style: BorderStyle.SINGLE, size: 6 },
+              }
+            }),
+            new Paragraph({
+               alignment: AlignmentType.CENTER,
+               children: [
+                   new TextRun({ text: "Fuente: Plataforma de Geointeligencia SAI", size: 18, color: "5B6573", bold: true, font: "Calibri" }),
+                   new TextRun({ text: ` | Fecha: ${new Date().toLocaleDateString("es-MX")}`, size: 18, color: "5B6573", font: "Calibri" })
+               ],
+               spacing: { before: 60, after: 400 }
             })
           );
         } catch (e) { console.warn("Error en mapa:", e); }
@@ -328,15 +377,13 @@ export async function exportToWord(
     photoElements.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
-        children: [new TextRun({ text: "ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO", bold: true, size: 32, font: "Arial" })],
+        children: [new TextRun({ text: "ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
         spacing: { after: 400 }
       })
     );
 
-    const WORD_MAX_WIDTH = 300; // Para el Grid 2x2 en formato Vertical
-    const photoCells: TableCell[] = [];
-
-    for (const url of attachedPhotos) {
+    for (let i = 0; i < attachedPhotos.length; i++) {
+      const url = attachedPhotos[i];
       try {
         const stampedBuffer = await applyWatermarkForWord(url);
         // Reconstruir un objeto Image para conocer el aspect ratio
@@ -351,76 +398,88 @@ export async function exportToWord(
               )
             );
         });
-        const originalWidth = img.width || img.naturalWidth || WORD_MAX_WIDTH;
-        const originalHeight = img.height || img.naturalHeight || WORD_MAX_WIDTH;
+        const WORD_MAX_WIDTH = 450;
+        const originalWidth = img.width || img.naturalWidth || 640;
+        const originalHeight = img.height || img.naturalHeight || 480;
         const ratio = originalHeight / originalWidth || 1;
         const proportionalHeight = Math.floor(WORD_MAX_WIDTH * ratio);
 
-        photoCells.push(new TableCell({
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
+        photoElements.push(
+          new Paragraph({
+             alignment: AlignmentType.CENTER,
+             children: [
                 new ImageRun({
-                  ...({ data: stampedBuffer, transformation: { width: WORD_MAX_WIDTH, height: proportionalHeight } } as any),
-                }),
-              ]
-            })
-          ],
-          borders: {
-            top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-          },
-          margins: { top: 200, bottom: 200, left: 100, right: 100 },
-        }));
+                   data: stampedBuffer,
+                   transformation: { width: WORD_MAX_WIDTH, height: proportionalHeight }
+                })
+             ]
+          }),
+          new Paragraph({
+             alignment: AlignmentType.CENTER,
+             children: [
+                new TextRun({ text: `Imagen ${i + 1} - Evidencia Táctica`, bold: true, size: 22, color: "0D2B52", font: "Calibri" })
+             ],
+             spacing: { before: 120 }
+          }),
+          new Paragraph({
+             alignment: AlignmentType.CENTER,
+             children: [
+                new TextRun({ text: `Fuente: Trabajo de Campo | Fecha: ${new Date().toLocaleDateString("es-MX")}`, size: 18, color: "5B6573", font: "Calibri" })
+             ],
+             spacing: { after: 600 }
+          })
+        );
+        if ((i + 1) % 2 === 0 && i !== attachedPhotos.length - 1) {
+            photoElements.push(new Paragraph({ pageBreakBefore: true }));
+        }
       } catch (err) {
         console.warn("Error procesando foto:", url, err);
       }
     }
-
-    const tableRows: TableRow[] = [];
-    for (let i = 0; i < photoCells.length; i += 2) {
-      const cells = [photoCells[i]];
-      if (i + 1 < photoCells.length) {
-        cells.push(photoCells[i + 1]);
-      } else {
-        // Celda vacía si el número de fotos es impar
-        cells.push(new TableCell({
-          children: [],
-          borders: {
-            top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-          }
-        }));
-      }
-      tableRows.push(new TableRow({ children: cells }));
-    }
-
-    photoElements.push(new Table({
-      rows: tableRows,
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-      }
-    }));
   }
+
+  const headerFooterTabs = [
+    { type: TabStopType.CENTER, position: 4283 },
+    { type: TabStopType.RIGHT, position: 8567 },
+  ];
 
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD
   const doc = new Document({
+    numbering: {
+      config: [
+        {
+          reference: "custom-bullets",
+          levels: [
+            {
+              level: 0,
+              format: "bullet",
+              text: "■",
+              alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 720, hanging: 360 } } }
+            },
+            {
+              level: 1,
+              format: "bullet",
+              text: "•",
+              alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 1080, hanging: 360 } } }
+            },
+            {
+              level: 2,
+              format: "bullet",
+              text: "–",
+              alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 1440, hanging: 360 } } }
+            }
+          ]
+        }
+      ]
+    },
     styles: {
       default: {
         document: {
-          run: { font: "Arial", size: 22, color: "000000" }, // 11pt
-          paragraph: { alignment: AlignmentType.JUSTIFIED, spacing: { line: 276 } }, // 1.15 line spacing
+          run: { font: "Calibri", size: 22, color: "222222" }, // 11pt
+          paragraph: { alignment: AlignmentType.JUSTIFIED, spacing: { line: 276, after: 120 }, widowControl: true },
         },
       },
       paragraphStyles: [
@@ -429,15 +488,28 @@ export async function exportToWord(
           name: "Heading 1",
           basedOn: "Normal",
           next: "Normal",
-          run: { color: "0F172A", size: 32, bold: true },
-          paragraph: { spacing: { before: 240, after: 120 } },
+          run: { color: "0D2B52", size: 32, bold: true },
+          paragraph: {
+            spacing: { before: 360, after: 200 },
+            border: {
+              top: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
+            },
+          },
         },
         {
           id: "Heading2",
           name: "Heading 2",
           basedOn: "Normal",
           next: "Normal",
-          run: { color: "1E293B", size: 28, bold: true },
+          run: { color: "1F4E79", size: 26, bold: true },
+          paragraph: { spacing: { before: 240, after: 120 } },
+        },
+        {
+          id: "Heading3",
+          name: "Heading 3",
+          basedOn: "Normal",
+          next: "Normal",
+          run: { color: "222222", size: 22, bold: true },
           paragraph: { spacing: { before: 240, after: 120 } },
         },
       ],
@@ -449,14 +521,21 @@ export async function exportToWord(
             size: {
               orientation: PageOrientation.PORTRAIT,
             },
+            margin: { top: 1417, bottom: 1134, left: 1417, right: 1134 }, // 2.5cm sup/izq, 2.0cm inf/der
           },
         },
         headers: {
           default: new Header({
             children: [
               new Paragraph({
-                alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: "CONFIDENCIAL / USO EXCLUSIVO - CEIPOL", color: "94A3B8", size: 16 })],
+                tabStops: headerFooterTabs,
+                children: [
+                  new TextRun({ text: "CEIPOL", bold: true, color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: "\tPERFIL CRIMINOLÓGICO AMBIENTAL", color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: "\tCONFIDENCIAL | USO EXCLUSIVO", bold: true, color: "5B6573", size: 18, font: "Calibri" }),
+                ],
+                border: { bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
+                spacing: { after: 200 }
               }),
             ],
           }),
@@ -465,12 +544,16 @@ export async function exportToWord(
           default: new Footer({
             children: [
               new Paragraph({
-                alignment: AlignmentType.CENTER,
+                tabStops: headerFooterTabs,
+                border: { top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
+                spacing: { before: 200 },
                 children: [
-                  new TextRun({ text: "Página ", size: 18, color: "64748B" }),
-                  new TextRun({ children: [PageNumber.CURRENT], size: 18, color: "64748B" }),
-                  new TextRun({ text: " de ", size: 18, color: "64748B" }),
-                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: "64748B" }),
+                  new TextRun({ text: new Date().toLocaleDateString("es-MX"), color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: "\tPágina ", color: "5B6573", size: 18, font: "Calibri" }),
+                  new PageNumber(),
+                  new TextRun({ text: " de ", color: "5B6573", size: 18, font: "Calibri" }),
+                  new NumberOfPages(),
+                  new TextRun({ text: `\tEXP: ${safeName}`, color: "5B6573", size: 18, font: "Calibri" }),
                 ],
               }),
             ],
@@ -487,11 +570,6 @@ export async function exportToWord(
   });
 
   const blob = await Packer.toBlob(doc);
-  const safeName =
-    projectName
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
 
   saveAs(blob, `Dictamen_Oficial_${safeName}.docx`);
 }
