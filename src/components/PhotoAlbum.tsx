@@ -4,8 +4,8 @@ import { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
-import { AnalysisMap } from "./AnalysisMap";
-import { CrimeCharts } from "./CrimeCharts";
+import { TacticalCharts } from "./TacticalCharts";
+import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
@@ -165,7 +165,6 @@ export function PhotoAlbum({
   const [isRefiningDoc, setIsRefiningDoc] = useState(false);
   const [docSuggestions, setDocSuggestions] = useState("");
   const [isAuditingDoc, setIsAuditingDoc] = useState(false);
-  const [mapViewMode, setMapViewMode] = useState<"HEATMAP" | "ECOLOGY" | "MOBILITY">("HEATMAP");
   const [mapSnapshots, setMapSnapshots] = useState<{ title: string; dataUrl: string }[]>([]);
   const [listeningField, setListeningField] = useState<string | null>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -540,60 +539,9 @@ const hasMinimumPhotos =
     }
   };
 
-  const handleDownloadMap = async () => {
-    const el = document.getElementById("map-export-container");
-    if (!el) return;
-    try {
-      const canvas = await html2canvas(el, {
-        useCORS: true,
-        scale: 2,
-      });
-      const dataUrl = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = "Mapa_Dictamen_Tactico.png";
-      link.click();
-    } catch (err) {
-      console.error("[PhotoAlbum] Error al exportar mapa:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo exportar el mapa oficial."
-      );
-    }
-  };
-
   const handleAttachMapSnapshot = async () => {
-    const el = document.getElementById("map-export-container");
-    if (!el) return;
-    try {
-      // Ocultar la botonera de pestañas temporalmente para la foto
-      const buttons = el.querySelector('.bg-slate-100.border-b');
-      if (buttons) (buttons as HTMLElement).style.display = 'none';
-
-      const originalStyle = el.getAttribute("style") || "";
-      // Forzar temporalmente ancho de escritorio y altura para una captura nítida
-      el.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important; height: 800px !important;`);
-      // Esperar a que el mapa procese el cambio de tamaño
-      await new Promise(r => setTimeout(r, 600));
-
-      const canvas = await html2canvas(el, { useCORS: true, scale: 2, windowWidth: 1024 });
-      
-      // Restaurar estilo original
-      el.setAttribute("style", originalStyle);
-      if (buttons) (buttons as HTMLElement).style.display = 'flex';
-
-      const dataUrl = canvas.toDataURL("image/png");
-      
-      let title = "Mapa Criminológico";
-      if (mapViewMode === "HEATMAP") title = "Mapa de Zonas Calientes (Heatmap)";
-      if (mapViewMode === "ECOLOGY") title = "Mapa de Ecología y Atractores (DENUE)";
-      if (mapViewMode === "MOBILITY") title = "Mapa de Topografía y Rutas";
-
-      setMapSnapshots(prev => [...prev, { title, dataUrl }]);
-    } catch (err) {
-      console.error("[PhotoAlbum] Error al capturar mapa:", err);
-    }
+    await autoCaptureSnapshots();
+    alert("Mapas capturados exitosamente para el dictamen oficial.");
   };
 
   const autoCaptureSnapshots = async () => {
@@ -601,55 +549,57 @@ const hasMinimumPhotos =
     let changed = false;
 
     // Capturar Gráficas
-    if (!currentSnapshots.some(s => s.title === "GRÁFICAS ESTADÍSTICAS") && analysisResult?.historicalCrimes && analysisResult.historicalCrimes.length > 0) {
-      const chartsEl = document.getElementById("charts-export-container");
-      if (chartsEl) {
+    if (!currentSnapshots.some(s => s.title.includes("GRÁFICAS: RADAR")) && analysisResult) {
+      const chartsEl1 = document.getElementById("charts-export-container-1");
+      if (chartsEl1) {
         try {
-          const originalStyle = chartsEl.getAttribute("style") || "";
-          // Forzar layout de escritorio para evitar que se apriete en móviles
-          chartsEl.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important;`);
-          
-          const gridEl = chartsEl.querySelector('.grid-cols-1');
-          if (gridEl) {
-            gridEl.classList.remove('grid-cols-1', 'md:grid-cols-3');
-            gridEl.classList.add('grid-cols-3');
-          }
-          // Esperar a que terminen las animaciones CSS (transition-all duration-1000)
+          const originalStyle = chartsEl1.getAttribute("style") || "";
+          chartsEl1.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important;`);
           await new Promise(r => setTimeout(r, 1200));
+          const canvas1 = await html2canvas(chartsEl1, { useCORS: true, scale: 2, backgroundColor: "#ffffff", windowWidth: 1024 });
+          chartsEl1.setAttribute("style", originalStyle);
+          currentSnapshots.unshift({ title: "GRÁFICAS: RADAR Y FACTORES", dataUrl: canvas1.toDataURL("image/png") });
+          changed = true;
+        } catch(e) {}
+      }
 
-          const canvas = await html2canvas(chartsEl, { useCORS: true, scale: 2, backgroundColor: "#0f172a", windowWidth: 1024 });
-          
-          chartsEl.setAttribute("style", originalStyle);
-          if (gridEl) {
-            gridEl.classList.remove('grid-cols-3');
-            gridEl.classList.add('grid-cols-1', 'md:grid-cols-3');
-          }
-
-          currentSnapshots.unshift({ title: "GRÁFICAS ESTADÍSTICAS", dataUrl: canvas.toDataURL("image/png") });
+      const chartsEl2 = document.getElementById("charts-export-container-2");
+      if (chartsEl2) {
+        try {
+          const originalStyle = chartsEl2.getAttribute("style") || "";
+          chartsEl2.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important;`);
+          await new Promise(r => setTimeout(r, 1200));
+          const canvas2 = await html2canvas(chartsEl2, { useCORS: true, scale: 2, backgroundColor: "#ffffff", windowWidth: 1024 });
+          chartsEl2.setAttribute("style", originalStyle);
+          const insertIndex = currentSnapshots.findIndex(s => s.title === "GRÁFICAS: RADAR Y FACTORES");
+          currentSnapshots.splice(insertIndex >= 0 ? insertIndex + 1 : 0, 0, { title: "GRÁFICAS: RANKING Y PROYECCIÓN", dataUrl: canvas2.toDataURL("image/png") });
           changed = true;
         } catch(e) {}
       }
     }
 
-    // Capturar Mapa
-    if (!currentSnapshots.some(s => s.title.includes("MAPA")) && analysisResult) {
-      const mapEl = document.getElementById("map-export-container");
-      if (mapEl) {
-        try {
-          const buttons = mapEl.querySelector('.bg-slate-100.border-b');
-          if (buttons) (buttons as HTMLElement).style.display = 'none';
+    // Capturar Mapas Tácticos Institucionales
+    const mapIds = [
+      { id: "map-density", title: "1. DENSIDAD CRIMINOLÓGICA" },
+      { id: "map-mobility", title: "2. CORREDORES Y MOVILIDAD" },
+      { id: "map-attractors", title: "3. ATRACCIÓN Y FACTORES" },
+      { id: "map-predictive", title: "4. PROYECCIÓN A 6 MESES" }
+    ];
 
-          const originalStyle = mapEl.getAttribute("style") || "";
-          mapEl.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important; height: 800px !important;`);
-          await new Promise(r => setTimeout(r, 600)); // Recálculo del mapa
-
-          const canvas = await html2canvas(mapEl, { useCORS: true, scale: 2, windowWidth: 1024 });
-          
-          mapEl.setAttribute("style", originalStyle);
-          if (buttons) (buttons as HTMLElement).style.display = 'flex';
-          currentSnapshots.push({ title: "MAPA DEL ANÁLISIS", dataUrl: canvas.toDataURL("image/png") });
-          changed = true;
-        } catch(e) {}
+    for (const m of mapIds) {
+      if (!currentSnapshots.some(s => s.title === m.title) && analysisResult) {
+        const el = document.getElementById(m.id);
+        if (el) {
+          try {
+            const originalStyle = el.getAttribute("style") || "";
+            el.setAttribute("style", `${originalStyle}; width: 800px !important; height: 500px !important; max-width: none !important;`);
+            await new Promise(r => setTimeout(r, 600));
+            const canvas = await html2canvas(el, { useCORS: true, scale: 2, windowWidth: 1024 });
+            el.setAttribute("style", originalStyle);
+            currentSnapshots.push({ title: m.title, dataUrl: canvas.toDataURL("image/png") });
+            changed = true;
+          } catch(e) {}
+        }
       }
     }
 
@@ -1486,9 +1436,9 @@ const hasMinimumPhotos =
               {isValidatingPhotos ? "Auditando evidencia fotográfica..." : "Procesando inteligencia... Por favor espere"}
             </>
           ) : aiProfile ? (
-            isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Análisis Criminológico"
+            isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Hipótesis"
           ) : (
-            "Generar Análisis Criminológico"
+            "Generar Hipótesis"
           )}
         </button>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
@@ -1647,72 +1597,20 @@ const hasMinimumPhotos =
                 </button>
               </div>
 
-              {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-                <div id="charts-export-container" className="w-full bg-[#0f172a] rounded-xl p-4 mb-3 border border-slate-700">
-                  <CrimeCharts crimes={analysisResult.historicalCrimes ?? []} inegi={analysisResult.inegiDemographics} pois={analysisResult.pois ?? []} />
+              {analysisResult && (
+                <div className="w-full mb-3 print:mb-0">
+                  <TacticalCharts analysisResult={analysisResult} />
                 </div>
               )}
-              <div id="map-export-container" className="w-full mt-3 rounded-xl border border-slate-700 bg-white text-black overflow-hidden flex flex-col">
-                <div className="bg-slate-100 border-b border-slate-300 p-2 flex flex-wrap gap-2 print:hidden justify-center shadow-sm">
-                  <button 
-                    onClick={() => setMapViewMode("HEATMAP")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'HEATMAP' ? 'bg-red-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                  >
-                    🔥 Zonas Calientes
-                  </button>
-                  <button 
-                    onClick={() => setMapViewMode("ECOLOGY")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'ECOLOGY' ? 'bg-sky-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                  >
-                    🏪 Atractores (DENUE)
-                  </button>
-                  <button 
-                    onClick={() => setMapViewMode("MOBILITY")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mapViewMode === 'MOBILITY' ? 'bg-emerald-600 text-white shadow-inner' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                  >
-                    🛣️ Topografía y Rutas
-                  </button>
-                </div>
-                <div className="relative p-0 w-full">
-                  <AnalysisMap
-                    album={album.filter((p) => selectedIds.includes(p.id))}
-                    analysisResult={analysisResult}
-                    analysisRadius={analysisRadius}
-                    analysisPolygon={analysisPolygon}
-                    setAnalysisPolygon={setAnalysisPolygon}
-                    manualPois={manualPois}
-                    setManualPois={setManualPois}
-                    isPreliminary={false}
-                    viewMode={mapViewMode}
-                    geometryType={project?.geometryType}
-                  />
-                  {/* Capa de Explicación de Atractores (DENUE/PLACES) */}
-                  {mapViewMode === "ECOLOGY" && analysisResult.pois && analysisResult.pois.length > 0 && (
-                    <div className="absolute bottom-6 left-2 right-2 z-10 pointer-events-none flex justify-center">
-                      <div className="bg-slate-900/95 border border-sky-500/80 rounded-lg p-3 text-white shadow-2xl backdrop-blur-sm w-11/12 max-w-lg">
-                        <p className="text-xs font-bold text-sky-400 mb-2 truncate">🏪 Justificación de Atractores del Delito</p>
-                        <ul className="text-[10px] space-y-1.5">
-                          {analysisResult.pois.slice(0, 3).map((poi: any, idx: number) => (
-                            <li key={idx}><span className="font-semibold text-sky-200">{poi.name} ({poi.category}):</span> Concentra víctimas potenciales y fomenta ventanas de oportunidad criminal en su entorno.</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Capa de Lugares de Acecho y Rutas con Google Street View y Vision API */}
-                  {mapViewMode === "MOBILITY" && (analysisResult as any)?.tacticalStreetViews && (analysisResult as any).tacticalStreetViews.length > 0 && (
-                    <div className="absolute bottom-6 left-2 right-2 flex gap-3 overflow-x-auto z-10 pointer-events-none justify-center px-4">
-                      {(analysisResult as any).tacticalStreetViews.map((sv: any, idx: number) => (
-                        <div key={idx} className="bg-slate-900/95 border border-emerald-500/80 rounded-lg p-2 text-white flex-1 min-w-[160px] max-w-[220px] shadow-2xl backdrop-blur-sm">
-                          <p className="text-[10px] font-bold text-emerald-400 mb-1 truncate" title={sv.name}>📍 Ruta / Acecho: {sv.name}</p>
-                          <img src={sv.streetViewUrl} alt="Street View" className="w-full h-20 object-cover rounded border border-slate-700 mb-1.5" />
-                          <p className="text-[9px] leading-tight text-slate-300 truncate">Puntos Ciegos: {sv.vision?.etiquetasRelevantes?.slice(0, 2).join(", ") || "Vulnerabilidades visuales"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              <div className="w-full mt-3 flex flex-col print:mb-0">
+                <TacticalMaps
+                  album={album.filter((p) => selectedIds.includes(p.id))}
+                  analysisResult={analysisResult}
+                  analysisRadius={analysisRadius}
+                  analysisPolygon={analysisPolygon}
+                  manualPois={manualPois}
+                  geometryType={project?.geometryType}
+                />
               </div>
               <div className="flex flex-wrap gap-2 mt-3 print:hidden">
                 <button
@@ -1720,14 +1618,7 @@ const hasMinimumPhotos =
                   onClick={handleAttachMapSnapshot}
                   className="inline-flex items-center justify-center rounded-md bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 transition-colors"
                 >
-                  📸 Añadir vista actual al informe
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadMap}
-                  className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors print:hidden"
-                >
-                  Descargar Imagen Suelta
+                  📸 Añadir 4 Mapas al Informe Word
                 </button>
               </div>
               {mapSnapshots.length > 0 && (
@@ -1828,16 +1719,40 @@ const hasMinimumPhotos =
                   <label className="block text-xs font-medium text-slate-300">
                     Hipótesis de la Persona Perfiladora (contexto del cruce de ubicaciones)
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => toggleDictation('analysisContext', (text) => {
-                      setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
-                      setIsAnalysisContextAudited(false);
-                    })}
-                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
-                  >
-                    <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {!isReadOnly && projectId && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const { getDb } = await import("@/lib/firebase");
+                            const { doc, updateDoc } = await import("firebase/firestore");
+                            const firestore = getDb();
+                            await updateDoc(doc(firestore, "projects", projectId), {
+                              hipotesis: analysisContext
+                            });
+                            window.alert("Hipótesis guardada exitosamente en el expediente.");
+                          } catch (err) {
+                            console.error("Error al guardar hipótesis:", err);
+                            window.alert("Error al guardar la hipótesis.");
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border border-emerald-600 text-emerald-300 bg-emerald-900/40 hover:bg-emerald-800 transition-colors"
+                      >
+                        <span>💾</span> Guardar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleDictation('analysisContext', (text) => {
+                        setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
+                        setIsAnalysisContextAudited(false);
+                      })}
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
+                    >
+                      <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   spellCheck={true}
@@ -2033,7 +1948,7 @@ const hasMinimumPhotos =
                   disabled={!isAnalysisContextAudited}
                   className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Comenzar Análisis
+                  Comenzar a Generar Hipótesis
                 </button>
               </div>
             </div>
@@ -2108,31 +2023,24 @@ const hasMinimumPhotos =
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
               const chunks = [];
-              for (let i = 0; i < items.length; i += 4) chunks.push(items.slice(i, i + 4));
+              for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
 
               return (
                 <>
-                  <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-slate-800 text-white">
+                  <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-[#0D2B52] text-white">
                     <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">{title}</h1>
-                    <div className="w-32 h-2 bg-sky-500"></div>
+                    <div className="w-32 h-2 bg-[#D96A00]"></div>
                   </div>
                   {chunks.map((chunk, cIdx) => (
-                    <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
-                      <div className="grid grid-cols-2 grid-rows-2 gap-8 flex-1">
-                        {Array.from({ length: 4 }).map((_, i) => {
-                          const snap = chunk[i];
-                          return snap ? (
-                            <div key={i} className="border-2 border-slate-300 p-3 rounded-lg flex flex-col bg-slate-50 shadow-sm overflow-hidden">
-                              <h4 className="text-sm font-bold text-slate-700 text-center mb-2 uppercase tracking-wider border-b border-slate-300 pb-1 truncate">{snap.title}</h4>
-                              <div className="flex-1 relative bg-slate-200">
-                                <img src={snap.dataUrl} className="absolute top-0 left-0 w-full h-full object-contain" alt={snap.title} />
-                              </div>
-                            </div>
-                          ) : (
-                            <div key={i}></div>
-                          );
-                        })}
-                      </div>
+                    <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white gap-8">
+                      {chunk.map((snap, i) => (
+                        <div key={i} className="flex-1 border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden">
+                          <h4 className="text-xl font-bold text-[#0D2B52] text-center mb-3 uppercase tracking-wider border-b-2 border-slate-300 pb-2">{snap.title}</h4>
+                          <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
+                            <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </>

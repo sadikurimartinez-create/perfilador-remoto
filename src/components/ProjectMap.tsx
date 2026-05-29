@@ -459,7 +459,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           <span className="text-4xl block mb-3 opacity-50">⏳</span>
           <h4 className="text-lg font-semibold text-slate-300">Paneles Analíticos en Espera</h4>
           <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">
-            Para visualizar el Dashboard Estadístico, el Heatmap de Riesgo y el Panel de Correlaciones, primero debes subir las fotografías requeridas y hacer clic en <strong>"Generar Análisis Criminológico"</strong>.
+            Para visualizar el Dashboard Estadístico, el Heatmap de Riesgo y el Panel de Correlaciones, primero debes subir las fotografías requeridas y hacer clic en <strong>"Generar Hipótesis"</strong>.
           </p>
         </div>
       )}

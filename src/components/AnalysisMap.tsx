@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
-export type MapViewMode = "HEATMAP" | "ECOLOGY" | "MOBILITY";
+export type MapViewMode = "DENSITY" | "MOBILITY" | "ATTRACTORS" | "PREDICTIVE";
 
 type AnalysisMapProps = {
   album: AlbumPhoto[];
@@ -48,8 +48,8 @@ const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "vi
 
 const containerStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "500px",
-  height: "65vh",
+  height: "100%",
+  minHeight: "400px",
 };
 
 function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolean {
@@ -81,7 +81,7 @@ export function AnalysisMap({
   manualPois,
   setManualPois,
   isPreliminary = false,
-  viewMode = "HEATMAP",
+  viewMode = "DENSITY",
   geometryType,
 }: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -230,13 +230,48 @@ export function AnalysisMap({
   };
 
   return (
-    <div className="relative rounded-xl border-2 border-slate-700 shadow-xl overflow-hidden bg-slate-900/50">
+    <div className="relative w-full h-full overflow-hidden bg-slate-100">
       {/* Sello de agua oficial */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
         <span className="text-white/40 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
           SSPE-CEIPOL
         </span>
       </div>
+
+      {/* Leyenda Institucional Integrada en el Mapa */}
+      {!isPreliminary && (
+        <div className="absolute bottom-4 left-4 bg-white/95 border border-[#0D2B52] p-3 rounded-lg shadow-lg z-20 text-[10px] text-[#222222] min-w-[200px]">
+          {viewMode === "DENSITY" && (
+            <>
+               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Densidad Criminológica</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#B22222]"></span> Alta Concentración (Hotspot)</div>
+               <div className="flex items-center gap-2"><span className="text-[10px]">❌</span> Evento Histórico</div>
+            </>
+          )}
+          {viewMode === "MOBILITY" && (
+            <>
+               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Movilidad Criminal</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-5 h-1.5 bg-[#D96A00]"></span> Corredor de Movilidad</div>
+               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#10b981]"></span> Nodo de Interés</div>
+            </>
+          )}
+          {viewMode === "ATTRACTORS" && (
+            <>
+               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Factores Criminógenos</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-60"></span> Área de Influencia Directa</div>
+               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#eab308] border border-black"></span> Top Atractor</div>
+            </>
+          )}
+          {viewMode === "PREDICTIVE" && (
+            <>
+               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Evolución a 6 Meses</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#B22222] opacity-40"></span> Expansión de Riesgo Crítico</div>
+               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#D96A00] opacity-50"></span> Agravamiento Focalizado</div>
+            </>
+          )}
+        </div>
+      )}
+
       {isPreliminary && (
         <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 shadow-lg">
           <span className="font-semibold tracking-tight text-emerald-300">
@@ -276,24 +311,6 @@ export function AnalysisMap({
               Fijar POI manual
             </button>
           )}
-        </div>
-      )}
-
-      {/* LEYENDA DEL TOP 5 POIs (SOLO MODO ECOLOGY) */}
-      {!isPreliminary && viewMode === "ECOLOGY" && top5Pois.length > 0 && (
-        <div className="absolute top-3 right-3 bg-slate-900/95 border border-slate-600 p-3 rounded-lg shadow-2xl z-20 max-w-[280px]">
-          <h4 className="text-xs font-bold text-amber-400 mb-2 border-b border-slate-600 pb-1 uppercase tracking-wider">Top 5 Atractores de Riesgo</h4>
-          <ul className="text-[10px] text-slate-200 space-y-2">
-            {top5Pois.map((p, i) => (
-              <li key={i} className="leading-tight flex gap-2">
-                <span className="flex-shrink-0 bg-amber-500 text-slate-900 font-bold w-4 h-4 rounded-full flex items-center justify-center">{i+1}</span>
-                <div>
-                  <span className="font-bold text-amber-200 block">{p.name}</span>
-                  <span className="text-slate-400">{p.category}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 
@@ -373,8 +390,20 @@ export function AnalysisMap({
           />
         )}
 
-        {/* Pines tácticos: se basan en el tipo de evidencia seleccionada */}
-        {viewMode === "MOBILITY" && photosWithCoords.map((p) => {
+        {/* Movilidad Criminal: Líneas conectando nodos y POIs */}
+        {!isPreliminary && viewMode === "MOBILITY" && top5Pois.map((p, idx) => (
+          <Polyline
+            key={`route-${idx}`}
+            path={[center, { lat: p.lat as number, lng: p.lng as number }]}
+            options={{
+              strokeColor: "#D96A00",
+              strokeOpacity: 0.8,
+              strokeWeight: 4,
+            }}
+          />
+        ))}
+
+        {viewMode !== "DENSITY" && photosWithCoords.map((p) => {
           const pinColor = getMarkerColor(p.tipo);
           return (
             <Marker
@@ -400,7 +429,7 @@ export function AnalysisMap({
             icon={{
               path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
               scale: 8,
-              fillColor: "#f97316",
+              fillColor: "#D96A00",
               fillOpacity: 1,
               strokeColor: "#1f2937",
               strokeWeight: 2,
@@ -409,7 +438,7 @@ export function AnalysisMap({
         )}
 
         {/* Delitos: puntos carmesí con cruz táctica */}
-        {viewMode === "HEATMAP" && crimesWithCoords.map((c, idx) => (
+        {viewMode === "DENSITY" && crimesWithCoords.map((c, idx) => (
           <Marker
             key={`crime-${idx}`}
             position={{ lat: c.lat as number, lng: c.lng as number }}
@@ -423,7 +452,7 @@ export function AnalysisMap({
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
               scale: 6,
-              fillColor: "#7f1d1d",
+              fillColor: "#B22222",
               fillOpacity: 1,
               strokeColor: "#fecaca",
               strokeWeight: 1,
@@ -432,27 +461,40 @@ export function AnalysisMap({
         ))}
 
         {/* POIs / atractores Top 5: Numerados */}
-        {viewMode === "ECOLOGY" && top5Pois.map((p, idx) => (
-          <Marker
-            key={`top-poi-${idx}`}
-            position={{ lat: p.lat as number, lng: p.lng as number }}
-            title={p.name}
-            label={{
-              text: `${idx + 1}`,
-              color: "#ffffff",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: "#eab308", 
-              fillOpacity: 1,
-              strokeColor: "#000000",
-              strokeWeight: 2,
-            }}
-          />
+        {viewMode === "ATTRACTORS" && top5Pois.map((p, idx) => (
+          <div key={`attr-group-${idx}`}>
+            <Circle
+              center={{ lat: p.lat as number, lng: p.lng as number }}
+              radius={100}
+              options={{ fillColor: "#1F4E79", fillOpacity: 0.3, strokeColor: "#0D2B52", strokeWeight: 2 }}
+            />
+            <Marker
+              position={{ lat: p.lat as number, lng: p.lng as number }}
+              title={p.name}
+              label={{ text: `${idx + 1}`, color: "#ffffff", fontSize: "12px", fontWeight: "bold" }}
+              icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#eab308", fillOpacity: 1, strokeColor: "#000000", strokeWeight: 2 }}
+            />
+          </div>
         ))}
+
+        {/* Predicción a 6 meses: Expansión de zonas de riesgo */}
+        {viewMode === "PREDICTIVE" && (
+          <>
+            <Circle
+              center={center}
+              radius={analysisRadius * 1.5}
+              options={{ fillColor: "#B22222", fillOpacity: 0.15, strokeColor: "#B22222", strokeWeight: 2 }}
+            />
+            {top5Pois.map((p, idx) => (
+              <Circle
+                key={`pred-${idx}`}
+                center={{ lat: p.lat as number, lng: p.lng as number }}
+                radius={250}
+                options={{ fillColor: "#D96A00", fillOpacity: 0.25, strokeColor: "#D96A00", strokeWeight: 2 }}
+              />
+            ))}
+          </>
+        )}
 
         {/* Polígono de análisis dibujado por el analista */}
         {isPreliminary && analysisPolygon && analysisPolygon.length > 2 && (
@@ -485,69 +527,24 @@ export function AnalysisMap({
           />
         ))}
 
-        {viewMode === "HEATMAP" && heatmapCrimeData.length > 0 && (
+        {viewMode === "DENSITY" && heatmapCrimeData.length > 0 && (
           <HeatmapLayer
             data={heatmapCrimeData}
             options={{
               radius: 40,
               dissipating: true,
-              opacity: 0.7,
+              opacity: 0.8,
               gradient: [
-                "rgba(0,255,0,0)",
-                "rgba(0,255,0,0.4)",
-                "rgba(255,255,0,0.6)",
-                "rgba(255,165,0,0.8)",
-                "rgba(255,0,0,1)",
+                "rgba(46,139,87,0)",     // Verde #2E8B57
+                "rgba(46,139,87,0.4)",
+                "rgba(230,167,0,0.6)",   // Amarillo #E6A700
+                "rgba(217,106,0,0.8)",   // Naranja #D96A00
+                "rgba(178,34,34,1)",     // Rojo #B22222
               ],
             }}
           />
         )}
       </GoogleMap>
-
-      <div className="p-3 border-t border-slate-700 bg-slate-900/90 space-y-2">
-        <div className="flex flex-col gap-3 text-xs">
-          <div className="flex flex-col gap-1">
-            <span className="font-semibold text-slate-200">Simbología Táctica de Evidencia:</span>
-            <div className="flex flex-wrap items-center gap-3">
-              {geometryType === "lineal" ? (
-                <>
-                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#10b981] border border-white" /> Nodo Inicial</span>
-                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#3b82f6] border border-white" /> Corredor</span>
-                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#ef4444] border border-white" /> Nodo Final</span>
-                </>
-              ) : geometryType === "poligono" ? (
-                <>
-                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#8b5cf6] border border-white" /> Perímetro</span>
-                  <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#f97316] border border-white" /> Interior</span>
-                </>
-              ) : (
-                <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-[#dc2626] border border-white" /> Nodo Principal</span>
-              )}
-            </div>
-          </div>
-          <div className="h-px w-full bg-slate-700 my-1" />
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-3 w-3 rounded-full bg-sky-400" />
-            <span className="text-slate-400">
-              <span className="font-semibold text-slate-200">Atractores:</span>{" "}
-              Escuelas, comercios y otros puntos de interés (POIs).
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px]">❌</span>
-            <span className="text-slate-400">
-              <span className="font-semibold text-slate-200">Incidencia:</span>{" "}
-              Delitos históricos (Puntos individuales).
-            </span>
-          </div>
-        </div>
-        {heatmapCrimeData.length > 0 && (
-          <p className="text-[11px] text-slate-500 flex items-center gap-2 mt-1">
-            <span className="font-medium text-slate-400">Heatmap:</span>
-            Verde (baja) → Amarillo → Rojo (alta concentración).
-          </p>
-        )}
-      </div>
     </div>
   );
 }
