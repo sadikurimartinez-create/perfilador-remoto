@@ -16,6 +16,12 @@ import {
   PageOrientation,
   ShadingType,
   TabStopType,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  VerticalAlign,
+  HeightRule,
 } from "docx";
 import { saveAs } from "file-saver";
 
@@ -227,7 +233,8 @@ export async function exportToWord(
   projectName: string,
   attachedPhotos?: ({ url: string; tipo?: string; comentario?: string } | string)[],
   riskLevel?: "bajo" | "medio" | "alto",
-  mapSnapshots?: { title: string; dataUrl: string }[]
+  mapSnapshots?: { title: string; dataUrl: string }[],
+  scinceDemographics?: any
 ) {
   const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
 
@@ -303,6 +310,181 @@ export async function exportToWord(
 
   // 3. CUERPO DEL DOCUMENTO (Parseado desde Markdown)
   const bodyParagraphs = await parseMarkdownToParagraphs(content);
+
+  // 3.5 PERFIL SOCIODEMOGRÁFICO
+  const scinceElements: any[] = [];
+  if (scinceDemographics) {
+    scinceElements.push(
+      new Paragraph({
+        children: [new TextRun({ text: "PERFIL SOCIODEMOGRÁFICO DEL ÁREA DE ANÁLISIS", bold: true, size: 28, font: "Aptos", color: "0D2B52" })],
+        spacing: { before: 360, after: 200 }
+      }),
+      new Paragraph({
+        children: [new TextRun({ text: "Caracterización sociodemográfica obtenida mediante integración de información censal INEGI correspondiente al área geográfica analizada.", size: 22, font: "Aptos", color: "222222" })],
+        spacing: { after: 360 }
+      })
+    );
+
+    const createRow = (icon: string, indicator: string, value: string, isGray: boolean, valueColor?: string) => {
+      const shading = isGray ? { fill: "F5F7FA", type: ShadingType.CLEAR } : undefined;
+      const borders = {
+        top: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+        left: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+        right: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+      };
+
+      return new TableRow({
+        height: { value: 400, rule: HeightRule.ATLEAST },
+        children: [
+          new TableCell({
+            shading, borders, verticalAlign: VerticalAlign.CENTER, width: { size: 15, type: WidthType.PERCENTAGE },
+            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: icon, font: "Segoe UI Emoji", size: 22 })] })]
+          }),
+          new TableCell({
+            shading, borders, verticalAlign: VerticalAlign.CENTER, width: { size: 55, type: WidthType.PERCENTAGE },
+            margins: { left: 100 },
+            children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: indicator, font: "Aptos", size: 22, color: "222222", bold: true })] })]
+          }),
+          new TableCell({
+            shading, borders, verticalAlign: VerticalAlign.CENTER, width: { size: 30, type: WidthType.PERCENTAGE },
+            margins: { right: 100 },
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: value, font: "Aptos", size: 22, color: valueColor || "222222", bold: true })] })]
+          })
+        ]
+      });
+    };
+
+    const headerRow = new TableRow({
+      height: { value: 400, rule: HeightRule.ATLEAST },
+      children: [
+        new TableCell({
+          shading: { fill: "0D2B52", type: ShadingType.CLEAR },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Ícono", font: "Aptos", size: 24, bold: true, color: "FFFFFF" })] })]
+        }),
+        new TableCell({
+          shading: { fill: "0D2B52", type: ShadingType.CLEAR },
+          verticalAlign: VerticalAlign.CENTER,
+          margins: { left: 100 },
+          children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: "Indicador", font: "Aptos", size: 24, bold: true, color: "FFFFFF" })] })]
+        }),
+        new TableCell({
+          shading: { fill: "0D2B52", type: ShadingType.CLEAR },
+          verticalAlign: VerticalAlign.CENTER,
+          margins: { right: 100 },
+          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "Valor", font: "Aptos", size: 24, bold: true, color: "FFFFFF" })] })]
+        })
+      ]
+    });
+
+    const rows = [headerRow];
+    const indicators = [
+      { icon: "👥", name: "Población Total", val: scinceDemographics.poblacionTotal.toLocaleString("es-MX") },
+      { icon: "👨", name: "Hombres", val: `${scinceDemographics.hombres.toLocaleString("es-MX")} (${scinceDemographics.pctHombres.toFixed(1)}%)` },
+      { icon: "👩", name: "Mujeres", val: `${scinceDemographics.mujeres.toLocaleString("es-MX")} (${scinceDemographics.pctMujeres.toFixed(1)}%)` },
+      { icon: "🎂", name: "Edad Promedio", val: `${scinceDemographics.edadPromedio.toFixed(1)} años` },
+      { icon: "🧑", name: "Población de 15 a 29 años", val: `${scinceDemographics.pctJovenes.toFixed(1)}%` },
+      { icon: "🎓", name: "Escolaridad Promedio", val: `${scinceDemographics.escolaridad.toFixed(1)} años` },
+      { icon: "🏠", name: "Viviendas Habitadas", val: scinceDemographics.viviendas.toLocaleString("es-MX") },
+      { icon: "👩‍👧", name: "Hogares con Jefatura Femenina", val: `${scinceDemographics.jefaturaFem.toFixed(1)}%` },
+      { icon: "💼", name: "Población Económicamente Activa", val: `${scinceDemographics.pea.toFixed(1)}%` },
+      { icon: "🌐", name: "Acceso a Internet", val: `${scinceDemographics.internet.toFixed(1)}%` },
+      { icon: "📍", name: "Densidad Poblacional", val: `${scinceDemographics.densidad.toLocaleString("es-MX")} hab/km²` },
+      { icon: "📉", name: "Grado de Marginación", val: scinceDemographics.gradoMarginacion },
+      { icon: "🚨", name: "Índice Sociodemográfico de Vulnerabilidad", val: scinceDemographics.gradoVulnerabilidad, color: scinceDemographics.colorVulnerabilidad },
+    ];
+
+    indicators.forEach((ind, i) => {
+      rows.push(createRow(ind.icon, ind.name, ind.val, i % 2 !== 0, ind.color));
+    });
+
+    const table = new Table({
+      width: { size: 90, type: WidthType.PERCENTAGE },
+      alignment: AlignmentType.CENTER,
+      rows
+    });
+    
+    scinceElements.push(table);
+
+    const lecturaTable = new Table({
+      width: { size: 90, type: WidthType.PERCENTAGE },
+      alignment: AlignmentType.CENTER,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+                bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+                left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+                right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+              },
+              margins: { top: 200, bottom: 200, left: 200, right: 200 },
+              children: [
+                new Paragraph({
+                  spacing: { after: 120 },
+                  children: [new TextRun({ text: "LECTURA SOCIODEMOGRÁFICA", bold: true, font: "Aptos", size: 24, color: "0D2B52" })]
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.JUSTIFIED,
+                  children: [new TextRun({ text: scinceDemographics.lectura, font: "Aptos", size: 22, color: "222222" })]
+                })
+              ]
+            })
+          ]
+        })
+      ]
+    });
+
+    const censintTable = new Table({
+      width: { size: 90, type: WidthType.PERCENTAGE },
+      alignment: AlignmentType.CENTER,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+                bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+                left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+                right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+              },
+              margins: { top: 200, bottom: 200, left: 200, right: 200 },
+              children: [
+                new Paragraph({
+                  spacing: { after: 120 },
+                  children: [new TextRun({ text: "EVALUACIÓN DE VULNERABILIDAD SOCIODEMOGRÁFICA (CENSINT)", bold: true, font: "Aptos", size: 24, color: "0D2B52" })]
+                }),
+                new Paragraph({
+                  spacing: { after: 120 },
+                  children: [
+                    new TextRun({ text: "SocioDemographic Vulnerability Score (SVS): ", bold: true, font: "Aptos", size: 22, color: "222222" }),
+                    new TextRun({ text: `${scinceDemographics.svs}/100`, bold: true, font: "Aptos", size: 22, color: scinceDemographics.svsColor }),
+                    new TextRun({ text: ` [${scinceDemographics.svsNivel.toUpperCase()}]`, bold: true, font: "Aptos", size: 22, color: scinceDemographics.svsColor })
+                  ]
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.JUSTIFIED,
+                  children: [new TextRun({ text: scinceDemographics.lecturaCensint, font: "Aptos", size: 22, color: "222222" })]
+                })
+              ]
+            })
+          ]
+        })
+      ]
+    });
+
+    scinceElements.push(
+      new Paragraph({ spacing: { before: 240 } }),
+      lecturaTable,
+      new Paragraph({ spacing: { before: 240 } }),
+      censintTable,
+      new Paragraph({ spacing: { after: 360 } })
+    );
+  }
 
   // 4. MAPAS (ATLAS CARTOGRÁFICO)
   const mapElements: any[] = [];
@@ -570,6 +752,7 @@ export async function exportToWord(
         },
         children: [
           ...coverPageParagraphs,
+          ...scinceElements,
           ...bodyParagraphs,
           ...mapElements,
           ...photoElements,

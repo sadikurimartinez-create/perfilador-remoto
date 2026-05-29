@@ -27,17 +27,19 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
     const riskLevel = analysisResult?.riskLevel || 'medio';
     const inegi = analysisResult?.inegiDemographics || {};
     const ml = analysisResult?.mlFeatures || {};
+    const scince = analysisResult?.scinceDemographics || {};
 
     // 1. Radar de Riesgo Multifuente
-    let baseScore = riskLevel === 'crítico' ? 90 : riskLevel === 'alto' ? 75 : riskLevel === 'medio' ? 50 : 25;
+    let baseScore = ml.finalThreatScore || (riskLevel === 'crítico' ? 90 : riskLevel === 'alto' ? 75 : riskLevel === 'medio' ? 50 : 25);
     
     const radarData = [
-      { subject: 'R. Territorial', A: Math.min(100, baseScore + (crimes.length * 2)) },
-      { subject: 'R. Urbano', A: Math.min(100, baseScore + (pois.length * 1.5)) },
-      { subject: 'R. Ambiental', A: Math.min(100, baseScore + (ml.ratioIrregularidad ? ml.ratioIrregularidad * 50 : 10)) },
-      { subject: 'R. Visual', A: Math.min(100, baseScore + 15) },
-      { subject: 'R. Social', A: Math.min(100, baseScore + (inegi.poblacionTotal ? 10 : -10)) },
-      { subject: 'Escalamiento', A: Math.min(100, baseScore + (ml.frecuenciaGraves ? ml.frecuenciaGraves * 5 : 0)) },
+      { subject: 'R. Territorial', A: Math.min(100, (ml.puntajeHeuristicoBase || 5) * 10 + (crimes.length * 2)) },
+      { subject: 'R. Urbano', A: Math.min(100, (ml.atractoresTotales || pois.length) * 5 + 30) },
+      { subject: 'R. Ambiental', A: Math.min(100, 40 + (ml.ratioIrregularidad ? ml.ratioIrregularidad * 50 : 10)) },
+      { subject: 'R. Visual', A: Math.min(100, baseScore + 5) },
+      { subject: 'R. Demográfico', A: Math.min(100, baseScore + (inegi.poblacionTotal ? 5 : -5)) },
+      { subject: 'V. Sociodemográfica', A: scince.svs || 50 },
+      { subject: 'Escalamiento', A: Math.min(100, 30 + (ml.frecuenciaGraves ? ml.frecuenciaGraves * 15 : 0)) },
       { subject: 'Threat Score', A: baseScore }
     ];
 
@@ -50,6 +52,14 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
       { name: 'Comercio Irregular', impact: Math.min(100, (ml.ratioIrregularidad || 0.2) * 100 + 20) },
       { name: 'Vulnerabilidad Espacial', impact: Math.min(100, baseScore - 5) }
     ];
+    
+    // CENSINT: Adición de variables sociodemográficas competitivas
+    if (scince.svs > 60) factoresRaw.push({ name: 'Alta Vulnerabilidad Social', impact: scince.svs });
+    if (scince.pctJovenes > 28) factoresRaw.push({ name: 'Alta Concentración Juvenil', impact: 70 + (scince.pctJovenes - 28) * 2 });
+    if (scince.gradoMarginacion === 'Alto' || scince.gradoMarginacion === 'Muy Alto') factoresRaw.push({ name: 'Marginación Social', impact: scince.gradoMarginacion === 'Muy Alto' ? 95 : 80 });
+    if (scince.escolaridad && scince.escolaridad < 8.5) factoresRaw.push({ name: 'Baja Escolaridad Promedio', impact: 85 - scince.escolaridad * 5 });
+    if (scince.densidad > 6000) factoresRaw.push({ name: 'Alta Densidad Poblacional', impact: Math.min(100, scince.densidad / 100) });
+
     const factoresData = factoresRaw.sort((a, b) => b.impact - a.impact).slice(0, 5);
 
     // 3. Ranking de Atractores de Riesgo
@@ -72,7 +82,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
     }
 
     // 4. Proyección Criminológica a 6 Meses
-    let trendBase = baseScore / 25; // Base 1 a 3.6
+    let trendBase = (baseScore * 0.85 + (scince.svs || 50) * 0.15) / 25; // Base 1 a 4
     const proyeccionData = [];
     for (let i = 0; i <= 6; i++) {
       let val = trendBase + (i * (baseScore >= 50 ? 0.15 : -0.05)) + (Math.random() * 0.2 - 0.1);

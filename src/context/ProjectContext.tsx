@@ -79,6 +79,7 @@ export type AnalysisResult = {
     poblacionTotal: string;
     datosExtra: string;
   };
+  scinceDemographics?: any;
   raw?: unknown;
 };
 

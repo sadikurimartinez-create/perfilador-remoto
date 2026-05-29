@@ -482,6 +482,7 @@ const hasMinimumPhotos =
             pois?: any[];
             inegiDemographics?: any;
             tacticalStreetViews?: any[];
+            scinceDemographics?: any;
           };
         };
         const markdown = data.markdown ?? "";
@@ -511,6 +512,8 @@ const hasMinimumPhotos =
           pois: data.meta?.pois || currentAnalysisResult?.pois || [],
           inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
           tacticalStreetViews: data.meta?.tacticalStreetViews || (currentAnalysisResult as any)?.tacticalStreetViews,
+          
+          
         } as any);
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
@@ -638,7 +641,8 @@ const hasMinimumPhotos =
         "Dictamen_criminologico_ambiental",
         photosToExportData.length > 0 ? photosToExportData : undefined,
         profileRiskLevel ?? undefined,
-        sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined
+        sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined,
+        (analysisResult as any)?.scinceDemographics
       );
 
       if (!isReadOnly) await markAsPrinted();
@@ -1604,6 +1608,23 @@ const hasMinimumPhotos =
                 </button>
               </div>
 
+              {analysisResult?.scinceDemographics?.svs !== undefined && (
+                <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 print:hidden">
+                   <div className="bg-slate-800/60 p-4 border border-slate-700/80 rounded-xl flex items-center justify-between col-span-1 lg:col-span-2">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-200">Vulnerabilidad Sociodemográfica</h4>
+                        <div className="text-[11px] text-slate-400 mt-0.5">CENSINT • SocioDemographic Vulnerability Score</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-3xl">🚨</div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-2xl font-black" style={{color: `#${analysisResult.scinceDemographics.svsColor}`}}>{analysisResult.scinceDemographics.svs}</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest" style={{color: `#${analysisResult.scinceDemographics.svsColor}`}}>{analysisResult.scinceDemographics.svsNivel}</span>
+                        </div>
+                      </div>
+                   </div>
+                </div>
+              )}
               {analysisResult && (
                 <div className="w-full mb-3 print:mb-0">
                   <TacticalCharts analysisResult={analysisResult} />
