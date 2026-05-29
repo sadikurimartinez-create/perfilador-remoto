@@ -176,7 +176,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: COLORS.azulInstitucional, fontWeight: 600 }} />
                 <YAxis domain={[0, 4]} ticks={[1, 2, 3, 4]} tickFormatter={formatYAxisProyeccion} tick={{ fontSize: 10, fill: COLORS.grisCorporativo, fontWeight: 600 }} width={55} />
-                <Tooltip formatter={(value: number) => [formatYAxisProyeccion(value), 'Nivel Esperado']} contentStyle={{ fontSize: '12px', color: COLORS.texto }} />
+                <Tooltip formatter={(value: any) => [formatYAxisProyeccion(Number(value)), 'Nivel Esperado']} contentStyle={{ fontSize: '12px', color: COLORS.texto }} />
                 <ReferenceLine y={3} stroke={COLORS.naranja} strokeDasharray="3 3" opacity={0.6} />
                 <ReferenceLine y={4} stroke={COLORS.rojo} strokeDasharray="3 3" opacity={0.6} />
                 <Line type="monotone" dataKey="nivel" stroke={COLORS.rojo} strokeWidth={3} dot={{ r: 4, fill: COLORS.rojo, stroke: COLORS.blanco, strokeWidth: 2 }} activeDot={{ r: 7 }} />
