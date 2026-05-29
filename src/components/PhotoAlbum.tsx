@@ -606,8 +606,11 @@ const hasMinimumPhotos =
   };
 
   const handleExportToWord = async () => {
-    const rawContent = editableProfile || aiProfile;
-    if (!rawContent) return;
+    const rawContent = editableProfile || aiProfile || (project as any)?.analysisContent;
+    if (!rawContent) {
+      setError("No hay contenido para exportar. Genere o guarde el dictamen primero.");
+      return;
+    }
     setError(null);
     
     const snapshotsToExport = await autoCaptureSnapshots();
@@ -1089,14 +1092,19 @@ const hasMinimumPhotos =
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ lat: centerLat, lng: centerLng })
                 });
-                const data = await res.json();
+                let data;
+                try {
+                  data = await res.json();
+                } catch (e) {
+                  throw new Error(`El servidor falló (Error HTTP ${res.status}). Revise los logs de Vercel o su conexión.`);
+                }
                 if (res.ok) {
                   const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setIsAnalysisContextAudited(false); // Forzar reevaluación por la IA
                   alert(`Consulta SCINCE finalizada. ${data.viviendasDeshabitadas} casas deshabitadas detectadas en la cuadra.`);
                 } else { setError(data.error || "Error al consultar INEGI SCINCE."); }
-              } catch (err) { setError("Error de red al conectar con SCINCE."); } 
+              } catch (err: any) { setError(err.message || "Error de red al conectar con SCINCE."); } 
               finally { setIsCheckingScince(false); }
             }}
             className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"

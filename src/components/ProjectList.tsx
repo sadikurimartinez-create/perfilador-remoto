@@ -30,6 +30,8 @@ type ProjectWithCount = {
   comentariosSupervisor?: string;
   descripcion?: string;
   geometryType?: string;
+  analysisContent?: string;
+  deleted?: boolean;
 };
 
 export function ProjectList() {
@@ -141,7 +143,8 @@ export function ProjectList() {
             comentariosSupervisor: data.comentariosSupervisor || "",
             descripcion: data.descripcion || "",
             geometryType: data.geometryType || "individual",
-          } as ProjectWithCount & { deleted?: boolean };
+            analysisContent: data.analysisContent || "",
+          } as ProjectWithCount;
         })
         .filter((p) => !p.deleted);
       setProjects(list);
@@ -693,13 +696,13 @@ export function ProjectList() {
                       </div>
                     </div>
                     <div className="bg-slate-900/80 p-4 border-t border-slate-800/80">
-                      {analysesForProject.length === 0 ? (
+                      {analysesForProject.length === 0 && !p.analysisContent ? (
                         <p className="text-sm text-slate-500 italic">
                           Sin análisis generados aún.
                         </p>
                       ) : (
                         <div className="space-y-2">
-                          {analysesForProject.slice(0, 3).map((a) => (
+                          {(p.analysisContent ? [{ id: p.id + '_inline', projectId: p.id, content: p.analysisContent, createdAt: p.createdAt, createdBy: p.createdBy }] : analysesForProject).slice(0, 3).map((a: any) => (
                             <div
                               key={a.id}
                               className="bg-slate-800/40 p-3 rounded-md border border-slate-700/50 flex flex-col gap-2"
