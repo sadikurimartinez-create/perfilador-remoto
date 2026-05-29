@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
@@ -99,7 +98,6 @@ async function burnGpsOnImage(srcUrl: string): Promise<string> {
   });
 }
 
-const C4_RIGHT_COLUMN_ID = "c4-right-column";
 
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
@@ -108,15 +106,12 @@ type PhotoAlbumProps = {
     content: string,
     attachedPhotos?: string[]
   ) => Promise<void>;
-  /** Vista Centro de Comando: columna derecha para mapa y gráficas (portal). */
-  splitLayout?: boolean;
 };
 
 export function PhotoAlbum({
   onDeletePhoto,
   projectId,
   onSaveAnalysisToCloud,
-  splitLayout = false,
 }: PhotoAlbumProps = {}) {
   const {
     project,

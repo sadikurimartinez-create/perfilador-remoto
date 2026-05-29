@@ -215,19 +215,6 @@ export function AnalysisMap({
     );
   }
 
-  const getPoiIcon = (category?: string | null): { emoji: string; bg: string } => {
-    switch (category) {
-      case "escuela":
-        return { emoji: "🏫", bg: "#0ea5e9" };
-      case "expendioAlcohol":
-        return { emoji: "🍺", bg: "#eab308" };
-      case "chatarreraOTaller":
-        return { emoji: "🛠️", bg: "#f97316" };
-      case "otro":
-      default:
-        return { emoji: "📍", bg: "#22c55e" };
-    }
-  };
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-100">
