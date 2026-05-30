@@ -1097,7 +1097,7 @@ const hasMinimumPhotos =
                 const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
                 const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
 
-                const res = await fetch("/api/osint/scince", {
+                const res = await fetch("/api/inegi/scince", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ lat: centerLat, lng: centerLng })
@@ -1154,7 +1154,7 @@ const hasMinimumPhotos =
                 const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
                 const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
 
-                const res = await fetch("/api/osint/denue", {
+                const res = await fetch("/api/inegi/denue", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ lat: centerLat, lng: centerLng, radio: 500 })
