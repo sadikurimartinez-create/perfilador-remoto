@@ -179,6 +179,9 @@ export function PhotoAlbum({
   // Estado para Consulta INEGI SCINCE
   const [isCheckingScince, setIsCheckingScince] = useState(false);
 
+  // Estado para Consulta INEGI DENUE
+  const [isCheckingDenue, setIsCheckingDenue] = useState(false);
+
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
   const [isAnalysisContextAudited, setIsAnalysisContextAudited] = useState(false);
@@ -1117,6 +1120,59 @@ const hasMinimumPhotos =
             className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
             {isCheckingScince ? "Consultando INEGI..." : "📊 Consultar Cuadra y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
+
+      {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) */}
+      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
+          <p className="text-xs text-slate-400">
+            Realice un barrido para identificar negocios, bares, chatarreras y unidades económicas formales a 250 metros de la evidencia.
+          </p>
+        </header>
+        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+          <p className="text-xs text-slate-300 flex-1">
+            {selectedIds.length > 0
+              ? `El barrido buscará negocios a 250 metros del centroide de las ${selectedIds.length} fotos seleccionadas.`
+              : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
+          </p>
+          <button
+            type="button"
+            disabled={selectedIds.length === 0 || isCheckingDenue || isReadOnly}
+            onClick={async () => {
+              setIsCheckingDenue(true);
+              setError(null);
+              try {
+                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+                if (selectedPhotos.length === 0) {
+                  setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
+                  setIsCheckingDenue(false);
+                  return;
+                }
+                const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
+                const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
+
+                const res = await fetch("/api/osint/denue", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lat: centerLat, lng: centerLng, radio: 250 })
+                });
+                let data;
+                try { data = await res.json(); } catch (e) { throw new Error(`El servidor falló (Error HTTP ${res.status}).`); }
+                if (res.ok) {
+                  const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 250 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setIsAnalysisContextAudited(false);
+                  alert(`Consulta DENUE finalizada. ${data.total} unidades económicas detectadas.`);
+                } else { setError(data.error || "Error al consultar INEGI DENUE."); }
+              } catch (err: any) { setError(err.message || "Error de red al conectar con DENUE."); } 
+              finally { setIsCheckingDenue(false); }
+            }}
+            className="w-full md:w-auto bg-amber-700 hover:bg-amber-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingDenue ? "Buscando Negocios..." : "🏪 Consultar DENUE y Añadir a Hipótesis"}
           </button>
         </div>
       </div>
