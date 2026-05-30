@@ -9,3 +9,5 @@ yarn-error.log*
 dist/
 out/
 perfil-remoto-fa3fa74486fa.json
+.vercel
+.env*

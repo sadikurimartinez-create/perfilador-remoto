@@ -6,6 +6,7 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
+import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -182,6 +183,10 @@ export function PhotoAlbum({
   // Estado para Consulta INEGI DENUE
   const [isCheckingDenue, setIsCheckingDenue] = useState(false);
 
+  // FASE 3: Indicadores de Conexión en tiempo real (Telemetría)
+  const [statusScince, setStatusScince] = useState<"checking" | "online" | "offline">("checking");
+  const [statusDenue, setStatusDenue] = useState<"checking" | "online" | "offline">("checking");
+
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
   const [isAnalysisContextAudited, setIsAnalysisContextAudited] = useState(false);
@@ -201,6 +206,17 @@ const currentPhotos = album.length;
 
 const hasMinimumPhotos =
   currentPhotos >= requiredPhotos;
+
+  // Verificar conexión de las APIs al cargar el componente
+  useEffect(() => {
+    pingOsint().then(() => {
+      setStatusScince("online");
+      setStatusDenue("online");
+    }).catch(() => {
+      setStatusScince("offline");
+      setStatusDenue("offline");
+    });
+  }, []);
 
   const toggleDictation = (fieldId: string, onUpdate: (text: string) => void) => {
     if (typeof window === "undefined") return;
@@ -1070,7 +1086,12 @@ const hasMinimumPhotos =
       {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) */}
       <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Demografía y Marginación (INEGI SCINCE)</h4>
+          <div className="flex flex-wrap items-center gap-3">
+            <h4 className="text-base font-semibold text-slate-200">Demografía y Marginación (INEGI SCINCE)</h4>
+            {statusScince === "checking" && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full animate-pulse">⏳ Verificando...</span>}
+            {statusScince === "online" && <span className="text-[10px] bg-emerald-900/60 border border-emerald-700 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE</span>}
+            {statusScince === "offline" && <span className="text-[10px] bg-red-900/60 border border-red-700 text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> OFFLINE (404)</span>}
+          </div>
           <p className="text-xs text-slate-400">
             Extrae datos sociodemográficos a nivel manzana/AGEB basados en el centro de las fotografías seleccionadas. Identifica viviendas deshabitadas y desorganización social.
           </p>
@@ -1097,23 +1118,15 @@ const hasMinimumPhotos =
                 const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
                 const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
 
-                const res = await fetch("/api/inegi/scince", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ lat: centerLat, lng: centerLng })
-                });
-                let data;
-                try {
-                  data = await res.json();
-                } catch (e) {
-                  throw new Error(`El servidor falló (Error HTTP ${res.status}). Revise los logs de Vercel o su conexión.`);
-                }
-                if (res.ok) {
+                const data = await getScinceData(centerLat, centerLng);
+                if (data.exito) {
                   const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setIsAnalysisContextAudited(false); // Forzar reevaluación por la IA
                   alert(`Consulta SCINCE finalizada. ${data.viviendasDeshabitadas} casas deshabitadas detectadas en la cuadra.`);
-                } else { setError(data.error || "Error al consultar INEGI SCINCE."); }
+                } else {
+                  setError(data.error || "Error al consultar INEGI SCINCE.");
+                }
               } catch (err: any) { setError(err.message || "Error de red al conectar con SCINCE."); } 
               finally { setIsCheckingScince(false); }
             }}
@@ -1127,7 +1140,12 @@ const hasMinimumPhotos =
       {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) */}
       <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
+          <div className="flex flex-wrap items-center gap-3">
+            <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
+            {statusDenue === "checking" && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full animate-pulse">⏳ Verificando...</span>}
+            {statusDenue === "online" && <span className="text-[10px] bg-emerald-900/60 border border-emerald-700 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE</span>}
+            {statusDenue === "offline" && <span className="text-[10px] bg-red-900/60 border border-red-700 text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> OFFLINE (404)</span>}
+          </div>
           <p className="text-xs text-slate-400">
             Realice un barrido para identificar negocios, bares, chatarreras y unidades económicas formales a 500 metros de la evidencia.
           </p>
@@ -1154,19 +1172,15 @@ const hasMinimumPhotos =
                 const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
                 const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
 
-                const res = await fetch("/api/inegi/denue", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ lat: centerLat, lng: centerLng, radio: 500 })
-                });
-                let data;
-                try { data = await res.json(); } catch (e) { throw new Error(`El servidor falló (Error HTTP ${res.status}).`); }
-                if (res.ok) {
+                const data = await getDenueData(centerLat, centerLng, 500);
+                if (data.exito) {
                   const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setIsAnalysisContextAudited(false);
                   alert(`Consulta DENUE finalizada. ${data.total} unidades económicas detectadas.`);
-                } else { setError(data.error || "Error al consultar INEGI DENUE."); }
+                } else {
+                  setError(data.error || "Error al consultar INEGI DENUE.");
+                }
               } catch (err: any) { setError(err.message || "Error de red al conectar con DENUE."); } 
               finally { setIsCheckingDenue(false); }
             }}

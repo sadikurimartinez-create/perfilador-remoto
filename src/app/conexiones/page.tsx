@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getFirebaseApp, getAuthInstance } from "@/lib/firebase";
+import { pingOsint } from "@/lib/osintActions";
 
 type Status = "pending" | "ok" | "error";
 
@@ -13,7 +14,9 @@ type SensorKey =
   | "microphone"
   | "firebase"
   | "maps"
-  | "gemini";
+  | "gemini"
+  | "scince"
+  | "denue";
 
 type SensorState = Record<SensorKey, Status>;
 
@@ -25,6 +28,8 @@ const initialState: SensorState = {
   firebase: "pending",
   maps: "pending",
   gemini: "pending",
+  scince: "pending",
+  denue: "pending",
 };
 
 export default function ConexionesPage() {
@@ -37,6 +42,8 @@ export default function ConexionesPage() {
     firebase: "",
     maps: "",
     gemini: "",
+    scince: "",
+    denue: "",
   });
 
   useEffect(() => {
@@ -161,6 +168,15 @@ export default function ConexionesPage() {
     } catch {
       updateSensor("gemini", "error", "No se pudo comprobar la configuración de Gemini.");
     }
+
+    // INEGI SCINCE
+    pingOsint().then(() => {
+      updateSensor("scince", "ok", "Conexión directa establecida (Server Action)");
+      updateSensor("denue", "ok", "Conexión directa establecida (Server Action)");
+    }).catch(() => {
+      updateSensor("scince", "error", "Error en motor interno");
+      updateSensor("denue", "error", "Error en motor interno");
+    });
   }, []);
 
   const [_, setDummy] = useState(0); // evita warning por funciones no usadas
@@ -318,6 +334,20 @@ export default function ConexionesPage() {
                 </div>
                 {statusBadge(sensors.gemini)}
               </div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-100">Motor INEGI SCINCE</p>
+                  <p className="text-xs text-slate-400">{messages.scince}</p>
+                </div>
+                {statusBadge(sensors.scince)}
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-100">Motor INEGI DENUE</p>
+                  <p className="text-xs text-slate-400">{messages.denue}</p>
+                </div>
+                {statusBadge(sensors.denue)}
+              </div>
             </div>
           </div>
 
@@ -383,4 +413,3 @@ export default function ConexionesPage() {
     </main>
   );
 }
-
