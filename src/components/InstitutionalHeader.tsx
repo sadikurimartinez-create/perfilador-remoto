@@ -23,7 +23,7 @@ export function InstitutionalHeader() {
         <div className="flex flex-1 flex-col items-center justify-center text-center min-w-0">
           <Link href="/">
             <h1 className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl hover:text-sky-400 transition-colors">
-              PERFILADOR REMOTO
+              PERFILADOR REMOTO v2.2
             </h1>
           </Link>
           <p className="text-[10px] font-medium text-slate-300 sm:text-xs mt-0.5">
