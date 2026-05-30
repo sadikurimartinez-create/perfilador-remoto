@@ -1129,13 +1129,13 @@ const hasMinimumPhotos =
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
           <p className="text-xs text-slate-400">
-            Realice un barrido para identificar negocios, bares, chatarreras y unidades económicas formales a 250 metros de la evidencia.
+            Realice un barrido para identificar negocios, bares, chatarreras y unidades económicas formales a 500 metros de la evidencia.
           </p>
         </header>
         <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
           <p className="text-xs text-slate-300 flex-1">
             {selectedIds.length > 0
-              ? `El barrido buscará negocios a 250 metros del centroide de las ${selectedIds.length} fotos seleccionadas.`
+              ? `El barrido buscará negocios a 500 metros del centroide de las ${selectedIds.length} fotos seleccionadas.`
               : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
           </p>
           <button
@@ -1157,12 +1157,12 @@ const hasMinimumPhotos =
                 const res = await fetch("/api/osint/denue", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ lat: centerLat, lng: centerLng, radio: 250 })
+                  body: JSON.stringify({ lat: centerLat, lng: centerLng, radio: 500 })
                 });
                 let data;
                 try { data = await res.json(); } catch (e) { throw new Error(`El servidor falló (Error HTTP ${res.status}).`); }
                 if (res.ok) {
-                  const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 250 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
+                  const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setIsAnalysisContextAudited(false);
                   alert(`Consulta DENUE finalizada. ${data.total} unidades económicas detectadas.`);
