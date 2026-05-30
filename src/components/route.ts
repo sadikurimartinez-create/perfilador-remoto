@@ -1,1 +1,0 @@
-// Archivo eliminado por redundancia y para evitar conflictos en Vercel.
