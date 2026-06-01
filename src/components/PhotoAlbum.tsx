@@ -1022,8 +1022,6 @@ const hasMinimumPhotos =
               try {
                 const ngrokUrl = (process.env.NEXT_PUBLIC_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
                 const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
-                  method: "GET",
-                  headers: { "ngrok-skip-browser-warning": "true" }
                   method: "POST"
                 });
                 
