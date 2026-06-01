@@ -115,15 +115,27 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     return { lat, lng };
   }, [coordinates]);
 
-  // Simulación táctica de datos del Atlas de Riesgos basados en el centro del mapa
+  const [realDuctos, setRealDuctos] = useState<any[][]>([]);
+
+  useEffect(() => {
+    if (!center || !showAtlasRiesgos) return;
+    const q = `[out:json][timeout:15];(way"man_made"="pipeline";way"power"="line";);out geom;`;
+    fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: q })
+      .then(res => res.json())
+      .then(data => {
+          const lines = data.elements
+              .filter((e: any) => e.geometry)
+              .map((e: any) => e.geometry.map((pt: any) => ({ lat: pt.lat, lng: pt.lon })));
+          setRealDuctos(lines);
+      })
+      .catch(err => console.error("Overpass map error", err));
+  }, [center, showAtlasRiesgos]);
+
+  // Combinación de datos tácticos del Atlas de Riesgos basados en el centro del mapa
   const atlasData = useMemo(() => {
     if (!center) return null;
     return {
-      ducto: [
-        { lat: center.lat - 0.008, lng: center.lng - 0.012 },
-        { lat: center.lat + 0.002, lng: center.lng + 0.001 },
-        { lat: center.lat + 0.012, lng: center.lng + 0.008 },
-      ],
+      ductos: realDuctos.length > 0 ? realDuctos : [],
       falla: [
         { lat: center.lat - 0.004, lng: center.lng + 0.004 },
         { lat: center.lat - 0.001, lng: center.lng + 0.007 },
@@ -131,7 +143,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         { lat: center.lat - 0.007, lng: center.lng + 0.005 },
       ]
     };
-  }, [center]);
+  }, [center, realDuctos]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -369,10 +381,13 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         {/* CAPAS GEOGRÁFICAS DEL ATLAS DE RIESGO */}
         {showAtlasRiesgos && atlasData && (
           <>
-            <Polyline
-              path={atlasData.ducto}
-              options={{ strokeColor: "#f59e0b", strokeOpacity: 0.9, strokeWeight: 5, zIndex: 50 }}
-            />
+            {atlasData.ductos.map((ductoPath, idx) => (
+              <Polyline
+                key={`ducto-${idx}`}
+                path={ductoPath}
+                options={{ strokeColor: "#f59e0b", strokeOpacity: 0.9, strokeWeight: 5, zIndex: 50 }}
+              />
+            ))}
             <Polygon
               paths={atlasData.falla}
               options={{ fillColor: "#ef4444", fillOpacity: 0.3, strokeColor: "#b91c1c", strokeWeight: 2, zIndex: 40 }}

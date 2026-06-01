@@ -264,6 +264,36 @@ async function getSesnspMunicipal(estado: string, municipio: string): Promise<st
   return "";
 }
 
+async function getOverpassData(lat: number, lng: number, radius: number) {
+  try {
+    const query = `[out:json][timeout:10];
+    (
+      way"man_made"="pipeline";
+      way"highway"~"path|track";
+      way"landuse"~"brownfield|greenfield|construction|vacant";
+      way"noexit"="yes";
+    );
+    out tags;`;
+    
+    const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: query });
+    if (!res.ok) throw new Error("Overpass API error");
+    
+    const data = await res.json();
+    let ductos = 0; let senderos = 0; let baldios = 0; let callejones = 0;
+    for (const el of data.elements) {
+      if (!el.tags) continue;
+      if (el.tags.man_made === "pipeline") ductos++;
+      if (el.tags.highway && (el.tags.highway === "path" || el.tags.highway === "track")) senderos++;
+      if (el.tags.landuse) baldios++;
+      if (el.tags.noexit === "yes") callejones++;
+    }
+    return { ductos, senderos, baldios, callejones, exito: true };
+  } catch (err) {
+    console.error("[generate-profile] Error en Overpass:", err);
+    return { ductos: 0, senderos: 0, baldios: 0, callejones: 0, exito: false };
+  }
+}
+
 async function readBibliographyContext(): Promise<string> {
   try {
     const baseDir = path.join(process.cwd(), "Bibliografía");
@@ -465,6 +495,8 @@ function buildPromptForGemini(params: {
   projectDescription?: string;
   tacticalStreetViews?: any[];
   sesnspTexto: string;
+  overpassTexto: string;
+  cenapredTexto: string;
 }): string {
   const {
     photos,
@@ -490,6 +522,8 @@ function buildPromptForGemini(params: {
     projectDescription,
     tacticalStreetViews = [],
     sesnspTexto,
+    overpassTexto,
+    cenapredTexto,
   } = params;
 
   const comentariosInvestigador = photos
@@ -652,6 +686,12 @@ ${incidenciaArchivosTexto || "No se encontraron delitos adicionales en archivos 
 ## INCIDENCIA MUNICIPAL MACRO (SESNSP)
 ${sesnspTexto || "No se detectaron estadísticas a nivel municipal en los archivos locales."}
 
+## INFRAESTRUCTURA CRÍTICA Y DUCTOS (ATLAS DE RIESGOS / CENAPRED)
+${cenapredTexto}
+
+## ENTORNO URBANO TÁCTICO (OVERPASS API / CALLEJONES Y BALDÍOS)
+${overpassTexto}
+
 ## CONTEXTO VISUAL (Street View)
 ${streetViewTexto}
 
@@ -678,7 +718,7 @@ Después de estas 3 precisiones iniciales, estructura el resto del documento OBL
 1. INFORMACIÓN SOCIO-DEMOGRÁFICA: Obligatoriamente debes redactar este capitulado analizando los datos de INEGI SCINCE. REGLA: ${geoDemographicInstruction} (Menciona esto expresamente al iniciar el capítulo).
 2. ANÁLISIS DEL CONTEXTO ESPACIAL (Máx. 1 párrafo integrando la información demográfica con la hipótesis del analista).
 3. DETERIORO FÍSICO Y VENTANAS ROTAS (Viñetas con hallazgos clave de fotos y Vision API).
-4. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT y CSV, identificando riesgos directos).
+4. ATRACTORES Y DINÁMICA DELICTIVA (Viñetas cruzando DENUE, OSINT, CSV, callejones/baldíos de Overpass e infraestructura crítica, identificando riesgos directos).
 5. LÍNEAS CRONOLÓGICAS GEOESPACIALES (Profundización de la información predictiva: establece clara y circunstanciadamente el escalamiento de los fenómenos criminales, su continuidad espacial y la proyección de riesgos inminentes).
 6. CONCLUSIONES TÁCTICAS (Riesgo a 6 meses expuesto en puntos de acción y recomendaciones operativas directas).
 `.trim();
@@ -776,6 +816,8 @@ export async function POST(req: Request) {
   const newsOsintPromise = geocodingPromise.then((geo) => searchNewsOsint(geo.colonia || "", geo.municipio || "", geo.estado || ""));
     const telegramOsintPromise = geocodingPromise.then((geo) => searchTelegram(geo.colonia || geo.municipio || ""));
 
+    const overpassPromise = getOverpassData(centerLat, centerLng, radiusMeters);
+
     const bibliographyPromise = readBibliographyContext();
 
     const [
@@ -788,6 +830,7 @@ export async function POST(req: Request) {
       newsOsintResult,
       telegramOsintResult,
       bibliographyContext,
+      overpassResult,
     ] = await Promise.all([
       geocodingPromise,
       Promise.allSettled([denueTimedPromise, placesPromise]),
@@ -798,9 +841,19 @@ export async function POST(req: Request) {
       newsOsintPromise,
       telegramOsintPromise,
       bibliographyPromise,
+      overpassPromise,
     ]);
 
     const sesnspTexto = await getSesnspMunicipal(geocoding.estado || "", geocoding.municipio || "");
+
+    let overpassTexto = "No se extrajeron datos de infraestructura urbana táctica.";
+    let cenapredTexto = "No se detectaron ductos o infraestructura crítica superficial en el perímetro.";
+    if (overpassResult.exito) {
+      overpassTexto = `Se detectaron ${overpassResult.senderos} senderos/caminos de terracería, ${overpassResult.baldios} lotes baldíos/en construcción, y ${overpassResult.callejones} callejones ciegos en el radio de análisis. Estos elementos actúan frecuentemente como rutas de escape o lugares de acecho.`;
+      if (overpassResult.ductos > 0) {
+        cenapredTexto = `¡ALERTA! Se detectaron ${overpassResult.ductos} instalaciones de infraestructura crítica (posibles ductos de hidrocarburos / PEMEX) dentro del perímetro de análisis. Alto riesgo asociado a delitos federales (robo de combustible, tomas clandestinas).`;
+      }
+    }
 
     const denueResult =
       placesAndDenueSettled[0].status === "fulfilled"
@@ -1002,6 +1055,8 @@ export async function POST(req: Request) {
       projectDescription: body.projectDescription,
       tacticalStreetViews,
       sesnspTexto,
+      overpassTexto,
+      cenapredTexto,
     });
 
     const marcoTeoriaReglas =
