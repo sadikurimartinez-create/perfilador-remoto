@@ -57,6 +57,7 @@ export default function AdminPage() {
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
   const [checklist, setChecklist] = useState<boolean[]>([false, false, false, false, false]);
   const [feedback, setFeedback] = useState("");
+  const [plazoDevolucion, setPlazoDevolucion] = useState<number>(24);
   const [evaluationMsg, setEvaluationMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   // Estado para el Dashboard de Desempeño
@@ -314,8 +315,11 @@ export default function AdminPage() {
       const db = getDb();
       await updateDoc(doc(db, "projects", selectedProject.id), {
         estado: "DEVUELTO",
+        comentariosAuditoria: feedback,
         comentariosSupervisor: feedback,
-        evaluadoPor: user.name,
+        fechaDevolucion: Date.now(),
+        deadlineAt: Date.now() + (plazoDevolucion * 60 * 60 * 1000),
+        devueltoPor: user.name || user.username,
         fechaEvaluacion: Date.now(),
       });
       setEvaluationMsg({ type: "ok", text: "Expediente DEVUELTO al analista con observaciones." });
@@ -325,9 +329,13 @@ export default function AdminPage() {
     }
   };
 
-  const enRevision = projects.filter(p => p.estado === "EN REVISIÓN");
-  const aprobados = projects.filter(p => p.estado === "CERRADO" && p.evaluadoPor === user.name).length;
-  const devueltos = projects.filter(p => p.estado === "DEVUELTO" && p.evaluadoPor === user.name).length;
+  const expedientesPendientes = projects.filter(p => 
+    p.estado === "EN REVISIÓN" || 
+    p.estado === "EN AUDITORÍA" || 
+    ((!p.estado || p.estado === "ABIERTO") && p.printedAt && ((Date.now() - p.printedAt) / (1000 * 60 * 60) > 24))
+  );
+  const aprobados = projects.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
+  const devueltos = projects.filter(p => p.estado === "DEVUELTO").length;
 
   return (
     <div className="space-y-6">
@@ -376,37 +384,54 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl flex flex-col justify-center items-center shadow-md">
               <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">En Revisión (Pendientes)</p>
-              <p className="text-3xl font-bold mt-2 text-amber-400">{enRevision.length}</p>
+              <p className="text-3xl font-bold mt-2 text-amber-400">{expedientesPendientes.length}</p>
             </div>
             <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl flex flex-col justify-center items-center shadow-md">
-              <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">Mis Validaciones (Aprobados)</p>
+              <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">Validaciones Globales</p>
               <p className="text-3xl font-bold mt-2 text-emerald-400">{aprobados}</p>
             </div>
             <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl flex flex-col justify-center items-center shadow-md">
-              <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">Mis Devoluciones</p>
+              <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wide">Devoluciones Activas</p>
               <p className="text-3xl font-bold mt-2 text-red-400">{devueltos}</p>
             </div>
           </div>
 
           {!selectedProject ? (
             <div className="card border border-slate-800 p-4">
-              <h3 className="text-sm font-semibold text-slate-100 mb-3">Bandeja de Entrada: Expedientes En Revisión</h3>
-              {enRevision.length === 0 ? (
+              <h3 className="text-sm font-semibold text-slate-100 mb-3">Bandeja de Entrada: Pendientes de Auditoría</h3>
+              {expedientesPendientes.length === 0 ? (
                 <p className="text-xs text-slate-400 bg-slate-900/50 p-4 rounded-lg text-center border border-slate-800/50">No hay expedientes pendientes de validación en este momento.</p>
               ) : (
                 <ul className="space-y-2">
-                  {enRevision.map(p => (
+                  {expedientesPendientes.map(p => (
                     <li key={p.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900/60 border border-slate-800 p-3 rounded-lg gap-3">
                       <div>
-                        <p className="font-semibold text-sm text-slate-200">{p.name || p.nombre || "Expediente Sin Nombre"}</p>
-                        <p className="text-[11px] text-slate-400">Enviado a revisión por: <span className="text-slate-300 font-medium">{p.createdBy || "Analista"}</span></p>
+                        <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                          <p className="font-semibold text-sm text-slate-200">{p.name || p.nombre || "Expediente Sin Nombre"}</p>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            p.estado === "EN REVISIÓN" ? "bg-blue-900/60 text-blue-400 border border-blue-700" :
+                            p.estado === "EN AUDITORÍA" ? "bg-purple-900/60 text-purple-400 border border-purple-700" :
+                            "bg-slate-700 text-slate-300 border border-slate-500"
+                          }`}>
+                            {p.estado === "EN REVISIÓN" ? "En Revisión" : p.estado === "EN AUDITORÍA" ? "En Auditoría" : "Cerrado (24h)"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">Analista: <span className="text-slate-300 font-medium">{p.createdBy || "Desconocido"}</span></p>
                       </div>
-                      <button
-                        onClick={() => openEvaluation(p)}
-                        className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-semibold shadow transition-colors"
-                      >
-                        Evaluar Expediente
-                      </button>
+                      <div className="flex gap-2">
+                        <Link
+                          href={`/project/${p.id}`}
+                          className="bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded text-xs font-semibold shadow transition-colors flex items-center"
+                        >
+                          👁️ Ver
+                        </Link>
+                        <button
+                          onClick={() => openEvaluation(p)}
+                          className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded text-xs font-semibold shadow transition-colors flex items-center"
+                        >
+                          📋 Evaluar
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -440,6 +465,19 @@ export default function AdminPage() {
                   placeholder="Ej. Falta profundidad en el análisis de las rutas de escape en el cuadrante nororiente..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-md p-3 text-xs text-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 min-h-[80px]"
                 />
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <label className="text-xs text-slate-300 font-medium">Término para subsanar (en caso de devolución):</label>
+                <select
+                  value={plazoDevolucion}
+                  onChange={(e) => setPlazoDevolucion(Number(e.target.value))}
+                  className="bg-slate-950 text-slate-200 border border-slate-700 rounded-md px-2 py-1 text-xs focus:ring-sky-500 outline-none"
+                >
+                  <option value={24}>24 horas</option>
+                  <option value={48}>48 horas</option>
+                  <option value={72}>72 horas</option>
+                </select>
               </div>
 
               {evaluationMsg && (

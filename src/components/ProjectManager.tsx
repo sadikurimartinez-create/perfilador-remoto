@@ -443,8 +443,8 @@ export function ProjectManager() {
               Enviar a Revisión
             </button>
           )}
-        {/* FLUJO ADMIN: INICIAR AUDITORÍA */}
-        {isAdmin && estadoProyecto === "EN REVISIÓN" && (
+        {/* FLUJO ADMIN: INICIAR AUDITORÍA (En revisión o cerrados por 24h) */}
+        {isAdmin && (estadoProyecto === "EN REVISIÓN" || estadoProyecto === "ABIERTO") && (
           <button
             type="button"
             onClick={handleIniciarAuditoria}

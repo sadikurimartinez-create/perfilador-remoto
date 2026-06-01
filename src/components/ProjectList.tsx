@@ -417,7 +417,8 @@ export function ProjectList() {
   };
 
   const handleOpenProject = (p: ProjectWithCount) => {
-    if (p.estado === "EN REVISIÓN" || p.estado === "CERRADO") {
+    const adminRole = (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
+    if (!adminRole && (p.estado === "EN REVISIÓN" || p.estado === "CERRADO" || p.estado === "VALIDADO")) {
       alert(`El expediente se encuentra en estado: ${p.estado}. No es posible modificarlo en este momento.`);
       return;
     }
