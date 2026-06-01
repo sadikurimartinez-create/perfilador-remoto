@@ -619,9 +619,9 @@ function buildPromptForGemini(params: {
   }
 
   const lugaresAcechoTexto = tacticalStreetViews && tacticalStreetViews.length > 0
-    ? `\n## ANÁLISIS DE STREET VIEW Y LUGARES DE ACECHO\nSe utilizaron coordenadas y Google Street View con Vision API para ubicar rutas de acceso/escape y lugares de acecho en los principales atractores:\n` +
-      (tacticalStreetViews || []).map((sv: any) => `- ${sv.name} (${sv.category}): Etiquetas de vulnerabilidad detectadas: ${sv.vision?.etiquetasRelevantes?.join(", ") || "Ninguna"}.`).join("\n") +
-      `\nUtiliza explícitamente esta información para señalar POR QUÉ fungen como atractores, rutas de acceso, de escape o lugares de acecho en tu dictamen.\n`
+    ? `\n## ANÁLISIS TÁCTICO DE STREET VIEW Y LUGARES DE ACECHO (EVIDENCIA VISUAL OBLIGATORIA)\nSe utilizaron coordenadas y Google Street View con Vision API para ubicar rutas de acceso/escape y lugares de acecho en los principales atractores del área:\n\n` +
+      (tacticalStreetViews || []).map((sv: any) => `- ATRACTOR: ${sv.name} (${sv.category})\n  URL IMAGEN STREET VIEW: ${sv.streetViewUrl}\n  Etiquetas de vulnerabilidad (Vision API): ${sv.vision?.etiquetasRelevantes?.join(", ") || "Ninguna"}.`).join("\n\n") +
+      `\n\n[MANDATO DE INYECCIÓN VISUAL]: ESTÁS OBLIGADO a insertar estas imágenes de Street View dentro del capítulo "4. ATRACTORES Y DINÁMICA DELICTIVA" usando el formato Markdown estricto: !Lugar de Acecho - Nombre. INMEDIATAMENTE DEBAJO DE CADA IMAGEN, DEBES REDACTAR UN PIE DE FOTO (caption en cursivas) EXPLICATIVO, TÁCTICO Y SEVERO que describa por qué este lugar específico funciona como un "lugar de acecho", "ruta de escape" o "atractor de riesgo", justificándolo con las etiquetas detectadas y la teoría de Criminología Ambiental aplicable.\n`
     : "";
 
   const prompt = `
@@ -849,9 +849,9 @@ export async function POST(req: Request) {
     let overpassTexto = "No se extrajeron datos de infraestructura urbana táctica.";
     let cenapredTexto = "No se detectaron ductos o infraestructura crítica superficial en el perímetro.";
     if (overpassResult.exito) {
-      overpassTexto = `Se detectaron ${overpassResult.senderos} senderos/caminos de terracería, ${overpassResult.baldios} lotes baldíos/en construcción, y ${overpassResult.callejones} callejones ciegos en el radio de análisis. Estos elementos actúan frecuentemente como rutas de escape o lugares de acecho.`;
+      overpassTexto = `[MANDATO DE INTELIGENCIA URBANA - OVERPASS API] Se detectaron de forma exacta: ${overpassResult.senderos} senderos/caminos de terracería, ${overpassResult.baldios} lotes baldíos/en construcción, y ${overpassResult.callejones} callejones ciegos en el radio de análisis.\nINSTRUCCIÓN SEVERA: Es IMPERATIVO que integres estos elementos en tu dictamen como facilitadores clave para rutas de escape y lugares de acecho, justificando cómo su presencia eleva la viabilidad de la elección racional del infractor.`;
       if (overpassResult.ductos > 0) {
-        cenapredTexto = `¡ALERTA! Se detectaron ${overpassResult.ductos} instalaciones de infraestructura crítica (posibles ductos de hidrocarburos / PEMEX) dentro del perímetro de análisis. Alto riesgo asociado a delitos federales (robo de combustible, tomas clandestinas).`;
+        cenapredTexto = `[ALERTA MÁXIMA - ATLAS DE RIESGOS CENAPRED] Se detectaron ${overpassResult.ductos} instalaciones de infraestructura crítica (posibles ductos de hidrocarburos / PEMEX) en el perímetro.\nINSTRUCCIÓN SEVERA: Esto representa un Alto Riesgo de Delitos Federales (Robo de combustible / Huachicol y tomas clandestinas). Debes dedicar un apartado advirtiendo este riesgo inminente y su impacto en la desorganización social de la zona.`;
       }
     }
 
