@@ -10,8 +10,8 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
       reject(new Error("El navegador de este celular no soporta geolocalización."));
       return;
     }
-    // Aumentamos el tiempo a 20 segundos para dar tiempo a iOS de solicitar permisos y conectar con satélites
-    const timeout = setTimeout(() => reject(new Error("Tiempo de espera agotado buscando satélites GPS. Revise los permisos de Safari/Chrome.")), 20000);
+    // Aumentamos el tiempo a 40 segundos para dar más tiempo a dispositivos móviles e iOS en interiores
+    const timeout = setTimeout(() => reject(new Error("Tiempo de espera agotado buscando satélites GPS. Revise los permisos de Safari/Chrome o salga a un área despejada.")), 40000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timeout);
@@ -28,7 +28,7 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
         if (err.code === 3) errMsg = "Tiempo de espera agotado por el sensor GPS del dispositivo.";
         reject(new Error(errMsg));
       },
-      { enableHighAccuracy: true, timeout: 18000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 35000, maximumAge: 30000 }
     );
   });
 }
