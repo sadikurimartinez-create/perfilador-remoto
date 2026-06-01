@@ -238,7 +238,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       // Lógica de 24 horas: Inmutabilidad para analistas operativos tras su impresión
       if (projectData.printedAt && user?.role !== "SUPER_ADMIN" && user?.role !== "ADMIN") {
         const hoursSincePrint = (Date.now() - projectData.printedAt) / (1000 * 60 * 60);
-        if (hoursSincePrint > 24) {
+        if (hoursSincePrint > 24 && projectData.estado !== "DEVUELTO") {
           canModify = false;
           isLockedByTime = true;
         }

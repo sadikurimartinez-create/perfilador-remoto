@@ -22,6 +22,7 @@ export function ProjectManager() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [showDevolverPrompt, setShowDevolverPrompt] = useState(false);
   const [comentariosAdmin, setComentariosAdmin] = useState("");
+  const [plazoDevolucion, setPlazoDevolucion] = useState<number>(24);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
@@ -227,15 +228,16 @@ export function ProjectManager() {
         estado: "DEVUELTO",
         comentariosAuditoria: comentariosAdmin,
         fechaDevolucion: Date.now(),
+          deadlineAt: Date.now() + (plazoDevolucion * 60 * 60 * 1000),
         devueltoPor: (user as any)?.username || "Administrador"
       });
       setShowDevolverPrompt(false);
       setComentariosAdmin("");
-      window.alert("Expediente devuelto al usuario con comentarios.");
+        window.alert(`Expediente devuelto al usuario con un término de ${plazoDevolucion} horas.`);
     } catch (err: any) {
       window.alert("Error al devolver expediente: " + err.message);
     }
-  };
+   };
 
   const handleGuardarYSalir = async () => {
     if (project) {
@@ -503,6 +505,18 @@ export function ProjectManager() {
           placeholder="Escribe los comentarios, observaciones o correcciones requeridas..."
           className="w-full rounded-lg border border-orange-700/50 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px] mb-3"
         />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+          <label className="text-sm text-slate-300 font-medium">Término para subsanar:</label>
+          <select
+            value={plazoDevolucion}
+            onChange={(e) => setPlazoDevolucion(Number(e.target.value))}
+            className="bg-slate-900 text-slate-100 border border-slate-700 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+          >
+            <option value={24}>24 horas</option>
+            <option value={48}>48 horas</option>
+            <option value={72}>72 horas</option>
+          </select>
+        </div>
         <div className="flex gap-2">
           <button onClick={handleDevolverProyecto} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
             Confirmar Devolución
@@ -515,7 +529,16 @@ export function ProjectManager() {
     )}
     {estadoProyecto === "DEVUELTO" && (
       <div className="card p-4 border-l-4 border-red-500 bg-red-950/20">
-        <h3 className="text-red-400 font-bold text-sm">Expediente Devuelto</h3>
+        <h3 className="text-red-400 font-bold text-sm flex items-center justify-between">
+          <span>Expediente Devuelto</span>
+          {(project as any).deadlineAt && (
+            <span className={`text-xs px-2 py-0.5 rounded font-mono ${((project as any).deadlineAt - Date.now()) <= 5 * 3600 * 1000 ? "bg-red-600 text-white animate-pulse" : "bg-red-900/50 text-red-200"}`}>
+              {((project as any).deadlineAt - Date.now()) > 0 
+                ? `Vence en: ${Math.floor(((project as any).deadlineAt - Date.now()) / (3600 * 1000))}h ${Math.floor((((project as any).deadlineAt - Date.now()) % (3600 * 1000)) / 60000)}m`
+                : "¡Término vencido!"}
+            </span>
+          )}
+        </h3>
         <p className="text-sm text-slate-300 mt-1"><span className="font-semibold">Comentarios de auditoría ({(project as any).devueltoPor}):</span> {(project as any).comentariosAuditoria}</p>
         <p className="text-xs text-red-300 mt-2">Por favor, subsana las observaciones y vuelve a hacer clic en &quot;Enviar a Revisión&quot;.</p>
       </div>

@@ -32,6 +32,7 @@ type ProjectWithCount = {
   geometryType?: string;
   analysisContent?: string;
   deleted?: boolean;
+  deadlineAt?: number;
 };
 
 export function ProjectList() {
@@ -144,6 +145,7 @@ export function ProjectList() {
             descripcion: data.descripcion || "",
             geometryType: data.geometryType || "individual",
             analysisContent: data.analysisContent || "",
+            deadlineAt: data.deadlineAt || 0,
           } as ProjectWithCount;
         })
         .filter((p) => !p.deleted);
@@ -443,6 +445,9 @@ export function ProjectList() {
   const isAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
   const devueltosPropios = list.filter(p => p.estado === "DEVUELTO" && p.createdBy === (user as any)?.username);
   const enRevisionAdmin = list.filter(p => p.estado === "EN REVISIÓN");
+  
+  const expedientesUrgentes = devueltosPropios.filter(p => p.deadlineAt && (p.deadlineAt - Date.now()) <= (5 * 60 * 60 * 1000) && (p.deadlineAt - Date.now()) > 0);
+  const expedientesVencidos = devueltosPropios.filter(p => p.deadlineAt && (p.deadlineAt - Date.now()) <= 0);
 
   const filteredList = list.filter((p) => {
     if (!searchTerm) return true;
@@ -510,14 +515,38 @@ export function ProjectList() {
       )}
 
       {devueltosPropios.length > 0 && !showPrompt && (
-        <div className="bg-red-950/40 border border-red-900 border-l-4 border-l-red-500 p-4 rounded-lg shadow-lg">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg animate-pulse">⚠️</span>
-            <h3 className="text-red-400 font-bold text-sm">¡Acción Requerida! Tienes {devueltosPropios.length} expediente(s) devuelto(s)</h3>
+        <div className="flex flex-col gap-4">
+          {expedientesVencidos.length > 0 && (
+            <div className="bg-red-900/60 border border-red-700 border-l-4 border-l-red-500 p-4 rounded-lg shadow-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">❌</span>
+                <h3 className="text-red-300 font-bold text-sm">¡Término Vencido!</h3>
+              </div>
+              <p className="text-xs text-red-100 ml-8">
+                Tienes {expedientesVencidos.length} expediente(s) cuyo término para subsanar observaciones ha expirado. Comunícate con tu supervisor.
+              </p>
+            </div>
+          )}
+          {expedientesUrgentes.length > 0 && (
+            <div className="bg-orange-950/60 border border-orange-700 border-l-4 border-l-orange-500 p-4 rounded-lg shadow-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg animate-pulse">⏳</span>
+                <h3 className="text-orange-400 font-bold text-sm">¡Alerta de Término! &lt; 5 horas restantes</h3>
+              </div>
+              <p className="text-xs text-orange-200 ml-8">
+                Tienes {expedientesUrgentes.length} expediente(s) devuelto(s) próximos a vencer. Ingresa inmediatamente para subsanar las observaciones.
+              </p>
+            </div>
+          )}
+          <div className="bg-red-950/30 border border-red-900/50 border-l-4 border-l-red-500/50 p-4 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">⚠️</span>
+              <h3 className="text-red-400 font-bold text-sm">Tienes {devueltosPropios.length} expediente(s) devuelto(s) en total</h3>
+            </div>
+            <p className="text-xs text-red-200/80 ml-8">
+              Abre el expediente con la etiqueta roja &quot;Devuelto&quot;, lee los comentarios y subsánalos antes de que finalice el término.
+            </p>
           </div>
-          <p className="text-xs text-red-200 ml-8">
-            Tienes observaciones de auditoría pendientes. Abre el expediente con la etiqueta roja &quot;Devuelto&quot;, lee los comentarios y subsánalos.
-          </p>
         </div>
       )}
 
