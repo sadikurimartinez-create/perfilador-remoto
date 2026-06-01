@@ -6,7 +6,6 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData, getNgrokUrl } from "@/lib/osintActions";
 import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
@@ -167,7 +166,6 @@ export function PhotoAlbum({
   const [profileRiskLevel, setProfileRiskLevel] = useState<
     "bajo" | "medio" | "alto" | null
   >(null);
-  const [analysisPolygon, setAnalysisPolygon] = useState<google.maps.LatLngLiteral[]>([]);
   const [analysisPolygon, setAnalysisPolygon] = useState<{ lat: number; lng: number }[]>([]);
   const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
@@ -1022,12 +1020,11 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const ngrokUrl = await getNgrokUrl();
                 const ngrokUrl = (process.env.NEXT_PUBLIC_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
                 const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
-                  method: "POST"
                   method: "GET",
                   headers: { "ngrok-skip-browser-warning": "true" }
+                  method: "POST"
                 });
                 
                 if (!res.ok) throw new Error(`Fallo de conexión con Ngrok (Código ${res.status}). Asegúrese de que el túnel y el robot local están encendidos.`);
