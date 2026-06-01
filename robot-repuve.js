@@ -4,10 +4,12 @@ const app = express();
 
 // Habilitar CORS para permitir peticiones directas desde la plataforma web (Vercel)
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "*");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, ngrok-skip-browser-warning");
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
   next();
 });
 
@@ -15,7 +17,7 @@ const MORELOGIN_API = "http://127.0.0.1:40000";
 const PROFILE_ID = "2060114385070264320"; // Tu perfil de MoreLogin
 const API_KEY_2CAPTCHA = "b57cb6e6e68ab65198220bbe3c4b6784"; 
 
-app.get("/repuve", async (req, res) => {
+app.all("/repuve", async (req, res) => {
   const placa = req.query.placa;
   if (!placa) return res.json({ exito: false, error: "Falta placa" });
   

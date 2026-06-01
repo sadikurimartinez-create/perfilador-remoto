@@ -1022,8 +1022,7 @@ const hasMinimumPhotos =
               try {
                 const ngrokUrl = await getNgrokUrl();
                 const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
-                  method: "GET",
-                  headers: { "ngrok-skip-browser-warning": "true" }
+                  method: "POST"
                 });
                 
                 if (!res.ok) throw new Error(`Fallo de conexión con Ngrok (Código ${res.status}). Asegúrese de que el túnel y el robot local están encendidos.`);
