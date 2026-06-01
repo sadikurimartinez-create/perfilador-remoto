@@ -81,7 +81,8 @@ export async function checkAutoPlaca(placa: string) {
     const profileId = "2060114385070264320";
     const API_KEY_2CAPTCHA = process.env.TWOCAPTCHA_API_KEY || "b57cb6e6e68ab65198220bbe3c4b6784"; 
 
-    const moreLoginApi = process.env.MORELOGIN_API_URL || "http://127.0.0.1:40000";
+    // Limpiamos la URL por si se copió con espacios accidentales o barras al final en Vercel
+    const moreLoginApi = (process.env.MORELOGIN_API_URL || "http://127.0.0.1:40000").trim().replace(/\/$/, "");
 
     console.log(`[REPUVE] 📡 Contactando API de MoreLogin en: ${moreLoginApi}`);
     const startRes = await fetch(`${moreLoginApi}/api/env/start`, {
