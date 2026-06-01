@@ -71,39 +71,3 @@ async function solveImageCaptchaLocal(base64Image: string, apiKey: string): Prom
   }
   throw new Error("Timeout: 2Captcha tardó demasiado en resolver la imagen.");
 }
-
-export async function checkAutoPlaca(placa: string) {
-  console.log(`\n[REPUVE] 🚀 Iniciando barrido para placa: ${placa}`);
-  try {
-    if (!placa) return { exito: false, error: "No se proporcionó una placa vehicular." };
-
-    // La URL de ngrok ahora apuntará a tu pequeño servidor local de Robot en el puerto 3005
-    const localApiUrl = (process.env.MORELOGIN_API_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
-
-    console.log(`[REPUVE] 📡 Contactando API Local de Scraping en: ${localApiUrl}/repuve?placa=${placa}`);
-    
-    // Configuramos un temporizador manual (55 segundos) para no chocar con el corte abrupto de Vercel
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000);
-
-    const res = await fetch(`${localApiUrl}/repuve?placa=${placa}`, {
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      throw new Error(`Error en API Local: ${res.status}`);
-    }
-
-    const data = await res.json();
-    return data;
-  } catch (error: any) {
-    console.error("[CheckAuto API] Error:", error);
-    if (error.name === "AbortError") {
-      return { exito: false, error: "El Robot tardó más de 55 segundos. La página del gobierno está lenta o el Captcha fue muy difícil. Intenta de nuevo." };
-    }
-    return { exito: false, error: error.message || "Error interno." };
-  }
-}
