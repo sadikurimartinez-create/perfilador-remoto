@@ -1020,19 +1020,21 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch(`/api/osint/repuve?placa=${plateQuery.trim()}`);
-                if (!res.ok) {
-                  if (res.status === 504) throw new Error("Tiempo de espera agotado en Vercel (504). El robot tardó más de 60 segundos.");
-                  if (res.status === 404) throw new Error("Ruta de conexión (404) no encontrada en Vercel. Asegúrese de que el último deploy fue exitoso.");
-                }
-                const text = await res.text();
-                let data;
-                try {
-                  data = JSON.parse(text);
-                } catch (e) {
-                  throw new Error(`Respuesta inválida de Vercel (Código ${res.status}). Ngrok podría estar bloqueando la conexión con una pantalla de advertencia o Vercel falló.`);
+                const res = await fetch(`/api/check-plate`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ placa: plateQuery.trim() })
+                });
+                
+                if (res.status === 404) {
+                   throw new Error("Ruta de conexión (404) no encontrada en Vercel. Asegúrese de que el archivo fue subido a GitHub.");
+                } else if (res.status === 504) {
+                   throw new Error("Tiempo de espera agotado en Vercel (504). El robot tardó más de 60 segundos.");
+                } else if (!res.ok) {
+                   throw new Error(`Fallo de conexión en Vercel (Código ${res.status}).`);
                 }
                 
+                const data = await res.json();
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}] Estatus recuperado del barrido: ${data.estatus}. Observaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
