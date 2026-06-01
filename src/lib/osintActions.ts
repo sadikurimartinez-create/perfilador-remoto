@@ -1,8 +1,5 @@
 "use server";
 
-// Aumentar el tiempo de espera de Vercel al límite máximo (60 segundos)
-export const maxDuration = 60;
-
 // Ping silencioso para la telemetría (Centro de Conexiones)
 export async function pingOsint() {
   return { status: "ok" };
