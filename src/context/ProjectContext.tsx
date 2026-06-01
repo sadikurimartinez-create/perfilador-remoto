@@ -80,6 +80,7 @@ export type AnalysisResult = {
     datosExtra: string;
   };
   scinceDemographics?: any;
+  tacticalStreetViews?: any[];
   riskLevel?: string;
   mlFeatures?: any;
   raw?: unknown;

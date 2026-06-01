@@ -1021,6 +1021,7 @@ const hasMinimumPhotos =
               setError(null);
               try {
                 const ngrokUrl = (process.env.NEXT_PUBLIC_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
+                // Conexión directa al robot local mediante POST (Bypass de CORS y Vercel 404)
                 const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
                   method: "POST"
                 });
