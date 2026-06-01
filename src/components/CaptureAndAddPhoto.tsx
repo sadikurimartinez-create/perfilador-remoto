@@ -10,7 +10,8 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
       reject(new Error("El navegador de este celular no soporta geolocalización."));
       return;
     }
-    const timeout = setTimeout(() => reject(new Error("Tiempo de espera agotado buscando satélites GPS. Acérquese a un área despejada.")), 10000);
+    // Aumentamos el tiempo a 20 segundos para dar tiempo a iOS de solicitar permisos y conectar con satélites
+    const timeout = setTimeout(() => reject(new Error("Tiempo de espera agotado buscando satélites GPS. Revise los permisos de Safari/Chrome.")), 20000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timeout);
@@ -21,9 +22,13 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
       },
       (err) => {
         clearTimeout(timeout);
-        reject(new Error("Permiso de ubicación DENEGADO. Por favor, permita el acceso al GPS en la configuración de su navegador (Chrome/Safari)."));
+        let errMsg = "Error de GPS.";
+        if (err.code === 1) errMsg = "Permiso de ubicación DENEGADO. Active el GPS en Ajustes > Privacidad para su navegador.";
+        if (err.code === 2) errMsg = "Posición no disponible. Intente salir a un área despejada.";
+        if (err.code === 3) errMsg = "Tiempo de espera agotado por el sensor GPS del dispositivo.";
+        reject(new Error(errMsg));
       },
-      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 18000, maximumAge: 10000 }
     );
   });
 }
@@ -266,7 +271,7 @@ export function CaptureAndAddPhoto() {
           Evidencia Fotográfica
         </h3>
         <p className="text-sm text-slate-400">
-          Tome las fotos con la cámara normal de su teléfono (para que se guarden en su carrete) y luego súbalas aquí. El sistema extraerá el GPS original de las fotografías.
+          Tome las fotos con la cámara de su teléfono y súbalas aquí. El sistema extraerá el GPS de las fotografías o de su ubicación actual. (En iOS/iPhone, recuerde dar permisos de Ubicación a Safari).
         </p>
       </header>
 
@@ -284,8 +289,25 @@ export function CaptureAndAddPhoto() {
             <input type="number" placeholder="Longitud (ej. -102.2916)" value={manualCoords.lng} onChange={(e) => setManualCoords({ ...manualCoords, lng: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
           </div>
           <div className="flex flex-col gap-3 mt-2">
+          <button 
+            onClick={async () => {
+              setError("Buscando señal GPS...");
+              try {
+                const loc = await getFallbackLocation();
+                setManualCoords({ lat: loc.lat.toString(), lng: loc.lng.toString() });
+                setError(null);
+              } catch (err: any) {
+                setError(err.message);
+              }
+            }}
+            className="w-full bg-emerald-600 text-white py-2 rounded text-sm font-semibold transition"
+          >
+            📍 Obtener Mi Ubicación Actual
+          </button>
+          <div className="flex gap-3">
             <button onClick={handleManualSubmit} className="flex-1 bg-sky-600 text-white py-2 rounded text-sm font-semibold">Guardar y Subir</button>
             <button onClick={() => { setManualQueue([]); setError(null); setManualCoords({ lat: "", lng: "" }); }} className="flex-1 bg-slate-700 text-white py-2 rounded text-sm font-semibold">Cancelar</button>
+          </div>
           </div>
         </div>
       )}
