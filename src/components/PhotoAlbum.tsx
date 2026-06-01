@@ -1020,13 +1020,13 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch(`/api/osint/repuve?placa=${plateQuery.trim()}`);
+                const res = await fetch(`/api/repuve?placa=${plateQuery.trim()}`);
                 const text = await res.text();
                 let data;
                 try {
                   data = JSON.parse(text);
                 } catch (e) {
-                  throw new Error(`El túnel Ngrok ha caducado o el servidor local está apagado. Vercel devolvió un error 404.`);
+                  throw new Error(`La plataforma web no encuentra la ruta de conexión. Vercel devolvió un error ${res.status}. Por favor, asegúrate de que Vercel terminó de compilar el último "Redeploy".`);
                 }
                 
                 if (data.exito) {
