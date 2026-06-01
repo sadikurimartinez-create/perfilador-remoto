@@ -62,7 +62,7 @@ const getMarkerColor = (tipo?: string) => {
 };
 
 export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, album, project, projects = [] }: ProjectMapProps) {
-  const mapRef = useRef<google.maps.Map | null>(null);
+  const mapRef = useRef<any | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showClusters, setShowClusters] = useState(true);
@@ -163,14 +163,14 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     };
   }, [center, realDuctos, realWater, realHazards]);
 
-  const onMapLoad = useCallback((map: google.maps.Map) => {
+  const onMapLoad = useCallback((map: any) => {
     mapRef.current = map;
     setMapReady(true);
   }, []);
 
   useEffect(() => {
     if (!mapRef.current || !mapReady || typeof window === "undefined" || !(window as any).google || coordinates.length === 0) return;
-    const g = (window as any).google as typeof google;
+    const g = (window as any).google;
     const bounds = new g.maps.LatLngBounds();
     coordinates.forEach((pt) => bounds.extend(new g.maps.LatLng(pt.lat, pt.lng)));
     if (coordinates.length > 1) {
@@ -367,7 +367,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               draggable
               onDragEnd={(e) => handleMarkerDrag(idx, e.latLng!.lat(), e.latLng!.lng())}
               icon={{
-                path: (window as any).google.maps.SymbolPath.CIRCLE,
+                path: 0 as any, // CIRCLE
                 scale: 10,
                 fillColor: pinColor,
                 fillOpacity: 1,
@@ -430,7 +430,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
                 <Marker
                   key={`hazard-node-${idx}`}
                   position={hazardPath[0]}
-                  icon={{ path: (window as any).google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#9333ea", fillOpacity: 0.8, strokeColor: "#ffffff", strokeWeight: 1 }}
+                  icon={{ path: 0 as any, scale: 6, fillColor: "#9333ea", fillOpacity: 0.8, strokeColor: "#ffffff", strokeWeight: 1 }}
                 />
               )
             ))}
@@ -470,7 +470,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
                   fontWeight: 'bold',
                 }}
                 icon={{
-                  path: google.maps.SymbolPath.CIRCLE,
+                  path: 0 as any,
                   fillColor: '#dc2626',
                   fillOpacity: 0.8,
                   strokeWeight: 1,

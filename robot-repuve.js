@@ -23,13 +23,19 @@ app.all("/repuve", async (req, res) => {
   
   console.log(`[ROBOT] Iniciando búsqueda de placa: ${placa}`);
   try {
-    const startRes = await fetch(`${MORELOGIN_API}/api/env/start`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ env_id: PROFILE_ID }),
-    });
+    let startRes;
+    try {
+      startRes = await fetch(`${MORELOGIN_API}/api/env/start`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ env_id: PROFILE_ID }),
+      });
+    } catch (e) {
+      throw new Error(`MoreLogin no responde en el puerto 40000. Verifica que la "API Local" esté activada en la configuración de la app.`);
+    }
+
     const startData = await startRes.json();
     
-    if (startData.code !== 0) throw new Error("No se pudo iniciar MoreLogin.");
+    if (startData.code !== 0) throw new Error(`Error de MoreLogin: ${startData.msg || "Código " + startData.code}`);
 
     const browser = await puppeteer.connect({ browserWSEndpoint: startData.data.wsDetail, defaultViewport: null });
     const page = await browser.newPage();

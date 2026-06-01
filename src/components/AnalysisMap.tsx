@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 export type MapViewMode = "DENSITY" | "MOBILITY" | "ATTRACTORS" | "PREDICTIVE";
@@ -12,8 +11,8 @@ type AnalysisMapProps = {
   /** Radio de la zona de análisis en metros (círculo en el mapa). Por defecto 500. */
   analysisRadius?: number;
   /** Polígono de análisis dibujado manualmente por el analista. */
-  analysisPolygon?: google.maps.LatLngLiteral[];
-  setAnalysisPolygon?: (coords: google.maps.LatLngLiteral[]) => void;
+  analysisPolygon?: { lat: number; lng: number }[];
+  setAnalysisPolygon?: (coords: { lat: number; lng: number }[]) => void;
   /** POIs manuales fijados por el analista en el mapa preliminar. */
   manualPois?: { lat: number; lng: number; label?: string }[];
   setManualPois?: (value: { lat: number; lng: number; label?: string }[]) => void;
@@ -84,7 +83,7 @@ export function AnalysisMap({
   viewMode = "DENSITY",
   geometryType,
 }: AnalysisMapProps) {
-  const mapRef = useRef<google.maps.Map | null>(null);
+  const mapRef = useRef<any | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [isPlacingManualPoi, setIsPlacingManualPoi] = useState(false);
   const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
@@ -127,6 +126,14 @@ export function AnalysisMap({
     .slice(0, 5);
   }, [poisWithCoords, crimesWithCoords]);
 
+  const lugaresAcecho = useMemo(() => {
+    if (!analysisResult?.tacticalStreetViews) return [];
+    return analysisResult.tacticalStreetViews.map((sv: any) => {
+      const match = analysisResult.pois?.find((p) => p.name === sv.name);
+      return { ...sv, lat: match?.lat, lng: match?.lng };
+    }).filter((a: any) => a.lat != null && a.lng != null);
+  }, [analysisResult]);
+
   const boundsPoints = useMemo(() => {
     const points: Array<{ lat: number; lng: number }> = [];
     photosWithCoords.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
@@ -135,14 +142,14 @@ export function AnalysisMap({
     return points;
   }, [photosWithCoords, crimesWithCoords, top5Pois]);
 
-  const onMapLoad = useCallback((map: google.maps.Map) => {
+  const onMapLoad = useCallback((map: any) => {
     mapRef.current = map;
     setMapReady(true);
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current || !mapReady || typeof window === "undefined" || !(window as any).google || boundsPoints.length === 0) return;
-    const g = (window as any).google as typeof google;
+    if (!mapRef.current || !mapReady || typeof window === "undefined" || !(window as any).google?.maps || boundsPoints.length === 0) return;
+    const g = (window as any).google;
     const bounds = new g.maps.LatLngBounds();
     boundsPoints.forEach((pt) => bounds.extend(new g.maps.LatLng(pt.lat, pt.lng)));
     mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
@@ -161,11 +168,11 @@ export function AnalysisMap({
       !isLoaded ||
       !analysisResult?.historicalCrimes?.length ||
       typeof window === "undefined" ||
-      !(window as any).google
+      !(window as any).google?.maps
     ) {
       return [];
     }
-    const g = (window as any).google as typeof google;
+    const g = (window as any).google;
     const valid = analysisResult.historicalCrimes.filter((c) => hasValidCoords(c));
     if (valid.length === 0) return [];
 
@@ -235,18 +242,27 @@ export function AnalysisMap({
                <div className="flex items-center gap-2"><span className="text-[10px]">❌</span> Evento Histórico</div>
             </>
           )}
-          {viewMode === "MOBILITY" && (
-            <>
-               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Movilidad Criminal</div>
-               <div className="flex items-center gap-2 mb-1"><span className="w-5 h-1.5 bg-[#D96A00]"></span> Corredor de Movilidad</div>
-               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#10b981]"></span> Nodo de Interés</div>
-            </>
+              {viewMode === "MOBILITY" && (
+                <>
+                   <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Movilidad y Rutas</div>
+                   <div className="flex items-center gap-2 mb-1"><span className="w-5 h-1 border-t-2 border-dashed border-[#D96A00]"></span> Ruta de Acceso / Escape</div>
+                   <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#10b981]"></span> Nodo Principal / de Interés</div>
+                   <div className="flex items-center gap-2"><span className="w-4 h-3 bg-slate-900 border border-sky-400"></span> Lugar de Acecho (StreetView)</div>
+                </>
           )}
           {viewMode === "ATTRACTORS" && (
             <>
-               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Factores Criminógenos</div>
-               <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-60"></span> Área de Influencia Directa</div>
-               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#eab308] border border-black"></span> Top Atractor</div>
+               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Top 5 Atractores de Riesgo</div>
+               <div className="flex flex-col gap-1.5 mb-3">
+                  {top5Pois.map((p, idx) => (
+                    <div key={`legend-attr-${idx}`} className="flex items-start gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-full bg-[#eab308] border border-black text-[9px] flex items-center justify-center text-black font-bold shrink-0 mt-0.5">{idx + 1}</span>
+                      <span className="truncate max-w-[160px] font-semibold text-slate-700" title={p.name}>{p.name}</span>
+                    </div>
+                  ))}
+                  {top5Pois.length === 0 && <div className="text-gray-500 italic">No hay atractores detectados</div>}
+               </div>
+               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-20 border border-[#eab308]"></span> Área de Influencia Directa</div>
             </>
           )}
           {viewMode === "PREDICTIVE" && (
@@ -384,10 +400,33 @@ export function AnalysisMap({
             path={[center, { lat: p.lat as number, lng: p.lng as number }]}
             options={{
               strokeColor: "#D96A00",
-              strokeOpacity: 0.8,
-              strokeWeight: 4,
+              strokeOpacity: 0,
+              strokeWeight: 3,
+              icons: [{
+                icon: { path: "M 0,-1 0,1", strokeOpacity: 0.8, scale: 3 },
+                offset: "0",
+                repeat: "15px"
+              }]
             }}
           />
+        ))}
+
+        {/* Lugares de acecho con StreetView ilustrado */}
+        {!isPreliminary && viewMode === "MOBILITY" && lugaresAcecho.map((acecho: any, idx: number) => (
+          <OverlayView
+            key={`acecho-${idx}`}
+            position={{ lat: acecho.lat, lng: acecho.lng }}
+            mapPaneName="overlayMouseTarget"
+            getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height + 15) })}
+          >
+            <div className="bg-slate-900 border-2 border-sky-500 rounded-lg p-1 shadow-xl flex flex-col items-center w-28 relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={acecho.streetViewUrl} alt={acecho.name} className="w-full h-16 object-cover rounded-sm" />
+              <span className="text-[8px] font-bold text-sky-200 mt-1 uppercase text-center leading-tight truncate w-full px-1" title={acecho.name}>{acecho.name}</span>
+              <span className="text-[7px] text-slate-300 text-center mb-0.5">Lugar de Acecho</span>
+              <div className="absolute -bottom-[10px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-sky-500"></div>
+            </div>
+          </OverlayView>
         ))}
 
         {viewMode !== "DENSITY" && photosWithCoords.map((p) => {
@@ -398,7 +437,7 @@ export function AnalysisMap({
               position={{ lat: p.lat, lng: p.lng }}
               title={`${p.tipo} - ${p.comentario ?? ""}`}
               icon={{
-                path: google.maps.SymbolPath.CIRCLE,
+              path: 0 as any, // CIRCLE
                 scale: 10,
                 fillColor: pinColor,
                 fillOpacity: 1,
@@ -414,7 +453,7 @@ export function AnalysisMap({
             position={center}
             title="Centro del levantamiento fotográfico"
             icon={{
-              path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            path: 3 as any, // BACKWARD_CLOSED_ARROW
               scale: 8,
               fillColor: "#D96A00",
               fillOpacity: 1,
@@ -437,7 +476,7 @@ export function AnalysisMap({
               fontWeight: "700",
             }}
             icon={{
-              path: google.maps.SymbolPath.CIRCLE,
+            path: 0 as any, // CIRCLE
               scale: 6,
               fillColor: "#B22222",
               fillOpacity: 1,
@@ -449,19 +488,19 @@ export function AnalysisMap({
 
         {/* POIs / atractores Top 5: Numerados */}
         {viewMode === "ATTRACTORS" && top5Pois.map((p, idx) => (
-          <div key={`attr-group-${idx}`}>
+          <Fragment key={`attr-group-${idx}`}>
             <Circle
               center={{ lat: p.lat as number, lng: p.lng as number }}
-              radius={100}
-              options={{ fillColor: "#1F4E79", fillOpacity: 0.3, strokeColor: "#0D2B52", strokeWeight: 2 }}
+              radius={120}
+              options={{ fillColor: "#1F4E79", fillOpacity: 0.15, strokeColor: "#eab308", strokeWeight: 2, strokeOpacity: 0.8 }}
             />
             <Marker
               position={{ lat: p.lat as number, lng: p.lng as number }}
               title={p.name}
-              label={{ text: `${idx + 1}`, color: "#ffffff", fontSize: "12px", fontWeight: "bold" }}
-              icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#eab308", fillOpacity: 1, strokeColor: "#000000", strokeWeight: 2 }}
+              label={{ text: `${idx + 1}`, color: "#000000", fontSize: "13px", fontWeight: "900" }}
+            icon={{ path: 0 as any, scale: 12, fillColor: "#eab308", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 }}
             />
-          </div>
+          </Fragment>
         ))}
 
         {/* Predicción a 6 meses: Expansión de zonas de riesgo */}
@@ -504,7 +543,7 @@ export function AnalysisMap({
             position={{ lat: p.lat, lng: p.lng }}
             title={p.label || "POI manual"}
             icon={{
-              path: google.maps.SymbolPath.CIRCLE,
+              path: 0 as any, // CIRCLE
               scale: 7,
               fillColor: "#f59e0b",
               fillOpacity: 1,
