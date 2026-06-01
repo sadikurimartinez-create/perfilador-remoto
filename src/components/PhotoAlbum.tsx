@@ -1021,12 +1021,16 @@ const hasMinimumPhotos =
               setError(null);
               try {
                 const res = await fetch(`/api/repuve?placa=${plateQuery.trim()}`);
+                if (!res.ok) {
+                  if (res.status === 504) throw new Error("Tiempo de espera agotado en Vercel (504). El robot tardó más de 60 segundos.");
+                  if (res.status === 404) throw new Error("Ruta de conexión (404) no encontrada en Vercel. Asegúrese de que el último deploy fue exitoso.");
+                }
                 const text = await res.text();
                 let data;
                 try {
                   data = JSON.parse(text);
                 } catch (e) {
-                  throw new Error(`La plataforma web no encuentra la ruta de conexión. Vercel devolvió un error ${res.status}. Por favor, asegúrate de que Vercel terminó de compilar el último "Redeploy".`);
+                  throw new Error(`Respuesta inválida de Vercel (Código ${res.status}). Ngrok podría estar bloqueando la conexión con una pantalla de advertencia o Vercel falló.`);
                 }
                 
                 if (data.exito) {
@@ -1040,7 +1044,7 @@ const hasMinimumPhotos =
                 }
               } catch (err) {
                 console.error("[Frontend] Error crítico al llamar Server Action de REPUVE:", err);
-                setError("Error de red al conectar con el módulo de barrido vehicular.");
+                setError(err instanceof Error ? err.message : "Error de red al conectar con el módulo de barrido vehicular.");
               } finally {
                 setIsCheckingPlate(false);
               }
