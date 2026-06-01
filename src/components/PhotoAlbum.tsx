@@ -1020,7 +1020,7 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch(`/api/check-plate`, {
+                const res = await fetch(`/api/osint/repuve`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ placa: plateQuery.trim() })
