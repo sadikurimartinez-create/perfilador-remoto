@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 export type MapViewMode = "DENSITY" | "MOBILITY" | "ATTRACTORS" | "PREDICTIVE";
