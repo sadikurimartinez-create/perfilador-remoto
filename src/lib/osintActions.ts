@@ -1,5 +1,8 @@
 "use server";
 
+// Aumentar el tiempo de espera de Vercel al límite máximo (60 segundos)
+export const maxDuration = 60;
+
 // Ping silencioso para la telemetría (Centro de Conexiones)
 export async function pingOsint() {
   return { status: "ok" };
@@ -82,10 +85,16 @@ export async function checkAutoPlaca(placa: string) {
 
     console.log(`[REPUVE] 📡 Contactando API Local de Scraping en: ${localApiUrl}/repuve?placa=${placa}`);
     
+    // Configuramos un temporizador manual (55 segundos) para no chocar con el corte abrupto de Vercel
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 55000);
+
     const res = await fetch(`${localApiUrl}/repuve?placa=${placa}`, {
       method: "GET",
       cache: "no-store",
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       throw new Error(`Error en API Local: ${res.status}`);
@@ -95,6 +104,9 @@ export async function checkAutoPlaca(placa: string) {
     return data;
   } catch (error: any) {
     console.error("[CheckAuto API] Error:", error);
+    if (error.name === "AbortError") {
+      return { exito: false, error: "El Robot tardó más de 55 segundos. La página del gobierno está lenta o el Captcha fue muy difícil. Intenta de nuevo." };
+    }
     return { exito: false, error: error.message || "Error interno." };
   }
 }
