@@ -1021,7 +1021,14 @@ const hasMinimumPhotos =
               setError(null);
               try {
                 const res = await fetch(`/api/osint/repuve?placa=${plateQuery.trim()}`);
-                const data = await res.json();
+                const text = await res.text();
+                let data;
+                try {
+                  data = JSON.parse(text);
+                } catch (e) {
+                  throw new Error(`El túnel Ngrok ha caducado o el servidor local está apagado. Vercel devolvió un error 404.`);
+                }
+                
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}] Estatus recuperado del barrido: ${data.estatus}. Observaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
