@@ -1020,7 +1020,7 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch(`/api/repuve?placa=${plateQuery.trim()}`);
+                const res = await fetch(`/api/osint/repuve?placa=${plateQuery.trim()}`);
                 if (!res.ok) {
                   if (res.status === 504) throw new Error("Tiempo de espera agotado en Vercel (504). El robot tardó más de 60 segundos.");
                   if (res.status === 404) throw new Error("Ruta de conexión (404) no encontrada en Vercel. Asegúrese de que el último deploy fue exitoso.");
