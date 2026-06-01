@@ -6,7 +6,7 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
+import { pingOsint, getScinceData, getDenueData, getNgrokUrl } from "@/lib/osintActions";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -1020,19 +1020,13 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch(`/api/osint/repuve`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ placa: plateQuery.trim() })
+                const ngrokUrl = await getNgrokUrl();
+                const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
+                  method: "GET",
+                  headers: { "ngrok-skip-browser-warning": "true" }
                 });
                 
-                if (res.status === 404) {
-                   throw new Error("Ruta de conexión (404) no encontrada en Vercel. Asegúrese de que el archivo fue subido a GitHub.");
-                } else if (res.status === 504) {
-                   throw new Error("Tiempo de espera agotado en Vercel (504). El robot tardó más de 60 segundos.");
-                } else if (!res.ok) {
-                   throw new Error(`Fallo de conexión en Vercel (Código ${res.status}).`);
-                }
+                if (!res.ok) throw new Error(`Fallo de conexión con Ngrok (Código ${res.status}). Asegúrese de que el túnel y el robot local están encendidos.`);
                 
                 const data = await res.json();
                 if (data.exito) {

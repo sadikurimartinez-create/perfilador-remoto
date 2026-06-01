@@ -5,6 +5,11 @@ export async function pingOsint() {
   return { status: "ok" };
 }
 
+// Obtener la URL de Ngrok rápidamente para conexión directa desde el cliente
+export async function getNgrokUrl() {
+  return (process.env.MORELOGIN_API_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
+}
+
 export async function getScinceData(lat: number, lng: number) {
   try {
     if (!lat || !lng) throw new Error("Faltan coordenadas");
