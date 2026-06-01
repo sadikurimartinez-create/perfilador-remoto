@@ -116,17 +116,33 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   }, [coordinates]);
 
   const [realDuctos, setRealDuctos] = useState<any[][]>([]);
+  const [realWater, setRealWater] = useState<any[][]>([]);
+  const [realHazards, setRealHazards] = useState<any[][]>([]);
 
   useEffect(() => {
     if (!center || !showAtlasRiesgos) return;
-    const q = `[out:json][timeout:15];(way"man_made"="pipeline";way"power"="line";);out geom;`;
+    const radius = 2000;
+    const q = `[out:json][timeout:15];
+    (
+      way"man_made"="pipeline";
+      way"power"="line";
+      way"natural"="water";
+      way"waterway"~"river|stream|canal";
+      way"amenity"="fuel";
+      node"amenity"="fuel";
+    );
+    out geom tags;`;
+    
     fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: q })
       .then(res => res.json())
       .then(data => {
-          const lines = data.elements
-              .filter((e: any) => e.geometry)
-              .map((e: any) => e.geometry.map((pt: any) => ({ lat: pt.lat, lng: pt.lon })));
-          setRealDuctos(lines);
+          const ductos: any[][] = []; const water: any[][] = []; const hazards: any[] = [];
+          data.elements.forEach((e: any) => {
+            if (e.tags?.man_made === "pipeline" || e.tags?.power === "line") { if (e.geometry) ductos.push(e.geometry.map((pt: any) => ({ lat: pt.lat, lng: pt.lon }))); }
+            else if (e.tags?.natural === "water" || e.tags?.waterway) { if (e.geometry) water.push(e.geometry.map((pt: any) => ({ lat: pt.lat, lng: pt.lon }))); }
+            else if (e.tags?.amenity === "fuel") { if (e.geometry) hazards.push(e.geometry.map((pt: any) => ({ lat: pt.lat, lng: pt.lon }))); else if (e.lat && e.lon) hazards.push([{ lat: e.lat, lng: e.lon }]); }
+          });
+          setRealDuctos(ductos); setRealWater(water); setRealHazards(hazards);
       })
       .catch(err => console.error("Overpass map error", err));
   }, [center, showAtlasRiesgos]);
@@ -136,6 +152,8 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
     if (!center) return null;
     return {
       ductos: realDuctos.length > 0 ? realDuctos : [],
+      water: realWater.length > 0 ? realWater : [],
+      hazards: realHazards.length > 0 ? realHazards : [],
       falla: [
         { lat: center.lat - 0.004, lng: center.lng + 0.004 },
         { lat: center.lat - 0.001, lng: center.lng + 0.007 },
@@ -143,7 +161,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
         { lat: center.lat - 0.007, lng: center.lng + 0.005 },
       ]
     };
-  }, [center, realDuctos]);
+  }, [center, realDuctos, realWater, realHazards]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -305,7 +323,13 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             <h4 className="text-xs font-bold text-slate-200 mb-2 uppercase tracking-wider">Atlas Nacional de Riesgos</h4>
             <div className="flex flex-col gap-2 text-[10px] text-slate-300">
               <div className="flex items-center gap-2">
-                <span className="w-4 h-1 bg-amber-500 rounded"></span> Ductos PEMEX (Riesgo Huachicol)
+                <span className="w-4 h-1 bg-amber-500 rounded"></span> Infraestructura Crítica (PEMEX/CFE)
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-blue-500/40 border border-blue-700 rounded"></span> Cuerpos de Agua / Inundables
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 bg-purple-600/50 border border-purple-700 rounded"></span> Peligro Químico (Gasolineras/Industrial)
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 bg-red-500/30 border border-red-700 rounded"></span> Falla Geológica / Hundimiento
@@ -387,6 +411,28 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
                 path={ductoPath}
                 options={{ strokeColor: "#f59e0b", strokeOpacity: 0.9, strokeWeight: 5, zIndex: 50 }}
               />
+            ))}
+            {atlasData.water.map((waterPath, idx) => (
+              <Polygon
+                key={`water-${idx}`}
+                paths={waterPath}
+                options={{ fillColor: "#3b82f6", fillOpacity: 0.4, strokeColor: "#2563eb", strokeWeight: 2, zIndex: 30 }}
+              />
+            ))}
+            {atlasData.hazards.map((hazardPath, idx) => (
+              hazardPath.length > 1 ? (
+                <Polygon
+                  key={`hazard-${idx}`}
+                  paths={hazardPath}
+                  options={{ fillColor: "#9333ea", fillOpacity: 0.5, strokeColor: "#7e22ce", strokeWeight: 2, zIndex: 45 }}
+                />
+              ) : (
+                <Marker
+                  key={`hazard-node-${idx}`}
+                  position={hazardPath[0]}
+                  icon={{ path: (window as any).google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#9333ea", fillOpacity: 0.8, strokeColor: "#ffffff", strokeWeight: 1 }}
+                />
+              )
             ))}
             <Polygon
               paths={atlasData.falla}

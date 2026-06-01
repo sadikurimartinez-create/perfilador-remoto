@@ -270,10 +270,15 @@ async function getOverpassData(lat: number, lng: number, radius: number) {
   try {
     const query = `[out:json][timeout:10];
     (
-      way"man_made"="pipeline";
-      way"highway"~"path|track";
-      way"landuse"~"brownfield|greenfield|construction|vacant";
-      way"noexit"="yes";
+          way"man_made"="pipeline";
+          way"power"="line";
+          way"highway"~"path|track";
+          way"landuse"~"brownfield|greenfield|construction|vacant";
+          way"noexit"="yes";
+          way"natural"="water";
+          way"waterway"~"river|stream|canal";
+          node"amenity"="fuel";
+          way"amenity"="fuel";
     );
     out tags;`;
     
@@ -282,17 +287,20 @@ async function getOverpassData(lat: number, lng: number, radius: number) {
     
     const data = await res.json();
     let ductos = 0; let senderos = 0; let baldios = 0; let callejones = 0;
+    let cuerposAgua = 0; let gasolineras = 0;
     for (const el of data.elements) {
       if (!el.tags) continue;
-      if (el.tags.man_made === "pipeline") ductos++;
+      if (el.tags.man_made === "pipeline" || el.tags.power === "line") ductos++;
       if (el.tags.highway && (el.tags.highway === "path" || el.tags.highway === "track")) senderos++;
       if (el.tags.landuse) baldios++;
       if (el.tags.noexit === "yes") callejones++;
+      if (el.tags.natural === "water" || el.tags.waterway) cuerposAgua++;
+      if (el.tags.amenity === "fuel") gasolineras++;
     }
-    return { ductos, senderos, baldios, callejones, exito: true };
+    return { ductos, senderos, baldios, callejones, cuerposAgua, gasolineras, exito: true };
   } catch (err) {
     console.error("[generate-profile] Error en Overpass:", err);
-    return { ductos: 0, senderos: 0, baldios: 0, callejones: 0, exito: false };
+    return { ductos: 0, senderos: 0, baldios: 0, callejones: 0, cuerposAgua: 0, gasolineras: 0, exito: false };
   }
 }
 
@@ -856,8 +864,20 @@ export async function POST(req: Request) {
     let cenapredTexto = "No se detectaron ductos o infraestructura crítica superficial en el perímetro.";
     if (overpassResult.exito) {
       overpassTexto = `[MANDATO DE INTELIGENCIA URBANA - OVERPASS API] Se detectaron de forma exacta: ${overpassResult.senderos} senderos/caminos de terracería, ${overpassResult.baldios} lotes baldíos/en construcción, y ${overpassResult.callejones} callejones ciegos en el radio de análisis.\nINSTRUCCIÓN SEVERA: Es IMPERATIVO que integres estos elementos en tu dictamen como facilitadores clave para rutas de escape y lugares de acecho, justificando cómo su presencia eleva la viabilidad de la elección racional del infractor.`;
+      
+      const cenapredAlerts = [];
       if (overpassResult.ductos > 0) {
-        cenapredTexto = `[ALERTA MÁXIMA - ATLAS DE RIESGOS CENAPRED] Se detectaron ${overpassResult.ductos} instalaciones de infraestructura crítica (posibles ductos de hidrocarburos / PEMEX) en el perímetro.\nINSTRUCCIÓN SEVERA: Esto representa un Alto Riesgo de Delitos Federales (Robo de combustible / Huachicol y tomas clandestinas). Debes dedicar un apartado advirtiendo este riesgo inminente y su impacto en la desorganización social de la zona.`;
+        cenapredAlerts.push(`${overpassResult.ductos} instalaciones de infraestructura crítica (ductos de hidrocarburos PEMEX o alta tensión). Riesgo de delitos federales o tomas clandestinas.`);
+      }
+      if (overpassResult.cuerposAgua > 0) {
+        cenapredAlerts.push(`${overpassResult.cuerposAgua} cuerpos de agua, presas o canales. Riesgo por aislamiento perimetral o zonas propicias para hallazgo de indicios/cuerpos.`);
+      }
+      if (overpassResult.gasolineras > 0) {
+        cenapredAlerts.push(`${overpassResult.gasolineras} estaciones de servicio (gasolineras). Atractores nocturnos de alta movilidad y foco de riesgo químico/inflamable.`);
+      }
+      
+      if (cenapredAlerts.length > 0) {
+        cenapredTexto = `[ALERTA MÁXIMA - ATLAS DE RIESGOS CENAPRED] Se detectaron los siguientes elementos de riesgo geográfico/crítico en el perímetro:\n` + cenapredAlerts.map(a => `- ${a}`).join('\n') + `\nINSTRUCCIÓN SEVERA: Debes dedicar un apartado dentro del capítulo de "ATRACTORES Y DINÁMICA DELICTIVA" advirtiendo de forma objetiva estos riesgos inminentes y su impacto en la desorganización social de la zona.`;
       }
     }
 
