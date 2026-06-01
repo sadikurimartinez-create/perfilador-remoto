@@ -40,6 +40,22 @@ function generateSafeId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
+function ElapsedTime({ running }: { running: boolean }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!running) {
+      setSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
+  if (!running) return null;
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
+}
+
 export function CaptureAndAddPhoto() {
   const { uploadAndAddPhoto, project, album } = useProject();
   const minimumPhotos = {
@@ -261,7 +277,9 @@ export function CaptureAndAddPhoto() {
               <div className="absolute inset-0 border-4 border-sky-500/20 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
-            <p className="text-lg text-slate-200 font-semibold tracking-tight">Procesando imagen...</p>
+          <p className="text-lg text-slate-200 font-semibold tracking-tight flex items-center justify-center gap-2">
+            Procesando imagen... <ElapsedTime running={isFetchingGPS} />
+          </p>
             <p className="text-sm text-slate-400 mt-1">Comprimiendo y extrayendo GPS</p>
           </div>
         </div>

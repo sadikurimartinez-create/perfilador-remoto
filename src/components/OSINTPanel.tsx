@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { runOSINTScan }
   from '../utils/osintEngine';
@@ -16,6 +16,22 @@ import NarrativeFusionPanel
   from './NarrativeFusionPanel';
 import VisualAnalysisPanel
   from './VisualAnalysisPanel';
+
+function ElapsedTime({ running }: { running: boolean }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!running) {
+      setSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
+  if (!running) return null;
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
+}
 
 interface Props {
   project: any;
@@ -62,11 +78,11 @@ const OSINTPanel: React.FC<Props> = ({
         <button
           onClick={executeOSINT}
           disabled={loading}
-          className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded text-sm"
+        className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded text-sm flex items-center justify-center"
         >
-          {loading
-            ? 'Ejecutando...'
-            : 'Ejecutar OSINT'}
+        {loading ? (
+          <span className="flex items-center justify-center gap-1">Ejecutando... <ElapsedTime running={loading} /></span>
+        ) : 'Ejecutar OSINT'}
         </button>
 
       </div>

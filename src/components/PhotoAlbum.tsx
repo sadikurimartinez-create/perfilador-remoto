@@ -99,6 +99,22 @@ async function burnGpsOnImage(srcUrl: string): Promise<string> {
   });
 }
 
+function ElapsedTime({ running }: { running: boolean }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!running) {
+      setSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
+  if (!running) return null;
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
+}
+
 
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
@@ -154,7 +170,6 @@ export function PhotoAlbum({
   const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
   const [debugData, setDebugData] = useState<any>(null);
-  const [showMonitor, setShowMonitor] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docContext, setDocContext] = useState("");
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -292,6 +307,7 @@ const hasMinimumPhotos =
     setError(null);
     try {
       const photosContext = selectedPhotos.map(p => `[${p.tipo}] ${p.comentario}`).join(" | ");
+      const instructionPhotos = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático. Evalúa EXCLUSIVAMENTE la claridad descriptiva de la observación en campo. NO exijas cantidades precisas, datos estadísticos, nombres exactos ni información OSINT/GEOINT (eso lo hará la plataforma después de manera automática). Si el comentario describe razonablemente el entorno, la percepción de seguridad o el riesgo visual, otorga un score de 80 o más. Tu sugerencia debe ser amigable y no demandar datos imposibles de obtener a simple vista.)";
       const minimalPhotos = selectedPhotos.map((p) => ({
         lat: p.lat,
         lng: p.lng,
@@ -301,7 +317,7 @@ const hasMinimumPhotos =
       const res = await fetch("/api/refine-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: photosContext, photos: minimalPhotos, mode: "validate-photos", geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
+        body: JSON.stringify({ context: photosContext + instructionPhotos, photos: minimalPhotos, mode: "validate-photos", geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
       });
       const data = await res.json();
       if ((data.score ?? 0) < 80) {
@@ -502,6 +518,7 @@ const hasMinimumPhotos =
             inegiDemographics?: any;
             tacticalStreetViews?: any[];
             scinceDemographics?: any;
+            mlFeatures?: any;
           };
         };
         const markdown = data.markdown ?? "";
@@ -532,6 +549,8 @@ const hasMinimumPhotos =
           inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
           tacticalStreetViews: data.meta?.tacticalStreetViews || (currentAnalysisResult as any)?.tacticalStreetViews,
           scinceDemographics: data.meta?.scinceDemographics || (currentAnalysisResult as any)?.scinceDemographics,
+          riskLevel: data.meta?.riskLevel || (currentAnalysisResult as any)?.riskLevel,
+          mlFeatures: data.meta?.mlFeatures || (currentAnalysisResult as any)?.mlFeatures,
         } as any);
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
@@ -607,11 +626,9 @@ const hasMinimumPhotos =
         const el = document.getElementById(m.id);
         if (el) {
           try {
-            const originalStyle = el.getAttribute("style") || "";
-            el.setAttribute("style", `${originalStyle}; width: 800px !important; height: 500px !important; max-width: none !important;`);
-            await new Promise(r => setTimeout(r, 600));
-            const canvas = await html2canvas(el, { useCORS: true, scale: 2, windowWidth: 1024 });
-            el.setAttribute("style", originalStyle);
+            // Dejamos el mapa en su tamaño real responsivo para evitar que Google Maps pierda el centrado
+            // Solo aumentamos el 'scale' para obtener alta resolución sin afectar el renderizado interno.
+            const canvas = await html2canvas(el, { useCORS: true, scale: 2.5 });
             currentSnapshots.push({ title: m.title, dataUrl: canvas.toDataURL("image/png") });
             changed = true;
           } catch(e) {}
@@ -1023,7 +1040,7 @@ const hasMinimumPhotos =
             }}
             className="w-full md:w-auto bg-sky-700 hover:bg-sky-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
-            {isCheckingPlate ? "Consultando Base de Datos..." : "🔍 Consultar y Añadir a Hipótesis"}
+            {isCheckingPlate ? <span className="flex items-center justify-center">Consultando Base de Datos... <ElapsedTime running={isCheckingPlate} /></span> : "🔍 Consultar y Añadir a Hipótesis"}
           </button>
         </div>
       </div>
@@ -1075,7 +1092,7 @@ const hasMinimumPhotos =
             }}
             className="w-full md:w-auto bg-emerald-700 hover:bg-emerald-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
-            {isCheckingSat ? "Consultando SAT..." : "💰 Consultar SAT y Añadir a Hipótesis"}
+            {isCheckingSat ? <span className="flex items-center justify-center">Consultando SAT... <ElapsedTime running={isCheckingSat} /></span> : "💰 Consultar SAT y Añadir a Hipótesis"}
           </button>
         </div>
       </div>
@@ -1129,7 +1146,7 @@ const hasMinimumPhotos =
             }}
             className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
-            {isCheckingScince ? "Consultando INEGI..." : "📊 Consultar Cuadra y Añadir a Hipótesis"}
+            {isCheckingScince ? <span className="flex items-center justify-center">Consultando INEGI... <ElapsedTime running={isCheckingScince} /></span> : "📊 Consultar Cuadra y Añadir a Hipótesis"}
           </button>
         </div>
       </div>
@@ -1183,7 +1200,7 @@ const hasMinimumPhotos =
             }}
             className="w-full md:w-auto bg-amber-700 hover:bg-amber-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
-            {isCheckingDenue ? "Buscando Negocios..." : "🏪 Consultar DENUE y Añadir a Hipótesis"}
+            {isCheckingDenue ? <span className="flex items-center justify-center">Buscando Negocios... <ElapsedTime running={isCheckingDenue} /></span> : "🏪 Consultar DENUE y Añadir a Hipótesis"}
           </button>
         </div>
       </div>
@@ -1268,7 +1285,7 @@ const hasMinimumPhotos =
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        context: docContext + "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)",
+                        context: docContext + "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático y flexible. Evalúa SÓLO la pertinencia lógica de la evidencia. NO exijas cantidades, métricas precisas ni datos que requieran investigación OSINT. Si el contexto justifica la evidencia de forma general, otorga un score >= 80. MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)",
                         photos: minimalPhotos,
                         mode: "suggest",
                         geometryType: project?.geometryType || "individual",
@@ -1319,7 +1336,7 @@ const hasMinimumPhotos =
                 disabled={isRefiningDoc || !docContext.trim() || isReadOnly}
                 className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
               >
-                {isRefiningDoc ? "Consultando IA..." : "Pedir Sugerencias y Auditar Contexto"}
+                {isRefiningDoc ? <span className="flex items-center justify-center">Consultando IA... <ElapsedTime running={isRefiningDoc} /></span> : "Pedir Sugerencias y Auditar Contexto"}
               </button>
             </div>
 
@@ -1378,7 +1395,7 @@ const hasMinimumPhotos =
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ 
-                            context: docSuggestions + "\n\n(MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)", 
+                            context: docSuggestions + "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático y flexible. Evalúa SÓLO la pertinencia lógica. NO exijas cantidades ni datos que requieran investigación OSINT. Si tiene sentido lógico general, otorga un score >= 80. MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)", 
                             photos: minimalPhotos,
                             mode: "audit",
                             geometryType: project?.geometryType || "individual",
@@ -1421,7 +1438,7 @@ const hasMinimumPhotos =
                     disabled={isAuditingDoc || !docSuggestions.trim()}
                     className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
                   >
-                    {isAuditingDoc ? "Auditando..." : "Auditar y Mejorar Redacción"}
+                    {isAuditingDoc ? <span className="flex items-center justify-center">Auditando... <ElapsedTime running={isAuditingDoc} /></span> : "Auditar y Mejorar Redacción"}
                   </button>
                   <button
                     type="button"
@@ -1468,7 +1485,7 @@ const hasMinimumPhotos =
               }}
               className="w-full bg-sky-700 hover:bg-sky-600 text-white py-1.5 px-4 rounded text-xs font-semibold disabled:opacity-50 transition"
             >
-              {isUploadingDoc ? "Subiendo Evidencia..." : "Subir Evidencia Contextualizada"}
+              {isUploadingDoc ? <span className="flex items-center justify-center">Subiendo Evidencia... <ElapsedTime running={isUploadingDoc} /></span> : "Subir Evidencia Contextualizada"}
             </button>
           </div>
           <div className="w-full space-y-2">
@@ -1510,41 +1527,16 @@ const hasMinimumPhotos =
                   d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
                 />
               </svg>
-              {isValidatingPhotos ? "Auditando evidencia fotográfica..." : "Procesando inteligencia... Por favor espere"}
+              {isValidatingPhotos ? <span className="flex items-center gap-1">Auditando evidencia fotográfica... <ElapsedTime running={isValidatingPhotos} /></span> : <span className="flex items-center gap-1">Procesando inteligencia... Por favor espere <ElapsedTime running={isGeneratingAI} /></span>}
             </>
           ) : aiProfile ? (
-            isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Hipótesis"
+            isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Informe"
           ) : (
-            "Generar Hipótesis"
+            "Generar Informe"
           )}
         </button>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-        <button
-          type="button"
-          onClick={() => setShowMonitor(!showMonitor)}
-          className="text-xs text-gray-500 hover:text-blue-400 flex items-center gap-1 mt-2"
-        >
-          👁️{" "}
-          {showMonitor ? "Ocultar Monitor de Ingesta" : "Ver Datos Crudos (Auditoría)"}
-        </button>
       </div>
-
-      {showMonitor && (
-        <div className="mt-4 p-4 bg-black border border-green-900 rounded-md overflow-x-auto max-h-96 overflow-y-auto">
-          <h4 className="text-green-500 text-xs font-mono mb-2 border-b border-green-900 pb-1">
-            DATOS EXTRAÍDOS PARA LA IA:
-          </h4>
-          {debugData ? (
-            <pre className="text-green-400 text-[10px] sm:text-xs font-mono whitespace-pre-wrap">
-              {JSON.stringify(debugData, null, 2)}
-            </pre>
-          ) : (
-            <p className="text-green-700 text-[11px] font-mono">
-              Aún no hay datos capturados. Genere un análisis para ver el payload que se enviará a la IA.
-            </p>
-          )}
-        </div>
-      )}
 
       {isGeneratingAI && (
         <div className="animate-pulse space-y-4 p-6 bg-slate-900/40 rounded-xl border border-slate-700/50">
@@ -1889,9 +1881,9 @@ const hasMinimumPhotos =
                         
                         let instruction = "";
                         if (qaIteration === 0) {
-                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador analítico empático. Evalúa la pertinencia y claridad de la hipótesis basándote SÓLO en la observación en sitio del analista. No exijas datos estadísticos, criminológicos ni de contexto urbano que la plataforma calculará después automáticamente. Si le asignas un score menor a 80, devuelve EXACTAMENTE entre 2 y 4 preguntas individuales, claras y breves, enfocadas en mejorar la pertinencia y fundamento de la hipótesis de campo. Si el score es 80 o mayor, devuelve el arreglo 'questions' vacío.)" + jsonInstruction;
+                          instruction = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador analítico empático y MUY FLEXIBLE. Evalúa la pertinencia de la hipótesis basándote SÓLO en la apreciación subjetiva del analista en campo. ESTÁ ESTRICTAMENTE PROHIBIDO exigir datos estadísticos, cantidades de delitos, información demográfica o de OSINT (todo esto se inyectará después). Si la hipótesis tiene sentido lógico, asigna un score de 80 o mayor. Si es menor a 80, devuelve EXACTAMENTE entre 1 y 2 preguntas breves y fáciles de responder. Si el score es 80 o mayor, devuelve el arreglo 'questions' vacío.)" + jsonInstruction;
                         } else {
-                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas con la siguiente información:\n"${answersString}"\n\nReevalúa la pertinencia de la hipótesis integrada. Si aún no alcanza 80, devuelve 1 o 2 nuevas preguntas breves. Si ya alcanza 80, devuelve 'questions' vacío.)` + jsonInstruction;
+                          instruction = `\n\n(INSTRUCCIÓN DEL SISTEMA: La Persona Perfiladora ha respondido a tus preguntas con la siguiente información:\n"${answersString}"\n\nReevalúa la pertinencia de la hipótesis integrada siendo MUY FLEXIBLE. NO exijas estadísticas ni OSINT. Si responde de forma aceptable, otorga 80 o más. Si aún no alcanza 80, devuelve 1 nueva pregunta breve. Si ya alcanza 80, devuelve 'questions' vacío.)` + jsonInstruction;
                         }
 
                         const res = await fetch("/api/refine-context", {
@@ -1969,7 +1961,7 @@ const hasMinimumPhotos =
                     disabled={isRefining || selectedIds.length < 1 || isAnalysisContextAudited}
                     className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
                   >
-                    {isRefining ? "Validando..." : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
+                    {isRefining ? <span className="flex items-center justify-center">Validando... <ElapsedTime running={isRefining} /></span> : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
                   </button>
                   <button
                     type="button"
@@ -2043,7 +2035,7 @@ const hasMinimumPhotos =
                   disabled={!isAnalysisContextAudited}
                   className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Comenzar a Generar Hipótesis
+                  Generar Informe
                 </button>
               </div>
             </div>
@@ -2120,7 +2112,7 @@ const hasMinimumPhotos =
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
               const chunks = [];
-              for (let i = 0; i < items.length; i += 4) chunks.push(items.slice(i, i + 4));
+              for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
 
               return (
                 <>
@@ -2130,9 +2122,9 @@ const hasMinimumPhotos =
                   </div>
                   {chunks.map((chunk, cIdx) => (
                     <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
-                      <div className="grid grid-cols-2 gap-8 h-full">
+                      <div className="flex flex-col gap-8 h-full">
                         {chunk.map((snap, i) => (
-                          <div key={i} className="border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden h-full">
+                          <div key={i} className="border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden h-1/2">
                             <h4 className="text-sm font-bold text-[#0D2B52] text-center mb-2 uppercase tracking-wider border-b-2 border-slate-300 pb-1">{snap.title}</h4>
                             <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}

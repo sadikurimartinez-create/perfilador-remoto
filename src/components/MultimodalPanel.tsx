@@ -1,7 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useProject } from "@/context/ProjectContext";
+
+function ElapsedTime({ running }: { running: boolean }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!running) {
+      setSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
+  if (!running) return null;
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
+}
 
 type MultimodalPanelProps = {
   project?: any;
@@ -168,7 +184,7 @@ export default function MultimodalPanel({ project }: MultimodalPanelProps) {
           disabled={files.length === 0 || isProcessing || isReadOnly}
           className="w-full bg-sky-600 hover:bg-sky-500 text-white font-semibold py-2 px-4 rounded-md transition-colors text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isProcessing ? "Ingestando Evidencias..." : "Procesar Evidencia Multimodal"}
+        {isProcessing ? <span className="flex items-center justify-center gap-1">Ingestando Evidencias... <ElapsedTime running={isProcessing} /></span> : "Procesar Evidencia Multimodal"}
         </button>
       </div>
     </div>

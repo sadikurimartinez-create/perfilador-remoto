@@ -71,7 +71,7 @@ function computeRiskLevel(params: {
   numPois: number;
   radioMetros: number;
   svs?: number;
-}): { riskLevel: "bajo" | "medio" | "alto"; mlFeatures: any } {
+}): { riskLevel: "bajo" | "medio" | "alto"; mlFeatures: any; tendencia: string } {
   const {
     totalIncidenciaDB,
     totalIncidenciaCSV,
@@ -131,7 +131,9 @@ function computeRiskLevel(params: {
     finalThreatScore
   };
 
-  return { riskLevel, mlFeatures };
+  const tendencia = finalThreatScore >= 50 ? "AL ALZA" : "ESTABLE O A LA BAJA";
+
+  return { riskLevel, mlFeatures, tendencia };
 }
 
 function generateScinceDemographics(lat: number, lng: number, geometryType: string, radiusMeters: number) {
@@ -497,6 +499,8 @@ function buildPromptForGemini(params: {
   sesnspTexto: string;
   overpassTexto: string;
   cenapredTexto: string;
+  computedRiskLevel: string;
+  tendenciaPredictiva: string;
 }): string {
   const {
     photos,
@@ -524,6 +528,8 @@ function buildPromptForGemini(params: {
     sesnspTexto,
     overpassTexto,
     cenapredTexto,
+    computedRiskLevel,
+    tendenciaPredictiva,
   } = params;
 
   const comentariosInvestigador = photos
@@ -710,8 +716,8 @@ REGLA DE ORO: NO DEBE EXCEDER 2 CUARTILLAS. Utiliza viñetas (bullet points) par
 
 Para la SÍNTESIS INICIAL de tu reporte, debes OBLIGATORIAMENTE incluir las siguientes 3 precisiones en este orden exacto al inicio de tu dictamen, adaptando los textos guía al contexto:
 1. EXPLICACIÓN DEL ANÁLISIS: Redacta textualmente: "Se llevó a cabo un trabajo de geo inteligencia sobre el [nodo / polígono / corredor] ubicado en [Dirección / Colonia]..."
-2. SÍNTESIS DE RIESGO: Redacta textualmente: "El [nodo / polígono / corredor] presenta un nivel de riesgo [Bajo/Medio/Alto] ya que..." (Justifica brevemente basado en los datos).
-3. INFORMACIÓN PREDICTIVA INICIAL: Redacta textualmente: "Como resultado del análisis se concluye que en un lapso de [X] meses la incidencia delictiva del delito de [X] puede aumentar / las riñas pueden intensificarse..."
+2. SÍNTESIS DE RIESGO: Redacta textualmente: "El [nodo / polígono / corredor] presenta un nivel de riesgo ${computedRiskLevel.toUpperCase()} ya que..." (Justifica brevemente basado en los datos). ESTÁ ESTRICTAMENTE PROHIBIDO MODIFICAR ESTE NIVEL DE RIESGO, DEBE SER DECLARADO COMO ${computedRiskLevel.toUpperCase()}.
+3. INFORMACIÓN PREDICTIVA INICIAL: Redacta textualmente: "Como resultado del análisis se concluye que en un lapso de 6 meses la incidencia delictiva del entorno presenta una tendencia ${tendenciaPredictiva}..." (Continúa justificando brevemente basado en los atractores de riesgo detectados). ESTÁ ESTRICTAMENTE PROHIBIDO CONTRADECIR ESTA TENDENCIA.
 
 Después de estas 3 precisiones iniciales, estructura el resto del documento OBLIGATORIAMENTE en estas secciones breves (EVITA arrojar kilos de datos estadísticos si no tienen una inferencia criminal directa para la zona):
 
@@ -1031,6 +1037,18 @@ export async function POST(req: Request) {
       photos.map((p) => p.tipo)
     );
 
+    const scinceDemographics = generateScinceDemographics(centerLat, centerLng, body.geometryType || "individual", radiusMeters);
+
+    const { riskLevel, mlFeatures, tendencia } = computeRiskLevel({
+      totalIncidenciaDB: incidenciaResumen.total,
+      totalIncidenciaCSV,
+      porDelito: incidenciaResumen.porDelito,
+      numIrregulares,
+      numPois,
+      radioMetros: radiusMeters,
+      svs: scinceDemographics.svs,
+    });
+
     const prompt = buildPromptForGemini({
       photos,
       geocoding,
@@ -1057,6 +1075,8 @@ export async function POST(req: Request) {
       sesnspTexto,
       overpassTexto,
       cenapredTexto,
+      computedRiskLevel: riskLevel,
+      tendenciaPredictiva: tendencia,
     });
 
     const marcoTeoriaReglas =
@@ -1106,17 +1126,6 @@ export async function POST(req: Request) {
       );
       throw err;
     }
-
-    const { riskLevel, mlFeatures } = computeRiskLevel({
-      totalIncidenciaDB: incidenciaResumen.total,
-      totalIncidenciaCSV,
-      porDelito: incidenciaResumen.porDelito,
-      numIrregulares,
-      numPois,
-      radioMetros: radiusMeters,
-    });
-
-    const scinceDemographics = generateScinceDemographics(centerLat, centerLng, body.geometryType || "individual", radiusMeters);
 
     return NextResponse.json(
       {
