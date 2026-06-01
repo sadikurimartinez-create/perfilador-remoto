@@ -228,6 +228,42 @@ type HistoricalSummary = {
   porRango: Array<{ rango: string; cantidad: number }>;
 };
 
+/**
+ * Elimina vocales, acentos y el caracter corrupto "" para comparar nombres de 
+ * municipios que vienen de Google Maps contra los del CSV mal codificado.
+ */
+function fuzzyMatch(str: string) {
+  return str.toLowerCase().replace(/[aeiouáéíóúü\s\W_]/gi, "");
+}
+
+async function getSesnspMunicipal(estado: string, municipio: string): Promise<string> {
+  if (!estado || !municipio) return "";
+  try {
+    const filePath = path.join(process.cwd(), "INCID DELICT", "TablaDinámica-RNID-Municipal Víctimas - ABRIL 2026-corteAbril2026(PlanoVíctimasMunicipalSIIID).csv");
+    const content = await fs.readFile(filePath, "utf-8");
+    const lines = content.split('\n');
+
+    const targetEstado = fuzzyMatch(estado);
+    const targetMunicipio = fuzzyMatch(municipio);
+
+    for (const line of lines) {
+      const cols = line.split(';');
+      if (cols.length >= 4) {
+        const rowEstado = fuzzyMatch(cols[0]);
+        const rowMunicipio = fuzzyMatch(cols[2]);
+        if ((rowEstado.includes(targetEstado) || targetEstado.includes(rowEstado)) &&
+            (rowMunicipio === targetMunicipio || rowMunicipio.includes(targetMunicipio) || targetMunicipio.includes(rowMunicipio))) {
+          const total = cols[3].trim();
+          return `Estadística Oficial SESNSP (2026): El municipio de ${municipio}, ${estado} registra un total acumulado de ${total} víctimas de delitos de acuerdo con el corte a Abril de 2026. (ATENCIÓN: Usa este dato SÓLO como 'temperatura' macro-criminal. Tu barrido y dictamen NO deben evaluar al municipio, sino ESTRICTAMENTE limitarse al radio/polígono preestablecido).`;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[generate-profile] No se pudo leer el CSV de SESNSP:", e);
+  }
+  return "";
+}
+
 async function readBibliographyContext(): Promise<string> {
   try {
     const baseDir = path.join(process.cwd(), "Bibliografía");
@@ -428,6 +464,7 @@ function buildPromptForGemini(params: {
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
   tacticalStreetViews?: any[];
+  sesnspTexto: string;
 }): string {
   const {
     photos,
@@ -452,6 +489,7 @@ function buildPromptForGemini(params: {
     geometryType,
     projectDescription,
     tacticalStreetViews = [],
+    sesnspTexto,
   } = params;
 
   const comentariosInvestigador = photos
@@ -611,6 +649,9 @@ ${incidenciaTexto}
 ## INCIDENCIA ADICIONAL (archivos CSV locales)
 ${incidenciaArchivosTexto || "No se encontraron delitos adicionales en archivos CSV dentro del radio."}
 
+## INCIDENCIA MUNICIPAL MACRO (SESNSP)
+${sesnspTexto || "No se detectaron estadísticas a nivel municipal en los archivos locales."}
+
 ## CONTEXTO VISUAL (Street View)
 ${streetViewTexto}
 
@@ -758,6 +799,8 @@ export async function POST(req: Request) {
       telegramOsintPromise,
       bibliographyPromise,
     ]);
+
+    const sesnspTexto = await getSesnspMunicipal(geocoding.estado || "", geocoding.municipio || "");
 
     const denueResult =
       placesAndDenueSettled[0].status === "fulfilled"
@@ -958,6 +1001,7 @@ export async function POST(req: Request) {
       geometryType: body.geometryType,
       projectDescription: body.projectDescription,
       tacticalStreetViews,
+      sesnspTexto,
     });
 
     const marcoTeoriaReglas =
@@ -984,7 +1028,7 @@ export async function POST(req: Request) {
     ==================================================
 
     - Mantén narrativa analítica profesional.
-    - REGLA DE ESCALA ESPACIAL: Prohibido generalizar a nivel municipal o estatal. Centra tus inferencias ESTRICTAMENTE en las manzanas y cuadras que componen el radio de ${radiusMeters} metros alrededor de la evidencia.
+    - REGLA DE ESCALA ESPACIAL: Prohibido generalizar a nivel municipal o estatal. Centra tus inferencias ESTRICTAMENTE en las manzanas y cuadras que componen el radio de ${radiusMeters} metros alrededor de la evidencia. Los datos macro (SESNSP, demografía municipal) son SOLO para contexto de fondo; todo el barrido, análisis y perfilación deben limitarse rigurosamente al perímetro marcado por el investigador.
     - Diferencia hechos de inferencias.
     - No emitas conclusiones absolutas.
     - Prioriza análisis contextual.

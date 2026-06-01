@@ -1,0 +1,10 @@
+Incidencia Delictiva Fuero Común - Nueva Metodología;
+Campo;Descripción
+Año;Año de registro de las averiguaciones previas y/o carpetas de investigación.
+Clave_Ent;Clave de la entidad, según el Marco Geoestadístico Nacional (MGN) del Instituto Nacional de Geografía y Estadística (INEGI).
+Entidad;Entidad federativa de registro de las averiguaciones previas y/o carpetas de investigación.
+Bien jurídico afectado;Primera clasificación de los delitos en las averiguaciones previas y/o carpetas de investigación. 
+Tipo de delito;Segunda clasificación de los delitos.
+Subtipo de delito;Tercera clasificación de los delitos.
+Modalidad;Cuarta clasificación de los delitos.
+Enero - diciembre;Mes de registro de las averiguaciones previas y/o carpetas de investigación.

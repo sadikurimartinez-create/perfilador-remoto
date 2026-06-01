@@ -6,7 +6,7 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
+import { pingOsint, getScinceData, getDenueData, checkAutoPlaca } from "@/lib/osintActions";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -1003,14 +1003,9 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch("/api/checkauto", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ placa: plateQuery.trim() })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}] Estatus recuperado del barrido: ${data.estatus}. Marca/Modelo: ${data.marca} ${data.modelo}. Observaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
+                const data = await checkAutoPlaca(plateQuery.trim());
+                if (data.exito) {
+                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}] Estatus recuperado del barrido: ${data.estatus}. Observaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setPlateQuery("");
                   setIsAnalysisContextAudited(false); // Forzar a reevaluar la hipótesis con la IA
@@ -1019,6 +1014,7 @@ const hasMinimumPhotos =
                   setError(data.error || "Error al consultar la placa.");
                 }
               } catch (err) {
+                console.error("[Frontend] Error crítico al llamar Server Action de REPUVE:", err);
                 setError("Error de red al conectar con el módulo de barrido vehicular.");
               } finally {
                 setIsCheckingPlate(false);
