@@ -38,15 +38,23 @@ async function requestMoreLogin(path, payload) {
   }
 }
 
-// Cola de tareas global para manejar usuarios simultáneos uno por uno
-let colaDeEspera = Promise.resolve();
+let robotOcupado = false;
 
-app.all("/repuve", (req, res) => {
+app.all("/repuve", async (req, res) => {
   const placa = req.query.placa;
   if (!placa) return res.json({ exito: false, error: "Falta placa" });
   
   // Añadimos la petición de este usuario a la cola
   colaDeEspera = colaDeEspera.then(async () => {
+  if (robotOcupado) {
+    console.log(`\n[ROBOT] ⚠️ Petición rechazada: El robot está ocupado. Placa en espera: ${placa}`);
+    return res.json({ 
+      exito: false, 
+      error: "⚠️ El Cuartel General está analizando otra placa en este momento. Por favor, espere 45 segundos y vuelva a intentarlo." 
+    });
+  }
+
+  robotOcupado = true;
   console.log(`\n========================================`);
   console.log(`[ROBOT] 🚀 Iniciando búsqueda de placa: ${placa}`);
   console.log(`========================================`);
@@ -415,10 +423,5 @@ app.all("/repuve", (req, res) => {
       console.log("[ROBOT] 🧹 Desconectando navegador...\n");
       await browser.disconnect().catch(()=>null);
     }
-  }
-  }).catch(err => {
-    console.error("[ROBOT] ❌ Error grave en la cola de trabajo:", err);
-  });
-});
 
 app.listen(3005, () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005"));
