@@ -47,6 +47,7 @@ app.all("/repuve", async (req, res) => {
   console.log(`========================================`);
   
   let browser = null;
+  let page = null;
   try {
     console.log("[ROBOT] 1/7 📡 Solicitando a MoreLogin que inicie el navegador...");
     let startData;
@@ -84,7 +85,6 @@ app.all("/repuve", async (req, res) => {
     browser = await puppeteer.connect({ ...endpointParams, defaultViewport: null });
     
     console.log("[ROBOT] 3/7 📑 Abriendo nueva pestaña del navegador...");
-    const page = await browser.newPage();
     page.on('dialog', async dialog => {
       console.log(`\n[ROBOT] ⚠️ Alerta emergente de REPUVE detectada: "${dialog.message()}"`);
       await dialog.accept().catch(() => null);
@@ -402,6 +402,10 @@ app.all("/repuve", async (req, res) => {
     console.error("\n[ROBOT] ❌ ERROR EN EL PROCESO:", error.message, "\n");
     res.json({ exito: false, error: error.message });
   } finally {
+    if (page) {
+      console.log("[ROBOT] 🧹 Cerrando pestaña de búsqueda...");
+      await page.close().catch(()=>null);
+    }
     if (browser) {
       console.log("[ROBOT] 🧹 Desconectando navegador...\n");
       await browser.disconnect().catch(()=>null);
