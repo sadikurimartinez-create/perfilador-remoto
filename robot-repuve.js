@@ -38,10 +38,15 @@ async function requestMoreLogin(path, payload) {
   }
 }
 
-app.all("/repuve", async (req, res) => {
+// Cola de tareas global para manejar usuarios simultáneos uno por uno
+let colaDeEspera = Promise.resolve();
+
+app.all("/repuve", (req, res) => {
   const placa = req.query.placa;
   if (!placa) return res.json({ exito: false, error: "Falta placa" });
   
+  // Añadimos la petición de este usuario a la cola
+  colaDeEspera = colaDeEspera.then(async () => {
   console.log(`\n========================================`);
   console.log(`[ROBOT] 🚀 Iniciando búsqueda de placa: ${placa}`);
   console.log(`========================================`);
@@ -411,6 +416,9 @@ app.all("/repuve", async (req, res) => {
       await browser.disconnect().catch(()=>null);
     }
   }
+  }).catch(err => {
+    console.error("[ROBOT] ❌ Error grave en la cola de trabajo:", err);
+  });
 });
 
 app.listen(3005, () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005"));
