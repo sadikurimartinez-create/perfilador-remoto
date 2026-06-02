@@ -1035,7 +1035,7 @@ const hasMinimumPhotos =
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setPlateQuery("");
                   setIsAnalysisContextAudited(false); // Forzar a reevaluar la hipótesis con la IA
-                  alert(`Búsqueda completada: ${data.estatus}. Resultado anexado a la Hipótesis del Analista.`);
+                  alert(`¡Búsqueda Vehicular Completada!\n\nEstatus: ${data.estatus}\n\n${data.resumenTexto || ""}\n\n* La información ha sido anexada a su Hipótesis Táctica.`);
                 } else {
                   setError(data.error || "Error al consultar la placa.");
                 }

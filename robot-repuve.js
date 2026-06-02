@@ -362,6 +362,15 @@ app.all("/repuve", async (req, res) => {
       pestanas.usa_can = await clickAndReadTab(["USA", "CAN", "ESTADOS UNIDOS", "CANADÁ"]);
       pestanas.avisos = await clickAndReadTab(["AVISOS MINISTERIALES", "AVISOS", "JUDICIALES"]);
 
+      // Corrección de estatus general si la tabla principal no tiene la palabra exacta pero las instituciones confirman
+      if (estatus.includes("ESTATUS NO DETERMINADO")) {
+        if (pestanas.fgj.includes("SIN REPORTE") || pestanas.ocra.includes("SIN REPORTE")) {
+          estatus = "✅ SIN REPORTE DE ROBO (Verificado en instituciones)";
+        } else if (pestanas.fgj.includes("CON REPORTE") || pestanas.ocra.includes("CON REPORTE") || pestanas.usa_can.includes("CON REPORTE")) {
+          estatus = "⚠️ CON REPORTE DE ROBO (ALERTA CRÍTICA)";
+        }
+      }
+
       return { estatus, datos, pestanas, textoMuestra: textoGlobal.substring(0, 200).replace(/\n/g, ' ') };
     });
 
@@ -379,7 +388,7 @@ app.all("/repuve", async (req, res) => {
     console.log("");
     
     // Generar un resumen en texto plano ideal para inyectar en la Hipótesis del frontend
-    const resumenFormateado = `🚗 DATOS DEL VEHÍCULO (Placa: ${placa}): Marca: ${analisis.datos.marca} | Modelo: ${analisis.datos.modelo} | Año: ${analisis.datos.anio} | NIV: ${analisis.datos.niv}\n📁 REPORTE POR INSTITUCIÓN:\n        - FGJ/PGJ: ${analisis.pestanas.fgj}\n        - OCRA: ${analisis.pestanas.ocra}\n        - Robo USA/CAN: ${analisis.pestanas.usa_can}\n        - Avisos Min/Jud: ${analisis.pestanas.avisos}`;
+    const resumenFormateado = `🚗 DATOS DEL VEHÍCULO: Marca: ${analisis.datos.marca} | Modelo: ${analisis.datos.modelo} | Año: ${analisis.datos.anio} | NIV: ${analisis.datos.niv}\n📁 REPORTE POR INSTITUCIÓN:\n        - FGJ/PGJ: ${analisis.pestanas.fgj}\n        - OCRA: ${analisis.pestanas.ocra}\n        - Robo USA/CAN: ${analisis.pestanas.usa_can}\n        - Avisos Min/Jud: ${analisis.pestanas.avisos}`;
 
     res.json({ 
       exito: true, 
