@@ -1030,7 +1030,8 @@ const hasMinimumPhotos =
                 
                 const data = await res.json();
                 if (data.exito) {
-                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}] Estatus recuperado del barrido: ${data.estatus}. Observaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
+                  // Inyectamos el resumen detallado (vehículo + instituciones) proveniente del Robot
+                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setPlateQuery("");
                   setIsAnalysisContextAudited(false); // Forzar a reevaluar la hipótesis con la IA
