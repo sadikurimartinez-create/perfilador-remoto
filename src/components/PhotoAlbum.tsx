@@ -1020,13 +1020,18 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const ngrokUrl = (process.env.NEXT_PUBLIC_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
-                // Conexión directa al robot local mediante POST (Bypass de CORS y Vercel 404)
+                // 1. Obtenemos la URL de Ngrok desde las variables de entorno de Vercel
+                const ngrokUrl = process.env.NEXT_PUBLIC_NGROK_URL 
+                  ? process.env.NEXT_PUBLIC_NGROK_URL.trim().replace(/\/$/, "")
+                  : "http://127.0.0.1:3005";
+
+                console.log("[Frontend] Conectando a Robot en:", ngrokUrl);
+                // 2. Conexión directa (Bypass de Vercel 404 y CORS)
                 const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
                   method: "POST"
                 });
                 
-                if (!res.ok) throw new Error(`Fallo de conexión con Ngrok (Código ${res.status}). Asegúrese de que el túnel y el robot local están encendidos.`);
+                if (!res.ok) throw new Error(`Fallo de conexión (Código ${res.status}). Verifica que Ngrok y el robot local estén encendidos.`);
                 
                 const data = await res.json();
                 if (data.exito) {

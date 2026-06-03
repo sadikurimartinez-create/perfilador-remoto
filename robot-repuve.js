@@ -44,8 +44,6 @@ app.all("/repuve", async (req, res) => {
   const placa = req.query.placa;
   if (!placa) return res.json({ exito: false, error: "Falta placa" });
   
-  // Añadimos la petición de este usuario a la cola
-  colaDeEspera = colaDeEspera.then(async () => {
   if (robotOcupado) {
     console.log(`\n[ROBOT] ⚠️ Petición rechazada: El robot está ocupado. Placa en espera: ${placa}`);
     return res.json({ 
@@ -98,6 +96,7 @@ app.all("/repuve", async (req, res) => {
     browser = await puppeteer.connect({ ...endpointParams, defaultViewport: null });
     
     console.log("[ROBOT] 3/7 📑 Abriendo nueva pestaña del navegador...");
+    page = await browser.newPage();
     page.on('dialog', async dialog => {
       console.log(`\n[ROBOT] ⚠️ Alerta emergente de REPUVE detectada: "${dialog.message()}"`);
       await dialog.accept().catch(() => null);
@@ -188,7 +187,7 @@ app.all("/repuve", async (req, res) => {
         if (sitekey) {
           console.log(`[ROBOT] 6/7 🤖 reCaptcha invisible detectado (Sitekey: ${sitekey.substring(0,8)}...). Solicitando token a la IA...`);
           const pageUrl = encodeURIComponent(await page.url());
-          const inRes = await fetch(`https://2captcha.com/in.php?key=${API_KEY_2CAPTCHA}&method=userrecaptcha&googlekey=${sitekey}&pageurl=${pageUrl}&invisible=1&json=1`);
+          const inRes = await fetch(`<https://2captcha.com/in.php?key=${API_KEY_2CAPTCHA}&method=userrecaptcha&googlekey=${sitekey}&pageurl=${pageUrl}&invisible=1&json=1>`);
           const inData = await inRes.json();
           
           if (inData.status === 1) {
@@ -197,7 +196,7 @@ app.all("/repuve", async (req, res) => {
             for (let i = 0; i < 15; i++) {
               await new Promise(r => setTimeout(r, 5000));
               console.log(`[ROBOT]     ... esperando token invisible de IA (intento ${i+1}/15)`);
-              const resRes = await fetch(`https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1`);
+              const resRes = await fetch(`<https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1>`);
               const resData = await resRes.json();
               if (resData.status === 1) { token = resData.request; break; }
             }
@@ -224,7 +223,7 @@ app.all("/repuve", async (req, res) => {
                     const cbElement = document.querySelector('[data-callback]');
                     if (cbElement) {
                       const cbName = cbElement.getAttribute('data-callback');
-                      if (typeof window[cbName] === 'function') window[cbName](t);
+                      if (typeof window[cbName] === 'function') windowcbName;
                     }
                     return Promise.resolve(t);
                   },
@@ -255,7 +254,7 @@ app.all("/repuve", async (req, res) => {
         for (let i = 0; i < 12; i++) {
           await new Promise(r => setTimeout(r, 5000));
           console.log(`[ROBOT]     ... esperando respuesta de IA (intento ${i+1}/12)`);
-          const resRes = await fetch(`https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1`);
+          const resRes = await fetch(`<https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1>`);
           const resData = await resRes.json();
           if (resData.status === 1) { captchaResuelto = resData.request; break; }
         }
@@ -423,5 +422,8 @@ app.all("/repuve", async (req, res) => {
       console.log("[ROBOT] 🧹 Desconectando navegador...\n");
       await browser.disconnect().catch(()=>null);
     }
+    robotOcupado = false;
+  }
+});
 
 app.listen(3005, () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005"));
