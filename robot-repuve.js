@@ -187,7 +187,7 @@ app.all("/repuve", async (req, res) => {
         if (sitekey) {
           console.log(`[ROBOT] 6/7 🤖 reCaptcha invisible detectado (Sitekey: ${sitekey.substring(0,8)}...). Solicitando token a la IA...`);
           const pageUrl = encodeURIComponent(await page.url());
-          const inRes = await fetch(`<https://2captcha.com/in.php?key=${API_KEY_2CAPTCHA}&method=userrecaptcha&googlekey=${sitekey}&pageurl=${pageUrl}&invisible=1&json=1>`);
+          const inRes = await fetch(`https://2captcha.com/in.php?key=${API_KEY_2CAPTCHA}&method=userrecaptcha&googlekey=${sitekey}&pageurl=${pageUrl}&invisible=1&json=1`);
           const inData = await inRes.json();
           
           if (inData.status === 1) {
@@ -196,7 +196,7 @@ app.all("/repuve", async (req, res) => {
             for (let i = 0; i < 15; i++) {
               await new Promise(r => setTimeout(r, 5000));
               console.log(`[ROBOT]     ... esperando token invisible de IA (intento ${i+1}/15)`);
-              const resRes = await fetch(`<https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1>`);
+              const resRes = await fetch(`https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1`);
               const resData = await resRes.json();
               if (resData.status === 1) { token = resData.request; break; }
             }
@@ -223,7 +223,7 @@ app.all("/repuve", async (req, res) => {
                     const cbElement = document.querySelector('[data-callback]');
                     if (cbElement) {
                       const cbName = cbElement.getAttribute('data-callback');
-                      if (typeof window[cbName] === 'function') windowcbName;
+                      if (typeof window[cbName] === 'function') window[cbName](t);
                     }
                     return Promise.resolve(t);
                   },
@@ -254,7 +254,7 @@ app.all("/repuve", async (req, res) => {
         for (let i = 0; i < 12; i++) {
           await new Promise(r => setTimeout(r, 5000));
           console.log(`[ROBOT]     ... esperando respuesta de IA (intento ${i+1}/12)`);
-          const resRes = await fetch(`<https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1>`);
+          const resRes = await fetch(`https://2captcha.com/res.php?key=${API_KEY_2CAPTCHA}&action=get&id=${captchaId}&json=1`);
           const resData = await resRes.json();
           if (resData.status === 1) { captchaResuelto = resData.request; break; }
         }
@@ -299,7 +299,7 @@ app.all("/repuve", async (req, res) => {
     if (!formSelectors.placa) throw new Error("No se encontró la caja para ingresar la placa. El gobierno modificó fuertemente el formulario.");
 
     // Limpiamos la placa de saltos de línea ocultos que provocan un "Enter" accidental prematuro
-    const placaLimpia = placa.replace(/[\r\n]/g, '').trim();
+    const placaLimpia = placa.replace(/[-\s\r\n]/g, '').trim().toUpperCase();
     await page.type(formSelectors.placa, placaLimpia, { delay: 150 });
     
     if (formNeedsCaptcha && captchaResuelto && formSelectors.captcha) {

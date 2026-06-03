@@ -1009,7 +1009,7 @@ const hasMinimumPhotos =
             type="text"
             placeholder="Ingrese placa o NIV..."
             value={plateQuery}
-            onChange={(e) => setPlateQuery(e.target.value.toUpperCase())}
+            onChange={(e) => setPlateQuery(e.target.value.toUpperCase().replace(/[-\s]/g, ""))}
             disabled={isCheckingPlate || isReadOnly}
             className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
           />
