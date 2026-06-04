@@ -1,7 +1,7 @@
-export const maxDuration = 60; // ¡AQUÍ SÍ FUNCIONAN LOS 60 SEGUNDOS!
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60; // Configuración permitida para Vercel Pro (Da margen para resolver Cloudflare)
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
@@ -12,38 +12,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ exito: false, error: "No se proporcionó una placa vehicular." }, { status: 400 });
     }
 
-    const localApiUrl = (process.env.MORELOGIN_API_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
+    // Busca el NGROK_URL en las variables de entorno, o intenta localmente por defecto.
+    const botUrl = (process.env.NGROK_URL || process.env.NEXT_PUBLIC_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
 
-    console.log(`[REPUVE API] Contactando Robot Local en: ${localApiUrl}/repuve?placa=${placa}`);
+    console.log(`[Vercel Backend] Enlazando con el Robot en: ${botUrl}/repuve?placa=${placa}`);
     
+    // Damos 55 segundos de timeout para evitar exceder el límite de 60s de Vercel
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 55000);
 
-    let res;
-    try {
-      res = await fetch(`${localApiUrl}/repuve?placa=${placa}`, {
-        method: "GET",
-        headers: { "ngrok-skip-browser-warning": "true" },
-        cache: "no-store",
-        signal: controller.signal
-      });
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      return NextResponse.json({ exito: false, error: `No se pudo conectar con Ngrok (${localApiUrl}). El túnel está apagado o la URL es incorrecta.` });
-    }
+    const res = await fetch(`${botUrl}/repuve?placa=${placa}`, {
+      method: "POST",
+      headers: { "ngrok-skip-browser-warning": "true", "Content-Type": "application/json" },
+      cache: "no-store",
+      signal: controller.signal
+    });
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      if (res.status === 404) {
-        return NextResponse.json({ exito: false, error: `Ngrok devolvió 404. La URL ${localApiUrl} ya caducó. Reinicia Ngrok y actualiza Vercel.` });
-      }
-      return NextResponse.json({ exito: false, error: `Error en el Robot Local: ${res.status}` });
+      return NextResponse.json({ exito: false, error: `Error en el Servidor Ngrok/Robot: Código ${res.status}` }, { status: res.status });
     }
 
     const data = await res.json();
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("[REPUVE API] Error:", error);
-    return NextResponse.json({ exito: false, error: error.message || "Error interno." });
+    console.error("[Vercel Backend] Error conectando con el Robot:", error);
+    return NextResponse.json({ exito: false, error: "Fallo de conexión al Robot. Verifica que Ngrok esté encendido en la PC raíz." }, { status: 500 });
   }
 }

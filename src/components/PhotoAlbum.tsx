@@ -1201,36 +1201,17 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-            const ngrokUrl = process.env.NEXT_PUBLIC_NGROK_URL 
-                  ? process.env.NEXT_PUBLIC_NGROK_URL.trim().replace(/\/$/, "")
-                  : null;
-
-                let res;
-                let fetchError: any = null;
-
-                if (ngrokUrl) {
-                  try {
-                    res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
-                  } catch (e) { fetchError = e; }
-                } else {
-                  const urls = Array.from(new Set([
-                    `http://${window.location.hostname}:3005/repuve?placa=${plateQuery.trim()}`,
-                    `http://127.0.0.1:3005/repuve?placa=${plateQuery.trim()}`,
-                    `http://localhost:3005/repuve?placa=${plateQuery.trim()}`
-                  ]));
-                  for (const url of urls) {
-                    try {
-                      res = await fetch(url, { method: "POST" });
-                      fetchError = null;
-                      break;
-                    } catch (e) { fetchError = e; }
-                  }
-                }
-
-                if (fetchError || !res) throw new Error(`Fallo de conexión al robot. Detalles: ${fetchError?.message || 'Error de red'}`);
-                if (!res.ok) throw new Error(`Fallo de conexión (Código ${res.status}). Verifica que el robot esté encendido.`);
+                const res = await fetch("/api/repuve", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ placa: plateQuery.trim() })
+                });
                 
                 const data = await res.json();
+
+                if (!res.ok) {
+                  throw new Error(data.error || `Fallo en el puente de conexión (Código ${res.status}).`);
+                }
                 if (data.exito) {
                   // Inyectamos el resumen detallado (vehículo + instituciones) proveniente del Robot
                   const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nInstrucción/Contexto del Analista: ${plateContext}\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
@@ -1243,8 +1224,8 @@ const hasMinimumPhotos =
                   setError(data.error || "Error al consultar la placa.");
                 }
               } catch (err) {
-                console.error("[Frontend] Error crítico al llamar Server Action de REPUVE:", err);
-                setError(err instanceof Error ? err.message : "Error de red al conectar con el módulo de barrido vehicular.");
+                console.error("[Frontend] Error crítico al consultar placa:", err);
+                setError(err instanceof Error ? err.message : "Error de red al comunicarse con el cuartel general.");
               } finally {
                 setIsCheckingPlate(false);
               }
