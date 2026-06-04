@@ -130,7 +130,36 @@ app.all("/repuve", async (req, res) => {
       return "DESCONOCIDO";
     });
 
-    if (pageStatus === "CLOUDFLARE") throw new Error("REPUVE está bloqueando el acceso con Cloudflare. Resuelve el desafío manualmente en el navegador abierto.");
+    if (pageStatus === "CLOUDFLARE") {
+      console.log("\n[ROBOT] 🚨 ¡CLOUDFLARE DETECTADO! 🚨");
+      console.log("[ROBOT] 🛑 El robot se ha pausado. Por favor, VE A LA VENTANA ABIERTA DEL NAVEGADOR y resuelve el Captcha humano (marca la casilla).");
+      console.log("[ROBOT] ⏳ Tienes 60 segundos antes de que se cancele la consulta...\n");
+      await page.bringToFront().catch(() => null);
+      
+      let cloudflareResuelto = false;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000)); // Esperar 2 segundos por intento
+        try {
+          const status = await page.evaluate(() => {
+            const text = document.body.innerText.toUpperCase();
+            if (document.querySelector('input[name="placa"]') || document.querySelector('#placa') || text.includes("NÚMERO DE PLACA")) return "OK";
+            return "CLOUDFLARE";
+          });
+          if (status === "OK") {
+            cloudflareResuelto = true;
+            console.log("[ROBOT] ✅ ¡Cloudflare superado con éxito! Continuando automatización...");
+            break;
+          }
+        } catch (e) {
+          // Ignorar errores si la página se está recargando (Cloudflare suele recargar al validar)
+        }
+      }
+      
+      if (!cloudflareResuelto) {
+        throw new Error("Tiempo de 60 segundos agotado para resolver Cloudflare manualmente. Vuelve a intentar la búsqueda.");
+      }
+    }
+
     if (pageStatus === "MANTENIMIENTO") throw new Error("El portal de REPUVE se encuentra en mantenimiento o fuera de servicio en este momento.");
     if (pageStatus === "DESCONOCIDO") {
       const pageTitle = await page.title();
