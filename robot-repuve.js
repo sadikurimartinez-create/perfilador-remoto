@@ -426,4 +426,4 @@ app.all("/repuve", async (req, res) => {
   }
 });
 
-app.listen(3005, () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005"));
+app.listen(3005, "0.0.0.0", () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005"));

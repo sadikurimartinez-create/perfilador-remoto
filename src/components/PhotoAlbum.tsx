@@ -1023,7 +1023,7 @@ const hasMinimumPhotos =
                 // 1. Obtenemos la URL de Ngrok desde las variables de entorno de Vercel
                 const ngrokUrl = process.env.NEXT_PUBLIC_NGROK_URL 
                   ? process.env.NEXT_PUBLIC_NGROK_URL.trim().replace(/\/$/, "")
-                  : `http://${window.location.hostname}:3005`;
+                  : (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") ? "http://127.0.0.1:3005" : `http://${window.location.hostname}:3005`;
 
                 console.log("[Frontend] Conectando a Robot en:", ngrokUrl);
                 // 2. Conexión directa (Bypass de Vercel 404 y CORS)
