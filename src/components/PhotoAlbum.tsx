@@ -1032,14 +1032,17 @@ const hasMinimumPhotos =
                     res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
                   } catch (e) { fetchError = e; }
                 } else {
-                  try {
-                    // Intento 1: Usando la IP dinámica para las computadoras remotas
-                    res = await fetch(`http://${window.location.hostname}:3005/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
-                  } catch (e) {
+                  const urls = Array.from(new Set([
+                    `http://${window.location.hostname}:3005/repuve?placa=${plateQuery.trim()}`,
+                    `http://127.0.0.1:3005/repuve?placa=${plateQuery.trim()}`,
+                    `http://localhost:3005/repuve?placa=${plateQuery.trim()}`
+                  ]));
+                  for (const url of urls) {
                     try {
-                      // Intento 2: Fallback infalible para la computadora raíz
-                      res = await fetch(`http://127.0.0.1:3005/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
-                    } catch (e2) { fetchError = e2; }
+                      res = await fetch(url, { method: "POST" });
+                      fetchError = null;
+                      break;
+                    } catch (e) { fetchError = e; }
                   }
                 }
 

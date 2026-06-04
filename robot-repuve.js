@@ -8,6 +8,7 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, ngrok-skip-browser-warning");
+  res.header("Access-Control-Allow-Private-Network", "true");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
@@ -426,4 +427,4 @@ app.all("/repuve", async (req, res) => {
   }
 });
 
-app.listen(3005, "0.0.0.0", () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005 (Visible en Red)"));
+app.listen(3005, () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005 (Visible en Red)"));
