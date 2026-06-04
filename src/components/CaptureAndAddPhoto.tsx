@@ -57,7 +57,7 @@ function ElapsedTime({ running }: { running: boolean }) {
 }
 
 export function CaptureAndAddPhoto() {
-  const { uploadAndAddPhoto, project, album } = useProject();
+  const { uploadAndAddPhoto, project, album, uploadDocument } = useProject();
   const minimumPhotos = {
     individual: 1,
     lineal: 2,
@@ -80,6 +80,8 @@ export function CaptureAndAddPhoto() {
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const pendingProcessed = useRef(false);
+  
+  const [isUploadingEvidencia, setIsUploadingEvidencia] = useState(false);
   
   // Estados para el Fallback Manual
   const [manualQueue, setManualQueue] = useState<File[]>([]);
@@ -234,6 +236,23 @@ export function CaptureAndAddPhoto() {
     }
   };
 
+  const handleEvidenciaComplementaria = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    setIsUploadingEvidencia(true);
+    setError(null);
+    try {
+      const files = Array.from(e.target.files);
+      for (const file of files) {
+        await uploadDocument(file, "PENDIENTE DE CONTEXTUALIZAR EN GABINETE");
+      }
+      alert("Evidencia in-situ capturada.\nRecuerde contextualizarla en la pestaña de Evidencias Adicionales (Gabinete).");
+    } catch (err: any) {
+      setError(err.message || "Error al subir evidencia complementaria.");
+    } finally {
+      setIsUploadingEvidencia(false);
+    }
+  };
+
   return (
   <>
 
@@ -356,6 +375,44 @@ export function CaptureAndAddPhoto() {
             onChange={(e) => handlePhotoUpload(e, false)}
           />
         </label>
+      </div>
+
+      {/* FASE: EVIDENCIA COMPLEMENTARIA IN-SITU */}
+      <div className="mt-8 border-t border-slate-700 pt-6 space-y-4">
+        <header className="space-y-1">
+          <h3 className="text-lg font-semibold text-slate-100">
+            Evidencia Complementaria (In-situ)
+          </h3>
+          <p className="text-sm text-slate-400">
+            Tome fotografías adicionales en calidad de evidencias (fuera de la geometría del perfil). Podrá contextualizarlas y auditarlas con IA posteriormente en el trabajo de Gabinete.
+          </p>
+        </header>
+        <div className="flex flex-col gap-4">
+          <label
+            className={`w-full text-center rounded-lg border border-purple-600 bg-purple-900/30 text-purple-100 px-3 py-3 text-base font-semibold hover:bg-purple-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady || isUploadingEvidencia ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+          >
+            {isUploadingEvidencia ? "Guardando Evidencia..." : "📸 Capturar Evidencia (Cámara)"}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              onChange={handleEvidenciaComplementaria}
+            />
+          </label>
+          <label
+            className={`w-full text-center rounded-lg border border-indigo-600 bg-indigo-900/30 text-indigo-100 px-3 py-3 text-base font-semibold hover:bg-indigo-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady || isUploadingEvidencia ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+          >
+            🖼️ Subir Evidencia (Galería)
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              onChange={handleEvidenciaComplementaria}
+            />
+          </label>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}

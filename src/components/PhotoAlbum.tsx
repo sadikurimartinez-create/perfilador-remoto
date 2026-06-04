@@ -117,6 +117,106 @@ function ElapsedTime({ running }: { running: boolean }) {
   return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
 }
 
+function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isReadOnly }: any) {
+  const [context, setContext] = useState("");
+  const [suggestions, setSuggestions] = useState("");
+  const [auditScore, setAuditScore] = useState<number | null>(null);
+  const [isRefining, setIsRefining] = useState(false);
+  const [isAudited, setIsAudited] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const parseJSONResponse = (suggestionsVal: string, scoreVal: number) => {
+    let sVal = suggestionsVal;
+    let scVal = scoreVal;
+    if (sVal.includes("La respuesta de la IA") || sVal.includes("```") || sVal.includes("{")) {
+      try {
+        const match = sVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonStr = match && match[1] ? match[1] : sVal.match(/\{[\s\S]*\}/)?.[0];
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && typeof parsed === 'object') {
+            if (typeof parsed.score === 'number') scVal = parsed.score;
+            if (typeof parsed.suggestions === 'string') sVal = parsed.suggestions;
+          }
+        }
+      } catch(e) {}
+    }
+    return { sVal, scVal };
+  };
+
+  const handleRequestSuggestions = async () => {
+    setIsRefining(true);
+    setSuggestions("");
+    setAuditScore(null);
+    try {
+      const selected = album.filter((p: any) => selectedIds.includes(p.id));
+      const photosToUse = selected.length > 0 ? selected : album.filter((p:any) => p.lat != null && p.lng != null);
+      const minimalPhotos = photosToUse.map((p: any) => ({ lat: p.lat, lng: p.lng, tipo: p.tipo || "", comentario: p.comentario || "" }));
+      const res = await fetch("/api/refine-context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context: context + "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático y flexible. Evalúa SÓLO la pertinencia lógica de la evidencia. NO exijas cantidades ni métricas precisas. Si el contexto justifica la evidencia de forma general, otorga un score >= 80. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string).)",
+          photos: minimalPhotos,
+          mode: "suggest",
+          geometryType: project?.geometryType || "individual",
+          projectDescription: project?.descripcion || "",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const { sVal, scVal } = parseJSONResponse(data.suggestions ?? "", data.score ?? 0);
+        setSuggestions(sVal);
+        setAuditScore(scVal);
+        if (scVal >= 80) setIsAudited(true);
+      } else {
+        alert(data.error || "No se pudieron obtener sugerencias.");
+      }
+    } catch(e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const { doc, updateDoc } = await import("firebase/firestore");
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", projectId, "documents", d.id), {
+        context: context
+      });
+    } catch(e: any) {
+      alert("Error al guardar: " + e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 p-3 bg-slate-900 border border-amber-600/50 rounded-lg shadow-inner">
+       <p className="text-[11px] text-amber-400 font-semibold mb-1 flex items-center gap-1">
+         <span className="animate-pulse">⚠️</span> Evidencia In-Situ: Requiere Trabajo de Gabinete (Contextualización)
+       </p>
+       <textarea value={context} disabled={isReadOnly} onChange={(e) => { setContext(e.target.value); setIsAudited(false); }} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[80px]" placeholder="Describa el contexto y justificación de esta evidencia capturada en campo..." />
+       <div className="flex items-center gap-2 mt-1">
+          <button type="button" onClick={handleRequestSuggestions} disabled={isRefining || !context.trim() || isReadOnly} className="bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-md text-white text-[11px] font-semibold disabled:opacity-50 transition-colors">
+              {isRefining ? "Consultando IA..." : "Auditar Contexto"}
+          </button>
+       </div>
+       {suggestions && (
+           <div className="p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-md text-xs text-yellow-200 mt-2 space-y-2">
+               <div className="flex justify-between items-center"><p className="font-semibold">Sugerencias IA:</p>{auditScore !== null && (<span className={`px-2 py-0.5 rounded font-bold ${auditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>Lógica: {auditScore}%</span>)}</div>
+               <textarea value={suggestions} onChange={(e) => setSuggestions(e.target.value)} className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded p-2 text-yellow-100 min-h-[60px] focus:outline-none" />
+               <div className="flex gap-2"><button type="button" onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }} className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded font-medium text-[11px]">Aplicar Sugerencia</button><button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button></div>
+           </div>
+       )}
+       <div className="flex justify-end mt-2"><button type="button" onClick={handleSave} disabled={isSaving || !context.trim() || !isAudited || isReadOnly} className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-1.5 rounded-md text-[11px] font-bold disabled:opacity-50 transition-colors shadow-md">{isSaving ? "Guardando..." : "✅ Subir al Análisis (Completar Gabinete)"}</button></div>
+    </div>
+  );
+}
 
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
@@ -190,10 +290,12 @@ export function PhotoAlbum({
   // Estado para Consulta Vehicular OSINT
   const [plateQuery, setPlateQuery] = useState("");
   const [isCheckingPlate, setIsCheckingPlate] = useState(false);
+  const [plateContext, setPlateContext] = useState("");
 
   // Estado para Consulta SAT OSINT (Art. 69-B)
   const [satQuery, setSatQuery] = useState("");
   const [isCheckingSat, setIsCheckingSat] = useState(false);
+  const [satContext, setSatContext] = useState("");
 
   // Estado para Consulta INEGI SCINCE
   const [isCheckingScince, setIsCheckingScince] = useState(false);
@@ -936,7 +1038,7 @@ const hasMinimumPhotos =
                   <div className="relative w-full mt-2">
                     <textarea
                       spellCheck={true}
-                      placeholder="Comentario (Obligatorio)..."
+                      placeholder="Contexto e Instrucciones Específicas para la IA (Ej. Buscar grafitis similares a 1km)..."
                       value={p.comentario || ""}
                       disabled={isReadOnly}
                       onChange={(e) => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: e.target.value })}
@@ -1045,21 +1147,56 @@ const hasMinimumPhotos =
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Consulta Vehicular (OSINT Automático)</h4>
           <p className="text-xs text-slate-400">
-            Realice un barrido automatizado simulando la consulta pública de placas vehiculares detectadas en las fotos. El resultado se inyectará en la hipótesis.
+            Realice un barrido automatizado simulando la consulta pública de placas vehiculares detectadas en las fotos. El resultado se inyectará en la hipótesis. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
           </p>
         </header>
-        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
-          <input
-            type="text"
-            placeholder="Ingrese placa o NIV..."
-            value={plateQuery}
-            onChange={(e) => setPlateQuery(e.target.value.toUpperCase().replace(/[-\s]/g, ""))}
-            disabled={isCheckingPlate || isReadOnly}
-            className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
-          />
+        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+            <input
+              type="text"
+              placeholder="Ingrese placa o NIV..."
+              value={plateQuery}
+              onChange={(e) => setPlateQuery(e.target.value.toUpperCase().replace(/[-\s]/g, ""))}
+              disabled={isCheckingPlate || isReadOnly}
+              className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
+            />
+          </div>
+          <div className="w-full relative">
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => toggleDictation('plateContext', (text) => setPlateContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'plateContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+              >
+                <span>🎙️</span> {listeningField === 'plateContext' ? "Grabando..." : "Dictar"}
+              </button>
+            )}
+            <textarea
+              spellCheck={true}
+              value={plateContext}
+              disabled={isReadOnly}
+              onChange={(e) => setPlateContext(e.target.value)}
+              placeholder="Contexto, justificación o instrucción específica para la IA sobre este vehículo (Obligatorio)..."
+              className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!plateContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
+            />
+          </div>
+          <div className="mt-1 mb-2">
+            <div className="flex justify-between items-center text-[10px] mb-1">
+              <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
+              <span className={`font-bold ${plateContext.length < 30 ? "text-red-400" : plateContext.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
+                {plateContext.length === 0 ? "Sin contexto" : plateContext.length < 30 ? "Básico" : plateContext.length < 100 ? "Aceptable" : "Óptimo"}
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5">
+              <div 
+                className={`h-1.5 rounded-full transition-all duration-300 ${plateContext.length < 30 ? "bg-red-500" : plateContext.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min((plateContext.length / 150) * 100, 100)}%` }}
+              ></div>
+            </div>
+          </div>
           <button
             type="button"
-            disabled={!plateQuery.trim() || isCheckingPlate || isReadOnly}
+            disabled={!plateQuery.trim() || !plateContext.trim() || isCheckingPlate || isReadOnly}
             onClick={async () => {
               setIsCheckingPlate(true);
               setError(null);
@@ -1096,9 +1233,10 @@ const hasMinimumPhotos =
                 const data = await res.json();
                 if (data.exito) {
                   // Inyectamos el resumen detallado (vehículo + instituciones) proveniente del Robot
-                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
+                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nInstrucción/Contexto del Analista: ${plateContext}\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setPlateQuery("");
+                  setPlateContext("");
                   setIsAnalysisContextAudited(false); // Forzar a reevaluar la hipótesis con la IA
                   alert(`¡Búsqueda Vehicular Completada!\n\nEstatus: ${data.estatus}\n\n${data.resumenTexto || ""}\n\n* La información ha sido anexada a su Hipótesis Táctica.`);
                 } else {
@@ -1123,21 +1261,56 @@ const hasMinimumPhotos =
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Inteligencia Económica (SAT - Art. 69B)</h4>
           <p className="text-xs text-slate-400">
-            Consulte negocios detectados contra las listas negras de la SHCP/SAT. Identifique empresas fachada o posibles esquemas de lavado de dinero operando en el polígono.
+            Consulte negocios detectados contra las listas negras de la SHCP/SAT. Identifique empresas fachada o posibles esquemas de lavado de dinero operando en el polígono. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
           </p>
         </header>
-        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
-          <input
-            type="text"
-            placeholder="Ingrese RFC o Razón Social..."
-            value={satQuery}
-            onChange={(e) => setSatQuery(e.target.value.toUpperCase())}
-            disabled={isCheckingSat || isReadOnly}
-            className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
-          />
+        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+            <input
+              type="text"
+              placeholder="Ingrese RFC o Razón Social..."
+              value={satQuery}
+              onChange={(e) => setSatQuery(e.target.value.toUpperCase())}
+              disabled={isCheckingSat || isReadOnly}
+              className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
+            />
+          </div>
+          <div className="w-full relative">
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => toggleDictation('satContext', (text) => setSatContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'satContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+              >
+                <span>🎙️</span> {listeningField === 'satContext' ? "Grabando..." : "Dictar"}
+              </button>
+            )}
+            <textarea
+              spellCheck={true}
+              value={satContext}
+              disabled={isReadOnly}
+              onChange={(e) => setSatContext(e.target.value)}
+              placeholder="Contexto, justificación o instrucción específica para la IA sobre este negocio (Obligatorio)..."
+              className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!satContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
+            />
+          </div>
+          <div className="mt-1 mb-2">
+            <div className="flex justify-between items-center text-[10px] mb-1">
+              <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
+              <span className={`font-bold ${satContext.length < 30 ? "text-red-400" : satContext.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
+                {satContext.length === 0 ? "Sin contexto" : satContext.length < 30 ? "Básico" : satContext.length < 100 ? "Aceptable" : "Óptimo"}
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5">
+              <div 
+                className={`h-1.5 rounded-full transition-all duration-300 ${satContext.length < 30 ? "bg-red-500" : satContext.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min((satContext.length / 150) * 100, 100)}%` }}
+              ></div>
+            </div>
+          </div>
           <button
             type="button"
-            disabled={!satQuery.trim() || isCheckingSat || isReadOnly}
+            disabled={!satQuery.trim() || !satContext.trim() || isCheckingSat || isReadOnly}
             onClick={async () => {
               setIsCheckingSat(true);
               setError(null);
@@ -1149,9 +1322,10 @@ const hasMinimumPhotos =
                 });
                 const data = await res.json();
                 if (res.ok) {
-                  const newContext = `[INTELIGENCIA ECONÓMICA OSINT - Búsqueda SAT: ${data.busqueda}] Estatus Oficial: ${data.estatus}. Supuesto: ${data.supuesto}. Observaciones tácticas: Este establecimiento fue consultado en las Listas Negras (Art. 69-B CFF). Si aparece como EFOS, debe considerarse un mercado negro y atractor de riesgo grave de desorganización social para el entorno.`;
+                  const newContext = `[INTELIGENCIA ECONÓMICA OSINT - Búsqueda SAT: ${data.busqueda}]\nInstrucción/Contexto del Analista: ${satContext}\nEstatus Oficial: ${data.estatus}. Supuesto: ${data.supuesto}. Observaciones tácticas: Este establecimiento fue consultado en las Listas Negras (Art. 69-B CFF). Si aparece como EFOS, debe considerarse un mercado negro y atractor de riesgo grave de desorganización social para el entorno.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setSatQuery("");
+                  setSatContext("");
                   setIsAnalysisContextAudited(false); // Forzar reevaluación por añadir riesgo
                   alert(`Consulta finalizada: ${data.estatus}. Resultado integrado a la hipótesis.`);
                 } else {
@@ -1570,7 +1744,11 @@ const hasMinimumPhotos =
                     <button onClick={() => removeDocument(d.id)} className="text-red-400 hover:text-red-300 text-[10px] shrink-0">Eliminar</button>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
+                {d.context === "PENDIENTE DE CONTEXTUALIZAR EN GABINETE" ? (
+                  <PendingEvidenceEditor d={d} projectId={projectId} album={album} selectedIds={selectedIds} project={project} isReadOnly={isReadOnly} />
+                ) : (
+                  <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
+                )}
               </div>
             )) : (
               <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-700 rounded-lg">No hay evidencias adicionales en este expediente.</div>
