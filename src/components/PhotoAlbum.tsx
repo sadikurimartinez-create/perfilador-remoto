@@ -1020,18 +1020,31 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                // 1. Obtenemos la URL de Ngrok desde las variables de entorno de Vercel
-                const ngrokUrl = process.env.NEXT_PUBLIC_NGROK_URL 
+            const ngrokUrl = process.env.NEXT_PUBLIC_NGROK_URL 
                   ? process.env.NEXT_PUBLIC_NGROK_URL.trim().replace(/\/$/, "")
-                  : (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") ? "http://127.0.0.1:3005" : `http://${window.location.hostname}:3005`;
+                  : null;
 
-                console.log("[Frontend] Conectando a Robot en:", ngrokUrl);
-                // 2. Conexión directa (Bypass de Vercel 404 y CORS)
-                const res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, {
-                  method: "POST"
-                });
-                
-                if (!res.ok) throw new Error(`Fallo de conexión (Código ${res.status}). Verifica que Ngrok y el robot local estén encendidos.`);
+                let res;
+                let fetchError: any = null;
+
+                if (ngrokUrl) {
+                  try {
+                    res = await fetch(`${ngrokUrl}/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
+                  } catch (e) { fetchError = e; }
+                } else {
+                  try {
+                    // Intento 1: Usando la IP dinámica para las computadoras remotas
+                    res = await fetch(`http://${window.location.hostname}:3005/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
+                  } catch (e) {
+                    try {
+                      // Intento 2: Fallback infalible para la computadora raíz
+                      res = await fetch(`http://127.0.0.1:3005/repuve?placa=${plateQuery.trim()}`, { method: "POST" });
+                    } catch (e2) { fetchError = e2; }
+                  }
+                }
+
+                if (fetchError || !res) throw new Error(`Fallo de conexión al robot. Detalles: ${fetchError?.message || 'Error de red'}`);
+                if (!res.ok) throw new Error(`Fallo de conexión (Código ${res.status}). Verifica que el robot esté encendido.`);
                 
                 const data = await res.json();
                 if (data.exito) {
