@@ -303,7 +303,8 @@ export function ProjectList() {
       try {
         const firestore = getDb();
         await updateDoc(doc(firestore, "projects", projectId), {
-          createdBy: newOwner.trim()
+          createdBy: newOwner.trim(),
+          lockedBy: null // Asegura desbloquear el expediente para el nuevo dueño
         });
         window.alert(`Expediente reasignado exitosamente a ${newOwner.trim()}.`);
       } catch (err: any) {
