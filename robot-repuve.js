@@ -133,16 +133,24 @@ app.all("/repuve", async (req, res) => {
     if (pageStatus === "CLOUDFLARE") {
       console.log("\n[ROBOT] 🚨 ¡CLOUDFLARE DETECTADO! 🚨");
       console.log("[ROBOT] 🛑 El robot se ha pausado. Por favor, VE A LA VENTANA ABIERTA DEL NAVEGADOR y resuelve el Captcha humano (marca la casilla).");
-      console.log("[ROBOT] ⏳ Tienes 60 segundos antes de que se cancele la consulta...\n");
+      console.log("[ROBOT] ⏳ Tienes 90 segundos. Si Cloudflare se queda en un bucle infinito, el robot recargará la página automáticamente...\n");
       await page.bringToFront().catch(() => null);
       
       let cloudflareResuelto = false;
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 45; i++) {
         await new Promise(r => setTimeout(r, 2000)); // Esperar 2 segundos por intento
+
+        // Si llevamos 40 segundos atascados en Cloudflare, forzamos una recarga
+        if (i === 20) {
+          console.log("\n[ROBOT] 🔄 Cloudflare parece estar en un bucle infinito (40s). Recargando la página automáticamente para intentar destrabarlo...");
+          await page.reload({ waitUntil: "domcontentloaded" }).catch(() => null);
+          continue;
+        }
+
         try {
           const status = await page.evaluate(() => {
             const text = document.body.innerText.toUpperCase();
-            if (document.querySelector('input[name="placa"]') || document.querySelector('#placa') || text.includes("NÚMERO DE PLACA")) return "OK";
+            if (document.querySelector('input[name="placa"]') || document.querySelector('#placa') || text.includes("NÚMERO DE PLACA") || document.querySelector('form')) return "OK";
             return "CLOUDFLARE";
           });
           if (status === "OK") {
@@ -156,7 +164,7 @@ app.all("/repuve", async (req, res) => {
       }
       
       if (!cloudflareResuelto) {
-        throw new Error("Tiempo de 60 segundos agotado para resolver Cloudflare manualmente. Vuelve a intentar la búsqueda.");
+        throw new Error("Tiempo de 90 segundos agotado para resolver Cloudflare. El sitio está bloqueando el acceso definitivamente. Intente más tarde.");
       }
     }
 
