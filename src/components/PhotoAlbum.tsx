@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
@@ -7,6 +8,13 @@ import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
+
+type EvidencePhotoType = {
+  id: string;
+  previewUrl?: string;
+  tipo?: string;
+  comentario?: string;
+};
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -273,7 +281,7 @@ export function PhotoAlbum({
   const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
   const [debugData, setDebugData] = useState<any>(null);
-  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docFiles, setDocFiles] = useState<File[]>([]);
   const [docContext, setDocContext] = useState("");
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [isRefiningDoc, setIsRefiningDoc] = useState(false);
@@ -1444,14 +1452,36 @@ const hasMinimumPhotos =
         </header>
         <div className="flex flex-col gap-4 items-start w-full">
           <div className="w-full space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
-            <input
-              id="doc-upload-input"
-              type="file"
-              disabled={isReadOnly}
-              onChange={(e) => setDocFile(e.target.files ? e.target.files[0] : null)}
-              className="text-sm text-slate-300 w-full file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-900 file:text-sky-200 hover:file:bg-sky-800 disabled:opacity-50"
-              accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
-            />
+            <div className="flex gap-2">
+              <label className="flex-1 text-center cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors">
+                📄 Seleccionar Archivo(s)
+                <input
+                  type="file"
+                  multiple
+                  disabled={isReadOnly}
+                  onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  className="hidden"
+                  accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
+                />
+              </label>
+              <label className="flex-1 text-center cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors">
+                📁 Subir Carpeta Completa
+                <input
+                  type="file"
+                  {...{ webkitdirectory: "true", directory: "true" } as any}
+                  multiple
+                  disabled={isReadOnly}
+                  onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            {docFiles.length > 0 && (
+              <div className="flex justify-between items-center bg-sky-900/20 border border-sky-800 p-2 rounded">
+                <span className="text-xs text-sky-400 font-semibold">✓ {docFiles.length} archivo(s) preparado(s) para contextualizar</span>
+                <button type="button" onClick={() => setDocFiles([])} className="text-red-400 hover:text-red-300 text-[10px] font-bold">Cancelar</button>
+              </div>
+            )}
             <div className="w-full relative">
               {!isReadOnly && (
                 <button
@@ -1693,20 +1723,20 @@ const hasMinimumPhotos =
 
             <button
               type="button"
-              disabled={!docFile || !docContext.trim() || isUploadingDoc || isReadOnly || !isDocContextAudited}
+              disabled={docFiles.length === 0 || !docContext.trim() || isUploadingDoc || isReadOnly || !isDocContextAudited}
               onClick={async () => {
-                if (!docFile || !docContext.trim()) return;
+                if (docFiles.length === 0 || !docContext.trim()) return;
                 setIsUploadingDoc(true);
                 setError(null);
                 try {
-                  await uploadDocument(docFile, docContext);
-                  setDocFile(null);
+                  for (const file of docFiles) {
+                    await uploadDocument(file, docContext);
+                  }
+                  setDocFiles([]);
                   setDocContext("");
                   setIsDocContextAudited(false);
-                  const fileInput = document.getElementById("doc-upload-input") as HTMLInputElement;
-                  if (fileInput) fileInput.value = "";
                 } catch (e: any) {
-                  setError("Error al subir documento: " + e.message);
+                  setError("Error al subir documento(s): " + e.message);
                 } finally {
                   setIsUploadingDoc(false);
                 }
@@ -2343,7 +2373,7 @@ const hasMinimumPhotos =
 
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
-              const chunks = [];
+              const chunks: Array<{ title: string; dataUrl: string }[]> = [];
               for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
 
               return (
@@ -2352,10 +2382,10 @@ const hasMinimumPhotos =
                     <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">{title}</h1>
                     <div className="w-32 h-2 bg-[#D96A00]"></div>
                   </div>
-                  {chunks.map((chunk, cIdx) => (
+                  {chunks.map((chunk: { title: string; dataUrl: string }[], cIdx: number) => (
                     <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
                       <div className="flex flex-col gap-8 h-full">
-                        {chunk.map((snap, i) => (
+                        {chunk.map((snap: { title: string; dataUrl: string }, i: number) => (
                           <div key={i} className="border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden h-1/2">
                             <h4 className="text-sm font-bold text-[#0D2B52] text-center mb-2 uppercase tracking-wider border-b-2 border-slate-300 pb-1">{snap.title}</h4>
                             <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
@@ -2384,7 +2414,7 @@ const hasMinimumPhotos =
             const selectedPhotos = album.filter(p => selectedIds.includes(p.id));
             if (selectedPhotos.length === 0) return null;
 
-            const photoChunks = [];
+            const photoChunks: Array<typeof album> = [];
             for (let i = 0; i < selectedPhotos.length; i += 4) {
               photoChunks.push(selectedPhotos.slice(i, i + 4));
             }
@@ -2398,11 +2428,11 @@ const hasMinimumPhotos =
                 {photoChunks.map((chunk, idx) => (
                   <div key={idx} className="html2pdf__page-break w-full h-[1123px] p-10 bg-white flex flex-col">
                     <div className="grid grid-cols-2 gap-6 h-full">
-                      {chunk.map(p => (
+                      {chunk.map((p) => (
                         <div key={p.id} className="border border-slate-300 rounded-lg p-3 flex flex-col bg-slate-50 h-full max-h-[500px]">
                           <div className="relative w-full flex-1 mb-2 rounded border border-slate-200 overflow-hidden bg-black min-h-[200px]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
+                            <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="w-full h-full object-cover" />
                               <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
                                 <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest">SSPE-CEIPOL</span>
                               </div>
@@ -2415,7 +2445,7 @@ const hasMinimumPhotos =
                   </div>
                 ))}
               </>
-            )
+            );
           })()}
         </div>
       </div>
