@@ -145,7 +145,7 @@ export function ImageUpload() {
                 alt="Vista previa de la evidencia"
               className="h-auto max-h-[75vh] w-full object-contain bg-black"
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10" data-html2canvas-ignore="true">
                 <span className="text-white/40 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
                   SSPE-CEIPOL
                 </span>

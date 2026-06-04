@@ -227,7 +227,7 @@ export function AnalysisMap({
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-100">
       {/* Sello de agua oficial */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden" data-html2canvas-ignore="true">
         <span className="text-white/40 font-bold text-4xl sm:text-6xl -rotate-45 select-none tracking-widest drop-shadow-lg">
           SSPE-CEIPOL
         </span>

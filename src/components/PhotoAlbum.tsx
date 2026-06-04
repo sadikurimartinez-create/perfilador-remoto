@@ -84,15 +84,17 @@ async function burnGpsOnImage(srcUrl: string): Promise<string> {
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate(-Math.PI / 4);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
-      const watermarkSize = Math.max(30, canvas.width * 0.1);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+      const watermarkSize = Math.max(40, canvas.width * 0.08);
       ctx.font = `bold ${watermarkSize}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 4;
       ctx.fillText("SSPE-CEIPOL", 0, 0);
       ctx.restore();
       
-      resolve(canvas.toDataURL("image/jpeg", 0.9));
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
     };
     img.onerror = () => resolve(srcUrl);
     img.src = srcUrl;
@@ -147,6 +149,7 @@ export function PhotoAlbum({
     removeDocument,
     isReadOnly,
     markAsPrinted,
+    uploadAndAddPhoto,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -552,6 +555,29 @@ const hasMinimumPhotos =
           riskLevel: data.meta?.riskLevel || (currentAnalysisResult as any)?.riskLevel,
           mlFeatures: data.meta?.mlFeatures || (currentAnalysisResult as any)?.mlFeatures,
         } as any);
+
+        // Integrar automáticamente los lugares de acecho (StreetView) al Álbum
+        if (data.meta?.tacticalStreetViews && data.meta.tacticalStreetViews.length > 0) {
+          for (const sv of data.meta.tacticalStreetViews) {
+            const exists = album.some(p => 
+              Math.abs((p.lat || 0) - sv.lat) < 0.0001 && 
+              Math.abs((p.lng || 0) - sv.lng) < 0.0001
+            );
+            
+            if (!exists && uploadAndAddPhoto) {
+              try {
+                const svRes = await fetch(sv.streetViewUrl);
+                if (svRes.ok) {
+                  const blob = await svRes.blob();
+                  const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
+                  await uploadAndAddPhoto(file, sv.lat, sv.lng);
+                }
+              } catch (err) {
+                console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);
+              }
+            }
+          }
+        }
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
         
@@ -572,6 +598,23 @@ const hasMinimumPhotos =
     } finally {
       setIsGeneratingAI(false);
     }
+  };
+
+  const addWatermarkToCanvas = (canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+    const watermarkSize = Math.max(40, canvas.width * 0.08);
+    ctx.font = `bold ${watermarkSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 4;
+    ctx.fillText("SSPE-CEIPOL", 0, 0);
+    ctx.restore();
   };
 
   const handleAttachMapSnapshot = async () => {
@@ -629,6 +672,7 @@ const hasMinimumPhotos =
             // Dejamos el mapa en su tamaño real responsivo para evitar que Google Maps pierda el centrado
             // Solo aumentamos el 'scale' para obtener alta resolución sin afectar el renderizado interno.
             const canvas = await html2canvas(el, { useCORS: true, scale: 2.5 });
+            addWatermarkToCanvas(canvas);
             currentSnapshots.push({ title: m.title, dataUrl: canvas.toDataURL("image/png") });
             changed = true;
           } catch(e) {}
@@ -862,7 +906,7 @@ const hasMinimumPhotos =
                       className="w-full h-auto max-h-[75vh] object-contain"
                     />
                     {/* Sello de agua visual en UI */}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10" data-html2canvas-ignore="true">
                       <span className="text-white/40 font-bold text-4xl sm:text-7xl -rotate-45 select-none tracking-widest drop-shadow-lg">
                         SSPE-CEIPOL
                       </span>
@@ -2201,7 +2245,7 @@ const hasMinimumPhotos =
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={p.previewUrl} alt={`Evidencia ${p.tipo}`} className="w-full h-full object-cover" />
                               <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-10">
-                                <span className="text-white/40 font-bold text-2xl -rotate-45 select-none tracking-widest drop-shadow-lg">SSPE-CEIPOL</span>
+                                <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest">SSPE-CEIPOL</span>
                               </div>
                             </div>
                             <p className="text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200 pb-1 mb-1 shrink-0">{p.tipo || "Evidencia"}</p>

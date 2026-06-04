@@ -499,7 +499,7 @@ function buildPromptForGemini(params: {
   multimodalContext?: string;
   analysisRadius: number;
   focusAreas: string[];
-  poiImages: Array<{ name: string; category: string; streetViewUrl: string }>;
+  poiImages: Array<{ name: string; category: string; streetViewUrl: string; lat?: number; lng?: number }>;
   visionDataTactica?: { texto: string; rostros: number };
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
@@ -634,8 +634,8 @@ function buildPromptForGemini(params: {
 
   const lugaresAcechoTexto = tacticalStreetViews && tacticalStreetViews.length > 0
     ? `\n## ANÁLISIS TÁCTICO DE STREET VIEW Y LUGARES DE ACECHO (EVIDENCIA VISUAL OBLIGATORIA)\nSe utilizaron coordenadas y Google Street View con Vision API para ubicar rutas de acceso/escape y lugares de acecho en los principales atractores del área:\n\n` +
-      (tacticalStreetViews || []).map((sv: any) => `- ATRACTOR: ${sv.name} (${sv.category})\n  URL IMAGEN STREET VIEW: ${sv.streetViewUrl}\n  Etiquetas de vulnerabilidad (Vision API): ${sv.vision?.etiquetasRelevantes?.join(", ") || "Ninguna"}.`).join("\n\n") +
-      `\n\n[MANDATO DE INYECCIÓN VISUAL]: ESTÁS OBLIGADO a insertar estas imágenes de Street View dentro del capítulo "4. ATRACTORES Y DINÁMICA DELICTIVA" usando el formato Markdown estricto: !Lugar de Acecho - Nombre. INMEDIATAMENTE DEBAJO DE CADA IMAGEN, DEBES REDACTAR UN PIE DE FOTO (caption en cursivas) EXPLICATIVO, TÁCTICO Y SEVERO que describa por qué este lugar específico funciona como un "lugar de acecho", "ruta de escape" o "atractor de riesgo", justificándolo con las etiquetas detectadas y la teoría de Criminología Ambiental aplicable.\n`
+      (tacticalStreetViews || []).map((sv: any) => `- ATRACTOR: ${sv.name} (${sv.category})\n  Etiquetas de vulnerabilidad (Vision API): ${sv.vision?.etiquetasRelevantes?.join(", ") || "Ninguna"}.`).join("\n\n") +
+      `\n\n[MANDATO DE ANÁLISIS VISUAL]: Utiliza la descripción y etiquetas de estas imágenes de Street View para fundamentar tus inferencias en el capítulo "4. ATRACTORES Y DINÁMICA DELICTIVA", justificando por qué estos puntos específicos funcionan como "lugar de acecho", "ruta de escape" o "atractor de riesgo", basado en la teoría de Criminología Ambiental. ESTÁ ESTRICTAMENTE PROHIBIDO INSERTAR FOTOGRAFÍAS O IMÁGENES EN EL TEXTO (NO USES MARKDOWN PARA IMÁGENES NI LAS ANEXES A LOS MAPAS). Estas imágenes ya han sido anexadas automáticamente al Álbum Fotográfico del expediente.\n`
     : "";
 
   const prompt = `
@@ -681,10 +681,10 @@ ${irregularidadesTexto || "No se identificaron unidades económicas registradas 
 [MANDATO TÁCTICO MULTIDIMENSIONAL Y FILTRADO ESTRICTO]:
 0. ANCLAJE ESTRATÉGICO AL ANALISTA: Las imágenes, sus comentarios y la "Hipótesis del Analista" son el NÚCLEO INAMOVIBLE de tu dictamen. Utiliza los datos masivos de OSINT, DENUE, Incidencia y Demografía ÚNICA Y EXCLUSIVAMENTE para validar, robustecer o contrastar operativamente lo que el investigador ya observó en campo. Si un dato del OSINT (ej. escuelas a 1km, tuits genéricos) no se relaciona con los riesgos del perímetro, IGNÓRALO por completo.
 1. ${geoInstruction}\nCORRELACIÓN TRANSVERSAL: Es OBLIGATORIO cruzar la "Explicación del Proyecto" y la "Hipótesis del Analista" con los datos de las APIs. Usa la Inteligencia Artificial para enriquecer y sostener las inferencias humanas, eliminando cualquier "paja" informativa.
-2. FILTRADO ESTRICTO DE ATRACTORES (POIs y PLACES): NO enumeres comercios, escuelas o negocios genéricos si no tienen un vínculo DIRECTO y comprobable con la 'Hipótesis del Analista'. Solo destaca aquellos que funcionen como "Generadores de Delitos", "Atractores" o "Nodos de Miedo" que sustenten operativamente la hipótesis y descarta el resto.
+2. FILTRADO ESTRICTO DE ATRACTORES (POIs y PLACES): PROHIBIDO enumerar negocios irrelevantes (ej. hoteles, restaurantes, tiendas) si su única "anomalía" es un mal servicio, mala comida o temas administrativos. SOLO enumera aquellos comercios que funcionen como "Generadores de Delitos", "Atractores de Riesgo" o "Nodos de Miedo" (ej. giros negros, giros antagónicos, venta de alcohol irregular, lugares de acecho comprobables) vinculados a la hipótesis.
 3. ECONOMÍA INFORMAL Y ZONAS GRISES: Identifica discrepancias entre Google Places y DENUE estrictamente vinculadas al riesgo analizado. Argumenta cómo la irregularidad fomenta el patrón criminal planteado en la hipótesis.
 4. CORRELACIÓN ESTADÍSTICA Y ESPACIAL: Cruza los giros comerciales (POIs) con la estadística delictiva de manera focalizada (Ej. si la hipótesis habla de robo de autopartes, céntrate en analizar talleres irregulares u objetivos relacionados; ignora lo que no sume a la hipótesis).
-5. OSINT Y COMENTARIOS CIUDADANOS (RESEÑAS): Procesa las reseñas de Google Places y tuits. DESCARTA cualquier comentario que sea irrelevante (ej. quejas de comida, precios o servicio al cliente). EXTRAE y analiza ÚNICAMENTE las reseñas ciudadanas que adviertan sobre focos de conflicto social, narcomenudeo, asaltos, acoso o tensión comunitaria que refuercen o confirmen la hipótesis operativa.
+5. OSINT Y COMENTARIOS CIUDADANOS (RESEÑAS): PROHIBIDO MENCIONAR QUEJAS DE SERVICIO, ALIMENTOS, PRECIOS O INSTALACIONES. Extrae y analiza ÚNICA Y EXCLUSIVAMENTE reseñas ciudadanas que adviertan de forma directa sobre asaltos, robos, narcomenudeo, violencia, acoso, riñas o inseguridad grave. Si un lugar no tiene este tipo de reseñas delictivas, IGNÓRALO por completo en el OSINT.
 6. HEMEROTECA Y NOTA ROJA: Cruza las noticias detectadas en los medios con la Hipótesis del Analista. Si hay cateos u homicidios reportados recientemente, correlaciónalo con la desorganización social.
 7. ACTIVIDADES RUTINARIAS: Relaciona la tipología del comercio con la previsibilidad de las víctimas en horarios específicos.
 
@@ -865,7 +865,7 @@ export async function POST(req: Request) {
     if (overpassResult.exito) {
       overpassTexto = `[MANDATO DE INTELIGENCIA URBANA - OVERPASS API] Se detectaron de forma exacta: ${overpassResult.senderos} senderos/caminos de terracería, ${overpassResult.baldios} lotes baldíos/en construcción, y ${overpassResult.callejones} callejones ciegos en el radio de análisis.\nINSTRUCCIÓN SEVERA: Es IMPERATIVO que integres estos elementos en tu dictamen como facilitadores clave para rutas de escape y lugares de acecho, justificando cómo su presencia eleva la viabilidad de la elección racional del infractor.`;
       
-      const cenapredAlerts = [];
+      const cenapredAlerts: string[] = [];
       if (overpassResult.ductos > 0) {
         cenapredAlerts.push(`${overpassResult.ductos} instalaciones de infraestructura crítica (ductos de hidrocarburos PEMEX o alta tensión). Riesgo de delitos federales o tomas clandestinas.`);
       }
@@ -877,7 +877,7 @@ export async function POST(req: Request) {
       }
       
       if (cenapredAlerts.length > 0) {
-        cenapredTexto = `[ALERTA MÁXIMA - ATLAS DE RIESGOS CENAPRED] Se detectaron los siguientes elementos de riesgo geográfico/crítico en el perímetro:\n` + cenapredAlerts.map(a => `- ${a}`).join('\n') + `\nINSTRUCCIÓN SEVERA: Debes dedicar un apartado dentro del capítulo de "ATRACTORES Y DINÁMICA DELICTIVA" advirtiendo de forma objetiva estos riesgos inminentes y su impacto en la desorganización social de la zona.`;
+        cenapredTexto = `[ALERTA MÁXIMA - ATLAS DE RIESGOS CENAPRED] Se detectaron los siguientes elementos de riesgo geográfico/crítico en el perímetro:\n` + cenapredAlerts.map((a: string) => `- ${a}`).join('\n') + `\nINSTRUCCIÓN SEVERA: Debes dedicar un apartado dentro del capítulo de "ATRACTORES Y DINÁMICA DELICTIVA" advirtiendo de forma objetiva estos riesgos inminentes y su impacto en la desorganización social de la zona.`;
       }
     }
 
@@ -891,6 +891,7 @@ export async function POST(req: Request) {
         : null;
         
     let osintReviewsTexto = "";
+    let lugaresConResenasCriticas: any[] = [];
     if (placesResult) {
       const allPlaces = [
         ...placesResult.escuelas,
@@ -898,11 +899,19 @@ export async function POST(req: Request) {
         ...placesResult.chatarrerasOTalleres,
         ...placesResult.otros,
       ];
-      const placesWithReviews = allPlaces.filter(p => p.resenasOsint && p.resenasOsint.length > 0);
-      if (placesWithReviews.length > 0) {
-        osintReviewsTexto = placesWithReviews.map(p => {
-          return `Lugar: ${p.nombre} (${p.categoria})\nComentarios (OSINT):\n` +
-                 p.resenasOsint!.map(r => ` - "${r}"`).join("\n");
+      const placesWithReviews = allPlaces.filter((p: any) => p.resenasOsint && p.resenasOsint.length > 0);
+      
+      const palabrasClaveCrimen = ["robo", "robaron", "asalto", "asaltaron", "inseguro", "peligroso", "miedo", "drogas", "narco", "balacera", "balazos", "muerto", "asesinato", "homicidio", "violencia", "golpearon", "riña", "pelea", "cristalazo", "ratero", "ladron", "policía", "patrulla", "acoso", "violación", "secuestro", "extorsión", "sospechoso", "delincuencia"];
+      
+      lugaresConResenasCriticas = placesWithReviews.map((p: any) => {
+        const resenasCriticas = p.resenasOsint!.filter((r: string) => palabrasClaveCrimen.some(kw => r.toLowerCase().includes(kw)));
+        return { ...p, resenasCriticas };
+      }).filter((p: any) => p.resenasCriticas.length > 0);
+
+      if (lugaresConResenasCriticas.length > 0) {
+        osintReviewsTexto = lugaresConResenasCriticas.map((p: any) => {
+          return `Lugar: ${p.nombre} (${p.categoria})\nComentarios (OSINT DELICTIVO):\n` +
+                 p.resenasCriticas.map((r: string) => ` - "${r}"`).join("\n");
         }).join("\n\n");
       }
     }
@@ -934,7 +943,7 @@ export async function POST(req: Request) {
     }
 
     let irregularidadesTexto = "";
-    let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
+    let poiImages: Array<{ name: string; category: string; streetViewUrl: string; lat: number; lng: number }> = [];
     let numIrregulares = 0;
     let numPois = 0;
     const tacticalStreetViews: any[] = [];
@@ -965,7 +974,8 @@ export async function POST(req: Request) {
             ...placesResult.escuelas,
             ...placesResult.expendiosAlcohol,
             ...placesResult.chatarrerasOTalleres,
-            ...placesResult.otros,
+            // De 'otros', solo pasamos al mapa los que tuvieron reseñas delictivas críticas (ignora basura)
+            ...placesResult.otros.filter((o: any) => lugaresConResenasCriticas.some((lc: any) => lc.nombre === o.nombre)),
           ].map((p) => ({
             name: p.nombre,
             category: p.categoria,
@@ -995,11 +1005,13 @@ export async function POST(req: Request) {
           poiImages = mergedPois.slice(0, 12).map((p) => ({
             name: p.name,
             category: p.category,
+            lat: p.lat,
+            lng: p.lng,
             streetViewUrl: `https://maps.googleapis.com/maps/api/streetview?size=640x400&location=${p.lat},${p.lng}&key=${mapsKey}`,
           }));
 
-          // Extraer imágenes de Street View para Rutas y Acecho
-          for (const poi of poiImages.slice(0, 2)) {
+          // Extraer imágenes de Street View para Rutas y Acecho (Asegurar al menos 2-3)
+          for (const poi of poiImages.slice(0, 3)) {
             try {
               const svRes = await fetch(poi.streetViewUrl);
               if (svRes.ok) {
