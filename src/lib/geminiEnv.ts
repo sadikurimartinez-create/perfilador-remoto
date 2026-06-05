@@ -9,13 +9,9 @@ export const GCP_CLIENT_EMAIL = g.GCP_CLIENT_EMAIL || "";
 export const GCP_PRIVATE_KEY = g.GCP_PRIVATE_KEY || "";
 
 /** Modelo por defecto si no se define GEMINI_MODEL en el entorno. */
-const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash-001";
+const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
 
-let envModel = typeof g.GEMINI_MODEL === "string" && g.GEMINI_MODEL.trim().length > 0
-    ? g.GEMINI_MODEL.trim()
-    : DEFAULT_GEMINI_MODEL;
-
-// Corrección automática para Vertex AI en caso de omitir la versión
-if (envModel === "gemini-1.5-flash") envModel = "gemini-1.5-flash-001";
-
-export const GEMINI_MODEL = envModel;
+export const GEMINI_MODEL =
+  (typeof g.GEMINI_MODEL === "string" && g.GEMINI_MODEL.trim().length > 0
+    ? g.GEMINI_MODEL.trim().replace(/^models\//, '')
+    : DEFAULT_GEMINI_MODEL).replace(/^models\//, '');
