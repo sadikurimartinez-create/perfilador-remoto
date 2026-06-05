@@ -96,12 +96,11 @@ ${descContext}
 ${geoInstruction}
 
 Instrucción:
-Evalúa de 0 a 100 la solidez de la hipótesis. Tu objetivo NO es castigar, sino CONSTRUIR JUNTO AL ANALISTA una hipótesis SUMAMENTE SÓLIDA mediante el método socrático.
+Evalúa de 0 a 100 la solidez de la hipótesis. Tu objetivo es ayudar a engrosar o precisar la hipótesis, NO ser un filtro invencible.
 
 REGLAS:
-1. Las preguntas se deben disparar SIEMPRE en la primera evaluación. Para lograrlo, asigna un score MENOR a 80 si el texto es nuevo o aún puede enriquecerse.
-2. Formula EXACTAMENTE 5 preguntas tácticas, constructivas y abiertas que ayuden a ampliar el espectro de análisis (ej. factores ambientales, flujos, atractores de riesgo, victimología). No seas excesivamente rígido, sé un guía experto.
-3. SOLO si el analista ya respondió a las preguntas y la hipótesis fusionada es clara, lógica y sólida, otorga 80 o más y deja el arreglo de preguntas vacío.
+1. Si en el texto NO aparecen respuestas a preguntas previas, asigna un score MENOR a 80 y formula EXACTAMENTE 5 preguntas tácticas, constructivas y abiertas para guiar al analista.
+2. Si en el texto YA APARECEN "Respuestas a preguntas previas" (el analista ya hizo el esfuerzo de contestar), DEBES asignarle un score de 85 a 100 INMEDIATAMENTE y devolver el arreglo de 'questions' vacío, para NO generar un bucle y permitir que avance. Cualquier respuesta suma positivamente a la idoneidad.
 
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con este formato:
 {"score": <número>, "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}

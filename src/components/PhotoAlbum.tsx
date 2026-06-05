@@ -2211,7 +2211,7 @@ const hasMinimumPhotos =
                         setIsRefining(false);
                       }
                     }}
-                    disabled={isRefining || !analysisContext.trim() || isAnalysisContextAudited}
+                    disabled={isRefining || !analysisContext.trim() || isAnalysisContextAudited || (qaIteration > 0 && Object.values(userAnswersMap).filter(a => a.trim().length > 0).length === 0)}
                     className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
                   >
                   {isRefining ? <span className="flex items-center justify-center">Validando... <ElapsedTime running={isRefining} /></span> : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
@@ -2226,8 +2226,9 @@ const hasMinimumPhotos =
                 </div>
               {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
                 <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-sm text-yellow-200 space-y-4">
-                  <div className="flex items-center justify-between border-b border-yellow-800 pb-2">
-                    <p className="font-bold text-yellow-400">⚠️ La hipótesis requiere ampliar el espectro (Idoneidad: {analysisAuditScore}%)</p>
+                  <div className="flex flex-col border-b border-yellow-800 pb-2">
+                    <p className="font-bold text-yellow-400">💡 La IA sugiere ampliar el espectro para fortalecer el dictamen (Idoneidad actual: {analysisAuditScore}%)</p>
+                    <p className="text-xs text-yellow-200/80 mt-1">Responde al menos a una pregunta para sumar puntos de idoneidad y avanzar. No hay respuestas incorrectas, todo aporta al análisis.</p>
                   </div>
                   {aiQuestionsList.map((q, idx) => (
                     <div key={idx} className="space-y-2">
