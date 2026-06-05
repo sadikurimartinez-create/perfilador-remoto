@@ -8,7 +8,7 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 type RefineBody = {
   context: string;
   photos?: { lat: number | null; lng: number | null; tipo?: string; comentario?: string }[];
-  mode?: "suggest" | "audit" | "validate-photos";
+  mode?: "suggest" | "audit" | "validate-photos" | "hypothesis-qa";
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
 };
@@ -82,6 +82,26 @@ Devuelve un objeto JSON estrictamente con este formato:
   "score": <número de 0 a 100 evaluando la efectividad de la contextualización>,
   "suggestions": "<Si score < 80: explica detalladamente por qué la evidencia falla y qué debe mejorar de forma tajante. Si score >= 80: indica brevemente 'Validación fotográfica exitosa.'>"
 }
+`.trim();
+    } else if (mode === "hypothesis-qa") {
+      prompt = `
+Eres un Auditor Experto en Criminología Ambiental adscrito al CEIPOL.
+El investigador ha redactado la siguiente hipótesis operativa y/o respuestas:
+"${cleanedContext.replace(/\n\n\(MUY IMPORTANTE:.*?\)/g, '')}"
+
+Coordenadas aproximadas de las fotos:
+${coordsText}
+
+${descContext}
+${geoInstruction}
+
+Instrucción:
+Evalúa de 0 a 100 qué tan técnica, lógica y aplicable es la hipótesis.
+- Si el score es MENOR a 80, DEBES formular EXACTAMENTE 5 preguntas tácticas que obliguen al analista a ampliar el espectro de su análisis (ej. factores ambientales, flujos, atractores de riesgo, victimología).
+- Si la hipótesis ya tiene sentido lógico general y justifica la evidencia, otorga un score de 80 o mayor y deja el arreglo de preguntas vacío.
+
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con este formato:
+{"score": <número>, "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}
 `.trim();
     } else {
       prompt = `
