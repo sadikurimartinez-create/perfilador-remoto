@@ -77,37 +77,8 @@ function readFileAsBase64(file: File): Promise<string> {
 
 /** Tatúa/Quema el sello de agua directamente en los píxeles de la imagen para que nunca se pierdan en Word/PDF */
 async function burnGpsOnImage(srcUrl: string): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return resolve(srcUrl);
-
-      ctx.drawImage(img, 0, 0);
-
-      // Sello de agua Institucional
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(-Math.PI / 4);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
-      const watermarkSize = Math.max(40, canvas.width * 0.08);
-      ctx.font = `bold ${watermarkSize}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 4;
-      ctx.fillText("SSPE-CEIPOL", 0, 0);
-      ctx.restore();
-      
-      resolve(canvas.toDataURL("image/jpeg", 0.92));
-    };
-    img.onerror = () => resolve(srcUrl);
-    img.src = srcUrl;
-  });
+  // Desactivado para evitar sello empalmado/doble en el informe
+  return Promise.resolve(srcUrl);
 }
 
 function ElapsedTime({ running }: { running: boolean }) {

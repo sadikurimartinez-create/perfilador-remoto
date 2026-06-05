@@ -57,12 +57,60 @@ ${strategies}
 DATOS DEL PROYECTO (EVIDENCIA DE CAMPO):
 ${JSON.stringify(safeBody, null, 2)}
 
-INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental.
-Sé CONCISO, analítico y directo. Evita explicaciones redundantes para que la respuesta sea rápida.
-Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate obligatoriamente de incluir la clave "markdown" con todo el contenido del dictamen. 
+INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental. Es OBLIGATORIO que uses EXACTAMENTE la siguiente estructura de Markdown. Llenarás los datos utilizando la información demográfica (SCINCE), comercial (DENUE) e incidencia proporcionada. Usa viñetas (■) donde corresponda.
+
+ESTRUCTURA OBLIGATORIA A REPLICAR:
+
+DICTAMEN TÁCTICO
+PERFIL CRIMINOLÓGICO AMBIENTAL
+EXPEDIENTE: DICTAMEN_CRIMINOLOGICO_AMBIENTAL
+FECHA DE EMISIÓN: (Fecha actual)
+NIVEL DE RIESGO: (Determinar BAJO, MEDIO o ALTO)
+
+PERFIL SOCIODEMOGRÁFICO DEL ÁREA DE ANÁLISIS
+(Tabla Markdown con Ícono, Indicador y Valor. Ej: 👥 Población Total, 👨 Hombres, 👩 Mujeres, 🎂 Edad Promedio, 🎓 Escolaridad, 🏠 Viviendas Habitadas, 📉 Grado de Marginación)
+
+LECTURA SOCIODEMOGRÁFICA
+(Párrafo analítico)
+
+EVALUACIÓN DE VULNERABILIDAD SOCIODEMOGRÁFICA (CENSINT)
+(Párrafo indicando el SVS y nivel de riesgo)
+
+PERFIL CRIMINOLÓGICO AMBIENTAL: (Nombre de la zona o proyecto)
+
+1. EXPLICACIÓN DEL ANÁLISIS:
+(Párrafo descriptivo)
+
+2. SÍNTESIS DE RIESGO:
+(Párrafo indicando riesgo ALTO/MEDIO/BAJO y resumen)
+
+3. INFORMACIÓN PREDICTIVA INICIAL:
+(Proyección a 6 meses)
+
+---
+
+INFORMACIÓN SOCIO-DEMOGRÁFICA
+(Párrafo)
+
+ANÁLISIS DEL CONTEXTO ESPACIAL
+(Párrafo)
+
+DETERIORO FÍSICO Y VENTANAS ROTAS
+■ (Hallazgos en viñetas)
+
+ATRACTORES Y DINÁMICA DELICTIVA
+■ (Hallazgos en viñetas)
+
+LÍNEAS CRONOLÓGICAS GEOESPACIALES
+■ (Proyección en viñetas)
+
+CONCLUSIONES TÁCTICAS (Riesgo a 6 meses)
+■ (Recomendaciones en viñetas)
+
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate de incluir la clave "markdown" con todo este contenido estructurado.
 MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea reales dentro de la cadena JSON. Ejemplo:
 {
-  "markdown": "# Dictamen Táctico\\n\\nContenido...",
+  "markdown": "DICTAMEN TÁCTICO\\nPERFIL CRIMINOLÓGICO...",
   "meta": {
     "riskLevel": "alto"
   }
