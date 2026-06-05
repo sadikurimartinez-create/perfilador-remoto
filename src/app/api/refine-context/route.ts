@@ -1,4 +1,5 @@
 export const runtime = "nodejs";
+export const maxDuration = 60; // Permitir hasta 60s en Vercel
 
 import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
