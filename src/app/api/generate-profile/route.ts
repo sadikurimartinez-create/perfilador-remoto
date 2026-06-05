@@ -34,6 +34,15 @@ export async function POST(req: Request) {
     const tags = body.album?.map((p: any) => p.tipo) || [];
     const strategies = buildStrategiesSummaryForTags(tags);
 
+    // Limpieza de seguridad extrema para evitar que el texto en base64 ahogue el modelo y cause 504 Timeout
+    const safeBody = { ...body };
+    if (Array.isArray(safeBody.photos)) {
+      safeBody.photos = safeBody.photos.map((p: any) => {
+        const { imageBase64, ...rest } = p;
+        return rest;
+      });
+    }
+
     const prompt = `
 INSTRUCCIONES DE SISTEMA:
 ${systemPrompt}
@@ -42,8 +51,7 @@ ESTRATEGIAS APLICABLES (CRIMINOLOGÍA AMBIENTAL):
 ${strategies}
 
 DATOS DEL PROYECTO (EVIDENCIA DE CAMPO):
-${JSON.stringify(body, null, 2)}
-
+${JSON.stringify(safeBody, null, 2)}
 INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental detallado. 
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la estructura correspondiente.
 `;

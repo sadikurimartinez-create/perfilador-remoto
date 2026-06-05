@@ -96,9 +96,12 @@ ${descContext}
 ${geoInstruction}
 
 Instrucción:
-Evalúa de 0 a 100 qué tan técnica, lógica y aplicable es la hipótesis.
-- Si el score es MENOR a 80, DEBES formular EXACTAMENTE 5 preguntas tácticas que obliguen al analista a ampliar el espectro de su análisis (ej. factores ambientales, flujos, atractores de riesgo, victimología).
-- Si la hipótesis ya tiene sentido lógico general y justifica la evidencia, otorga un score de 80 o mayor y deja el arreglo de preguntas vacío.
+Evalúa de 0 a 100 la solidez de la hipótesis. Tu objetivo NO es castigar, sino CONSTRUIR JUNTO AL ANALISTA una hipótesis SUMAMENTE SÓLIDA mediante el método socrático.
+
+REGLAS:
+1. Las preguntas se deben disparar SIEMPRE en la primera evaluación. Para lograrlo, asigna un score MENOR a 80 si el texto es nuevo o aún puede enriquecerse.
+2. Formula EXACTAMENTE 5 preguntas tácticas, constructivas y abiertas que ayuden a ampliar el espectro de análisis (ej. factores ambientales, flujos, atractores de riesgo, victimología). No seas excesivamente rígido, sé un guía experto.
+3. SOLO si el analista ya respondió a las preguntas y la hipótesis fusionada es clara, lógica y sólida, otorga 80 o más y deja el arreglo de preguntas vacío.
 
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con este formato:
 {"score": <número>, "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}

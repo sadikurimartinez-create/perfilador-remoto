@@ -598,7 +598,7 @@ const hasMinimumPhotos =
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            photos: photosPayload,
+            photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
             analysisContext,
             analysisRadius,
             focusAreas,
