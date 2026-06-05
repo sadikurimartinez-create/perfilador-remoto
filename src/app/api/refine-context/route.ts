@@ -84,9 +84,16 @@ Devuelve un objeto JSON estrictamente con este formato:
 }
 `.trim();
     } else if (mode === "hypothesis-qa") {
+      const isSecondIteration = cleanedContext.includes("Respuestas a preguntas previas:");
+      
+      if (isSecondIteration) {
+        // Bypass de IA para evitar bucles y ahorrar tiempo: Si ya respondió, aprobamos automáticamente.
+        return NextResponse.json({ score: 90, questions: [] });
+      }
+
       prompt = `
 Eres un Auditor Experto en Criminología Ambiental adscrito al CEIPOL.
-El investigador ha redactado la siguiente hipótesis operativa y/o respuestas:
+El analista redactó la siguiente hipótesis operativa:
 "${cleanedContext.replace(/\n\n\(MUY IMPORTANTE:.*?\)/g, '')}"
 
 Coordenadas aproximadas de las fotos:
@@ -95,15 +102,10 @@ ${coordsText}
 ${descContext}
 ${geoInstruction}
 
-Instrucción:
-Evalúa de 0 a 100 la solidez de la hipótesis. Tu objetivo es ayudar a engrosar o precisar la hipótesis, NO ser un filtro invencible.
-
-REGLAS:
-1. Si en el texto NO aparecen respuestas a preguntas previas, asigna un score MENOR a 80 y formula EXACTAMENTE 5 preguntas tácticas, constructivas y abiertas para guiar al analista.
-2. Si en el texto YA APARECEN "Respuestas a preguntas previas" (el analista ya hizo el esfuerzo de contestar), DEBES asignarle un score de 85 a 100 INMEDIATAMENTE y devolver el arreglo de 'questions' vacío, para NO generar un bucle y permitir que avance. Cualquier respuesta suma positivamente a la idoneidad.
-
+Instrucción OBLIGATORIA:
+Asigna siempre un score de 50 (para forzar la auditoría). Genera EXACTAMENTE 5 preguntas tácticas, constructivas y abiertas para que el analista reflexione y engrose su análisis (ej. sobre vulnerabilidades, rutas o atractores).
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con este formato:
-{"score": <número>, "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}
+{"score": 50, "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}
 `.trim();
     } else {
       prompt = `

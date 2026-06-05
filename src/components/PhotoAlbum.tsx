@@ -578,7 +578,7 @@ const hasMinimumPhotos =
             data?: any[];
             bibliografia?: string;
           };
-          incidenciaLocal = incidenciaJson.data ?? [];
+          incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
           bibliografiaLocal = incidenciaJson.bibliografia ?? "";
           setDebugData((prev: any) => ({
             ...(prev ?? {}),
@@ -2170,7 +2170,7 @@ const hasMinimumPhotos =
                         if (res.ok) {
                           let scoreVal = data.score ?? 0;
                           let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
-                          if (questionsVal.length === 0 && typeof data.suggestions === "string") {
+                          if (questionsVal.length === 0 && typeof data.suggestions === "string" && scoreVal < 80) {
                               questionsVal = data.suggestions.split('\n').filter((l: string) => l.trim().length > 10).slice(0,5);
                           }
 
