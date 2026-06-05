@@ -48,10 +48,26 @@ INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental detallado.
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la estructura correspondiente.
 `;
 
-    const result = await model.generateContent({
+    // Creamos una carrera (race) entre la llamada a la IA y un temporizador de 54 segundos.
+    // Vercel corta a los 60s, por lo que a los 54s abortamos controladamente para devolver un JSON de error.
+    const generatePromise = model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" }
     });
+
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error("VERTEX_TIMEOUT")), 54000)
+    );
+
+    let result;
+    try {
+      result = await Promise.race([generatePromise, timeoutPromise]);
+    } catch (raceError: any) {
+      if (raceError.message === "VERTEX_TIMEOUT") {
+        return NextResponse.json({ error: "Los servidores de IA están saturados y superaron el límite de tiempo. Por favor, reintenta en unos minutos o usa un modelo más rápido (Flash)." }, { status: 408 });
+      }
+      throw raceError;
+    }
     
     const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
     let parsed;
