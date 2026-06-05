@@ -623,7 +623,8 @@ const hasMinimumPhotos =
         }
 
         const data = (await res.json()) as {
-          markdown: string;
+          markdown?: string;
+          unifiedProfile?: string;
           meta?: { 
             riskLevel?: "bajo" | "medio" | "alto";
             incidenciaDetalles?: any[];
@@ -634,7 +635,9 @@ const hasMinimumPhotos =
             mlFeatures?: any;
           };
         };
-        const markdown = data.markdown ?? "";
+        let markdown = data.markdown || data.unifiedProfile;
+        if (!markdown) markdown = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        
         setAiProfile(markdown);
         setEditableProfile(markdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);

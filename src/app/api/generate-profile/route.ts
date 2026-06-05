@@ -59,7 +59,13 @@ ${JSON.stringify(safeBody, null, 2)}
 
 INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental.
 Sé CONCISO, analítico y directo. Evita explicaciones redundantes para que la respuesta sea rápida.
-Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la estructura correspondiente.
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate obligatoriamente de incluir la clave "markdown" con todo el contenido del dictamen. Ejemplo:
+{
+  "markdown": "# Dictamen Táctico...",
+  "meta": {
+    "riskLevel": "alto"
+  }
+}
 `;
 
     const result = await model.generateContent({
@@ -75,7 +81,7 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la estructura corres
     } catch (e) {
       console.error("[api/generate-profile] Error parseando JSON de Gemini:", e);
       // Fallback a un objeto que el frontend pueda intentar procesar en caso de fallo
-      parsed = { unifiedProfile: text }; 
+      parsed = { markdown: text }; 
     }
 
     return NextResponse.json(parsed);
