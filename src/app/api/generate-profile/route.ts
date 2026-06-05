@@ -1,51 +1,75 @@
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
+import { VertexAI } from "@google-cloud/vertexai";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import { buildSystemPrompt } from "@/lib/promptBuilder";
+import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 
-export const dynamic = "force-dynamic"; // Asegura que siempre traiga datos frescos
-
-export async function GET() {
+export async function POST(req: Request) {
   try {
-    const pool = getPool();
-    
-    // Extraemos todos los registros ordenados por el más reciente
-    const { rows } = await pool.query(
-      "SELECT * FROM analisis_ml_features ORDER BY fecha_analisis DESC"
-    );
+    const body = await req.json();
 
-    if (rows.length === 0) {
-      return new NextResponse("No hay datos suficientes para exportar. Genera algunos perfiles primero.", { status: 404 });
+    if (!GCP_PROJECT_ID) {
+      console.warn("[api/generate-profile] Falta GCP_PROJECT_ID");
+      return NextResponse.json({ error: "Falta configuración de GCP (GCP_PROJECT_ID)" }, { status: 500 });
     }
 
-    // Extraer los nombres de las columnas para los encabezados del CSV
-    const headers = Object.keys(rows[0]).join(",");
+    const authOptions = GCP_PRIVATE_KEY
+      ? {
+          credentials: {
+            client_email: GCP_CLIENT_EMAIL,
+            private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+          },
+        }
+      : undefined;
 
-    // Formatear cada fila correctamente
-    const csvRows = rows.map((row) => {
-      return Object.values(row)
-        .map((val) => {
-          if (val === null || val === undefined) return "";
-          
-          // Si es texto y contiene comas, comillas o saltos de línea, lo envolvemos en comillas
-          const strVal = String(val);
-          if (strVal.includes(",") || strVal.includes('"') || strVal.includes("\n")) {
-            return `"${strVal.replace(/"/g, '""')}"`;
-          }
-          return strVal;
-        })
-        .join(",");
+    const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+    const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
+    
+    const systemPrompt = buildSystemPrompt();
+    
+    // Extraer etiquetas/tipos de las fotos para inyectar estrategias
+    const tags = body.album?.map((p: any) => p.tipo) || [];
+    const strategies = buildStrategiesSummaryForTags(tags);
+
+    const prompt = `
+INSTRUCCIONES DE SISTEMA:
+${systemPrompt}
+
+ESTRATEGIAS APLICABLES (CRIMINOLOGÍA AMBIENTAL):
+${strategies}
+
+DATOS DEL PROYECTO (EVIDENCIA DE CAMPO):
+${JSON.stringify(body, null, 2)}
+
+INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental detallado. 
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la estructura correspondiente.
+`;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
     });
+    
+    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    let parsed;
+    try {
+      const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      parsed = JSON.parse(cleanText);
+    } catch (e) {
+      console.error("[api/generate-profile] Error parseando JSON de Gemini:", e);
+      // Fallback a un objeto que el frontend pueda intentar procesar en caso de fallo
+      parsed = { unifiedProfile: text }; 
+    }
 
-    const csvContent = [headers, ...csvRows].join("\n");
-
-    return new NextResponse(csvContent, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": 'attachment; filename="dataset_ml_perfil_remoto.csv"',
-      },
-    });
-  } catch (error) {
-    console.error("[api/export-ml] Error exportando CSV de Machine Learning:", error);
-    return new NextResponse("Error interno al exportar los datos.", { status: 500 });
+    return NextResponse.json(parsed);
+  } catch (err: any) {
+    console.error("[api/generate-profile] Error:", err);
+    return NextResponse.json(
+      { error: "Error al generar el perfil de IA.", details: err.message },
+      { status: 500 }
+    );
   }
 }
