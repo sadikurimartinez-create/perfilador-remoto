@@ -5,8 +5,8 @@ export const GCP_PROJECT_ID = typeof g.GCP_PROJECT_ID === "string" && g.GCP_PROJ
 export const GCP_LOCATION = typeof g.GCP_LOCATION === "string" && g.GCP_LOCATION.trim() ? g.GCP_LOCATION.trim() : "us-central1";
 
 // Credenciales inyectadas directamente para Vercel (sin archivo físico)
-export const GCP_CLIENT_EMAIL = g.GCP_CLIENT_EMAIL || "";
-export const GCP_PRIVATE_KEY = g.GCP_PRIVATE_KEY || "";
+export const GCP_CLIENT_EMAIL = (g.GCP_CLIENT_EMAIL || "").replace(/^"|"$/g, "").trim();
+export const GCP_PRIVATE_KEY = (g.GCP_PRIVATE_KEY || "").replace(/^"|"$/g, "").replace(/\\n/g, "\n").trim();
 
 /** Modelo por defecto si no se define GEMINI_MODEL en el entorno. */
 const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
