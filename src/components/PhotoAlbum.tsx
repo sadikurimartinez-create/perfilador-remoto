@@ -2296,104 +2296,121 @@ const hasMinimumPhotos =
     </section>
       {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
       <div className="absolute left-[-9999px] top-[-9999px]">
-        <div id="official-pdf-content" className="w-[794px] bg-white text-black font-sans">
+        <div id="official-pdf-content" className="w-[794px] bg-white text-[#222222] font-sans">
           {/* PÁGINA 1: CARÁTULA */}
-          <div className="w-full h-[1123px] flex flex-col p-10 bg-white">
-            <div className="flex justify-between items-center border-b-2 border-slate-800 pb-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-20 object-contain" />
-              <div className="flex-1 text-center px-4">
-                <h1 className="text-xl font-black text-slate-900 tracking-wide">PERFIL CRIMINOLÓGICO AMBIENTAL</h1>
-                <h2 className="text-sm font-bold text-slate-700 mt-1">CENTRO DE ESTUDIOS Y POLÍTICA CRIMINAL</h2>
-                <h3 className="text-[11px] font-semibold text-slate-500 mt-0.5">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO</h3>
-              </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logos/logo-ssp.png" alt="SSP" className="h-20 object-contain" />
-            </div>
-            <div className="flex-1 flex flex-col justify-center items-center text-center">
-              <h1 className="text-4xl font-black text-slate-800 tracking-wider uppercase">{project?.nombre || "Análisis de Polígono"}</h1>
-              <div className="w-48 h-1 bg-sky-700 my-6"></div>
-              <p className="text-lg text-slate-600">Documento generado por el Sistema de Análisis de Información (SAI)</p>
-              <p className="text-lg font-bold text-slate-700 mt-2">PERFILADOR REMOTO</p>
-            </div>
-            <div className="text-center text-sm text-slate-500">
-              {new Date().toLocaleDateString("es-MX", { year: 'numeric', month: 'long', day: 'numeric' })}
-            </div>
-          </div>
-
-          {/* PÁGINA 2: SÍNTESIS */}
           <div className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
-            <h2 className="text-2xl font-black text-slate-800 border-b-2 border-slate-500 pb-2 mb-6">SÍNTESIS DEL ANÁLISIS</h2>
-            <div className="space-y-6">
-              <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
-                <p className="text-sm font-bold text-slate-500 uppercase">Explicación del Proyecto (Voz)</p>
-                <p className="text-base text-slate-800 mt-2">{project?.descripcion || "No se proporcionó descripción."}</p>
+            <div className="flex justify-between items-center border-b-2 border-[#0D2B52] pb-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-24 object-contain" />
+              <div className="flex-1 text-center px-4">
+                <h1 className="text-2xl font-black text-[#0D2B52] tracking-widest uppercase">DICTAMEN TÁCTICO</h1>
+                <h2 className="text-base font-bold text-slate-700 mt-2">PERFIL CRIMINOLÓGICO AMBIENTAL</h2>
+                <h3 className="text-xs font-semibold text-slate-500 mt-1 uppercase">Centro de Estudios y Política Criminal</h3>
               </div>
-              <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
-                <p className="text-sm font-bold text-slate-500 uppercase">Hipótesis del Analista</p>
-                <p className="text-base text-slate-800 mt-2">{analysisContext || "No se proporcionó hipótesis."}</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logos/logo-ssp.png" alt="SSP" className="h-24 object-contain" />
+            </div>
+
+            <div className="flex-1 flex flex-col justify-center items-center text-center px-8">
+              <div className="bg-[#0D2B52] text-white py-6 px-10 rounded-t-lg w-full shadow-md">
+                <h1 className="text-3xl font-black tracking-widest uppercase leading-tight">{project?.nombre || "Análisis de Polígono"}</h1>
               </div>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
-                  <p className="text-sm font-bold text-slate-500 uppercase">Parámetros del Análisis</p>
-                  <p className="text-base text-slate-800 mt-2">Radio de Cobertura: <span className="font-bold">{analysisRadius} metros</span></p>
-                  <p className="text-base text-slate-800">Geometría: <span className="font-bold">{project?.geometryType || "No definida"}</span></p>
+              <div className="bg-slate-50 border-x border-b border-slate-300 py-8 px-10 rounded-b-lg w-full shadow-md">
+                <div className="grid grid-cols-2 gap-6 text-left">
+                  <div className="flex flex-col border-b border-slate-300 pb-3">
+                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Expediente Oficial</span>
+                    <span className="font-mono text-slate-800 text-sm mt-1">{project?.id || "DICTAMEN_CRIMINOLOGICO"}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-slate-300 pb-3">
+                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Fecha de Emisión</span>
+                    <span className="font-mono text-slate-800 text-sm mt-1">{new Date().toLocaleDateString("es-MX", { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-slate-300 pb-3">
+                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Geometría</span>
+                    <span className="font-mono text-slate-800 text-sm mt-1 uppercase">{project?.geometryType || "NO DEFINIDA"}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-slate-300 pb-3">
+                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Radio de Cobertura</span>
+                    <span className="font-mono text-slate-800 text-sm mt-1">{analysisRadius} metros</span>
+                  </div>
                 </div>
-                <div className="p-4 border border-slate-300 bg-slate-50 rounded-lg">
-                  <p className="text-sm font-bold text-slate-500 uppercase">Nivel de Riesgo (IA)</p>
-                  <p className={`text-3xl font-black uppercase mt-2 ${profileRiskLevel === 'alto' ? 'text-red-600' : profileRiskLevel === 'medio' ? 'text-amber-500' : 'text-emerald-600'}`}>{profileRiskLevel || "No calculado"}</p>
+                
+                <div className="mt-8 flex flex-col items-center justify-center p-4 border-2 border-slate-300 rounded-lg bg-white">
+                  <span className="font-bold text-slate-600 uppercase text-xs mb-2 tracking-widest">Nivel de Riesgo (IA)</span>
+                  <span className={`text-2xl font-black uppercase px-6 py-2 rounded shadow-sm ${profileRiskLevel === 'alto' ? 'bg-red-600 text-white' : profileRiskLevel === 'medio' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>{profileRiskLevel || "PENDIENTE"}</span>
                 </div>
               </div>
             </div>
+
+            <div className="text-center mt-auto border-t border-slate-300 pt-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documento Estratégico Generado por el Perfilador Remoto CEIPOL</p>
+              <p className="text-[10px] text-slate-400">Documento Confidencial - Uso Exclusivo</p>
+            </div>
           </div>
 
-          {/* PÁGINAS DE DICTAMEN */}
-          <div className="html2pdf__page-break p-10 bg-white">
-            <h2 className="text-2xl font-black text-slate-800 border-b-2 border-slate-500 pb-2 mb-6">DICTAMEN TÁCTICO</h2>
-            <div className="text-base text-slate-800 whitespace-pre-wrap leading-relaxed text-justify columns-2 gap-8">
+          {/* PÁGINAS DE DICTAMEN TEXTUAL */}
+          <div className="html2pdf__page-break p-10 bg-white min-h-[1123px] relative">
+            <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6">
+               <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">DICTAMEN TÁCTICO</h2>
+               <span className="text-[10px] font-bold text-slate-400 uppercase">{project?.nombre}</span>
+            </div>
+            
+            <div className="text-[11.5px] text-[#333333] whitespace-pre-wrap leading-relaxed text-justify">
               {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
+            </div>
+
+            <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2">
+              <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
+              <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
+              <span className="text-[9px] text-slate-400">Dictamen Estratégico</span>
             </div>
           </div>
 
           {/* ANEXOS DE MAPAS Y GRÁFICAS */}
           {(() => {
-            const mapsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía"));
-            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
+            const mapsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía") || s.title.toLowerCase().includes("densidad") || s.title.toLowerCase().includes("corredores"));
+            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica") || !mapsSnaps.some((m) => m.title === s.title));
 
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
               const chunks: Array<{ title: string; dataUrl: string }[]> = [];
               for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
 
-              return (
-                <>
-                  <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-[#0D2B52] text-white">
-                    <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">{title}</h1>
-                    <div className="w-32 h-2 bg-[#D96A00]"></div>
+              return chunks.map((chunk: { title: string; dataUrl: string }[], cIdx: number) => (
+                <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative">
+                  <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
+                     <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">{title.toUpperCase()}</h2>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase">CEIPOL GEOINT</span>
                   </div>
-                  {chunks.map((chunk: { title: string; dataUrl: string }[], cIdx: number) => (
-                    <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
-                      <div className="flex flex-col gap-8 h-full">
-                        {chunk.map((snap: { title: string; dataUrl: string }, i: number) => (
-                          <div key={i} className="border-2 border-[#0D2B52] p-4 rounded-xl flex flex-col bg-slate-50 shadow-sm overflow-hidden h-1/2">
-                            <h4 className="text-sm font-bold text-[#0D2B52] text-center mb-2 uppercase tracking-wider border-b-2 border-slate-300 pb-1">{snap.title}</h4>
-                            <div className="flex-1 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
-                            </div>
-                          </div>
-                        ))}
+                  
+                  <div className="flex flex-col gap-6 flex-1">
+                    {chunk.map((snap: { title: string; dataUrl: string }, i: number) => (
+                      <div key={i} className="border border-slate-300 p-4 rounded-lg flex flex-col bg-slate-50 overflow-hidden h-[450px]">
+                        <h4 className="text-sm font-bold text-white bg-[#0D2B52] px-3 py-1.5 rounded-t-md text-left uppercase tracking-wide shrink-0">
+                          {snap.title}
+                        </h4>
+                        <div className="flex-1 relative bg-white border border-slate-200 flex items-center justify-center p-2 rounded-b-md">
+                          <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
+                        </div>
+                        <div className="mt-2 pt-2 shrink-0">
+                          <p className="text-[9px] text-slate-500 font-bold uppercase">Fuente: Plataforma de Geointeligencia SAI | CEIPOL</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </>
-              );
+                    ))}
+                  </div>
+
+                  <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2">
+                    <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
+                    <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ));
             };
 
             return (
               <>
-                {renderAnnexPage("Anexo Geoespacial", mapsSnaps)}
-                {renderAnnexPage("Anexo Estadístico", chartsSnaps)}
+                {renderAnnexPage("Atlas Cartográfico", mapsSnaps)}
+                {renderAnnexPage("Modelos Analíticos", chartsSnaps)}
               </>
             );
           })()}
@@ -2404,34 +2421,49 @@ const hasMinimumPhotos =
             if (selectedPhotos.length === 0) return null;
 
             const photoChunks: Array<typeof album> = [];
-            for (let i = 0; i < selectedPhotos.length; i += 4) {
-              photoChunks.push(selectedPhotos.slice(i, i + 4));
+            for (let i = 0; i < selectedPhotos.length; i += 2) {
+              photoChunks.push(selectedPhotos.slice(i, i + 2));
             }
 
-            return (
-              <>
-                <div className="html2pdf__page-break w-full h-[1123px] flex flex-col items-center justify-center p-10 bg-slate-800 text-white">
-                  <h1 className="text-5xl font-black tracking-widest uppercase mb-4 text-center">Anexo Fotográfico</h1>
-                  <div className="w-32 h-2 bg-sky-500"></div>
+            return photoChunks.map((chunk, idx) => (
+              <div key={`photo-chunk-${idx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative">
+                <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
+                   <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO</h2>
+                   <span className="text-[10px] font-bold text-slate-400 uppercase">INSPECCIÓN IN-SITU</span>
                 </div>
-                {photoChunks.map((chunk, idx) => (
-                  <div key={idx} className="html2pdf__page-break w-full h-[1123px] p-10 bg-white flex flex-col">
-                    <div className="grid grid-cols-2 gap-6 h-full">
-                      {chunk.map((p) => (
-                        <div key={p.id} className="border border-slate-300 rounded-lg p-3 flex flex-col bg-slate-50 h-full max-h-[500px]">
-                          <div className="relative w-full flex-1 mb-2 rounded border border-slate-200 overflow-hidden bg-black min-h-[200px]">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="w-full h-full object-cover" />
-                            </div>
-                            <p className="text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200 pb-1 mb-1 shrink-0">{p.tipo || "Evidencia"}</p>
-                            <p className="text-xs text-slate-800 leading-snug overflow-hidden line-clamp-6 shrink-0">{p.comentario || "Sin comentario."}</p>
-                          </div>
-                      ))}
+                
+                <div className="flex flex-col gap-6 flex-1">
+                  {chunk.map((p, i) => (
+                    <div key={p.id} className="border border-slate-300 rounded-lg flex flex-row bg-slate-50 h-[450px] overflow-hidden">
+                      {/* Fotografía izquierda */}
+                      <div className="w-1/2 bg-black relative flex items-center justify-center p-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="max-w-full max-h-full object-contain" />
+                      </div>
+                      {/* Texto derecha */}
+                      <div className="w-1/2 flex flex-col p-5 bg-white border-l border-slate-300">
+                        <h4 className="text-sm font-black text-white bg-[#1F4E79] px-3 py-1.5 rounded uppercase mb-4 shrink-0 shadow-sm">
+                          Evidencia ${idx * 2 + i + 1} - {p.tipo || "Registro Táctico"}
+                        </h4>
+                        <div className="bg-slate-50 p-4 rounded border border-slate-200 flex-1 overflow-hidden">
+                          <p className="text-[11px] text-slate-700 leading-relaxed text-justify">
+                            {p.comentario || "Sin comentario analítico registrado."}
+                          </p>
+                        </div>
+                        <div className="mt-4 pt-2 border-t border-slate-200 shrink-0">
+                           <p className="text-[9px] text-slate-500 font-bold uppercase">Fuente: Trabajo de Campo | {new Date().toLocaleDateString()}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
                 ))}
-              </>
-            );
+                </div>
+
+                <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2">
+                  <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
+                  <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
+                </div>
+              </div>
+            ));
           })()}
         </div>
       </div>

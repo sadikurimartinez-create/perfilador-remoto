@@ -57,60 +57,72 @@ ${strategies}
 DATOS DEL PROYECTO (EVIDENCIA DE CAMPO):
 ${JSON.stringify(safeBody, null, 2)}
 
-INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental. Es OBLIGATORIO que uses EXACTAMENTE la siguiente estructura de Markdown. Llenarás los datos utilizando la información demográfica (SCINCE), comercial (DENUE) e incidencia proporcionada. Usa viñetas (■) donde corresponda.
+INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental como un PRODUCTO EDITORIAL PROFESIONAL de Alta Calidad Institucional.
+Es OBLIGATORIO que uses EXACTAMENTE la siguiente estructura de Markdown.
+Usa los caracteres de bloque de cita (>) para simular recuadros y cuadros de texto en las lecturas analíticas, vulnerabilidades y hallazgos. Llenarás los datos utilizando la información demográfica (SCINCE), comercial (DENUE) e incidencia. Usa viñetas (■) donde corresponda.
 
 ESTRUCTURA OBLIGATORIA A REPLICAR:
 
-DICTAMEN TÁCTICO
-PERFIL CRIMINOLÓGICO AMBIENTAL
-EXPEDIENTE: DICTAMEN_CRIMINOLOGICO_AMBIENTAL
-FECHA DE EMISIÓN: (Fecha actual)
-NIVEL DE RIESGO: (Determinar BAJO, MEDIO o ALTO)
-
-PERFIL SOCIODEMOGRÁFICO DEL ÁREA DE ANÁLISIS
-(Tabla Markdown con Ícono, Indicador y Valor. Ej: 👥 Población Total, 👨 Hombres, 👩 Mujeres, 🎂 Edad Promedio, 🎓 Escolaridad, 🏠 Viviendas Habitadas, 📉 Grado de Marginación)
-
-LECTURA SOCIODEMOGRÁFICA
-(Párrafo analítico)
-
-EVALUACIÓN DE VULNERABILIDAD SOCIODEMOGRÁFICA (CENSINT)
-(Párrafo indicando el SVS y nivel de riesgo)
-
-PERFIL CRIMINOLÓGICO AMBIENTAL: (Nombre de la zona o proyecto)
-
-1. EXPLICACIÓN DEL ANÁLISIS:
-(Párrafo descriptivo)
-
-2. SÍNTESIS DE RIESGO:
-(Párrafo indicando riesgo ALTO/MEDIO/BAJO y resumen)
-
-3. INFORMACIÓN PREDICTIVA INICIAL:
-(Proyección a 6 meses)
+# DICTAMEN TÁCTICO
+## PERFIL CRIMINOLÓGICO AMBIENTAL
+**EXPEDIENTE:** DICTAMEN_CRIMINOLOGICO_AMBIENTAL
+**FECHA DE EMISIÓN:** (Fecha actual)
+**NIVEL DE RIESGO:** (Determinar BAJO, MEDIO o ALTO)
 
 ---
 
-INFORMACIÓN SOCIO-DEMOGRÁFICA
+### PERFIL SOCIODEMOGRÁFICO DEL ÁREA DE ANÁLISIS
+Caracterización sociodemográfica obtenida mediante integración de información censal INEGI correspondiente al área geográfica analizada.
+
+(Generar Tabla Markdown con Ícono, Indicador y Valor. Ej: 👥 Población Total, 👨 Hombres, 👩 Mujeres, 🎂 Edad Promedio, 🎓 Escolaridad, 🏠 Viviendas Habitadas, 📉 Grado de Marginación)
+
+> **LECTURA SOCIODEMOGRÁFICA**
+> (Párrafo analítico)
+
+> **EVALUACIÓN DE VULNERABILIDAD SOCIODEMOGRÁFICA (CENSINT)**
+> (Párrafo indicando el SVS y nivel de riesgo)
+
+---
+
+### PERFIL CRIMINOLÓGICO AMBIENTAL: (Nombre de la zona o proyecto)
+
+#### 1. EXPLICACIÓN DEL ANÁLISIS
+> (Párrafo descriptivo)
+
+#### 2. SÍNTESIS DE RIESGO
+> (Párrafo indicando riesgo ALTO/MEDIO/BAJO y resumen)
+
+#### 3. INFORMACIÓN PREDICTIVA INICIAL
+> (Proyección a 6 meses)
+
+---
+
+### INFORMACIÓN SOCIO-DEMOGRÁFICA
 (Párrafo)
 
-ANÁLISIS DEL CONTEXTO ESPACIAL
+### ANÁLISIS DEL CONTEXTO ESPACIAL
 (Párrafo)
 
-DETERIORO FÍSICO Y VENTANAS ROTAS
-■ (Hallazgos en viñetas)
+### DETERIORO FÍSICO Y VENTANAS ROTAS
+> **Hallazgos Críticos:**
+> ■ (Hallazgos en viñetas)
 
-ATRACTORES Y DINÁMICA DELICTIVA
-■ (Hallazgos en viñetas)
+### ATRACTORES Y DINÁMICA DELICTIVA
+> **Puntos de Vulnerabilidad:**
+> ■ (Hallazgos en viñetas)
 
-LÍNEAS CRONOLÓGICAS GEOESPACIALES
-■ (Proyección en viñetas)
+### LÍNEAS CRONOLÓGICAS GEOESPACIALES
+> **Proyección Evolutiva:**
+> ■ (Proyección en viñetas)
 
-CONCLUSIONES TÁCTICAS (Riesgo a 6 meses)
-■ (Recomendaciones en viñetas)
+### CONCLUSIONES TÁCTICAS (Riesgo a 6 meses)
+> **Recomendaciones Operacionales:**
+> ■ (Recomendaciones en viñetas)
 
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate de incluir la clave "markdown" con todo este contenido estructurado.
 MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea reales dentro de la cadena JSON. Ejemplo:
 {
-  "markdown": "DICTAMEN TÁCTICO\\nPERFIL CRIMINOLÓGICO...",
+  "markdown": "# DICTAMEN TÁCTICO\\n## PERFIL CRIMINOLÓGICO...",
   "meta": {
     "riskLevel": "alto"
   }
