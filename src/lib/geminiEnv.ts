@@ -9,7 +9,7 @@ export const GCP_CLIENT_EMAIL = (g.GCP_CLIENT_EMAIL || "").replace(/^"|"$/g, "")
 export const GCP_PRIVATE_KEY = (g.GCP_PRIVATE_KEY || "").replace(/^"|"$/g, "").replace(/\\n/g, "\n").trim();
 
 /** Modelo por defecto si no se define GEMINI_MODEL en el entorno. */
-const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 export const GEMINI_MODEL =
   (typeof g.GEMINI_MODEL === "string" && g.GEMINI_MODEL.trim().length > 0
