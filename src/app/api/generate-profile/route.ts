@@ -59,9 +59,10 @@ ${JSON.stringify(safeBody, null, 2)}
 
 INSTRUCCIÓN FINAL: Genera el Perfil Criminológico Ambiental.
 Sé CONCISO, analítico y directo. Evita explicaciones redundantes para que la respuesta sea rápida.
-Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate obligatoriamente de incluir la clave "markdown" con todo el contenido del dictamen. Ejemplo:
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate obligatoriamente de incluir la clave "markdown" con todo el contenido del dictamen. 
+MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea reales dentro de la cadena JSON. Ejemplo:
 {
-  "markdown": "# Dictamen Táctico...",
+  "markdown": "# Dictamen Táctico\\n\\nContenido...",
   "meta": {
     "riskLevel": "alto"
   }
@@ -80,8 +81,16 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate obligatoriam
       parsed = JSON.parse(cleanText);
     } catch (e) {
       console.error("[api/generate-profile] Error parseando JSON de Gemini:", e);
-      // Fallback a un objeto que el frontend pueda intentar procesar en caso de fallo
-      parsed = { markdown: text }; 
+      // Extractor de emergencia a prueba de balas si la IA rompe el JSON con saltos de línea reales
+      let rawMarkdown = text;
+      const match = text.match(/"markdown"\s*:\s*"([\s\S]*?)"\s*(?:,\s*"meta"|}$)/);
+      if (match && match[1]) {
+         rawMarkdown = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      } else {
+         // Limpieza bruta
+         rawMarkdown = text.replace(/^[\s\S]*?"markdown"\s*:\s*"/, '').replace(/"\s*}\s*$/, '').replace(/\\n/g, '\n');
+      }
+      parsed = { markdown: rawMarkdown }; 
     }
 
     return NextResponse.json(parsed);
