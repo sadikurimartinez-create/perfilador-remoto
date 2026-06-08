@@ -981,7 +981,7 @@ const hasMinimumPhotos =
             {project?.geometryType !== "individual" && (
               <h4 className="text-sm font-semibold text-sky-300 mb-2 border-b border-slate-700 pb-1">{group.title}</h4>
             )}
-            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+            <div className="flex flex-col gap-6 w-full">
               {group.photos.map((p) => (
           <div
             key={p.id}
@@ -1158,7 +1158,7 @@ const hasMinimumPhotos =
         ));
       })()}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 pt-6 mt-6 border-t border-slate-800 print:hidden">
+      <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
       {/* MÓDULO DE CONSULTA VEHICULAR OSINT (CheckAuto / REPUVE) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
@@ -1485,7 +1485,7 @@ const hasMinimumPhotos =
       </div>
 
       {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) */}
-      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50 xl:col-span-2">
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
             <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
@@ -2091,7 +2091,7 @@ const hasMinimumPhotos =
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mt-6">
+            <div className="flex flex-col gap-8 items-start mt-6 w-full">
             {selectedIds.length >= 1 && (
               <>
               <div className="space-y-6">
