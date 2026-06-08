@@ -277,6 +277,11 @@ export function PhotoAlbum({
   const [isCheckingSat, setIsCheckingSat] = useState(false);
   const [satContext, setSatContext] = useState("");
 
+  // Estado para Consulta TELEGRAM OSINT
+  const [telegramQuery, setTelegramQuery] = useState("");
+  const [isCheckingTelegram, setIsCheckingTelegram] = useState(false);
+  const [telegramContext, setTelegramContext] = useState("");
+
   // Estado para Consulta INEGI SCINCE
   const [isCheckingScince, setIsCheckingScince] = useState(false);
 
@@ -1326,6 +1331,94 @@ const hasMinimumPhotos =
             className="w-full md:w-auto bg-emerald-700 hover:bg-emerald-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
             {isCheckingSat ? <span className="flex items-center justify-center">Consultando SAT... <ElapsedTime running={isCheckingSat} /></span> : "💰 Consultar SAT y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
+
+      {/* MÓDULO DE INTELIGENCIA DE FUENTES ABIERTAS (TELEGRAM OSINT) */}
+      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Inteligencia de Fuentes Abiertas (Telegram OSINT)</h4>
+          <p className="text-xs text-slate-400">
+            Consulte bases de datos filtradas (Leaks) buscando apodos, placas secundarias o entidades detectadas en terreno. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+          </p>
+        </header>
+        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+            <input
+              type="text"
+              placeholder="Ingrese objetivo (Ej. Apodo, Teléfono)..."
+              value={telegramQuery}
+              onChange={(e) => setTelegramQuery(e.target.value)}
+              disabled={isCheckingTelegram || isReadOnly}
+              className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 font-mono"
+            />
+          </div>
+          <div className="w-full relative">
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => toggleDictation('telegramContext', (text) => setTelegramContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'telegramContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+              >
+                <span>🎙️</span> {listeningField === 'telegramContext' ? "Grabando..." : "Dictar"}
+              </button>
+            )}
+            <textarea
+              spellCheck={true}
+              value={telegramContext}
+              disabled={isReadOnly}
+              onChange={(e) => setTelegramContext(e.target.value)}
+              placeholder="Contexto, justificación o instrucción específica para la IA sobre esta búsqueda..."
+              className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!telegramContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
+            />
+          </div>
+          <div className="mt-1 mb-2">
+            <div className="flex justify-between items-center text-[10px] mb-1">
+              <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
+              <span className={`font-bold ${telegramContext.length < 30 ? "text-red-400" : telegramContext.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
+                {telegramContext.length === 0 ? "Sin contexto" : telegramContext.length < 30 ? "Básico" : telegramContext.length < 100 ? "Aceptable" : "Óptimo"}
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5">
+              <div 
+                className={`h-1.5 rounded-full transition-all duration-300 ${telegramContext.length < 30 ? "bg-red-500" : telegramContext.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min((telegramContext.length / 150) * 100, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={!telegramQuery.trim() || !telegramContext.trim() || isCheckingTelegram || isReadOnly}
+            onClick={async () => {
+              setIsCheckingTelegram(true);
+              setError(null);
+              try {
+                const res = await fetch("/api/osint", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ queryTelegram: telegramQuery.trim() })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                  const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda: ${telegramQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setTelegramQuery("");
+                  setTelegramContext("");
+                  setIsAnalysisContextAudited(false);
+                  alert(`Consulta Telegram OSINT finalizada.\n\nResultado integrado a la hipótesis.`);
+                } else {
+                  setError(data.error || "Error al consultar Telegram OSINT.");
+                }
+              } catch (err) {
+                setError("Error de red al conectar con el módulo OSINT.");
+              } finally {
+                setIsCheckingTelegram(false);
+              }
+            }}
+            className="w-full md:w-auto bg-indigo-700 hover:bg-indigo-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingTelegram ? <span className="flex items-center justify-center">Consultando OSINT... <ElapsedTime running={isCheckingTelegram} /></span> : "🕵️ Consultar OSINT y Añadir a Hipótesis"}
           </button>
         </div>
       </div>

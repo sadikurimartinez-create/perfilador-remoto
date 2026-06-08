@@ -1,223 +1,94 @@
-import React, { useState, useEffect } from 'react';
+"use client";
 
-import { runOSINTScan }
-  from '../utils/osintEngine';
-import NewsIntelligencePanel
-  from './NewsIntelligencePanel';
-import SocialIntelligencePanel
-  from './SocialIntelligencePanel';
-import UrbanIntelligencePanel
-  from './UrbanIntelligencePanel';
-import GeointFusionPanel
-  from './GeointFusionPanel';
-import ThreatIntelligencePanel
-  from './ThreatIntelligencePanel';
-import NarrativeFusionPanel
-  from './NarrativeFusionPanel';
-import VisualAnalysisPanel
-  from './VisualAnalysisPanel';
+import { useState } from "react";
 
-function ElapsedTime({ running }: { running: boolean }) {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    if (!running) {
-      setSeconds(0);
+interface OsintPanelProps {
+  onOsintDataFetched: (data: string) => void;
+}
+
+export function OsintPanel({ onOsintDataFetched }: OsintPanelProps) {
+  const [placa, setPlaca] = useState("");
+  const [queryTelegram, setQueryTelegram] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConsultar = async () => {
+    if (!placa && !queryTelegram) {
+      setError("Ingresa una placa o un término de búsqueda para Telegram.");
       return;
     }
-    const interval = setInterval(() => setSeconds(s => s + 1), 1000);
-    return () => clearInterval(interval);
-  }, [running]);
-  if (!running) return null;
-  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-  const s = (seconds % 60).toString().padStart(2, '0');
-  return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
-}
 
-interface Props {
-  project: any;
-  setOsintResults?: (
-    data: any
-  ) => void;
-}
-
-const OSINTPanel: React.FC<Props> = ({
-  project,
-  setOsintResults,
-}) => {
-
-  const [loading, setLoading] =
-    React.useState(false);
-
-  const [results, setResults] =
-    React.useState<any>(null);
-
-  const executeOSINT = async () => {
     setLoading(true);
+    setError(null);
+    setResult(null);
 
     try {
-      const data = await runOSINTScan(project);
-      setOsintResults?.(data);
-      setResults(data);
-    } catch (error) {
-      console.error("OSINT Error:", error);
+      // Nota: Asegúrate de que tu archivo de la API esté guardado en src/app/api/osint/route.ts
+      const res = await fetch("/api/osint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ placa, queryTelegram }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setResult(data.osintSummary);
+        // Pasamos el resultado al componente padre para que se incluya en el prompt de la IA
+        onOsintDataFetched(data.osintSummary);
+      } else {
+        setError(data.error || "Ocurrió un error en la consulta OSINT.");
+      }
+    } catch (err) {
+      setError("No se pudo conectar con el servidor OSINT.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
+    <section className="card p-4 md:p-6 space-y-4 w-full border border-sky-900 bg-slate-900/50">
+      <header className="space-y-1">
+        <h3 className="text-lg font-semibold text-sky-400 flex items-center gap-2">
+          🔍 Panel de Inteligencia OSINT y REPUVE
+        </h3>
+        <p className="text-sm text-slate-400">
+          Consulta vehículos sospechosos u objetivos de interés. Esta información se inyectará automáticamente en el Informe Final.
+        </p>
+      </header>
 
-    <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-4 mt-4">
-
-      <div className="flex justify-between items-center mb-4">
-
-        <h2 className="text-lg font-bold text-cyan-300">
-          Motor OSINT CEIPOL
-        </h2>
-
+      <div className="flex flex-col md:flex-row gap-4">
+        <input
+          type="text"
+          placeholder="Placa del vehículo (Ej. AAA123A)"
+          value={placa}
+          onChange={(e) => setPlaca(e.target.value.toUpperCase())}
+          className="flex-1 p-2 bg-slate-800 border border-slate-700 rounded text-sm text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+        />
+        <input
+          type="text"
+          placeholder="Buscar en Telegram (Apodo, serie...)"
+          value={queryTelegram}
+          onChange={(e) => setQueryTelegram(e.target.value)}
+          className="flex-1 p-2 bg-slate-800 border border-slate-700 rounded text-sm text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+        />
         <button
-          onClick={executeOSINT}
+          onClick={handleConsultar}
           disabled={loading}
-        className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded text-sm flex items-center justify-center"
+          className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded text-sm font-semibold transition disabled:opacity-50"
         >
-        {loading ? (
-          <span className="flex items-center justify-center gap-1">Ejecutando... <ElapsedTime running={loading} /></span>
-        ) : 'Ejecutar OSINT'}
+          {loading ? "Consultando..." : "Ejecutar Búsqueda"}
         </button>
-
       </div>
 
-      {results && (
-
-        <div className="space-y-4">
-
-          <div className="bg-slate-800 rounded p-4">
-
-            <p className="text-xs text-slate-400">
-              Resultados Totales
-            </p>
-
-            <p className="text-3xl font-bold text-white">
-              {results.totalResults}
-            </p>
-
-          </div>
-
-          <NewsIntelligencePanel
-            osintResults={results}
-          />
-
-          <ThreatIntelligencePanel
-            project={project}
-            osintResults={results}
-          />
-
-          <NarrativeFusionPanel
-            project={project}
-            osintResults={results}
-          />
-
-          <VisualAnalysisPanel
-            project={project}
-          />
-
-          <GeointFusionPanel
-            project={project}
-            osintResults={results}
-          />
-
-          <UrbanIntelligencePanel
-            denue={
-              results.denue || []
-            }
-            overpass={
-              results.overpass || []
-            }
-            googlePlaces={
-              results.googlePlaces || []
-            }
-          />
-
-          <SocialIntelligencePanel
-            redditResults={
-              results.reddit || []
-            }
-            xResults={
-              results.x || []
-            }
-          />
-
-          <div className="flex flex-col gap-4">
-
-            <div className="bg-slate-800 rounded p-3">
-              <p className="text-xs text-slate-400">
-                SERPAPI
-              </p>
-
-              <p className="text-xl text-cyan-300 font-bold">
-                {results.serp?.length || 0}
-              </p>
-            </div>
-
-            <div className="bg-slate-800 rounded p-3">
-              <p className="text-xs text-slate-400">
-                NEWSAPI
-              </p>
-
-              <p className="text-xl text-fuchsia-300 font-bold">
-                {results.news?.length || 0}
-              </p>
-            </div>
-
-            <div className="bg-slate-800 rounded p-3">
-              <p className="text-xs text-slate-400">
-                GNEWS
-              </p>
-
-              <p className="text-xl text-emerald-300 font-bold">
-                {results.gnews?.length || 0}
-              </p>
-            </div>
-
-            <div className="bg-slate-800 rounded p-3">
-              <p className="text-xs text-slate-400">
-                NEWSDATA
-              </p>
-
-              <p className="text-xl text-orange-300 font-bold">
-                {results.newsdata?.length || 0}
-              </p>
-            </div>
-
-            <div className="bg-slate-800 rounded p-3">
-              <p className="text-xs text-slate-400">
-                THENEWSAPI
-              </p>
-
-              <p className="text-xl text-red-300 font-bold">
-                {results.thenews?.length || 0}
-              </p>
-            </div>
-
-            <div className="bg-slate-800 rounded p-3">
-              <p className="text-xs text-slate-400">
-                DENUE
-              </p>
-
-              <p className="text-xl text-yellow-300 font-bold">
-                {results.denue?.length || 0}
-              </p>
-            </div>
-
-          </div>
-
+      {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+      
+      {result && (
+        <div className="mt-4 p-3 bg-black/40 border border-emerald-900/50 rounded-lg whitespace-pre-wrap text-xs text-emerald-300 font-mono">
+          {result}
         </div>
-
       )}
-
-    </div>
-
+    </section>
   );
-};
-
-export default OSINTPanel;
+}
