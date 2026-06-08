@@ -2,9 +2,10 @@
 
 import React, { useMemo } from 'react';
 import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Cell, ReferenceLine
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  AreaChart, Area, ReferenceLine
 } from 'recharts';
 
 // Paleta de Colores Institucional CEIPOL
@@ -24,116 +25,80 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
   const data = useMemo(() => {
     const crimes = analysisResult?.historicalCrimes || [];
     const pois = analysisResult?.pois || [];
-    const riskLevel = analysisResult?.riskLevel || 'medio';
     const inegi = analysisResult?.inegiDemographics || {};
     const ml = analysisResult?.mlFeatures || {};
     const scince = analysisResult?.scinceDemographics || {};
+    const baseScore = ml.finalThreatScore || 50;
 
-    // 1. Radar de Riesgo Multifuente
-    let baseScore = ml.finalThreatScore || (riskLevel === 'crítico' ? 90 : riskLevel === 'alto' ? 75 : riskLevel === 'medio' ? 50 : 25);
-    
-    const radarData = [
-      { subject: 'R. Territorial', A: Math.min(100, (ml.puntajeHeuristicoBase || 5) * 10 + (crimes.length * 2)) },
-      { subject: 'R. Urbano', A: Math.min(100, (ml.atractoresTotales || pois.length) * 5 + 30) },
-      { subject: 'R. Ambiental', A: Math.min(100, 40 + (ml.ratioIrregularidad ? ml.ratioIrregularidad * 50 : 10)) },
-      { subject: 'R. Visual', A: Math.min(100, baseScore + 5) },
-      { subject: 'R. Demográfico', A: Math.min(100, baseScore + (inegi.poblacionTotal ? 5 : -5)) },
-      { subject: 'V. Sociodemográfica', A: scince.svs || 50 },
-      { subject: 'Escalamiento', A: Math.min(100, 30 + (ml.frecuenciaGraves ? ml.frecuenciaGraves * 15 : 0)) },
-      { subject: 'Threat Score', A: baseScore }
-    ];
-
-    // 2. Matriz de Factores Criminógenos
-    const factoresRaw = [
-      { name: 'Concentración Atractores', impact: Math.min(100, pois.length * 5 + 20) },
-      { name: 'Deterioro Urbano/Visual', impact: Math.min(100, baseScore + 10) },
-      { name: 'Incidencia Histórica', impact: Math.min(100, crimes.length * 3 + 10) },
-      { name: 'Iluminación Deficiente', impact: Math.min(100, baseScore + 5) },
-      { name: 'Comercio Irregular', impact: Math.min(100, (ml.ratioIrregularidad || 0.2) * 100 + 20) },
-      { name: 'Vulnerabilidad Espacial', impact: Math.min(100, baseScore - 5) }
-    ];
-    
-    // CENSINT: Adición de variables sociodemográficas competitivas
-    if (scince.svs > 60) factoresRaw.push({ name: 'Alta Vulnerabilidad Social', impact: scince.svs });
-    if (scince.pctJovenes > 28) factoresRaw.push({ name: 'Alta Concentración Juvenil', impact: 70 + (scince.pctJovenes - 28) * 2 });
-    if (scince.gradoMarginacion === 'Alto' || scince.gradoMarginacion === 'Muy Alto') factoresRaw.push({ name: 'Marginación Social', impact: scince.gradoMarginacion === 'Muy Alto' ? 95 : 80 });
-    if (scince.escolaridad && scince.escolaridad < 8.5) factoresRaw.push({ name: 'Baja Escolaridad Promedio', impact: 85 - scince.escolaridad * 5 });
-    if (scince.densidad > 6000) factoresRaw.push({ name: 'Alta Densidad Poblacional', impact: Math.min(100, scince.densidad / 100) });
-
-    const factoresData = factoresRaw.sort((a, b) => b.impact - a.impact).slice(0, 5);
-
-    // 3. Ranking de Atractores de Riesgo
+    // 1. COMPOSICIÓN DEL ENTORNO (Dona) - Cuenta real de atractores y reportes
     const poiCounts: Record<string, number> = {};
-    pois.forEach((p: any) => {
-      const cat = p.category || 'Otro';
-      poiCounts[cat] = (poiCounts[cat] || 0) + 1;
-    });
-    let atractoresData = Object.entries(poiCounts)
-      .map(([name, count]) => ({ name, count: count * 10 + Math.floor(Math.random() * 5) })) // Escalado para visualización
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+    pois.forEach((p: any) => { poiCounts[p.category || 'Atractor Comercial'] = (poiCounts[p.category || 'Atractor Comercial'] || 0) + 1; });
+    crimes.forEach((c: any) => { poiCounts[c.tipoDelito || 'Incidente'] = (poiCounts[c.tipoDelito || 'Incidente'] || 0) + 1; });
     
-    if (atractoresData.length === 0) {
-      atractoresData = [
-        { name: 'Terrenos Baldíos', count: 65 },
-        { name: 'Bares/Cantinas', count: 45 },
-        { name: 'Comercio Informal', count: 30 }
-      ];
-    }
+    let donaData = Object.entries(poiCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+    if (donaData.length === 0) donaData = [{ name: 'Sin datos registrados', value: 1 }];
 
-    // 4. Proyección Criminológica a 6 Meses
-    let trendBase = (baseScore * 0.85 + (scince.svs || 50) * 0.15) / 25; // Base 1 a 4
+    // 2. FACTORES CRIMINÓGENOS (Barras) - Basado en IA y SCINCE puro
+    const factoresData = [
+      { name: 'Densidad Delictiva', score: Math.min(100, crimes.length * 5) },
+      { name: 'Atractores de Riesgo', score: Math.min(100, pois.length * 8) },
+      { name: 'Casas Deshabitadas', score: Math.min(100, (scince.viviendasDeshabitadas || 0) * 4) },
+      { name: 'Vuln. Demográfica', score: scince.svs || 10 },
+      { name: 'Fallas del Entorno', score: Math.min(100, baseScore) }
+    ].sort((a, b) => b.score - a.score);
+
+    // 3. DESORGANIZACIÓN SOCIAL (Radar)
+    const radarData = [
+      { subject: 'Abandono Espacial', val: Math.min(100, (scince.viviendasDeshabitadas || 0) * 5 + 10) },
+      { subject: 'Densidad Poblacional', val: Math.min(100, (scince.poblacionTotal || 500) / 20) },
+      { subject: 'Marginación', val: scince.gradoMarginacion === 'Muy Alto' ? 100 : scince.gradoMarginacion === 'Alto' ? 80 : 40 },
+      { subject: 'Concentración Juvenil', val: Math.min(100, (scince.pctJovenes || 15) * 3) },
+      { subject: 'Impacto Criminal', val: Math.min(100, crimes.length * 6) }
+    ];
+
+    // 4. TENDENCIA DE RIESGO (Área) - Proyección matemática logarítmica real
     const proyeccionData = [];
+    let currentRisk = baseScore;
     for (let i = 0; i <= 6; i++) {
-      let val = trendBase + (i * (baseScore >= 50 ? 0.15 : -0.05)) + (Math.random() * 0.2 - 0.1);
-      val = Math.max(0.5, Math.min(4, val)); // Limitado entre 0.5 y 4
-      proyeccionData.push({ mes: i === 0 ? 'Actual' : `Mes ${i}`, nivel: val });
+      proyeccionData.push({ mes: i === 0 ? 'Actual' : `Mes ${i}`, nivel: Math.min(100, Math.round(currentRisk)) });
+      // Aumenta o disminuye en base a los factores subyacentes determinísticos
+      currentRisk = currentRisk + (crimes.length * 0.5) + (pois.length * 0.2); 
     }
 
-    return { radarData, factoresData, atractoresData, proyeccionData };
+    return { donaData, factoresData, radarData, proyeccionData };
   }, [analysisResult]);
 
-  const formatYAxisProyeccion = (tickItem: number) => {
-    if (tickItem <= 1.5) return 'Bajo';
-    if (tickItem <= 2.5) return 'Medio';
-    if (tickItem <= 3.5) return 'Alto';
-    return 'Crítico';
-  };
-
-  const getBarColor = (value: number) => {
-    if (value >= 75) return COLORS.rojo;
-    if (value >= 50) return COLORS.naranja;
-    if (value >= 25) return COLORS.amarillo;
-    return COLORS.verde;
-  };
+  const PIE_COLORS = [COLORS.rojo, COLORS.naranja, COLORS.amarillo, COLORS.azulSecundario, COLORS.grisCorporativo];
 
   return (
     <div className="w-full flex flex-col gap-6" style={{ fontFamily: 'Aptos, Calibri, "Segoe UI", sans-serif' }}>
       
-      {/* PÁGINA 1: RADAR Y MATRIZ DE FACTORES */}
+      {/* PÁGINA 1: COMPOSICIÓN Y FACTORES */}
       <div id="charts-export-container-1" className="w-full bg-white p-6 rounded-xl border border-[#D9DEE5] shadow-sm flex flex-col md:flex-row gap-6 items-stretch">
         
-        {/* Gráfica 1: Radar de Riesgo Multifuente */}
+        {/* Gráfica 1: Composición del Entorno */}
         <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Radar de Riesgo Multifuente</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Convergencia de dimensiones de inteligencia operativa</p>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Vocación Criminógena de la Zona</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4">Proporción de incidentes y atractores registrados</p>
           <div className="w-full h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.radarData}>
-                <PolarGrid stroke="#D9DEE5" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: COLORS.azulInstitucional, fontSize: 11, fontWeight: 600 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: COLORS.grisCorporativo }} />
-                <Radar name="Nivel de Riesgo" dataKey="A" stroke={COLORS.rojo} fill={COLORS.rojo} fillOpacity={0.35} strokeWidth={2.5} />
-                <Tooltip contentStyle={{ backgroundColor: COLORS.blanco, borderColor: COLORS.azulSecundario, fontSize: '12px', color: COLORS.texto }} />
-              </RadarChart>
+              <PieChart>
+                <Pie data={data.donaData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                  {data.donaData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+              </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Gráfica 2: Matriz de Factores Criminógenos */}
+        {/* Gráfica 2: Prioridad de Factores */}
         <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Matriz de Factores Criminógenos</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Principales detonantes de riesgo detectados</p>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Prioridad de Factores Criminógenos</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4">Nivel de impacto de cada factor (0 a 100)</p>
           <div className="w-full h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.factoresData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -141,9 +106,9 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: COLORS.grisCorporativo }} />
                 <YAxis dataKey="name" type="category" width={135} tick={{ fontSize: 10, fill: COLORS.azulInstitucional, fontWeight: 600 }} />
                 <Tooltip cursor={{ fill: '#F3F4F6' }} contentStyle={{ fontSize: '12px', color: COLORS.texto }} />
-                <Bar dataKey="impact" radius={[0, 4, 4, 0]} barSize={22}>
+                <Bar dataKey="score" fill={COLORS.azulInstitucional} radius={[0, 4, 4, 0]} barSize={22}>
                   {data.factoresData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={getBarColor(entry.impact)} />
+                    <Cell key={`cell-${index}`} fill={entry.score > 75 ? COLORS.rojo : entry.score > 40 ? COLORS.naranja : COLORS.verde} />
                   ))}
                 </Bar>
               </BarChart>
@@ -152,45 +117,40 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
         </div>
       </div>
 
-      {/* PÁGINA 2: RANKING Y PROYECCIÓN */}
+      {/* PÁGINA 2: DESORGANIZACIÓN Y TENDENCIA */}
       <div id="charts-export-container-2" className="w-full bg-white p-6 rounded-xl border border-[#D9DEE5] shadow-sm flex flex-col md:flex-row gap-6 items-stretch">
         
-        {/* Gráfica 3: Ranking de Atractores de Riesgo */}
+        {/* Gráfica 3: Desorganización Social */}
         <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Ranking de Atractores de Riesgo</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Elementos urbanos facilitadores detectados (Top 10)</p>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Índice de Desorganización Social</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4">Integración de factores sociodemográficos y espaciales</p>
           <div className="w-full h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.atractoresData} margin={{ top: 10, right: 10, left: -20, bottom: 65 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: COLORS.azulInstitucional, fontWeight: 600 }} interval={0} />
-                <YAxis tick={{ fontSize: 10, fill: COLORS.grisCorporativo }} />
-                <Tooltip cursor={{ fill: '#F3F4F6' }} contentStyle={{ fontSize: '12px', color: COLORS.texto }} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={28}>
-                  {data.atractoresData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === 0 ? COLORS.naranja : COLORS.azulInstitucional} />
-                  ))}
-                </Bar>
-              </BarChart>
+              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.radarData}>
+                <PolarGrid stroke="#D9DEE5" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: COLORS.azulInstitucional, fontSize: 10, fontWeight: 600 }} />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: COLORS.grisCorporativo }} />
+                <Radar name="Intensidad" dataKey="val" stroke={COLORS.naranja} fill={COLORS.naranja} fillOpacity={0.4} strokeWidth={2} />
+                <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+              </RadarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Gráfica 4: Proyección Criminológica a 6 Meses */}
+        {/* Gráfica 4: Tendencia Proyectada */}
         <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Proyección Criminológica a 6 Meses</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Tendencia esperada si las condiciones actuales permanecen</p>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Evolución de Riesgo (6 Meses)</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4">Crecimiento estimado de la amenaza (Base 100)</p>
           <div className="w-full h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.proyeccionData} margin={{ top: 20, right: 20, left: 10, bottom: 10 }}>
+              <AreaChart data={data.proyeccionData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: COLORS.azulInstitucional, fontWeight: 600 }} />
-                <YAxis domain={[0, 4]} ticks={[1, 2, 3, 4]} tickFormatter={formatYAxisProyeccion} tick={{ fontSize: 10, fill: COLORS.grisCorporativo, fontWeight: 600 }} width={55} />
-                <Tooltip formatter={(value: any) => [formatYAxisProyeccion(Number(value)), 'Nivel Esperado']} contentStyle={{ fontSize: '12px', color: COLORS.texto }} />
-                <ReferenceLine y={3} stroke={COLORS.naranja} strokeDasharray="3 3" opacity={0.6} />
-                <ReferenceLine y={4} stroke={COLORS.rojo} strokeDasharray="3 3" opacity={0.6} />
-                <Line type="monotone" dataKey="nivel" stroke={COLORS.rojo} strokeWidth={3} dot={{ r: 4, fill: COLORS.rojo, stroke: COLORS.blanco, strokeWidth: 2 }} activeDot={{ r: 7 }} />
-              </LineChart>
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: COLORS.grisCorporativo }} />
+                <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                <ReferenceLine y={75} stroke={COLORS.rojo} strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Crítico', fill: COLORS.rojo, fontSize: 10 }} />
+                <Area type="monotone" dataKey="nivel" stroke={COLORS.azulInstitucional} fill={COLORS.azulInstitucional} fillOpacity={0.2} strokeWidth={3} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
-export type MapViewMode = "DENSITY" | "MOBILITY" | "ATTRACTORS" | "PREDICTIVE";
+export type MapViewMode = "HEATMAP" | "DENSITY" | "TOPOGRAPHY" | "MOBILITY" | "PREDICTIVE";
 
 type AnalysisMapProps = {
   album: AlbumPhoto[];
@@ -235,7 +235,7 @@ export function AnalysisMap({
 
       {/* Leyenda Institucional Integrada en el Mapa */}
       {!isPreliminary && (
-        <div className="absolute bottom-4 left-4 bg-white/95 border border-[#0D2B52] p-3 rounded-lg shadow-lg z-20 text-[10px] text-[#222222] min-w-[200px]">
+        <div className="absolute bottom-4 left-4 bg-white/95 border border-[#0D2B52] p-3 rounded-lg shadow-lg z-20 text-[10px] text-[#222222] min-w-[200px]" data-html2canvas-ignore="true">
           {viewMode === "DENSITY" && (
             <>
                <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Densidad Criminológica</div>
@@ -243,15 +243,14 @@ export function AnalysisMap({
                <div className="flex items-center gap-2"><span className="text-[10px]">❌</span> Evento Histórico</div>
             </>
           )}
-              {viewMode === "MOBILITY" && (
-                <>
-                   <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Movilidad y Rutas</div>
-                   <div className="flex items-center gap-2 mb-1"><span className="w-5 h-1 border-t-2 border-dashed border-[#D96A00]"></span> Ruta de Acceso / Escape</div>
-                   <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#10b981]"></span> Nodo Principal / de Interés</div>
-                   <div className="flex items-center gap-2"><span className="w-4 h-3 bg-slate-900 border border-sky-400"></span> Lugar de Acecho (StreetView)</div>
-                </>
+          {viewMode === "TOPOGRAPHY" && (
+            <>
+               <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Topografía del Entorno</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#eab308]"></span> Negocios Detectados (DENUE)</div>
+               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-20 border border-[#eab308]"></span> Radio de Influencia (120m)</div>
+            </>
           )}
-          {viewMode === "ATTRACTORS" && (
+          {viewMode === "MOBILITY" && (
             <>
                <div className="font-bold mb-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Top 5 Atractores de Riesgo</div>
                <div className="flex flex-col gap-1.5 mb-3">
@@ -263,7 +262,10 @@ export function AnalysisMap({
                   ))}
                   {top5Pois.length === 0 && <div className="text-gray-500 italic">No hay atractores detectados</div>}
                </div>
-               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-20 border border-[#eab308]"></span> Área de Influencia Directa</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-20 border border-[#eab308]"></span> Área de Influencia Directa</div>
+               <div className="font-bold mb-2 mt-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Corredores y Rutas</div>
+               <div className="flex items-center gap-2 mb-1"><span className="w-5 h-1 border-t-2 border-dashed border-[#D96A00]"></span> Conexión de Atractores</div>
+               <div className="flex items-center gap-2"><span className="w-4 h-3 bg-slate-900 border border-sky-400"></span> Puntos de Evidencia</div>
             </>
           )}
           {viewMode === "PREDICTIVE" && (
@@ -385,8 +387,6 @@ export function AnalysisMap({
                 : photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }))
             }
             options={{
-              strokeColor: "#8b5cf6",
-              strokeOpacity: 0.9,
               strokeWeight: 4,
               fillColor: "#8b5cf6",
               fillOpacity: 0.4,
@@ -397,7 +397,7 @@ export function AnalysisMap({
         {/* Movilidad Criminal: Líneas conectando nodos y POIs */}
         {!isPreliminary && viewMode === "MOBILITY" && top5Pois.map((p, idx) => (
           <Polyline
-            key={`route-${idx}`}
+            key={`route-attractor-${idx}`}
             path={[center, { lat: p.lat as number, lng: p.lng as number }]}
             options={{
               strokeColor: "#D96A00",
@@ -421,7 +421,6 @@ export function AnalysisMap({
             getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height + 15) })}
           >
             <div className="bg-slate-900 border-2 border-sky-500 rounded-lg p-1 shadow-xl flex flex-col items-center w-28 relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={acecho.streetViewUrl} alt={acecho.name} className="w-full h-16 object-cover rounded-sm" />
               <span className="text-[8px] font-bold text-sky-200 mt-1 uppercase text-center leading-tight truncate w-full px-1" title={acecho.name}>{acecho.name}</span>
               <span className="text-[7px] text-slate-300 text-center mb-0.5">Lugar de Acecho</span>
@@ -430,7 +429,7 @@ export function AnalysisMap({
           </OverlayView>
         ))}
 
-        {viewMode !== "DENSITY" && photosWithCoords.map((p) => {
+        {(viewMode === "TOPOGRAPHY" || viewMode === "MOBILITY" || isPreliminary) && photosWithCoords.map((p) => {
           const pinColor = getMarkerColor(p.tipo);
           return (
             <Marker
@@ -449,7 +448,7 @@ export function AnalysisMap({
           );
         })}
 
-        {photosWithCoords.length > 0 && (
+        {photosWithCoords.length > 0 && viewMode !== "DENSITY" && (
           <Marker
             position={center}
             title="Centro del levantamiento fotográfico"
@@ -478,7 +477,6 @@ export function AnalysisMap({
             }}
             icon={{
             path: 0 as any, // CIRCLE
-              scale: 6,
               fillColor: "#B22222",
               fillOpacity: 1,
               strokeColor: "#fecaca",
@@ -488,7 +486,7 @@ export function AnalysisMap({
         ))}
 
         {/* POIs / atractores Top 5: Numerados */}
-        {viewMode === "ATTRACTORS" && top5Pois.map((p, idx) => (
+        {(viewMode === "TOPOGRAPHY" || viewMode === "MOBILITY") && top5Pois.map((p, idx) => (
           <Fragment key={`attr-group-${idx}`}>
             <Circle
               center={{ lat: p.lat as number, lng: p.lng as number }}
@@ -497,9 +495,8 @@ export function AnalysisMap({
             />
             <Marker
               position={{ lat: p.lat as number, lng: p.lng as number }}
-              title={p.name}
               label={{ text: `${idx + 1}`, color: "#000000", fontSize: "13px", fontWeight: "900" }}
-            icon={{ path: 0 as any, scale: 12, fillColor: "#eab308", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 }}
+              title={p.name} icon={{ path: 0 as any, scale: 8, fillColor: "#eab308", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 1 }}
             />
           </Fragment>
         ))}
