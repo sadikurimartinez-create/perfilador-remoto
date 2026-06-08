@@ -9,6 +9,7 @@ import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
+import { runOSINTScan } from "../utils/osintEngine";
 
 type EvidencePhotoType = {
   id: string;
@@ -512,7 +513,12 @@ const hasMinimumPhotos =
         })
       );
 
-      const mapRes = await fetch("/api/analyze-selection", {
+      const first = selected[0];
+      const lat = typeof first?.lat === "number" && !Number.isNaN(first.lat) ? first.lat : 21.8818;
+      const lng = typeof first?.lng === "number" && !Number.isNaN(first.lng) ? first.lng : -102.2915;
+
+      // EJECUCIÓN PARALELA: Mapa, Incidencia y Barrido OSINT Automático (X/Twitter, Google, DENUE, News)
+      const mapResPromise = fetch("/api/analyze-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -522,49 +528,47 @@ const hasMinimumPhotos =
           manualPois
         }),
       });
-      
+
+      const incidenciaResPromise = fetch("/api/incidencia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lng }),
+      }).catch(e => {
+        console.error("[PhotoAlbum] Error /api/incidencia:", e);
+        return null;
+      });
+
+      const osintPromise = runOSINTScan(project).catch(e => {
+        console.warn("[Auto-OSINT] Falló el barrido:", e);
+        return null;
+      });
+
+      const [mapRes, incidenciaRes, automaticOsintData] = await Promise.all([
+        mapResPromise,
+        incidenciaResPromise,
+        osintPromise
+      ]);
+
       let currentAnalysisResult = analysisResult;
-      if (mapRes.ok) {
+      let svData: any[] = [];
+      if (mapRes && mapRes.ok) {
         const mapData = await mapRes.json();
         currentAnalysisResult = mapData;
         setAnalysisResult(mapData);
+        if (mapData.tacticalStreetViews) svData = mapData.tacticalStreetViews;
       }
 
-      // Incidencia local (1km) + marco teórico (bibliografía) para auditoría y Gemini
       let incidenciaLocal: any[] = [];
       let bibliografiaLocal = "";
-      try {
-        const first = selected[0];
-        const lat =
-          typeof first?.lat === "number" && !Number.isNaN(first.lat)
-            ? first.lat
-            : 21.8818;
-        const lng =
-          typeof first?.lng === "number" && !Number.isNaN(first.lng)
-            ? first.lng
-            : -102.2915;
-
-        const incidenciaRes = await fetch("/api/incidencia", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lat, lng }),
-        });
-
-        if (incidenciaRes.ok) {
-          const incidenciaJson = (await incidenciaRes.json()) as {
-            data?: any[];
-            bibliografia?: string;
-          };
-          incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
-          bibliografiaLocal = incidenciaJson.bibliografia ?? "";
-          setDebugData((prev: any) => ({
-            ...(prev ?? {}),
-            incidencia: incidenciaLocal,
-            bibliografia: bibliografiaLocal,
-          }));
-        }
-      } catch (e) {
-        console.error("[PhotoAlbum] Error /api/incidencia:", e);
+      if (incidenciaRes && incidenciaRes.ok) {
+        const incidenciaJson = await incidenciaRes.json() as any;
+        incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
+        bibliografiaLocal = incidenciaJson.bibliografia ?? "";
+        setDebugData((prev: any) => ({
+          ...(prev ?? {}),
+          incidencia: incidenciaLocal,
+          bibliografia: bibliografiaLocal,
+        }));
       }
 
       // Empaquetar las instrucciones de la Evidencia Multimodal para la IA
@@ -584,6 +588,8 @@ const hasMinimumPhotos =
             multimodalContext,
             geometryType: project?.geometryType || "individual",
             projectDescription: project?.descripcion || "",
+            osintEngineData: automaticOsintData,
+            streetViews: svData
           }),
         });
 
@@ -1879,7 +1885,7 @@ const hasMinimumPhotos =
                   d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
                 />
               </svg>
-              {isValidatingPhotos ? <span className="flex items-center gap-1">Auditando evidencia fotográfica... <ElapsedTime running={isValidatingPhotos} /></span> : <span className="flex items-center gap-1">Procesando inteligencia... Por favor espere <ElapsedTime running={isGeneratingAI} /></span>}
+              {isValidatingPhotos ? <span className="flex items-center gap-1">Auditando evidencia fotográfica... <ElapsedTime running={isValidatingPhotos} /></span> : <span className="flex items-center gap-1">Ejecutando Barrido OSINT e Inteligencia Artificial... <ElapsedTime running={isGeneratingAI} /></span>}
             </>
           ) : aiProfile ? (
             isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Informe"

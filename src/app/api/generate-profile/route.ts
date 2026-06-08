@@ -54,12 +54,28 @@ export async function POST(req: Request) {
     const osintRepuveData = safeBody.analysisContext || "Sin datos OSINT/Inteligencia registrados.";
     const clasificacionRiesgo = safeBody.projectDescription || "Pendiente de evaluación";
     
+    const osintEngineStr = safeBody.osintEngineData 
+      ? JSON.stringify({
+          serp: safeBody.osintEngineData.serp?.slice(0, 3),
+          news: safeBody.osintEngineData.news?.slice(0, 3),
+          x: safeBody.osintEngineData.x?.slice(0, 3),
+          reddit: safeBody.osintEngineData.reddit?.slice(0, 3),
+          denue: safeBody.osintEngineData.denue?.length,
+          places: safeBody.osintEngineData.googlePlaces?.length
+        }) 
+      : "Sin datos OSINT automáticos.";
+    const streetViewsStr = (safeBody.streetViews && safeBody.streetViews.length > 0)
+      ? safeBody.streetViews.map((sv: any) => `[StreetView] Ubicación: ${sv.name} | Coordenadas: ${sv.lat}, ${sv.lng}`).join(" | ")
+      : "Sin barrido de StreetView.";
+
     const promptEstructura = generarPromptInformeFinal({
       visionAPI: datosVisionExtraidos,
       incidenciaCSV: incidenciaStr,
       placesVsDenue: "Comercios base (evaluar en terreno frente a registros).",
       osintRepuve: osintRepuveData,
-      clasificacionRiesgo: clasificacionRiesgo
+      clasificacionRiesgo: clasificacionRiesgo,
+      osintAutomatedSweep: osintEngineStr,
+      streetViewsSweep: streetViewsStr
     });
 
     const prompt = `

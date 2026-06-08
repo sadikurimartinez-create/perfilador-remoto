@@ -4,6 +4,8 @@ export interface InformeContext {
   placesVsDenue: string;
   osintRepuve: string;
   clasificacionRiesgo: string;
+  osintAutomatedSweep?: string;
+  streetViewsSweep?: string;
 }
 
 export const generarPromptInformeFinal = (context: InformeContext): string => {
@@ -24,6 +26,8 @@ DATOS DE ENTRADA PROVISTOS:
 3. Fricción Económica (Places vs DENUE): ${context.placesVsDenue || 'Comercio regular.'}
 4. Inteligencia OSINT y REPUVE: ${context.osintRepuve || 'Sin vehículos o entidades de interés.'}
 5. Clasificación Base del Entorno: ${context.clasificacionRiesgo || 'No determinada.'}
+6. Barrido Automático OSINT (X/Twitter, DENUE, Noticias, Google): ${context.osintAutomatedSweep || 'No ejecutado'}
+7. Detecciones de StreetView (Lugares de Acecho): ${context.streetViewsSweep || 'Sin imágenes capturadas'}
 ---
 
 ESTRUCTURA OBLIGATORIA DEL INFORME:
@@ -41,6 +45,8 @@ Redacta este apartado subdividido en las siguientes matrices:
 
 3. INTELIGENCIA DE ENTORNO Y OBJETOS (OSINT)
 Redacta el análisis de los vehículos u objetos consultados.
+- Es OBLIGATORIO incluir los hallazgos del Barrido Automático OSINT. Menciona de forma explícita cualquier actividad relevante en redes sociales (X/Twitter, Reddit), reportes de noticias, y la concentración de negocios (DENUE/Places).
+- Evalúa las "Detecciones de StreetView": si el sistema detectó lugares de acecho, descríbelos detalladamente y cómo benefician al delincuente.
 - Si hay reporte de robo en los datos de REPUVE/OSINT, inclúyelo analíticamente demostrando cómo el vehículo sospechoso aprovecha el entorno (e.g. maleza, puntos ciegos) como espacio de resguardo temporal, validando el patrón delictivo.
 
 4. CONCLUSIONES OPERACIONALES
