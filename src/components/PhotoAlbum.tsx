@@ -981,7 +981,7 @@ const hasMinimumPhotos =
             {project?.geometryType !== "individual" && (
               <h4 className="text-sm font-semibold text-sky-300 mb-2 border-b border-slate-700 pb-1">{group.title}</h4>
             )}
-            <div className="flex flex-col gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
               {group.photos.map((p) => (
           <div
             key={p.id}
@@ -1158,8 +1158,9 @@ const hasMinimumPhotos =
         ));
       })()}
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 pt-6 mt-6 border-t border-slate-800 print:hidden">
       {/* MÓDULO DE CONSULTA VEHICULAR OSINT (CheckAuto / REPUVE) */}
-      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Consulta Vehicular (OSINT Automático)</h4>
           <p className="text-xs text-slate-400">
@@ -1254,7 +1255,7 @@ const hasMinimumPhotos =
       </div>
 
       {/* MÓDULO DE INTELIGENCIA ECONÓMICA (SAT Art. 69-B) */}
-      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Inteligencia Económica (SAT - Art. 69B)</h4>
           <p className="text-xs text-slate-400">
@@ -1342,7 +1343,7 @@ const hasMinimumPhotos =
       </div>
 
       {/* MÓDULO DE INTELIGENCIA DE FUENTES ABIERTAS (TELEGRAM OSINT) */}
-      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Inteligencia de Fuentes Abiertas (Telegram OSINT)</h4>
           <p className="text-xs text-slate-400">
@@ -1430,7 +1431,7 @@ const hasMinimumPhotos =
       </div>
 
       {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) */}
-      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
             <h4 className="text-base font-semibold text-slate-200">Demografía y Marginación (INEGI SCINCE)</h4>
@@ -1484,7 +1485,7 @@ const hasMinimumPhotos =
       </div>
 
       {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) */}
-      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50 xl:col-span-2">
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
             <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
@@ -1535,6 +1536,7 @@ const hasMinimumPhotos =
             {isCheckingDenue ? <span className="flex items-center justify-center">Buscando Negocios... <ElapsedTime running={isCheckingDenue} /></span> : "🏪 Consultar DENUE y Añadir a Hipótesis"}
           </button>
         </div>
+      </div>
       </div>
 
       {/* EVIDENCIAS ADICIONALES */}
@@ -2084,13 +2086,15 @@ const hasMinimumPhotos =
       )}
 
       {showConfigModal && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-900 px-8 py-10 space-y-6 my-auto">
+        <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">
+          <div className="w-full max-w-[95vw] 2xl:max-w-[1600px] rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-8 md:py-10 my-8 md:my-auto">
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mt-6">
             {selectedIds.length >= 1 && (
-              <div className="space-y-2">
+              <>
+              <div className="space-y-6">
                 <div className="space-y-1">
                   <p className="block text-xs font-medium text-slate-300">
                     Objetivos prioritarios del análisis
@@ -2224,6 +2228,8 @@ const hasMinimumPhotos =
                     ></div>
                   </div>
                 </div>
+                </div>
+                <div className="space-y-6">
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
@@ -2280,11 +2286,11 @@ const hasMinimumPhotos =
                             setUserAnswersMap({});
                           } else {
                             setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
-                                "¿Podría detallar más los elementos de riesgo observados en el terreno?",
-                                "¿Qué factores ambientales podrían estar facilitando estas conductas?",
-                                "¿Cómo influye la iluminación y los servicios públicos en la zona?",
-                                "¿Existen rutas de escape claras para los infractores?",
-                                "¿Qué características tienen las víctimas u objetivos en este entorno?"
+                            "¿A qué hora del día percibe mayor vulnerabilidad en este punto?",
+                            "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",
+                            "¿Hacia dónde se dirigen las posibles rutas de escape físicas desde este nodo?",
+                            "¿Qué tipo de personas transitaban o frecuentan esta zona cuando observó?",
+                            "¿Observó algún obstáculo visual (bardas, maleza, autos) que facilite el acecho?"
                             ]);
                             setIsAnalysisContextAudited(false);
                             if (answersString.trim()) {
@@ -2350,6 +2356,7 @@ const hasMinimumPhotos =
                 </div>
               )}
               </div>
+              </>
             )}
             <div className="space-y-2 pt-1">
               <label className="block text-xs font-medium text-slate-300">
@@ -2391,6 +2398,7 @@ const hasMinimumPhotos =
             </div>
           </div>
         </div>
+      </div>
       )}
     </section>
       {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
@@ -2438,8 +2446,8 @@ const hasMinimumPhotos =
                   <span className="font-bold text-slate-600 uppercase text-xs mb-2 tracking-widest">Nivel de Riesgo (IA)</span>
                   <span className={`text-2xl font-black uppercase px-6 py-2 rounded shadow-sm ${profileRiskLevel === 'alto' ? 'bg-red-600 text-white' : profileRiskLevel === 'medio' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>{profileRiskLevel || "PENDIENTE"}</span>
                 </div>
+                </div>
               </div>
-            </div>
 
             <div className="text-center mt-auto border-t border-slate-300 pt-4">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documento Estratégico Generado por el Perfilador Remoto CEIPOL</p>
@@ -2542,7 +2550,7 @@ const hasMinimumPhotos =
                       {/* Texto derecha */}
                       <div className="w-1/2 flex flex-col p-5 bg-white border-l border-slate-300">
                         <h4 className="text-sm font-black text-white bg-[#1F4E79] px-3 py-1.5 rounded uppercase mb-4 shrink-0 shadow-sm">
-                          Evidencia ${idx * 2 + i + 1} - {p.tipo || "Registro Táctico"}
+                          Evidencia {idx * 2 + i + 1} - {p.tipo || "Registro Táctico"}
                         </h4>
                         <div className="bg-slate-50 p-4 rounded border border-slate-200 flex-1 overflow-hidden">
                           <p className="text-[11px] text-slate-700 leading-relaxed text-justify">

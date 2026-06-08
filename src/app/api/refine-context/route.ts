@@ -103,7 +103,11 @@ ${descContext}
 ${geoInstruction}
 
 Instrucción OBLIGATORIA:
-Asigna siempre un score de 50 (para forzar la auditoría). Genera EXACTAMENTE 5 preguntas tácticas, constructivas y abiertas para que el analista reflexione y engrose su análisis (ej. sobre vulnerabilidades, rutas o atractores).
+Asigna siempre un score de 50. Genera EXACTAMENTE 5 preguntas enfocadas en solicitar precisiones descriptivas (cómo, cuándo, dónde) sobre el entorno que el analista observa.
+REGLAS ESTRICTAS PARA LAS PREGUNTAS:
+1. NO pidas estadísticas, estudios ni bases de datos. Deben ser sobre lo que el humano puede ver, oler o percibir.
+2. NO repitas lo que ya se dijo en la hipótesis.
+3. Formula las preguntas de tal modo que el analista pueda responder libremente, incluso si la respuesta es "No lo sé", "No aplica" o "No se observó".
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con este formato:
 {"score": 50, "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}
 `.trim();
