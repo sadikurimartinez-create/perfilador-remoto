@@ -21,8 +21,8 @@ import MultiUserPanel
   from './MultiUserPanel';
 import PredictivePanel
   from './PredictivePanel';
-import OSINTPanel
-  from './OSINTPanel';
+import OsintEnginePanel
+  from './OsintEnginePanel';
 import ThreatMapOverlay
   from './ThreatMapOverlay';
 import {
@@ -536,7 +536,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           <PredictivePanel
             project={project}
           />
-          <OSINTPanel
+          <OsintEnginePanel
             project={project}
             setOsintResults={
               setOsintResults
