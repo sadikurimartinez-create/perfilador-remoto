@@ -289,6 +289,9 @@ export function PhotoAlbum({
   // Estado para Consulta INEGI DENUE
   const [isCheckingDenue, setIsCheckingDenue] = useState(false);
 
+  // Estado para Fusión OSINT RSS
+  const [isCheckingRss, setIsCheckingRss] = useState(false);
+
   // FASE 3: Indicadores de Conexión en tiempo real (Telemetría)
   const [statusScince, setStatusScince] = useState<"checking" | "online" | "offline">("checking");
   const [statusDenue, setStatusDenue] = useState<"checking" | "online" | "offline">("checking");
@@ -1534,6 +1537,61 @@ const hasMinimumPhotos =
             className="w-full md:w-auto bg-amber-700 hover:bg-amber-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
             {isCheckingDenue ? <span className="flex items-center justify-center">Buscando Negocios... <ElapsedTime running={isCheckingDenue} /></span> : "🏪 Consultar DENUE y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
+
+      {/* MÓDULO DE FUSIÓN OSINT (NOTICIAS RSS) */}
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Radar OSINT Regional (Noticias RSS)</h4>
+          <p className="text-xs text-slate-400">
+            Escanea medios locales y nacionales en tiempo real. La IA correlacionará automáticamente las noticias de alto impacto con tu hipótesis, la marginación y los comercios detectados.
+          </p>
+        </header>
+        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+          <p className="text-xs text-slate-300 flex-1">
+            Recomendación: Ejecute las consultas SCINCE y DENUE antes de este barrido para que la IA tenga mayor contexto de cruce.
+          </p>
+          <button
+            type="button"
+            disabled={isCheckingRss || isReadOnly}
+            onClick={async () => {
+              setIsCheckingRss(true);
+              setError(null);
+              try {
+                const res = await fetch("/api/osint/rss-parser", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    projectContext: analysisContext,
+                    region: "Aguascalientes"
+                  })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                  const d = data.data;
+                  const criticos = d.eventosCriticos && d.eventosCriticos.length > 0
+                    ? d.eventosCriticos.map((e: any) => `- ${e.titulo} (${e.fuente}): ${e.resumenTactico}`).join("\n")
+                    : "No se detectaron eventos críticos inmediatos en el barrido actual.";
+                  
+                  const newContext = `[FUSIÓN OSINT REGIONAL - Noticias RSS]\nSe analizaron ${d.totalNoticiasLeidas} noticias recientes.\n\nEVENTOS TÁCTICOS DETECTADOS:\n${criticos}\n\nCORRELACIÓN DE INTELIGENCIA:\n- Cruce Comercial (DENUE): ${d.correlacionPlataforma?.conexionDenue || "N/A"}\n- Cruce Sociodemográfico (SCINCE): ${d.correlacionPlataforma?.conexionScince || "N/A"}\n- Incidencia Histórica: ${d.correlacionPlataforma?.conexionHistorica || "N/A"}\n\nCONCLUSIÓN OPERATIVA: ${d.conclusionOperativa || "Revisar entorno con precaución."}`;
+                  
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setIsAnalysisContextAudited(false); // Forzamos a la IA a reevaluar la hipótesis con los nuevos datos
+                  alert("¡Fusión OSINT completada!\nLas noticias y su correlación han sido inyectadas en tu Hipótesis.");
+                } else {
+                  setError(data.message || data.error || "No se pudieron obtener noticias recientes.");
+                }
+              } catch (err: any) {
+                setError(err.message || "Error de red al conectar con el Motor OSINT RSS.");
+              } finally {
+                setIsCheckingRss(false);
+              }
+            }}
+            className="w-full md:w-auto bg-rose-700 hover:bg-rose-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingRss ? <span className="flex items-center justify-center">Analizando Noticias... <ElapsedTime running={isCheckingRss} /></span> : "📡 Realizar Fusión OSINT Regional"}
           </button>
         </div>
       </div>
