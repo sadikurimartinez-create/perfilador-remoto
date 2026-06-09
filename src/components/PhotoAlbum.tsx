@@ -293,10 +293,7 @@ export function PhotoAlbum({
   const [isCheckingRss, setIsCheckingRss] = useState(false);
 
   // Estado para Búsqueda Multimodal Geo-Espacial
-  const [geoSubject, setGeoSubject] = useState("");
-  const [geoAction, setGeoAction] = useState("");
-  const [geoEnvironment, setGeoEnvironment] = useState("");
-  const [geoImage, setGeoImage] = useState<File | null>(null);
+  const [geoQueries, setGeoQueries] = useState<any[]>([]);
   const [isCheckingGeo, setIsCheckingGeo] = useState(false);
 
   // FASE 3: Indicadores de Conexión en tiempo real (Telemetría)
@@ -1608,7 +1605,7 @@ const hasMinimumPhotos =
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">Búsqueda Multimodal Geo-Espacial</h4>
           <p className="text-xs text-slate-400">
-            Realice un barrido inteligente (IA + Grounding) a 1km de radio usando conceptos visuales y de contexto. La imagen es opcional, pero la contextualización estructurada es obligatoria.
+            Realice un barrido inteligente (IA + Grounding) a 1km de radio usando conceptos visuales y de contexto. Puede agregar múltiples imágenes y búsquedas. La información es obligatoria para cada imagen.
           </p>
         </header>
         <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
@@ -1623,64 +1620,92 @@ const hasMinimumPhotos =
             </ul>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 space-y-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Sujeto (¿Qué buscar?)</label>
-                <input
-                  type="text"
-                  placeholder='ej. "grafitis", "callejones", "luminarias rotas"'
-                  value={geoSubject}
-                  onChange={(e) => setGeoSubject(e.target.value)}
-                  disabled={isCheckingGeo || isReadOnly}
-                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Acción/Relación (¿Qué hacer?)</label>
-                <input
-                  type="text"
-                  placeholder='ej. "busca similares a la foto", "identifica riesgos contrarios"'
-                  value={geoAction}
-                  onChange={(e) => setGeoAction(e.target.value)}
-                  disabled={isCheckingGeo || isReadOnly}
-                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-slate-300">Ambiente (Entorno)</label>
-                <input
-                  type="text"
-                  placeholder='ej. "zona comercial", "callejón sin salida", "baldío"'
-                  value={geoEnvironment}
-                  onChange={(e) => setGeoEnvironment(e.target.value)}
-                  disabled={isCheckingGeo || isReadOnly}
-                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
-                />
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col gap-2">
-              <label className="text-[11px] font-semibold text-slate-300">Imagen de referencia (Opcional)</label>
-              <div className="flex flex-col gap-2 h-full">
-                <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-600 rounded-lg p-2 bg-slate-900/50 hover:bg-slate-800 transition-colors cursor-pointer min-h-[60px]">
-                  <span className="text-xl mb-1">📷</span>
-                  <span className="text-xs text-slate-400 text-center">Usar Cámara</span>
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setGeoImage(e.target.files ? e.target.files[0] : null)} disabled={isCheckingGeo || isReadOnly} />
-                </label>
-                <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-600 rounded-lg p-2 bg-slate-900/50 hover:bg-slate-800 transition-colors cursor-pointer min-h-[60px]">
-                  <span className="text-xl mb-1">📸</span>
-                  <span className="text-xs text-slate-400 text-center">Subir Archivo</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => setGeoImage(e.target.files ? e.target.files[0] : null)} disabled={isCheckingGeo || isReadOnly} />
-                </label>
-                {geoImage && <div className="text-[10px] text-emerald-400 text-center truncate">Seleccionada: {geoImage.name}</div>}
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <label className="flex-1 min-w-[140px] text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 px-2 text-xs font-semibold hover:bg-emerald-800/50 transition-colors">
+              📷 Usar Cámara
+              <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => {
+                if (e.target.files) {
+                  const newQueries = Array.from(e.target.files).map(file => ({
+                    id: Math.random().toString(36).substring(2, 9), file, previewUrl: URL.createObjectURL(file), subject: "", action: "", environment: ""
+                  }));
+                  setGeoQueries(prev => [...prev, ...newQueries]);
+                }
+                e.target.value = "";
+              }} disabled={isCheckingGeo || isReadOnly} />
+            </label>
+            <label className="flex-1 min-w-[140px] text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 px-2 text-xs font-semibold hover:bg-sky-800/50 transition-colors">
+              📸 Subir Archivo(s)
+              <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+                if (e.target.files) {
+                  const newQueries = Array.from(e.target.files).map(file => ({
+                    id: Math.random().toString(36).substring(2, 9), file, previewUrl: URL.createObjectURL(file), subject: "", action: "", environment: ""
+                  }));
+                  setGeoQueries(prev => [...prev, ...newQueries]);
+                }
+                e.target.value = "";
+              }} disabled={isCheckingGeo || isReadOnly} />
+            </label>
+            <button type="button" onClick={() => setGeoQueries(prev => [...prev, { id: Math.random().toString(36).substring(2, 9), file: null, previewUrl: null, subject: "", action: "", environment: "" }])} disabled={isCheckingGeo || isReadOnly} className="flex-1 min-w-[140px] rounded-lg border border-indigo-600 bg-indigo-900/30 text-indigo-100 py-2 px-2 text-xs font-semibold hover:bg-indigo-800/50 transition-colors">
+              📝 Búsqueda solo texto
+            </button>
           </div>
+
+          {geoQueries.length > 0 && (
+            <div className="space-y-4">
+              {geoQueries.map((query, index) => (
+                <div key={query.id} className="flex flex-col md:flex-row gap-4 p-4 bg-slate-900/80 rounded-lg border border-slate-600 relative shadow-md">
+                  <button type="button" onClick={() => {
+                    setGeoQueries(prev => {
+                      const item = prev.find(q => q.id === query.id);
+                      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+                      return prev.filter(q => q.id !== query.id);
+                    });
+                  }} disabled={isCheckingGeo || isReadOnly} className="absolute top-2 right-2 text-red-400 hover:text-red-300 font-bold text-lg bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center border border-red-900/50 z-10 shadow-sm" title="Borrar y volver a capturar">
+                    ✕
+                  </button>
+                  
+                  {query.previewUrl && (
+                    <div className="w-full md:w-1/4 flex flex-col gap-2 relative">
+                      <img src={query.previewUrl} alt="Preview" className="w-full h-32 md:h-full object-cover rounded border border-slate-600 bg-black" />
+                      <div className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.5 rounded text-[9px] text-emerald-400 max-w-[90%] truncate">
+                        {query.file?.name}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className={`w-full ${query.previewUrl ? 'md:w-3/4' : 'md:w-full'} space-y-3`}>
+                    <div className="flex justify-between items-center pr-8">
+                      <h5 className="text-xs font-bold text-sky-300">Búsqueda {index + 1}</h5>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold text-slate-300">Sujeto (¿Qué buscar?)</label>
+                        <input type="text" placeholder='ej. "grafitis", "callejones"' value={query.subject} onChange={(e) => {
+                          setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, subject: e.target.value } : q));
+                        }} disabled={isCheckingGeo || isReadOnly} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold text-slate-300">Acción (¿Qué hacer?)</label>
+                        <input type="text" placeholder='ej. "busca similares", "identifica"' value={query.action} onChange={(e) => {
+                          setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, action: e.target.value } : q));
+                        }} disabled={isCheckingGeo || isReadOnly} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-semibold text-slate-300">Ambiente (Entorno)</label>
+                        <input type="text" placeholder='ej. "zona comercial", "baldío"' value={query.environment} onChange={(e) => {
+                          setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, environment: e.target.value } : q));
+                        }} disabled={isCheckingGeo || isReadOnly} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <button
             type="button"
-            disabled={!geoSubject.trim() || !geoAction.trim() || !geoEnvironment.trim() || isCheckingGeo || isReadOnly}
+            disabled={geoQueries.length === 0 || !geoQueries.every(q => q.subject.trim() && q.action.trim() && q.environment.trim()) || isCheckingGeo || isReadOnly}
             onClick={async () => {
               setIsCheckingGeo(true);
               setError(null);
@@ -1691,38 +1716,61 @@ const hasMinimumPhotos =
                 const centerLat = photosToUse.reduce((acc: number, p: any) => acc + p.lat!, 0) / photosToUse.length;
                 const centerLng = photosToUse.reduce((acc: number, p: any) => acc + p.lng!, 0) / photosToUse.length;
 
-                let imageBase64 = null;
-                if (geoImage) {
-                  try { imageBase64 = await resizeImageToBase64(geoImage, 800, 0.6); } catch (e) { console.warn("No se pudo procesar la imagen de referencia."); }
+                let allFindings = "";
+                let allPois: any[] = [];
+                let allConcepts: string[] = [];
+
+                for (let i = 0; i < geoQueries.length; i++) {
+                   const q = geoQueries[i];
+                   let imageBase64 = null;
+                   if (q.file) {
+                     try { imageBase64 = await resizeImageToBase64(q.file, 800, 0.6); } catch (e) { console.warn(`No se pudo procesar la imagen de referencia ${i+1}.`); }
+                   }
+                   
+                   const res = await fetch("/api/osint/geo-spatial-search", {
+                     method: "POST", headers: { "Content-Type": "application/json" },
+                     body: JSON.stringify({ lat: centerLat, lng: centerLng, subject: q.subject, action: q.action, environment: q.environment, imageBase64 })
+                   });
+                   const data = await res.json();
+                   if (res.ok && data.success) {
+                      const d = data.data;
+                      const hallazgos = d.hallazgos && d.hallazgos.length > 0 ? d.hallazgos.map((h: any) => `- ${h.nombre} (${h.nivelCoincidencia}): ${h.descripcion}`).join("\n") : "No se identificaron zonas de riesgo coincidentes.";
+                      allFindings += `\n\n--- BARRIDO ${i + 1} ---\nParámetros:\n- Sujeto: ${q.subject}\n- Acción: ${q.action}\n- Ambiente: ${q.environment}\nConceptos: ${d.conceptosExtraidos?.join(", ")}\nHallazgos:\n${hallazgos}\nConclusión: ${d.conclusion}`;
+                      
+                      if (d.conceptosExtraidos) allConcepts.push(...d.conceptosExtraidos);
+
+                      if (d.hallazgos && d.hallazgos.length > 0) {
+                        const newPois = d.hallazgos.map((h: any) => ({
+                          lat: h.lat,
+                          lng: h.lng,
+                          label: `Geo-IA: ${h.nombre}`
+                        }));
+                        allPois.push(...newPois);
+                      }
+                   } else {
+                      throw new Error(data.error || `Error en la búsqueda ${i+1}`);
+                   }
                 }
 
-                const res = await fetch("/api/osint/geo-spatial-search", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ lat: centerLat, lng: centerLng, subject: geoSubject, action: geoAction, environment: geoEnvironment, imageBase64 })
-                });
-                const data = await res.json();
-                if (res.ok && data.success) {
-                  const d = data.data;
-                  const hallazgos = d.hallazgos && d.hallazgos.length > 0 ? d.hallazgos.map((h: any) => `- ${h.nombre} (${h.nivelCoincidencia}): ${h.descripcion}`).join("\n") : "No se identificaron zonas de riesgo coincidentes.";
-                  const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL]\n(INSTRUCCIÓN OBLIGATORIA PARA LA IA: Debes detallar e insertar de manera explícita en tu dictamen final todos y cada uno de los siguientes hallazgos).\n\nParámetros:\n- Sujeto: ${geoSubject}\n- Acción: ${geoAction}\n- Ambiente: ${geoEnvironment}\n\nConceptos extraídos por IA: ${d.conceptosExtraidos?.join(", ")}\n\nHALLAZGOS EN RADIOS DE 1KM:\n${hallazgos}\n\nCONCLUSIÓN DEL BARRIDO: ${d.conclusion}`;
+                if (allFindings) {
+                  const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL MÚLTIPLE]\n(INSTRUCCIÓN OBLIGATORIA PARA LA IA: Debes detallar e insertar de manera explícita en tu dictamen final todos y cada uno de los siguientes hallazgos).${allFindings}`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setIsAnalysisContextAudited(false); setGeoSubject(""); setGeoAction(""); setGeoEnvironment(""); setGeoImage(null);
+                  setIsAnalysisContextAudited(false); 
                   
-                  if (d.hallazgos && d.hallazgos.length > 0) {
-                    const newPois = d.hallazgos.map((h: any) => ({
-                      lat: h.lat,
-                      lng: h.lng,
-                      label: `Geo-IA: ${h.nombre}`
-                    }));
-                    setManualPois(prev => [...prev, ...newPois]);
+                  // Cleanup object URLs
+                  geoQueries.forEach(q => { if(q.previewUrl) URL.revokeObjectURL(q.previewUrl) });
+                  setGeoQueries([]); 
+                  
+                  if (allPois.length > 0) {
+                    setManualPois(prev => [...prev, ...allPois]);
                   }
-                  alert("¡Barrido Geo-Espacial completado con éxito!\nSe ha inyectado el análisis en la hipótesis.");
-                } else { setError(data.error || "Error al realizar la búsqueda geo-espacial."); }
+                  alert("¡Barridos Geo-Espaciales completados con éxito!\nSe han inyectado los análisis en la hipótesis.");
+                }
               } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
             }}
-            className="w-full bg-indigo-700 hover:bg-indigo-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg mt-2"
+            className="w-full bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-4 rounded-lg text-xs font-bold disabled:opacity-50 transition shadow-lg mt-2 uppercase tracking-wide"
           >
-            {isCheckingGeo ? <span className="flex items-center justify-center">Realizando Barrido Multimodal... <ElapsedTime running={isCheckingGeo} /></span> : "🌐 Ejecutar Barrido Geo-Espacial y Añadir a Hipótesis"}
+            {isCheckingGeo ? <span className="flex items-center justify-center">Realizando Barrido(s) Multimodal(es)... <ElapsedTime running={isCheckingGeo} /></span> : `🌐 Ejecutar Barrido Geo-Espacial y Añadir a Hipótesis ${geoQueries.length > 0 && geoQueries.every(q => q.subject.trim() && q.action.trim() && q.environment.trim()) ? `(${geoQueries.length})` : ''}`}
           </button>
         </div>
       </div>
