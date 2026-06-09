@@ -65,7 +65,9 @@ export async function searchNewsOsint(
   const keywords = [
     "robo", "asalto", "homicidio", "asesinato", "balacera", "cateo", "operativo", "cártel", "narcomenudeo", "riña", "detenido", "violencia", "sicarios", "ejecutado", "feminicidio", "secuestro", "extorsión", "arma", "crimen", "policía",
     // 25 palabras adicionales sobre Toxicomanía / Drogas
-    "drogas", "adicción", "cristal", "metanfetaminas", "fentanilo", "cocaína", "marihuana", "heroína", "sobredosis", "picaderos", "anexos", "estupefacientes", "psicotrópicos", "enervantes", "consumo", "narcomenudistas", "dealers", "intoxicación", "jeringas", "pipas", "inhalantes", "adictos", "drogadictos", "sustancias", "dosis"
+    "drogas", "adicción", "cristal", "metanfetaminas", "fentanilo", "cocaína", "marihuana", "heroína", "sobredosis", "picaderos", "anexos", "estupefacientes", "psicotrópicos", "enervantes", "consumo", "narcomenudistas", "dealers", "intoxicación", "jeringas", "pipas", "inhalantes", "adictos", "drogadictos", "sustancias", "dosis",
+    // 30 palabras adicionales sobre Seguridad Pública, Prevención y Teorías de Criminología Ambiental
+    "prevención", "disuasión", "vigilancia", "patrullaje", "proximidad", "abandono", "deterioro", "vandalismo", "desorden", "grafiti", "oportunidad", "riesgo", "vulnerabilidad", "infractor", "víctima", "guardián", "nodo", "ruta", "corredor", "refugio", "marginalidad", "reincidencia", "delincuencia", "antisocial", "cohesión", "impunidad", "percepción", "miedo", "recuperación", "iluminación"
   ];
   const locationKeywords = [colonia, municipio, estado]
     .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
