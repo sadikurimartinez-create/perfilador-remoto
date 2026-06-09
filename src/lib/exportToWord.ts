@@ -234,7 +234,9 @@ export async function exportToWord(
   attachedPhotos?: ({ url: string; tipo?: string; comentario?: string } | string)[],
   riskLevel?: "bajo" | "medio" | "alto",
   mapSnapshots?: { title: string; dataUrl: string }[],
-  scinceDemographics?: any
+  scinceDemographics?: any,
+  reportNumber?: string,
+  reportSummary?: string
 ) {
   const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
 
@@ -277,14 +279,35 @@ export async function exportToWord(
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: `EXPEDIENTE: ${projectName.toUpperCase()}`, size: 24, font: "Calibri", color: "222222" })],
+      children: [new TextRun({ text: `NÚMERO DE EXPEDIENTE: ${reportNumber || projectName.toUpperCase()}`, size: 24, font: "Calibri", color: "222222", bold: true })],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [new TextRun({ text: `FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-MX")}`, size: 24, font: "Calibri", color: "222222" })],
-      spacing: { after: 1000 }
+      spacing: { after: 600 }
     })
   );
+
+  if (reportSummary) {
+    coverPageParagraphs.push(
+      new Paragraph({
+        spacing: { before: 200, after: 120 },
+        children: [new TextRun({ text: "SÍNTESIS EJECUTIVA DEL DICTAMEN", bold: true, size: 22, color: "0D2B52", font: "Calibri" })]
+      }),
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        shading: { type: ShadingType.CLEAR, fill: "F5F7FA" },
+        border: {
+          top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
+          bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
+          left: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
+          right: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
+        },
+        children: [new TextRun({ text: reportSummary, size: 22, font: "Calibri", color: "222222" })],
+        spacing: { before: 120, after: 600 }
+      })
+    );
+  }
 
   let riskColor = "B22222"; // CRÍTICO
   if (riskLevel === "bajo") riskColor = "2E8B57";
@@ -505,7 +528,7 @@ export async function exportToWord(
               tmpImg.onload = () => resolve();
               tmpImg.onerror = () => reject(new Error("[exportToWord] Error en visual"));
             });
-            const MAP_MAX_WIDTH = 500;
+            const MAP_MAX_WIDTH = 450;
             const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
             const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
@@ -532,8 +555,8 @@ export async function exportToWord(
           return [
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
-              spacing: { before: 200, after: 120 }
+              children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
+              spacing: { before: 120, after: 60 }
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
@@ -541,8 +564,8 @@ export async function exportToWord(
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
-              spacing: { before: 80, after: 600 }
+              children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 12, color: "5B6573", font: "Calibri" })],
+              spacing: { before: 40, after: 240 }
             })
           ];
         };
@@ -581,7 +604,7 @@ export async function exportToWord(
               )
             );
         });
-        const WORD_MAX_WIDTH = 500;
+        const WORD_MAX_WIDTH = 450;
         const originalWidth = img.width || img.naturalWidth || 640;
         const originalHeight = img.height || img.naturalHeight || 480;
         const ratio = originalHeight / originalWidth || 1;
@@ -611,12 +634,12 @@ export async function exportToWord(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             children: [new ImageRun({ data: p.stampedBuffer, transformation: { width: p.width, height: p.height } } as any)],
-            spacing: { before: 200 }
+            spacing: { before: 120 }
           }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: `Imagen ${p.index} - ${p.tipo}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
-            spacing: { before: 120 }
+            children: [new TextRun({ text: `Imagen ${p.index} - ${p.tipo}`, bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
+            spacing: { before: 60 }
           })
         ];
 
@@ -624,8 +647,8 @@ export async function exportToWord(
           items.push(
             new Paragraph({
               alignment: AlignmentType.JUSTIFIED,
-              children: [new TextRun({ text: p.comentario, size: 22, font: "Calibri", color: "222222" })],
-              spacing: { before: 80, after: 80 }
+              children: [new TextRun({ text: p.comentario, size: 20, font: "Calibri", color: "222222" })],
+              spacing: { before: 60, after: 60 }
             })
           );
         }
@@ -633,8 +656,8 @@ export async function exportToWord(
         items.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: `Trabajo de Campo | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
-            spacing: { after: 600 }
+            children: [new TextRun({ text: `Trabajo de Campo | ${new Date().toLocaleDateString("es-MX")}`, size: 12, color: "5B6573", font: "Calibri" })],
+            spacing: { after: 240 }
           })
         );
 

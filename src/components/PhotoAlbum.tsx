@@ -938,7 +938,9 @@ const hasMinimumPhotos =
         photosToExportData.length > 0 ? photosToExportData : undefined,
         profileRiskLevel ?? undefined,
         sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined,
-        (analysisResult as any)?.scinceDemographics
+        (analysisResult as any)?.scinceDemographics,
+        reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO",
+        reportSummary
       );
 
       if (!isReadOnly) await markAsPrinted();
