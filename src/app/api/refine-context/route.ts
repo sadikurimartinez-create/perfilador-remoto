@@ -20,8 +20,10 @@ function formatCoord(n: number | null | undefined): string {
 }
 
 export async function POST(req: Request) {
+  let requestMode: string | undefined;
   try {
     const { context, photos, mode, geometryType, projectDescription, region } = (await req.json()) as RefineBody;
+    requestMode = mode;
 
     // ============================================================================
     // MÓDULO DE FUSIÓN OSINT RSS (Integrado aquí para evitar errores 404 de Vercel)
@@ -69,11 +71,28 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la siguiente estruct
 
       if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID no está configurado.");
       const authOptions = GCP_PRIVATE_KEY ? { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } } : undefined;
-      const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
-      const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ googleSearchRetrieval: {} }] });
-      const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.2 } });
-      const cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").replace(/```json/gi, '').replace(/```/g, '').trim();
-      return NextResponse.json(JSON.parse(cleanText));
+      
+      try {
+        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+        const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ googleSearchRetrieval: {} }] });
+        
+        const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.2 } });
+        const cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").replace(/```json/gi, '').replace(/```/g, '').trim();
+        
+        let parsed = JSON.parse(cleanText);
+        
+        // En caso de que la IA olvide envolverlo en "data" y "success"
+        if (parsed.eventosCriticos && !parsed.data) {
+          parsed = { success: true, data: parsed };
+        }
+        if (parsed.data && parsed.success === undefined) {
+          parsed.success = true;
+        }
+        return NextResponse.json(parsed);
+        
+      } catch (err: any) {
+        return NextResponse.json({ success: false, error: "Error en IA OSINT: " + err.message }, { status: 500 });
+      }
     }
 
     const coordsText =
@@ -222,6 +241,10 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido.
     
     const isAuthError = err.message?.includes("could not load the default credentials") || err.message?.includes("permission denied");
     
+    if (requestMode === "rss-news") {
+      return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    }
+
     return NextResponse.json({ 
       score: 0, 
       suggestions: `Error del Servidor: ${isAuthError ? "Problema con las credenciales de Google Cloud (GOOGLE_APPLICATION_CREDENTIALS)." : err.message || "Fallo en la comunicación con Vertex AI."} Verifique la terminal local para más detalles.`
