@@ -83,7 +83,7 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
     ctx.textBaseline = "middle";
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate(-Math.PI / 4);
-    ctx.fillText("SIGLAS DE TU DEPENDENCIA AQUÍ", 0, 0);
+    ctx.fillText("SSPE-CEIPOL", 0, 0);
     ctx.restore();
 
     // 5. Devolver ArrayBuffer para docx
@@ -489,89 +489,87 @@ export async function exportToWord(
   // 4. MAPAS (ATLAS CARTOGRÁFICO)
   const mapElements: any[] = [];
   if (mapSnapshots && mapSnapshots.length > 0) {
-    mapElements.push(new Paragraph({ pageBreakBefore: true }));
-    mapElements.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        children: [new TextRun({ text: "ATLAS CARTOGRÁFICO Y GEOESPACIAL", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
-        spacing: { after: 400 }
-      })
-    );
+    const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
+    const mapsSnaps = mapSnapshots.filter(s => !chartsSnaps.some((c) => c.title === s.title));
 
-    const mapCellsData: any[] = [];
-    for (const snapshot of mapSnapshots) {
-      if (snapshot.dataUrl && snapshot.dataUrl.startsWith("data:image")) {
-        try {
-          const tmpImg = new Image();
-          tmpImg.src = snapshot.dataUrl;
-          await new Promise<void>((resolve, reject) => {
-            tmpImg.onload = () => resolve();
-            tmpImg.onerror = () => reject(new Error("[exportToWord] Error en mapa"));
-          });
-          // Ajuste para matriz 2x2 (Mitad del ancho de la página)
-          const MAP_MAX_WIDTH = 270;
-          const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
-          const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
+    const processVisuals = async (title: string, snaps: any[]) => {
+      if (snaps.length === 0) return;
 
-          const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
-          mapCellsData.push({snapshot, mapBuffer, width: MAP_MAX_WIDTH, height: proportionalHeight });
-        } catch (e) { console.warn("Error en mapa:", e); }
+      const cellsData: any[] = [];
+      for (const snapshot of snaps) {
+        if (snapshot.dataUrl && snapshot.dataUrl.startsWith("data:image")) {
+          try {
+            const tmpImg = new Image();
+            tmpImg.src = snapshot.dataUrl;
+            await new Promise<void>((resolve, reject) => {
+              tmpImg.onload = () => resolve();
+              tmpImg.onerror = () => reject(new Error("[exportToWord] Error en visual"));
+            });
+            const MAP_MAX_WIDTH = 270;
+            const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
+            const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
+
+            const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
+            cellsData.push({snapshot, mapBuffer, width: MAP_MAX_WIDTH, height: proportionalHeight });
+          } catch (e) { console.warn("Error en visual:", e); }
+        }
       }
-    }
 
-    const mapRows: TableRow[] = [];
-    for (let i = 0; i < mapCellsData.length; i += 2) {
-      const m1 = mapCellsData[i];
-      const m2 = mapCellsData[i + 1];
-
-      const createMapCell = (m: any) => {
-        if (!m) return new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } } });
-        return new TableCell({
-          width: { size: 50, type: WidthType.PERCENTAGE },
-          margins: { top: 100, bottom: 200, left: 100, right: 100 },
-          borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } },
-          children: [
+      for (let i = 0; i < cellsData.length; i += 2) {
+        mapElements.push(new Paragraph({ pageBreakBefore: true }));
+        if (i === 0) {
+          mapElements.push(
             new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-              spacing: { after: 120 }
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new ImageRun({ data: m.mapBuffer, transformation: { width: m.width, height: m.height } } as any)]
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
-              spacing: { before: 60, after: 200 }
+              heading: HeadingLevel.HEADING_1,
+              children: [new TextRun({ text: title, bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
+              spacing: { after: 400 }
             })
-          ]
-        });
-      };
-      mapRows.push(new TableRow({ children: [createMapCell(m1), createMapCell(m2)] }));
-    }
+          );
+        }
 
-    if (mapRows.length > 0) {
-      mapElements.push(new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: mapRows,
-        borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
-      }));
-    }
+        const m1 = cellsData[i];
+        const m2 = cellsData[i + 1];
+
+        const createMapCell = (m: any) => {
+          if (!m) return new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } } });
+          return new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            margins: { top: 100, bottom: 200, left: 100, right: 100 },
+            borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
+                spacing: { after: 120 }
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new ImageRun({ data: m.mapBuffer, transformation: { width: m.width, height: m.height } } as any)]
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
+                spacing: { before: 60, after: 200 }
+              })
+            ]
+          });
+        };
+
+        mapElements.push(new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [new TableRow({ children: [createMapCell(m1), createMapCell(m2)] })],
+          borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
+        }));
+      }
+    };
+
+    await processVisuals("ATLAS CARTOGRÁFICO Y GEOESPACIAL", mapsSnaps);
+    await processVisuals("MODELOS ANALÍTICOS Y GRÁFICAS", chartsSnaps);
   }
 
   // 5. FOTOGRAFÍAS TÁCTICAS
   const photoElements: any[] = [];
   if (attachedPhotos && attachedPhotos.length > 0) {
-    photoElements.push(new Paragraph({ pageBreakBefore: true }));
-    photoElements.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        children: [new TextRun({ text: "ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
-        spacing: { after: 400 }
-      })
-    );
-
     const photoCellsData: any[] = [];
     for (let i = 0; i < attachedPhotos.length; i++) {
       const item = attachedPhotos[i];
@@ -604,8 +602,18 @@ export async function exportToWord(
       }
     }
 
-    const photoRows: TableRow[] = [];
     for (let i = 0; i < photoCellsData.length; i += 2) {
+      photoElements.push(new Paragraph({ pageBreakBefore: true }));
+      if (i === 0) {
+        photoElements.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [new TextRun({ text: "ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
+            spacing: { after: 400 }
+          })
+        );
+      }
+
       const p1 = photoCellsData[i];
       const p2 = photoCellsData[i + 1];
 
@@ -640,13 +648,9 @@ export async function exportToWord(
           ]
         });
       };
-      photoRows.push(new TableRow({ children: [createPhotoCell(p1), createPhotoCell(p2)] }));
-    }
-
-    if (photoRows.length > 0) {
       photoElements.push(new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: photoRows,
+        rows: [new TableRow({ children: [createPhotoCell(p1), createPhotoCell(p2)] })],
         borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
       }));
     }

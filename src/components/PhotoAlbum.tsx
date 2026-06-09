@@ -79,8 +79,38 @@ function readFileAsBase64(file: File): Promise<string> {
 
 /** Tatúa/Quema el sello de agua directamente en los píxeles de la imagen para que nunca se pierdan en Word/PDF */
 async function burnGpsOnImage(srcUrl: string): Promise<string> {
-  // Desactivado para evitar sello empalmado/doble en el informe
-  return Promise.resolve(srcUrl);
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(srcUrl);
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(-Math.PI / 4);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+      const watermarkSize = Math.max(40, canvas.width * 0.08);
+      ctx.font = `bold ${watermarkSize}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+      ctx.shadowBlur = 8;
+      ctx.fillText("SSPE-CEIPOL", 0, 0);
+      ctx.restore();
+      
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    img.onerror = () => resolve(srcUrl);
+    img.src = srcUrl;
+  });
 }
 
 function ElapsedTime({ running }: { running: boolean }) {
@@ -211,7 +241,8 @@ type PhotoAlbumProps = {
   projectId?: string;
   onSaveAnalysisToCloud?: (
     content: string,
-    attachedPhotos?: string[]
+    attachedPhotos?: string[],
+    summary?: string
   ) => Promise<void>;
 };
 
@@ -276,6 +307,7 @@ export function PhotoAlbum({
   const [docAuditScore, setDocAuditScore] = useState<number | null>(null);
   const [analysisAuditScore, setAnalysisAuditScore] = useState<number | null>(null);
 
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [reportSummary, setReportSummary] = useState("");
   const [reportNumber, setReportNumber] = useState("");
 
@@ -300,6 +332,13 @@ export function PhotoAlbum({
       setReportNumber(`${initials}/${dd}${mm}${yyyy}/01`);
     }
   }, [user, reportNumber]);
+
+  useEffect(() => {
+    if (project && (project as any).reportSummary && !reportSummary) {
+      setReportSummary((project as any).reportSummary);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
 
   // Estado para Consulta Vehicular OSINT
   const [plateQuery, setPlateQuery] = useState("");
@@ -488,7 +527,7 @@ const hasMinimumPhotos =
         // Versión robusta y rápida: se guarda siempre el texto del dictamen
         // y no se bloquea el UI intentando subir fotos pesadas.
         try {
-          await onSaveAnalysisToCloud(editableProfile, []);
+          await onSaveAnalysisToCloud(editableProfile, [], reportSummary);
           setHasSavedAnalysis(true);
         } catch (saveErr) {
           console.error(
@@ -2310,12 +2349,57 @@ const hasMinimumPhotos =
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Breve Resumen (Carátula)</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-slate-300">Breve Resumen (Carátula)</label>
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        const contentToSummarize = editableProfile || aiProfile || (project as any)?.analysisContent;
+                        if (!contentToSummarize) {
+                          alert("No hay dictamen para resumir. Genérelo primero.");
+                          return;
+                        }
+                        setIsGeneratingSummary(true);
+                        try {
+                          const sumRes = await fetch("/api/refine-context", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              context: "Resume el siguiente dictamen en un solo párrafo de máximo 40 palabras para usarlo en la carátula oficial. Dictamen:\n" + contentToSummarize.substring(0, 2000) + "\n\n(INSTRUCCIÓN: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con el resumen). NO agregues markdown ni comillas invertidas.)",
+                              photos: [],
+                              mode: "suggest",
+                              geometryType: project?.geometryType || "individual",
+                              projectDescription: project?.descripcion || "",
+                            })
+                          });
+                          const sumText = await sumRes.text();
+                          let sumData;
+                          try { sumData = JSON.parse(sumText); } catch(e) {}
+                          if (sumData) {
+                            let sVal = sumData.suggestions || "";
+                            const match = sVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                            if (match && match) { try { const parsed = JSON.parse(match); if (parsed.suggestions) sVal = parsed.suggestions; } catch(e) {} }
+                            else if (sVal.trim().startsWith("{")) { try { const parsed = JSON.parse(sVal); if (parsed.suggestions) sVal = parsed.suggestions; } catch(e) {} }
+                            setReportSummary(sVal.trim());
+                          }
+                        } catch (err) {
+                          alert("Error al autogenerar el resumen.");
+                        } finally {
+                          setIsGeneratingSummary(false);
+                        }
+                      }}
+                      disabled={isGeneratingSummary || isReadOnly}
+                      className="text-[10px] text-sky-400 hover:text-sky-300 font-medium disabled:opacity-50 transition-colors"
+                    >
+                      {isGeneratingSummary ? "⏳ Generando..." : "🪄 Auto-Generar"}
+                    </button>
+                  </div>
                   <textarea 
                     value={reportSummary} 
                     onChange={(e) => setReportSummary(e.target.value)} 
+                    disabled={isReadOnly}
                     placeholder="Resumen del contenido del informe..."
-                    className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 resize-y min-h-[40px]"
+                    className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 resize-y min-h-[40px] disabled:opacity-60"
                   />
                 </div>
               </div>
