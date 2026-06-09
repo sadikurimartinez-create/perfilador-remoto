@@ -762,24 +762,6 @@ const hasMinimumPhotos =
     }
   };
 
-  const addWatermarkToCanvas = (canvas: HTMLCanvasElement | null) => {
-    if (!canvas || typeof canvas.getContext !== "function") return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(-Math.PI / 4);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-    const watermarkSize = Math.max(40, canvas.width * 0.08);
-    ctx.font = `bold ${watermarkSize}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(255, 255, 255, 0.7)";
-    ctx.shadowBlur = 4;
-    ctx.fillText("SSPE-CEIPOL", 0, 0);
-    ctx.restore();
-  };
-
   const autoCaptureSnapshots = async (): Promise<{ title: string; dataUrl: string }[]> => {
     const currentSnapshots = [...mapSnapshots];
     let changed = false;
@@ -826,7 +808,6 @@ const hasMinimumPhotos =
             // Solo aumentamos el 'scale' para obtener alta resolución sin afectar el renderizado interno.
             const resultMap = await html2canvas(el, { useCORS: true, scale: 2.5 });
             const canvasMap = resultMap as unknown as HTMLCanvasElement;
-            addWatermarkToCanvas(canvasMap);
             const dataUrlMap = String(canvasMap.toDataURL("image/png"));
             currentSnapshots.push({ title: m.title, dataUrl: dataUrlMap });
             changed = true;
@@ -913,7 +894,8 @@ const hasMinimumPhotos =
         filename: `Dictamen_Criminologico_${safeName}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ['css', 'legacy'] }
       };
       html2pdf().set(opt).from(element).save().then(() => {
         if (!isReadOnly) void markAsPrinted();
@@ -2804,7 +2786,7 @@ const hasMinimumPhotos =
               for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
 
               return chunks.map((chunk: { title: string; dataUrl: string }[], cIdx: number) => (
-                <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative">
+            <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative" style={{ pageBreakBefore: "always" }}>
                   <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
                      <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">{title.toUpperCase()}</h2>
                      <span className="text-[10px] font-bold text-slate-400 uppercase">CEIPOL GEOINT</span>
@@ -2853,7 +2835,7 @@ const hasMinimumPhotos =
             }
 
             return photoChunks.map((chunk, idx) => (
-              <div key={`photo-chunk-${idx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative">
+            <div key={`photo-chunk-${idx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative" style={{ pageBreakBefore: "always" }}>
                 <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
                    <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO</h2>
                    <span className="text-[10px] font-bold text-slate-400 uppercase">INSPECCIÓN IN-SITU</span>
@@ -2863,9 +2845,14 @@ const hasMinimumPhotos =
                   {chunk.map((p, i) => (
                     <div key={p.id} className="border border-slate-300 rounded-lg flex flex-row bg-slate-50 h-[450px] overflow-hidden">
                       {/* Fotografía izquierda */}
-                      <div className="w-1/2 bg-black relative flex items-center justify-center p-1">
+                    <div className="w-1/2 bg-black relative flex items-center justify-center p-1 overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="max-w-full max-h-full object-contain" />
+                      <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="max-w-full max-h-full object-contain z-0" />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                        <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+                          SSPE-CEIPOL
+                        </span>
+                      </div>
                       </div>
                       {/* Texto derecha */}
                       <div className="w-1/2 flex flex-col p-5 bg-white border-l border-slate-300">

@@ -80,10 +80,13 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
       <div id="charts-export-container-1" className="w-full bg-white p-6 rounded-xl border border-[#D9DEE5] shadow-sm flex flex-col md:flex-row gap-6 items-stretch">
         
         {/* Gráfica 1: Composición del Entorno */}
-        <div id="chart-export-1" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Vocación Criminógena de la Zona</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Proporción de incidentes y atractores registrados</p>
-          <div className="w-full h-[250px]">
+        <div id="chart-export-1" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white relative overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <span className="text-slate-800/10 font-bold text-3xl sm:text-4xl -rotate-45 select-none tracking-widest drop-shadow-sm">SSPE-CEIPOL</span>
+          </div>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Vocación Criminógena de la Zona</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4 z-10 relative">Proporción de incidentes y atractores registrados</p>
+andos par          <div className="w-full h-[250px] z-10 relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={data.donaData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
@@ -96,10 +99,13 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
         </div>
 
         {/* Gráfica 2: Prioridad de Factores */}
-        <div id="chart-export-2" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Prioridad de Factores Criminógenos</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Nivel de impacto de cada factor (0 a 100)</p>
-          <div className="w-full h-[250px]">
+        <div id="chart-export-2" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white relative overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <span className="text-slate-800/10 font-bold text-3xl sm:text-4xl -rotate-45 select-none tracking-widest drop-shadow-sm">SSPE-CEIPOL</span>
+          </div>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Prioridad de Factores Criminógenos</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4 z-10 relative">Nivel de impacto de cada factor (0 a 100)</p>
+          <div className="w-full h-[250px] z-10 relative">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.factoresData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
@@ -121,10 +127,13 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
       <div id="charts-export-container-2" className="w-full bg-white p-6 rounded-xl border border-[#D9DEE5] shadow-sm flex flex-col md:flex-row gap-6 items-stretch">
         
         {/* Gráfica 3: Desorganización Social */}
-        <div id="chart-export-3" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Índice de Desorganización Social</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Integración de factores sociodemográficos y espaciales</p>
-          <div className="w-full h-[250px]">
+        <div id="chart-export-3" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white relative overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <span className="text-slate-800/10 font-bold text-3xl sm:text-4xl -rotate-45 select-none tracking-widest drop-shadow-sm">SSPE-CEIPOL</span>
+          </div>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Índice de Desorganización Social</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4 z-10 relative">Integración de factores sociodemográficos y espaciales</p>
+          <div className="w-full h-[250px] z-10 relative">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.radarData}>
                 <PolarGrid stroke="#D9DEE5" />
@@ -138,10 +147,13 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
         </div>
 
         {/* Gráfica 4: Tendencia Proyectada */}
-        <div id="chart-export-4" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
-          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Evolución de Riesgo (6 Meses)</h3>
-          <p className="text-[10px] text-[#5B6573] text-center mb-4">Crecimiento estimado de la amenaza (Base 100)</p>
-          <div className="w-full h-[250px]">
+        <div id="chart-export-4" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white relative overflow-hidden">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <span className="text-slate-800/10 font-bold text-3xl sm:text-4xl -rotate-45 select-none tracking-widest drop-shadow-sm">SSPE-CEIPOL</span>
+          </div>
+          <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Evolución de Riesgo (6 Meses)</h3>
+          <p className="text-[10px] text-[#5B6573] text-center mb-4 z-10 relative">Crecimiento estimado de la amenaza (Base 100)</p>
+          <div className="w-full h-[250px] z-10 relative">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.proyeccionData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
