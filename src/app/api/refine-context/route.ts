@@ -8,9 +8,10 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 type RefineBody = {
   context: string;
   photos?: { lat: number | null; lng: number | null; tipo?: string; comentario?: string }[];
-  mode?: "suggest" | "audit" | "validate-photos" | "hypothesis-qa";
+  mode?: "suggest" | "audit" | "validate-photos" | "hypothesis-qa" | "rss-news";
   geometryType?: "individual" | "lineal" | "poligono";
   projectDescription?: string;
+  region?: string;
 };
 
 function formatCoord(n: number | null | undefined): string {
@@ -20,7 +21,60 @@ function formatCoord(n: number | null | undefined): string {
 
 export async function POST(req: Request) {
   try {
-    const { context, photos, mode, geometryType, projectDescription } = (await req.json()) as RefineBody;
+    const { context, photos, mode, geometryType, projectDescription, region } = (await req.json()) as RefineBody;
+
+    // ============================================================================
+    // MÓDULO DE FUSIÓN OSINT RSS (Integrado aquí para evitar errores 404 de Vercel)
+    // ============================================================================
+    if (mode === "rss-news") {
+      const query = encodeURIComponent(`seguridad OR policia OR crimen OR violencia ${region || "Aguascalientes"}`);
+      const rssUrl = `https://news.google.com/rss/search?q=${query}&hl=es-419&gl=MX&ceid=MX:es-419`;
+      
+      let rssText = "";
+      try {
+        const rssRes = await fetch(rssUrl);
+        if (rssRes.ok) {
+          const xml = await rssRes.text();
+          const items = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+          rssText = items.slice(0, 15).map(item => {
+            const title = item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "";
+            const pubDate = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "";
+            const source = item.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || "";
+            return `- ${title.replace(/<!\[CDATA\[|\]\]>/g, '')} (${source} - ${pubDate})`;
+          }).join("\n");
+        }
+      } catch (e) {
+        console.warn("Fallo al obtener RSS local.", e);
+      }
+
+      const promptRss = `
+Eres un Analista de Inteligencia OSINT adscrito al CEIPOL.
+Tu tarea es correlacionar las noticias recientes de seguridad con la hipótesis operativa del investigador.
+
+Hipótesis del Investigador:
+"""
+${context || "Sin contexto proporcionado."}
+"""
+
+Titulares de Noticias Recientes (RSS Extraído):
+"""
+${rssText || "Busca en la web las noticias policiales más recientes de " + (region || "Aguascalientes") + "."}
+"""
+
+Analiza estrictamente si los eventos recientes en las noticias confirman o agravan los riesgos descritos en la hipótesis.
+
+Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la siguiente estructura exacta:
+{ "success": true, "data": { "eventosCriticos": [ { "titulo": "Título de la noticia", "fuente": "Medio", "resumenTactico": "Por qué es relevante para el polígono" } ], "totalNoticiasLeidas": 15, "correlacionPlataforma": { "conexionDenue": "Relación con negocios", "conexionScince": "Relación demográfica", "conexionHistorica": "Relación historial" }, "conclusionOperativa": "Conclusión en 2 líneas." } }
+`.trim();
+
+      if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID no está configurado.");
+      const authOptions = GCP_PRIVATE_KEY ? { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } } : undefined;
+      const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+      const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ googleSearchRetrieval: {} }] });
+      const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.2 } });
+      const cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").replace(/```json/gi, '').replace(/```/g, '').trim();
+      return NextResponse.json(JSON.parse(cleanText));
+    }
 
     const coordsText =
       photos && photos.length > 0

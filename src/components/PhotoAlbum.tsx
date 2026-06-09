@@ -1576,11 +1576,12 @@ const hasMinimumPhotos =
               setIsCheckingRss(true);
               setError(null);
               try {
-                const res = await fetch("/api/rss-news", {
+                const res = await fetch("/api/refine-context", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    projectContext: analysisContext,
+                    context: analysisContext,
+                    mode: "rss-news",
                     region: "Aguascalientes"
                   })
                 });
@@ -1589,7 +1590,7 @@ const hasMinimumPhotos =
                 try {
                   data = JSON.parse(textRes);
                 } catch (e) {
-                  throw new Error(`La ruta /api/rss-news no existe o devolvió HTML (Status: ${res.status}).`);
+                  throw new Error(`Error en el servidor al procesar noticias (Status: ${res.status}).`);
                 }
                 if (res.ok && data.success) {
                   const d = data.data;
