@@ -44,6 +44,21 @@ const getSeverityWeight = (crimeName: string) => {
   return 2; 
 };
 
+// Generador matemático para puntear el radio de los lugares de acecho
+const getDottedCirclePath = (lat: number, lng: number, radiusMeters: number) => {
+  const points = [];
+  for (let i = 0; i <= 36; i++) {
+    const angle = (i / 36) * 2 * Math.PI;
+    const dx = radiusMeters * Math.cos(angle);
+    const dy = radiusMeters * Math.sin(angle);
+    points.push({
+       lat: lat + (dy / 111320),
+       lng: lng + (dx / (40075 * Math.cos(lat * Math.PI / 180)))
+    });
+  }
+  return points;
+};
+
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
 const containerStyle: React.CSSProperties = {
@@ -88,6 +103,8 @@ export function AnalysisMap({
   const [mapReady, setMapReady] = useState(false);
   const [isPlacingManualPoi, setIsPlacingManualPoi] = useState(false);
   const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
+  const [accessRoutes, setAccessRoutes] = useState<any[][]>([]);
+  const [escapeRoutes, setEscapeRoutes] = useState<any[][]>([]);
 
   const photosWithCoords = useMemo(
     () => album.filter(hasValidCoords) as Array<{ id: string; lat: number; lng: number; tipo: string; comentario: string }>,
@@ -155,6 +172,45 @@ export function AnalysisMap({
     boundsPoints.forEach((pt) => bounds.extend(new g.maps.LatLng(pt.lat, pt.lng)));
     mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
   }, [mapReady, boundsPoints]);
+
+  // Efecto para calcular rutas tácticas reales sobre el trazado de las calles
+  useEffect(() => {
+    if (viewMode !== "MOBILITY" && viewMode !== "PREDICTIVE") return;
+    if (!mapReady || typeof window === "undefined" || !(window as any).google) return;
+    if (top5Pois.length === 0 || !center) return;
+
+    const ds = new (window as any).google.maps.DirectionsService();
+    const access: any[][] = [];
+    const escape: any[][] = [];
+
+    const fetchRoute = (origin: any, destination: any, mode: string): Promise<any[]> => {
+      return new Promise((resolve) => {
+        ds.route({ origin, destination, travelMode: mode }, (result: any, status: any) => {
+          if (status === "OK" && result) {
+            resolve(result.routes[0].overview_path);
+          } else {
+            resolve([origin, destination]); // Fallback a línea recta si no hay calle mapeada
+          }
+        });
+      });
+    };
+
+    const generateRoutes = async () => {
+      for (let i = 0; i < top5Pois.length; i++) {
+        const poiLatLng = { lat: top5Pois[i].lat as number, lng: top5Pois[i].lng as number };
+        if (i % 2 === 0) {
+          access.push(await fetchRoute(poiLatLng, center, "WALKING")); // Rutas de acceso / peatonales
+        } else {
+          escape.push(await fetchRoute(center, poiLatLng, "DRIVING")); // Rutas de fuga / vehiculares
+        }
+        await new Promise(r => setTimeout(r, 250)); // Pequeña pausa para no saturar la API de Google
+      }
+      setAccessRoutes(access);
+      setEscapeRoutes(escape);
+    };
+
+    generateRoutes();
+  }, [mapReady, viewMode, top5Pois, center]);
 
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
   const { isLoaded, loadError } = useJsApiLoader({
@@ -264,7 +320,9 @@ export function AnalysisMap({
                </div>
                <div className="flex items-center gap-2 mb-1"><span className="w-3 h-3 rounded-full bg-[#1F4E79] opacity-20 border border-[#eab308]"></span> Área de Influencia Directa</div>
                <div className="font-bold mb-2 mt-2 border-b border-gray-300 pb-1 text-[#0D2B52] uppercase">Corredores y Rutas</div>
-               <div className="flex items-center gap-2 mb-1"><span className="w-5 h-1 border-t-2 border-dashed border-[#D96A00]"></span> Conexión de Atractores</div>
+              <div className="flex items-center gap-2 mb-1"><span className="w-5 h-2 bg-[#10b981] opacity-60"></span> Rutas de Acceso (Calles)</div>
+              <div className="flex items-center gap-2 mb-1"><span className="w-5 h-2 bg-[#ef4444] opacity-60"></span> Rutas de Fuga (Calles)</div>
+              <div className="flex items-center gap-2 mb-1"><span className="w-4 h-4 rounded-full border-2 border-dashed border-[#0ea5e9]"></span> Lugar de Acecho Punteado</div>
                <div className="flex items-center gap-2"><span className="w-4 h-3 bg-slate-900 border border-sky-400"></span> Puntos de Evidencia</div>
             </>
           )}
@@ -394,20 +452,56 @@ export function AnalysisMap({
           />
         )}
 
-        {/* Movilidad Criminal: Líneas conectando nodos y POIs */}
-        {!isPreliminary && viewMode === "MOBILITY" && top5Pois.map((p, idx) => (
+        {/* Rutas de Acceso (Sombreando calles) */}
+        {!isPreliminary && (viewMode === "MOBILITY" || viewMode === "PREDICTIVE") && accessRoutes.map((path, idx) => (
           <Polyline
-            key={`route-attractor-${idx}`}
-            path={[center, { lat: p.lat as number, lng: p.lng as number }]}
+            key={`route-access-${idx}`}
+            path={path}
             options={{
-              strokeColor: "#D96A00",
+              strokeColor: "#10b981", // Verde
+              strokeOpacity: 0.6,
+              strokeWeight: 8,
+              zIndex: 10
+            }}
+          />
+        ))}
+
+        {/* Rutas de Fuga (Sombreando calles) */}
+        {!isPreliminary && (viewMode === "MOBILITY" || viewMode === "PREDICTIVE") && escapeRoutes.map((path, idx) => (
+          <Polyline
+            key={`route-escape-${idx}`}
+            path={path}
+            options={{
+              strokeColor: "#ef4444", // Rojo
+              strokeOpacity: 0.6,
+              strokeWeight: 8,
+              zIndex: 10
+            }}
+          />
+        ))}
+
+        {/* Lugares de acecho punteados de la IA */}
+        {!isPreliminary && viewMode === "MOBILITY" && lugaresAcecho.map((acecho: any, idx: number) => (
+          <Polyline
+            key={`acecho-dot-${idx}`}
+            path={getDottedCirclePath(acecho.lat, acecho.lng, 50)}
+            options={{
               strokeOpacity: 0,
-              strokeWeight: 3,
-              icons: [{
-                icon: { path: "M 0,-1 0,1", strokeOpacity: 0.8, scale: 3 },
-                offset: "0",
-                repeat: "15px"
-              }]
+              icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 2.5, strokeColor: "#0ea5e9" }, offset: "0", repeat: "12px" }],
+              zIndex: 20
+            }}
+          />
+        ))}
+
+        {/* Lugares de acecho punteados MANUALES del fotógrafo */}
+        {!isPreliminary && viewMode === "MOBILITY" && photosWithCoords.filter(p => p.tipo === "Lugar de Acecho").map((p: any, idx: number) => (
+          <Polyline
+            key={`acecho-manual-dot-${idx}`}
+            path={getDottedCirclePath(p.lat, p.lng, 50)}
+            options={{
+              strokeOpacity: 0,
+              icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 2.5, strokeColor: "#0ea5e9" }, offset: "0", repeat: "12px" }],
+              zIndex: 20
             }}
           />
         ))}
