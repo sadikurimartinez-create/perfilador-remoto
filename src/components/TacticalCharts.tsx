@@ -80,7 +80,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
       <div id="charts-export-container-1" className="w-full bg-white p-6 rounded-xl border border-[#D9DEE5] shadow-sm flex flex-col md:flex-row gap-6 items-stretch">
         
         {/* Gráfica 1: Composición del Entorno */}
-        <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
+        <div id="chart-export-1" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
           <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Vocación Criminógena de la Zona</h3>
           <p className="text-[10px] text-[#5B6573] text-center mb-4">Proporción de incidentes y atractores registrados</p>
           <div className="w-full h-[250px]">
@@ -96,7 +96,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
         </div>
 
         {/* Gráfica 2: Prioridad de Factores */}
-        <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
+        <div id="chart-export-2" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
           <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Prioridad de Factores Criminógenos</h3>
           <p className="text-[10px] text-[#5B6573] text-center mb-4">Nivel de impacto de cada factor (0 a 100)</p>
           <div className="w-full h-[250px]">
@@ -121,7 +121,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
       <div id="charts-export-container-2" className="w-full bg-white p-6 rounded-xl border border-[#D9DEE5] shadow-sm flex flex-col md:flex-row gap-6 items-stretch">
         
         {/* Gráfica 3: Desorganización Social */}
-        <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
+        <div id="chart-export-3" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
           <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Índice de Desorganización Social</h3>
           <p className="text-[10px] text-[#5B6573] text-center mb-4">Integración de factores sociodemográficos y espaciales</p>
           <div className="w-full h-[250px]">
@@ -138,7 +138,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
         </div>
 
         {/* Gráfica 4: Tendencia Proyectada */}
-        <div className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
+        <div id="chart-export-4" className="flex-1 flex flex-col border border-[#D9DEE5] p-4 rounded-lg bg-white">
           <h3 className="text-[14px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide">Evolución de Riesgo (6 Meses)</h3>
           <p className="text-[10px] text-[#5B6573] text-center mb-4">Crecimiento estimado de la amenaza (Base 100)</p>
           <div className="w-full h-[250px]">

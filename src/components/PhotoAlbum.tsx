@@ -757,40 +757,27 @@ const hasMinimumPhotos =
     const currentSnapshots = [...mapSnapshots];
     let changed = false;
 
-    // Capturar Gráficas
-    if (!currentSnapshots.some((s) => s.title.includes("GRÁFICAS: RADAR")) && analysisResult) {
-      const chartsEl1 = document.getElementById("charts-export-container-1");
-      if (chartsEl1) {
-        try {
-          const originalStyle = chartsEl1.getAttribute("style") || "";
-          chartsEl1.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important;`);
-          await new Promise((r) => setTimeout(r, 1200));
-          const result1 = await html2canvas(chartsEl1, { useCORS: true, scale: 2, backgroundColor: "#ffffff", windowWidth: 1024 });
-          const canvas1 = result1 as unknown as HTMLCanvasElement;
-          chartsEl1.setAttribute("style", originalStyle);
-          const dataUrl1 = String(canvas1.toDataURL("image/png"));
-          currentSnapshots.unshift({ title: "GRÁFICAS: RADAR Y FACTORES", dataUrl: dataUrl1 });
-          changed = true;
-        } catch(err) {
-          console.warn("Ignorar error de renderizado en graficas:", err);
-        }
-      }
+    // Capturar Gráficas Individuales
+    const chartIds = [
+      { id: "chart-export-1", title: "GRÁFICA 1: COMPOSICIÓN DEL ENTORNO" },
+      { id: "chart-export-2", title: "GRÁFICA 2: PRIORIDAD DE FACTORES" },
+      { id: "chart-export-3", title: "GRÁFICA 3: DESORGANIZACIÓN SOCIAL" },
+      { id: "chart-export-4", title: "GRÁFICA 4: EVOLUCIÓN DE RIESGO" }
+    ];
 
-      const chartsEl2 = document.getElementById("charts-export-container-2");
-      if (chartsEl2) {
-        try {
-          const originalStyle = chartsEl2.getAttribute("style") || "";
-          chartsEl2.setAttribute("style", `${originalStyle}; width: 1024px !important; max-width: none !important;`);
-          await new Promise((r) => setTimeout(r, 1200));
-          const result2 = await html2canvas(chartsEl2, { useCORS: true, scale: 2, backgroundColor: "#ffffff", windowWidth: 1024 });
-          const canvas2 = result2 as unknown as HTMLCanvasElement;
-          chartsEl2.setAttribute("style", originalStyle);
-          const insertIndex = currentSnapshots.findIndex((s) => s.title === "GRÁFICAS: RADAR Y FACTORES");
-          const dataUrl2 = String(canvas2.toDataURL("image/png"));
-          currentSnapshots.splice(insertIndex >= 0 ? insertIndex + 1 : 0, 0, { title: "GRÁFICAS: RANKING Y PROYECCIÓN", dataUrl: dataUrl2 });
-          changed = true;
-        } catch(err) {
-          console.warn("Ignorar error de renderizado en graficas 2:", err);
+    for (const c of chartIds) {
+      if (!currentSnapshots.some((s) => s.title === c.title) && analysisResult) {
+        const el = document.getElementById(c.id);
+        if (el) {
+          try {
+            const resultMap = await html2canvas(el, { useCORS: true, scale: 2.5, backgroundColor: "#ffffff" });
+            const canvasMap = resultMap as unknown as HTMLCanvasElement;
+            const dataUrlMap = String(canvasMap.toDataURL("image/png"));
+            currentSnapshots.push({ title: c.title, dataUrl: dataUrlMap });
+            changed = true;
+          } catch(err) {
+            console.warn("Ignorar error de renderizado en gráficas:", err);
+          }
         }
       }
     }
@@ -846,8 +833,8 @@ const hasMinimumPhotos =
     const snapshotsToExport = await autoCaptureSnapshots();
     const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
 
-    const mapsSnaps = snapshotsToExport.filter((s) => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía"));
-    const chartsSnaps = snapshotsToExport.filter((s) => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica") || !mapsSnaps.some((m) => m.title === s.title));
+    const chartsSnaps = snapshotsToExport.filter((s) => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
+    const mapsSnaps = snapshotsToExport.filter((s) => !chartsSnaps.some((c) => c.title === s.title));
     const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
 
     const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
@@ -2754,8 +2741,8 @@ const hasMinimumPhotos =
 
           {/* ANEXOS DE MAPAS Y GRÁFICAS */}
           {(() => {
-            const mapsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("mapa") || s.title.toLowerCase().includes("zonas") || s.title.toLowerCase().includes("atractores") || s.title.toLowerCase().includes("topografía") || s.title.toLowerCase().includes("densidad") || s.title.toLowerCase().includes("corredores"));
-            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica") || !mapsSnaps.some((m) => m.title === s.title));
+            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
+            const mapsSnaps = mapSnapshots.filter(s => !chartsSnaps.some((c) => c.title === s.title));
 
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
