@@ -1704,9 +1704,18 @@ const hasMinimumPhotos =
                 if (res.ok && data.success) {
                   const d = data.data;
                   const hallazgos = d.hallazgos && d.hallazgos.length > 0 ? d.hallazgos.map((h: any) => `- ${h.nombre} (${h.nivelCoincidencia}): ${h.descripcion}`).join("\n") : "No se identificaron zonas de riesgo coincidentes.";
-                  const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL]\nParámetros:\n- Sujeto: ${geoSubject}\n- Acción: ${geoAction}\n- Ambiente: ${geoEnvironment}\n\nConceptos extraídos por IA: ${d.conceptosExtraidos?.join(", ")}\n\nHALLAZGOS EN RADIOS DE 1KM:\n${hallazgos}\n\nCONCLUSIÓN DEL BARRIDO: ${d.conclusion}`;
+                  const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL]\n(INSTRUCCIÓN OBLIGATORIA PARA LA IA: Debes detallar e insertar de manera explícita en tu dictamen final todos y cada uno de los siguientes hallazgos).\n\nParámetros:\n- Sujeto: ${geoSubject}\n- Acción: ${geoAction}\n- Ambiente: ${geoEnvironment}\n\nConceptos extraídos por IA: ${d.conceptosExtraidos?.join(", ")}\n\nHALLAZGOS EN RADIOS DE 1KM:\n${hallazgos}\n\nCONCLUSIÓN DEL BARRIDO: ${d.conclusion}`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setIsAnalysisContextAudited(false); setGeoSubject(""); setGeoAction(""); setGeoEnvironment(""); setGeoImage(null);
+                  
+                  if (d.hallazgos && d.hallazgos.length > 0) {
+                    const newPois = d.hallazgos.map((h: any) => ({
+                      lat: h.lat,
+                      lng: h.lng,
+                      label: `Geo-IA: ${h.nombre}`
+                    }));
+                    setManualPois(prev => [...prev, ...newPois]);
+                  }
                   alert("¡Barrido Geo-Espacial completado con éxito!\nSe ha inyectado el análisis en la hipótesis.");
                 } else { setError(data.error || "Error al realizar la búsqueda geo-espacial."); }
               } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
