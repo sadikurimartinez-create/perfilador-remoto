@@ -1576,7 +1576,7 @@ const hasMinimumPhotos =
               setIsCheckingRss(true);
               setError(null);
               try {
-                const res = await fetch("/api/osint/rss-parser", {
+                const res = await fetch("/api/rss-news", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -1589,7 +1589,7 @@ const hasMinimumPhotos =
                 try {
                   data = JSON.parse(textRes);
                 } catch (e) {
-                  throw new Error(`La ruta /api/osint/rss-parser no existe o devolvió HTML (Status: ${res.status}).`);
+                  throw new Error(`La ruta /api/rss-news no existe o devolvió HTML (Status: ${res.status}).`);
                 }
                 if (res.ok && data.success) {
                   const d = data.data;
