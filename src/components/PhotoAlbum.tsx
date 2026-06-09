@@ -593,13 +593,18 @@ const hasMinimumPhotos =
       // Empaquetar las instrucciones de la Evidencia Multimodal para la IA
       const multimodalContext = documents.map(d => `[Archivo Adjunto al Expediente: ${d.name} | Tipo: ${d.type}]\nInstrucción Táctica del Analista: ${d.context}`).join("\n\n");
 
+      // Forzar a la IA a describir detalladamente las evidencias de StreetView o del barrido físico
+      const svInstruction = svData && svData.length > 0
+        ? `\n\n[INSTRUCCIÓN TÁCTICA OBLIGATORIA - BARRIDO DE ACECHO]\nSe obtuvieron ${svData.length} evidencias fotográficas automatizadas de lugares de acecho (StreetView): ${svData.map((s: any) => s.name).join(', ')}. ES TOTALMENTE OBLIGATORIO que dediques un apartado en tu dictamen para enumerar y explicar detalladamente CADA UNO de estos lugares, justificando con claridad por qué representan un riesgo físico o refugio criminal.`
+        : `\n\n[INSTRUCCIÓN TÁCTICA OBLIGATORIA - BARRIDO DE ACECHO]\nPROHIBIDO mencionar la frase "no se dispone de un barrido de StreetView". El barrido de lugares de acecho se garantizó a través de la exploración in-situ del analista. Usa estrictamente las fotografías adjuntas por el investigador para extraer, enumerar y explicar con total claridad las evidencias de riesgo y vulnerabilidad física encontradas en terreno.`;
+
       try {
         const res = await fetch("/api/generate-profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
-            analysisContext,
+            analysisContext: (analysisContext || "") + svInstruction,
             analysisRadius,
             focusAreas,
             incidenciaLocal,
