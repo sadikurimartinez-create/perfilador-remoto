@@ -7,13 +7,13 @@ export function TacticalMaps({ album, analysisResult, analysisRadius, analysisPo
     <div className="w-full flex flex-col gap-6" style={{ fontFamily: 'Aptos, Calibri, "Segoe UI", sans-serif' }}>
       
       {/* PÁGINA 1: DENSIDAD Y MOVILIDAD */}
-      <div className="w-full flex flex-col md:flex-row gap-6 bg-slate-50 p-6 rounded-xl border border-slate-300 shadow-sm items-stretch">
+      <div className="w-full flex flex-col gap-8 bg-slate-50 p-6 rounded-xl border border-slate-300 shadow-sm">
         {/* Mapa 1: Densidad Criminológica */}
         <div className="flex-1 flex flex-col bg-white rounded-lg shadow-sm border-2 border-[#0D2B52] overflow-hidden" id="map-density">
           <div className="bg-[#B22222] text-white p-2 text-center font-bold text-sm uppercase tracking-widest shadow-md z-10">
             1. Mapa de Calor (Hotspots Históricos)
           </div>
-          <div className="w-full h-[400px] relative bg-slate-100">
+          <div className="w-full relative">
             <AnalysisMap viewMode="DENSITY" album={album} analysisResult={analysisResult} analysisRadius={analysisRadius} analysisPolygon={analysisPolygon} manualPois={manualPois} geometryType={geometryType} />
           </div>
         </div>
@@ -23,20 +23,20 @@ export function TacticalMaps({ album, analysisResult, analysisRadius, analysisPo
           <div className="bg-[#1F4E79] text-white p-2 text-center font-bold text-sm uppercase tracking-widest shadow-md z-10">
             2. Topografía del Entorno y Atractores
           </div>
-          <div className="w-full h-[400px] relative bg-slate-100">
+          <div className="w-full relative">
             <AnalysisMap viewMode="TOPOGRAPHY" album={album} analysisResult={analysisResult} analysisRadius={analysisRadius} analysisPolygon={analysisPolygon} manualPois={manualPois} geometryType={geometryType} />
           </div>
         </div>
       </div>
 
       {/* PÁGINA 2: ATRACTORES Y PROYECCIÓN */}
-      <div className="w-full flex flex-col md:flex-row gap-6 bg-slate-50 p-6 rounded-xl border border-slate-300 shadow-sm items-stretch">
+      <div className="w-full flex flex-col gap-8 bg-slate-50 p-6 rounded-xl border border-slate-300 shadow-sm">
         {/* Mapa 3: Atractores y Factores */}
         <div className="flex-1 flex flex-col bg-white rounded-lg shadow-sm border-2 border-[#0D2B52] overflow-hidden" id="map-attractors">
           <div className="bg-[#D96A00] text-white p-2 text-center font-bold text-sm uppercase tracking-widest shadow-md z-10">
             3. Movilidad y Corredores de Riesgo
           </div>
-          <div className="w-full h-[400px] relative bg-slate-100">
+          <div className="w-full relative">
             <AnalysisMap viewMode="MOBILITY" album={album} analysisResult={analysisResult} analysisRadius={analysisRadius} analysisPolygon={analysisPolygon} manualPois={manualPois} geometryType={geometryType} />
           </div>
         </div>
@@ -46,7 +46,7 @@ export function TacticalMaps({ album, analysisResult, analysisRadius, analysisPo
           <div className="bg-[#5B6573] text-white p-2 text-center font-bold text-sm uppercase tracking-widest shadow-md z-10">
             4. Proyección Territorial (Expansión)
           </div>
-          <div className="w-full h-[400px] relative bg-slate-100">
+          <div className="w-full relative">
             <AnalysisMap viewMode="PREDICTIVE" album={album} analysisResult={analysisResult} analysisRadius={analysisRadius} analysisPolygon={analysisPolygon} manualPois={manualPois} geometryType={geometryType} />
           </div>
         </div>
