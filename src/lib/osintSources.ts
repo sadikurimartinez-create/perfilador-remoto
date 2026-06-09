@@ -64,7 +64,18 @@ export const OSINT_SOURCES: OsintSource[] = [
   // ==========================================
   { id: "api_fed_inegi", name: "INEGI API", url: "https://www.inegi.org.mx/servicios/api_indicadores.html", type: "API", level: "DATOS_ABIERTOS" },
   { id: "api_fed_denue", name: "DENUE", url: "https://www.inegi.org.mx/app/mapa/denue/", type: "API", level: "DATOS_ABIERTOS" },
-  { id: "api_fed_datamx", name: "Data México", url: "https://www.economia.gob.mx/datamexico", type: "API", level: "DATOS_ABIERTOS" }
+  { id: "api_fed_datamx", name: "Data México", url: "https://www.economia.gob.mx/datamexico", type: "API", level: "DATOS_ABIERTOS" },
+
+  // ==========================================
+  // NIVEL 4: REDES SOCIALES Y FOROS (REDDIT)
+  // ==========================================
+  { id: "rss_reddit_mexico", name: "Reddit r/mexico", url: "https://www.reddit.com/r/mexico/new/.rss", type: "RSS", level: "NACIONAL" },
+  { id: "rss_reddit_mexicocity", name: "Reddit r/MexicoCity", url: "https://www.reddit.com/r/MexicoCity/new/.rss", type: "RSS", level: "REGIONAL", region: "Ciudad de México" },
+  { id: "rss_reddit_ags", name: "Reddit r/Aguascalientes", url: "https://www.reddit.com/r/Aguascalientes/new/.rss", type: "RSS", level: "REGIONAL", region: "Aguascalientes" },
+  { id: "rss_reddit_noticiasmexico", name: "Reddit r/NoticiasMexico", url: "https://www.reddit.com/r/NoticiasMexico/new/.rss", type: "RSS", level: "NACIONAL" },
+  { id: "api_reddit_mexico", name: "Reddit r/mexico JSON", url: "https://www.reddit.com/r/mexico/new.json", type: "API", level: "NACIONAL" },
+  { id: "api_reddit_ags", name: "Reddit r/Aguascalientes JSON", url: "https://www.reddit.com/r/Aguascalientes/new.json", type: "API", level: "REGIONAL", region: "Aguascalientes" },
+  { id: "api_reddit_search_ags", name: "Reddit Search Aguascalientes", url: "https://www.reddit.com/search.json?q=Aguascalientes", type: "API", level: "REGIONAL", region: "Aguascalientes" }
 ];
 
 /**

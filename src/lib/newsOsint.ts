@@ -45,7 +45,12 @@ const RSS_FEEDS = [
   { nombre: "El Sol de León", url: "https://www.elsoldeleon.com.mx/rss.xml" },
   { nombre: "El Sol de Irapuato", url: "https://www.elsoldeirapuato.com.mx/rss.xml" },
   { nombre: "Periódico Correo", url: "https://periodicocorreo.com.mx/feed/" },
-  { nombre: "Zona Franca", url: "https://zonafranca.mx/feed/" }
+  { nombre: "Zona Franca", url: "https://zonafranca.mx/feed/" },
+  // Foros y Redes Sociales (Reddit)
+  { nombre: "Reddit México", url: "https://www.reddit.com/r/mexico/new/.rss" },
+  { nombre: "Reddit CDMX", url: "https://www.reddit.com/r/MexicoCity/new/.rss" },
+  { nombre: "Reddit Aguascalientes", url: "https://www.reddit.com/r/Aguascalientes/new/.rss" },
+  { nombre: "Reddit NoticiasMéxico", url: "https://www.reddit.com/r/NoticiasMexico/new/.rss" }
 ];
 
 export async function searchNewsOsint(
@@ -57,7 +62,11 @@ export async function searchNewsOsint(
     return { exito: false, resumen: "Sin ubicación suficiente para el rastreo de noticias.", noticiasRelevantes: [] };
   }
 
-  const keywords = ["robo", "asalto", "homicidio", "asesinato", "balacera", "cateo", "operativo", "cártel", "narcomenudeo", "riña", "detenido", "violencia", "sicarios", "ejecutado", "feminicidio", "secuestro", "extorsión", "arma", "crimen", "policía"];
+  const keywords = [
+    "robo", "asalto", "homicidio", "asesinato", "balacera", "cateo", "operativo", "cártel", "narcomenudeo", "riña", "detenido", "violencia", "sicarios", "ejecutado", "feminicidio", "secuestro", "extorsión", "arma", "crimen", "policía",
+    // 25 palabras adicionales sobre Toxicomanía / Drogas
+    "drogas", "adicción", "cristal", "metanfetaminas", "fentanilo", "cocaína", "marihuana", "heroína", "sobredosis", "picaderos", "anexos", "estupefacientes", "psicotrópicos", "enervantes", "consumo", "narcomenudistas", "dealers", "intoxicación", "jeringas", "pipas", "inhalantes", "adictos", "drogadictos", "sustancias", "dosis"
+  ];
   const locationKeywords = [colonia, municipio, estado]
     .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
     .map((k) => k.toLowerCase());
