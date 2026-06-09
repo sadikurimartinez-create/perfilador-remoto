@@ -4,6 +4,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
+import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
@@ -219,6 +220,7 @@ export function PhotoAlbum({
   projectId,
   onSaveAnalysisToCloud,
 }: PhotoAlbumProps = {}) {
+  const { user } = useAuth();
   const {
     project,
     album,
@@ -273,6 +275,31 @@ export function PhotoAlbum({
   const [isValidatingPhotos, setIsValidatingPhotos] = useState(false);
   const [docAuditScore, setDocAuditScore] = useState<number | null>(null);
   const [analysisAuditScore, setAnalysisAuditScore] = useState<number | null>(null);
+
+  const [reportSummary, setReportSummary] = useState("");
+  const [reportNumber, setReportNumber] = useState("");
+
+  useEffect(() => {
+    if (user && !reportNumber) {
+      const u = user as any;
+      const n = u.nombre || "";
+      const ap = u.apellidoPaterno || "";
+      const am = u.apellidoMaterno || "";
+      let initials = "USR";
+      if (n || ap || am) {
+        initials = `${n.charAt(0) || ""}${ap.charAt(0) || ""}${am.charAt(0) || ""}`.toUpperCase();
+      } else if (u.username) {
+        initials = u.username.substring(0, 3).toUpperCase();
+      }
+      
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      
+      setReportNumber(`${initials}/${dd}${mm}${yyyy}/01`);
+    }
+  }, [user, reportNumber]);
 
   // Estado para Consulta Vehicular OSINT
   const [plateQuery, setPlateQuery] = useState("");
@@ -2255,6 +2282,26 @@ const hasMinimumPhotos =
               <h4 className="text-lg font-bold text-sky-200 tracking-tight">
                 Análisis Espacial y Estadístico
               </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:hidden">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Número de Informe</label>
+                  <input 
+                    type="text" 
+                    value={reportNumber} 
+                    onChange={(e) => setReportNumber(e.target.value)} 
+                    className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300">Breve Resumen (Carátula)</label>
+                  <textarea 
+                    value={reportSummary} 
+                    onChange={(e) => setReportSummary(e.target.value)} 
+                    placeholder="Resumen del contenido del informe..."
+                    className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 resize-y min-h-[40px]"
+                  />
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2 pt-1 print:hidden">
                 {!isReadOnly && projectId && (
                   <button
@@ -2691,8 +2738,8 @@ const hasMinimumPhotos =
               <div className="bg-slate-50 border-x border-b border-slate-300 py-8 px-10 rounded-b-lg w-full shadow-md">
                 <div className="grid grid-cols-2 gap-6 text-left">
                   <div className="flex flex-col border-b border-slate-300 pb-3">
-                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Expediente Oficial</span>
-                    <span className="font-mono text-slate-800 text-sm mt-1">{project?.id || "DICTAMEN_CRIMINOLOGICO"}</span>
+                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Número de Informe</span>
+                    <span className="font-mono text-slate-800 text-sm mt-1">{reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO"}</span>
                   </div>
                   <div className="flex flex-col border-b border-slate-300 pb-3">
                     <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Fecha de Emisión</span>
@@ -2708,7 +2755,14 @@ const hasMinimumPhotos =
                   </div>
                 </div>
                 
-                <div className="mt-8 flex flex-col items-center justify-center p-4 border-2 border-slate-300 rounded-lg bg-white">
+                <div className="mt-6 flex flex-col border-b border-slate-300 pb-3 text-left">
+                  <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Resumen del Contenido</span>
+                  <span className="text-slate-800 text-sm mt-1 leading-relaxed">
+                    {reportSummary || "Dictamen táctico del perfil criminológico ambiental enfocado en el análisis de vulnerabilidades, factores de riesgo y movilidad criminal."}
+                  </span>
+                </div>
+
+                <div className="mt-6 flex flex-col items-center justify-center p-4 border-2 border-slate-300 rounded-lg bg-white">
                   <span className="font-bold text-slate-600 uppercase text-xs mb-2 tracking-widest">Nivel de Riesgo (IA)</span>
                   <span className={`text-2xl font-black uppercase px-6 py-2 rounded shadow-sm ${profileRiskLevel === 'alto' ? 'bg-red-600 text-white' : profileRiskLevel === 'medio' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>{profileRiskLevel || "PENDIENTE"}</span>
                 </div>
