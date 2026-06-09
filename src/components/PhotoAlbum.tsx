@@ -1602,6 +1602,121 @@ const hasMinimumPhotos =
           </button>
         </div>
       </div>
+
+      {/* MÓDULO DE BÚSQUEDA MULTIMODAL GEO-ESPACIAL */}
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Búsqueda Multimodal Geo-Espacial</h4>
+          <p className="text-xs text-slate-400">
+            Realice un barrido inteligente (IA + Grounding) a 1km de radio usando conceptos visuales y de contexto. La imagen es opcional, pero la contextualización estructurada es obligatoria.
+          </p>
+        </header>
+        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+          
+          <div className="bg-sky-900/30 border border-sky-800 p-3 rounded-lg text-xs text-sky-200 space-y-2">
+            <p className="font-bold text-sky-300">💡 Guía de Contextualización para el Usuario:</p>
+            <p>Para obtener los mejores resultados en el barrido de 1km, estructura tu descripción. Ejemplos que activan el barrido:</p>
+            <ul className="list-disc pl-4 space-y-1 opacity-90">
+              <li>&quot;Busca patrones visuales similares a este grafiti en un radio de 1km para identificar firmas de la misma banda.&quot;</li>
+              <li>&quot;Analiza el entorno y ubica puntos de acecho como callejones oscuros o entradas sin visibilidad.&quot;</li>
+              <li>&quot;Realiza un barrido de infraestructura dañada; busca postes de luz apagados o muros derribados.&quot;</li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 space-y-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-300">Sujeto (¿Qué buscar?)</label>
+                <input
+                  type="text"
+                  placeholder='ej. "grafitis", "callejones", "luminarias rotas"'
+                  value={geoSubject}
+                  onChange={(e) => setGeoSubject(e.target.value)}
+                  disabled={isCheckingGeo || isReadOnly}
+                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-300">Acción/Relación (¿Qué hacer?)</label>
+                <input
+                  type="text"
+                  placeholder='ej. "busca similares a la foto", "identifica riesgos contrarios"'
+                  value={geoAction}
+                  onChange={(e) => setGeoAction(e.target.value)}
+                  disabled={isCheckingGeo || isReadOnly}
+                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-300">Ambiente (Entorno)</label>
+                <input
+                  type="text"
+                  placeholder='ej. "zona comercial", "callejón sin salida", "baldío"'
+                  value={geoEnvironment}
+                  onChange={(e) => setGeoEnvironment(e.target.value)}
+                  disabled={isCheckingGeo || isReadOnly}
+                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 flex flex-col gap-2">
+              <label className="text-[11px] font-semibold text-slate-300">Imagen de referencia (Opcional)</label>
+              <div className="flex flex-col gap-2 h-full">
+                <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-600 rounded-lg p-2 bg-slate-900/50 hover:bg-slate-800 transition-colors cursor-pointer min-h-[60px]">
+                  <span className="text-xl mb-1">📷</span>
+                  <span className="text-xs text-slate-400 text-center">Usar Cámara</span>
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setGeoImage(e.target.files ? e.target.files[0] : null)} disabled={isCheckingGeo || isReadOnly} />
+                </label>
+                <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-600 rounded-lg p-2 bg-slate-900/50 hover:bg-slate-800 transition-colors cursor-pointer min-h-[60px]">
+                  <span className="text-xl mb-1">📸</span>
+                  <span className="text-xs text-slate-400 text-center">Subir Archivo</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => setGeoImage(e.target.files ? e.target.files[0] : null)} disabled={isCheckingGeo || isReadOnly} />
+                </label>
+                {geoImage && <div className="text-[10px] text-emerald-400 text-center truncate">Seleccionada: {geoImage.name}</div>}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={!geoSubject.trim() || !geoAction.trim() || !geoEnvironment.trim() || isCheckingGeo || isReadOnly}
+            onClick={async () => {
+              setIsCheckingGeo(true);
+              setError(null);
+              try {
+                const selectedPhotos = album.filter((p: any) => selectedIds.includes(p.id) && p.lat && p.lng);
+                const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter((p: any) => p.lat && p.lng);
+                if (photosToUse.length === 0) { setError("No hay fotos georreferenciadas en el álbum para establecer el epicentro del barrido."); setIsCheckingGeo(false); return; }
+                const centerLat = photosToUse.reduce((acc: number, p: any) => acc + p.lat!, 0) / photosToUse.length;
+                const centerLng = photosToUse.reduce((acc: number, p: any) => acc + p.lng!, 0) / photosToUse.length;
+
+                let imageBase64 = null;
+                if (geoImage) {
+                  try { imageBase64 = await resizeImageToBase64(geoImage, 800, 0.6); } catch (e) { console.warn("No se pudo procesar la imagen de referencia."); }
+                }
+
+                const res = await fetch("/api/osint/geo-spatial-search", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lat: centerLat, lng: centerLng, subject: geoSubject, action: geoAction, environment: geoEnvironment, imageBase64 })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                  const d = data.data;
+                  const hallazgos = d.hallazgos && d.hallazgos.length > 0 ? d.hallazgos.map((h: any) => `- ${h.nombre} (${h.nivelCoincidencia}): ${h.descripcion}`).join("\n") : "No se identificaron zonas de riesgo coincidentes.";
+                  const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL]\nParámetros:\n- Sujeto: ${geoSubject}\n- Acción: ${geoAction}\n- Ambiente: ${geoEnvironment}\n\nConceptos extraídos por IA: ${d.conceptosExtraidos?.join(", ")}\n\nHALLAZGOS EN RADIOS DE 1KM:\n${hallazgos}\n\nCONCLUSIÓN DEL BARRIDO: ${d.conclusion}`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setIsAnalysisContextAudited(false); setGeoSubject(""); setGeoAction(""); setGeoEnvironment(""); setGeoImage(null);
+                  alert("¡Barrido Geo-Espacial completado con éxito!\nSe ha inyectado el análisis en la hipótesis.");
+                } else { setError(data.error || "Error al realizar la búsqueda geo-espacial."); }
+              } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
+            }}
+            className="w-full bg-indigo-700 hover:bg-indigo-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg mt-2"
+          >
+            {isCheckingGeo ? <span className="flex items-center justify-center">Realizando Barrido Multimodal... <ElapsedTime running={isCheckingGeo} /></span> : "🌐 Ejecutar Barrido Geo-Espacial y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
       </div>
 
       {/* EVIDENCIAS ADICIONALES */}
