@@ -292,6 +292,13 @@ export function PhotoAlbum({
   // Estado para Fusión OSINT RSS
   const [isCheckingRss, setIsCheckingRss] = useState(false);
 
+  // Estado para Búsqueda Multimodal Geo-Espacial
+  const [geoSubject, setGeoSubject] = useState("");
+  const [geoAction, setGeoAction] = useState("");
+  const [geoEnvironment, setGeoEnvironment] = useState("");
+  const [geoImage, setGeoImage] = useState<File | null>(null);
+  const [isCheckingGeo, setIsCheckingGeo] = useState(false);
+
   // FASE 3: Indicadores de Conexión en tiempo real (Telemetría)
   const [statusScince, setStatusScince] = useState<"checking" | "online" | "offline">("checking");
   const [statusDenue, setStatusDenue] = useState<"checking" | "online" | "offline">("checking");
