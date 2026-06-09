@@ -144,7 +144,13 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
           projectDescription: project?.descripcion || "",
         }),
       });
-      const data = await res.json();
+      const textRes = await res.text();
+      let data;
+      try {
+        data = JSON.parse(textRes);
+      } catch (e) {
+        throw new Error(`El servidor devolvió HTML en lugar de JSON (Status: ${res.status}). Verifica que la ruta exista.`);
+      }
       if (res.ok) {
         const { sVal, scVal } = parseJSONResponse(data.suggestions ?? "", data.score ?? 0);
         setSuggestions(sVal);
@@ -417,7 +423,13 @@ const hasMinimumPhotos =
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context: photosContext + instructionPhotos, photos: minimalPhotos, mode: "validate-photos", geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
       });
-      const data = await res.json();
+      const textRes = await res.text();
+      let data;
+      try {
+        data = JSON.parse(textRes);
+      } catch (e) {
+        throw new Error(`La ruta /api/refine-context devolvió HTML (Status: ${res.status}).`);
+      }
       if ((data.score ?? 0) < 80) {
         setError(`⚠️ RECHAZADO (Lógica ${data.score ?? 0}%): ${data.suggestions || "Mejora el rigor técnico de la evidencia."}`);
         setIsValidatingPhotos(false);
@@ -1572,7 +1584,13 @@ const hasMinimumPhotos =
                     region: "Aguascalientes"
                   })
                 });
-                const data = await res.json();
+                const textRes = await res.text();
+                let data;
+                try {
+                  data = JSON.parse(textRes);
+                } catch (e) {
+                  throw new Error(`La ruta /api/osint/rss-parser no existe o devolvió HTML (Status: ${res.status}).`);
+                }
                 if (res.ok && data.success) {
                   const d = data.data;
                   const criticos = d.eventosCriticos && d.eventosCriticos.length > 0
@@ -1885,7 +1903,13 @@ const hasMinimumPhotos =
                         projectDescription: project?.descripcion || "",
                       }),
                     });
-                    const data = await res.json();
+                    const textRes = await res.text();
+                    let data;
+                    try {
+                      data = JSON.parse(textRes);
+                    } catch (e) {
+                      throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
+                    }
                     if (res.ok) {
                       let scoreVal = data.score ?? 0;
                       let suggestionsVal = data.suggestions ?? "";
@@ -1995,7 +2019,13 @@ const hasMinimumPhotos =
                             projectDescription: project?.descripcion || "",
                           }),
                         });
-                        const data = await res.json();
+                        const textRes = await res.text();
+                        let data;
+                        try {
+                          data = JSON.parse(textRes);
+                        } catch (e) {
+                          throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
+                        }
                       if (res.ok) {
                         let scoreVal = data.score ?? 0;
                         let suggestionsVal = data.suggestions ?? "";
@@ -2505,7 +2535,13 @@ const hasMinimumPhotos =
                             projectDescription: project?.descripcion || "",
                           }),
                         });
-                        const data = await res.json();
+                        const textRes = await res.text();
+                        let data;
+                        try {
+                          data = JSON.parse(textRes);
+                        } catch (e) {
+                          throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
+                        }
                         if (res.ok) {
                           let scoreVal = data.score ?? 0;
                           let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
