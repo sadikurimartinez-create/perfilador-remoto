@@ -505,7 +505,7 @@ export async function exportToWord(
               tmpImg.onload = () => resolve();
               tmpImg.onerror = () => reject(new Error("[exportToWord] Error en visual"));
             });
-            const MAP_MAX_WIDTH = 270;
+            const MAP_MAX_WIDTH = 500;
             const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
             const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
 
@@ -527,39 +527,30 @@ export async function exportToWord(
           );
         }
 
-        const m1 = cellsData[i];
-        const m2 = cellsData[i + 1];
-
-        const createMapCell = (m: any) => {
-          if (!m) return new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } } });
-          return new TableCell({
-            width: { size: 50, type: WidthType.PERCENTAGE },
-            margins: { top: 100, bottom: 200, left: 100, right: 100 },
-            borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } },
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-                spacing: { after: 120 }
-              }),
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [new ImageRun({ data: m.mapBuffer, transformation: { width: m.width, height: m.height } } as any)]
-              }),
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
-                spacing: { before: 60, after: 200 }
-              })
-            ]
-          });
+        const renderMapItem = (m: any) => {
+          if (!m) return [];
+          return [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+              spacing: { before: 200, after: 120 }
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new ImageRun({ data: m.mapBuffer, transformation: { width: m.width, height: m.height } } as any)]
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
+              spacing: { before: 80, after: 600 }
+            })
+          ];
         };
 
-        mapElements.push(new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [new TableRow({ children: [createMapCell(m1), createMapCell(m2)] })],
-          borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
-        }));
+        mapElements.push(...renderMapItem(cellsData[i]));
+        if (cellsData[i + 1]) {
+          mapElements.push(...renderMapItem(cellsData[i + 1]));
+        }
       }
     };
 
@@ -590,7 +581,7 @@ export async function exportToWord(
               )
             );
         });
-        const WORD_MAX_WIDTH = 270;
+        const WORD_MAX_WIDTH = 500;
         const originalWidth = img.width || img.naturalWidth || 640;
         const originalHeight = img.height || img.naturalHeight || 480;
         const ratio = originalHeight / originalWidth || 1;
@@ -614,45 +605,46 @@ export async function exportToWord(
         );
       }
 
-      const p1 = photoCellsData[i];
-      const p2 = photoCellsData[i + 1];
+      const renderPhotoItem = (p: any) => {
+        if (!p) return [];
+        const items = [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: p.stampedBuffer, transformation: { width: p.width, height: p.height } } as any)],
+            spacing: { before: 200 }
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: `Imagen ${p.index} - ${p.tipo}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+            spacing: { before: 120 }
+          })
+        ];
 
-      const createPhotoCell = (p: any) => {
-        if (!p) return new TableCell({ children: [], borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } } });
-        return new TableCell({
-          width: { size: 50, type: WidthType.PERCENTAGE },
-          margins: { top: 100, bottom: 200, left: 100, right: 100 },
-          borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" } },
-          children: [
+        if (p.comentario) {
+          items.push(
             new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new ImageRun({ data: p.stampedBuffer, transformation: { width: p.width, height: p.height } } as any)]
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: `Imagen ${p.index} - ${p.tipo}`, bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-              spacing: { before: 80 }
-            }),
-            ...(p.comentario ? [
-              new Paragraph({
-                alignment: AlignmentType.JUSTIFIED,
-                children: [new TextRun({ text: p.comentario, size: 16, font: "Calibri", color: "222222" })],
-                spacing: { before: 40, after: 40 }
-              })
-            ] : []),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: `Trabajo de Campo | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
-              spacing: { after: 200 }
+              alignment: AlignmentType.JUSTIFIED,
+              children: [new TextRun({ text: p.comentario, size: 22, font: "Calibri", color: "222222" })],
+              spacing: { before: 80, after: 80 }
             })
-          ]
-        });
+          );
+        }
+
+        items.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: `Trabajo de Campo | ${new Date().toLocaleDateString("es-MX")}`, size: 14, color: "5B6573", font: "Calibri" })],
+            spacing: { after: 600 }
+          })
+        );
+
+        return items;
       };
-      photoElements.push(new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [new TableRow({ children: [createPhotoCell(p1), createPhotoCell(p2)] })],
-        borders: { top: { style: BorderStyle.NONE, size: 0, color: "auto" }, bottom: { style: BorderStyle.NONE, size: 0, color: "auto" }, left: { style: BorderStyle.NONE, size: 0, color: "auto" }, right: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "auto" }, insideVertical: { style: BorderStyle.NONE, size: 0, color: "auto" } }
-      }));
+
+      photoElements.push(...renderPhotoItem(photoCellsData[i]));
+      if (photoCellsData[i + 1]) {
+        photoElements.push(...renderPhotoItem(photoCellsData[i + 1]));
+      }
     }
   }
 
