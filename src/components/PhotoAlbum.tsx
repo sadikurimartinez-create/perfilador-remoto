@@ -2,7 +2,7 @@
 // @ts-nocheck
 /* eslint-disable */
 
-import { useRef, useState, useEffect } from "react";
+import React, { Fragment, useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
@@ -691,6 +691,41 @@ const hasMinimumPhotos =
         setEditableProfile(finalMarkdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
 
+        // Generar resumen automático para la carátula
+        try {
+          const sumRes = await fetch("/api/refine-context", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              context: "Resume el siguiente dictamen en un solo párrafo de máximo 40 palabras para usarlo en la carátula oficial. Dictamen:\n" + finalMarkdown.substring(0, 2000) + "\n\n(INSTRUCCIÓN: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con el resumen). NO agregues markdown ni comillas invertidas.)",
+              photos: [],
+              mode: "suggest",
+              geometryType: project?.geometryType || "individual",
+              projectDescription: project?.descripcion || "",
+            })
+          });
+          const sumText = await sumRes.text();
+          let sumData;
+          try { sumData = JSON.parse(sumText); } catch(e) {}
+          if (sumData) {
+            let sVal = sumData.suggestions || "";
+            if (sVal.includes("```")) {
+              const match = sVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+              if (match && match) {
+                try {
+                  const parsed = JSON.parse(match);
+                  if (parsed.suggestions) sVal = parsed.suggestions;
+                } catch(e) {}
+              }
+            } else if (sVal.trim().startsWith("{")) {
+              try { const parsed = JSON.parse(sVal); if (parsed.suggestions) sVal = parsed.suggestions; } catch(e) {}
+            }
+            setReportSummary(sVal.trim());
+          }
+        } catch (err) {
+          console.warn("No se pudo autogenerar el resumen de la carátula.", err);
+        }
+
         // Integrar datos para asegurar que las gráficas y el mapa (Dashboard) se pinten
         const combinedCrimes = [
           ...(data.meta?.incidenciaDetalles || []).map((c: any) => ({
@@ -890,12 +925,12 @@ const hasMinimumPhotos =
       const html2pdf = (html2pdfModule.default || html2pdfModule) as any;
       const safeName = project?.nombre?.replace(/\s+/g, "_") || "Dictamen";
       const opt = {
-        margin: 10,
+        margin: 0,
         filename: `Dictamen_Criminologico_${safeName}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: ['css', 'legacy'] }
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ['css', 'legacy'] }
       };
       html2pdf().set(opt).from(element).save().then(() => {
         if (!isReadOnly) void markAsPrinted();
@@ -2266,7 +2301,7 @@ const hasMinimumPhotos =
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:hidden">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Número de Informe</label>
+                  <label className="text-xs font-semibold text-slate-300">Número de Expediente</label>
                   <input 
                     type="text" 
                     value={reportNumber} 
@@ -2700,7 +2735,7 @@ const hasMinimumPhotos =
       <div className="absolute left-[-9999px] top-[-9999px]">
         <div id="official-pdf-content" className="w-[794px] bg-white text-[#222222] font-sans">
           {/* PÁGINA 1: CARÁTULA */}
-          <div className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white">
+          <div className="html2pdf__page-break w-[794px] h-[1123px] flex flex-col p-10 bg-white" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
             <div className="flex justify-between items-center border-b-2 border-[#0D2B52] pb-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-24 object-contain" />
@@ -2720,7 +2755,7 @@ const hasMinimumPhotos =
               <div className="bg-slate-50 border-x border-b border-slate-300 py-8 px-10 rounded-b-lg w-full shadow-md">
                 <div className="grid grid-cols-2 gap-6 text-left">
                   <div className="flex flex-col border-b border-slate-300 pb-3">
-                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Número de Informe</span>
+                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Número de Expediente</span>
                     <span className="font-mono text-slate-800 text-sm mt-1">{reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO"}</span>
                   </div>
                   <div className="flex flex-col border-b border-slate-300 pb-3">
@@ -2737,9 +2772,9 @@ const hasMinimumPhotos =
                   </div>
                 </div>
                 
-                <div className="mt-6 flex flex-col border-b border-slate-300 pb-3 text-left">
-                  <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Resumen del Contenido</span>
-                  <span className="text-slate-800 text-sm mt-1 leading-relaxed">
+                <div className="mt-8 flex flex-col border border-slate-400 bg-slate-100 rounded-lg p-5 text-left shadow-sm">
+                  <span className="font-bold text-[#0D2B52] uppercase text-[11px] tracking-wider mb-2 border-b border-slate-300 pb-1">Síntesis Ejecutiva del Dictamen</span>
+                  <span className="text-slate-800 text-[13px] leading-relaxed font-medium">
                     {reportSummary || "Dictamen táctico del perfil criminológico ambiental enfocado en el análisis de vulnerabilidades, factores de riesgo y movilidad criminal."}
                   </span>
                 </div>
@@ -2758,13 +2793,13 @@ const hasMinimumPhotos =
           </div>
 
           {/* PÁGINAS DE DICTAMEN TEXTUAL */}
-          <div className="html2pdf__page-break p-10 bg-white min-h-[1123px] relative">
+          <div className="html2pdf__page-break w-[794px] min-h-[1123px] flex flex-col p-10 bg-white relative" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
             <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6">
                <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">DICTAMEN TÁCTICO</h2>
                <span className="text-[10px] font-bold text-slate-400 uppercase">{project?.nombre}</span>
             </div>
             
-            <div className="text-[11.5px] text-[#333333] whitespace-pre-wrap leading-relaxed text-justify">
+            <div className="text-[11.5px] text-[#333333] whitespace-pre-wrap leading-relaxed text-justify flex-1">
               {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
             </div>
 
@@ -2786,15 +2821,15 @@ const hasMinimumPhotos =
               for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
 
               return chunks.map((chunk: { title: string; dataUrl: string }[], cIdx: number) => (
-            <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative" style={{ pageBreakBefore: "always" }}>
+                <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-[794px] h-[1123px] flex flex-col p-10 bg-white relative overflow-hidden" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
                   <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
                      <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">{title.toUpperCase()}</h2>
                      <span className="text-[10px] font-bold text-slate-400 uppercase">CEIPOL GEOINT</span>
                   </div>
                   
-                  <div className="flex flex-col gap-6 flex-1">
+                  <div className="flex flex-col gap-8 flex-1">
                     {chunk.map((snap: { title: string; dataUrl: string }, i: number) => (
-                      <div key={i} className="border border-slate-300 p-4 rounded-lg flex flex-col bg-slate-50 overflow-hidden h-[450px]">
+                      <div key={i} className="border border-slate-300 p-4 rounded-lg flex flex-col bg-slate-50 overflow-hidden h-[420px]">
                         <h4 className="text-sm font-bold text-white bg-[#0D2B52] px-3 py-1.5 rounded-t-md text-left uppercase tracking-wide shrink-0">
                           {snap.title}
                         </h4>
@@ -2808,7 +2843,7 @@ const hasMinimumPhotos =
                     ))}
                   </div>
 
-                  <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2">
+                  <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2 shrink-0">
                     <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
                     <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
                   </div>
@@ -2835,21 +2870,21 @@ const hasMinimumPhotos =
             }
 
             return photoChunks.map((chunk, idx) => (
-            <div key={`photo-chunk-${idx}`} className="html2pdf__page-break w-full h-[1123px] flex flex-col p-10 bg-white relative" style={{ pageBreakBefore: "always" }}>
+              <div key={`photo-chunk-${idx}`} className="html2pdf__page-break w-[794px] h-[1123px] flex flex-col p-10 bg-white relative overflow-hidden" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
                 <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
                    <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO</h2>
                    <span className="text-[10px] font-bold text-slate-400 uppercase">INSPECCIÓN IN-SITU</span>
                 </div>
                 
-                <div className="flex flex-col gap-6 flex-1">
+                <div className="flex flex-col gap-8 flex-1">
                   {chunk.map((p, i) => (
-                    <div key={p.id} className="border border-slate-300 rounded-lg flex flex-row bg-slate-50 h-[450px] overflow-hidden">
+                    <div key={p.id} className="border border-slate-300 rounded-lg flex flex-row bg-slate-50 h-[420px] overflow-hidden">
                       {/* Fotografía izquierda */}
                     <div className="w-1/2 bg-black relative flex items-center justify-center p-1 overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="max-w-full max-h-full object-contain z-0" />
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                        <span className="text-white/40 font-bold text-3xl -rotate-45 select-none tracking-widest drop-shadow-lg">
+                      <div className="absolute bottom-3 right-3 flex items-center justify-center pointer-events-none z-10 bg-black/60 px-3 py-1.5 rounded border border-white/20">
+                        <span className="text-white/90 font-bold text-[10px] select-none tracking-widest drop-shadow-md">
                           SSPE-CEIPOL
                         </span>
                       </div>
@@ -2872,7 +2907,7 @@ const hasMinimumPhotos =
                 ))}
                 </div>
 
-                <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2">
+                <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2 shrink-0">
                   <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
                   <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
                 </div>
