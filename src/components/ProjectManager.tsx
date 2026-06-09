@@ -616,7 +616,7 @@ export function ProjectManager() {
 
       <PhotoAlbum 
         projectId={project.id}
-        onSaveAnalysisToCloud={async (content, _photos, summary) => {
+        onSaveAnalysisToCloud={async (content: string, _photos?: string[], summary?: string) => {
           const { getDb } = await import("@/lib/firebase");
           const { doc, updateDoc } = await import("firebase/firestore");
           const firestore = getDb();
