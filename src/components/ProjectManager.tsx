@@ -228,16 +228,16 @@ export function ProjectManager() {
         estado: "DEVUELTO",
         comentariosAuditoria: comentariosAdmin,
         fechaDevolucion: Date.now(),
-          deadlineAt: Date.now() + (plazoDevolucion * 60 * 60 * 1000),
+        deadlineAt: Date.now() + (plazoDevolucion * 60 * 60 * 1000),
         devueltoPor: (user as any)?.username || "Administrador"
       });
       setShowDevolverPrompt(false);
       setComentariosAdmin("");
-        window.alert(`Expediente devuelto al usuario con un término de ${plazoDevolucion} horas.`);
+      window.alert(`Expediente devuelto al usuario con un término de ${plazoDevolucion} horas.`);
     } catch (err: any) {
       window.alert("Error al devolver expediente: " + err.message);
     }
-   };
+  };
 
   const handleGuardarYSalir = async () => {
     if (project) {
@@ -616,13 +616,14 @@ export function ProjectManager() {
 
       <PhotoAlbum 
         projectId={project.id}
-        onSaveAnalysisToCloud={async (content) => {
+        onSaveAnalysisToCloud={async (content, _photos, summary) => {
           const { getDb } = await import("@/lib/firebase");
           const { doc, updateDoc } = await import("firebase/firestore");
           const firestore = getDb();
           await updateDoc(doc(firestore, "projects", project.id), {
             analysisContent: content,
-            iaAnalysis: analysisResult
+            iaAnalysis: analysisResult,
+            reportSummary: summary || ""
           });
         }}
       />
