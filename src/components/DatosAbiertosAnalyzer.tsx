@@ -37,32 +37,32 @@ export default function DatosAbiertosAnalyzer({ lat, lng, onAnalysisComplete }: 
   };
 
   return (
-    <div style={{ border: '1px solid #ccc', padding: '16px', borderRadius: '8px', marginTop: '16px', backgroundColor: '#f9fafb' }}>
-      <h3 style={{ marginTop: 0, color: '#111827' }}>Análisis de Datos Abiertos de México</h3>
-      <p style={{ color: '#374151' }}>Pegue la URL de un dataset del portal datos.gob.mx para buscar registros cercanos a su punto de análisis.</p>
+    <div className="border border-slate-700 p-4 rounded-lg mt-4 bg-slate-800/30 space-y-3">
+      <h4 className="text-sm font-semibold text-slate-200">Análisis de Datos Abiertos de México</h4>
+      <p className="text-xs text-slate-400">Pegue la URL de un dataset del portal datos.gob.mx para buscar registros cercanos a su punto de análisis.</p>
       
       <input
         type="text"
         value={datasetUrl}
         onChange={(e) => setDatasetUrl(e.target.value)}
         placeholder="https://www.datos.gob.mx/dataset/..."
-        style={{ width: '100%', padding: '8px', marginBottom: '12px', borderRadius: '4px', border: '1px solid #d1d5db' }}
+        className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
         disabled={isLoading}
       />
       
-      <button onClick={handleAnalyze} disabled={isLoading} style={{ padding: '10px 15px', cursor: 'pointer', backgroundColor: isLoading ? '#9ca3af' : '#0D2B52', color: 'white', border: 'none', borderRadius: '4px' }}>
+      <button onClick={handleAnalyze} disabled={isLoading} className="w-full md:w-auto bg-teal-700 hover:bg-teal-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg">
         {isLoading ? 'Analizando...' : 'Analizar Datos Abiertos'}
       </button>
 
       {error && (
-        <div style={{ color: '#b91c1c', marginTop: '12px', backgroundColor: '#fee2e2', padding: '10px', borderRadius: '4px' }}>
+        <div className="text-red-400 bg-red-900/30 border border-red-800 p-2 rounded-md text-xs">
           <strong>Error:</strong> {error}
         </div>
       )}
 
       {result && !error && (
-        <div style={{ marginTop: '12px', backgroundColor: '#e0f2fe', padding: '12px', borderRadius: '4px', color: '#0c4a6e' }}>
-          <h4>Resultado del Análisis</h4>
+        <div className="bg-sky-900/30 border border-sky-800 p-3 rounded-lg text-xs text-sky-200 space-y-1">
+          <h5 className="font-bold text-sky-300">Resultado del Análisis</h5>
           <p><strong>Dataset:</strong> {result.datasetTitle}</p>
           <p>{result.resumen}</p>
         </div>

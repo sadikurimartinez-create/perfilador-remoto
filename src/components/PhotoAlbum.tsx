@@ -11,6 +11,7 @@ import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
+import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 
 type EvidencePhotoType = {
   id: string;
@@ -271,6 +272,7 @@ export function PhotoAlbum({
     markAsPrinted,
     uploadAndAddPhoto,
     datosGobMxResult, // <-- Obtener del contexto
+    setDatosGobMxResult,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -1499,24 +1501,57 @@ const hasMinimumPhotos =
               setIsCheckingTelegram(true);
               setError(null);
               try {
+                // 1. Expandir la consulta con IA
+                const expansionRes = await fetch("/api/refine-context", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    context: `Dada la siguiente consulta de inteligencia: "${telegramQuery.trim()}". Genera al menos 8 palabras clave, entidades o conceptos relacionados para profundizar la búsqueda en bases de datos de fuentes abiertas. (INSTRUCCIÓN DEL SISTEMA: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con las palabras clave separadas por comas).)`,
+                    mode: "suggest",
+                    photos: [],
+                    geometryType: project?.geometryType || "individual",
+                    projectDescription: project?.descripcion || "",
+                  }),
+                });
+
+                let expandedQuery = telegramQuery.trim();
+                if (expansionRes.ok) {
+                  const expansionData = await expansionRes.json();
+                  let suggestionsVal = expansionData.suggestions || "";
+                  // Lógica de parseo robusta
+                  if (suggestionsVal.includes("```")) {
+                    const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                    if (match && match) {
+                      try { const parsed = JSON.parse(match); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
+                    }
+                  } else if (suggestionsVal.trim().startsWith("{")) {
+                    try { const parsed = JSON.parse(suggestionsVal); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
+                  }
+                  
+                  if (suggestionsVal) {
+                    expandedQuery += ", " + suggestionsVal;
+                  }
+                }
+
+                // 2. Ejecutar la búsqueda OSINT con la consulta expandida
                 const res = await fetch("/api/osint", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ queryTelegram: telegramQuery.trim() })
+                  body: JSON.stringify({ queryTelegram: expandedQuery })
                 });
                 const data = await res.json();
                 if (res.ok && data.success) {
-                  const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda: ${telegramQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
+                  const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda Ampliada por IA: ${expandedQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setTelegramQuery("");
                   setTelegramContext("");
                   setIsAnalysisContextAudited(false);
-                  alert(`Consulta Telegram OSINT finalizada.\n\nResultado integrado a la hipótesis.`);
+                  alert(`Consulta Telegram OSINT (Ampliada por IA) finalizada.\n\nResultado integrado a la hipótesis.`);
                 } else {
                   setError(data.error || "Error al consultar Telegram OSINT.");
                 }
               } catch (err) {
-                setError("Error de red al conectar con el módulo OSINT.");
+                setError("Error de red al conectar con el módulo OSINT o de expansión de IA.");
               } finally {
                 setIsCheckingTelegram(false);
               }
@@ -1634,6 +1669,25 @@ const hasMinimumPhotos =
             {isCheckingDenue ? <span className="flex items-center justify-center">Buscando Negocios... <ElapsedTime running={isCheckingDenue} /></span> : "🏪 Consultar DENUE y Añadir a Hipótesis"}
           </button>
         </div>
+      </div>
+
+      {/* MÓDULO DE DATOS ABIERTOS (datos.gob.mx) */}
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Datos Abiertos del Gobierno Federal</h4>
+          <p className="text-xs text-slate-400">Busca bases de datos y registros oficiales cerca de las coordenadas del polígono.</p>
+        </header>
+        <DatosAbiertosAnalyzer
+          lat={album.find(p => p.lat && p.lng)?.lat || 21.8818}
+          lng={album.find(p => p.lat && p.lng)?.lng || -102.2915}
+          onAnalysisComplete={(data) => {
+            setDatosGobMxResult(data);
+            const newContext = `[DATOS ABIERTOS GUBERNAMENTALES]\nDataset: ${data.datasetTitle}\nResumen: ${data.resumen}\n\nObservaciones tácticas: Elementos extraídos del padrón federal.`;
+            setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+            setIsAnalysisContextAudited(false); // Obliga a reevaluar la hipótesis
+            alert(`Análisis de Datos Abiertos completado y anexado a su Hipótesis:\n\n${data.resumen}`);
+          }}
+        />
       </div>
 
       {/* MÓDULO DE FUSIÓN OSINT (NOTICIAS RSS) */}
