@@ -1516,20 +1516,25 @@ const hasMinimumPhotos =
 
                 let expandedQuery = telegramQuery.trim();
                 if (expansionRes.ok) {
-                  const expansionData = await expansionRes.json();
-                  let suggestionsVal = expansionData.suggestions || "";
-                  // Lógica de parseo robusta
-                  if (suggestionsVal.includes("```")) {
-                    const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                    if (match && match) {
-                      try { const parsed = JSON.parse(match); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
+                  const expansionText = await expansionRes.text();
+                  try {
+                    const expansionData = JSON.parse(expansionText);
+                    let suggestionsVal = expansionData.suggestions || "";
+                    // Lógica de parseo robusta
+                    if (suggestionsVal.includes("```")) {
+                      const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                      if (match && match[1]) {
+                        try { const parsed = JSON.parse(match[1]); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
+                      }
+                    } else if (suggestionsVal.trim().startsWith("{")) {
+                      try { const parsed = JSON.parse(suggestionsVal); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
                     }
-                  } else if (suggestionsVal.trim().startsWith("{")) {
-                    try { const parsed = JSON.parse(suggestionsVal); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
-                  }
-                  
-                  if (suggestionsVal) {
-                    expandedQuery += ", " + suggestionsVal;
+                    
+                    if (suggestionsVal) {
+                      expandedQuery += ", " + suggestionsVal;
+                    }
+                  } catch(e) {
+                     console.error("Error al parsear la expansión de IA:", e);
                   }
                 }
 
@@ -1539,8 +1544,15 @@ const hasMinimumPhotos =
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ queryTelegram: expandedQuery })
                 });
+                if (!res.ok) {
+                   const errorText = await res.text().catch(() => `Error del servidor (código ${res.status})`);
+                   if (errorText.toLowerCase().includes("<!doctype html>")) {
+                     throw new Error(`La ruta /api/osint no está disponible o devolvió HTML (Status: ${res.status}).`);
+                   }
+                   throw new Error(errorText);
+                }
                 const data = await res.json();
-                if (res.ok && data.success) {
+                if (data.success) {
                   const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda Ampliada por IA: ${expandedQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setTelegramQuery("");
@@ -1550,8 +1562,9 @@ const hasMinimumPhotos =
                 } else {
                   setError(data.error || "Error al consultar Telegram OSINT.");
                 }
-              } catch (err) {
-                setError("Error de red al conectar con el módulo OSINT o de expansión de IA.");
+              } catch (err: any) {
+                console.error("Error Telegram OSINT:", err);
+                setError(err.message || "Error de red al conectar con el módulo OSINT o de expansión de IA.");
               } finally {
                 setIsCheckingTelegram(false);
               }
