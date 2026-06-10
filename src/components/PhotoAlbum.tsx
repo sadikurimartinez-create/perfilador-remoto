@@ -9,7 +9,7 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData } from "@/lib/osintActions";
+import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 
@@ -1324,17 +1324,8 @@ const hasMinimumPhotos =
               setIsCheckingPlate(true);
               setError(null);
               try {
-                const res = await fetch("/api/repuve", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ placa: plateQuery.trim() })
-                });
+                const data = await getRepuveData(plateQuery.trim());
                 
-                const data = await res.json();
-
-                if (!res.ok) {
-                  throw new Error(data.error || `Fallo en el puente de conexión (Código ${res.status}).`);
-                }
                 if (data.exito) {
                   // Inyectamos el resumen detallado (vehículo + instituciones) proveniente del Robot
                   const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nInstrucción/Contexto del Analista: ${plateContext}\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;

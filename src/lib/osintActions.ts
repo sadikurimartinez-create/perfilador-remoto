@@ -164,3 +164,25 @@ export async function getRnpdnoData(estado: string, municipio: string) {
     return { exito: false, error: error.message || "Error conectando al cuartel general (Robot RNPDNO)." };
   }
 }
+
+export async function getRepuveData(placa: string) {
+  try {
+    const NGROK_URL = (process.env.ROBOT_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
+    const url = `${NGROK_URL}/repuve?placa=${encodeURIComponent(placa)}`;
+    
+    const res = await fetch(url, { 
+      method: "GET", 
+      cache: 'no-store',
+      headers: { "ngrok-skip-browser-warning": "true" }
+    });
+    
+    if (!res.ok) throw new Error(`Error en la conexión con el Robot (Status: ${res.status})`);
+    return await res.json();
+  } catch (error: any) {
+    console.error("[osintActions.getRepuveData] Error:", error);
+    if (error.message?.includes("fetch failed") || error.cause?.code === "ECONNREFUSED") {
+      return { exito: false, error: "⚠️ Vercel no puede comunicarse con el Robot local. Asegúrate de encender el robot (node robot-repuve.js) y de configurar la variable ROBOT_NGROK_URL en Vercel." };
+    }
+    return { exito: false, error: error.message || "Error conectando al cuartel general (Robot REPUVE)." };
+  }
+}
