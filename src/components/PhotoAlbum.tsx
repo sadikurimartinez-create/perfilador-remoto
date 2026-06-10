@@ -1539,7 +1539,7 @@ const hasMinimumPhotos =
                 }
 
                 // 2. Ejecutar la búsqueda OSINT con la consulta expandida
-                const res = await fetch("/api/osint", {
+                const res = await fetch("/api/telegram-osint", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ queryTelegram: expandedQuery })
@@ -1547,7 +1547,7 @@ const hasMinimumPhotos =
                 if (!res.ok) {
                    const errorText = await res.text().catch(() => `Error del servidor (código ${res.status})`);
                    if (errorText.toLowerCase().includes("<!doctype html>")) {
-                     throw new Error(`La ruta /api/osint no está disponible o devolvió HTML (Status: ${res.status}).`);
+                     throw new Error(`La ruta /api/telegram-osint no está disponible o devolvió HTML (Status: ${res.status}).`);
                    }
                    throw new Error(errorText);
                 }
