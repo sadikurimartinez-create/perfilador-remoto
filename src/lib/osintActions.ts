@@ -153,6 +153,10 @@ export async function getRnpdnoData(estado: string, municipio: string) {
     return data;
   } catch (error: any) {
     console.error("[osintActions.getRnpdnoData] Error:", error);
+    // Interceptar específicamente el error de servidor caído (fetch failed / ECONNREFUSED)
+    if (error.message?.includes("fetch failed") || error.cause?.code === "ECONNREFUSED") {
+      return { exito: false, error: "⚠️ Vercel no puede comunicarse con el Robot local. Asegúrate de encender el robot (node robot-repuve.js) y de configurar la variable ROBOT_NGROK_URL en Vercel." };
+    }
     return { exito: false, error: error.message || "Error conectando al cuartel general (Robot RNPDNO)." };
   }
 }
