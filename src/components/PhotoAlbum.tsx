@@ -358,6 +358,12 @@ export function PhotoAlbum({
   const [isCheckingTelegram, setIsCheckingTelegram] = useState(false);
   const [telegramContext, setTelegramContext] = useState("");
 
+  // Estado para Consulta RNPDNO (Desaparecidos)
+  const [rnpdnoEstado, setRnpdnoEstado] = useState("Aguascalientes");
+  const [rnpdnoMunicipio, setRnpdnoMunicipio] = useState("Todos");
+  const [isCheckingRnpdno, setIsCheckingRnpdno] = useState(false);
+  const [rnpdnoContext, setRnpdnoContext] = useState("");
+
   // Estado para Consulta INEGI SCINCE
   const [isCheckingScince, setIsCheckingScince] = useState(false);
 
@@ -1560,6 +1566,74 @@ const hasMinimumPhotos =
             className="w-full md:w-auto bg-indigo-700 hover:bg-indigo-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
           >
             {isCheckingTelegram ? <span className="flex items-center justify-center">Consultando OSINT... <ElapsedTime running={isCheckingTelegram} /></span> : "🕵️ Consultar OSINT y Añadir a Hipótesis"}
+          </button>
+        </div>
+      </div>
+
+      {/* MÓDULO DE INTELIGENCIA DE PERSONAS DESAPARECIDAS (RNPDNO) */}
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">Registro de Desaparecidos (RNPDNO - SEGOB)</h4>
+          <p className="text-xs text-slate-400">
+            Extrae cifras del Registro Nacional de Personas Desaparecidas. Identifica patrones de violencia extrema y trata en el Estado/Municipio. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+          </p>
+        </header>
+        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+            <input
+              type="text"
+              placeholder="Estado (Ej. Aguascalientes)"
+              value={rnpdnoEstado}
+              onChange={(e) => setRnpdnoEstado(e.target.value)}
+              disabled={isCheckingRnpdno || isReadOnly}
+              className="w-full md:w-1/2 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
+            />
+            <input
+              type="text"
+              placeholder="Municipio (Ej. Todos)"
+              value={rnpdnoMunicipio}
+              onChange={(e) => setRnpdnoMunicipio(e.target.value)}
+              disabled={isCheckingRnpdno || isReadOnly}
+              className="w-full md:w-1/2 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
+            />
+          </div>
+          <div className="w-full relative">
+            {!isReadOnly && (
+              <button type="button" onClick={() => toggleDictation('rnpdnoContext', (text) => setRnpdnoContext(prev => (prev ? `${prev.trim()} ${text}` : text)))} className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'rnpdnoContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}><span>🎙️</span> {listeningField === 'rnpdnoContext' ? "Grabando..." : "Dictar"}</button>
+            )}
+            <textarea spellCheck={true} value={rnpdnoContext} disabled={isReadOnly} onChange={(e) => setRnpdnoContext(e.target.value)} placeholder="Contexto, justificación o instrucción específica para la IA sobre estas cifras..." className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!rnpdnoContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`} />
+          </div>
+          <button
+            type="button"
+            disabled={isCheckingRnpdno || isReadOnly}
+            onClick={async () => {
+              if (!rnpdnoContext.trim()) {
+                alert("⚠️ Acción requerida: Por favor, escriba o dicte el contexto/justificación antes de ejecutar la consulta a SEGOB.");
+                return;
+              }
+              setIsCheckingRnpdno(true);
+              setError(null);
+              try {
+                const res = await fetch("/api/rnpdno", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ estado: rnpdnoEstado, municipio: rnpdnoMunicipio })
+                });
+                const data = await res.json();
+                if (res.ok && data.exito) {
+                  const newContext = `[INTELIGENCIA DE PERSONAS DESAPARECIDAS - RNPDNO]\nInstrucción/Contexto del Analista: ${rnpdnoContext}\nResultados Oficiales: ${data.resumenTexto}\nObservaciones tácticas: Estas métricas deben cruzarse con los indicadores de violencia y marginación del polígono para evaluar la presencia delictiva de alto impacto.`;
+                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                  setRnpdnoContext("");
+                  setIsAnalysisContextAudited(false);
+                  alert(`Consulta RNPDNO Finalizada:\n\n${data.resumenTexto}`);
+                } else {
+                  setError(data.error || "Error al extraer datos de SEGOB.");
+                }
+              } catch (err: any) { setError(err.message || "Error de red conectando al Cuartel General."); }
+              finally { setIsCheckingRnpdno(false); }
+            }}
+            className="w-full md:w-auto bg-fuchsia-700 hover:bg-fuchsia-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+          >
+            {isCheckingRnpdno ? <span className="flex items-center justify-center">Extrayendo Datos... <ElapsedTime running={isCheckingRnpdno} /></span> : "⚠️ Consultar SEGOB y Añadir a Hipótesis"}
           </button>
         </div>
       </div>

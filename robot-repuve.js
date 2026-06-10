@@ -464,4 +464,79 @@ app.all("/repuve", async (req, res) => {
   }
 });
 
+app.all("/rnpdno", async (req, res) => {
+  const estado = req.query.estado || "Aguascalientes";
+  const municipio = req.query.municipio || "Todos";
+
+  if (robotOcupado) {
+    return res.json({ exito: false, error: "⚠️ El Cuartel General está analizando otra consulta. Espere 45 segundos." });
+  }
+
+  robotOcupado = true;
+  console.log(`\n========================================`);
+  console.log(`[ROBOT] 🚀 Iniciando búsqueda RNPDNO: ${estado} - ${municipio}`);
+  console.log(`========================================`);
+
+  let browser = null;
+  let page = null;
+  try {
+    console.log("[ROBOT] 1/4 📡 Conectando a MoreLogin...");
+    let startData;
+    try {
+      startData = await requestMoreLogin('/api/env/start', { envId: PROFILE_ID, env_id: PROFILE_ID });
+    } catch (e) {
+      throw new Error("MoreLogin no respondió. Asegúrate de que la API Local esté activa.");
+    }
+    if (startData.code !== 0) throw new Error(`Error de MoreLogin: ${startData.msg}`);
+
+    let endpointParams = {};
+    if (startData.data) {
+      if (startData.data.wsDetail) endpointParams = { browserWSEndpoint: startData.data.wsDetail };
+      else if (startData.data.coreDetail) endpointParams = { browserURL: startData.data.coreDetail };
+      else if (startData.data.webSocketDebuggerUrl) endpointParams = { browserWSEndpoint: startData.data.webSocketDebuggerUrl };
+      else if (startData.data.debugPort) endpointParams = { browserURL: `http://127.0.0.1:${startData.data.debugPort}` };
+    }
+
+    browser = await puppeteer.connect({ ...endpointParams, defaultViewport: null });
+    page = await browser.newPage();
+    
+    console.log("[ROBOT] 2/4 ⏳ Navegando al portal RNPDNO de SEGOB...");
+    await page.goto("https://consultapublicarnpdno.segob.gob.mx/consulta", { waitUntil: "networkidle2", timeout: 60000 });
+    
+    console.log("[ROBOT] 3/4 ⏳ Esperando carga de gráficas y tableros (15s)...");
+    // El portal de SEGOB usa Angular/JS muy pesado. Le damos 15 segundos para asegurar que los números no digan "Cargando..."
+    await new Promise(r => setTimeout(r, 15000));
+
+    console.log("[ROBOT] 4/4 🔍 Extrayendo inteligencia numérica...");
+    const data = await page.evaluate(() => {
+      const text = document.body.innerText.replace(/\n/g, ' ');
+      const extractNear = (keyword) => {
+          // Busca la palabra clave y extrae el primer número (con o sin comas) que aparezca cerca
+          // Ampliamos el rango de búsqueda a 100 caracteres por si la estructura HTML es ancha
+          const regex = new RegExp(`${keyword}[^0-9]{0,100}?([\\d,]+)`, 'i');
+          const match = text.match(regex);
+          return match ? match[1] : "N/D";
+      };
+      return {
+         total: extractNear("Total de Personas Desaparecidas y No Localizadas") || extractNear("Desaparecidas y No Localizadas"),
+         hombres: extractNear("Hombres"),
+         mujeres: extractNear("Mujeres"),
+         localizadas: extractNear("Localizadas")
+      };
+    });
+
+    console.log(`[ROBOT] 🎉 RESULTADO RNPDNO: Total Desaparecidas: ${data.total} | Hombres: ${data.hombres} | Mujeres: ${data.mujeres}`);
+    const resumenTexto = `📊 Registro Nacional de Personas Desaparecidas (RNPDNO):\nTotal Histórico: ${data.total}\nHombres: ${data.hombres} | Mujeres: ${data.mujeres}\nPersonas Localizadas: ${data.localizadas}`;
+    
+    res.json({ exito: true, resumenTexto, datos: data });
+  } catch (error) {
+    console.error("\n[ROBOT] ❌ ERROR EN RNPDNO:", error.message, "\n");
+    res.json({ exito: false, error: error.message });
+  } finally {
+    if (page) await page.close().catch(()=>null);
+    if (browser) await browser.disconnect().catch(()=>null);
+    robotOcupado = false;
+  }
+});
+
 app.listen(3005, () => console.log("🤖 Servidor Robot local ejecutándose en el puerto 3005 (Visible en Red)"));
