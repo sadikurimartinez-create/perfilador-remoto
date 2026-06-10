@@ -9,7 +9,7 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData } from "@/lib/osintActions";
+import { pingOsint, getScinceData, getDenueData, getTelegramOsintData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 
@@ -1538,20 +1538,8 @@ const hasMinimumPhotos =
                   }
                 }
 
-                // 2. Ejecutar la búsqueda OSINT con la consulta expandida
-                const res = await fetch("/api/telegram-osint", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ queryTelegram: expandedQuery })
-                });
-                if (!res.ok) {
-                   const errorText = await res.text().catch(() => `Error del servidor (código ${res.status})`);
-                   if (errorText.toLowerCase().includes("<!doctype html>")) {
-                     throw new Error(`La ruta /api/telegram-osint no está disponible o devolvió HTML (Status: ${res.status}).`);
-                   }
-                   throw new Error(errorText);
-                }
-                const data = await res.json();
+                // 2. Ejecutar la búsqueda OSINT con la consulta expandida (Vía Server Action)
+                const data = await getTelegramOsintData(expandedQuery);
                 if (data.success) {
                   const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda Ampliada por IA: ${expandedQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
