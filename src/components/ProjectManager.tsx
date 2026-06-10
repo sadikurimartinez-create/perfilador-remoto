@@ -9,6 +9,8 @@ import { CaptureAndAddPhoto } from "./CaptureAndAddPhoto";
 import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
 import { doc, updateDoc } from "firebase/firestore";
+import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
+import type { DatosGobMxResult } from "@/lib/datosGobMx";
 import { getDb } from "@/lib/firebase";
 
 export function ProjectManager() {
@@ -16,7 +18,7 @@ export function ProjectManager() {
   const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult } = useProject();
   const { user } = useAuth();
   const isAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
-  const estadoProyecto = (project as any)?.estado || "ABIERTO";
+  const { estado: estadoProyecto = "ABIERTO", setDatosGobMxResult } = useProject();
   const [nombreInput, setNombreInput] = useState("");
   const [descripcionInput, setDescripcionInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
@@ -34,6 +36,11 @@ export function ProjectManager() {
 
   const requiredPhotos = project?.geometryType === 'poligono' ? 3 : project?.geometryType === 'lineal' ? 2 : 1;
   const hasMinimumPhotos = album.length >= requiredPhotos;
+
+  const handleDatosGobMxComplete = (data: DatosGobMxResult) => {
+    if (setDatosGobMxResult) setDatosGobMxResult(data);
+    window.alert(`Análisis de Datos Abiertos completado: ${data.resumen}`);
+  };
 
   useEffect(() => {
     if (project && project.descripcion && !descripcionInput) {
@@ -593,6 +600,21 @@ export function ProjectManager() {
       {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") && (
         <CaptureAndAddPhoto />
       )}
+
+      {/* Panel de Datos Abiertos */}
+      <div className="card p-4 md:p-6 border border-slate-700 bg-slate-900/40">
+        <h3 className="text-lg font-semibold text-slate-100 mb-2">2. Enriquecer con Datos Abiertos (Opcional)</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          Cruza la información del polígono con bases de datos públicas del gobierno federal.
+        </p>
+        {validPhotos.length > 0 ? (
+          <DatosAbiertosAnalyzer
+            lat={validPhotos[0].lat!}
+            lng={validPhotos[0].lng!}
+            onAnalysisComplete={handleDatosGobMxComplete}
+          />
+        ) : <p className="text-xs text-amber-400">Agregue al menos una foto georreferenciada para activar este módulo.</p>}
+      </div>
 
       {album.length > 0 && (
         <ProjectMap

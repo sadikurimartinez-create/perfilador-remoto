@@ -270,6 +270,7 @@ export function PhotoAlbum({
     isReadOnly,
     markAsPrinted,
     uploadAndAddPhoto,
+    datosGobMxResult, // <-- Obtener del contexto
   } = useProject();
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
@@ -679,7 +680,8 @@ const hasMinimumPhotos =
             geometryType: project?.geometryType || "individual",
             projectDescription: project?.descripcion || "",
             osintEngineData: automaticOsintData,
-            streetViews: svData
+            streetViews: svData,
+            datosGobMxData: datosGobMxResult, // <-- AÑADIR AQUÍ
           }),
         });
 
@@ -1827,8 +1829,15 @@ const hasMinimumPhotos =
                      method: "POST", headers: { "Content-Type": "application/json" },
                      body: JSON.stringify({ lat: centerLat, lng: centerLng, subject: q.subject, action: q.action, environment: q.environment, imageBase64 })
                    });
+                   if (!res.ok) {
+                     const errorText = await res.text().catch(() => `Error del servidor (código ${res.status})`);
+                     if (errorText.toLowerCase().includes("<!doctype html>")) {
+                       throw new Error(`Error del servidor (código ${res.status}). La ruta /api/osint/geo-spatial-search no está funcionando correctamente o no existe.`);
+                     }
+                     throw new Error(errorText);
+                   }
                    const data = await res.json();
-                   if (res.ok && data.success) {
+                   if (data.success) {
                       const d = data.data;
                       const hallazgos = d.hallazgos && d.hallazgos.length > 0 ? d.hallazgos.map((h: any) => `- ${h.nombre} (${h.nivelCoincidencia}): ${h.descripcion}`).join("\n") : "No se identificaron zonas de riesgo coincidentes.";
                       allFindings += `\n\n--- BARRIDO ${i + 1} ---\nParámetros:\n- Sujeto: ${q.subject}\n- Acción: ${q.action}\n- Ambiente: ${q.environment}\nConceptos: ${d.conceptosExtraidos?.join(", ")}\nHallazgos:\n${hallazgos}\nConclusión: ${d.conclusion}`;

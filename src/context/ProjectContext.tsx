@@ -1,5 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { DatosGobMxResult } from "@/lib/datosGobMx";
 
 import {
   createContext,
@@ -124,6 +125,8 @@ type ProjectContextValue = {
   uploadDocument: (file: File, context: string) => Promise<void>;
   removeDocument: (id: string) => Promise<void>;
   markAsPrinted: () => Promise<void>;
+  datosGobMxResult: DatosGobMxResult | null;
+  setDatosGobMxResult: (result: DatosGobMxResult | null) => void;
   isReadOnly: boolean;
 };
 
@@ -150,6 +153,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysisResult, setAnalysisResultState] = useState<AnalysisResult | null>(null);
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
+  const [datosGobMxResult, setDatosGobMxResult] = useState<DatosGobMxResult | null>(null);
 
   const createProject = useCallback(async ({
     nombre,
@@ -593,6 +597,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       uploadDocument,
       removeDocument,
       markAsPrinted,
+      datosGobMxResult,
+      setDatosGobMxResult,
       isReadOnly
     }),
     [
@@ -619,6 +625,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       uploadDocument,
       removeDocument,
       markAsPrinted,
+      datosGobMxResult,
+      setDatosGobMxResult,
       isReadOnly
     ]
   );
