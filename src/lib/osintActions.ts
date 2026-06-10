@@ -136,3 +136,23 @@ Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. 
     return { success: false, error: "Error interno del servidor al ejecutar el barrido OSINT." };
   }
 }
+
+export async function getRnpdnoData(estado: string, municipio: string) {
+  try {
+    // Intenta usar la URL de ngrok si está configurada, si no, usa localhost directo.
+    const NGROK_URL = process.env.ROBOT_NGROK_URL || "http://127.0.0.1:3005";
+    const url = `${NGROK_URL}/rnpdno?estado=${encodeURIComponent(estado || "Aguascalientes")}&municipio=${encodeURIComponent(municipio || "Todos")}`;
+    
+    const res = await fetch(url, { method: "GET", cache: 'no-store' });
+    
+    if (!res.ok) {
+      throw new Error(`Error en la conexión con el Robot (Status: ${res.status})`);
+    }
+
+    const data = await res.json();
+    return data;
+  } catch (error: any) {
+    console.error("[osintActions.getRnpdnoData] Error:", error);
+    return { exito: false, error: error.message || "Error conectando al cuartel general (Robot RNPDNO)." };
+  }
+}

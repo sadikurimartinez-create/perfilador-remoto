@@ -9,7 +9,7 @@ import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData, getTelegramOsintData } from "@/lib/osintActions";
+import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 
@@ -1614,12 +1614,8 @@ const hasMinimumPhotos =
               setIsCheckingRnpdno(true);
               setError(null);
               try {
-                const res = await fetch("/api/rnpdno", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ estado: rnpdnoEstado, municipio: rnpdnoMunicipio })
-                });
-                const data = await res.json();
-                if (res.ok && data.exito) {
+                const data = await getRnpdnoData(rnpdnoEstado, rnpdnoMunicipio);
+                if (data.exito) {
                   const newContext = `[INTELIGENCIA DE PERSONAS DESAPARECIDAS - RNPDNO]\nInstrucción/Contexto del Analista: ${rnpdnoContext}\nResultados Oficiales: ${data.resumenTexto}\nObservaciones tácticas: Estas métricas deben cruzarse con los indicadores de violencia y marginación del polígono para evaluar la presencia delictiva de alto impacto.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
                   setRnpdnoContext("");
