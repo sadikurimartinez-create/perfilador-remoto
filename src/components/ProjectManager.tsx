@@ -15,10 +15,10 @@ import { getDb } from "@/lib/firebase";
 
 export function ProjectManager() {
   const router = useRouter();
-  const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult } = useProject();
+  const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult, setDatosGobMxResult } = useProject();
   const { user } = useAuth();
   const isAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
-  const { estado: estadoProyecto = "ABIERTO", setDatosGobMxResult } = useProject();
+  const estadoProyecto = (project as any)?.estado || "ABIERTO";
   const [nombreInput, setNombreInput] = useState("");
   const [descripcionInput, setDescripcionInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
