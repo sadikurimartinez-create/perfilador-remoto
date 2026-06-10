@@ -140,10 +140,14 @@ Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. 
 export async function getRnpdnoData(estado: string, municipio: string) {
   try {
     // Intenta usar la URL de ngrok si está configurada, si no, usa localhost directo.
-    const NGROK_URL = process.env.ROBOT_NGROK_URL || "http://127.0.0.1:3005";
+    const NGROK_URL = (process.env.ROBOT_NGROK_URL || "http://127.0.0.1:3005").trim().replace(/\/$/, "");
     const url = `${NGROK_URL}/rnpdno?estado=${encodeURIComponent(estado || "Aguascalientes")}&municipio=${encodeURIComponent(municipio || "Todos")}`;
     
-    const res = await fetch(url, { method: "GET", cache: 'no-store' });
+    const res = await fetch(url, { 
+      method: "GET", 
+      cache: 'no-store',
+      headers: { "ngrok-skip-browser-warning": "true" }
+    });
     
     if (!res.ok) {
       throw new Error(`Error en la conexión con el Robot (Status: ${res.status})`);
