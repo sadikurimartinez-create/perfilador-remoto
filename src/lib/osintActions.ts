@@ -1,5 +1,7 @@
 "use server";
 
+import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
+
 // Ping silencioso para la telemetría (Centro de Conexiones)
 export async function pingOsint() {
   return { status: "ok" };
@@ -75,4 +77,27 @@ async function solveImageCaptchaLocal(base64Image: string, apiKey: string): Prom
     if (resData.request !== "CAPCHA_NOT_READY") throw new Error("Error de 2Captcha: " + resData.request);
   }
   throw new Error("Timeout: 2Captcha tardó demasiado en resolver la imagen.");
+}
+
+export async function getDatosGobMxData(
+  datasetUrl: string,
+  lat: number,
+  lng: number,
+  radio: number = 1000
+): Promise<{ exito: boolean; data?: DatosGobMxResult; error?: string }> {
+  try {
+    if (!datasetUrl || !lat || !lng) {
+      throw new Error("Faltan URL del dataset o coordenadas");
+    }
+    // Basic URL validation
+    if (!datasetUrl.includes("datos.gob.mx/dataset/")) {
+      throw new Error("La URL no parece ser un dataset válido de datos.gob.mx");
+    }
+
+    const result = await searchDatosGobMx(datasetUrl, lat, lng, radio);
+    return { exito: true, data: result };
+  } catch (error: any) {
+    console.error("[osintActions.getDatosGobMxData] Error:", error);
+    return { exito: false, error: error.message || "Error al consultar datos.gob.mx" };
+  }
 }

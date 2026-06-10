@@ -65,6 +65,7 @@ export const OSINT_SOURCES: OsintSource[] = [
   { id: "api_fed_inegi", name: "INEGI API", url: "https://www.inegi.org.mx/servicios/api_indicadores.html", type: "API", level: "DATOS_ABIERTOS" },
   { id: "api_fed_denue", name: "DENUE", url: "https://www.inegi.org.mx/app/mapa/denue/", type: "API", level: "DATOS_ABIERTOS" },
   { id: "api_fed_datamx", name: "Data México", url: "https://www.economia.gob.mx/datamexico", type: "API", level: "DATOS_ABIERTOS" },
+  { id: "api_fed_datosgob", name: "Datos Abiertos de México", url: "https://datos.gob.mx", type: "API", level: "DATOS_ABIERTOS" },
 
   // ==========================================
   // NIVEL 4: REDES SOCIALES Y FOROS (REDDIT)
