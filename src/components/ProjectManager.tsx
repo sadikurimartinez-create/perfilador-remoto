@@ -13,7 +13,7 @@ import { getDb } from "@/lib/firebase";
 
 export function ProjectManager() {
   const router = useRouter();
-  const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult, setDatosGobMxResult } = useProject();
+  const { project, album, createProject, closeProject, updatePhotoCoordinates, analysisResult } = useProject();
   const { user } = useAuth();
   const isAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN" || (user as any)?.role === "ADMIN";
   const estadoProyecto = (project as any)?.estado || "ABIERTO";
@@ -26,8 +26,6 @@ export function ProjectManager() {
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
