@@ -2365,7 +2365,7 @@ const hasMinimumPhotos =
             "Generar Informe"
           )}
         </button>
-        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-2">{typeof error === "string" ? error : (error as any)?.message || JSON.stringify(error)}</p>}
       </div>
 
       {isGeneratingAI && (

@@ -348,14 +348,18 @@ app.all("/repuve", async (req, res) => {
     await new Promise(r => setTimeout(r, 2500)); // Pausa táctica anti-bots
 
     // Burlar el interceptor del botón enviando el formulario directamente si tenemos token invisible
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => null),
-      page.evaluate((selSubmit) => {
-        const btn = document.querySelector(selSubmit);
-        if (btn) btn.click();
-        else { const form = document.querySelector('form'); if (form) form.submit(); }
-      }, formSelectors.submit).catch(() => page.keyboard.press('Enter').catch(() => null))
-    ]);
+    try {
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => null),
+        page.evaluate((selSubmit) => {
+          const btn = document.querySelector(selSubmit);
+          if (btn) btn.click();
+          else { const form = document.querySelector('form'); if (form) form.submit(); }
+        }, formSelectors.submit).catch(() => null)
+      ]);
+    } catch (navErr) {
+      console.log("[ROBOT] ⚠️ Detached frame/Navigation error ignorado. Continuando a lectura de tabla...");
+    }
     
     console.log("[ROBOT] 🔍 Analizando el resultado arrojado por el gobierno...");
     await new Promise(r => setTimeout(r, 4000)); // Pausa ampliada para asegurar que la tabla cargue
@@ -512,8 +516,8 @@ app.all("/rnpdno", async (req, res) => {
       const text = document.body.innerText.replace(/\n/g, ' ');
       const extractNear = (keyword) => {
           // Busca la palabra clave y extrae el primer número (con o sin comas) que aparezca cerca
-          // Ampliamos el rango de búsqueda a 100 caracteres por si la estructura HTML es ancha
-          const regex = new RegExp(`${keyword}[^0-9]{0,100}?([\\d,]+)`, 'i');
+          // Ampliamos el rango de búsqueda a 300 caracteres por si la estructura HTML es muy ancha
+          const regex = new RegExp(`${keyword}[^0-9]{0,300}?([\\d,]+)`, 'i');
           const match = text.match(regex);
           return match ? match[1] : "N/D";
       };
