@@ -158,18 +158,22 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                         
                         const safeExtract = (pattern) => {
                             const match = textoCompleto.match(pattern);
-                            return match && match[1] ? match[1].trim() : "N/D";
+                            return match && match[1] ? match[1].replace(/\s+/g, ' ').trim() : "N/D";
                         };
                         
                         const detalles = {
-                            nombre: safeExtract(/(?:Nombre|Nombre\\(s\\))[^:]*:\s*(.{2,50}?)(?=\s+(?:Primer|Segundo|Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
-                            edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)[^:]*:\s*(.{1,15}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
-                            fechaDesaparicion: safeExtract(/(?:Fecha de desaparición|Fecha y hora de desaparición|Fecha de los hechos)[^:]*:\s*(.{6,25}?)(?=\s+(?:Edad|Sexo|Estatura|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
-                            sexo: safeExtract(/Sexo[^:]*:\s*(.{1,15}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
-                            estatura: safeExtract(/Estatura[^:]*:\s*(.{1,15}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Dependencia|$))/i),
-                            complexion: safeExtract(/Complexi[óo]n[^:]*:\s*(.{1,30}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Dependencia|$))/i),
-                            senas: safeExtract(/(?:Señas|Señas particulares)[^:]*:\s*(.{1,150}?)(?=\s+(?:Ropa|Vestimenta|Fecha|Nacionalidad|Dependencia|Observaciones|$))/i)
+                            nombre: safeExtract(/(?:Nombre|Nombre\\(s\\))(?:\s*:)?\s*(.{2,120}?)(?=\s+(?:Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+                            edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)(?:\s*:)?\s*(.{1,20}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
+                            fechaDesaparicion: safeExtract(/(?:Fecha de desaparición|Fecha y hora de desaparición|Fecha de los hechos|Fecha)(?:\s*:)?\s*(.{6,40}?)(?=\s+(?:Edad|Sexo|Estatura|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
+                            sexo: safeExtract(/(?:Sexo|G[ée]nero)(?:\s*:)?\s*(.{1,20}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
+                            estatura: safeExtract(/Estatura(?:\s*:)?\s*(.{1,20}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Lugar|Dependencia|$))/i),
+                            complexion: safeExtract(/Complexi[óo]n(?:\s*:)?\s*(.{1,40}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Lugar|Dependencia|$))/i),
+                            senas: safeExtract(/(?:Señas|Señas particulares)(?:\s*:)?\s*(.{1,200}?)(?=\s+(?:Ropa|Vestimenta|Fecha|Nacionalidad|Lugar|Dependencia|Observaciones|$))/i)
                         };
+
+                        if (detalles.nombre !== "N/D") {
+                            detalles.nombre = detalles.nombre.replace(/(?:Primer Apellido|Segundo Apellido|Apellido)/gi, '').replace(/\s+/g, ' ').trim();
+                        }
 
                         resultados.push({
                             id: i + 1,
