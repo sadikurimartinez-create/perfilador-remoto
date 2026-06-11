@@ -58,6 +58,8 @@ Analiza estrictamente si los eventos recientes en las noticias confirman o agrav
 
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la siguiente estructura exacta:
 { "success": true, "data": { "eventosCriticos": [ { "titulo": "Título de la noticia", "fuente": "Medio", "resumenTactico": "Por qué es relevante para el polígono" } ], "totalNoticiasLeidas": 15, "correlacionPlataforma": { "conexionDenue": "Relación con negocios", "conexionScince": "Relación demográfica", "conexionHistorica": "Relación historial" }, "conclusionOperativa": "Conclusión en 2 líneas." } }
+
+IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directamente con el carácter { y termínala con el carácter }.
 `.trim();
 
       if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID no está configurado.");
@@ -65,14 +67,39 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la siguiente estruct
       const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
       const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ googleSearch: {} } as any] });
       
-      const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { temperature: 0.2 } });
-      const cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").replace(/```json/gi, '').replace(/```/g, '').trim();
-      
-      let parsed = JSON.parse(cleanText);
-      if (parsed.eventosCriticos && !parsed.data) parsed = { success: true, data: parsed };
-      if (parsed.data && parsed.success === undefined) parsed.success = true;
-      
-      return NextResponse.json(parsed);
+      const streamingResp = await model.generateContentStream({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { temperature: 0.2 } });
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          // Enviar un espacio en blanco inmediatamente para evitar el Timeout (504) de Vercel
+          controller.enqueue(new TextEncoder().encode(" "));
+          
+          // Enviar "pulsos de vida" cada 4 segundos para mantener la conexión abierta
+          const keepAlive = setInterval(() => {
+            controller.enqueue(new TextEncoder().encode(" "));
+          }, 4000);
+
+          try {
+            for await (const item of streamingResp.stream) {
+              if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
+                let text = item.candidates[0].content.parts[0].text;
+                text = text.replace(/```json/gi, '').replace(/```/g, '');
+                controller.enqueue(new TextEncoder().encode(text));
+              }
+            }
+          } catch (e: any) {
+            console.error("Error durante el streaming de VertexAI:", e);
+            // Si la IA falla a medio camino, enviamos un JSON válido con el error para que la pantalla no se congele
+            const errorMsg = JSON.stringify({ success: false, error: e.message, data: { eventosCriticos: [], conclusionOperativa: "Fallo en el análisis de IA: " + e.message } });
+            controller.enqueue(new TextEncoder().encode(errorMsg));
+          } finally {
+            clearInterval(keepAlive);
+            controller.close();
+          }
+        }
+      });
+
+      return new Response(stream, { headers: { "Content-Type": "application/json" } });
     }
 
     // ============================================================================
