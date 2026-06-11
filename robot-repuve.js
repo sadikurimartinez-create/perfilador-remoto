@@ -639,23 +639,39 @@ app.all("/rnpdno", async (req, res) => {
 
           // 3. Extraer la información de la ficha
           const fichaActiva = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
-          const textoCompleto = (fichaActiva.innerText || "").replace(/\n/g, ' ');
+          const textoCompleto = fichaActiva.innerText || "";
           const imagen = fichaActiva.querySelector('img');
           const fotoUrl = imagen ? imagen.src : 'Sin foto';
 
-          const safeExtract = (pattern) => {
-            const match = textoCompleto.match(pattern);
-            return match && match[1] ? match[1].replace(/\s+/g, ' ').trim() : "N/D";
+          const safeExtract = (keywords) => {
+            const lines = textoCompleto.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l.length > 0);
+            for (let i = 0; i < lines.length; i++) {
+              const upperLine = lines[i].toUpperCase();
+              for (const kw of keywords) {
+                if (upperLine.startsWith(kw.toUpperCase())) {
+                  let val = lines[i].substring(kw.length).trim();
+                  if (val.startsWith(':')) val = val.substring(1).trim();
+                  if (val.length > 0) return val;
+                  if (i + 1 < lines.length) {
+                    const nextLine = lines[i + 1];
+                    // Evitar capturar otra etiqueta por accidente si el campo estaba vacío
+                    const esOtraEtiqueta = ["NOMBRE", "EDAD", "FECHA", "SEXO", "ESTATURA", "COMPLEX", "SEÑAS"].some(k => nextLine.toUpperCase().startsWith(k));
+                    if (!esOtraEtiqueta) return nextLine;
+                  }
+                }
+              }
+            }
+            return "N/D";
           };
 
           const detalles = {
-            nombre: safeExtract(/(?:Nombre|Nombre\(s\))(?:\s*:)?\s*(.{2,120}?)(?=\s+(?:Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
-            edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)(?:\s*:)?\s*(.{1,20}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
-            fechaDesaparicion: safeExtract(/(?:Fecha de desaparición|Fecha y hora de desaparición|Fecha de los hechos|Fecha)(?:\s*:)?\s*(.{6,40}?)(?=\s+(?:Edad|Sexo|Estatura|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
-            sexo: safeExtract(/(?:Sexo|G[ée]nero)(?:\s*:)?\s*(.{1,20}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
-            estatura: safeExtract(/Estatura(?:\s*:)?\s*(.{1,20}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Lugar|Dependencia|$))/i),
-            complexion: safeExtract(/Complexi[óo]n(?:\s*:)?\s*(.{1,40}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Lugar|Dependencia|$))/i),
-            senas: safeExtract(/(?:Señas|Señas particulares)(?:\s*:)?\s*(.{1,200}?)(?=\s+(?:Ropa|Vestimenta|Fecha|Nacionalidad|Lugar|Dependencia|Observaciones|$))/i)
+            nombre: safeExtract(["Nombre(s)", "Nombre", "Persona desaparecida"]),
+            edad: safeExtract(["Edad actual", "Edad al momento", "Edad"]),
+            fechaDesaparicion: safeExtract(["Fecha y hora de desaparición", "Fecha de desaparición", "Fecha de los hechos", "Fecha"]),
+            sexo: safeExtract(["Sexo", "Género", "Genero"]),
+            estatura: safeExtract(["Estatura"]),
+            complexion: safeExtract(["Complexión", "Complexion"]),
+            senas: safeExtract(["Señas particulares", "Señas"])
           };
 
           if (detalles.nombre !== "N/D") {
