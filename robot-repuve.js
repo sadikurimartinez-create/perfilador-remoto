@@ -593,8 +593,16 @@ app.all("/rnpdno", async (req, res) => {
     await page.click('.btn-busqueda-consulta');
     console.log("[ROBOT] ✅ Clic en Buscar realizado.");
 
-    console.log("[ROBOT] 3/4 ⏳ Esperando carga del listado de personas (6s)...");
-    await new Promise(r => setTimeout(r, 6000));
+    console.log("[ROBOT] 3/4 ⏳ Esperando carga del listado de personas (hasta 45s)...");
+    // Espera inteligente: El robot vigilará el DOM hasta que aparezcan resultados o un mensaje de vacío
+    await page.waitForFunction(() => {
+      const texto = document.body.innerText.toUpperCase();
+      const elementos = document.querySelectorAll('tbody tr, .card, .mat-row, .list-group-item');
+      // Detecta si la lista ya se llenó o si hay algún texto indicador de que la petición terminó
+      return elementos.length > 1 || texto.includes('MÁS INFORMACIÓN') || texto.includes('DETALLE') || texto.includes('NO SE ENCONTRARON') || texto.includes('EDAD ACTUAL');
+    }, { timeout: 45000 }).catch(() => console.log("[ROBOT] ⚠️ La carga demoró demasiado, intentando extraer lo que esté en pantalla..."));
+    
+    await new Promise(r => setTimeout(r, 4000)); // Tiempo adicional para que las animaciones terminen de pintar
 
     console.log("[ROBOT] 4/4 🔍 Iniciando navegación profunda (Fichas e Instituciones)...");
     // Extraemos las fichas individuales. Limitado a 5 por seguridad de Timeout en Vercel/HTTP.

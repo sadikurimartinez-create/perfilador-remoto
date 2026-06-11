@@ -99,8 +99,20 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
             print("[ROBOT] ✅ Clic en Buscar realizado.")
 
             print("[ROBOT] 3/4 ⏳ Esperando carga del listado de resultados...")
-            await page.wait_for_timeout(6000)
-            
+            try:
+                script_espera = """
+                () => {
+                    const texto = document.body.innerText.toUpperCase();
+                    const elementos = document.querySelectorAll('tbody tr, .card, .mat-row, .list-group-item');
+                    return elementos.length > 1 || texto.includes('MÁS INFORMACIÓN') || texto.includes('DETALLE') || texto.includes('NO SE ENCONTRARON') || texto.includes('EDAD ACTUAL');
+                }
+                """
+                await page.wait_for_function(script_espera, timeout=45000)
+            except:
+                print("[ROBOT] ⚠️ La carga demoró demasiado, intentando extraer lo que esté en pantalla...")
+                
+            await page.wait_for_timeout(4000)
+
             print("[ROBOT] 4/4 🔍 Iniciando navegación profunda (Extracción de Fichas Individuales)...")
             
             # Lógica heurística inyectada al navegador para hacer clics dinámicos en las filas, 
