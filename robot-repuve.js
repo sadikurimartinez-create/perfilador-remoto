@@ -622,46 +622,69 @@ app.all("/rnpdno", async (req, res) => {
 
       for (let i = 0; i < limite; i++) {
         try {
-          elementosClick[i].click();
-          await delay(2500); // Esperar que abra el modal con las instituciones
+          // Hacemos scroll y buscamos un botón interno por si la fila no es clickeable
+          elementosClick[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await delay(500);
+          const clickTarget = elementosClick[i].querySelector('button, a, .mat-icon') || elementosClick[i];
+          clickTarget.click();
+          
+          // Espera activa al modal de instituciones
+          let t1 = 0;
+          while(t1 < 5000) {
+              if (document.querySelector('.modal.show, dialog, .mat-dialog-container, .cdk-overlay-pane')) break;
+              await delay(500);
+              t1 += 500;
+          }
 
           // 2. Seleccionar la Autoridad/Institución
-          const modal = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
+          const modal = document.querySelector('.modal.show, dialog, .mat-dialog-container, .cdk-overlay-pane') || document.body;
           const botonesInst = Array.from(modal.querySelectorAll('button, a')).filter(b => {
             const txt = (b.innerText || "").toUpperCase();
-            return txt.includes('FISCALÍA') || txt.includes('COMISIÓN') || txt.includes('PROCURADURÍA');
+            return txt.includes('FISCALÍA') || txt.includes('COMISIÓN') || txt.includes('PROCURADURÍA') || txt.includes('VER FICHA');
           });
 
           if (botonesInst.length > 0) {
             botonesInst[0].click(); // Clic en la primera autoridad
-            await delay(3000); // Esperar a que cargue la ficha completa y la foto
           }
 
-          // 3. Extraer la información de la ficha
-          const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container'));
-          // Busca el modal que esté al frente y contenga características físicas
-          const fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('COMPLEX'))) || modales.find(m => m.innerText && m.innerText.length > 50) || document.body;
-          const textoCompleto = fichaActiva.innerText || "";
+          // 3. Espera activa a que la ficha cargue sus datos reales (evita leer "Cargando...")
+          let t2 = 0;
+          let fichaActiva = null;
+          while(t2 < 10000) {
+              const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container, app-detalle'));
+              fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('SEXO') || m.innerText.toUpperCase().includes('EDAD') || m.innerText.toUpperCase().includes('ESTATURA'))) || document.body;
+              
+              if (fichaActiva && fichaActiva.innerText && (fichaActiva.innerText.toUpperCase().includes('SEXO') || fichaActiva.innerText.toUpperCase().includes('ESTATURA'))) {
+                  break;
+              }
+              await delay(500);
+              t2 += 500;
+          }
+
+          // 4. Extracción Lineal Inteligente
+          const textoCompleto = fichaActiva ? (fichaActiva.innerText || "") : "";
           const imagen = fichaActiva.querySelector('img');
           const fotoUrl = imagen ? imagen.src : 'Sin foto';
 
           const safeExtract = (keywords) => {
-            let raw = textoCompleto.replace(/\n/g, '  ');
-            for (const kw of keywords) {
-              const idx = raw.toUpperCase().indexOf(kw.toUpperCase());
-              if (idx !== -1) {
-                let val = raw.substring(idx + kw.length).trim();
-                if (val.startsWith(':')) val = val.substring(1).trim();
-                const stopWords = ["NOMBRE", "EDAD", "SEXO", "GÉNERO", "GENERO", "FECHA", "ESTATURA", "COMPLEX", "SEÑAS", "NACIONALIDAD", "LUGAR", "ESTATUS", "DEPENDENCIA", "CIRCUNSTANCIAS", "CABELLO", "OJOS", "SÍNTESIS"];
-                let minStop = val.length;
-                for (const sw of stopWords) {
-                  const sIdx = val.toUpperCase().indexOf(sw);
-                  if (sIdx > 0 && sIdx < minStop) minStop = sIdx;
+            const lines = textoCompleto.split(String.fromCharCode(10)).map(l => l.trim().replace(/\s+:/g, ':')).filter(l => l.length > 0);
+            for (let j = 0; j < lines.length; j++) {
+                const upperLine = lines[j].toUpperCase();
+                for (const kw of keywords) {
+                    const ukw = kw.toUpperCase();
+                    if (upperLine === ukw || upperLine === ukw + ':') {
+                        if (j + 1 < lines.length) {
+                            const nextLineUpper = lines[j+1].toUpperCase();
+                            if (!["NOMBRE", "EDAD", "FECHA", "SEXO", "ESTATURA", "COMPLEX", "SEÑAS", "CIRCUNSTANCIAS", "LUGAR", "NACIONALIDAD"].some(k => nextLineUpper.startsWith(k))) {
+                                return lines[j+1];
+                            }
+                        }
+                    }
+                    if (upperLine.startsWith(ukw + ':')) {
+                        const val = lines[j].substring(lines[j].indexOf(':') + 1).trim();
+                        if (val) return val;
+                    }
                 }
-                let finalVal = val.substring(0, minStop).trim();
-                finalVal = finalVal.replace(/^(ACTUAL|AL MOMENTO|DE DESAPARICIÓN|DE HECHOS)\s*:?\s*/i, '');
-                if (finalVal.length > 0) return finalVal;
-              }
             }
             return "N/D";
           };
@@ -684,7 +707,9 @@ app.all("/rnpdno", async (req, res) => {
 
           // 4. Cerrar el modal para procesar el siguiente
           const btnCerrar = fichaActiva.querySelector('.btn-close, [aria-label="Close"], .close, button.mat-dialog-close');
+          const btnRegresar = Array.from(document.querySelectorAll('button')).find(b => b.innerText.toUpperCase().includes('REGRESAR') || b.innerText.toUpperCase().includes('VOLVER'));
           if (btnCerrar) btnCerrar.click();
+          else if (btnRegresar) btnRegresar.click();
           else document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
           
           await delay(1500);
