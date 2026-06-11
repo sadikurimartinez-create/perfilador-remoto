@@ -512,57 +512,73 @@ app.all("/rnpdno", async (req, res) => {
     await page.goto("https://consultapublicarnpdno.segob.gob.mx/consulta", { waitUntil: "networkidle2", timeout: 60000 });
     
     console.log("[ROBOT] 2.5/4 ⏳ Llenando formulario...");
-    await page.waitForSelector('select.form-select.form-select-sm', { timeout: 15000 });
+    // Esperamos cualquier select en lugar de una clase específica que pudo haber cambiado
+    await page.waitForSelector('select', { timeout: 15000 });
 
     console.log(`[ROBOT] 📅 Ingresando rango de fechas: ${fechaInicio} al ${fechaFin}...`);
     await page.evaluate((inicio, fin) => {
-      // 1. Intentar inyectar en campos tipo fecha nativos
-      const inputsDate = document.querySelectorAll('input[type="date"]');
+      const evt = (el, type) => el.dispatchEvent(new Event(type, { bubbles: true }));
+      const inputsDate = Array.from(document.querySelectorAll('input[type="date"]'));
       if (inputsDate.length >= 2) {
-        inputsDate[0].value = inicio;
-        inputsDate[0].dispatchEvent(new Event('input', { bubbles: true }));
-        inputsDate[0].dispatchEvent(new Event('change', { bubbles: true }));
-        inputsDate[1].value = fin;
-        inputsDate[1].dispatchEvent(new Event('input', { bubbles: true }));
-        inputsDate[1].dispatchEvent(new Event('change', { bubbles: true }));
+        inputsDate[0].focus(); inputsDate[0].value = inicio; evt(inputsDate[0], 'input'); evt(inputsDate[0], 'change'); inputsDate[0].blur();
+        inputsDate[1].focus(); inputsDate[1].value = fin; evt(inputsDate[1], 'input'); evt(inputsDate[1], 'change'); inputsDate[1].blur();
       } else {
-        // 2. Si son campos de texto disfrazados de fecha (ej. 01/01/2000)
-        const textInputs = Array.from(document.querySelectorAll('input[type="text"]')).filter(i => (i.placeholder && i.placeholder.includes('/')) || (i.name && i.name.toLowerCase().includes('fecha')));
+        const textInputs = Array.from(document.querySelectorAll('input')).filter(i => (i.placeholder && i.placeholder.includes('/')) || (i.name && i.name.toLowerCase().includes('fecha')));
         if (textInputs.length >= 2) {
           const formatText = (dateStr) => { const p = dateStr.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dateStr; };
-          textInputs[0].value = formatText(inicio); textInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-          textInputs[1].value = formatText(fin); textInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+          textInputs[0].focus(); textInputs[0].value = formatText(inicio); evt(textInputs[0], 'input'); evt(textInputs[0], 'change'); textInputs[0].blur();
+          textInputs[1].focus(); textInputs[1].value = formatText(fin); evt(textInputs[1], 'input'); evt(textInputs[1], 'change'); textInputs[1].blur();
         }
       }
     }, fechaInicio, fechaFin);
 
-    // Seleccionar Estado usando Puppeteer de forma nativa
+    // Seleccionar Estado buscando dinámicamente el <select> correcto
     await new Promise(r => setTimeout(r, 2000)); // Pausa breve para estabilización de la página
-    const selectsHandles = await page.$$('select.form-select.form-select-sm');
-    if (selectsHandles.length > 0) {
-      const estadoValue = await page.evaluate((el, estadoObj) => {
-        const option = Array.from(el.options).find(o => o.text.includes(estadoObj));
+    const allSelects = await page.$$('select');
+    for (const sel of allSelects) {
+      const val = await page.evaluate((el, est) => {
+        const option = Array.from(el.options).find(o => o.text.toUpperCase().includes(est.toUpperCase()));
         return option ? option.value : null;
-      }, selectsHandles[0], estado);
-      if (estadoValue) await selectsHandles[0].select(estadoValue);
+      }, sel, estado);
+      if (val) {
+        await sel.select(val);
+        await page.evaluate((el) => {
+           el.dispatchEvent(new Event('change', { bubbles: true }));
+           el.dispatchEvent(new Event('blur', { bubbles: true }));
+        }, sel);
+        break;
+      }
     }
     console.log(`[ROBOT] ✅ Estado '${estado}' seleccionado.`);
 
     // Esperar a que el servidor del gobierno cargue los municipios correspondientes
     console.log("[ROBOT] ⏳ Esperando a que el servidor de SEGOB cargue los municipios...");
     await page.waitForFunction((municipioObjetivo) => {
-      const selects = document.querySelectorAll('select.form-select.form-select-sm');
-      return selects.length > 1 && Array.from(selects[1].options).some(o => o.text.includes(municipioObjetivo));
+      const selects = document.querySelectorAll('select');
+      for (const sel of selects) {
+        if (Array.from(sel.options).some(o => o.text.toUpperCase().includes(municipioObjetivo.toUpperCase()))) return true;
+      }
+      return false;
     }, { timeout: 30000 }, municipio);
 
-    // Seleccionar Municipio
-    const handlesMun = await page.$$('select.form-select.form-select-sm');
-    if (handlesMun.length > 1) {
-      const munValue = await page.evaluate((el, munObj) => {
-        const option = Array.from(el.options).find(o => o.text.includes(munObj));
+    // Seleccionar Municipio dinámicamente
+    const allSelectsMun = await page.$$('select');
+    for (const sel of allSelectsMun) {
+      // Ignorar el select del Estado
+      const isState = await page.evaluate((el, est) => Array.from(el.options).some(o => o.text.toUpperCase() === est.toUpperCase()), sel, estado);
+      if (isState) continue;
+      const val = await page.evaluate((el, mun) => {
+        const option = Array.from(el.options).find(o => o.text.toUpperCase().includes(mun.toUpperCase()));
         return option ? option.value : null;
-      }, handlesMun[1], municipio);
-      if (munValue) await handlesMun[1].select(munValue);
+      }, sel, municipio);
+      if (val) {
+        await sel.select(val);
+        await page.evaluate((el) => {
+           el.dispatchEvent(new Event('change', { bubbles: true }));
+           el.dispatchEvent(new Event('blur', { bubbles: true }));
+        }, sel);
+        break;
+      }
     }
     console.log(`[ROBOT] ✅ Municipio '${municipio}' seleccionado.`);
 

@@ -54,38 +54,37 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
             print("[ROBOT] 2/4 ⏳ Llenando formulario...")
             
             # Esperamos a que los menús desplegables aparezcan en pantalla
-            await page.wait_for_selector('select.form-select.form-select-sm', timeout=15000)
+            await page.wait_for_selector('select', timeout=15000)
             print(f"[ROBOT] 📅 Ingresando rango de fechas: {fecha_inicio} al {fecha_fin}...")
             script_fechas = """
             ([inicio, fin]) => {
-                const inputsDate = document.querySelectorAll('input[type="date"]');
+                const evt = (el, type) => el.dispatchEvent(new Event(type, { bubbles: true }));
+                const inputsDate = Array.from(document.querySelectorAll('input[type="date"]'));
                 if (inputsDate.length >= 2) {
-                    inputsDate[0].value = inicio; inputsDate[0].dispatchEvent(new Event('input', { bubbles: true })); inputsDate[0].dispatchEvent(new Event('change', { bubbles: true }));
-                    inputsDate[1].value = fin; inputsDate[1].dispatchEvent(new Event('input', { bubbles: true })); inputsDate[1].dispatchEvent(new Event('change', { bubbles: true }));
+                    inputsDate[0].focus(); inputsDate[0].value = inicio; evt(inputsDate[0], 'input'); evt(inputsDate[0], 'change'); inputsDate[0].blur();
+                    inputsDate[1].focus(); inputsDate[1].value = fin; evt(inputsDate[1], 'input'); evt(inputsDate[1], 'change'); inputsDate[1].blur();
                 } else {
-                    const textInputs = Array.from(document.querySelectorAll('input[type="text"]')).filter(i => (i.placeholder && i.placeholder.includes('/')) || (i.name && i.name.toLowerCase().includes('fecha')));
+                    const textInputs = Array.from(document.querySelectorAll('input')).filter(i => (i.placeholder && i.placeholder.includes('/')) || (i.name && i.name.toLowerCase().includes('fecha')));
                     if (textInputs.length >= 2) {
                         const formatText = (dateStr) => { const p = dateStr.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dateStr; };
-                        textInputs[0].value = formatText(inicio); textInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-                        textInputs[1].value = formatText(fin); textInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+                        textInputs[0].focus(); textInputs[0].value = formatText(inicio); evt(textInputs[0], 'input'); evt(textInputs[0], 'change'); textInputs[0].blur();
+                        textInputs[1].focus(); textInputs[1].value = formatText(fin); evt(textInputs[1], 'input'); evt(textInputs[1], 'change'); textInputs[1].blur();
                     }
                 }
             }
             """
             await page.evaluate(script_fechas, [fecha_inicio, fecha_fin])
 
-            selects = page.locator('select.form-select.form-select-sm')
-
             # 1. Seleccionamos el Estado
-            await selects.nth(0).select_option(label=estado_objetivo)
+            await page.locator(f'select:has(option:has-text("{estado_objetivo}"))').first.select_option(label=estado_objetivo)
             print(f"[ROBOT] ✅ Estado '{estado_objetivo}' seleccionado.")
             
             # Esperamos a que la opción del municipio EXISTA en el HTML para evitar timeouts
             print("[ROBOT] ⏳ Esperando a que el servidor de SEGOB cargue los municipios...")
-            await page.locator(f'select.form-select.form-select-sm >> option:has-text("{municipio_objetivo}")').first.wait_for(state="attached", timeout=30000)
+            await page.locator(f'select >> option:has-text("{municipio_objetivo}")').first.wait_for(state="attached", timeout=30000)
             
             # 2. Seleccionamos el Municipio
-            await selects.nth(1).select_option(label=municipio_objetivo)
+            await page.locator(f'select:has(option:has-text("{municipio_objetivo}"))').first.select_option(label=municipio_objetivo)
             print(f"[ROBOT] ✅ Municipio '{municipio_objetivo}' seleccionado.")
 
             # 3. Seleccionamos el criterio de búsqueda
