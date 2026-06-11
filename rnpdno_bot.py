@@ -76,34 +76,92 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
             await boton_buscar.click()
             print("[ROBOT] ✅ Clic en Buscar realizado.")
 
-            print("[ROBOT] 3/4 ⏳ Esperando resultados (Esto puede tomar varios segundos)...")
+            print("[ROBOT] 3/4 ⏳ Esperando carga del listado de resultados...")
+            await page.wait_for_timeout(6000)
             
-            # El robot se detiene y espera de forma inteligente hasta que la gráfica cargue
-            # Usamos "Edad actual:" porque descubrimos que ese texto aparece cuando carga todo
-            await page.get_by_text("Edad actual:", exact=False).first.wait_for(state="visible", timeout=60000)
-            await page.wait_for_timeout(3000) # Pausa extra para que los números terminen de aparecer
+            print("[ROBOT] 4/4 🔍 Iniciando navegación profunda (Extracción de Fichas Individuales)...")
             
-            print("[ROBOT] 4/4 🔍 Extrayendo inteligencia numérica...")
+            # Lógica heurística inyectada al navegador para hacer clics dinámicos en las filas, 
+            # seleccionar las instituciones y extraer foto/datos de cada ficha.
+            script_extraccion = """
+            async () => {
+                const delay = (ms) => new Promise(res => setTimeout(res, ms));
+                const resultados = [];
+                
+                // 1. Encontrar todos los contenedores/filas de resultados
+                const botonesDetalle = Array.from(document.querySelectorAll('tr, .list-group-item, .card, button')).filter(el => {
+                    const txt = (el.innerText || "").toUpperCase();
+                    return txt.includes('MÁS INFORMACIÓN') || txt.includes('DETALLE') || el.classList.contains('mat-row');
+                });
 
-            # Extraemos todo el texto de la pantalla para buscar los números
-            texto_visible = await page.evaluate("document.body.innerText")
+                let elementosClick = botonesDetalle.length > 0 ? botonesDetalle : Array.from(document.querySelectorAll('tbody tr')).filter(tr => tr.children.length > 2);
+                
+                // Procesaremos máximo 5 registros en esta prueba para no colapsar por tiempo
+                let limite = Math.min(elementosClick.length, 5);
+                
+                for(let i = 0; i < limite; i++) {
+                    try {
+                        elementosClick[i].click(); // Abrir el resultado
+                        await delay(2500); // Esperar modal de instituciones
+                        
+                        // 2. Seleccionar Institución (Fiscalía, Comisión, etc.)
+                        const modal = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
+                        const botonesInst = Array.from(modal.querySelectorAll('button, a')).filter(b => {
+                            const txt = (b.innerText || "").toUpperCase();
+                            return txt.includes('FISCALÍA') || txt.includes('COMISIÓN') || txt.includes('PROCURADURÍA');
+                        });
+                        
+                        if(botonesInst.length > 0) {
+                            botonesInst[0].click(); // Clic en la autoridad
+                            await delay(3000); // Esperar a que cargue la ficha
+                        }
+                        
+                        // 3. Extraer la información de la Ficha
+                        const fichaActiva = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
+                        const textoCompleto = (fichaActiva.innerText || "").split(String.fromCharCode(10)).join(' ');
+                        const imagen = fichaActiva.querySelector('img');
+                        const fotoUrl = imagen ? imagen.src : 'Sin foto';
+                        
+                        resultados.push({
+                            id: i + 1,
+                            foto: fotoUrl,
+                            datos: textoCompleto.substring(0, 400)
+                        });
+                        
+                        // 4. Cerrar el modal para regresar a la lista
+                        const btnCerrar = fichaActiva.querySelector('.btn-close, [aria-label="Close"], .close, button.mat-dialog-close');
+                        if (btnCerrar) {
+                            btnCerrar.click();
+                        } else {
+                            document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
+                        }
+                        await delay(1500);
+                        
+                    } catch(err) {
+                        console.error("Error en registro", i);
+                    }
+                }
+                
+                const btnSig = Array.from(document.querySelectorAll('button, a')).find(el => (el.innerText || "").toUpperCase().includes('SIGUIENTE'));
+                const hayMasPaginas = btnSig && !btnSig.disabled;
+                
+                return { fichas: resultados, total_en_pantalla: elementosClick.length, hay_mas_paginas: hayMasPaginas };
+            }
+            """
             
-            # Función inteligente para capturar los números al lado de la palabra clave
-            def buscar_metrica(palabra_clave, texto_pantalla):
-                match = re.search(rf"{palabra_clave}\D{{0,50}}([\d,]+)", texto_pantalla, re.IGNORECASE)
-                return match.group(1) if match else "N/D"
-
-            total_desaparecidas = buscar_metrica("Total", texto_visible)
-            hombres = buscar_metrica("Hombres", texto_visible)
-            mujeres = buscar_metrica("Mujeres", texto_visible)
-
-            # Imprimimos el resultado final
+            extraccion = await page.evaluate(script_extraccion)
+            fichas = extraccion.get("fichas", [])
+            
             print("\n========================================")
-            print("🎉 RESULTADO RNPDNO EXTRAÍDO CORRECTAMENTE")
+            print("🎉 EXTRACCIÓN PROFUNDA FINALIZADA")
             print(f"📍 Ubicación: {estado_objetivo}, {municipio_objetivo} ({criterio_busqueda})")
-            print(f"👥 Total Desaparecidos: {total_desaparecidas}")
-            print(f"🚹 Hombres: {hombres}")
-            print(f"🚺 Mujeres: {mujeres}")
+            print(f"🔍 Elementos encontrados en la pantalla actual: {extraccion.get('total_en_pantalla', 0)}")
+            print(f"📄 ¿Hay más páginas?: {'Sí' if extraccion.get('hay_mas_paginas') else 'No'}")
+            print(f"👥 Fichas Extraídas en esta muestra (Máx 5): {len(fichas)}")
+            for f in fichas:
+                print(f"--- Ficha {f['id']} ---")
+                print(f"📷 Foto: {f['foto']}")
+                print(f"📝 Datos: {f['datos']}...")
             print("========================================\n")
 
         except PlaywrightTimeoutError:

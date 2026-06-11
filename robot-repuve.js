@@ -507,32 +507,120 @@ app.all("/rnpdno", async (req, res) => {
     console.log("[ROBOT] 2/4 ⏳ Navegando al portal RNPDNO de SEGOB...");
     await page.goto("https://consultapublicarnpdno.segob.gob.mx/consulta", { waitUntil: "networkidle2", timeout: 60000 });
     
-    console.log("[ROBOT] 3/4 ⏳ Esperando carga de gráficas y tableros (15s)...");
-    // El portal de SEGOB usa Angular/JS muy pesado. Le damos 15 segundos para asegurar que los números no digan "Cargando..."
-    await new Promise(r => setTimeout(r, 15000));
+    console.log("[ROBOT] 2.5/4 ⏳ Llenando formulario...");
+    await page.waitForSelector('select.form-select.form-select-sm', { timeout: 15000 });
 
-    console.log("[ROBOT] 4/4 🔍 Extrayendo inteligencia numérica...");
-    const data = await page.evaluate(() => {
-      const text = document.body.innerText.replace(/\n/g, ' ');
-      const extractNear = (keyword) => {
-          // Busca la palabra clave y extrae el primer número (con o sin comas) que aparezca cerca
-          // Ampliamos el rango de búsqueda a 300 caracteres por si la estructura HTML es muy ancha
-          const regex = new RegExp(`${keyword}[^0-9]{0,300}?([\\d,]+)`, 'i');
-          const match = text.match(regex);
-          return match ? match[1] : "N/D";
-      };
-      return {
-         total: extractNear("Total de Personas Desaparecidas y No Localizadas") || extractNear("Desaparecidas y No Localizadas"),
-         hombres: extractNear("Hombres"),
-         mujeres: extractNear("Mujeres"),
-         localizadas: extractNear("Localizadas")
-      };
+    // Seleccionar Estado
+    await page.evaluate((estadoObjetivo) => {
+      const selects = document.querySelectorAll('select.form-select.form-select-sm');
+      if (selects.length > 0) {
+        const option = Array.from(selects[0].options).find(o => o.text.includes(estadoObjetivo));
+        if (option) {
+          selects[0].value = option.value;
+          selects[0].dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    }, estado);
+    console.log(`[ROBOT] ✅ Estado '${estado}' seleccionado.`);
+
+    // Esperar a que el servidor del gobierno cargue los municipios correspondientes
+    console.log("[ROBOT] ⏳ Esperando a que el servidor de SEGOB cargue los municipios...");
+    await page.waitForFunction((municipioObjetivo) => {
+      const selects = document.querySelectorAll('select.form-select.form-select-sm');
+      return selects.length > 1 && Array.from(selects[1].options).some(o => o.text.includes(municipioObjetivo));
+    }, { timeout: 30000 }, municipio);
+
+    // Seleccionar Municipio
+    await page.evaluate((municipioObjetivo) => {
+      const selects = document.querySelectorAll('select.form-select.form-select-sm');
+      if (selects.length > 1) {
+        const option = Array.from(selects[1].options).find(o => o.text.includes(municipioObjetivo));
+        if (option) {
+          selects[1].value = option.value;
+          selects[1].dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    }, municipio);
+    console.log(`[ROBOT] ✅ Municipio '${municipio}' seleccionado.`);
+
+    // Seleccionar criterio "Última vez visto"
+    await page.evaluate(() => {
+      const labels = Array.from(document.querySelectorAll('label'));
+      const target = labels.find(l => l.innerText.toLowerCase().includes('última vez'));
+      if(target) target.click();
     });
 
-    console.log(`[ROBOT] 🎉 RESULTADO RNPDNO: Total Desaparecidas: ${data.total} | Hombres: ${data.hombres} | Mujeres: ${data.mujeres}`);
-    const resumenTexto = `📊 Registro Nacional de Personas Desaparecidas (RNPDNO):\nTotal Histórico: ${data.total}\nHombres: ${data.hombres} | Mujeres: ${data.mujeres}\nPersonas Localizadas: ${data.localizadas}`;
+    // Clic en buscar
+    await page.click('.btn-busqueda-consulta');
+    console.log("[ROBOT] ✅ Clic en Buscar realizado.");
+
+    console.log("[ROBOT] 3/4 ⏳ Esperando carga del listado de personas (6s)...");
+    await new Promise(r => setTimeout(r, 6000));
+
+    console.log("[ROBOT] 4/4 🔍 Iniciando navegación profunda (Fichas e Instituciones)...");
+    // Extraemos las fichas individuales. Limitado a 5 por seguridad de Timeout en Vercel/HTTP.
+    const extraccion = await page.evaluate(async () => {
+      const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      const fichas = [];
+      let hayMasPaginas = false;
+
+      // 1. Encontrar todas las filas/tarjetas de resultados
+      const botonesDetalle = Array.from(document.querySelectorAll('tr, .list-group-item, .card, button')).filter(el => {
+        const txt = (el.innerText || "").toUpperCase();
+        return txt.includes('MÁS INFORMACIÓN') || txt.includes('DETALLE') || el.classList.contains('mat-row');
+      });
+
+      let elementosClick = botonesDetalle.length > 0 ? botonesDetalle : Array.from(document.querySelectorAll('tbody tr')).filter(tr => tr.children.length > 2);
+      const limite = Math.min(elementosClick.length, 5);
+
+      for (let i = 0; i < limite; i++) {
+        try {
+          elementosClick[i].click();
+          await delay(2500); // Esperar que abra el modal con las instituciones
+
+          // 2. Seleccionar la Autoridad/Institución
+          const modal = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
+          const botonesInst = Array.from(modal.querySelectorAll('button, a')).filter(b => {
+            const txt = (b.innerText || "").toUpperCase();
+            return txt.includes('FISCALÍA') || txt.includes('COMISIÓN') || txt.includes('PROCURADURÍA');
+          });
+
+          if (botonesInst.length > 0) {
+            botonesInst[0].click(); // Clic en la primera autoridad
+            await delay(3000); // Esperar a que cargue la ficha completa y la foto
+          }
+
+          // 3. Extraer la información de la ficha
+          const fichaActiva = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
+          const textoCompleto = (fichaActiva.innerText || "").replace(/\n/g, ' ');
+          const imagen = fichaActiva.querySelector('img');
+          const fotoUrl = imagen ? imagen.src : 'Sin foto';
+
+          fichas.push({ id: i + 1, foto: fotoUrl, datos: textoCompleto.substring(0, 400) });
+
+          // 4. Cerrar el modal para procesar el siguiente
+          const btnCerrar = fichaActiva.querySelector('.btn-close, [aria-label="Close"], .close, button.mat-dialog-close');
+          if (btnCerrar) btnCerrar.click();
+          else document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
+          
+          await delay(1500);
+        } catch (e) {
+          console.error("Error en registro", i);
+        }
+      }
+
+      const btnSig = Array.from(document.querySelectorAll('button, a')).find(el => (el.innerText || "").toUpperCase().includes('SIGUIENTE'));
+      if (btnSig && !btnSig.disabled) hayMasPaginas = true;
+
+      return { fichas, hayMasPaginas, totalEncontrados: elementosClick.length };
+    });
+
+    console.log(`[ROBOT] 🎉 FICHAS EXTRAÍDAS: ${extraccion.fichas.length} de ${extraccion.totalEncontrados} visibles en pantalla.`);
+    if (extraccion.hayMasPaginas) console.log("[ROBOT] ⚠️ Existen más páginas de resultados disponibles.");
     
-    res.json({ exito: true, resumenTexto, datos: data });
+    const resumenTexto = `📊 Resultados Profundos RNPDNO:\nSe encontraron ${extraccion.totalEncontrados} registros en la primera página.\nSe extrajeron ${extraccion.fichas.length} fichas individuales (Muestra).\n${extraccion.hayMasPaginas ? 'Existen más páginas de resultados en el portal.' : ''}`;
+    
+    res.json({ exito: true, resumenTexto, datos_fichas: extraccion.fichas, detalles_paginacion: extraccion });
   } catch (error) {
     console.error("\n[ROBOT] ❌ ERROR EN RNPDNO:", error.message, "\n");
     res.json({ exito: false, error: error.message });
