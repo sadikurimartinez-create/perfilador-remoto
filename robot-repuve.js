@@ -479,6 +479,7 @@ app.all("/rnpdno", async (req, res) => {
   robotOcupado = true;
   console.log(`\n========================================`);
   console.log(`[ROBOT] 🚀 Iniciando búsqueda RNPDNO: ${estado} - ${municipio}`);
+  console.log(`[ROBOT] 🧬 VERSIÓN: Navegación Profunda (Fichas e Instituciones activado)`);
   console.log(`========================================`);
 
   let browser = null;
