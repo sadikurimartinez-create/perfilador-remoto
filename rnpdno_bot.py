@@ -151,26 +151,28 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                         }
                         
                         // 3. Extraer la información de la Ficha
-                        const fichaActiva = document.querySelector('.modal.show, dialog, .mat-dialog-container') || document.body;
+                        const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container'));
+                        const fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('COMPLEX'))) || modales.find(m => m.innerText && m.innerText.length > 50) || document.body;
                         const textoCompleto = fichaActiva.innerText || "";
                         const imagen = fichaActiva.querySelector('img');
                         const fotoUrl = imagen ? imagen.src : 'Sin foto';
                         
                         const safeExtract = (keywords) => {
-                            const lines = textoCompleto.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l.length > 0);
-                            for (let i = 0; i < lines.length; i++) {
-                                const upperLine = lines[i].toUpperCase();
-                                for (const kw of keywords) {
-                                    if (upperLine.startsWith(kw.toUpperCase())) {
-                                        let val = lines[i].substring(kw.length).trim();
-                                        if (val.startsWith(':')) val = val.substring(1).trim();
-                                        if (val.length > 0) return val;
-                                        if (i + 1 < lines.length) {
-                                            const nextLine = lines[i + 1];
-                                            const esOtraEtiqueta = ["NOMBRE", "EDAD", "FECHA", "SEXO", "ESTATURA", "COMPLEX", "SEÑAS"].some(k => nextLine.toUpperCase().startsWith(k));
-                                            if (!esOtraEtiqueta) return nextLine;
-                                        }
+                            let raw = textoCompleto.replace(/\n/g, '  ');
+                            for (const kw of keywords) {
+                                const idx = raw.toUpperCase().indexOf(kw.toUpperCase());
+                                if (idx !== -1) {
+                                    let val = raw.substring(idx + kw.length).trim();
+                                    if (val.startsWith(':')) val = val.substring(1).trim();
+                                    const stopWords = ["NOMBRE", "EDAD", "SEXO", "GÉNERO", "GENERO", "FECHA", "ESTATURA", "COMPLEX", "SEÑAS", "NACIONALIDAD", "LUGAR", "ESTATUS", "DEPENDENCIA", "CIRCUNSTANCIAS", "CABELLO", "OJOS", "SÍNTESIS"];
+                                    let minStop = val.length;
+                                    for (const sw of stopWords) {
+                                        const sIdx = val.toUpperCase().indexOf(sw);
+                                        if (sIdx > 0 && sIdx < minStop) minStop = sIdx;
                                     }
+                                    let finalVal = val.substring(0, minStop).trim();
+                                    finalVal = finalVal.replace(/^(ACTUAL|AL MOMENTO|DE DESAPARICIÓN|DE HECHOS)\s*:?\s*/i, '');
+                                    if (finalVal.length > 0) return finalVal;
                                 }
                             }
                             return "N/D";
