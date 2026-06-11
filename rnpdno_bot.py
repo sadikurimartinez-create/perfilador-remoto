@@ -1,6 +1,7 @@
 import asyncio
 import re
 import requests
+import datetime
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 # ==========================================
@@ -29,7 +30,10 @@ def iniciar_perfil_morelogin(env_id):
         print(f"[MORELOGIN] ❌ Error conectando a la API de MoreLogin. Error: {e}")
         return None
 
-async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo="Aguascalientes", criterio_busqueda="ultima_vez_visto"):
+async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo="Aguascalientes", criterio_busqueda="ultima_vez_visto", fecha_inicio="2000-01-01", fecha_fin=None):
+    if not fecha_fin:
+        fecha_fin = datetime.datetime.now().strftime("%Y-%m-%d")
+
     ws_endpoint = iniciar_perfil_morelogin(PERFIL_MORELOGIN_ID)
     
     if not ws_endpoint:
@@ -51,6 +55,25 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
             
             # Esperamos a que los menús desplegables aparezcan en pantalla
             await page.wait_for_selector('select.form-select.form-select-sm', timeout=15000)
+            print(f"[ROBOT] 📅 Ingresando rango de fechas: {fecha_inicio} al {fecha_fin}...")
+            script_fechas = """
+            ([inicio, fin]) => {
+                const inputsDate = document.querySelectorAll('input[type="date"]');
+                if (inputsDate.length >= 2) {
+                    inputsDate[0].value = inicio; inputsDate[0].dispatchEvent(new Event('input', { bubbles: true })); inputsDate[0].dispatchEvent(new Event('change', { bubbles: true }));
+                    inputsDate[1].value = fin; inputsDate[1].dispatchEvent(new Event('input', { bubbles: true })); inputsDate[1].dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                    const textInputs = Array.from(document.querySelectorAll('input[type="text"]')).filter(i => (i.placeholder && i.placeholder.includes('/')) || (i.name && i.name.toLowerCase().includes('fecha')));
+                    if (textInputs.length >= 2) {
+                        const formatText = (dateStr) => { const p = dateStr.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dateStr; };
+                        textInputs[0].value = formatText(inicio); textInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+                        textInputs[1].value = formatText(fin); textInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }
+            }
+            """
+            await page.evaluate(script_fechas, [fecha_inicio, fecha_fin])
+
             selects = page.locator('select.form-select.form-select-sm')
 
             # 1. Seleccionamos el Estado

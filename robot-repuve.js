@@ -471,6 +471,9 @@ app.all("/repuve", async (req, res) => {
 app.all("/rnpdno", async (req, res) => {
   const estado = req.query.estado || "Aguascalientes";
   const municipio = req.query.municipio || "Todos";
+  const fechaInicio = req.query.fechaInicio || "2000-01-01"; // YYYY-MM-DD
+  const hoy = new Date();
+  const fechaFin = req.query.fechaFin || hoy.toISOString().split('T')[0]; // Fecha actual por defecto
 
   if (robotOcupado) {
     return res.json({ exito: false, error: "⚠️ El Cuartel General está analizando otra consulta. Espere 45 segundos." });
@@ -510,6 +513,28 @@ app.all("/rnpdno", async (req, res) => {
     
     console.log("[ROBOT] 2.5/4 ⏳ Llenando formulario...");
     await page.waitForSelector('select.form-select.form-select-sm', { timeout: 15000 });
+
+    console.log(`[ROBOT] 📅 Ingresando rango de fechas: ${fechaInicio} al ${fechaFin}...`);
+    await page.evaluate((inicio, fin) => {
+      // 1. Intentar inyectar en campos tipo fecha nativos
+      const inputsDate = document.querySelectorAll('input[type="date"]');
+      if (inputsDate.length >= 2) {
+        inputsDate[0].value = inicio;
+        inputsDate[0].dispatchEvent(new Event('input', { bubbles: true }));
+        inputsDate[0].dispatchEvent(new Event('change', { bubbles: true }));
+        inputsDate[1].value = fin;
+        inputsDate[1].dispatchEvent(new Event('input', { bubbles: true }));
+        inputsDate[1].dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // 2. Si son campos de texto disfrazados de fecha (ej. 01/01/2000)
+        const textInputs = Array.from(document.querySelectorAll('input[type="text"]')).filter(i => (i.placeholder && i.placeholder.includes('/')) || (i.name && i.name.toLowerCase().includes('fecha')));
+        if (textInputs.length >= 2) {
+          const formatText = (dateStr) => { const p = dateStr.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dateStr; };
+          textInputs[0].value = formatText(inicio); textInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+          textInputs[1].value = formatText(fin); textInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    }, fechaInicio, fechaFin);
 
     // Seleccionar Estado usando Puppeteer de forma nativa
     await new Promise(r => setTimeout(r, 2000)); // Pausa breve para estabilización de la página
