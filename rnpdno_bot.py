@@ -122,10 +122,25 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                         const imagen = fichaActiva.querySelector('img');
                         const fotoUrl = imagen ? imagen.src : 'Sin foto';
                         
+                        const safeExtract = (pattern) => {
+                            const match = textoCompleto.match(pattern);
+                            return match && match[1] ? match[1].trim() : "N/D";
+                        };
+                        
+                        const detalles = {
+                            nombre: safeExtract(/(?:Nombre|Nombre\\(s\\))[^:]*:\s*(.{2,50}?)(?=\s+(?:Primer|Segundo|Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+                            edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)[^:]*:\s*(.{1,15}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+                            sexo: safeExtract(/Sexo[^:]*:\s*(.{1,15}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+                            estatura: safeExtract(/Estatura[^:]*:\s*(.{1,15}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Dependencia|$))/i),
+                            complexion: safeExtract(/Complexi[óo]n[^:]*:\s*(.{1,30}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Dependencia|$))/i),
+                            senas: safeExtract(/(?:Señas|Señas particulares)[^:]*:\s*(.{1,150}?)(?=\s+(?:Ropa|Vestimenta|Fecha|Nacionalidad|Dependencia|Observaciones|$))/i)
+                        };
+
                         resultados.push({
                             id: i + 1,
                             foto: fotoUrl,
-                            datos: textoCompleto.substring(0, 400)
+                            detalles: detalles,
+                            texto_crudo: textoCompleto.substring(0, 400)
                         });
                         
                         // 4. Cerrar el modal para regresar a la lista
@@ -161,7 +176,12 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
             for f in fichas:
                 print(f"--- Ficha {f['id']} ---")
                 print(f"📷 Foto: {f['foto']}")
-                print(f"📝 Datos: {f['datos']}...")
+                if 'detalles' in f:
+                    print(f"👤 Nombre: {f['detalles'].get('nombre', 'N/D')}")
+                    print(f"🎂 Edad: {f['detalles'].get('edad', 'N/D')} | ⚧️ Sexo: {f['detalles'].get('sexo', 'N/D')}")
+                    print(f"📏 Estatura: {f['detalles'].get('estatura', 'N/D')} | 🧍 Complexión: {f['detalles'].get('complexion', 'N/D')}")
+                    print(f"👁️ Señas: {f['detalles'].get('senas', 'N/D')}")
+                print(f"📝 Texto crudo: {f.get('texto_crudo', '')[:100]}...")
             print("========================================\n")
 
         except PlaywrightTimeoutError:

@@ -511,17 +511,16 @@ app.all("/rnpdno", async (req, res) => {
     console.log("[ROBOT] 2.5/4 ⏳ Llenando formulario...");
     await page.waitForSelector('select.form-select.form-select-sm', { timeout: 15000 });
 
-    // Seleccionar Estado
-    await page.evaluate((estadoObjetivo) => {
-      const selects = document.querySelectorAll('select.form-select.form-select-sm');
-      if (selects.length > 0) {
-        const option = Array.from(selects[0].options).find(o => o.text.includes(estadoObjetivo));
-        if (option) {
-          selects[0].value = option.value;
-          selects[0].dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    }, estado);
+    // Seleccionar Estado usando Puppeteer de forma nativa
+    await new Promise(r => setTimeout(r, 2000)); // Pausa breve para estabilización de la página
+    const selectsHandles = await page.$$('select.form-select.form-select-sm');
+    if (selectsHandles.length > 0) {
+      const estadoValue = await page.evaluate((el, estadoObj) => {
+        const option = Array.from(el.options).find(o => o.text.includes(estadoObj));
+        return option ? option.value : null;
+      }, selectsHandles[0], estado);
+      if (estadoValue) await selectsHandles[0].select(estadoValue);
+    }
     console.log(`[ROBOT] ✅ Estado '${estado}' seleccionado.`);
 
     // Esperar a que el servidor del gobierno cargue los municipios correspondientes
@@ -532,16 +531,14 @@ app.all("/rnpdno", async (req, res) => {
     }, { timeout: 30000 }, municipio);
 
     // Seleccionar Municipio
-    await page.evaluate((municipioObjetivo) => {
-      const selects = document.querySelectorAll('select.form-select.form-select-sm');
-      if (selects.length > 1) {
-        const option = Array.from(selects[1].options).find(o => o.text.includes(municipioObjetivo));
-        if (option) {
-          selects[1].value = option.value;
-          selects[1].dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-    }, municipio);
+    const handlesMun = await page.$$('select.form-select.form-select-sm');
+    if (handlesMun.length > 1) {
+      const munValue = await page.evaluate((el, munObj) => {
+        const option = Array.from(el.options).find(o => o.text.includes(munObj));
+        return option ? option.value : null;
+      }, handlesMun[1], municipio);
+      if (munValue) await handlesMun[1].select(munValue);
+    }
     console.log(`[ROBOT] ✅ Municipio '${municipio}' seleccionado.`);
 
     // Seleccionar criterio "Última vez visto"
@@ -597,7 +594,21 @@ app.all("/rnpdno", async (req, res) => {
           const imagen = fichaActiva.querySelector('img');
           const fotoUrl = imagen ? imagen.src : 'Sin foto';
 
-          fichas.push({ id: i + 1, foto: fotoUrl, datos: textoCompleto.substring(0, 400) });
+          const safeExtract = (pattern) => {
+            const match = textoCompleto.match(pattern);
+            return match && match[1] ? match[1].trim() : "N/D";
+          };
+
+          const detalles = {
+            nombre: safeExtract(/(?:Nombre|Nombre\(s\))[^:]*:\s*(.{2,50}?)(?=\s+(?:Primer|Segundo|Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+            edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)[^:]*:\s*(.{1,15}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+            sexo: safeExtract(/Sexo[^:]*:\s*(.{1,15}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+            estatura: safeExtract(/Estatura[^:]*:\s*(.{1,15}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Dependencia|$))/i),
+            complexion: safeExtract(/Complexi[óo]n[^:]*:\s*(.{1,30}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Dependencia|$))/i),
+            senas: safeExtract(/(?:Señas|Señas particulares)[^:]*:\s*(.{1,150}?)(?=\s+(?:Ropa|Vestimenta|Fecha|Nacionalidad|Dependencia|Observaciones|$))/i)
+          };
+
+          fichas.push({ id: i + 1, foto: fotoUrl, detalles, texto_crudo: textoCompleto.substring(0, 400) });
 
           // 4. Cerrar el modal para procesar el siguiente
           const btnCerrar = fichaActiva.querySelector('.btn-close, [aria-label="Close"], .close, button.mat-dialog-close');
