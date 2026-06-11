@@ -101,31 +101,55 @@ MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea re
 }
 `;
 
-    const result = await model.generateContent({
+    const streamingResp = await model.generateContentStream({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" }
     });
-    
-    const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    let parsed;
-    try {
-      const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(cleanText);
-    } catch (e) {
-      console.error("[api/generate-profile] Error parseando JSON de Gemini:", e);
-      // Extractor de emergencia a prueba de balas si la IA rompe el JSON con saltos de línea reales
-      let rawMarkdown = text;
-      const match = text.match(/"markdown"\s*:\s*"([\s\S]*?)"\s*(?:,\s*"meta"|}$)/);
-      if (match && match[1]) {
-         rawMarkdown = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-      } else {
-         // Limpieza bruta
-         rawMarkdown = text.replace(/^[\s\S]*?"markdown"\s*:\s*"/, '').replace(/"\s*}\s*$/, '').replace(/\\n/g, '\n');
-      }
-      parsed = { markdown: rawMarkdown }; 
-    }
 
-    return NextResponse.json(parsed);
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Pulso de vida para evitar el error 504 Timeout de Vercel
+        controller.enqueue(new TextEncoder().encode(" "));
+        const keepAlive = setInterval(() => {
+          controller.enqueue(new TextEncoder().encode(" "));
+        }, 4000);
+
+        try {
+          let fullText = "";
+          for await (const item of streamingResp.stream) {
+            if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
+              fullText += item.candidates[0].content.parts[0].text;
+            }
+          }
+          
+          let parsed;
+          try {
+            const cleanText = fullText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            parsed = JSON.parse(cleanText);
+          } catch (e) {
+            console.error("[api/generate-profile] Error parseando JSON de Gemini:", e);
+            let rawMarkdown = fullText;
+            const match = fullText.match(/"markdown"\s*:\s*"([\s\S]*?)"\s*(?:,\s*"meta"|}$)/);
+            if (match && match[1]) {
+               rawMarkdown = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+            } else {
+               rawMarkdown = fullText.replace(/^[\s\S]*?"markdown"\s*:\s*"/, '').replace(/"\s*}\s*$/, '').replace(/\\n/g, '\n');
+            }
+            parsed = { markdown: rawMarkdown }; 
+          }
+
+          controller.enqueue(new TextEncoder().encode(JSON.stringify(parsed)));
+        } catch (err: any) {
+          console.error("[api/generate-profile] Error AI Stream:", err);
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ markdown: "Error interno de IA: " + err.message })));
+        } finally {
+          clearInterval(keepAlive);
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, { headers: { "Content-Type": "application/json" } });
   } catch (err: any) {
     console.error("[api/generate-profile] Error:", err);
     return NextResponse.json(
