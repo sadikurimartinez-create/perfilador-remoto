@@ -651,6 +651,7 @@ app.all("/rnpdno", async (req, res) => {
           const detalles = {
             nombre: safeExtract(/(?:Nombre|Nombre\(s\))[^:]*:\s*(.{2,50}?)(?=\s+(?:Primer|Segundo|Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
             edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)[^:]*:\s*(.{1,15}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+            fechaDesaparicion: safeExtract(/(?:Fecha de desaparición|Fecha y hora de desaparición|Fecha de los hechos)[^:]*:\s*(.{6,25}?)(?=\s+(?:Edad|Sexo|Estatura|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
             sexo: safeExtract(/Sexo[^:]*:\s*(.{1,15}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
             estatura: safeExtract(/Estatura[^:]*:\s*(.{1,15}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Dependencia|$))/i),
             complexion: safeExtract(/Complexi[óo]n[^:]*:\s*(.{1,30}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Dependencia|$))/i),
@@ -679,7 +680,17 @@ app.all("/rnpdno", async (req, res) => {
     console.log(`[ROBOT] 🎉 FICHAS EXTRAÍDAS: ${extraccion.fichas.length} de ${extraccion.totalEncontrados} visibles en pantalla.`);
     if (extraccion.hayMasPaginas) console.log("[ROBOT] ⚠️ Existen más páginas de resultados disponibles.");
     
-    const resumenTexto = `📊 Resultados Profundos RNPDNO:\nSe encontraron ${extraccion.totalEncontrados} registros en la primera página.\nSe extrajeron ${extraccion.fichas.length} fichas individuales (Muestra).\n${extraccion.hayMasPaginas ? 'Existen más páginas de resultados en el portal.' : ''}`;
+    let resumenTexto = `📊 Resultados Profundos RNPDNO (Domicilio o Última vez vistos en el área de interés o sus fronteras):\nSe encontraron ${extraccion.totalEncontrados} registros. Se extrajeron ${extraccion.fichas.length} fichas individuales con la siguiente información:\n\n`;
+    
+    extraccion.fichas.forEach(f => {
+      resumenTexto += `👤 Nombre: ${f.detalles.nombre}\n`;
+      resumenTexto += `🎂 Edad: ${f.detalles.edad} | ⚧️ Sexo: ${f.detalles.sexo}\n`;
+      resumenTexto += `📅 Fecha de Desaparición: ${f.detalles.fechaDesaparicion}\n`;
+      resumenTexto += `📏 Estatura: ${f.detalles.estatura} | 🧍 Complexión: ${f.detalles.complexion}\n`;
+      resumenTexto += `👁️ Señas: ${f.detalles.senas}\n\n`;
+    });
+
+    resumenTexto += `\nINSTRUCCIÓN PARA LA IA: Presenta estos datos de forma precisa e individualizada. Cruza esta información con los indicadores de violencia y marginación del polígono para identificar patrones o posibles causas de las desapariciones. Menciona explícitamente que las ubicaciones (domicilio o última vez visto) se graficarán en un QUINTO MAPA analítico exclusivo para Personas Desaparecidas.`;
     
     res.json({ exito: true, resumenTexto, datos_fichas: extraccion.fichas, detalles_paginacion: extraccion });
   } catch (error) {

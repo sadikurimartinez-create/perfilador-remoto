@@ -164,6 +164,7 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                         const detalles = {
                             nombre: safeExtract(/(?:Nombre|Nombre\\(s\\))[^:]*:\s*(.{2,50}?)(?=\s+(?:Primer|Segundo|Edad|Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
                             edad: safeExtract(/(?:Edad|Edad actual|Edad al momento)[^:]*:\s*(.{1,15}?)(?=\s+(?:Sexo|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
+                            fechaDesaparicion: safeExtract(/(?:Fecha de desaparición|Fecha y hora de desaparición|Fecha de los hechos)[^:]*:\s*(.{6,25}?)(?=\s+(?:Edad|Sexo|Estatura|Nacionalidad|Lugar|Complex|Señas|Dependencia|$))/i),
                             sexo: safeExtract(/Sexo[^:]*:\s*(.{1,15}?)(?=\s+(?:Edad|Estatura|Fecha|Nacionalidad|Complex|Señas|Dependencia|$))/i),
                             estatura: safeExtract(/Estatura[^:]*:\s*(.{1,15}?)(?=\s+(?:Complex|Señas|Fecha|Nacionalidad|Dependencia|$))/i),
                             complexion: safeExtract(/Complexi[óo]n[^:]*:\s*(.{1,30}?)(?=\s+(?:Señas|Fecha|Nacionalidad|Dependencia|$))/i),
@@ -213,6 +214,7 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                 if 'detalles' in f:
                     print(f"👤 Nombre: {f['detalles'].get('nombre', 'N/D')}")
                     print(f"🎂 Edad: {f['detalles'].get('edad', 'N/D')} | ⚧️ Sexo: {f['detalles'].get('sexo', 'N/D')}")
+                    print(f"📅 Fecha de Desaparición: {f['detalles'].get('fechaDesaparicion', 'N/D')}")
                     print(f"📏 Estatura: {f['detalles'].get('estatura', 'N/D')} | 🧍 Complexión: {f['detalles'].get('complexion', 'N/D')}")
                     print(f"👁️ Señas: {f['detalles'].get('senas', 'N/D')}")
                 print(f"📝 Texto crudo: {f.get('texto_crudo', '')[:100]}...")
