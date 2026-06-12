@@ -611,33 +611,34 @@ app.all("/rnpdno", async (req, res) => {
       const fichas = [];
       let hayMasPaginas = false;
 
-      // 1. Encontrar todas las filas/tarjetas de resultados
-      const botonesDetalle = Array.from(document.querySelectorAll('tr, .list-group-item, .card, button')).filter(el => {
-        const txt = (el.innerText || "").toUpperCase();
-        return txt.includes('MÁS INFORMACIÓN') || txt.includes('DETALLE') || el.classList.contains('mat-row');
+      // 1. Encontrar filas únicas y evitar capturar elementos anidados duplicados
+      const filasResultados = Array.from(document.querySelectorAll('tbody tr, .mat-row, .list-group-item, .card')).filter(el => {
+          return el.innerText && el.innerText.trim().length > 10 && !el.closest('thead');
       });
-
-      let elementosClick = botonesDetalle.length > 0 ? botonesDetalle : Array.from(document.querySelectorAll('tbody tr')).filter(tr => tr.children.length > 2);
+      const elementosClick = filasResultados.filter(el => !filasResultados.some(parent => parent !== el && parent.contains(el)));
       const limite = Math.min(elementosClick.length, 5);
 
       for (let i = 0; i < limite; i++) {
         try {
-          // Hacemos scroll y buscamos un botón interno por si la fila no es clickeable
-          elementosClick[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const fila = elementosClick[i];
+          fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
           await delay(500);
-          const clickTarget = elementosClick[i].querySelector('button, a, .mat-icon') || elementosClick[i];
+          const clickTarget = fila.querySelector('button, a, .mat-icon, [role="button"]') || fila;
           clickTarget.click();
           
           // Espera activa al modal de instituciones
           let t1 = 0;
+          let modal = null;
           while(t1 < 5000) {
-              if (document.querySelector('.modal.show, dialog, .mat-dialog-container, .cdk-overlay-pane')) break;
+              modal = document.querySelector('.cdk-overlay-pane, .mat-dialog-container, .modal.show, dialog');
+              if (modal && modal.innerText.length > 20) break;
               await delay(500);
               t1 += 500;
           }
 
-          // 2. Seleccionar la Autoridad/Institución
-          const modal = document.querySelector('.modal.show, dialog, .mat-dialog-container, .cdk-overlay-pane') || document.body;
+          if (!modal) continue; // Si no abrió el modal flotante, descartamos para no leer basura
+
+          // 2. Seleccionar la Autoridad/Institución dentro de la ventana
           const botonesInst = Array.from(modal.querySelectorAll('button, a')).filter(b => {
             const txt = (b.innerText || "").toUpperCase();
             return txt.includes('FISCALÍA') || txt.includes('COMISIÓN') || txt.includes('PROCURADURÍA') || txt.includes('VER FICHA');
@@ -652,17 +653,19 @@ app.all("/rnpdno", async (req, res) => {
           let fichaActiva = null;
           while(t2 < 10000) {
               const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container, app-detalle'));
-              fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('SEXO') || m.innerText.toUpperCase().includes('EDAD') || m.innerText.toUpperCase().includes('ESTATURA'))) || document.body;
+              fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('COMPLEX')));
               
-              if (fichaActiva && fichaActiva.innerText && (fichaActiva.innerText.toUpperCase().includes('SEXO') || fichaActiva.innerText.toUpperCase().includes('ESTATURA'))) {
+              if (fichaActiva) {
                   break;
               }
               await delay(500);
               t2 += 500;
           }
 
+          if (!fichaActiva) fichaActiva = modal; // Fallback al modal abierto
+
           // 4. Extracción Lineal Inteligente
-          const textoCompleto = fichaActiva ? (fichaActiva.innerText || "") : "";
+          const textoCompleto = fichaActiva.innerText || "";
           const imagen = fichaActiva.querySelector('img');
           const fotoUrl = imagen ? imagen.src : 'Sin foto';
 
@@ -693,6 +696,7 @@ app.all("/rnpdno", async (req, res) => {
             nombre: safeExtract(["Nombre(s)", "Nombre", "Persona desaparecida"]),
             edad: safeExtract(["Edad actual", "Edad al momento", "Edad"]),
             fechaDesaparicion: safeExtract(["Fecha y hora de desaparición", "Fecha de desaparición", "Fecha de los hechos", "Fecha"]),
+            lugar: safeExtract(["Lugar de desaparición", "Lugar de los hechos", "Lugar", "Colonia", "Municipio"]),
             sexo: safeExtract(["Sexo", "Género", "Genero"]),
             estatura: safeExtract(["Estatura"]),
             complexion: safeExtract(["Complexión", "Complexion"]),
@@ -706,13 +710,15 @@ app.all("/rnpdno", async (req, res) => {
           fichas.push({ id: i + 1, foto: fotoUrl, detalles, texto_crudo: textoCompleto.substring(0, 400) });
 
           // 4. Cerrar el modal para procesar el siguiente
-          const btnCerrar = fichaActiva.querySelector('.btn-close, [aria-label="Close"], .close, button.mat-dialog-close');
-          const btnRegresar = Array.from(document.querySelectorAll('button')).find(b => b.innerText.toUpperCase().includes('REGRESAR') || b.innerText.toUpperCase().includes('VOLVER'));
-          if (btnCerrar) btnCerrar.click();
-          else if (btnRegresar) btnRegresar.click();
-          else document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
-          
-          await delay(1500);
+          let waitClose = 0;
+          while(document.querySelector('.cdk-overlay-pane, .mat-dialog-container, .modal.show') && waitClose < 3000) {
+              const btnCerrar = document.querySelector('.cdk-overlay-pane .btn-close, .cdk-overlay-pane [aria-label="Close"], .cdk-overlay-pane button.mat-dialog-close, .modal.show .close');
+              if (btnCerrar) btnCerrar.click();
+              document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
+              await delay(500);
+              waitClose += 500;
+          }
+          await delay(1000); // Respiro garantizado antes del próximo clic
         } catch (e) {
           console.error("Error en registro", i);
         }
@@ -733,11 +739,12 @@ app.all("/rnpdno", async (req, res) => {
       resumenTexto += `👤 Nombre: ${f.detalles.nombre}\n`;
       resumenTexto += `🎂 Edad: ${f.detalles.edad} | ⚧️ Sexo: ${f.detalles.sexo}\n`;
       resumenTexto += `📅 Fecha de Desaparición: ${f.detalles.fechaDesaparicion}\n`;
+      resumenTexto += `📍 Lugar/Colonia: ${f.detalles.lugar}\n`;
       resumenTexto += `📏 Estatura: ${f.detalles.estatura} | 🧍 Complexión: ${f.detalles.complexion}\n`;
       resumenTexto += `👁️ Señas: ${f.detalles.senas}\n\n`;
     });
 
-    resumenTexto += `\nINSTRUCCIÓN PARA LA IA: Presenta estos datos de forma precisa e individualizada. Cruza esta información con los indicadores de violencia y marginación del polígono para identificar patrones o posibles causas de las desapariciones. Menciona explícitamente que las ubicaciones (domicilio o última vez visto) se graficarán en un QUINTO MAPA analítico exclusivo para Personas Desaparecidas.`;
+    resumenTexto += `\nINSTRUCCIÓN OBLIGATORIA PARA LA IA: Aplica inmediatamente la "Directiva Operativa - Módulo de Personas Desaparecidas". Es tu OBLIGACIÓN cruzar el campo "Lugar/Colonia" con el área de interés. Si hay coincidencia, integra los hallazgos como el "MAPA 5 - PERSONAS DESAPARECIDAS" asumiendo su generación automática. Tienes PROHIBIDO recomendar mapas futuros. Correlaciona inmediatamente estos datos espaciales con el resto del OSINT y APIs disponibles en el expediente.`;
     
     res.json({ exito: true, resumenTexto, datos_fichas: extraccion.fichas, detalles_paginacion: extraccion });
   } catch (error) {

@@ -122,33 +122,34 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                 const delay = (ms) => new Promise(res => setTimeout(res, ms));
                 const resultados = [];
                 
-                // 1. Encontrar todos los contenedores/filas de resultados
-                const botonesDetalle = Array.from(document.querySelectorAll('tr, .list-group-item, .card, button')).filter(el => {
-                    const txt = (el.innerText || "").toUpperCase();
-                    return txt.includes('MÁS INFORMACIÓN') || txt.includes('DETALLE') || el.classList.contains('mat-row');
+                // 1. Encontrar filas únicas
+                const filasResultados = Array.from(document.querySelectorAll('tbody tr, .mat-row, .list-group-item, .card')).filter(el => {
+                    return el.innerText && el.innerText.trim().length > 10 && !el.closest('thead');
                 });
-
-                let elementosClick = botonesDetalle.length > 0 ? botonesDetalle : Array.from(document.querySelectorAll('tbody tr')).filter(tr => tr.children.length > 2);
+                const elementosClick = filasResultados.filter(el => !filasResultados.some(parent => parent !== el && parent.contains(el)));
                 
-                // Procesaremos máximo 5 registros en esta prueba para no colapsar por tiempo
                 let limite = Math.min(elementosClick.length, 5);
                 
                 for(let i = 0; i < limite; i++) {
                     try {
-                        elementosClick[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const fila = elementosClick[i];
+                        fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         await delay(500);
-                        const clickTarget = elementosClick[i].querySelector('button, a, .mat-icon') || elementosClick[i];
+                        const clickTarget = fila.querySelector('button, a, .mat-icon, [role="button"]') || fila;
                         clickTarget.click();
                         
                         let t1 = 0;
+                        let modal = null;
                         while(t1 < 5000) {
-                            if (document.querySelector('.modal.show, dialog, .mat-dialog-container, .cdk-overlay-pane')) break;
+                            modal = document.querySelector('.cdk-overlay-pane, .mat-dialog-container, .modal.show, dialog');
+                            if (modal && modal.innerText.length > 20) break;
                             await delay(500);
                             t1 += 500;
                         }
                         
-                        // 2. Seleccionar Institución (Fiscalía, Comisión, etc.)
-                        const modal = document.querySelector('.modal.show, dialog, .mat-dialog-container, .cdk-overlay-pane') || document.body;
+                        if (!modal) continue;
+
+                        // 2. Seleccionar Institución dentro del modal
                         const botonesInst = Array.from(modal.querySelectorAll('button, a')).filter(b => {
                             const txt = (b.innerText || "").toUpperCase();
                             return txt.includes('FISCALÍA') || txt.includes('COMISIÓN') || txt.includes('PROCURADURÍA') || txt.includes('VER FICHA');
@@ -162,16 +163,18 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                         let fichaActiva = null;
                         while(t2 < 10000) {
                             const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container, app-detalle'));
-                            fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('SEXO') || m.innerText.toUpperCase().includes('EDAD') || m.innerText.toUpperCase().includes('ESTATURA'))) || document.body;
-                            if (fichaActiva && fichaActiva.innerText && (fichaActiva.innerText.toUpperCase().includes('SEXO') || fichaActiva.innerText.toUpperCase().includes('ESTATURA'))) {
+                            fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('COMPLEX')));
+                            if (fichaActiva) {
                                 break;
                             }
                             await delay(500);
                             t2 += 500;
                         }
                         
+                        if (!fichaActiva) fichaActiva = modal;
+
                         // 3. Extraer la información de la Ficha
-                        const textoCompleto = fichaActiva ? (fichaActiva.innerText || "") : "";
+                        const textoCompleto = fichaActiva.innerText || "";
                         const imagen = fichaActiva.querySelector('img');
                         const fotoUrl = imagen ? imagen.src : 'Sin foto';
                         
@@ -202,6 +205,7 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                             nombre: safeExtract(["Nombre(s)", "Nombre", "Persona desaparecida"]),
                             edad: safeExtract(["Edad actual", "Edad al momento", "Edad"]),
                             fechaDesaparicion: safeExtract(["Fecha y hora de desaparición", "Fecha de desaparición", "Fecha de los hechos", "Fecha"]),
+                            lugar: safeExtract(["Lugar de desaparición", "Lugar de los hechos", "Lugar", "Colonia", "Municipio"]),
                             sexo: safeExtract(["Sexo", "Género", "Genero"]),
                             estatura: safeExtract(["Estatura"]),
                             complexion: safeExtract(["Complexión", "Complexion"]),
@@ -219,17 +223,15 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                             texto_crudo: textoCompleto.substring(0, 400)
                         });
                         
-                        // 4. Cerrar el modal para regresar a la lista
-                        const btnCerrar = fichaActiva.querySelector('.btn-close, [aria-label="Close"], .close, button.mat-dialog-close');
-                        const btnRegresar = Array.from(document.querySelectorAll('button')).find(b => b.innerText.toUpperCase().includes('REGRESAR') || b.innerText.toUpperCase().includes('VOLVER'));
-                        if (btnCerrar) {
-                            btnCerrar.click();
-                        } else if (btnRegresar) {
-                            btnRegresar.click();
-                        } else {
+                        let waitClose = 0;
+                        while(document.querySelector('.cdk-overlay-pane, .mat-dialog-container, .modal.show') && waitClose < 3000) {
+                            const btnCerrar = document.querySelector('.cdk-overlay-pane .btn-close, .cdk-overlay-pane [aria-label="Close"], .cdk-overlay-pane button.mat-dialog-close, .modal.show .close');
+                            if (btnCerrar) btnCerrar.click();
                             document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
+                            await delay(500);
+                            waitClose += 500;
                         }
-                        await delay(1500);
+                        await delay(1000);
                         
                     } catch(err) {
                         console.error("Error en registro", i);
@@ -259,6 +261,7 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                     print(f"👤 Nombre: {f['detalles'].get('nombre', 'N/D')}")
                     print(f"🎂 Edad: {f['detalles'].get('edad', 'N/D')} | ⚧️ Sexo: {f['detalles'].get('sexo', 'N/D')}")
                     print(f"📅 Fecha de Desaparición: {f['detalles'].get('fechaDesaparicion', 'N/D')}")
+                    print(f"📍 Lugar/Colonia: {f['detalles'].get('lugar', 'N/D')}")
                     print(f"📏 Estatura: {f['detalles'].get('estatura', 'N/D')} | 🧍 Complexión: {f['detalles'].get('complexion', 'N/D')}")
                     print(f"👁️ Señas: {f['detalles'].get('senas', 'N/D')}")
                 print(f"📝 Texto crudo: {f.get('texto_crudo', '')[:100]}...")
