@@ -26,7 +26,7 @@ CRITERIOS DE FILTRADO ESPACIAL (Solo considerar si cumplen):
 2. Última ubicación conocida o última vez vista dentro del área de interés, sus polígonos de influencia o inmediaciones.
 
 ANÁLISIS OBLIGATORIO DEL MAPA 5:
-Si existen resultados positivos vinculados espacialmente, ASUME que el "MAPA 5 - PERSONAS DESAPARECIDAS" ha sido generado automáticamente. DEBES redactar hallazgos concretos que incluyan:
+Si existen resultados positivos vinculados espacialmente, DEBES crear explícitamente una sección titulada "MAPA 5 - PERSONAS DESAPARECIDAS (GEORREFERENCIACIÓN Y ANÁLISIS)". En esta sección, redacta hallazgos concretos que incluyan:
 - Distribución espacial (dispersión, concentración, agrupamiento, alineación).
 - Relación con el área (proximidad al polígono, accesos, corredores de movilidad, zonas habitacionales/comerciales, espacios abandonados).
 - Correlación OBLIGATORIA con todos los demás hallazgos, APIs y OSINTs que conviven en el ecosistema (Incidencia Delictiva, Viviendas Deshabitadas, Riesgo Social, Factores Criminógenos).

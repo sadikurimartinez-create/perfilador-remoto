@@ -653,7 +653,8 @@ app.all("/rnpdno", async (req, res) => {
           let fichaActiva = null;
           while(t2 < 10000) {
               const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container, app-detalle'));
-              fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('COMPLEX')));
+              // Buscamos cualquier indicador de que la ficha ya cargó los datos personales vitales
+              fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('SEXO') || m.innerText.toUpperCase().includes('EDAD') || m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('LUGAR')));
               
               if (fichaActiva) {
                   break;
@@ -686,6 +687,13 @@ app.all("/rnpdno", async (req, res) => {
                     if (upperLine.startsWith(ukw + ':')) {
                         const val = lines[j].substring(lines[j].indexOf(':') + 1).trim();
                         if (val) return val;
+                    }
+                    // Capturar valores separados por espacio en lugar de dos puntos
+                    if (upperLine.startsWith(ukw + ' ') && !upperLine.includes(':')) {
+                        let val = lines[j].substring(ukw.length).trim();
+                        if (val && !["ACTUAL", "AL MOMENTO", "DE DESAPARICIÓN", "DE LOS HECHOS", "PARTICULARES"].some(v => val.toUpperCase().startsWith(v))) {
+                            return val;
+                        }
                     }
                 }
             }
@@ -744,7 +752,7 @@ app.all("/rnpdno", async (req, res) => {
       resumenTexto += `👁️ Señas: ${f.detalles.senas}\n\n`;
     });
 
-    resumenTexto += `\nINSTRUCCIÓN OBLIGATORIA PARA LA IA: Aplica inmediatamente la "Directiva Operativa - Módulo de Personas Desaparecidas". Es tu OBLIGACIÓN cruzar el campo "Lugar/Colonia" con el área de interés. Si hay coincidencia, integra los hallazgos como el "MAPA 5 - PERSONAS DESAPARECIDAS" asumiendo su generación automática. Tienes PROHIBIDO recomendar mapas futuros. Correlaciona inmediatamente estos datos espaciales con el resto del OSINT y APIs disponibles en el expediente.`;
+    resumenTexto += `\nINSTRUCCIÓN OBLIGATORIA PARA LA IA: Aplica la Directiva Operativa de Personas Desaparecidas. Cruza "Lugar/Colonia" con el área de interés. Si hay coincidencia, CREA EXPLÍCITAMENTE una sección titulada "MAPA 5 - PERSONAS DESAPARECIDAS (GEORREFERENCIACIÓN Y ANÁLISIS)". Tienes PROHIBIDO decir "asumiendo la generación" o recomendar crearlo a futuro; simplemente PRESENTA el mapa y su análisis. Correlaciona estos datos espaciales con el resto del OSINT y APIs.`;
     
     res.json({ exito: true, resumenTexto, datos_fichas: extraccion.fichas, detalles_paginacion: extraccion });
   } catch (error) {

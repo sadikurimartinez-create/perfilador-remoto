@@ -163,7 +163,7 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                         let fichaActiva = null;
                         while(t2 < 10000) {
                             const modales = Array.from(document.querySelectorAll('.mat-dialog-content, .cdk-overlay-pane, .modal-content, .modal.show, dialog, .mat-dialog-container, app-detalle'));
-                            fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('COMPLEX')));
+                            fichaActiva = modales.reverse().find(m => m.innerText && (m.innerText.toUpperCase().includes('SEXO') || m.innerText.toUpperCase().includes('EDAD') || m.innerText.toUpperCase().includes('ESTATURA') || m.innerText.toUpperCase().includes('LUGAR')));
                             if (fichaActiva) {
                                 break;
                             }
@@ -195,6 +195,12 @@ async def consultar_rnpdno(estado_objetivo="Aguascalientes", municipio_objetivo=
                                     if (upperLine.startsWith(ukw + ':')) {
                                         const val = lines[j].substring(lines[j].indexOf(':') + 1).trim();
                                         if (val) return val;
+                                    }
+                                    if (upperLine.startsWith(ukw + ' ') && !upperLine.includes(':')) {
+                                        let val = lines[j].substring(ukw.length).trim();
+                                        if (val && !["ACTUAL", "AL MOMENTO", "DE DESAPARICIÓN", "DE LOS HECHOS", "PARTICULARES"].some(v => val.toUpperCase().startsWith(v))) {
+                                            return val;
+                                        }
                                     }
                                 }
                             }
