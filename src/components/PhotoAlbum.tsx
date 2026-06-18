@@ -102,42 +102,6 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-/** Tatúa/Quema el sello de agua directamente en los píxeles de la imagen para que nunca se pierdan en Word/PDF */
-async function burnGpsOnImage(srcUrl: string): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(srcUrl);
-        return;
-      }
-      ctx.drawImage(img, 0, 0);
-      
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(-Math.PI / 4);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-      const watermarkSize = Math.max(40, canvas.width * 0.08);
-      ctx.font = `bold ${watermarkSize}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-      ctx.shadowBlur = 8;
-      ctx.fillText("SSPE-CEIPOL", 0, 0);
-      ctx.restore();
-      
-      resolve(canvas.toDataURL("image/jpeg", 0.9));
-    };
-    img.onerror = () => resolve(srcUrl);
-    img.src = srcUrl;
-  });
-}
-
 function ElapsedTime({ running }: { running: boolean }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -970,9 +934,8 @@ const hasMinimumPhotos =
     const photosToExportData: { url: string; tipo: string; comentario: string }[] = [];
 
     for (const p of photosToExport) {
-      const burnedUrl = await burnGpsOnImage(p.previewUrl as string);
       photosToExportData.push({
-        url: burnedUrl,
+        url: p.previewUrl as string,
         tipo: p.tipo || "Evidencia Táctica",
         comentario: p.comentario || "Sin comentario."
       });
