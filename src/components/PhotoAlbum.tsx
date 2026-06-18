@@ -13,6 +13,14 @@ import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdno
 import { runOSINTScan } from "../utils/osintEngine";
 import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 
+const POWER_UPS = [
+  { label: "OCR Visual", text: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales." },
+  { label: "Audio (Diarización)", text: "Aplica Análisis de Diarización y Sentimiento." },
+  { label: "Geo-Proximidad", text: "Realiza Consulta de Proximidad ST_DWithin y Grounding Dinámico." },
+  { label: "NLP Entidades", text: "Activa Extracción de Entidades Salientes." },
+  { label: "Histórico OSINT", text: "Despliega Búsqueda Semántica en Discovery Engine." }
+];
+
 type EvidencePhotoType = {
   id: string;
   previewUrl?: string;
@@ -169,7 +177,7 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          context: context + "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático y flexible. Evalúa SÓLO la pertinencia lógica de la evidencia. NO exijas cantidades ni métricas precisas. Si el contexto justifica la evidencia de forma general, otorga un score >= 80. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string).)",
+          context: context + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la idoneidad técnica del contexto. Endurece tu criterio: el texto debe dar directrices claras para el procesamiento. Si es claro, score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE genera 3 sugerencias de refinamiento técnico usando estos Power-Ups según aplique: 1. IMAGEN/PDF: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 2. AUDIO: "Aplica Análisis de Diarización y Sentimiento". 3. GEOESPACIAL: "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 4. TEXTO: "Activa Extracción de Entidades Salientes". 5. HISTÓRICO: "Búsqueda Semántica en Discovery Engine". Explica por qué usar el término mejora la extracción. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO uses markdown.)`,
           photos: minimalPhotos,
           mode: "suggest",
           geometryType: project?.geometryType || "individual",
@@ -220,6 +228,14 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
          <span className="animate-pulse">⚠️</span> Evidencia In-Situ: Requiere Trabajo de Gabinete (Contextualización)
        </p>
        <textarea value={context} disabled={isReadOnly} onChange={(e) => { setContext(e.target.value); setIsAudited(false); }} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[80px]" placeholder="Describa el contexto y justificación de esta evidencia capturada en campo..." />
+       {!isReadOnly && (
+         <div className="flex flex-wrap gap-1 mt-1 mb-1">
+           <span className="text-[9px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups:</span>
+           {POWER_UPS.map(p => (
+             <button type="button" key={p.label} onClick={() => { setContext(prev => (prev ? prev.trim() + " " : "") + p.text); setIsAudited(false); }} className="text-[9px] bg-indigo-900/40 text-indigo-300 border border-indigo-700/50 rounded px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors whitespace-nowrap">+{p.label}</button>
+           ))}
+         </div>
+       )}
        <div className="flex items-center gap-2 mt-1">
           <button type="button" onClick={handleRequestSuggestions} disabled={isRefining || !context.trim() || isReadOnly} className="bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-md text-white text-[11px] font-semibold disabled:opacity-50 transition-colors">
               {isRefining ? "Consultando IA..." : "Auditar Contexto"}
@@ -229,7 +245,7 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
            <div className="p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-md text-xs text-yellow-200 mt-2 space-y-2">
                <div className="flex justify-between items-center"><p className="font-semibold">Sugerencias IA:</p>{auditScore !== null && (<span className={`px-2 py-0.5 rounded font-bold ${auditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>Lógica: {auditScore}%</span>)}</div>
                <textarea value={suggestions} onChange={(e) => setSuggestions(e.target.value)} className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded p-2 text-yellow-100 min-h-[60px] focus:outline-none" />
-               <div className="flex gap-2"><button type="button" onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }} className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded font-medium text-[11px]">Aplicar Sugerencia</button><button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button></div>
+               <div className="flex gap-2"><button type="button" onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }} className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded font-medium text-[11px]">Aplicar Power-Up Sugerido</button><button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button></div>
            </div>
        )}
        <div className="flex justify-end mt-2"><button type="button" onClick={handleSave} disabled={isSaving || !context.trim() || !isAudited || isReadOnly} className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-1.5 rounded-md text-[11px] font-bold disabled:opacity-50 transition-colors shadow-md">{isSaving ? "Guardando..." : "✅ Subir al Análisis (Completar Gabinete)"}</button></div>
@@ -486,7 +502,7 @@ const hasMinimumPhotos =
     setError(null);
     try {
       const photosContext = selectedPhotos.map(p => `[${p.tipo}] ${p.comentario}`).join(" | ");
-      const instructionPhotos = "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático. Evalúa EXCLUSIVAMENTE la claridad descriptiva de la observación en campo. NO exijas cantidades precisas, datos estadísticos, nombres exactos ni información OSINT/GEOINT (eso lo hará la plataforma después de manera automática). Si el comentario describe razonablemente el entorno, la percepción de seguridad o el riesgo visual, otorga un score de 80 o más. Tu sugerencia debe ser amigable y no demandar datos imposibles de obtener a simple vista.)";
+      const instructionPhotos = `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA evaluando la evidencia de campo. Endurece tu criterio: busca indicaciones técnicas. Si el comentario describe bien el entorno y qué buscar, otorga score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE incluye en tus 'suggestions' 3 recomendaciones técnicas usando estos Power-Ups: 1. IMÁGENES: Sugiere "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 2. GEOESPACIAL: Sugiere "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 3. TEXTO: Sugiere "Activa Extracción de Entidades Salientes". Explica por qué esto afina a la IA. DEVUELVE UN JSON VÁLIDO con 'score' y 'suggestions'.)`;
       const minimalPhotos = selectedPhotos.map((p) => ({
         lat: p.lat,
         lng: p.lng,
@@ -1191,18 +1207,33 @@ const hasMinimumPhotos =
                       </>
                     )}
                   </div>
+                  {!isReadOnly && (
+                    <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                      <span className="text-[9px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups:</span>
+                      {POWER_UPS.map((pu) => (
+                        <button
+                          type="button"
+                          key={pu.label}
+                          onClick={() => updatePhotoMeta(p.id, { tipo: p.tipo, comentario: ((p.comentario || "").trim() + " " + pu.text).trim() })}
+                          className="text-[9px] bg-indigo-900/40 text-indigo-300 border border-indigo-700/50 rounded px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors whitespace-nowrap"
+                        >
+                          +{pu.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="mt-1 mb-2">
                     <div className="flex justify-between items-center text-[9px] mb-0.5">
-                      <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-                      <span className={`font-bold ${(p.comentario || "").length < 30 ? "text-red-400" : (p.comentario || "").length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
-                        {(p.comentario || "").length === 0 ? "Sin contexto" : (p.comentario || "").length < 30 ? "Básico" : (p.comentario || "").length < 100 ? "Aceptable" : "Óptimo"}
+                      <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                      <span className={`font-bold ${(p.comentario || "").length < 40 ? "text-red-400" : (p.comentario || "").length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
+                        {(p.comentario || "").length === 0 ? "Sin contexto" : (p.comentario || "").length < 40 ? "Básico" : (p.comentario || "").length < 120 ? "Aceptable" : "Óptimo"}
                       </span>
                     </div>
                     <div className="w-full bg-slate-800 rounded-full h-1">
                       <div 
-                        className={`h-1 rounded-full transition-all duration-300 ${(p.comentario || "").length < 30 ? "bg-red-500" : (p.comentario || "").length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(((p.comentario || "").length / 150) * 100, 100)}%` }}
+                        className={`h-1 rounded-full transition-all duration-300 ${(p.comentario || "").length < 40 ? "bg-red-500" : (p.comentario || "").length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
+                        style={{ width: `${Math.min(((p.comentario || "").length / 200) * 100, 100)}%` }}
                       ></div>
                     </div>
                   </div>
@@ -1309,15 +1340,15 @@ const hasMinimumPhotos =
           </div>
           <div className="mt-1 mb-2">
             <div className="flex justify-between items-center text-[10px] mb-1">
-              <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-              <span className={`font-bold ${plateContext.length < 30 ? "text-red-400" : plateContext.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
-                {plateContext.length === 0 ? "Sin contexto" : plateContext.length < 30 ? "Básico" : plateContext.length < 100 ? "Aceptable" : "Óptimo"}
+              <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+              <span className={`font-bold ${plateContext.length < 40 ? "text-red-400" : plateContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
+                {plateContext.length === 0 ? "Sin contexto" : plateContext.length < 40 ? "Básico" : plateContext.length < 120 ? "Aceptable" : "Óptimo"}
               </span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-1.5">
               <div 
-                className={`h-1.5 rounded-full transition-all duration-300 ${plateContext.length < 30 ? "bg-red-500" : plateContext.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
-                style={{ width: `${Math.min((plateContext.length / 150) * 100, 100)}%` }}
+                className={`h-1.5 rounded-full transition-all duration-300 ${plateContext.length < 40 ? "bg-red-500" : plateContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min((plateContext.length / 200) * 100, 100)}%` }}
               ></div>
             </div>
           </div>
@@ -1395,15 +1426,15 @@ const hasMinimumPhotos =
           </div>
           <div className="mt-1 mb-2">
             <div className="flex justify-between items-center text-[10px] mb-1">
-              <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-              <span className={`font-bold ${satContext.length < 30 ? "text-red-400" : satContext.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
-                {satContext.length === 0 ? "Sin contexto" : satContext.length < 30 ? "Básico" : satContext.length < 100 ? "Aceptable" : "Óptimo"}
+              <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+              <span className={`font-bold ${satContext.length < 40 ? "text-red-400" : satContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
+                {satContext.length === 0 ? "Sin contexto" : satContext.length < 40 ? "Básico" : satContext.length < 120 ? "Aceptable" : "Óptimo"}
               </span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-1.5">
               <div 
-                className={`h-1.5 rounded-full transition-all duration-300 ${satContext.length < 30 ? "bg-red-500" : satContext.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
-                style={{ width: `${Math.min((satContext.length / 150) * 100, 100)}%` }}
+                className={`h-1.5 rounded-full transition-all duration-300 ${satContext.length < 40 ? "bg-red-500" : satContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min((satContext.length / 200) * 100, 100)}%` }}
               ></div>
             </div>
           </div>
@@ -1483,15 +1514,15 @@ const hasMinimumPhotos =
           </div>
           <div className="mt-1 mb-2">
             <div className="flex justify-between items-center text-[10px] mb-1">
-              <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-              <span className={`font-bold ${telegramContext.length < 30 ? "text-red-400" : telegramContext.length < 100 ? "text-amber-400" : "text-emerald-400"}`}>
-                {telegramContext.length === 0 ? "Sin contexto" : telegramContext.length < 30 ? "Básico" : telegramContext.length < 100 ? "Aceptable" : "Óptimo"}
+              <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+              <span className={`font-bold ${telegramContext.length < 40 ? "text-red-400" : telegramContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
+                {telegramContext.length === 0 ? "Sin contexto" : telegramContext.length < 40 ? "Básico" : telegramContext.length < 120 ? "Aceptable" : "Óptimo"}
               </span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-1.5">
               <div 
-                className={`h-1.5 rounded-full transition-all duration-300 ${telegramContext.length < 30 ? "bg-red-500" : telegramContext.length < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
-                style={{ width: `${Math.min((telegramContext.length / 150) * 100, 100)}%` }}
+                className={`h-1.5 rounded-full transition-all duration-300 ${telegramContext.length < 40 ? "bg-red-500" : telegramContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min((telegramContext.length / 200) * 100, 100)}%` }}
               ></div>
             </div>
           </div>
@@ -2067,17 +2098,35 @@ const hasMinimumPhotos =
                 className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
               />
             </div>
+            {!isReadOnly && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                <span className="text-[10px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups IA:</span>
+                {POWER_UPS.map((pu) => (
+                  <button
+                    type="button"
+                    key={pu.label}
+                    onClick={() => {
+                      setDocContext(prev => (prev ? prev.trim() + " " : "") + pu.text);
+                      setIsDocContextAudited(false);
+                    }}
+                    className="text-[10px] bg-indigo-900/40 text-indigo-300 border border-indigo-700/50 rounded px-2 py-0.5 hover:bg-indigo-800/60 transition-colors whitespace-nowrap"
+                  >
+                    +{pu.label}
+                  </button>
+                ))}
+              </div>
+            )}
             
             <div className="mt-1 mb-2">
               <div className="flex justify-between items-center text-[10px] mb-1">
-                <span className="text-slate-400">Idoneidad del contexto (Semáforo):</span>
-                <span className={`font-bold ${docContext.length < 50 ? "text-red-400" : docContext.length < 150 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {docContext.length === 0 ? "Sin contexto" : docContext.length < 50 ? "Básico" : docContext.length < 150 ? "Aceptable" : "Óptimo"}
+                <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                <span className={`font-bold ${docContext.length < 60 ? "text-red-400" : docContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {docContext.length === 0 ? "Sin contexto" : docContext.length < 60 ? "Básico" : docContext.length < 180 ? "Aceptable" : "Óptimo"}
                 </span>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5">
                 <div 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 50 ? "bg-red-500" : docContext.length < 150 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 60 ? "bg-red-500" : docContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
                   style={{ width: `${Math.min((docContext.length / 250) * 100, 100)}%` }}
                 ></div>
               </div>
@@ -2103,7 +2152,7 @@ const hasMinimumPhotos =
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        context: docContext + "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático y flexible. Evalúa SÓLO la pertinencia lógica de la evidencia. NO exijas cantidades, métricas precisas ni datos que requieran investigación OSINT. Si el contexto justifica la evidencia de forma general, otorga un score >= 80. MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)",
+                        context: docContext + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la idoneidad técnica del documento. Endurece tu criterio: exige que el usuario guíe a las APIs. Si es claro, score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE genera 3 sugerencias de refinamiento técnico usando estos Power-Ups según el tipo de archivo: 1. AUDIO/VIDEO: "Aplica Análisis de Diarización y Sentimiento". 2. IMAGEN/PDF: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 3. GEOESPACIAL: "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 4. TEXTO: "Activa Extracción de Entidades Salientes". 5. HISTÓRICO: "Búsqueda Semántica en Discovery Engine". Explica por qué esto mejora el análisis. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues markdown.)`,
                         photos: minimalPhotos,
                         mode: "suggest",
                         geometryType: project?.geometryType || "individual",
@@ -2219,7 +2268,7 @@ const hasMinimumPhotos =
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ 
-                            context: docSuggestions + "\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un evaluador empático y flexible. Evalúa SÓLO la pertinencia lógica. NO exijas cantidades ni datos que requieran investigación OSINT. Si tiene sentido lógico general, otorga un score >= 80. MUY IMPORTANTE: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues comillas invertidas de markdown como ```json.)", 
+                            context: docSuggestions + `\n\n(INSTRUCCIÓN DEL SISTEMA: Evalúa la pertinencia técnica. Endurece el criterio. Score >= 80 si tiene sentido técnico. OBLIGATORIO: Asegura incluir 3 sugerencias usando Power-Ups como 'OCR Avanzado', 'Diarización', 'Extracción de Entidades' o 'Búsqueda Semántica'. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con 'score' y 'suggestions'. NO agregues markdown.)`, 
                             photos: minimalPhotos,
                             mode: "audit",
                             geometryType: project?.geometryType || "individual",
@@ -2280,7 +2329,7 @@ const hasMinimumPhotos =
                     disabled={isAuditingDoc || (docAuditScore !== null && docAuditScore < 80)}
                     className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                   >
-                    Aplicar al Contexto {(docAuditScore !== null && docAuditScore < 80) ? '(Requiere 80%)' : ''}
+                    Aplicar Power-Up Sugerido {(docAuditScore !== null && docAuditScore < 80) ? '(Requiere 80%)' : ''}
                   </button>
                 </div>
               </div>
@@ -2753,16 +2802,34 @@ const hasMinimumPhotos =
                   className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-5 py-4 text-base md:text-lg resize-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
                 />
+                {!isReadOnly && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    <span className="text-[10px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups IA:</span>
+                    {POWER_UPS.map((pu) => (
+                      <button
+                        type="button"
+                        key={pu.label}
+                        onClick={() => {
+                          setAnalysisContext(prev => (prev ? prev.trim() + " " : "") + pu.text);
+                          setIsAnalysisContextAudited(false);
+                        }}
+                        className="text-[10px] bg-indigo-900/40 text-indigo-300 border border-indigo-700/50 rounded px-2 py-0.5 hover:bg-indigo-800/60 transition-colors whitespace-nowrap"
+                      >
+                        +{pu.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-1 mb-2">
                   <div className="flex justify-between items-center text-[10px] mb-1">
-                    <span className="text-slate-400">Idoneidad de la hipótesis (Semáforo):</span>
-                    <span className={`font-bold ${analysisContext.length < 50 ? "text-red-400" : analysisContext.length < 150 ? "text-amber-400" : "text-emerald-400"}`}>
-                      {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 50 ? "Básico" : analysisContext.length < 150 ? "Aceptable" : "Óptimo"}
+                    <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                    <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
+                      {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
                     </span>
                   </div>
                   <div className="w-full bg-slate-800 rounded-full h-1.5">
                     <div 
-                      className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 50 ? "bg-red-500" : analysisContext.length < 150 ? "bg-amber-500" : "bg-emerald-500"}`}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
                       style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
                     ></div>
                   </div>
@@ -2794,7 +2861,7 @@ const hasMinimumPhotos =
                           .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
                           .join("\n\n");
 
-                        const fullContext = analysisContext + focusContext + (answersString ? `\n\nRespuestas a preguntas previas:\n${answersString}` : "");
+                        const fullContext = analysisContext + focusContext + (answersString ? `\n\nRespuestas a preguntas previas:\n${answersString}` : "") + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la hipótesis. Endurece el criterio: debe dar dirección técnica a las APIs. Si es sólida, score >= 80; si es vaga, score < 80. OBLIGATORIO: SIEMPRE incorpora en tus 'questions' o 'suggestions' al menos 3 sugerencias técnicas que inviten a usar: "Consulta de Proximidad ST_DWithin", "Grounding Dinámico", "Extracción de Entidades Salientes", o "Búsqueda Semántica en Discovery Engine". Explica brevemente el porqué. DEVUELVE UN JSON VÁLIDO.)`;
 
                         const res = await fetch("/api/refine-context", {
                           method: "POST",
