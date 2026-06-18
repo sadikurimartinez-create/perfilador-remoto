@@ -108,6 +108,13 @@ Devuelve la información ESTRICTAMENTE en formato JSON válido con esta estructu
         const vertexUrl = `https://${GCP_LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent`;
         const vertexPayload = { 
           contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [
+            {
+              googleSearchRetrieval: {
+                dynamicRetrievalConfig: { mode: "MODE_DYNAMIC", dynamicThreshold: 0.3 }
+              }
+            }
+          ],
           generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
         };
 
@@ -130,6 +137,57 @@ Devuelve la información ESTRICTAMENTE en formato JSON válido con esta estructu
   } catch (error: any) {
     console.error("DISCOVERY ENGINE ERROR:", error.response?.data?.error?.message || error.message);
     return { resultadosWeb: [], analisisInteligencia: null };
+  }
+};
+
+export const analyzeStreetViewWithGemini = async (lat: number, lng: number) => {
+  const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+  if (!GCP_PROJECT_ID || !MAPS_KEY) return null;
+
+  const headings = [0, 90, 180, 270];
+  const svImages: string[] = [];
+  
+  try {
+    for (const h of headings) {
+      const url = `https://maps.googleapis.com/maps/api/streetview?size=600x400&location=${lat},${lng}&heading=${h}&key=${MAPS_KEY}`;
+      const res = await axios.get(url, { responseType: 'arraybuffer' });
+      const base64 = Buffer.from(res.data, 'binary').toString('base64');
+      // Validamos que no sea la imagen genérica gris de "No image available"
+      if (base64.length > 10000) svImages.push(base64);
+    }
+  } catch (e) { 
+    console.error("Error obteniendo imágenes de Street View:", e); 
+  }
+
+  if (svImages.length === 0) return null;
+
+  try {
+    const authOptions: any = { scopes: ['https://www.googleapis.com/auth/cloud-platform'] };
+    if (GCP_CLIENT_EMAIL && GCP_PRIVATE_KEY) {
+      authOptions.credentials = { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY };
+      authOptions.projectId = GCP_PROJECT_ID;
+    }
+    const auth = new GoogleAuth(authOptions);
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    const token = tokenResponse.token;
+
+    const prompt = `Actúas como un perfilador criminológico analizando el entorno físico. Analiza estas imágenes de Street View capturadas en las coordenadas ${lat}, ${lng}. Identifica detalladamente: grafitis, zonas de abandono, poca iluminación, rutas de escape, o deterioro urbano (Teoría de las Ventanas Rotas). Redacta un reporte táctico conciso sobre los hallazgos visuales y cómo podrían facilitar oportunidades delictivas.`;
+
+    const parts: any[] = [{ text: prompt }];
+    svImages.forEach(img => {
+      parts.push({ inlineData: { mimeType: "image/jpeg", data: img } });
+    });
+
+    const vertexUrl = `https://${GCP_LOCATION}-aiplatform.googleapis.com/v1/projects/${GCP_PROJECT_ID}/locations/${GCP_LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent`;
+    const payload = { contents: [{ role: "user", parts }] };
+    const response = await axios.post(vertexUrl, payload, { headers: { 'Authorization': `Bearer ${token}` } });
+    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se detectaron hallazgos relevantes en el entorno visual.";
+    
+    return { analisis: text, imagenesBase64: svImages };
+  } catch (error) {
+    console.error("Error en Gemini Street View Analysis:", error);
+    return null;
   }
 };
 

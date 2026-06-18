@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { captureMapImage } from './captureMpas';
+import { captureMapImage, generateStreetViewBase64 } from './captureMpas';
 import { ConsolidatedReport } from '../types/Report';
 import { getPhotoDataURLs } from './capturePhotos';
 import { calculateRisk } from './scoring';
@@ -161,6 +161,36 @@ for (let i = 0; i < photoDataURLs.length; i++) {
       y = 20;
     }
   });
+
+  // APARTADO NUEVO: STREET VIEW
+  const firstFinding = report.findings?.[0] as any;
+  const baseLat = firstFinding?.latitude ?? firstFinding?.lat;
+  const baseLng = firstFinding?.longitude ?? firstFinding?.lng;
+
+  if (baseLat && baseLng) {
+    doc.addPage();
+    y = 20;
+    doc.setFontSize(14);
+    doc.text('APARTADO NUEVO: BARRIDO Y HALLAZGOS DE STREET VIEW', 20, y);
+    y += 10;
+    
+    const headings = [0, 90, 180, 270];
+    for (let i = 0; i < headings.length; i++) {
+      const h = headings[i];
+      const svDataUrl = await generateStreetViewBase64(Number(baseLat), Number(baseLng), h);
+      if (svDataUrl) {
+         doc.setFontSize(12);
+         doc.text(`Hallazgo Visual (Ángulo ${h}°)`, 20, y);
+         y += 5;
+         doc.addImage(svDataUrl, 'JPEG', 20, y, 80, 60);
+         y += 70;
+         if (y > 240 && i !== headings.length - 1) {
+            doc.addPage();
+            y = 20;
+         }
+      }
+    }
+  }
 
   if ((report as any).projectRef) {
     const log = createAuditLog(

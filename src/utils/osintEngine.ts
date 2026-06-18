@@ -21,6 +21,7 @@ import {
   searchX,
   buscarEnWebOSINT,
   searchTelegram,
+  analyzeStreetViewWithGemini,
 } from './socialProviders';
 
 import {
@@ -77,6 +78,8 @@ export const runOSINTScan = async (
   let overpass: any[] = [];
 
   let googlePlaces: any[] = [];
+  
+  let streetViewAnalysis: any = null;
 
   if (
     project?.latitude &&
@@ -101,6 +104,11 @@ export const runOSINTScan = async (
         project.longitude
       );
 
+    streetViewAnalysis =
+      await analyzeStreetViewWithGemini(
+        project.latitude,
+        project.longitude
+      );
   }
 
   // Procesamiento NLP Pro y Guardado en BigQuery (Histórico de Vínculos)
@@ -168,6 +176,8 @@ export const runOSINTScan = async (
     overpass,
 
     googlePlaces,
+    
+    streetViewAnalysis,
 
     evidenciasProcesadas: processedEvidences,
 

@@ -736,6 +736,10 @@ const hasMinimumPhotos =
            }
         }
 
+        if (automaticOsintData?.streetViewAnalysis?.analisis) {
+          finalMarkdown += `\n\n### BARRIDO MULTIMODAL DE STREET VIEW (IA)\n${automaticOsintData.streetViewAnalysis.analisis}`;
+        }
+
         setAiProfile(finalMarkdown);
         setEditableProfile(finalMarkdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);

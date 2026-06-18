@@ -173,25 +173,24 @@ export const exportWord = async (
   }
 
   // STREET VIEW ELEMENTS
-  const svFindings = report.findings.slice(0, 3);
   const svCells: TableCell[] = [];
-  if (svFindings.length > 0) {
-    for (let i = 0; i < 3; i++) {
-      const f = svFindings[i % svFindings.length] as any;
-      if (!f) continue;
-      const heading = [0, 90, 180][i];
-      const lat = Number(f?.latitude ?? f?.lat);
-      const lng = Number(f?.longitude ?? f?.lng);
-      if (isNaN(lat) || isNaN(lng)) continue;
+  const firstFinding = report.findings?.[0] as any;
+  const baseLat = firstFinding?.latitude ?? firstFinding?.lat;
+  const baseLng = firstFinding?.longitude ?? firstFinding?.lng;
 
-      const svDataUrl = await generateStreetViewBase64(lat, lng, heading);
+  if (baseLat && baseLng) {
+    const headings = [0, 90, 180, 270];
+    for (let i = 0; i < headings.length; i++) {
+      const h = headings[i];
+      const svDataUrl = await generateStreetViewBase64(Number(baseLat), Number(baseLng), h);
+
       if (svDataUrl && svDataUrl.includes(',')) {
         const base64Data = svDataUrl.split(',')[1];
         if (!base64Data) continue;
         const imgBuf = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         svCells.push(new TableCell({
           children: [
-            new Paragraph({ children: [new TextRun({ text: `Street View Evidencia ${i + 1}`, bold: true })], spacing: { after: 100 } }),
+            new Paragraph({ children: [new TextRun({ text: `Hallazgo Visual (Ángulo ${h}°)`, bold: true })], spacing: { after: 100 } }),
             new Paragraph({
               children: [
                 new ImageRun({
@@ -287,7 +286,7 @@ export const exportWord = async (
   if (svTable) {
     docChildren.push(
       new Paragraph({
-        children: [new TextRun({ text: 'EVIDENCIA VISUAL DE CONTEXTO - STREET VIEW', bold: true, size: 24 })],
+        children: [new TextRun({ text: 'APARTADO NUEVO: BARRIDO Y HALLAZGOS DE STREET VIEW', bold: true, size: 24 })],
         spacing: { before: 400, after: 200 },
         pageBreakBefore: true
       })
