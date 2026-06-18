@@ -21,6 +21,22 @@ const POWER_UPS = [
   { label: "Histórico OSINT", text: "Despliega Búsqueda Semántica en Discovery Engine." }
 ];
 
+const PowerUpsHelpTooltip = () => (
+  <div className="relative group inline-flex ml-1">
+    <span className="cursor-help text-[10px] bg-slate-800 text-slate-400 border border-slate-600 rounded-full w-4 h-4 flex items-center justify-center hover:bg-indigo-900 hover:text-indigo-300 transition-colors shadow-sm">?</span>
+    <div className="absolute bottom-full left-0 md:left-1/2 transform md:-translate-x-1/2 mb-2 hidden group-hover:block w-[280px] md:w-[320px] p-3 bg-slate-900 border border-indigo-500/50 rounded-lg shadow-2xl z-[150] text-[10px] text-slate-200 pointer-events-none">
+      <strong className="text-indigo-400 mb-2 block text-[11px] border-b border-slate-700 pb-1 uppercase tracking-wider">⚡ Guía de Power-Ups</strong>
+      <ul className="space-y-2">
+        <li><strong className="text-sky-300 block">👁️ +OCR Visual:</strong> Extrae texto y detecta objetos de riesgo en fotos y PDFs (Vision API).</li>
+        <li><strong className="text-sky-300 block">🎙️ +Audio (Diarización):</strong> Separa voces y analiza estrés o urgencia (Speech-to-Text).</li>
+        <li><strong className="text-sky-300 block">📍 +Geo-Proximidad:</strong> Cruza datos en radio de 1km con noticias en tiempo real.</li>
+        <li><strong className="text-sky-300 block">🧠 +NLP Entidades:</strong> Extrae alias, bandas criminales y direcciones del texto.</li>
+        <li><strong className="text-sky-300 block">📚 +Histórico OSINT:</strong> Busca contexto en casos pasados (Discovery Engine).</li>
+      </ul>
+    </div>
+  </div>
+);
+
 type EvidencePhotoType = {
   id: string;
   previewUrl?: string;
@@ -229,8 +245,9 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
        </p>
        <textarea value={context} disabled={isReadOnly} onChange={(e) => { setContext(e.target.value); setIsAudited(false); }} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[80px]" placeholder="Describa el contexto y justificación de esta evidencia capturada en campo..." />
        {!isReadOnly && (
-         <div className="flex flex-wrap gap-1 mt-1 mb-1">
+         <div className="flex flex-wrap items-center gap-1 mt-1 mb-1">
            <span className="text-[9px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups:</span>
+           <PowerUpsHelpTooltip />
            {POWER_UPS.map(p => (
              <button type="button" key={p.label} onClick={() => { setContext(prev => (prev ? prev.trim() + " " : "") + p.text); setIsAudited(false); }} className="text-[9px] bg-indigo-900/40 text-indigo-300 border border-indigo-700/50 rounded px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors whitespace-nowrap">+{p.label}</button>
            ))}
@@ -1208,8 +1225,9 @@ const hasMinimumPhotos =
                     )}
                   </div>
                   {!isReadOnly && (
-                    <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                    <div className="flex flex-wrap items-center gap-1 mt-1 mb-1">
                       <span className="text-[9px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups:</span>
+                      <PowerUpsHelpTooltip />
                       {POWER_UPS.map((pu) => (
                         <button
                           type="button"
@@ -2099,8 +2117,9 @@ const hasMinimumPhotos =
               />
             </div>
             {!isReadOnly && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
+              <div className="flex flex-wrap items-center gap-1 mt-1.5">
                 <span className="text-[10px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups IA:</span>
+                <PowerUpsHelpTooltip />
                 {POWER_UPS.map((pu) => (
                   <button
                     type="button"
@@ -2803,8 +2822,9 @@ const hasMinimumPhotos =
                   placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
                 />
                 {!isReadOnly && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
+                  <div className="flex flex-wrap items-center gap-1 mt-1.5">
                     <span className="text-[10px] text-indigo-400 font-bold uppercase py-0.5">⚡ Power-Ups IA:</span>
+                    <PowerUpsHelpTooltip />
                     {POWER_UPS.map((pu) => (
                       <button
                         type="button"
