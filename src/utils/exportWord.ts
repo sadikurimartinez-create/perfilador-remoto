@@ -181,6 +181,7 @@ export const exportWord = async (
   if (baseLat && baseLng) {
     const headings = [0, 90, 180, 270];
     for (let i = 0; i < headings.length; i++) {
+      const h = headings[i];
       const svDataUrl = await generateStreetViewBase64(Number(baseLat), Number(baseLng), h);
 
       if (svDataUrl && svDataUrl.includes(',')) {
