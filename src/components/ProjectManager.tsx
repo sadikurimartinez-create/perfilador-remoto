@@ -293,7 +293,7 @@ export function ProjectManager() {
             </button>
           </div>
         ) : (
-          <div className="card p-6 space-y-4 max-w-md">
+          <div className="card p-6 space-y-4 max-w-4xl w-full">
             <label className="block">
               <span className="block text-sm font-medium text-slate-200 mb-1">
                 Nombre del Proyecto
@@ -494,7 +494,7 @@ export function ProjectManager() {
 
     {/* BANNERS Y PROMPTS DE ESTADO */}
     {showDevolverPrompt && (
-      <div className="card p-4 border-l-4 border-orange-500 bg-orange-950/20">
+      <div className="card p-4 border-l-4 border-orange-500 bg-orange-950/20 w-full max-w-none">
         <h3 className="text-orange-400 font-bold mb-2 text-sm">Devolver Expediente a Usuario</h3>
         <textarea
           spellCheck={true}

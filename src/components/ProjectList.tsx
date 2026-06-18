@@ -817,7 +817,7 @@ export function ProjectList() {
           )}
         </>
       ) : (
-        <div className="card p-6 space-y-4 max-w-md">
+        <div className="card p-6 space-y-4 max-w-4xl w-full">
           <label className="block">
         <div className="flex items-center justify-between mb-1">
           <span className="block text-sm font-medium text-slate-200">
@@ -955,7 +955,7 @@ export function ProjectList() {
 
       {devueltoProject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-red-900 rounded-xl max-w-md w-full p-6 shadow-2xl">
+          <div className="bg-slate-900 border border-red-900 rounded-xl max-w-4xl w-full p-6 shadow-2xl">
             <h3 className="text-xl font-bold text-red-500 mb-2">Expediente Devuelto</h3>
             <p className="text-sm text-slate-300 mb-4">
               Tu supervisor ha devuelto este expediente con las siguientes observaciones. Corrige los puntos señalados y vuelve a enviarlo a revisión.
@@ -977,7 +977,7 @@ export function ProjectList() {
 
       {previewModalOpen && selectedPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-8">
-          <div className="w-full h-full max-w-[100vw] bg-gray-900 border border-gray-700 p-6 rounded-xl shadow-2xl overflow-y-auto relative flex flex-col">
+          <div className="w-full h-full max-w-[98vw] 2xl:max-w-none bg-gray-900 border border-gray-700 p-6 rounded-xl shadow-2xl overflow-y-auto relative flex flex-col">
             <button
               type="button"
               onClick={() => setPreviewModalOpen(false)}

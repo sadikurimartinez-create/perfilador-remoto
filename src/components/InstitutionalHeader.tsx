@@ -9,7 +9,7 @@ export function InstitutionalHeader() {
 
   return (
     <header className="w-full border-b border-slate-800 bg-slate-950/95">
-      <div className="mx-auto flex max-w-[95%] 2xl:max-w-[1600px] items-center justify-between gap-3 px-4 py-3">
+      <div className="mx-auto flex w-full max-w-[98%] 2xl:max-w-none items-center justify-between gap-3 px-4 py-3">
         <div className="flex flex-shrink-0 items-center gap-2">
           <Image
             src="/logos/logo-ceipol.png"

@@ -24,7 +24,7 @@ const POWER_UPS = [
 const PowerUpsHelpTooltip = () => (
   <div className="relative group inline-flex ml-1">
     <span className="cursor-help text-[10px] bg-slate-800 text-slate-400 border border-slate-600 rounded-full w-4 h-4 flex items-center justify-center hover:bg-indigo-900 hover:text-indigo-300 transition-colors shadow-sm">?</span>
-    <div className="absolute bottom-full left-0 md:left-1/2 transform md:-translate-x-1/2 mb-2 hidden group-hover:block w-[280px] md:w-[320px] p-3 bg-slate-900 border border-indigo-500/50 rounded-lg shadow-2xl z-[150] text-[10px] text-slate-200 pointer-events-none">
+    <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-96 p-3 bg-slate-900 border border-indigo-500/50 rounded-lg shadow-2xl z-[150] text-[10px] text-slate-200 pointer-events-none">
       <strong className="text-indigo-400 mb-2 block text-[11px] border-b border-slate-700 pb-1 uppercase tracking-wider">⚡ Guía de Power-Ups</strong>
       <ul className="space-y-2">
         <li><strong className="text-sky-300 block">👁️ +OCR Visual:</strong> Extrae texto y detecta objetos de riesgo en fotos y PDFs (Vision API).</li>
@@ -645,23 +645,37 @@ const hasMinimumPhotos =
       let currentAnalysisResult = analysisResult;
       let svData: any[] = [];
       if (mapRes && mapRes.ok) {
-        const mapData = await mapRes.json();
-        currentAnalysisResult = mapData;
-        setAnalysisResult(mapData);
-        if (mapData.tacticalStreetViews) svData = mapData.tacticalStreetViews;
+        try {
+          const mapText = await mapRes.text();
+          if (mapText) {
+            const mapData = JSON.parse(mapText);
+            currentAnalysisResult = mapData;
+            setAnalysisResult(mapData);
+            if (mapData.tacticalStreetViews) svData = mapData.tacticalStreetViews;
+          }
+        } catch (err) {
+          console.warn("JSON Parse Error en mapRes:", err);
+        }
       }
 
       let incidenciaLocal: any[] = [];
       let bibliografiaLocal = "";
       if (incidenciaRes && incidenciaRes.ok) {
-        const incidenciaJson = await incidenciaRes.json() as any;
-        incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
-        bibliografiaLocal = incidenciaJson.bibliografia ?? "";
-        setDebugData((prev: any) => ({
-          ...(prev ?? {}),
-          incidencia: incidenciaLocal,
-          bibliografia: bibliografiaLocal,
-        }));
+        try {
+          const incText = await incidenciaRes.text();
+          if (incText) {
+            const incidenciaJson = JSON.parse(incText) as any;
+            incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
+            bibliografiaLocal = incidenciaJson.bibliografia ?? "";
+            setDebugData((prev: any) => ({
+              ...(prev ?? {}),
+              incidencia: incidenciaLocal,
+              bibliografia: bibliografiaLocal,
+            }));
+          }
+        } catch (err) {
+          console.warn("JSON Parse Error en incidenciaRes:", err);
+        }
       }
 
       // Empaquetar las instrucciones de la Evidencia Multimodal para la IA
@@ -704,19 +718,13 @@ const hasMinimumPhotos =
           throw new Error(msg);
         }
 
-        const data = (await res.json()) as {
-          markdown?: string;
-          unifiedProfile?: string;
-          meta?: { 
-            riskLevel?: "bajo" | "medio" | "alto";
-            incidenciaDetalles?: any[];
-            pois?: any[];
-            inegiDemographics?: any;
-            tacticalStreetViews?: any[];
-            scinceDemographics?: any;
-            mlFeatures?: any;
-          };
-        };
+        const resText = await res.text();
+        let data: any;
+        try {
+          data = JSON.parse(resText);
+        } catch (err) {
+          throw new Error("El servidor devolvió una respuesta vacía o incompleta (Timeout). Intente generar el informe nuevamente.");
+        }
         
         let finalMarkdown: string = "";
         if (data.markdown) finalMarkdown = data.markdown;
@@ -2665,14 +2673,14 @@ const hasMinimumPhotos =
 
       {showConfigModal && (
         <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div className="w-full max-w-[95vw] 2xl:max-w-[1600px] rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-8 md:py-10 my-8 md:my-auto">
+          <div className="w-full max-w-[98vw] 2xl:max-w-none rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-8 md:py-10 my-8 md:my-auto max-h-[95vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
             <div className="flex flex-col gap-8 items-start mt-6 w-full">
             {selectedIds.length >= 1 && (
               <>
-              <div className="space-y-6">
+              <div className="space-y-6 w-full">
                 <div className="space-y-1">
                   <p className="block text-xs font-medium text-slate-300">
                     Objetivos prioritarios del análisis
@@ -3193,7 +3201,7 @@ const hasMinimumPhotos =
       {/* MODAL DE EDICIÓN DE VENTANA */}
       {editingPhoto && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm print:hidden">
-          <div className="w-full max-w-lg bg-slate-900 border border-sky-600 rounded-xl p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-6xl bg-slate-900 border border-sky-600 rounded-xl p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-sky-200">Ventana de Edición de Contexto</h3>
             <p className="text-xs text-slate-400">Edite la contextualización de la evidencia de manera cómoda.</p>
             <textarea
