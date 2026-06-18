@@ -604,9 +604,11 @@ const hasMinimumPhotos =
         })
       );
 
-      const first = selected[0];
-      const lat = typeof first?.lat === "number" && !Number.isNaN(first.lat) ? first.lat : 21.8818;
-      const lng = typeof first?.lng === "number" && !Number.isNaN(first.lng) ? first.lng : -102.2915;
+      // Usar el centroide geográfico real de las evidencias seleccionadas, no la ciudad de Aguascalientes por defecto
+      const centerLat = withCoords.reduce((acc, p) => acc + p.lat!, 0) / withCoords.length;
+      const centerLng = withCoords.reduce((acc, p) => acc + p.lng!, 0) / withCoords.length;
+      const lat = centerLat || 21.8818;
+      const lng = centerLng || -102.2915;
 
       // EJECUCIÓN PARALELA: Mapa, Incidencia y Barrido OSINT Automático (X/Twitter, Google, DENUE, News)
       const mapResPromise = fetch("/api/analyze-selection", {
@@ -623,13 +625,13 @@ const hasMinimumPhotos =
       const incidenciaResPromise = fetch("/api/incidencia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng }),
+        body: JSON.stringify({ lat, lng, radius: analysisRadius }), // Forzamos a la BDD a respetar el radio
       }).catch(e => {
         console.error("[PhotoAlbum] Error /api/incidencia:", e);
         return null;
       });
 
-      const osintPromise = runOSINTScan(project).catch(e => {
+      const osintPromise = runOSINTScan({ ...project, latitude: lat, longitude: lng }).catch(e => {
         console.warn("[Auto-OSINT] Falló el barrido:", e);
         return null;
       });
@@ -1756,8 +1758,14 @@ const hasMinimumPhotos =
           <p className="text-xs text-slate-400">Busca bases de datos y registros oficiales cerca de las coordenadas del polígono.</p>
         </header>
         <DatosAbiertosAnalyzer
-          lat={album.find(p => p.lat && p.lng)?.lat || 21.8818}
-          lng={album.find(p => p.lat && p.lng)?.lng || -102.2915}
+        lat={(() => {
+          const valid = album.filter(p => p.lat && p.lng);
+          return valid.length > 0 ? valid.reduce((acc, p) => acc + p.lat!, 0) / valid.length : 21.8818;
+        })()}
+        lng={(() => {
+          const valid = album.filter(p => p.lat && p.lng);
+          return valid.length > 0 ? valid.reduce((acc, p) => acc + p.lng!, 0) / valid.length : -102.2915;
+        })()}
           onAnalysisComplete={(data) => {
             setDatosGobMxResult(data);
             const newContext = `[DATOS ABIERTOS GUBERNAMENTALES]\nDataset: ${data.datasetTitle}\nResumen: ${data.resumen}\n\nObservaciones tácticas: Elementos extraídos del padrón federal.`;
