@@ -21,6 +21,8 @@ import {
   searchTelegram,
 } from './socialProviders';
 
+"use server";
+
 import {
   searchOverpass,
   searchGooglePlaces,
