@@ -1,3 +1,5 @@
+"use server";
+
 import {
 
   searchSerpAPI,
@@ -20,8 +22,6 @@ import {
   buscarEnWebOSINT,
   searchTelegram,
 } from './socialProviders';
-
-"use server";
 
 import {
   searchOverpass,
