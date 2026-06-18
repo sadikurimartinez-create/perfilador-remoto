@@ -8,6 +8,15 @@ GCP_LOCATION=us-central1
 # (Debes colocar el archivo JSON en la carpeta principal del proyecto)
 GOOGLE_APPLICATION_CREDENTIALS=./perfil-remoto-fa3fa74486fa.json
 
+# CLAVES PARA VERTEX AI SEARCH (DISCOVERY ENGINE)
+PGP_DISCOVERY_PROJECT_ID=proyecto-cecosai-nuevo
+PGP_DISCOVERY_LOCATION=global
+PGP_DISCOVERY_ENGINE_ID=perfilador-remoto-buscador_1781793527559
+PGP_DISCOVERY_API_KEY= # Pega aquí tu API Key de Google Cloud Platform
+
+# CLAVE PARA EL ANÁLISIS DE INTELIGENCIA CON GEMINI
+PGP_GEMINI_API_KEY= # Pega aquí tu API Key de Google Gemini (AI Studio)
+
 # BASE DE DATOS (Requerido para la estadística e incidencia - PostgreSQL)
 # (Busca en tu archivo local la variable de conexión a tu base de datos)
 DATABASE_URL=postgresql://usuario:Cocipe2009@host:puerto/basededatos
