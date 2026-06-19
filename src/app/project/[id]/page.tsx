@@ -162,7 +162,7 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto p-4 md:p-6 flex flex-col gap-6">
+    <div className="w-full p-4 md:p-6 flex flex-col gap-6">
       <header className="w-full">
         <div className="flex flex-wrap items-center justify-between gap-3 w-full">
           <div>

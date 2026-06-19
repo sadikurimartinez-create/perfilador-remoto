@@ -94,7 +94,7 @@ export default function PerfilPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto w-full mt-4">
+    <div className="w-full mt-4">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-slate-100">Mi Perfil Operativo</h1>
         <p className="text-sm text-slate-400 mt-2">

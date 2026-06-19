@@ -283,7 +283,7 @@ export default function ConexionesPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="w-full px-4 py-6">
         <header className="flex items-center justify-between mb-6">
           <div>
             <p className="text-xs text-slate-500 mb-1">

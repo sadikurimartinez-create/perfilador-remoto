@@ -637,7 +637,7 @@ export function ProjectList() {
               </button>
             </div>
           ) : (
-            <ul className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+            <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {paginatedList.map((p) => {
                 const analysesForProject = allAnalyses.filter(
                   (a) => a.projectId === p.id
@@ -817,135 +817,147 @@ export function ProjectList() {
           )}
         </>
       ) : (
-        <div className="card p-6 space-y-4 max-w-4xl w-full">
-          <label className="block">
-        <div className="flex items-center justify-between mb-1">
-          <span className="block text-sm font-medium text-slate-200">
-            Nombre del Proyecto
-          </span>
-          <button
-            type="button"
-            onClick={handleToggleDictation}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
-              isListening
-                ? "border-red-500 text-red-300 bg-red-900/40"
-                : "border-slate-600 text-slate-200 bg-slate-900"
-            }`}
-          >
-            <span aria-hidden="true">🎙️</span>
-            <span>{isListening ? "Detener" : "Dictar"}</span>
-          </button>
-        </div>
-            <input
-              type="text"
-              spellCheck={true}
-              value={nombreInput}
-              onChange={(e) => setNombreInput(e.target.value)}
-              placeholder="Ej. Diagnóstico Polígono VNSA"
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
-          </label>
-
-        <div className="geometry-selector mt-2 mb-4">
-          <span className="block text-sm font-medium text-slate-200 mb-1">Tipo de geometría operacional</span>
-          <div className="flex flex-col gap-2 text-sm text-slate-300">
-            <label>
-              <input
-                type="radio"
-                name="geometryType"
-                value="individual"
-                checked={geometryType === "individual"}
-                onChange={() => setGeometryType("individual")}
-              />{" "}
-              Individual
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="geometryType"
-                value="lineal"
-                checked={geometryType === "lineal"}
-                onChange={() => setGeometryType("lineal")}
-              />{" "}
-              Lineal
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="geometryType"
-                value="poligono"
-                checked={geometryType === "poligono"}
-                onChange={() => setGeometryType("poligono")}
-              />{" "}
-              Polígono
-            </label>
-          </div>
-        </div>
-
-          <div className="mt-4 mb-4">
-            <span className="block text-sm font-medium text-slate-200 mb-2">Captura de fotografías in-situ (Opcional en este paso)</span>
-            <div className="flex gap-2">
-              <label className="flex-1 text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 text-sm font-semibold hover:bg-emerald-800/50 shadow-md transition-colors">
-                📷 Usar Cámara
+        <div className="card p-6 space-y-4 max-w-6xl w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Columna Izquierda: Identificación del Proyecto */}
+            <div className="space-y-4">
+              <label className="block">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="block text-sm font-medium text-slate-200">
+                    Nombre del Proyecto
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleToggleDictation}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
+                      isListening
+                        ? "border-red-500 text-red-300 bg-red-900/40"
+                        : "border-slate-600 text-slate-200 bg-slate-900"
+                    }`}
+                  >
+                    <span aria-hidden="true">🎙️</span>
+                    <span>{isListening ? "Detener" : "Dictar"}</span>
+                  </button>
+                </div>
                 <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="sr-only"
-                  onChange={handlePendingPhotosChange}
+                  type="text"
+                  spellCheck={true}
+                  value={nombreInput}
+                  onChange={(e) => setNombreInput(e.target.value)}
+                  placeholder="Ej. Diagnóstico Polígono VNSA"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </label>
-              <label className="flex-1 text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors">
-                📸 Usar Galería
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="sr-only"
-                  onChange={handlePendingPhotosChange}
-                />
-              </label>
-            </div>
-            {pendingPhotos.length > 0 && (
-              <div className="mt-3">
-                <p className="text-xs text-emerald-400 mb-2 font-medium">✓ {pendingPhotos.length} fotografía(s) seleccionada(s) lista(s) para ser ingresada(s).</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {pendingPhotos.map((item, idx) => (
-                    <div key={idx} className="relative group rounded-md overflow-hidden border border-slate-600 aspect-square bg-slate-800 flex items-center justify-center">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={item.url} 
-                        alt="Preview" 
-                        className="object-cover w-full h-full"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePendingPhoto(idx)}
-                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-90 hover:opacity-100 shadow-md"
-                        title="Borrar fotografía"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+
+              <div className="geometry-selector">
+                <span className="block text-sm font-medium text-slate-200 mb-2">Tipo de geometría operacional</span>
+                <div className="flex flex-col gap-2.5 text-sm text-slate-300 bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+                    <input
+                      type="radio"
+                      name="geometryType"
+                      value="individual"
+                      checked={geometryType === "individual"}
+                      onChange={() => setGeometryType("individual")}
+                      className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
+                    />{" "}
+                    Individual (Punto + Radio operacional)
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+                    <input
+                      type="radio"
+                      name="geometryType"
+                      value="lineal"
+                      checked={geometryType === "lineal"}
+                      onChange={() => setGeometryType("lineal")}
+                      className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
+                    />{" "}
+                    Lineal (Rutas de patrullaje / Proyecciones)
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+                    <input
+                      type="radio"
+                      name="geometryType"
+                      value="poligono"
+                      checked={geometryType === "poligono"}
+                      onChange={() => setGeometryType("poligono")}
+                      className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
+                    />{" "}
+                    Polígono (Áreas de interés / Zonas calientes)
+                  </label>
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* Columna Derecha: Evidencia y Multimedia */}
+            <div className="space-y-4">
+              <div>
+                <span className="block text-sm font-medium text-slate-200 mb-2">Captura de fotografías in-situ (Opcional en este paso)</span>
+                <div className="flex gap-3">
+                  <label className="flex-1 text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2.5 text-sm font-semibold hover:bg-emerald-800/50 shadow-md transition-colors flex items-center justify-center gap-2">
+                    📷 Usar Cámara
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={handlePendingPhotosChange}
+                    />
+                  </label>
+                  <label className="flex-1 text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2.5 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors flex items-center justify-center gap-2">
+                    📸 Usar Galería
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={handlePendingPhotosChange}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {pendingPhotos.length > 0 && (
+                <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800">
+                  <p className="text-xs text-emerald-400 mb-2 font-medium">✓ {pendingPhotos.length} fotografía(s) seleccionada(s) lista(s) para ser ingresada(s).</p>
+                  <div className="grid grid-cols-4 gap-2 max-h-[140px] overflow-y-auto pr-1">
+                    {pendingPhotos.map((item, idx) => (
+                      <div key={idx} className="relative group rounded-md overflow-hidden border border-slate-700 aspect-square bg-slate-800 flex items-center justify-center shadow-sm">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={item.url} 
+                          alt="Preview" 
+                          className="object-cover w-full h-full"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePendingPhoto(idx)}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-90 hover:opacity-100 shadow-md"
+                          title="Borrar fotografía"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-4 border-t border-slate-800">
             <button
               type="button"
               onClick={() => void handleConfirmarNombre()}
               disabled={!nombreInput.trim()}
-              className="btn-primary flex-1"
+              className="btn-primary flex-1 py-2.5 text-sm font-semibold"
             >
               Crear e ingresar
             </button>
             <button
               type="button"
               onClick={() => setShowPrompt(false)}
-              className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 text-sm hover:bg-slate-800"
+              className="px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 text-sm hover:bg-slate-800 font-semibold transition-colors"
             >
               Cancelar
             </button>

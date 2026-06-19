@@ -1,7 +1,7 @@
 export default function DashboardPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 px-4 py-6">
-      <div className="max-w-5xl mx-auto space-y-4">
+    <div className="min-h-screen bg-slate-950 text-slate-100 py-4">
+      <div className="w-full space-y-4">
         <header className="space-y-1">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
             Dashboard Analítico Ambiental
