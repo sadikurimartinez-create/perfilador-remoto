@@ -68,6 +68,14 @@ export function InstitutionalHeader() {
               Mi Perfil
             </Link>
           )}
+          {user && (
+            <Link
+              href="/pandillas"
+              className="text-[11px] sm:text-xs font-medium text-slate-400 hover:text-sky-300 transition-colors"
+            >
+              Pandillas
+            </Link>
+          )}
           {user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
             <Link
               href="/admin"
