@@ -9,6 +9,7 @@ import { PhotoAlbum } from "@/components/PhotoAlbum";
 import { db } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
+import { PandillasUI } from "@/modules/pandillas/pandillas.ui";
 import {
   addDoc,
   collection,
@@ -42,6 +43,7 @@ export default function ProjectWorkspacePage() {
 
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
 
   useEffect(() => {
     if (!projectId) return;
@@ -189,13 +191,45 @@ export default function ProjectWorkspacePage() {
         </div>
       </header>
 
+      {/* PREMIUM TABS NAVIGATION HEADER */}
+      <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1.5 gap-1.5 shadow-lg max-w-lg w-full">
+        <button
+          onClick={() => setActiveWorkspaceTab("environmental")}
+          className={`flex-1 py-2.5 rounded-lg text-xs font-black tracking-wide uppercase transition-all whitespace-nowrap ${
+            activeWorkspaceTab === "environmental"
+              ? "bg-sky-500 text-slate-950 shadow-md font-extrabold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          📷 Evidencia y Entorno
+        </button>
+        <button
+          onClick={() => setActiveWorkspaceTab("pandillas")}
+          className={`flex-1 py-2.5 rounded-lg text-xs font-black tracking-wide uppercase transition-all whitespace-nowrap ${
+            activeWorkspaceTab === "pandillas"
+              ? "bg-sky-500 text-slate-950 shadow-md font-extrabold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          🕵️ Análisis de Pandillas
+        </button>
+      </div>
+
       <div className="w-full space-y-6 overflow-y-auto pb-20 lg:pb-0">
-        <CaptureAndAddPhoto />
-        <PhotoAlbum
-          onDeletePhoto={handleDeletePhoto}
-          projectId={project.id}
-          onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
-        />
+        {activeWorkspaceTab === "environmental" ? (
+          <>
+            <CaptureAndAddPhoto />
+            <PhotoAlbum
+              onDeletePhoto={handleDeletePhoto}
+              projectId={project.id}
+              onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
+            />
+          </>
+        ) : (
+          <div className="bg-slate-950/20 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+            <PandillasUI projectId={project.id} onSaveAnalysisToCloud={handleSaveAnalysisToCloud} />
+          </div>
+        )}
       </div>
 
       <div className="w-full" id="c4-right-column">

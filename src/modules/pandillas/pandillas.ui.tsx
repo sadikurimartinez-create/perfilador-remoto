@@ -1,20 +1,25 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { GangEntity, GangMember, FusionResult } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
+import { GoogleMap, Polygon, Marker, useJsApiLoader } from "@react-google-maps/api";
 
-export function PandillasUI() {
+interface PandillasUIProps {
+  projectId?: string;
+  onSaveAnalysisToCloud?: (content: string) => Promise<void>;
+}
+
+export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIProps = {}) {
   const { user } = useAuth();
   const username = user?.username || "CEIPOL_Analista";
 
   // --- STATE FOR FORM ---
   const [nombre, setNombre] = useState("");
   const [zonaInfluencia, setZonaInfluencia] = useState("");
-  const [lat, setLat] = useState("21.8853");
-  const [lng, setLng] = useState("-102.2916");
+  const [poligono, setPoligono] = useState<{ lat: number; lng: number }[]>([]);
   const [antagonicas, setAntagonicas] = useState<string[]>([]);
   const [nuevoAntagonica, setNuevoAntagonica] = useState("");
   const [integrantes, setIntegrantes] = useState<GangMember[]>([]);
@@ -56,10 +61,84 @@ export function PandillasUI() {
   // --- GRAPH INTERACTIVE STATES ---
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
 
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script-pandillas",
+    googleMapsApiKey: apiKey,
+    libraries: useMemo(() => ["places", "visualization", "drawing"], []),
+  });
+
+  const containerStyle = useMemo(() => ({
+    width: "100%",
+    height: "220px",
+  }), []);
+
+  const calculateCentroid = (vertices: { lat: number; lng: number }[]) => {
+    if (!vertices || vertices.length === 0) return { lat: 21.8853, lng: -102.2916 };
+    let totalLat = 0;
+    let totalLng = 0;
+    vertices.forEach(v => {
+      totalLat += v.lat;
+      totalLng += v.lng;
+    });
+    return {
+      lat: totalLat / vertices.length,
+      lng: totalLng / vertices.length
+    };
+  };
+
+  const mapCenter = useMemo(() => {
+    if (poligono && poligono.length > 0) {
+      return calculateCentroid(poligono);
+    }
+    return { lat: 21.8853, lng: -102.2916 }; // Defaults to Aguascalientes
+  }, [poligono]);
+
+  const handleMapClick = (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const newPt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      setPoligono(prev => [...prev, newPt]);
+    }
+  };
+
+  const handleClearPolygon = () => {
+    setPoligono([]);
+  };
+
   // Load saved gangs on mount
   useEffect(() => {
     void loadSavedGangs();
-  }, []);
+    if (projectId) {
+      void loadGangForProject();
+    }
+  }, [projectId]);
+
+  const loadGangForProject = async () => {
+    if (!projectId) return;
+    try {
+      const existing = await PandillasService.getGangByProjectId(projectId);
+      if (existing) {
+        setNombre(existing.nombre || "");
+        setZonaInfluencia(existing.zonaInfluencia || "");
+        if (existing.poligono && existing.poligono.length > 0) {
+          setPoligono(existing.poligono);
+        } else if (existing.coordenadas) {
+          setPoligono([existing.coordenadas]);
+        } else {
+          setPoligono([]);
+        }
+        setAntagonicas(existing.antagonicas || []);
+        setIntegrantes(existing.integrantes || []);
+        setGrafitiTexto(existing.grafitiInfo?.texto || "");
+        setGrafitiSimbolos(existing.grafitiInfo?.simbolos || "");
+        setGrafitiPatrones(existing.grafitiInfo?.patrones || "");
+        setArchivos(existing.archivosAnexos || []);
+        setSelectedGangId(existing.id || "");
+      }
+    } catch (e) {
+      console.error("Error al cargar pandilla por projectId:", e);
+    }
+  };
 
   const loadSavedGangs = async () => {
     try {
@@ -67,6 +146,61 @@ export function PandillasUI() {
       setStoredGangs(list);
     } catch (e) {
       console.error("Error al cargar expedientes:", e);
+    }
+  };
+
+  // --- ATTACH REPORT TO PROJECT WORKSPACE ---
+  const handleAttachToExpediente = async () => {
+    if (!analysisResult || !onSaveAnalysisToCloud) return;
+    
+    try {
+      const formattedIntegrantes = analysisResult.ficha.integrantes.length > 0
+        ? analysisResult.ficha.integrantes.map(m => `- **"${m.alias || "Sin alias"}"** - ${m.rol} (${m.nombre || "No identificado"}${m.edad ? `, ${m.edad} años` : ""})`).join("\n")
+        : "*No se reportaron integrantes en este dictamen.*";
+
+      const formattedAlertas = analysisResult.alertas.length > 0
+        ? analysisResult.alertas.map(a => `- [ALERTA ${a.severidad} - ${a.tipo}] ${a.mensaje} (${a.fecha})`).join("\n")
+        : "*No hay alertas tácticas activas.*";
+
+      const scinceText = analysisResult.scinceInfo
+        ? `- Grado de Marginación Urbana: **${analysisResult.scinceInfo.gradoMarginacion}**\n- Población Estimada en Sector: **${analysisResult.scinceInfo.poblacionTotal} habitantes**`
+        : "- *Información demográfica de INEGI SCINCE no disponible para este sector.*";
+
+      const denueText = analysisResult.denueInfo
+        ? `- Total de Comercios en Sector: **${analysisResult.denueInfo.total}**\n- Muestra / Resumen de Comercio Local: *${analysisResult.denueInfo.resumen}*`
+        : "- *Información comercial de INEGI DENUE no disponible para este sector.*";
+
+      const content = `# DICTAMEN DE INTELIGENCIA Y ANÁLISIS DE PANDILLAS
+**Pandilla/Clica:** ${analysisResult.ficha.nombre}
+**Nivel de Amenaza:** ${analysisResult.ficha.nivelRiesgo}
+**Zona de Influencia:** ${analysisResult.ficha.zona}
+
+## 1. Diagnóstico Operativo & Modus Operandi
+${analysisResult.ficha.resumenInteligencia}
+
+## 2. Estructura Jerárquica (${analysisResult.ficha.estructuraJerarquica})
+${analysisResult.ficha.descripcionEstructura}
+
+### Integrantes Identificados:
+${formattedIntegrantes}
+
+## 3. Demografía y Entorno Comercial (INEGI SCINCE & DENUE)
+${scinceText}
+${denueText}
+
+## 4. Alertas Tácticas de Riesgo
+${formattedAlertas}
+
+## 5. Cross-Check Jurídico (Asociación Delictiva)
+${analysisResult.ficha.crossCheckJuridico}
+
+---
+*Dictamen de Inteligencia emitido por el motor de fusión CEIPOL. Todos los derechos reservados.*`;
+
+      await onSaveAnalysisToCloud(content);
+      alert("📋 ¡El Dictamen de Pandillas ha sido anexado exitosamente al expediente maestro de este proyecto! Ahora está disponible para su exportación a Word.");
+    } catch (e: any) {
+      alert("Error al anexar dictamen al expediente: " + e.message);
     }
   };
 
@@ -169,15 +303,17 @@ export function PandillasUI() {
 
     for (let i = 0; i < steps.length; i++) {
       setAnalyzeStep(steps[i]);
-      // Slightly variable delays to simulate highly complex processing tasks
       await new Promise(r => setTimeout(r, 600 + Math.random() * 500));
     }
 
     try {
+      const centroid = calculateCentroid(poligono);
       const inputGang: GangEntity = {
+        projectId: projectId || undefined,
         nombre,
         zonaInfluencia,
-        coordenadas: { lat: parseFloat(lat) || 21.8853, lng: parseFloat(lng) || -102.2916 },
+        coordenadas: centroid,
+        poligono: poligono.length > 0 ? poligono : undefined,
         antagonicas,
         integrantes,
         grafitiInfo: {
@@ -206,11 +342,14 @@ export function PandillasUI() {
       return;
     }
     try {
+      const centroid = calculateCentroid(poligono);
       const gangToSave: GangEntity = {
         id: selectedGangId || undefined,
+        projectId: projectId || undefined,
         nombre,
         zonaInfluencia,
-        coordenadas: { lat: parseFloat(lat) || 21.8853, lng: parseFloat(lng) || -102.2916 },
+        coordenadas: centroid,
+        poligono: poligono.length > 0 ? poligono : undefined,
         antagonicas,
         integrantes,
         grafitiInfo: {
@@ -235,8 +374,7 @@ export function PandillasUI() {
     if (confirm("¿Está seguro de reiniciar el formulario? Perderá los datos no guardados.")) {
       setNombre("");
       setZonaInfluencia("");
-      setLat("21.8853");
-      setLng("-102.2916");
+      setPoligono([]);
       setAntagonicas([]);
       setIntegrantes([]);
       setGrafitiTexto("");
@@ -254,9 +392,12 @@ export function PandillasUI() {
   const handleLoadGang = (gang: GangEntity) => {
     setNombre(gang.nombre || "");
     setZonaInfluencia(gang.zonaInfluencia || "");
-    if (gang.coordenadas) {
-      setLat(gang.coordenadas.lat.toString());
-      setLng(gang.coordenadas.lng.toString());
+    if (gang.poligono && gang.poligono.length > 0) {
+      setPoligono(gang.poligono);
+    } else if (gang.coordenadas) {
+      setPoligono([gang.coordenadas]);
+    } else {
+      setPoligono([]);
     }
     setAntagonicas(gang.antagonicas || []);
     setIntegrantes(gang.integrantes || []);
@@ -350,7 +491,7 @@ export function PandillasUI() {
               />
             </div>
 
-            {/* 2. ZONE OF INFLUENCE & COORDINATES */}
+            {/* 2. ZONE OF INFLUENCE & MAP POLYGON */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Zona de Influencia</label>
               <input
@@ -365,28 +506,76 @@ export function PandillasUI() {
                 {coloniaSuggestions.map(col => <option key={col} value={col} />)}
               </datalist>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Latitud</label>
-                  <input
-                    type="text"
-                    value={lat}
-                    onChange={e => setLat(e.target.value)}
-                    placeholder="21.8853"
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500"
-                  />
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mt-2">Delinear Polígono de Influencia en Mapa</label>
+              
+              {!isLoaded ? (
+                <div className="w-full h-[220px] rounded-lg border border-slate-800 bg-slate-950/60 flex items-center justify-center text-xs text-slate-500">
+                  Cargando mapa interactivo...
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Longitud</label>
-                  <input
-                    type="text"
-                    value={lng}
-                    onChange={e => setLng(e.target.value)}
-                    placeholder="-102.2916"
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500"
-                  />
+              ) : (
+                <div className="relative rounded-lg overflow-hidden border border-slate-800 bg-slate-950/60">
+                  <GoogleMap
+                    mapContainerStyle={containerStyle}
+                    center={mapCenter}
+                    zoom={14}
+                    onClick={handleMapClick}
+                    options={{
+                      streetViewControl: false,
+                      mapTypeControl: false,
+                      fullscreenControl: false,
+                      mapTypeId: "hybrid",
+                    }}
+                  >
+                    {poligono.map((pt, idx) => (
+                      <Marker
+                        key={idx}
+                        position={pt}
+                        label={{
+                          text: String(idx + 1),
+                          color: "#ffffff",
+                          fontSize: "10px",
+                          fontWeight: "bold"
+                        }}
+                        icon={{
+                          path: 0 as any, // Circle
+                          scale: 7,
+                          fillColor: "#38bdf8",
+                          fillOpacity: 1,
+                          strokeColor: "#ffffff",
+                          strokeWeight: 1.5,
+                        }}
+                      />
+                    ))}
+
+                    {poligono.length >= 3 && (
+                      <Polygon
+                        paths={poligono}
+                        options={{
+                          strokeColor: "#38bdf8",
+                          strokeOpacity: 0.8,
+                          strokeWeight: 2,
+                          fillColor: "#0284c7",
+                          fillOpacity: 0.35,
+                        }}
+                      />
+                    )}
+                  </GoogleMap>
+                  
+                  {poligono.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearPolygon}
+                      className="absolute bottom-2 right-2 px-2 py-1 bg-red-950/80 hover:bg-red-900/90 border border-red-800/80 rounded text-[10px] font-bold text-red-300 transition-colors shadow-md z-30"
+                    >
+                      🗑️ Limpiar Polígono
+                    </button>
+                  )}
+                  
+                  <div className="absolute top-2 left-2 bg-slate-900/90 border border-slate-800 p-1.5 rounded text-[8px] text-slate-400 pointer-events-none z-30">
+                    {poligono.length === 0 ? "Haga clic en el mapa para delimitar la zona" : `Polígono: ${poligono.length} vértices`}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* 3. ANTAGONIST GANGS */}
@@ -703,7 +892,18 @@ export function PandillasUI() {
               <div className="card p-5 border-l-4 border-l-sky-500 bg-slate-900/60 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Identidad Criminal Consolidada</span>
-                  <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">{analysisResult.ficha.nombre}</h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">{analysisResult.ficha.nombre}</h3>
+                    {projectId && onSaveAnalysisToCloud && (
+                      <button
+                        type="button"
+                        onClick={handleAttachToExpediente}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sky-500 bg-sky-950/50 hover:bg-sky-900/60 text-[11px] font-black text-sky-400 tracking-wide uppercase transition-all shadow-md"
+                      >
+                        📋 Anexar al Expediente
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400 mt-1">Sector de Influencia: <strong className="text-slate-300">{analysisResult.ficha.zona}</strong></p>
                 </div>
 

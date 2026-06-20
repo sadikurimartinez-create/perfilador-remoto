@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/firebase";
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where } from "firebase/firestore";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
 
 /**
@@ -77,6 +77,27 @@ export class PandillasService {
     } catch (e) {
       console.warn("[PandillasService] Fallo consultando Firestore. Retornando arreglo vacío.", e);
       return [];
+    }
+  }
+
+  /**
+   * Fetches a gang record associated with a specific projectId.
+   */
+  static async getGangByProjectId(projectId: string): Promise<GangEntity | null> {
+    const db = getDb();
+    try {
+      const colRef = collection(db, this.collectionName);
+      const q = query(colRef, where("projectId", "==", projectId));
+      const snap = await getDocs(q);
+      if (snap.empty) return null;
+      const firstDoc = snap.docs[0];
+      return {
+        id: firstDoc.id,
+        ...firstDoc.data()
+      } as GangEntity;
+    } catch (e) {
+      console.warn("[PandillasService] Fallo consultando pandilla por projectId:", e);
+      return null;
     }
   }
 

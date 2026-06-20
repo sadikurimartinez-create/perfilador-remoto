@@ -13,9 +13,11 @@ export interface GangMember {
 
 export interface GangEntity {
   id?: string;
+  projectId?: string;
   nombre: string;
   zonaInfluencia: string;
   coordenadas?: { lat: number; lng: number };
+  poligono?: { lat: number; lng: number }[];
   antagonicas: string[];
   integrantes: GangMember[];
   grafitiInfo?: {
