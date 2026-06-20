@@ -6,6 +6,7 @@ export interface InformeContext {
   clasificacionRiesgo: string;
   osintAutomatedSweep?: string;
   streetViewsSweep?: string;
+  analysisRadius?: number;
 }
 
 export const generarPromptInformeFinal = (context: InformeContext): string => {
@@ -18,6 +19,7 @@ RESTRICCIONES OPERACIONALES (ADR):
 - Habla estrictamente en términos de "probabilidades espaciales", "facilidades para la comisión del delito" y "percepción de oportunidad".
 - Mantén un tono técnico, aséptico, analítico y ejecutivo. 
 - Tu función es asistir a la persona perfiladora, no sustituirla.
+- EL RADIO DE ANÁLISIS ESTABLECIDO DE ${context.analysisRadius || 250} METROS ES UN ELEMENTO CRÍTICO: Todo el análisis de entorno, la idoneidad, las conclusiones de patrullaje y de incidencia criminal deben circunscribirse fuertemente a este radio de acción espacial. Haz mención expresa y reiterada de que las vulnerabilidades y estrategias se concentran con base en este radio de influencia geográfica de ${context.analysisRadius || 250} metros.
 
 DATOS DE ENTRADA PROVISTOS:
 ---
@@ -28,6 +30,7 @@ DATOS DE ENTRADA PROVISTOS:
 5. Clasificación Base del Entorno: ${context.clasificacionRiesgo || 'No determinada.'}
 6. Barrido Automático OSINT (X/Twitter, DENUE, Noticias, Google): ${context.osintAutomatedSweep || 'No ejecutado'}
 7. Detecciones de StreetView (Lugares de Acecho): ${context.streetViewsSweep || 'Sin imágenes capturadas'}
+8. Radio de Análisis Establecido: ${context.analysisRadius ? `${context.analysisRadius} metros` : 'No especificado (por defecto 250 metros)'}
 ---
 
 ESTRUCTURA OBLIGATORIA DEL INFORME:

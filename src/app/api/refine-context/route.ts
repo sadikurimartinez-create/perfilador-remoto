@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   let requestMode: string | undefined;
   try {
     const body = await req.json();
-    const { context, photos, mode, geometryType, projectDescription, region } = body;
+    const { context, photos, mode, geometryType, projectDescription, region, analysisRadius } = body;
     requestMode = mode;
 
     // ============================================================================
@@ -113,7 +113,11 @@ IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directa
     if (mode === "hypothesis-qa") {
       sysPrompt = `Eres un sinodal y analista experto de la policía.
 Evalúa la siguiente hipótesis del investigador. Si es muy básica, otórgale una calificación menor a 80 y genera 5 preguntas clave (questions) que el investigador debería responder para mejorarla. Si la hipótesis y el contexto agregado tienen buena lógica táctica, otorga 80 o más.
-Geometría: ${geometryType} | Hipótesis actual:\n"""\n${context}\n"""
+IMPORTANTE: El investigador ha establecido un Radio de Búsqueda Geoespacial de ${analysisRadius || 250} metros. Valora la hipótesis considerando fuertemente este radio: la lógica táctica de la hipótesis debe concordar con la escala espacial de un área con cobertura de ${analysisRadius || 250} metros. Si la hipótesis no habla del entorno o de la distancia de influencia a esa escala de manera lógica, sugiérelo en las preguntas o evaluación.
+Geometría: ${geometryType} | Radio de búsqueda: ${analysisRadius || 250} metros | Hipótesis actual:
+"""
+${context}
+"""
 Devuelve ÚNICA Y EXCLUSIVAMENTE un JSON con: {"score": <número 0-100>, "suggestions": "<evaluación>", "questions": ["pregunta 1", "pregunta 2", "pregunta 3", "pregunta 4", "pregunta 5"]}`;
     } else if (mode === "validate-photos") {
       sysPrompt = `Eres un auditor táctico. Verifica si la selección de fotos es coherente con el análisis.

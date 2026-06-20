@@ -75,7 +75,8 @@ export async function POST(req: Request) {
       osintRepuve: osintRepuveData,
       clasificacionRiesgo: clasificacionRiesgo,
       osintAutomatedSweep: osintEngineStr,
-      streetViewsSweep: streetViewsStr
+      streetViewsSweep: streetViewsStr,
+      analysisRadius: safeBody.analysisRadius,
     });
 
     let gangReportStr = "Ningún informe de geointeligencia vinculado.";

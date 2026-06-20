@@ -345,10 +345,7 @@ export function PhotoAlbum({
   const [isCheckingPlate, setIsCheckingPlate] = useState(false);
   const [plateContext, setPlateContext] = useState("");
 
-  // Estado para Consulta SAT OSINT (Art. 69-B)
-  const [satQuery, setSatQuery] = useState("");
-  const [isCheckingSat, setIsCheckingSat] = useState(false);
-  const [satContext, setSatContext] = useState("");
+
 
   // Estado para Consulta TELEGRAM OSINT
   const [telegramQuery, setTelegramQuery] = useState("");
@@ -1378,93 +1375,7 @@ const hasMinimumPhotos =
         </div>
       </div>
 
-      {/* MÓDULO DE INTELIGENCIA ECONÓMICA (SAT Art. 69-B) */}
-      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Inteligencia Económica (SAT - Art. 69B)</h4>
-          <p className="text-xs text-slate-400">
-            Consulte negocios detectados contra las listas negras de la SHCP/SAT. Identifique empresas fachada o posibles esquemas de lavado de dinero operando en el polígono. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
-          </p>
-        </header>
-        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
-          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
-            <input
-              type="text"
-              placeholder="Ingrese RFC o Razón Social..."
-              value={satQuery}
-              onChange={(e) => setSatQuery(e.target.value.toUpperCase())}
-              disabled={isCheckingSat || isReadOnly}
-              className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
-            />
-          </div>
-          <div className="w-full relative">
-            {!isReadOnly && (
-              <button
-                type="button"
-                onClick={() => toggleDictation('satContext', (text) => setSatContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'satContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
-              >
-                <span>🎙️</span> {listeningField === 'satContext' ? "Grabando..." : "Dictar"}
-              </button>
-            )}
-            <textarea
-              spellCheck={true}
-              value={satContext}
-              disabled={isReadOnly}
-              onChange={(e) => setSatContext(e.target.value)}
-              placeholder="Contexto, justificación o instrucción específica para la IA sobre este negocio (Obligatorio)..."
-              className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!satContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
-            />
-          </div>
-          <div className="mt-1 mb-2">
-            <div className="flex justify-between items-center text-[10px] mb-1">
-              <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-              <span className={`font-bold ${satContext.length < 40 ? "text-red-400" : satContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
-                {satContext.length === 0 ? "Sin contexto" : satContext.length < 40 ? "Básico" : satContext.length < 120 ? "Aceptable" : "Óptimo"}
-              </span>
-            </div>
-            <div className="w-full bg-slate-800 rounded-full h-1.5">
-              <div 
-                className={`h-1.5 rounded-full transition-all duration-300 ${satContext.length < 40 ? "bg-red-500" : satContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
-                style={{ width: `${Math.min((satContext.length / 200) * 100, 100)}%` }}
-              ></div>
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={!satQuery.trim() || !satContext.trim() || isCheckingSat || isReadOnly}
-            onClick={async () => {
-              setIsCheckingSat(true);
-              setError(null);
-              try {
-                const res = await fetch("/api/osint/sat", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ rfc_o_nombre: satQuery.trim() })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                  const newContext = `[INTELIGENCIA ECONÓMICA OSINT - Búsqueda SAT: ${data.busqueda}]\nInstrucción/Contexto del Analista: ${satContext}\nEstatus Oficial: ${data.estatus}. Supuesto: ${data.supuesto}. Observaciones tácticas: Este establecimiento fue consultado en las Listas Negras (Art. 69-B CFF). Si aparece como EFOS, debe considerarse un mercado negro y atractor de riesgo grave de desorganización social para el entorno.`;
-                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setSatQuery("");
-                  setSatContext("");
-                  setIsAnalysisContextAudited(false); // Forzar reevaluación por añadir riesgo
-                  alert(`Consulta finalizada: ${data.estatus}. Resultado integrado a la hipótesis.`);
-                } else {
-                  setError(data.error || "Error al consultar el SAT.");
-                }
-              } catch (err) {
-                setError("Error de red al conectar con el módulo SAT.");
-              } finally {
-                setIsCheckingSat(false);
-              }
-            }}
-            className="w-full md:w-auto bg-emerald-700 hover:bg-emerald-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
-          >
-            {isCheckingSat ? <span className="flex items-center justify-center">Consultando SAT... <ElapsedTime running={isCheckingSat} /></span> : "💰 Consultar SAT y Añadir a Hipótesis"}
-          </button>
-        </div>
-      </div>
+
 
       {/* MÓDULO DE INTELIGENCIA DE FUENTES ABIERTAS (TELEGRAM OSINT) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
@@ -2688,75 +2599,6 @@ const hasMinimumPhotos =
             {selectedIds.length >= 1 && (
               <>
               <div className="space-y-6 w-full">
-                <div className="space-y-1">
-                  <p className="block text-xs font-medium text-slate-300">
-                    Objetivos prioritarios del análisis
-                  </p>
-                  {(() => {
-                    const analysisOptions = [
-                      "Incidencia Delictiva Histórica",
-                      "Giros Comerciales",
-                      "Bares",
-                      "Cantinas",
-                      "Chatarreras",
-                      "Escuelas / Entornos Educativos",
-                      "Terrenos Baldíos",
-                      "Zonas de Abandono",
-                      "Rutas de Escape / Callejones",
-                      "Deficiencia de Servicios Públicos",
-                      "Iluminación",
-                      "Pavimentación",
-                      "Otro"
-                    ];
-
-                    return (
-                      <>
-                        <div className="grid grid-cols-1 gap-1 text-xs text-slate-200">
-                          {analysisOptions.map((label) => (
-                            <label
-                              key={label}
-                              className="flex items-center gap-2 rounded-md bg-slate-900/60 px-2 py-1"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-3 w-3 rounded border-slate-600 bg-slate-900"
-                                checked={focusAreas.includes(label)}
-                                onChange={(e) =>
-                                  setFocusAreas((prev) =>
-                                    e.target.checked
-                                      ? [...prev, label]
-                                      : prev.filter((x) => x !== label)
-                                  )
-                                }
-                              />
-                              <span>{label}</span>
-                            </label>
-                          ))}
-                        </div>
-
-                        {focusAreas.includes("Otro") && (
-                          <div className="relative mt-2 w-full">
-                            <button
-                              type="button"
-                              onClick={() => toggleDictation('analysisContextExtra', (text) => setAnalysisContextExtra(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                              className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'analysisContextExtra' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
-                            >
-                              <span>🎙️</span>
-                            </button>
-                            <textarea
-                              spellCheck={true}
-                              placeholder="Especifique otros objetivos prioritarios del análisis..."
-                              value={analysisContextExtra ?? ""}
-                              onChange={(e) => setAnalysisContextExtra(e.target.value)}
-                              className="w-full rounded-md border border-slate-700 bg-slate-900 px-4 py-3 pr-10 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                              rows={4}
-                            />
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
                 <div className="flex items-center justify-between gap-2">
                   <label className="block text-xs font-medium text-slate-300">
                     Hipótesis de la Persona Perfiladora (contexto del cruce de ubicaciones)
@@ -2878,6 +2720,7 @@ const hasMinimumPhotos =
                             mode: "hypothesis-qa",
                             geometryType: project?.geometryType || "individual",
                             projectDescription: project?.descripcion || "",
+                            analysisRadius,
                           }),
                         });
                         const textRes = await res.text();
