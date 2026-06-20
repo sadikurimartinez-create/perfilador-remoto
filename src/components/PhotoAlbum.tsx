@@ -861,10 +861,10 @@ const hasMinimumPhotos =
 
     // Capturar Gráficas Individuales
     const chartIds = [
-      { id: "chart-export-1", title: "GRÁFICA 1: COMPOSICIÓN DEL ENTORNO" },
-      { id: "chart-export-2", title: "GRÁFICA 2: PRIORIDAD DE FACTORES" },
-      { id: "chart-export-3", title: "GRÁFICA 3: DESORGANIZACIÓN SOCIAL" },
-      { id: "chart-export-4", title: "GRÁFICA 4: EVOLUCIÓN DE RIESGO" }
+      { id: "chart-export-1", title: "GRÁFICA 1: DISTRIBUCIÓN TEMPORAL DEL DELITO POR TURNO" },
+      { id: "chart-export-2", title: "GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES (TOP 5)" },
+      { id: "chart-export-3", title: "GRÁFICA 3: FACILITADORES AMBIENTALES DE OPORTUNIDAD" },
+      { id: "chart-export-4", title: "GRÁFICA 4: PREDICCIÓN DE AUMENTO DE INCIDENCIA (6 MESES)" }
     ];
 
     for (const c of chartIds) {
