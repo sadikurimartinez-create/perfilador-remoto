@@ -91,11 +91,21 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [antagonicas, setAntagonicas] = useState<string[]>([]);
   const [nuevoAntagonica, setNuevoAntagonica] = useState("");
   const [integrantes, setIntegrantes] = useState<GangMember[]>([]);
+  const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
+  const [editingMember, setEditingMember] = useState<GangMember | null>(null);
+  const [tempMemberTab, setTempMemberTab] = useState<"personal" | "fisico" | "antecedentes">("personal");
   const [tempNombre, setTempNombre] = useState("");
   const [tempAlias, setTempAlias] = useState("");
   const [tempRol, setTempRol] = useState("Operativo");
   const [tempEdad, setTempEdad] = useState("");
   const [tempAntecedentes, setTempAntecedentes] = useState("");
+  const [tempSenasParticulares, setTempSenasParticulares] = useState("");
+  const [tempTatuajes, setTempTatuajes] = useState("");
+  const [tempComplexion, setTempComplexion] = useState("");
+  const [tempEstatura, setTempEstatura] = useState("");
+  const [tempVestimentaUsual, setTempVestimentaUsual] = useState("");
+  const [tempTelefonoRedes, setTempTelefonoRedes] = useState("");
+  const [tempVehiculosAsociados, setTempVehiculosAsociados] = useState("");
 
   const [grafitiTexto, setGrafitiTexto] = useState("");
   const [grafitiSimbolos, setGrafitiSimbolos] = useState("");
@@ -138,7 +148,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
   const containerStyle = useMemo(() => ({
     width: "100%",
-    height: "320px",
+    height: "420px",
   }), []);
 
   const calculateCentroid = (vertices: { lat: number; lng: number }[]) => {
@@ -296,7 +306,14 @@ ${analysisResult.ficha.crossCheckJuridico}
       alias: tempAlias.trim(),
       rol: tempRol,
       edad: tempEdad ? parseInt(tempEdad) || tempEdad : undefined,
-      antecedentes: tempAntecedentes.trim() || undefined
+      antecedentes: tempAntecedentes.trim() || undefined,
+      señasParticulares: tempSenasParticulares.trim() || undefined,
+      tatuajes: tempTatuajes.trim() || undefined,
+      complexion: tempComplexion.trim() || undefined,
+      estatura: tempEstatura.trim() || undefined,
+      vestimentaUsual: tempVestimentaUsual.trim() || undefined,
+      telefonoRedes: tempTelefonoRedes.trim() || undefined,
+      vehiculosAsociados: tempVehiculosAsociados.trim() || undefined
     };
     setIntegrantes([...integrantes, newMember]);
     // Clear inputs
@@ -305,10 +322,40 @@ ${analysisResult.ficha.crossCheckJuridico}
     setTempRol("Operativo");
     setTempEdad("");
     setTempAntecedentes("");
+    setTempSenasParticulares("");
+    setTempTatuajes("");
+    setTempComplexion("");
+    setTempEstatura("");
+    setTempVestimentaUsual("");
+    setTempTelefonoRedes("");
+    setTempVehiculosAsociados("");
   };
 
   const handleRemoveIntegrante = (idx: number) => {
     setIntegrantes(integrantes.filter((_, i) => i !== idx));
+  };
+
+  const handleStartEditMember = (idx: number) => {
+    setEditingMemberIndex(idx);
+    setEditingMember({ ...integrantes[idx] });
+  };
+
+  const handleSaveEditedMember = () => {
+    if (!editingMember) return;
+    if (!editingMember.alias && !editingMember.nombre) {
+      alert("Ingrese al menos un Nombre o un Alias para el integrante.");
+      return;
+    }
+    const updated = [...integrantes];
+    updated[editingMemberIndex!] = { ...editingMember };
+    setIntegrantes(updated);
+    setEditingMemberIndex(null);
+    setEditingMember(null);
+  };
+
+  const handleCancelEditMember = () => {
+    setEditingMemberIndex(null);
+    setEditingMember(null);
   };
 
   // --- FILE UPLOADER & CONTEXTUALIZATION ---
@@ -607,6 +654,47 @@ ${analysisResult.ficha.crossCheckJuridico}
           </div>
 
           <div className="space-y-4">
+            {/* HIGH-VISIBILITY GLOWING BARRIDO BUTTON CARD AT THE TOP */}
+            <div className="bg-gradient-to-br from-slate-950 via-sky-950/35 to-slate-900 border border-sky-500/30 rounded-xl p-4 shadow-lg shadow-sky-500/5 space-y-3 relative overflow-hidden">
+              <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-sky-500/10 blur-2xl pointer-events-none" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
+                  </span>
+                  <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">Motor de Fusión OSINT</span>
+                </div>
+                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/50 border border-emerald-900/30 px-2 py-0.5 rounded">
+                  SISTEMA ACTIVO
+                </span>
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-slate-200">BARRIDO OPERATIVO MULTIFUENTE</h3>
+                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                  Ejecute el barrido espacial, consulte demografía INEGI SCINCE, comercio DENUE y unificación de identidades mediante Vertex AI.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExecuteSweep}
+                disabled={isAnalyzing}
+                className="w-full relative overflow-hidden rounded-lg bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-600 hover:from-sky-300 hover:via-sky-400 hover:to-indigo-500 active:scale-[0.99] text-slate-950 text-xs font-black py-2.5 px-4 shadow-md transition-all flex items-center justify-center gap-2 tracking-wide uppercase"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
+                    <span>EJECUTANDO BARRIDO...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm">📡</span>
+                    <span>EJECUTAR BARRIDO DE INTELIGENCIA</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             {geoReportId && (
               <div className="bg-sky-950/40 border border-sky-500/30 rounded-xl p-3 flex items-center justify-between shadow-inner">
                 <div>
@@ -708,18 +796,43 @@ ${analysisResult.ficha.crossCheckJuridico}
                     )}
                   </GoogleMap>
                   
-                  {poligono.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleClearPolygon}
-                      className="absolute bottom-2 right-2 px-2 py-1 bg-red-950/80 hover:bg-red-900/90 border border-red-800/80 rounded text-[10px] font-bold text-red-300 transition-colors shadow-md z-30"
-                    >
-                      🗑️ Limpiar Polígono
-                    </button>
-                  )}
+                  {/* FLOATING DRAWING TOOLBOX Overlay */}
+                  <div className="absolute top-2 right-2 bg-slate-950/95 border border-slate-800 p-2.5 rounded-xl flex flex-col gap-2 z-30 shadow-2xl max-w-[190px]">
+                    <div className="text-[9px] font-black text-sky-400 uppercase tracking-wider flex items-center gap-1">
+                      🛠️ Caja de Herramientas
+                    </div>
+                    <p className="text-[8px] text-slate-400 leading-tight">
+                      Haga clic en el mapa para delimitar libremente (sin presionar Ctrl).
+                    </p>
+                    <div className="text-[9px] text-slate-300 font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800 flex justify-between">
+                      <span>Puntos:</span>
+                      <span className="text-sky-400">{poligono.length}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setPoligono(prev => prev.slice(0, -1))}
+                        disabled={poligono.length === 0}
+                        className="px-1.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-slate-900 text-[8px] font-bold text-slate-300 rounded border border-slate-700 transition-colors flex items-center justify-center gap-1"
+                        title="Deshacer el último vértice colocado"
+                      >
+                        ↩️ Deshacer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearPolygon}
+                        disabled={poligono.length === 0}
+                        className="px-1.5 py-1 bg-red-950/80 hover:bg-red-900/95 disabled:opacity-50 disabled:hover:bg-red-950/85 text-[8px] font-bold text-red-300 rounded border border-red-800/80 transition-colors flex items-center justify-center gap-1"
+                        title="Eliminar todos los puntos"
+                      >
+                        🗑️ Limpiar
+                      </button>
+                    </div>
+                  </div>
                   
-                  <div className="absolute top-2 left-2 bg-slate-900/90 border border-slate-800 p-1.5 rounded text-[8px] text-slate-400 pointer-events-none z-30">
-                    {poligono.length === 0 ? "Haga clic en el mapa para delimitar la zona" : `Polígono: ${poligono.length} vértices`}
+                  <div className="absolute bottom-2 left-2 bg-slate-950/90 border border-slate-800/80 px-2 py-1 rounded text-[9px] text-slate-300 pointer-events-none z-30 shadow-md flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Modo de dibujo: Clic libre activo</span>
                   </div>
                 </div>
               )}
@@ -768,86 +881,438 @@ ${analysisResult.ficha.crossCheckJuridico}
             </div>
 
             {/* 4. MEMBERS OF THE GANG (INTEGRANTES) */}
-            <div className="space-y-2.5 border-t border-slate-800/80 pt-3">
-              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Integrantes Identificados</label>
+            <div className="space-y-3 border-t border-slate-800/80 pt-3">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block flex items-center justify-between">
+                <span>Integrantes Identificados</span>
+                <span className="text-[10px] text-sky-400 font-bold bg-sky-950/60 border border-sky-800 px-2 py-0.5 rounded-full">
+                  {integrantes.length} Registrados
+                </span>
+              </label>
               
-              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    placeholder="Nombre completo"
-                    value={tempNombre}
-                    onChange={e => setTempNombre(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-300"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Alias/Apodo"
-                    value={tempAlias}
-                    onChange={e => setTempAlias(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-300"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-3 gap-3">
-                  <select
-                    value={tempRol}
-                    onChange={e => setTempRol(e.target.value)}
-                    className="col-span-2 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-300"
+              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 space-y-4 shadow-lg">
+                {/* Captured Sub-Tabs Navigation */}
+                <div className="flex border-b border-slate-800 bg-slate-950/50 p-1 rounded-lg gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setTempMemberTab("personal")}
+                    className={`flex-1 py-1.5 rounded text-[9px] font-black tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 ${
+                      tempMemberTab === "personal"
+                        ? "bg-sky-950 border border-sky-500/40 text-sky-400"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
                   >
-                    <option value="Líder">Líder / Cabecilla</option>
-                    <option value="Gatillero">Gatillero / Sicario</option>
-                    <option value="Puntero">Puntero / Halcón</option>
-                    <option value="Distribuidor">Distribuidor / Dealer</option>
-                    <option value="Operativo">Operativo común</option>
-                    <option value="Reclutador">Reclutador</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="Edad"
-                    value={tempEdad}
-                    onChange={e => setTempEdad(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300"
-                  />
+                    <span>👤</span> Personal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTempMemberTab("fisico")}
+                    className={`flex-1 py-1.5 rounded text-[9px] font-black tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 ${
+                      tempMemberTab === "fisico"
+                        ? "bg-sky-950 border border-sky-500/40 text-sky-400"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <span>🎨</span> Rasgos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTempMemberTab("antecedentes")}
+                    className={`flex-1 py-1.5 rounded text-[9px] font-black tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 ${
+                      tempMemberTab === "antecedentes"
+                        ? "bg-sky-950 border border-sky-500/40 text-sky-400"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <span>⚖️</span> Antecedentes/Señas
+                  </button>
                 </div>
 
-                <input
-                  type="text"
-                  placeholder="Antecedentes penales o señas particulares"
-                  value={tempAntecedentes}
-                  onChange={e => setTempAntecedentes(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-300"
-                />
+                {/* Sub-Tab 1: Personal Data */}
+                {tempMemberTab === "personal" && (
+                  <div className="space-y-3 animate-fadeIn">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Nombre Completo</label>
+                        <input
+                          type="text"
+                          placeholder="Nombre real"
+                          value={tempNombre}
+                          onChange={e => setTempNombre(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Alias / Apodo</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. El Charly"
+                          value={tempAlias}
+                          onChange={e => setTempAlias(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-2 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Rol Operativo</label>
+                        <select
+                          value={tempRol}
+                          onChange={e => setTempRol(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        >
+                          <option value="Líder">Líder / Cabecilla</option>
+                          <option value="Gatillero">Gatillero / Sicario</option>
+                          <option value="Puntero">Puntero / Halcón</option>
+                          <option value="Distribuidor">Distribuidor / Dealer</option>
+                          <option value="Operativo">Operativo común</option>
+                          <option value="Reclutador">Reclutador</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Edad</label>
+                        <input
+                          type="text"
+                          placeholder="Años"
+                          value={tempEdad}
+                          onChange={e => setTempEdad(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Tab 2: Physical Features */}
+                {tempMemberTab === "fisico" && (
+                  <div className="space-y-3 animate-fadeIn">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Complexión</label>
+                        <input
+                          type="text"
+                          placeholder="Delgada, robusta, atlética..."
+                          value={tempComplexion}
+                          onChange={e => setTempComplexion(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Estatura</label>
+                        <input
+                          type="text"
+                          placeholder="Aprox. (Ej. 1.70m)"
+                          value={tempEstatura}
+                          onChange={e => setTempEstatura(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Vestimenta Usual</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Ropa holgada, gorra, shorts oscuros..."
+                        value={tempVestimentaUsual}
+                        onChange={e => setTempVestimentaUsual(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Tatuajes y Modificaciones</label>
+                      <input
+                        type="text"
+                        placeholder="Ubicación y significado (Ej. Lágrima ojo izq, 13 en brazo)"
+                        value={tempTatuajes}
+                        onChange={e => setTempTatuajes(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Tab 3: Criminal Record & Marks */}
+                {tempMemberTab === "antecedentes" && (
+                  <div className="space-y-3 animate-fadeIn">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Señas Particulares</label>
+                        <input
+                          type="text"
+                          placeholder="Cicatrices, lunares, prótesis..."
+                          value={tempSenasParticulares}
+                          onChange={e => setTempSenasParticulares(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Antecedentes Penales</label>
+                        <input
+                          type="text"
+                          placeholder="Historial, arrestos o investigaciones"
+                          value={tempAntecedentes}
+                          onChange={e => setTempAntecedentes(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Teléfonos / Redes Sociales</label>
+                        <input
+                          type="text"
+                          placeholder="FB, WhatsApp, alias virtual"
+                          value={tempTelefonoRedes}
+                          onChange={e => setTempTelefonoRedes(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Vehículos Asociados</label>
+                        <input
+                          type="text"
+                          placeholder="Motos, autos, matrículas"
+                          value={tempVehiculosAsociados}
+                          onChange={e => setTempVehiculosAsociados(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700/80 rounded px-3 py-2 text-xs text-slate-200 focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <button
                   type="button"
                   onClick={handleAddIntegrante}
-                  className="w-full bg-sky-600 hover:bg-sky-500 text-xs font-bold text-white py-1.5 rounded transition-all"
+                  className="w-full bg-sky-600 hover:bg-sky-500 text-xs font-black text-white py-2 rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5"
                 >
-                  + Registrar Integrante en Lista
+                  ➕ Registrar Integrante en Lista
                 </button>
               </div>
 
+              {/* REGISTERED MEMBER CARD LIST EDITOR WITH DETATED "GUARDAR" BUTTON */}
               {integrantes.length > 0 && (
-                <div className="max-h-40 overflow-y-auto border border-slate-800 rounded-lg divide-y divide-slate-800">
-                  {integrantes.map((m, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 text-xs bg-slate-950/20 hover:bg-slate-900/30">
-                      <div>
-                        <span className="font-bold text-slate-200">
-                          {m.alias ? `"${m.alias}"` : "Sin alias"}
-                        </span>
-                        <span className="text-slate-400 ml-1.5">- {m.rol}</span>
-                        {m.nombre && <p className="text-[10px] text-slate-500">{m.nombre}</p>}
+                <div className="space-y-2.5 max-h-[380px] overflow-y-auto border border-slate-800/80 rounded-xl p-2.5 bg-slate-950/45 divide-y divide-slate-800">
+                  {integrantes.map((m, idx) => {
+                    const isEditing = editingMemberIndex === idx;
+
+                    return (
+                      <div key={idx} className="pt-2 first:pt-0 pb-2">
+                        {isEditing && editingMember ? (
+                          /* EXPANDED INLINE CARD EDITOR FOR ACTIVE INTEGRANTE */
+                          <div className="bg-slate-900/85 border border-sky-500/35 rounded-lg p-3 space-y-3 shadow-inner">
+                            <div className="text-[10px] font-black text-sky-400 uppercase tracking-wider flex items-center justify-between border-b border-slate-800 pb-1">
+                              <span>✏️ Editando Ficha de Integrante</span>
+                              <span className="font-mono text-[9px] text-slate-500">INDICE #{idx + 1}</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Nombre</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.nombre || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, nombre: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Alias</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.alias || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, alias: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-2 space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Rol</label>
+                                <select
+                                  value={editingMember.rol}
+                                  onChange={e => setEditingMember({ ...editingMember, rol: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                >
+                                  <option value="Líder">Líder / Cabecilla</option>
+                                  <option value="Gatillero">Gatillero / Sicario</option>
+                                  <option value="Puntero">Puntero / Halcón</option>
+                                  <option value="Distribuidor">Distribuidor / Dealer</option>
+                                  <option value="Operativo">Operativo común</option>
+                                  <option value="Reclutador">Reclutador</option>
+                                </select>
+                              </div>
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Edad</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.edad || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, edad: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 border-t border-slate-800/80 pt-2">
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Complexión</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.complexion || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, complexion: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Estatura</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.estatura || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, estatura: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-0.5">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Vestimenta Usual</label>
+                              <input
+                                type="text"
+                                value={editingMember.vestimentaUsual || ""}
+                                onChange={e => setEditingMember({ ...editingMember, vestimentaUsual: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                              />
+                            </div>
+
+                            <div className="space-y-0.5">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Tatuajes</label>
+                              <input
+                                type="text"
+                                value={editingMember.tatuajes || ""}
+                                onChange={e => setEditingMember({ ...editingMember, tatuajes: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 border-t border-slate-800/80 pt-2">
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Señas Particulares</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.señasParticulares || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, señasParticulares: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Antecedentes Penales</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.antecedentes || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, antecedentes: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Teléfonos/Redes</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.telefonoRedes || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, telefonoRedes: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Vehículos</label>
+                                <input
+                                  type="text"
+                                  value={editingMember.vehiculosAsociados || ""}
+                                  onChange={e => setEditingMember({ ...editingMember, vehiculosAsociados: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                                />
+                              </div>
+                            </div>
+
+                            {/* ROW-LEVEL DEDICATED SAVE BUTTON */}
+                            <div className="flex justify-end gap-2 border-t border-slate-800 pt-2">
+                              <button
+                                type="button"
+                                onClick={handleCancelEditMember}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-300 rounded"
+                              >
+                                ✕ Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveEditedMember}
+                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white rounded shadow"
+                              >
+                                💾 Guardar Cambios
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* COLLAPSED VIEW: BEAUTIFUL CARDS WITH SUMMARY AND ACTION BUTTONS */
+                          <div className="flex items-start justify-between p-2.5 rounded-lg bg-slate-900/40 hover:bg-slate-900/60 transition-colors border border-slate-800/60 hover:border-slate-800">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-slate-200 text-xs">
+                                  {m.alias ? `"${m.alias}"` : "Sin alias"}
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-sky-950/60 border border-sky-900/40 text-[9px] text-sky-400 font-bold uppercase tracking-wide">
+                                  {m.rol}
+                                </span>
+                                {m.edad && (
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    ({m.edad} años)
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {m.nombre && (
+                                <p className="text-[10px] text-slate-400 font-medium">
+                                  <span className="text-slate-500 font-semibold">Id:</span> {m.nombre}
+                                </p>
+                              )}
+
+                              {/* Small badges indicating captured details */}
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {m.complexion && <span className="text-[8px] bg-slate-950 px-1.5 py-0.5 rounded text-slate-400 border border-slate-800/80">Complexión: {m.complexion}</span>}
+                                {m.tatuajes && <span className="text-[8px] bg-slate-950 px-1.5 py-0.5 rounded text-slate-400 border border-slate-800/80">🎨 Con Tatuajes</span>}
+                                {m.señasParticulares && <span className="text-[8px] bg-slate-950 px-1.5 py-0.5 rounded text-slate-400 border border-slate-800/80">🔍 Con Señas</span>}
+                                {m.antecedentes && <span className="text-[8px] bg-red-950/30 text-red-400 px-1.5 py-0.5 rounded border border-red-900/20">⚖️ Con Antecedentes</span>}
+                                {m.telefonoRedes && <span className="text-[8px] bg-slate-950 px-1.5 py-0.5 rounded text-slate-400 border border-slate-800/80">📱 Redes</span>}
+                                {m.vehiculosAsociados && <span className="text-[8px] bg-slate-950 px-1.5 py-0.5 rounded text-slate-400 border border-slate-800/80">🏍️ Vehículo</span>}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditMember(idx)}
+                                className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 text-xs transition-colors"
+                                title="Editar ficha completa"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveIntegrante(idx)}
+                                className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-red-400 text-xs transition-colors"
+                                title="Eliminar integrante"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveIntegrante(idx)}
-                        className="text-red-400 hover:text-red-300 font-bold px-1.5"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -935,16 +1400,16 @@ ${analysisResult.ficha.crossCheckJuridico}
                 type="button"
                 onClick={handleExecuteSweep}
                 disabled={isAnalyzing}
-                className="w-full relative overflow-hidden rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-slate-950 text-sm font-black py-3.5 px-4 shadow-lg transition-all flex items-center justify-center gap-2"
+                className="w-full relative overflow-hidden rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 text-xs font-black py-3 px-4 shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wide"
               >
                 {isAnalyzing ? (
                   <>
-                    <span className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent" />
-                    <span>EJECUTANDO BARRIDO OPERATIVO...</span>
+                    <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
+                    <span>EJECUTANDO BARRIDO...</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-lg">📡</span>
+                    <span className="text-sm">📡</span>
                     <span>EJECUTAR BARRIDO DE INTELIGENCIA</span>
                   </>
                 )}

@@ -9,6 +9,13 @@ export interface GangMember {
   rol: string;
   edad?: number | string;
   antecedentes?: string;
+  señasParticulares?: string;
+  tatuajes?: string;
+  complexion?: string;
+  estatura?: string;
+  vestimentaUsual?: string;
+  telefonoRedes?: string;
+  vehiculosAsociados?: string;
 }
 
 export interface GangEntity {
