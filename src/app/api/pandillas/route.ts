@@ -29,7 +29,8 @@ export async function POST(req: Request) {
       antagonicas,
       integrantes,
       grafitiInfo,
-      archivosAnexos
+      archivosAnexos,
+      estatus: body.estatus || "Activa"
     };
 
     // 1. CARGAR Y PARSEAR EL DATASET LOCAL (Domiclios Pandillas.csv)

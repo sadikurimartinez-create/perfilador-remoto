@@ -6,7 +6,7 @@
 export interface GangMember {
   nombre: string;
   alias: string;
-  rol: string;
+  rol: string; // Legacy field, kept for backward compatibility
   edad?: number | string;
   antecedentes?: string;
   señasParticulares?: string;
@@ -16,33 +16,128 @@ export interface GangMember {
   vestimentaUsual?: string;
   telefonoRedes?: string;
   vehiculosAsociados?: string;
+
+  // REENGINEERING: CORE FIELDS
+  sexo?: "Masculino" | "Femenino" | "Otro";
+  curp?: string;
+  domicilioConocido?: string;
+  telefono?: string;
+  fotografiaUrl?: string; // Base64 or mock avatar path
+
+  // REENGINEERING: CRIMINOLOGICAL INFORMATION
+  detencionesPrevias?: string;
+  ingresosCentrosInternamiento?: string;
+  consumoDrogas?: string;
+  nivelViolencia?: "Bajo" | "Medio" | "Alto";
+  riesgoCriminogeno?: "Bajo" | "Medio" | "Alto" | "Crítico";
+  peligrosidadCalculada?: number; // Automatic computed danger rating (e.g. 0 to 100)
+
+  // REENGINEERING: DISTINCTIVE FEATURES
+  cicatrices?: string;
+  marcasDistintivas?: string;
+
+  // REENGINEERING: OCCUPATIONAL INFORMATION
+  lugarTrabajo?: string;
+  actividadEconomica?: string;
+  escuela?: string;
+
+  // REENGINEERING: STATUS WITHIN THE GANG
+  estatusPandilla?:
+    | "Líder"
+    | "Segundo al mando"
+    | "Reclutador"
+    | "Distribuidor"
+    | "Vigilante"
+    | "Operador"
+    | "Integrante"
+    | "Exintegrante"
+    | "Colaborador externo";
+}
+
+export interface GangRelationship {
+  tipo: "rival" | "asociado";
+  pandillaId?: string; // Id of linked gang
+  pandillaNombre: string; // Name of linked gang
+  tipoVinculo: string; // e.g. "Conflicto territorial", "Venta de estupefacientes", "Alianza de paso"
+  fechaInicio?: string;
+  nivelSeveridad?: "Bajo" | "Medio" | "Alto" | "Crítico"; // Level of conflict or cooperation
+}
+
+export interface GeointeligenciaShape {
+  id: string;
+  nombre: string;
+  tipo: "poligono" | "corredor" | "buffer" | "zona_riesgo";
+  puntos: { lat: number; lng: number }[]; // Array of points
+  radio?: number; // Used for buffer circles
+  nivelControlTerritorial: "Nulo" | "Bajo" | "Medio" | "Alto" | "Absoluto";
+  fechaActualizacion: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  fecha: string;
+  titulo: string;
+  descripcion: string;
+  gravedad: "Baja" | "Media" | "Alta" | "Crítica";
+  categoria: "enfrentamiento" | "detencion" | "grafiti" | "expansion" | "otro";
+  lugar?: string;
 }
 
 export interface GangEntity {
   id?: string;
   projectId?: string;
   nombre: string;
+  aliasConocidos?: string;
+  fechaRegistro?: number;
+  estatus: "Activa" | "Inactiva" | "En observación" | "Desarticulada";
+
+  // DATOS GENERALES
   zonaInfluencia: string;
+  coloniasAsociadas?: string[];
+  municipiosAsociados?: string[];
+  ilicitos?: ("Narcomenudeo" | "Robo" | "Extorsión" | "Homicidio" | "Lesiones" | "Daño en las cosas" | "Vandalismo" | "Otro")[];
+  especificarOtroIlicito?: string;
+  drogasConsumidas?: string[];
+  modusOperandi?: string;
+  simbolosIdentificacion?: string; // Graffiti or symbols
+  peligrosidad?: "Bajo" | "Medio" | "Alto" | "Crítico";
+
+  // LEGACY GEOMETRIES
   coordenadas?: { lat: number; lng: number };
   poligono?: { lat: number; lng: number }[];
-  antagonicas: string[];
+  antagonicas?: string[];
+
+  // REENGINEERED GEOMETRIES
+  geometrias?: GeointeligenciaShape[];
+
+  // RELATIONSHIPS
+  relaciones?: GangRelationship[];
+
+  // TIMELINE
+  cronologiaEventos?: TimelineEvent[];
+
+  // MEMBERS
   integrantes: GangMember[];
+
+  // LEGACY GRAFFITI INFO, KEPT FOR BACKWARD COMPATIBILITY
   grafitiInfo?: {
     texto?: string;
     simbolos?: string;
     patrones?: string;
     imageUrl?: string;
   };
+
   archivosAnexos?: {
     nombre: string;
     size: number;
     tipo: string;
     contexto?: string;
   }[];
+
   createdAt?: number;
   createdBy?: string;
   geoReportId?: string;
-  nivelRiesgo?: string;
+  nivelRiesgo?: string; // Kept for backward compatibility
   resumenInteligencia?: string;
 }
 
@@ -51,7 +146,7 @@ export interface FusionResult {
     nombre: string;
     zona: string;
     integrantes: GangMember[];
-    estructuraJerarquica: string; // "Piramidal", "Horizontal", "Celular", etc.
+    estructuraJerarquica: string;
     descripcionEstructura: string;
     nivelRiesgo: "Bajo" | "Medio" | "Alto" | "Crítico";
     resumenInteligencia: string;
@@ -72,6 +167,28 @@ export interface FusionResult {
     mensaje: string;
     fecha: string;
   }[];
+}
+
+/**
+ * Calculates member danger rating automatically.
+ */
+export function calculateMemberDanger(m: GangMember): number {
+  let score = 20; // Base score
+  if (m.estatusPandilla === "Líder") score += 35;
+  else if (m.estatusPandilla === "Segundo al mando") score += 25;
+  else if (m.estatusPandilla === "Reclutador" || m.estatusPandilla === "Distribuidor") score += 15;
+
+  if (m.nivelViolencia === "Alto") score += 20;
+  else if (m.nivelViolencia === "Medio") score += 10;
+
+  if (m.riesgoCriminogeno === "Crítico") score += 20;
+  else if (m.riesgoCriminogeno === "Alto") score += 15;
+  else if (m.riesgoCriminogeno === "Medio") score += 5;
+
+  if (m.antecedentes && m.antecedentes.length > 5) score += 5;
+  if (m.detencionesPrevias && m.detencionesPrevias.length > 5) score += 5;
+
+  return Math.min(100, score);
 }
 
 /**
@@ -105,3 +222,4 @@ export function calculateSimilarity(s1: string, s2: string): number {
   const union = new Set([...set1, ...set2]).size;
   return union > 0 ? intersection / union : 0;
 }
+

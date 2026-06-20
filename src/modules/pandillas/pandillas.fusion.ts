@@ -30,7 +30,10 @@ export function fuseGangsAndBuildGraph(
         existing.zonaInfluencia += `, ${gang.zonaInfluencia}`;
       }
       // Merge antagonists
-      const mergedAntagonists = Array.from(new Set([...existing.antagonicas, ...gang.antagonicas]));
+      const mergedAntagonists = Array.from(new Set([
+        ...(existing.antagonicas || []),
+        ...(gang.antagonicas || [])
+      ]));
       existing.antagonicas = mergedAntagonists;
       // Merge members
       const memberKeys = new Set(existing.integrantes.map(m => `${m.nombre.toLowerCase()}-${m.alias.toLowerCase()}`));
@@ -51,7 +54,11 @@ export function fuseGangsAndBuildGraph(
         };
       }
     } else {
-      uniqueGangsMap.set(gang.nombre, { ...gang, integrantes: [...gang.integrantes], antagonicas: [...gang.antagonicas] });
+      uniqueGangsMap.set(gang.nombre, {
+        ...gang,
+        integrantes: [...gang.integrantes],
+        antagonicas: [...(gang.antagonicas || [])]
+      });
     }
   }
 
@@ -69,8 +76,9 @@ export function fuseGangsAndBuildGraph(
   let riskScore = 0;
   if (primaryGang.integrantes.length > 3) riskScore += 1;
   if (primaryGang.integrantes.length > 8) riskScore += 1;
-  if (primaryGang.antagonicas.length > 1) riskScore += 1;
-  if (primaryGang.antagonicas.length > 3) riskScore += 1;
+  const primaryAnts = primaryGang.antagonicas || [];
+  if (primaryAnts.length > 1) riskScore += 1;
+  if (primaryAnts.length > 3) riskScore += 1;
   if (primaryGang.grafitiInfo?.simbolos || primaryGang.grafitiInfo?.patrones) riskScore += 1;
 
   const riskLevel: FusionResult["ficha"]["nivelRiesgo"] =
@@ -100,7 +108,7 @@ export function fuseGangsAndBuildGraph(
   });
 
   // 3. Antagonistic Gangs Nodes & Conflict Edges
-  primaryGang.antagonicas.forEach(ant => {
+  (primaryGang.antagonicas || []).forEach((ant: string) => {
     nodos.push({ id: ant, label: ant, tipo: "pandilla", risk: "Alto" });
     enlaces.push({ source: primaryName, target: ant, relacion: "conflicto" });
   });
@@ -179,11 +187,12 @@ export function fuseGangsAndBuildGraph(
     });
   }
 
-  if (primaryGang.antagonicas.length > 0) {
+  const ants = primaryGang.antagonicas || [];
+  if (ants.length > 0) {
     alertas.push({
       tipo: "conflicto",
       severidad: "Crítica",
-      mensaje: `Frontera de fricción activa identificada entre "${primaryName}" y "${primaryGang.antagonicas.join(", ")}" en sectores colindantes.`,
+      mensaje: `Frontera de fricción activa identificada entre "${primaryName}" y "${ants.join(", ")}" en sectores colindantes.`,
       fecha: today,
     });
   }
