@@ -36,6 +36,62 @@ const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: num
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
+
+// Algoritmos de validación espacial de contención geográfica
+const isPointInPolygon = (point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]): boolean => {
+  if (polygon.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng, yi = polygon[i].lat;
+    const xj = polygon[j].lng, yj = polygon[j].lat;
+    const intersect = ((yi > point.lat) !== (yj > point.lat))
+        && (point.lng < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+const isPointInRadius = (point: { lat: number; lng: number }, center: { lat: number; lng: number }, radiusMeters: number): boolean => {
+  const dist = getDistanceInMeters(center.lat, center.lng, point.lat, point.lng);
+  return dist <= radiusMeters;
+};
+
+const getDistanceToSegment = (p: { lat: number; lng: number }, p1: { lat: number; lng: number }, p2: { lat: number; lng: number }): number => {
+  const x = p.lng;
+  const y = p.lat;
+  const x1 = p1.lng;
+  const y1 = p1.lat;
+  const x2 = p2.lng;
+  const y2 = p2.lat;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    return getDistanceInMeters(y, x, y1, x1);
+  }
+
+  let t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+
+  const projLat = y1 + t * dy;
+  const projLng = x1 + t * dx;
+
+  return getDistanceInMeters(y, x, projLat, projLng);
+};
+
+const isPointNearLine = (point: { lat: number; lng: number }, line: { lat: number; lng: number }[], maxDistanceMeters: number): boolean => {
+  if (line.length === 0) return false;
+  if (line.length === 1) {
+    return getDistanceInMeters(line[0].lat, line[0].lng, point.lat, point.lng) <= maxDistanceMeters;
+  }
+  for (let i = 0; i < line.length - 1; i++) {
+    const dist = getDistanceToSegment(point, line[i], line[i+1]);
+    if (dist <= maxDistanceMeters) return true;
+  }
+  return false;
+};
+
 const getSeverityWeight = (crimeName: string) => {
   const name = crimeName.toLowerCase();
   if (name.includes("homicidio") || name.includes("secuestro") || name.includes("arma") || name.includes("violación")) return 5;
@@ -111,22 +167,66 @@ export function AnalysisMap({
     [album]
   );
 
+  // El centro geográfico del mapa se calcula de forma dinámica y secuencial priorizando las evidencias y la geometría del usuario.
+  // Evitamos por completo centrar en la ciudad de Aguascalientes si existe cualquier elemento activo.
   const center = useMemo(() => {
-    if (photosWithCoords.length === 0) return { lat: 21.88, lng: -102.29 };
-    const lat = photosWithCoords.reduce((a, p) => a + p.lat, 0) / photosWithCoords.length;
-    const lng = photosWithCoords.reduce((a, p) => a + p.lng, 0) / photosWithCoords.length;
+    const activeCoords: { lat: number; lng: number }[] = [];
+    if (photosWithCoords.length > 0) {
+      photosWithCoords.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
+    } else if (analysisPolygon && analysisPolygon.length > 0) {
+      analysisPolygon.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
+    } else if (manualPois && manualPois.length > 0) {
+      manualPois.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
+    }
+    if (activeCoords.length === 0) {
+      return { lat: 21.8853, lng: -102.2916 }; // fallback absoluto de última instancia si nada está definido
+    }
+    const lat = activeCoords.reduce((a, p) => a + p.lat, 0) / activeCoords.length;
+    const lng = activeCoords.reduce((a, p) => a + p.lng, 0) / activeCoords.length;
     return { lat, lng };
-  }, [photosWithCoords]);
+  }, [photosWithCoords, analysisPolygon, manualPois]);
 
-  const crimesWithCoords = useMemo(
-    () => (analysisResult?.historicalCrimes ?? []).filter((c) => hasValidCoords(c)),
-    [analysisResult?.historicalCrimes]
-  );
+  // Validador geoespacial en tiempo real de pertenencia al polígono, radio o corredor activo
+  const isPointInActiveGeography = useCallback((point: { lat: number; lng: number }): boolean => {
+    if (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) {
+      return isPointInPolygon(point, analysisPolygon);
+    }
+    
+    if (geometryType === "poligono") {
+      const polyPoints = photosWithCoords.filter(p => p.tipo === "Perímetro").length >= 3
+        ? photosWithCoords.filter(p => p.tipo === "Perímetro").map(p => ({ lat: p.lat, lng: p.lng }))
+        : photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }));
+      if (polyPoints.length >= 3) {
+        return isPointInPolygon(point, polyPoints);
+      }
+    }
+    
+    if (geometryType === "lineal" && photosWithCoords.length >= 1) {
+      const linePoints = photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }));
+      return isPointNearLine(point, linePoints, 500); // 500m de corredor/área de influencia
+    }
+    
+    if (photosWithCoords.length > 0 || (manualPois && manualPois.length > 0)) {
+      return isPointInRadius(point, center, analysisRadius);
+    }
+    
+    return true;
+  }, [isPreliminary, analysisPolygon, geometryType, photosWithCoords, center, analysisRadius, manualPois]);
 
-  const poisWithCoords = useMemo(
-    () => (analysisResult?.pois ?? []).filter((p) => hasValidCoords(p)),
-    [analysisResult?.pois]
-  );
+  // Se filtran los elementos con un estricto validador espacial para asegurar que pertenecen a la geografía activa
+  const crimesWithCoords = useMemo(() => {
+    const raw = (analysisResult?.historicalCrimes ?? []).filter((c) => hasValidCoords(c)) as Array<{ lat: number; lng: number; tipoDelito?: string }>;
+    const hasActiveGeo = photosWithCoords.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) || (manualPois && manualPois.length > 0);
+    if (!hasActiveGeo) return raw;
+    return raw.filter(c => isPointInActiveGeography(c));
+  }, [analysisResult?.historicalCrimes, isPointInActiveGeography, photosWithCoords.length, isPreliminary, analysisPolygon, manualPois]);
+
+  const poisWithCoords = useMemo(() => {
+    const raw = (analysisResult?.pois ?? []).filter((p) => hasValidCoords(p)) as Array<{ lat: number; lng: number; name?: string; type?: string }>;
+    const hasActiveGeo = photosWithCoords.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) || (manualPois && manualPois.length > 0);
+    if (!hasActiveGeo) return raw;
+    return raw.filter(p => isPointInActiveGeography(p));
+  }, [analysisResult?.pois, isPointInActiveGeography, photosWithCoords.length, isPreliminary, analysisPolygon, manualPois]);
 
   const top5Pois = useMemo(() => {
     if (!poisWithCoords || poisWithCoords.length === 0) return [];
@@ -187,9 +287,14 @@ export function AnalysisMap({
       return new Promise((resolve) => {
         ds.route({ origin, destination, travelMode: mode }, (result: any, status: any) => {
           if (status === "OK" && result) {
-            resolve(result.routes[0].overview_path);
+            const rawPath = result.routes[0].overview_path.map((pt: any) => ({ lat: pt.lat(), lng: pt.lng() }));
+            // Recorte geoespacial (clipping) de la ruta para que no salga del área de influencia activa
+            const clipped = rawPath.filter((pt: any) => isPointInActiveGeography(pt));
+            resolve(clipped);
           } else {
-            resolve([origin, destination]); // Fallback a línea recta si no hay calle mapeada
+            const rawPath = [origin, destination];
+            const clipped = rawPath.filter((pt: any) => isPointInActiveGeography(pt));
+            resolve(clipped);
           }
         });
       });

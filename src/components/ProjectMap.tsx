@@ -50,6 +50,72 @@ const containerStyle = {
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
+// Algoritmos de validación espacial de contención geográfica
+const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; 
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const isPointInPolygon = (point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]): boolean => {
+  if (polygon.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng, yi = polygon[i].lat;
+    const xj = polygon[j].lng, yj = polygon[j].lat;
+    const intersect = ((yi > point.lat) !== (yj > point.lat))
+        && (point.lng < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+const isPointInRadius = (point: { lat: number; lng: number }, center: { lat: number; lng: number }, radiusMeters: number): boolean => {
+  const dist = getDistanceInMeters(center.lat, center.lng, point.lat, point.lng);
+  return dist <= radiusMeters;
+};
+
+const getDistanceToSegment = (p: { lat: number; lng: number }, p1: { lat: number; lng: number }, p2: { lat: number; lng: number }): number => {
+  const x = p.lng;
+  const y = p.lat;
+  const x1 = p1.lng;
+  const y1 = p1.lat;
+  const x2 = p2.lng;
+  const y2 = p2.lat;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    return getDistanceInMeters(y, x, y1, x1);
+  }
+
+  let t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+
+  const projLat = y1 + t * dy;
+  const projLng = x1 + t * dx;
+
+  return getDistanceInMeters(y, x, projLat, projLng);
+};
+
+const isPointNearLine = (point: { lat: number; lng: number }, line: { lat: number; lng: number }[], maxDistanceMeters: number): boolean => {
+  if (line.length === 0) return false;
+  if (line.length === 1) {
+    return getDistanceInMeters(line[0].lat, line[0].lng, point.lat, point.lng) <= maxDistanceMeters;
+  }
+  for (let i = 0; i < line.length - 1; i++) {
+    const dist = getDistanceToSegment(point, line[i], line[i+1]);
+    if (dist <= maxDistanceMeters) return true;
+  }
+  return false;
+};
+
 const getMarkerColor = (tipo?: string) => {
   switch (tipo) {
     case "Nodo Inicial": return "#10b981"; // Verde Esmeralda
@@ -108,12 +174,54 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
 
   }, [session]);
 
+  // Centro dinámico priorizando geometrías de interés activas para evitar fallbacks estáticos en Aguascalientes Centro
   const center = useMemo(() => {
-    if (coordinates.length === 0) return { lat: 21.88, lng: -102.29 };
-    const lat = coordinates.reduce((sum, c) => sum + c.lat, 0) / coordinates.length;
-    const lng = coordinates.reduce((sum, c) => sum + c.lng, 0) / coordinates.length;
+    const activeCoords: { lat: number; lng: number }[] = [];
+    
+    if (coordinates && coordinates.length > 0) {
+      coordinates.forEach(c => activeCoords.push({ lat: c.lat, lng: c.lng }));
+    } else if (album && album.length > 0) {
+      album.forEach(p => {
+        if (p.lat != null && p.lng != null) {
+          activeCoords.push({ lat: p.lat, lng: p.lng });
+        }
+      });
+    } else if (project?.iaAnalysis && project.iaAnalysis.length > 0) {
+      project.iaAnalysis.forEach((item: any) => {
+        if (item.latitude && item.longitude) {
+          activeCoords.push({ lat: item.latitude, lng: item.longitude });
+        }
+      });
+    }
+
+    if (activeCoords.length === 0) {
+      return { lat: 21.8853, lng: -102.2916 }; //Fallback absoluto si no existe ninguna geometría
+    }
+
+    const lat = activeCoords.reduce((sum, c) => sum + c.lat, 0) / activeCoords.length;
+    const lng = activeCoords.reduce((sum, c) => sum + c.lng, 0) / activeCoords.length;
     return { lat, lng };
-  }, [coordinates]);
+  }, [coordinates, album, project?.iaAnalysis]);
+
+  // Filtro espacial estricto para asegurar pertenencia a la geografía seleccionada por el usuario
+  const isPointInActiveGeography = useCallback((point: { lat: number; lng: number }): boolean => {
+    if (coordinates.length === 0) return true;
+
+    if (geometryType === "poligono" && coordinates.length >= 3) {
+      return isPointInPolygon(point, coordinates);
+    }
+
+    if (geometryType === "lineal" && coordinates.length >= 1) {
+      return isPointNearLine(point, coordinates, 500); // 500 metros de margen
+    }
+
+    if (geometryType === "individual" || coordinates.length === 1) {
+      const centerPt = coordinates[0];
+      return isPointInRadius(point, centerPt, 500); // 500m de radio
+    }
+
+    return true;
+  }, [geometryType, coordinates]);
 
   const [realDuctos, setRealDuctos] = useState<any[][]>([]);
   const [realWater, setRealWater] = useState<any[][]>([]);
@@ -147,21 +255,22 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       .catch(err => console.error("Overpass map error", err));
   }, [center, showAtlasRiesgos]);
 
-  // Combinación de datos tácticos del Atlas de Riesgos basados en el centro del mapa
+  // Combinación y recorte geoespacial (clipping) de datos tácticos del Atlas de Riesgos para que permanezcan dentro de la geografía activa
   const atlasData = useMemo(() => {
     if (!center) return null;
     return {
-      ductos: realDuctos.length > 0 ? realDuctos : [],
-      water: realWater.length > 0 ? realWater : [],
-      hazards: realHazards.length > 0 ? realHazards : [],
+      // Recorte geoespacial de polilíneas y polígonos del Atlas de Riesgos
+      ductos: realDuctos.map(path => path.filter(pt => isPointInActiveGeography(pt))).filter(path => path.length >= 2),
+      water: realWater.map(path => path.filter(pt => isPointInActiveGeography(pt))).filter(path => path.length >= 3),
+      hazards: realHazards.map(path => path.filter(pt => isPointInActiveGeography(pt))).filter(path => path.length >= 1),
       falla: [
         { lat: center.lat - 0.004, lng: center.lng + 0.004 },
         { lat: center.lat - 0.001, lng: center.lng + 0.007 },
         { lat: center.lat - 0.005, lng: center.lng + 0.010 },
         { lat: center.lat - 0.007, lng: center.lng + 0.005 },
-      ]
+      ].filter(pt => isPointInActiveGeography(pt))
     };
-  }, [center, realDuctos, realWater, realHazards]);
+  }, [center, realDuctos, realWater, realHazards, isPointInActiveGeography]);
 
   const onMapLoad = useCallback((map: any) => {
     mapRef.current = map;
@@ -201,7 +310,8 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
       ?.filter(
         (item: any) =>
           item.latitude &&
-          item.longitude
+          item.longitude &&
+          isPointInActiveGeography({ lat: item.latitude, lng: item.longitude })
       )
       .map((item: any) => {
 
@@ -227,14 +337,15 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           weight,
         };
       }) || [];
-  }, [isLoaded, project?.iaAnalysis]);
+  }, [isLoaded, project?.iaAnalysis, isPointInActiveGeography]);
 
-  const clusterPoints =
-    project?.iaAnalysis
+  const clusterPoints = useMemo(() => {
+    return project?.iaAnalysis
       ?.filter(
         (item: any) =>
           item.latitude &&
-          item.longitude
+          item.longitude &&
+          isPointInActiveGeography({ lat: item.latitude, lng: item.longitude })
       )
       .map((item: any) => ({
         type: 'Feature',
@@ -249,6 +360,7 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           ],
         },
       })) || [];
+  }, [project?.iaAnalysis, isPointInActiveGeography]);
 
   const supercluster = new Supercluster({
     radius: 60,
@@ -413,31 +525,35 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
               />
             ))}
             {atlasData.water.map((waterPath, idx) => (
-              <Polygon
-                key={`water-${idx}`}
-                paths={waterPath}
-                options={{ fillColor: "#3b82f6", fillOpacity: 0.4, strokeColor: "#2563eb", strokeWeight: 2, zIndex: 30 }}
-              />
+              waterPath.length >= 3 ? (
+                <Polygon
+                  key={`water-${idx}`}
+                  paths={waterPath}
+                  options={{ fillColor: "#3b82f6", fillOpacity: 0.4, strokeColor: "#2563eb", strokeWeight: 2, zIndex: 30 }}
+                />
+              ) : null
             ))}
             {atlasData.hazards.map((hazardPath, idx) => (
-              hazardPath.length > 1 ? (
+              hazardPath.length >= 3 ? (
                 <Polygon
                   key={`hazard-${idx}`}
                   paths={hazardPath}
                   options={{ fillColor: "#9333ea", fillOpacity: 0.5, strokeColor: "#7e22ce", strokeWeight: 2, zIndex: 45 }}
                 />
-              ) : (
+              ) : hazardPath.length === 1 ? (
                 <Marker
                   key={`hazard-node-${idx}`}
                   position={hazardPath[0]}
                   icon={{ path: 0 as any, scale: 6, fillColor: "#9333ea", fillOpacity: 0.8, strokeColor: "#ffffff", strokeWeight: 1 }}
                 />
-              )
+              ) : null
             ))}
-            <Polygon
-              paths={atlasData.falla}
-              options={{ fillColor: "#ef4444", fillOpacity: 0.3, strokeColor: "#b91c1c", strokeWeight: 2, zIndex: 40 }}
-            />
+            {atlasData.falla.length >= 3 && (
+              <Polygon
+                paths={atlasData.falla}
+                options={{ fillColor: "#ef4444", fillOpacity: 0.3, strokeColor: "#b91c1c", strokeWeight: 2, zIndex: 40 }}
+              />
+            )}
           </>
         )}
 

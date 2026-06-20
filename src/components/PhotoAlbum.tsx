@@ -1768,11 +1768,17 @@ const hasMinimumPhotos =
         <DatosAbiertosAnalyzer
         lat={(() => {
           const valid = album.filter(p => p.lat && p.lng);
-          return valid.length > 0 ? valid.reduce((acc, p) => acc + p.lat!, 0) / valid.length : 21.8818;
+          if (valid.length > 0) return valid.reduce((acc, p) => acc + p.lat!, 0) / valid.length;
+          if (analysisPolygon && analysisPolygon.length > 0) return analysisPolygon.reduce((acc, p) => acc + p.lat, 0) / analysisPolygon.length;
+          if (manualPois && manualPois.length > 0) return manualPois.reduce((acc, p) => acc + p.lat, 0) / manualPois.length;
+          return 21.8818;
         })()}
         lng={(() => {
           const valid = album.filter(p => p.lat && p.lng);
-          return valid.length > 0 ? valid.reduce((acc, p) => acc + p.lng!, 0) / valid.length : -102.2915;
+          if (valid.length > 0) return valid.reduce((acc, p) => acc + p.lng!, 0) / valid.length;
+          if (analysisPolygon && analysisPolygon.length > 0) return analysisPolygon.reduce((acc, p) => acc + p.lng, 0) / analysisPolygon.length;
+          if (manualPois && manualPois.length > 0) return manualPois.reduce((acc, p) => acc + p.lng, 0) / manualPois.length;
+          return -102.2915;
         })()}
           onAnalysisComplete={(data) => {
             setDatosGobMxResult(data);

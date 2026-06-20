@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 
 /**
  * Diagnóstico: indica qué variables de entorno ve el servidor (sin mostrar valores).
