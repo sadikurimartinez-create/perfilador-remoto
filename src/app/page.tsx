@@ -61,19 +61,29 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-lg font-semibold text-slate-100">
           Mis Expedientes
         </h1>
-        <Link
-          href="/conexiones"
-          className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm hover:bg-slate-700 transition-colors"
-        >
-          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          Centro de Conexiones
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/pandillas"
+            className="inline-flex items-center gap-2 rounded-md bg-sky-950/60 border border-sky-800/50 px-4 py-2 text-sm font-semibold text-sky-400 shadow-sm hover:bg-sky-900/50 transition-colors"
+          >
+            <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+            Módulo de Pandillas
+          </Link>
+          <Link
+            href="/conexiones"
+            className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm hover:bg-slate-700 transition-colors"
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Centro de Conexiones
+          </Link>
+        </div>
       </div>
       <ProjectList />
     </div>
   );
 }
+
