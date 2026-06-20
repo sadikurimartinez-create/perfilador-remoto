@@ -10,6 +10,7 @@ import { db } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
 import { PandillasUI } from "@/modules/pandillas/pandillas.ui";
+import { PandillasService } from "@/modules/pandillas/pandillas.service";
 import {
   addDoc,
   collection,
@@ -44,6 +45,57 @@ export default function ProjectWorkspacePage() {
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
+
+  const [geoInputId, setGeoInputId] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+
+  const handleLinkGeoReport = async (geoId: string) => {
+    if (!geoId.trim() || !project) return;
+    setIsLinking(true);
+    try {
+      const gang = await PandillasService.getGangByGeoReportId(geoId.trim());
+      if (!gang) {
+        alert("❌ No se encontró ningún informe de geointeligencia con ese ID.");
+        setIsLinking(false);
+        return;
+      }
+      const db = getDb();
+      const projectRef = doc(db, "projects", project.id);
+      await updateDoc(projectRef, {
+        linkedGeoReportId: geoId.trim(),
+        linkedGangReport: gang,
+      });
+      await loadProject(project.id);
+      setGeoInputId("");
+      alert("✅ ¡Informe de Geointeligencia vinculado con éxito!");
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error al vincular el informe.");
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleUnlinkGeoReport = async () => {
+    if (!project) return;
+    if (!confirm("¿Está seguro de desvincular este informe de geointeligencia?")) return;
+    setIsLinking(true);
+    try {
+      const db = getDb();
+      const projectRef = doc(db, "projects", project.id);
+      await updateDoc(projectRef, {
+        linkedGeoReportId: null,
+        linkedGangReport: null,
+      });
+      await loadProject(project.id);
+      alert("✅ Informe de Geointeligencia desvinculado con éxito.");
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error al desvincular el informe.");
+    } finally {
+      setIsLinking(false);
+    }
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -218,6 +270,91 @@ export default function ProjectWorkspacePage() {
       <div className="w-full space-y-6 overflow-y-auto pb-20 lg:pb-0">
         {activeWorkspaceTab === "environmental" ? (
           <>
+            {/* CROSS GEOINTELLIGENCE LINKAGE CARD */}
+            <div className="card p-6 bg-slate-950/40 border border-slate-800/80 rounded-2xl shadow-xl backdrop-blur-sm space-y-4">
+              <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                    🗺️ Geointeligencia de Pandillas Cruzada
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Vincula un informe táctico de geointeligencia para cruzar datos de pandillas y alimentar el análisis de entorno de este expediente.
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-blue-950/80 text-blue-400 border border-blue-900/50 px-2 py-1 rounded">
+                  CEIPOL-GEO-LINK v2.0
+                </span>
+              </div>
+
+              {project.linkedGeoReportId ? (
+                <div className="p-4 rounded-xl border border-emerald-900/30 bg-emerald-950/5 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-emerald-400">Informe Vinculado Activo</p>
+                      <h4 className="text-sm font-bold text-slate-200 mt-0.5">
+                        {project.linkedGangReport?.nombre || "Pandilla Vinculada"}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded bg-red-950/60 border border-red-900/35 text-[9px] text-red-400 font-bold uppercase">
+                        Riesgo: {project.linkedGangReport?.nivelRiesgo || "No especificado"}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-slate-900/90 border border-slate-800 text-[9px] text-slate-300 font-mono">
+                        {project.linkedGeoReportId}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-300 space-y-1.5 bg-slate-950/40 p-3 rounded-lg border border-slate-900">
+                    <p className="leading-relaxed font-medium">
+                      <strong className="text-slate-400 font-semibold block mb-0.5">Zona de Influencia:</strong>
+                      {project.linkedGangReport?.zonaInfluencia || "Sin especificar"}
+                    </p>
+                    <p className="leading-relaxed font-medium">
+                      <strong className="text-slate-400 font-semibold block mb-0.5">Resumen de Inteligencia:</strong>
+                      {project.linkedGangReport?.resumenInteligencia || "Sin descripción disponible."}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      disabled={isLinking}
+                      onClick={handleUnlinkGeoReport}
+                      className="px-3 py-1.5 rounded-lg border border-red-900/50 hover:bg-red-950/40 text-xs font-bold text-red-400 transition-colors disabled:opacity-50"
+                    >
+                      {isLinking ? "Procesando..." : "🗑️ Desvincular Informe"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  <div className="sm:col-span-8 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      Código de Identificación de Geointeligencia
+                    </label>
+                    <input
+                      type="text"
+                      value={geoInputId}
+                      onChange={(e) => setGeoInputId(e.target.value)}
+                      placeholder="CEIPOL-GEO-[NOMBRE]-[RIESGO]-[ID]"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-sky-500/50 transition-colors font-mono"
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <button
+                      type="button"
+                      disabled={isLinking || !geoInputId.trim()}
+                      onClick={() => handleLinkGeoReport(geoInputId)}
+                      className="w-full h-[40px] inline-flex items-center justify-center rounded-xl bg-sky-500 hover:bg-sky-600 text-slate-950 text-xs font-extrabold uppercase tracking-wide shadow-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isLinking ? "Vinculando..." : "🔗 Vincular Reporte"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <CaptureAndAddPhoto />
             <PhotoAlbum
               onDeletePhoto={handleDeletePhoto}

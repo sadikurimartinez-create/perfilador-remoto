@@ -1,18 +1,18 @@
-import { getScinceData, getDenueData } from "@/lib/osintActions";
+import { getScinceData, getDenueData, getTelegramOsintData } from "@/lib/osintActions";
 import { PandillasService } from "./pandillas.service";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
 
 /**
  * Pandillas intelligence orchestration engine.
- * Gathers extra context from internal system APIs (SCINCE demographic data, DENUE active business data)
+ * Gathers extra context from internal system APIs (SCINCE demographic data, DENUE active business data, CEIPOL OSINT crawler)
  * to feed the Fusion and Sweep API with live, context-rich geo intelligence.
  */
 export class PandillasEngine {
   /**
    * Run the full Sweep Orchestration:
    * 1. Check if the gang zone has coordinates. If not, fallback to default Aguascalientes Center coordinates (21.8853, -102.2916).
-   * 2. Query internal APIs (getScinceData and getDenueData) to pull demographic and business data for the zone of influence.
-   * 3. Construct a unified context payload detailing SCINCE and DENUE matches.
+   * 2. Query internal APIs (getScinceData, getDenueData, getTelegramOsintData) to pull demographic, business, and social OSINT data.
+   * 3. Construct a unified context payload detailing SCINCE, DENUE, and OSINT matches.
    * 4. Call the main AI and CSV sweep endpoint via PandillasService.
    */
   static async executeFullSweep(
@@ -25,11 +25,12 @@ export class PandillasEngine {
 
     console.log(`[PandillasEngine] Iniciando barrido geoespacial en [${lat}, ${lng}]`);
 
-    // Concurrent execution of internal APIs
-    const [scinceData, denueData] = (await Promise.all([
+    // Concurrent execution of internal APIs (SCINCE, DENUE, and OSINT Crawler)
+    const [scinceData, denueData, telegramOsint] = (await Promise.all([
       getScinceData(lat, lng).catch(() => ({ exito: false, error: "Fallo SCINCE" })),
       getDenueData(lat, lng, 350).catch(() => ({ exito: false, error: "Fallo DENUE" })),
-    ])) as [any, any];
+      getTelegramOsintData(`Pandilla ${gang.nombre} Colonia ${gang.zonaInfluencia} Aguascalientes`).catch(() => ({ success: false, error: "Fallo OSINT" }))
+    ])) as [any, any, any];
 
     // Build the enriched context
     let enrichmentPrompt = `
@@ -43,6 +44,11 @@ export class PandillasEngine {
       denueData.exito && denueData.total > 0
         ? `Total comercios en radio: ${denueData.total}. Muestra de negocios: ${denueData.resumen}`
         : "Sin comercios reportados."
+    }
+* Análisis OSINT Complementario (CEIPOL Crawler): ${
+      telegramOsint.success
+        ? telegramOsint.osintSummary
+        : "Sin correlaciones OSINT adicionales detectadas."
     }
 `;
 

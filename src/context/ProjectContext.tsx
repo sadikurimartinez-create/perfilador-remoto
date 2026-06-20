@@ -55,6 +55,8 @@ export type Project = {
   descripcion?: string;
   createdBy?: string;
   printedAt?: number;
+  linkedGeoReportId?: string | null;
+  linkedGangReport?: any | null;
 };
 
 export type PerPhotoFinding = {

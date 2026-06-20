@@ -34,6 +34,9 @@ export interface GangEntity {
   }[];
   createdAt?: number;
   createdBy?: string;
+  geoReportId?: string;
+  nivelRiesgo?: string;
+  resumenInteligencia?: string;
 }
 
 export interface FusionResult {

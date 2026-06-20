@@ -78,12 +78,27 @@ export async function POST(req: Request) {
       streetViewsSweep: streetViewsStr
     });
 
+    let gangReportStr = "Ningún informe de geointeligencia vinculado.";
+    if (safeBody.linkedGangReport) {
+      const gang = safeBody.linkedGangReport;
+      gangReportStr = `
+- ID de Geointeligencia: ${gang.geoReportId || "N/A"}
+- Pandilla/Clica: ${gang.nombre || "N/A"} (Nivel de Amenaza/Riesgo: ${gang.nivelRiesgo || "N/A"})
+- Zona de Influencia Delimitada: ${gang.zonaInfluencia || "N/A"}
+- Resumen de Inteligencia Táctica: ${gang.resumenInteligencia || "N/A"}
+- Integrantes Identificados: ${gang.integrantes?.map((m: any) => `"${m.alias || "N/A"}" (${m.rol || "N/A"})`).join(", ") || "Ninguno registrado"}
+`;
+    }
+
     const prompt = `
 INSTRUCCIONES DE SISTEMA (ADR):
 ${systemPrompt}
 
 ESTRATEGIAS APLICABLES (CRIMINOLOGÍA AMBIENTAL):
 ${strategies}
+
+VÍNCULO DE GEOINTELIGENCIA DE PANDILLAS (CROSS-INTELLIGENCE):
+${gangReportStr}
 
 INFORMACIÓN ADICIONAL DE CAMPO:
 ${JSON.stringify(safeBody, null, 2)}

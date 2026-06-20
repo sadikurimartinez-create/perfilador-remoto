@@ -703,6 +703,7 @@ const hasMinimumPhotos =
             osintEngineData: automaticOsintData,
             streetViews: svData,
             datosGobMxData: datosGobMxResult, // <-- AÑADIR AQUÍ
+            linkedGangReport: project?.linkedGangReport,
           }),
         });
 

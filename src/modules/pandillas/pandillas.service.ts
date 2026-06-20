@@ -102,6 +102,27 @@ export class PandillasService {
   }
 
   /**
+   * Fetches a gang record associated with a specific geoReportId.
+   */
+  static async getGangByGeoReportId(geoReportId: string): Promise<GangEntity | null> {
+    const db = getDb();
+    try {
+      const colRef = collection(db, this.collectionName);
+      const q = query(colRef, where("geoReportId", "==", geoReportId));
+      const snap = await getDocs(q);
+      if (snap.empty) return null;
+      const firstDoc = snap.docs[0];
+      return {
+        id: firstDoc.id,
+        ...firstDoc.data()
+      } as GangEntity;
+    } catch (e) {
+      console.warn("[PandillasService] Fallo consultando pandilla por geoReportId:", e);
+      return null;
+    }
+  }
+
+  /**
    * Deletes a gang record from Firestore.
    */
   static async deleteGang(id: string): Promise<void> {

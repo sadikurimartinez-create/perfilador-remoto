@@ -5,7 +5,73 @@ import { useAuth } from "@/context/AuthContext";
 import { GangEntity, GangMember, FusionResult } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
-import { GoogleMap, Polygon, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Polygon, Marker, Circle, useJsApiLoader } from "@react-google-maps/api";
+
+const darkMapStyles = [
+  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#cbd5e1" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#38bdf8" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#1e293b" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#64748b" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#1e293b" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#334155" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#94a3b8" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#0f172a" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#1e293b" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#020617" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#3b82f6" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#020617" }],
+  },
+];
 
 interface PandillasUIProps {
   projectId?: string;
@@ -19,6 +85,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   // --- STATE FOR FORM ---
   const [nombre, setNombre] = useState("");
   const [zonaInfluencia, setZonaInfluencia] = useState("");
+  const [geoReportId, setGeoReportId] = useState("");
+  const [activeMarkerIndex, setActiveMarkerIndex] = useState<number | null>(null);
   const [poligono, setPoligono] = useState<{ lat: number; lng: number }[]>([]);
   const [antagonicas, setAntagonicas] = useState<string[]>([]);
   const [nuevoAntagonica, setNuevoAntagonica] = useState("");
@@ -70,7 +138,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
   const containerStyle = useMemo(() => ({
     width: "100%",
-    height: "220px",
+    height: "320px",
   }), []);
 
   const calculateCentroid = (vertices: { lat: number; lng: number }[]) => {
@@ -134,6 +202,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
         setGrafitiPatrones(existing.grafitiInfo?.patrones || "");
         setArchivos(existing.archivosAnexos || []);
         setSelectedGangId(existing.id || "");
+        setGeoReportId(existing.geoReportId || "");
       }
     } catch (e) {
       console.error("Error al cargar pandilla por projectId:", e);
@@ -327,6 +396,48 @@ ${analysisResult.ficha.crossCheckJuridico}
       const result = await PandillasEngine.executeFullSweep(inputGang, "Análisis de campo preventivo de pandillas.");
       setAnalysisResult(result);
       setActiveTab("ficha");
+
+      // --- AUTO-SAVE AFTER SUCCESSFUL SWEEP ---
+      try {
+        const riskLevel = result.ficha.nivelRiesgo || "Medio";
+        const summaryText = result.ficha.resumenInteligencia || "";
+        const cleanName = nombre.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 10);
+        const cleanRisk = riskLevel.toUpperCase();
+
+        const gangToSave: GangEntity = {
+          id: selectedGangId || undefined,
+          projectId: projectId || undefined,
+          nombre,
+          zonaInfluencia,
+          coordenadas: centroid,
+          poligono: poligono.length > 0 ? poligono : undefined,
+          antagonicas,
+          integrantes,
+          grafitiInfo: {
+            texto: grafitiTexto,
+            simbolos: grafitiSimbolos,
+            patrones: grafitiPatrones
+          },
+          archivosAnexos: archivos,
+          nivelRiesgo: riskLevel,
+          resumenInteligencia: summaryText
+        };
+
+        const savedId = await PandillasService.saveGang(gangToSave, username);
+        const idSnippet = savedId.substring(0, 5).toUpperCase();
+        const generatedGeoReportId = `CEIPOL-GEO-${cleanName}-${cleanRisk}-${idSnippet}`;
+
+        gangToSave.id = savedId;
+        gangToSave.geoReportId = generatedGeoReportId;
+        await PandillasService.saveGang(gangToSave, username);
+
+        setSelectedGangId(savedId);
+        setGeoReportId(generatedGeoReportId);
+        await loadSavedGangs();
+      } catch (saveErr) {
+        console.error("Error al auto-guardar barrido:", saveErr);
+      }
+
     } catch (err: any) {
       console.error(err);
       alert("Error al ejecutar el barrido inteligente: " + err.message);
@@ -343,6 +454,11 @@ ${analysisResult.ficha.crossCheckJuridico}
     }
     try {
       const centroid = calculateCentroid(poligono);
+      const riskLevel = analysisResult?.ficha.nivelRiesgo || "Medio";
+      const summaryText = analysisResult?.ficha.resumenInteligencia || "";
+      const cleanName = nombre.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 10);
+      const cleanRisk = riskLevel.toUpperCase();
+
       const gangToSave: GangEntity = {
         id: selectedGangId || undefined,
         projectId: projectId || undefined,
@@ -357,12 +473,22 @@ ${analysisResult.ficha.crossCheckJuridico}
           simbolos: grafitiSimbolos,
           patrones: grafitiPatrones
         },
-        archivosAnexos: archivos
+        archivosAnexos: archivos,
+        nivelRiesgo: riskLevel,
+        resumenInteligencia: summaryText
       };
 
       const savedId = await PandillasService.saveGang(gangToSave, username);
+      const idSnippet = savedId.substring(0, 5).toUpperCase();
+      const generatedGeoReportId = `CEIPOL-GEO-${cleanName}-${cleanRisk}-${idSnippet}`;
+
+      gangToSave.id = savedId;
+      gangToSave.geoReportId = generatedGeoReportId;
+      await PandillasService.saveGang(gangToSave, username);
+
       setSelectedGangId(savedId);
-      alert("¡Expediente de Pandilla guardado con éxito en la nube (Firestore)!");
+      setGeoReportId(generatedGeoReportId);
+      alert(`¡Expediente de Pandilla guardado con éxito! ID de Geointeligencia: ${generatedGeoReportId}`);
       await loadSavedGangs();
     } catch (e: any) {
       alert("Error al guardar expediente: " + e.message);
@@ -382,6 +508,7 @@ ${analysisResult.ficha.crossCheckJuridico}
       setGrafitiPatrones("");
       setArchivos([]);
       setSelectedGangId("");
+      setGeoReportId("");
       setAnalysisResult(null);
       setSelectedNode(null);
       setActiveTab("ficha");
@@ -406,6 +533,7 @@ ${analysisResult.ficha.crossCheckJuridico}
     setGrafitiPatrones(gang.grafitiInfo?.patrones || "");
     setArchivos(gang.archivosAnexos || []);
     setSelectedGangId(gang.id || "");
+    setGeoReportId(gang.geoReportId || "");
     setAnalysisResult(null); // Clear previous visual analysis so user can re-trigger sweep
     alert(`Expediente "${gang.nombre}" cargado en el panel de edición. Pulse 'Ejecutar Barrido' para procesar inteligencia.`);
   };
@@ -479,6 +607,25 @@ ${analysisResult.ficha.crossCheckJuridico}
           </div>
 
           <div className="space-y-4">
+            {geoReportId && (
+              <div className="bg-sky-950/40 border border-sky-500/30 rounded-xl p-3 flex items-center justify-between shadow-inner">
+                <div>
+                  <p className="text-[9px] font-bold text-sky-400 uppercase tracking-widest">ID Geointeligencia</p>
+                  <p className="text-xs font-mono font-bold text-slate-100">{geoReportId}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(geoReportId);
+                    alert("📋 ID de Geointeligencia copiado al portapapeles: " + geoReportId);
+                  }}
+                  className="px-2.5 py-1 bg-sky-900/60 hover:bg-sky-800/80 border border-sky-500/30 rounded-lg text-[10px] font-bold text-sky-300 transition-colors"
+                >
+                  ✂️ Copiar ID
+                </button>
+              </div>
+            )}
+
             {/* 1. NAME OF THE GANG */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Nombre de la Pandilla / Clica</label>
@@ -905,6 +1052,23 @@ ${analysisResult.ficha.crossCheckJuridico}
                     )}
                   </div>
                   <p className="text-xs text-slate-400 mt-1">Sector de Influencia: <strong className="text-slate-300">{analysisResult.ficha.zona}</strong></p>
+                  {geoReportId && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-[10px] font-mono bg-slate-950/80 border border-slate-800 px-2 py-0.5 rounded text-slate-300">
+                        ID Geointeligencia: <strong className="text-sky-400">{geoReportId}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(geoReportId);
+                          alert("📋 ID copiado: " + geoReportId);
+                        }}
+                        className="text-[10px] text-sky-400 hover:underline"
+                      >
+                        (Copiar)
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -1037,65 +1201,87 @@ ${analysisResult.ficha.crossCheckJuridico}
                 </div>
               </div>
 
-              {/* TACTICAL VECTOR MAP SIMULATOR */}
-              <div className="relative h-96 w-full rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-inner">
-                {/* Tactical grid background overlay */}
-                <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-40 pointer-events-none" />
-                
-                {/* Concentric radar rings */}
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full border border-sky-500/5 animate-[pulse_6s_infinite] pointer-events-none" />
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full border border-sky-500/10 animate-[pulse_4s_infinite] pointer-events-none" />
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-sky-500/20 animate-[pulse_2s_infinite] pointer-events-none" />
-
-                {/* Radar sweep hand */}
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-1 bg-gradient-to-r from-sky-500/0 via-sky-500/15 to-sky-500/0 origin-center animate-[spin_8s_linear_infinite] pointer-events-none" />
-
-                {/* Simulated Map Markers & Heatmaps */}
-                {analysisResult.mapa.geolocalizacion.map((point, idx) => {
-                  // Distribute positions on the tactical radar simulator visually
-                  const seed = idx * 37.5 + point.descripcion.length;
-                  const xOffset = Math.sin(seed) * 140;
-                  const yOffset = Math.cos(seed) * 110;
-
-                  return (
-                    <div
-                      key={idx}
-                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 group"
-                      style={{
-                        transform: `translate(calc(-50% + ${xOffset}px), calc(-50% + ${yOffset}px))`
-                      }}
-                    >
-                      {/* Glow heatmap circle */}
-                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-red-500/10 animate-ping opacity-40" />
-                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-red-500/20 opacity-30" />
-                      
-                      {/* Main pin marker */}
-                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-red-500 border border-white flex items-center justify-center cursor-pointer hover:scale-125 hover:bg-sky-500 transition-all shadow-md shadow-red-900/50 relative z-10">
-                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                      </div>
-
-                      {/* Tooltip Card on hover */}
-                      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-48 bg-slate-900 border border-slate-700/80 rounded-lg p-2.5 shadow-xl shadow-black/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-50 text-[10px] space-y-1">
-                        <p className="font-bold text-slate-200">Ubicación #{idx + 1}</p>
-                        <p className="text-slate-400 leading-normal">{point.descripcion}</p>
-                        <p className="text-red-400 font-semibold bg-red-950/40 px-1 py-0.5 rounded text-[8px] inline-block uppercase">Punto Caliente de Influencia</p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Coordinate Grid Labels */}
-                <div className="absolute left-4 bottom-4 font-mono text-[9px] text-slate-500 space-y-0.5">
-                  <p>Escala: 1:500m</p>
-                  <p>Centro: Aguascalientes, AGS</p>
-                  <p>Frecuencia de rastreo: 85Hz</p>
+              {/* TACTICAL VECTOR MAP */}
+              {!isLoaded ? (
+                <div className="w-full h-96 rounded-2xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
+                  Cargando mapa táctico...
                 </div>
-                
-                <div className="absolute right-4 top-4 bg-slate-900/90 border border-slate-800 p-2.5 rounded-lg text-[9px] font-mono text-slate-400 space-y-1 z-30">
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Domicilio Coincidente</div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-sky-500/10 border border-sky-500/30" /> Zonas de Calor (Incidencia)</div>
+              ) : (
+                <div className="relative h-96 w-full rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-inner">
+                  <GoogleMap
+                    mapContainerStyle={{ width: "100%", height: "100%" }}
+                    center={mapCenter}
+                    zoom={14}
+                    options={{
+                      streetViewControl: false,
+                      mapTypeControl: false,
+                      fullscreenControl: false,
+                      styles: darkMapStyles,
+                    }}
+                  >
+                    {poligono.length >= 3 && (
+                      <Polygon
+                        paths={poligono}
+                        options={{
+                          strokeColor: "#38bdf8",
+                          strokeOpacity: 0.8,
+                          strokeWeight: 2,
+                          fillColor: "#0284c7",
+                          fillOpacity: 0.25,
+                        }}
+                      />
+                    )}
+                    {analysisResult.mapa.geolocalizacion.map((point, idx) => (
+                      <Marker
+                        key={idx}
+                        position={{ lat: point.lat, lng: point.lng }}
+                        onClick={() => setActiveMarkerIndex(idx)}
+                        icon={{
+                          path: 0, // Circle
+                          scale: 7,
+                          fillColor: "#ef4444",
+                          fillOpacity: 1,
+                          strokeColor: "#ffffff",
+                          strokeWeight: 1.5,
+                        }}
+                      />
+                    ))}
+                    {analysisResult.mapa.areasCalientes?.map((area, idx) => (
+                      <Circle
+                        key={idx}
+                        center={{ lat: area.lat, lng: area.lng }}
+                        radius={area.radioMetros || 200}
+                        options={{
+                          strokeColor: "#ef4444",
+                          strokeOpacity: 0.4,
+                          strokeWeight: 1,
+                          fillColor: "#f87171",
+                          fillOpacity: (area.intensidad || 0.5) * 0.25,
+                        }}
+                      />
+                    ))}
+                  </GoogleMap>
+                  
+                  {/* Floating info card */}
+                  <div className="absolute bottom-4 left-4 bg-slate-900/95 border border-slate-800 p-3 rounded-xl max-w-xs z-30 shadow-xl space-y-1">
+                    <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1">📍 Punto de Geointeligencia</h4>
+                    {activeMarkerIndex !== null && analysisResult.mapa.geolocalizacion[activeMarkerIndex] ? (
+                      <>
+                        <p className="text-[9px] text-sky-400 font-bold uppercase tracking-wider">Ubicación #{activeMarkerIndex + 1}</p>
+                        <p className="text-[11px] text-slate-300 leading-normal font-medium">{analysisResult.mapa.geolocalizacion[activeMarkerIndex].descripcion}</p>
+                      </>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 italic">Seleccione un marcador rojo para ver los detalles tácticos.</p>
+                    )}
+                  </div>
+
+                  <div className="absolute right-4 top-4 bg-slate-900/90 border border-slate-800 p-2.5 rounded-lg text-[9px] font-mono text-slate-400 space-y-1 z-30 shadow-md">
+                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Domicilio Coincidente</div>
+                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-400" /> Vértice del Polígono</div>
+                    <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-red-400/20 border border-red-500/30" /> Área Caliente (Frecuencia)</div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* LIST OF ADDRESS COINCIDENCES */}
               <div className="card p-5 space-y-3">
