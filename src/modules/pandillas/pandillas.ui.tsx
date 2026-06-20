@@ -8,6 +8,7 @@ import {
   GangRelationship,
   GeointeligenciaShape,
   TimelineEvent,
+  GraffitiImage,
   calculateMemberDanger,
   calculateSimilarity
 } from "./pandillas.mapper";
@@ -114,6 +115,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [relaciones, setRelaciones] = useState<GangRelationship[]>([]);
   const [geometrias, setGeometrias] = useState<GeointeligenciaShape[]>([]);
   const [cronologiaEventos, setCronologiaEventos] = useState<TimelineEvent[]>([]);
+  const [imagenesGrafiti, setImagenesGrafiti] = useState<GraffitiImage[]>([]);
   const [archivos, setArchivos] = useState<{ nombre: string; size: number; tipo: string; contexto?: string }[]>([]);
 
   // --- INTERACTION & EDITING SUB-STATES ---
@@ -134,6 +136,28 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     fecha: new Date().toISOString().split("T")[0], titulo: "", descripcion: "", gravedad: "Media", categoria: "otro", lugar: ""
   });
 
+  // --- GRAFFITI GALLERY STATE & HANDLER ---
+  const [newGraffitiDesc, setNewGraffitiDesc] = useState("");
+  const [newGraffitiType, setNewGraffitiType] = useState<"Identidad" | "Advertencia" | "Frontera" | "Punto de venta" | "Otro">("Identidad");
+
+  const handleUploadGraffitiImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const newImg: GraffitiImage = {
+        id: `graf-${Date.now()}`,
+        url: reader.result as string,
+        descripcion: newGraffitiDesc || "Sin descripción",
+        tipo: newGraffitiType,
+        fechaRegistro: new Date().toLocaleDateString("es-MX")
+      };
+      setImagenesGrafiti(prev => [...prev, newImg]);
+      setNewGraffitiDesc(""); // reset
+    };
+    reader.readAsDataURL(file);
+  };
+
   // --- DRAWING TOOLBOX STATES ---
   const [drawingMode, setDrawingMode] = useState<"poligono" | "corredor" | "buffer" | "zona_riesgo" | null>(null);
   const [tempShapeName, setTempShapeName] = useState("");
@@ -147,7 +171,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeStep, setAnalyzeStep] = useState("");
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
-  const [activeReport, setActiveReport] = useState<"estructura" | "riesgo">("estructura");
+  const [activeReport, setActiveReport] = useState<"estructura" | "riesgo" | "completo">("estructura");
 
   // --- AUTOMATIC ALERTS SYSTEM ---
   const [alerts, setAlerts] = useState<{ id: string; tipo: string; severidad: string; mensaje: string; fecha: string }[]>([]);
@@ -208,6 +232,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     setRelaciones(gang.relaciones || []);
     setGeometrias(gang.geometrias || []);
     setCronologiaEventos(gang.cronologiaEventos || []);
+    setImagenesGrafiti(gang.imagenesGrafiti || []);
     setArchivos(gang.archivosAnexos || []);
     setAnalysisResult(null); // Clear previous visual report to let user sweep again
   };
@@ -278,6 +303,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
         relaciones,
         geometrias,
         cronologiaEventos,
+        imagenesGrafiti,
         coordenadas: centroid,
         archivosAnexos: archivos,
         geoReportId: generatedGeoReportId,
@@ -433,6 +459,20 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   };
 
   // --- GANG MEMBERS (INTEGRANTES) METHODS ---
+  const handleMemberPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setTempMember(prev => ({
+          ...prev,
+          fotografiaUrl: reader.result as string
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAddMember = () => {
     if (!tempMember.nombre && !tempMember.alias) {
       alert("⚠️ El integrante requiere por lo menos un nombre o alias identificatorio.");
@@ -468,7 +508,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       vehiculosAsociados: tempMember.vehiculosAsociados,
       estatusPandilla: tempMember.estatusPandilla as any,
       peligrosidadCalculada: danger,
-      fotografiaUrl: tempMember.sexo === "Femenino" ? "/avatars/avatar_fem.png" : "/avatars/avatar_male.png"
+      fotografiaUrl: tempMember.fotografiaUrl || (tempMember.sexo === "Femenino" ? "/avatars/avatar_fem.png" : "/avatars/avatar_male.png")
     };
 
     if (editingMemberIndex !== null) {
@@ -485,7 +525,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       nombre: "", alias: "", estatusPandilla: "Integrante", sexo: "Masculino", edad: "", curp: "", domicilioConocido: "",
       telefono: "", detencionesPrevias: "", ingresosCentrosInternamiento: "", consumoDrogas: "", nivelViolencia: "Bajo",
       riesgoCriminogeno: "Bajo", cicatrices: "", marcasDistintivas: "", lugarTrabajo: "", actividadEconomica: "", escuela: "",
-      tatuajes: "", complexion: "", estatura: "", vestimentaUsual: "", telefonoRedes: "", vehiculosAsociados: ""
+      tatuajes: "", complexion: "", estatura: "", vestimentaUsual: "", telefonoRedes: "", vehiculosAsociados: "", fotografiaUrl: ""
     });
   };
 
@@ -617,6 +657,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       setRelaciones([]);
       setGeometrias([]);
       setCronologiaEventos([]);
+      setImagenesGrafiti([]);
       setArchivos([]);
       setAnalysisResult(null);
       setActiveTab("dashboard");
@@ -1142,6 +1183,84 @@ ${analysisResult.ficha.crossCheckJuridico}
                   />
                 </div>
 
+                {/* GALLERY OF MULTIPLE GRAFFITI / MESSAGE IMAGES */}
+                <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3.5">
+                  <p className="text-[10px] font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🖼️</span> Galería Fotográfica de Grafitis y Mensajes delictivos
+                  </p>
+                  
+                  {/* Adder Sub-form */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end bg-slate-900/40 p-3 rounded-lg border border-slate-800/80">
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="text-[8px] font-bold text-slate-400 uppercase">Clasificación / Tipo</label>
+                      <select
+                        value={newGraffitiType}
+                        onChange={e => setNewGraffitiType(e.target.value as any)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                      >
+                        <option value="Identidad">Identidad / Marca de Clica</option>
+                        <option value="Advertencia">Mensaje de Advertencia / Rivalidad</option>
+                        <option value="Frontera">Límite Territorial / Frontera</option>
+                        <option value="Punto de venta">Punto de Venta de Droga</option>
+                        <option value="Otro">Otro / Mensaje Codificado</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-[8px] font-bold text-slate-400 uppercase">Descripción / Referencia</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Muro col. Solidaridad"
+                        value={newGraffitiDesc}
+                        onChange={e => setNewGraffitiDesc(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label className="w-full py-2 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-[10px] uppercase text-center block cursor-pointer transition-all shadow-md">
+                        📸 SUBIR IMAGEN
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleUploadGraffitiImage}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* List / Grid of Loaded Images */}
+                  <div className="grid grid-cols-2 gap-3 max-h-[220px] overflow-y-auto pr-1">
+                    {imagenesGrafiti.map((img) => (
+                      <div key={img.id} className="relative rounded-lg border border-slate-800 bg-slate-900/50 p-2 group flex flex-col justify-between">
+                        <div className="relative w-full h-24 rounded bg-slate-950 border border-slate-850 overflow-hidden">
+                          <img src={img.url} className="w-full h-full object-cover" alt="Graffiti / Marca" />
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-slate-950/90 text-sky-400 border border-slate-800">
+                            {img.tipo}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setImagenesGrafiti(imagenesGrafiti.filter(x => x.id !== img.id))}
+                            className="absolute top-1 right-1 bg-red-950/90 hover:bg-red-900/90 border border-red-950 text-[8px] font-black text-red-400 px-1.5 py-0.5 rounded transition-colors"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-300 mt-1.5 truncate uppercase">
+                          {img.descripcion}
+                        </p>
+                        <p className="text-[8px] text-slate-500 font-mono text-right mt-0.5">
+                          Reg: {img.fechaRegistro}
+                        </p>
+                      </div>
+                    ))}
+                    {imagenesGrafiti.length === 0 && (
+                      <div className="col-span-2 text-center py-6 text-[10px] text-slate-500 italic border border-dashed border-slate-805/80 rounded-lg">
+                        Sin imágenes de grafitis o marcas cargadas.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleSaveGangToCloud}
@@ -1166,27 +1285,52 @@ ${analysisResult.ficha.crossCheckJuridico}
               </div>
 
               <div className="space-y-3.5">
-                {/* CORE INDIVIDUAL DATA */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Nombre Completo</label>
-                    <input
-                      type="text"
-                      placeholder="Nombre real (Ej. Carlos Martínez Pérez)"
-                      value={tempMember.nombre}
-                      onChange={e => setTempMember({ ...tempMember, nombre: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
-                    />
+                {/* CORE INDIVIDUAL DATA WITH PHOTOGRAPHY */}
+                <div className="flex gap-4 bg-slate-950/40 p-4 rounded-xl border border-slate-800">
+                  <div className="flex flex-col items-center justify-center border-r border-slate-800/80 pr-4 space-y-1.5 flex-shrink-0">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Fotografía</label>
+                    <div className="relative w-20 h-20 bg-slate-900 rounded-xl border border-slate-700/60 flex items-center justify-center overflow-hidden group">
+                      {tempMember.fotografiaUrl ? (
+                        <img src={tempMember.fotografiaUrl} className="w-full h-full object-cover" alt="Vista previa" />
+                      ) : (
+                        <span className="text-3xl text-slate-600">👤</span>
+                      )}
+                      <label className="absolute inset-0 bg-slate-950/85 flex items-center justify-center text-[9px] font-black text-sky-400 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                        SUBIR
+                        <input type="file" accept="image/*" className="hidden" onChange={handleMemberPhotoUpload} />
+                      </label>
+                    </div>
+                    {tempMember.fotografiaUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setTempMember({ ...tempMember, fotografiaUrl: "" })}
+                        className="text-[8px] text-red-400 font-extrabold uppercase hover:underline"
+                      >
+                        Quitar
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Alias / Apodo</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. El Charly"
-                      value={tempMember.alias}
-                      onChange={e => setTempMember({ ...tempMember, alias: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
-                    />
+                  <div className="flex-1 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Nombre Completo</label>
+                      <input
+                        type="text"
+                        placeholder="Nombre real (Ej. Carlos Martínez Pérez)"
+                        value={tempMember.nombre}
+                        onChange={e => setTempMember({ ...tempMember, nombre: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Alias / Apodo</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. El Charly"
+                        value={tempMember.alias}
+                        onChange={e => setTempMember({ ...tempMember, alias: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1422,7 +1566,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                     >
                       {/* Avatar Photo */}
                       <div className="w-16 h-16 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center flex-shrink-0 relative">
-                        <span className="text-2xl">{m.sexo === "Femenino" ? "👩" : "👨"}</span>
+                        {m.fotografiaUrl ? (
+                          <img src={m.fotografiaUrl} className="w-full h-full object-cover" alt={m.alias || m.nombre} />
+                        ) : (
+                          <span className="text-2xl">{m.sexo === "Femenino" ? "👩" : "👨"}</span>
+                        )}
                         {/* Peligrosidad badge overlay */}
                         <div className="absolute bottom-0 inset-x-0 text-center bg-slate-950/80 text-[8px] font-black text-sky-400">
                           {m.peligrosidadCalculada}%
@@ -2087,7 +2235,7 @@ ${analysisResult.ficha.crossCheckJuridico}
             {/* RESULTS VIEW REPORT & PRODUCTS */}
             {analysisResult && (
               <div className="space-y-6">
-                <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1 gap-1 max-w-[400px]">
+                <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1 gap-1 max-w-xl no-print">
                   <button
                     onClick={() => setActiveReport("estructura")}
                     className={`flex-1 py-1.5 rounded text-[10px] font-black uppercase transition-all ${
@@ -2103,6 +2251,14 @@ ${analysisResult.ficha.crossCheckJuridico}
                     }`}
                   >
                     Reporte 2: Riesgo Territorial
+                  </button>
+                  <button
+                    onClick={() => setActiveReport("completo")}
+                    className={`flex-1 py-1.5 rounded text-[10px] font-black uppercase transition-all ${
+                      activeReport === "completo" ? "bg-sky-500 text-slate-950" : "text-slate-400"
+                    }`}
+                  >
+                    Reporte 3: Informe Integral de Pandilla
                   </button>
                 </div>
 
@@ -2293,6 +2449,411 @@ ${analysisResult.ficha.crossCheckJuridico}
                         className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-100 uppercase"
                       >
                         🖨️ Imprimir
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* PRODUCT 3: COMPLETE INTELLIGENCE REPORT */}
+                {activeReport === "completo" && (
+                  <div id="print-complete-report" className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 space-y-8 shadow-2xl relative">
+                    <style dangerouslySetInnerHTML={{ __html: `
+                      @media print {
+                        body {
+                          background: #ffffff !important;
+                          color: #000000 !important;
+                        }
+                        #print-complete-report {
+                          background: #ffffff !important;
+                          color: #000000 !important;
+                          border: none !important;
+                          box-shadow: none !important;
+                          padding: 0 !important;
+                          width: 100% !important;
+                        }
+                        .no-print {
+                          display: none !important;
+                        }
+                        h1, h2, h3, h4, h5, h6, p, td, th, span, div, strong, label {
+                          color: #000000 !important;
+                        }
+                        .border, .border-b, .border-t, .border-slate-800, .border-slate-900 {
+                          border-color: #d1d5db !important;
+                        }
+                        .bg-slate-950, .bg-slate-950/60, .bg-slate-900/40, .bg-slate-900, .bg-slate-950/40, .bg-slate-900/50, .bg-slate-900/80 {
+                          background-color: #f3f4f6 !important;
+                          background: #f3f4f6 !important;
+                        }
+                        .bg-red-950, .bg-sky-950, .bg-sky-950/60, .bg-emerald-950 {
+                          background-color: #e5e7eb !important;
+                          border-color: #9ca3af !important;
+                        }
+                        .text-sky-400, .text-red-400, .text-emerald-400 {
+                          color: #000000 !important;
+                          font-weight: bold !important;
+                        }
+                        /* Page breaks */
+                        .page-break {
+                          page-break-before: always;
+                        }
+                      }
+                    `}} />
+
+                    {/* Institutional Header */}
+                    <div className="flex justify-between border-b-2 border-sky-500/40 pb-6">
+                      <div>
+                        <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest block font-mono">
+                          ESTADO DE AGUASCALIENTES • SECRETARÍA DE SEGURIDAD PÚBLICA
+                        </span>
+                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest block font-mono">
+                          SECRETÓ / CLASIFICADO • EXCLUSIVO PARA USO OPERATIVO
+                        </span>
+                        <h2 className="text-3xl font-black text-slate-100 uppercase mt-2 tracking-tight">
+                          INFORME TÁCTICO INTEGRAL DE INTELIGENCIA
+                        </h2>
+                        <p className="text-xs text-slate-400 font-bold mt-1 uppercase">
+                          SISTEMA DE PERFILAMIENTO REMOTO Y GEOINTELIGENCIA CRITICA (CEIPOL)
+                        </p>
+                      </div>
+                      <div className="text-right flex flex-col justify-between">
+                        <div>
+                          <span className="text-xs font-black text-slate-400 font-mono bg-slate-950/80 px-2.5 py-1 rounded border border-slate-800">
+                            ID: {geoReportId || "PRE-EMISION"}
+                          </span>
+                        </div>
+                        <div className="mt-4">
+                          <p className="text-[10px] text-slate-400 font-bold font-mono">EMISIÓN: {new Date().toLocaleDateString("es-MX")} {new Date().toLocaleTimeString("es-MX")}</p>
+                          <p className="text-[9px] text-slate-500 font-mono">PERFILADOR DE PANDILLAS V2.1</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 1: RESUMEN GENERAL */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                        <span className="text-sky-400 text-lg">📊</span>
+                        <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider">
+                          1. RESUMEN EJECUTIVO Y DATOS DE LA ESTRUCTURA
+                        </h3>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-1 bg-slate-950/60 p-5 rounded-2xl border border-slate-850 space-y-3.5 text-xs">
+                          <h4 className="text-[10px] font-black text-sky-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">
+                            Identificación de la Organización
+                          </h4>
+                          <p className="flex justify-between">
+                            <strong className="text-slate-500 uppercase font-bold">Nombre:</strong> 
+                            <span className="text-slate-200 font-black uppercase">{nombre}</span>
+                          </p>
+                          <p className="flex justify-between">
+                            <strong className="text-slate-500 uppercase font-bold">Alias Conocidos:</strong> 
+                            <span className="text-slate-300 font-bold">{aliasConocidos || "N/A"}</span>
+                          </p>
+                          <p className="flex justify-between">
+                            <strong className="text-slate-500 uppercase font-bold">Estatus:</strong> 
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-950/40 text-emerald-400 border border-emerald-900/40">
+                              {estatus}
+                            </span>
+                          </p>
+                          <p className="flex justify-between">
+                            <strong className="text-slate-500 uppercase font-bold">Peligrosidad:</strong> 
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                              peligrosidad === "Crítico" ? "bg-red-950 text-red-400 border border-red-900" :
+                              peligrosidad === "Alto" ? "bg-orange-950 text-orange-400 border border-orange-900" :
+                              "bg-slate-900 text-slate-300 border border-slate-800"
+                            }`}>
+                              {peligrosidad || "Media"}
+                            </span>
+                          </p>
+                          <p className="flex justify-between">
+                            <strong className="text-slate-500 uppercase font-bold">Zona de Influencia:</strong> 
+                            <span className="text-slate-300 font-semibold">{zonaInfluencia || "No registrada"}</span>
+                          </p>
+                          <div className="space-y-1 mt-2">
+                            <strong className="text-slate-500 uppercase font-bold text-[10px] block">Áreas Geográficas:</strong>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {municipiosAsociados && (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[9px] font-mono border border-slate-800 uppercase">
+                                  Mun: {municipiosAsociados}
+                                </span>
+                              )}
+                              {coloniasAsociadas && (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[9px] font-mono border border-slate-800 uppercase">
+                                  Col: {coloniasAsociadas}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-4">
+                          <div className="bg-slate-950/60 p-5 rounded-2xl border border-slate-850 space-y-3">
+                            <h4 className="text-[10px] font-black text-sky-400 uppercase tracking-wider border-b border-slate-900 pb-1.5">
+                              Diagnóstico Táctico CEIPOL (Motor OSINT/Geointeligencia)
+                            </h4>
+                            <div className="text-xs leading-relaxed font-medium text-slate-300 space-y-2">
+                              <p className="whitespace-pre-line">{analysisResult.ficha.resumenInteligencia}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 2: INTEGRANTES & DOSSIER */}
+                    <div className="space-y-4 page-break">
+                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                        <span className="text-sky-400 text-lg">💀</span>
+                        <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider">
+                          2. DOSSIER OPERATIVO DE INTEGRANTES Y JERARQUÍA ("CALIDAD")
+                        </h3>
+                      </div>
+
+                      {integrantes.length === 0 ? (
+                        <div className="bg-slate-950/40 p-6 rounded-2xl text-center text-xs text-slate-500 italic border border-slate-850">
+                          No hay integrantes documentados en la base de datos de esta estructura.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {integrantes.map((m, idx) => (
+                            <div key={idx} className="bg-slate-950/60 rounded-2xl border border-slate-850 p-4 flex flex-col justify-between space-y-4 shadow-lg hover:border-slate-700 transition-all">
+                              <div className="flex gap-4">
+                                {/* Photo Box */}
+                                <div className="w-24 h-24 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center flex-shrink-0 relative shadow-inner">
+                                  {m.fotografiaUrl ? (
+                                    <img src={m.fotografiaUrl} className="w-full h-full object-cover" alt={m.alias || m.nombre} />
+                                  ) : (
+                                    <span className="text-4xl">{m.sexo === "Femenino" ? "👩" : "👨"}</span>
+                                  )}
+                                  <div className="absolute bottom-0 inset-x-0 text-center bg-slate-950/95 py-0.5 border-t border-slate-900">
+                                    <span className="text-[9px] font-black text-sky-400 tracking-wider">
+                                      PELIGRO: {m.peligrosidadCalculada || 0}%
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Main details */}
+                                <div className="space-y-1 min-w-0 flex-1">
+                                  <div className="flex justify-between items-start gap-1">
+                                    <h4 className="text-sm font-black text-slate-100 truncate uppercase">
+                                      {m.alias ? `"${m.alias}"` : "Sin alias"}
+                                    </h4>
+                                    <span className="px-2 py-0.5 rounded bg-red-950 text-red-400 text-[8px] font-black uppercase border border-red-900">
+                                      {m.estatusPandilla || "Integrante"}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-300 font-semibold truncate uppercase">
+                                    {m.nombre || "No identificado"}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 font-bold">
+                                    <span className="text-slate-500 font-bold">EDAD:</span> {m.edad ? `${m.edad} años` : "No reg."} | <span className="text-slate-500 font-bold">SEXO:</span> {m.sexo || "No reg."}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 truncate">
+                                    <span className="text-slate-500 font-bold uppercase">CURP:</span> <span className="font-mono text-[9px] font-bold text-slate-300">{m.curp || "N/A"}</span>
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 truncate">
+                                    <span className="text-slate-500 font-bold uppercase">DOMICILIO:</span> <span className="text-slate-300 font-bold">{m.domicilioConocido || "No reg."}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Technical features & traits grid */}
+                              <div className="grid grid-cols-2 gap-3 border-t border-slate-900 pt-3 text-[10px]">
+                                <div className="space-y-1 bg-slate-900/40 p-2 rounded-lg border border-slate-900/60">
+                                  <p className="font-black text-[9px] text-sky-400 uppercase tracking-wider">Perfil Criminológico</p>
+                                  <p><span className="text-slate-500 font-bold">Riesgo:</span> <strong className="text-red-400">{m.riesgoCriminogeno || "No calif."}</strong></p>
+                                  <p><span className="text-slate-500 font-bold">Violencia:</span> <strong className="text-slate-300">{m.nivelViolencia || "No calif."}</strong></p>
+                                  <p className="truncate"><span className="text-slate-500 font-bold">Droga consumo:</span> <strong className="text-slate-300">{m.consumoDrogas || "N/A"}</strong></p>
+                                </div>
+                                <div className="space-y-1 bg-slate-900/40 p-2 rounded-lg border border-slate-900/60">
+                                  <p className="font-black text-[9px] text-sky-400 uppercase tracking-wider">Señas Particulares</p>
+                                  <p className="truncate"><span className="text-slate-500 font-bold">Tatuajes:</span> <span className="text-slate-300 font-semibold">{m.tatuajes || "N/A"}</span></p>
+                                  <p className="truncate"><span className="text-slate-500 font-bold">Marcas/Cicatriz:</span> <span className="text-slate-300 font-semibold">{m.marcasDistintivas || m.cicatrices || "N/A"}</span></p>
+                                  <p className="truncate"><span className="text-slate-500 font-bold">Complexión:</span> <span className="text-slate-300 font-semibold">{m.complexion || "N/A"} ({m.estatura || "N/A"})</span></p>
+                                </div>
+                              </div>
+
+                              {/* Antecedentes and detention history block */}
+                              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-900 text-[10px] space-y-1 leading-relaxed">
+                                <p className="font-black text-[9px] text-red-400 uppercase tracking-wider">Antecedentes Penales y Detenciones</p>
+                                <p className="text-slate-300 font-semibold italic">
+                                  {m.detencionesPrevias || m.antecedentes || m.ingresosCentrosInternamiento || "No registra detenciones o antecedentes cargados en base de datos local."}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SECTION 3: GEOINTELIGENCIA & TERRITORIO */}
+                    <div className="space-y-4 page-break">
+                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                        <span className="text-sky-400 text-lg">🗺️</span>
+                        <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider">
+                          3. GEOMATRIZ DE CONTROL TERRITORIAL Y CAPAS GIS
+                        </h3>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="space-y-3">
+                          <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                            Delimitaciones GIS Georreferenciadas
+                          </h4>
+                          <div className="bg-slate-950/60 rounded-2xl border border-slate-850 p-4 space-y-3.5 text-xs">
+                            {geometrias.map((geo, gIdx) => (
+                              <div key={geo.id} className="border-b border-slate-900 pb-3 last:border-0 last:pb-0">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-extrabold text-slate-200 uppercase text-xs">{gIdx + 1}. {geo.nombre}</span>
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                    geo.nivelControlTerritorial === "Absoluto" || geo.nivelControlTerritorial === "Alto" ? "bg-red-950 text-red-400" : "bg-sky-950 text-sky-400"
+                                  }`}>
+                                    Control {geo.nivelControlTerritorial}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-400">
+                                  <span className="text-slate-500 font-bold uppercase">Tipo Capa:</span> {geo.tipo.toUpperCase()} {geo.radio && ` | Radio: ${geo.radio}m`}
+                                </p>
+                                <p className="text-[9px] text-slate-500 font-mono mt-1 break-all">
+                                  <span className="text-slate-600 font-bold">PUNTOS COORDENADAS:</span> {geo.puntos.map(p => `[${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}]`).join(", ")}
+                                </p>
+                              </div>
+                            ))}
+                            {geometrias.length === 0 && (
+                              <p className="text-xs text-slate-500 italic text-center py-4">No se han registrado polígonos o capas geográficas.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                            Análisis Crítico de Expansión
+                          </h4>
+                          <div className="bg-slate-950/60 rounded-2xl border border-slate-850 p-4 text-xs leading-relaxed font-semibold text-slate-300">
+                            <p className="whitespace-pre-line">{analysisResult.ficha.crossCheckJuridico}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 4: GALERIA DE GRAFITIS */}
+                    <div className="space-y-4 page-break">
+                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                        <span className="text-sky-400 text-lg">🎨</span>
+                        <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider">
+                          4. GALERÍA DE GRAFITIS IDENTITARIOS Y MENSAJES OPERATIVOS
+                        </h3>
+                      </div>
+
+                      {imagenesGrafiti.length === 0 ? (
+                        <div className="bg-slate-950/40 p-6 rounded-2xl text-center text-xs text-slate-500 italic border border-slate-850">
+                          No se han cargado evidencias visuales de marcas, grafitis identitarios o mensajes de advertencia para esta pandilla.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {imagenesGrafiti.map((img) => (
+                            <div key={img.id} className="bg-slate-950/60 rounded-2xl border border-slate-850 p-3 flex flex-col justify-between space-y-2 shadow-md">
+                              <div className="relative w-full h-32 rounded-xl bg-slate-900 border border-slate-900 overflow-hidden shadow-inner">
+                                <img src={img.url} className="w-full h-full object-cover" alt="Grafiti" />
+                                <span className="absolute top-2 left-2 px-2 py-0.5 rounded text-[8px] font-black uppercase bg-slate-950/95 text-sky-400 border border-slate-800 shadow">
+                                  {img.tipo || "Identidad"}
+                                </span>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[11px] font-bold text-slate-200 uppercase truncate">
+                                  {img.descripcion || "Sin descripción"}
+                                </p>
+                                <p className="text-[9px] text-slate-500 font-mono text-right">
+                                  Capturado: {img.fechaRegistro || "N/A"}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SECTION 5: RELACIONES & VINCULOS */}
+                    <div className="space-y-4 page-break">
+                      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                        <span className="text-sky-400 text-lg">🔗</span>
+                        <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider">
+                          5. RED DE VÍNCULOS Y RELACIONES BILATERALES
+                        </h3>
+                      </div>
+
+                      <table className="w-full text-xs text-left bg-slate-950/60 rounded-2xl border border-slate-850 overflow-hidden shadow">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-400 bg-slate-900/50">
+                            <th className="p-3.5">Organización Antagónica / Asociada</th>
+                            <th className="p-3.5">Bilateralidad</th>
+                            <th className="p-3.5">Tipo de Vínculo Táctico</th>
+                            <th className="p-3.5 text-center">Nivel Severidad / Riesgo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-900">
+                          {relaciones.map((r, idx) => (
+                            <tr key={idx} className="hover:bg-slate-900/10 text-slate-300">
+                              <td className="p-3.5 font-black uppercase tracking-wide">{r.pandillaNombre}</td>
+                              <td className="p-3.5">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                  r.tipo === "rival" ? "bg-red-950 text-red-400 border border-red-950/40" : "bg-emerald-950 text-emerald-400 border border-emerald-950/40"
+                                }`}>
+                                  {r.tipo.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="p-3.5 font-medium">{r.tipoVinculo}</td>
+                              <td className="p-3.5 text-center font-black">
+                                <span className={`px-2.5 py-0.5 rounded text-[9px] font-bold ${
+                                  r.nivelSeveridad === "Crítico" ? "bg-red-950 text-red-400" :
+                                  r.nivelSeveridad === "Alto" ? "bg-orange-950 text-orange-400" :
+                                  "bg-slate-900 text-slate-400"
+                                }`}>
+                                  {r.nivelSeveridad || "Medio"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          {relaciones.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="p-5 text-center text-xs text-slate-500 italic">No se han registrado relaciones bilaterales con otras estructuras.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* CEIPOL Validation Block */}
+                    <div className="border-t border-slate-800 pt-8 mt-12 grid grid-cols-2 gap-12 text-center text-[10px] uppercase font-bold text-slate-400 page-break">
+                      <div className="space-y-12">
+                        <p>PERFILADO Y CAPTURADO POR:</p>
+                        <div className="border-t border-slate-800 pt-2 w-2/3 mx-auto">
+                          <p className="text-slate-300 font-extrabold font-mono">FIRMA DE AGENTE ANALISTA</p>
+                          <p className="text-[9px] text-slate-500 font-medium">CEIPOL • SSP AGUASCALIENTES</p>
+                        </div>
+                      </div>
+                      <div className="space-y-12">
+                        <p>SISTEMA DE SEGURIDAD PÚBLICA:</p>
+                        <div className="border-t border-slate-800 pt-2 w-2/3 mx-auto">
+                          <p className="text-slate-300 font-extrabold font-mono">SELLO DE VALIDACIÓN TÁCTICA</p>
+                          <p className="text-[9px] text-slate-500 font-medium">CENTRO DE INTELIGENCIA OPERATIVA</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Report action buttons */}
+                    <div className="flex justify-end gap-3 pt-6 border-t border-slate-800 no-print">
+                      <button
+                        onClick={handleAttachReportToWorkspace}
+                        className="px-5 py-2.5 rounded-xl border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/40 text-xs font-black text-sky-400 uppercase tracking-wider shadow-lg transition-colors"
+                      >
+                        📄 Anexar Reporte Integral al Expediente
+                      </button>
+                      <button
+                        onClick={() => window.print()}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-xs font-black text-slate-100 uppercase tracking-wider shadow-lg transition-all"
+                      >
+                        🖨️ Imprimir Reporte
                       </button>
                     </div>
                   </div>

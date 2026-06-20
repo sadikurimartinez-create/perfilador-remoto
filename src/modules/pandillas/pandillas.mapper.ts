@@ -83,6 +83,14 @@ export interface TimelineEvent {
   lugar?: string;
 }
 
+export interface GraffitiImage {
+  id: string;
+  url: string; // Base64 or path
+  descripcion?: string; // e.g. "Punto de venta", "Mensaje de advertencia"
+  tipo?: "Identidad" | "Advertencia" | "Frontera" | "Punto de venta" | "Otro";
+  fechaRegistro?: string;
+}
+
 export interface GangEntity {
   id?: string;
   projectId?: string;
@@ -115,6 +123,9 @@ export interface GangEntity {
 
   // TIMELINE
   cronologiaEventos?: TimelineEvent[];
+
+  // IMAGES OF GRAFFITIS / MESSAGES
+  imagenesGrafiti?: GraffitiImage[];
 
   // MEMBERS
   integrantes: GangMember[];
