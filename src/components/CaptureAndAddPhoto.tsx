@@ -33,6 +33,53 @@ function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
   });
 }
 
+function getDeviceLocation(): Promise<{ lat: number; lng: number; accuracy: number | null; timestamp: number | null }> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator?.geolocation?.getCurrentPosition !== "function") {
+      reject(new Error("El navegador de este celular no soporta geolocalización."));
+      return;
+    }
+    const timeout = setTimeout(() => reject(new Error("Tiempo de espera agotado buscando satélites GPS. Revise los permisos de Safari/Chrome o salga a un área despejada.")), 40000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timeout);
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy ?? null,
+          timestamp: pos.timestamp ?? Date.now(),
+        });
+      },
+      (err) => {
+        clearTimeout(timeout);
+        let errMsg = "Error de GPS.";
+        if (err.code === 1) errMsg = "Permiso de ubicación DENEGADO. Active el GPS en Ajustes > Privacidad para su navegador.";
+        if (err.code === 2) errMsg = "Posición no disponible. Intente salir a un área despejada.";
+        if (err.code === 3) errMsg = "Tiempo de espera agotado por el sensor GPS del dispositivo.";
+        reject(new Error(errMsg));
+      },
+      { enableHighAccuracy: true, timeout: 35000, maximumAge: 0 } // Desactivar caché de ubicación para forzar sensor físico
+    );
+  });
+}
+
+function getCoordinatesDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Radio de la Tierra en metros
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+function coordinatesMatch(lat1: number, lng1: number, lat2: number, lng2: number, thresholdMeters: number = 100): boolean {
+  const distance = getCoordinatesDistance(lat1, lng1, lat2, lng2);
+  return distance <= thresholdMeters;
+}
+
 function generateSafeId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -54,6 +101,17 @@ function ElapsedTime({ running }: { running: boolean }) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
   return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
+}
+
+interface ManualQueueItem {
+  file: File;
+  diagnosticLogs: string;
+  exifLat: number | null;
+  exifLng: number | null;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  gpsAccuracy: number | null;
+  gpsTimestamp: number | null;
 }
 
 export function CaptureAndAddPhoto() {
@@ -84,7 +142,7 @@ export function CaptureAndAddPhoto() {
   const [isUploadingEvidencia, setIsUploadingEvidencia] = useState(false);
   
   // Estados para el Fallback Manual
-  const [manualQueue, setManualQueue] = useState<File[]>([]);
+  const [manualQueue, setManualQueue] = useState<ManualQueueItem[]>([]);
   const [manualCoords, setManualCoords] = useState({ lat: "", lng: "" });
 
   // FASE 1: Secuencialidad. Validar que el proyecto tenga Nombre, Geometría y Explicación.
@@ -102,85 +160,172 @@ export function CaptureAndAddPhoto() {
     setError(null);
     setIsFetchingGPS(true);
 
-    // Si es captura en vivo desde la cámara del perfilador, obtenemos el GPS del navegador 
-    // inmediatamente, ya que iOS/Android a veces borran el EXIF en el navegador por privacidad.
-    let liveLat: number | null = null;
-    let liveLng: number | null = null;
-    let fallbackFailed = false;
-
-    if (isLiveCapture) {
-      try {
-        const fallback = await getFallbackLocation();
-        liveLat = fallback.lat;
-        liveLng = fallback.lng;
-      } catch (err) {
-        console.warn("No se pudo obtener GPS en vivo, se intentará leer el EXIF de la foto.", err);
-        fallbackFailed = true;
-      }
+    // Intentamos obtener la ubicación actual del dispositivo una sola vez por lote.
+    // Usamos maximumAge: 0 para forzar una consulta fresca a los sensores físicos en móviles/iOS.
+    let deviceLoc: { lat: number; lng: number; accuracy: number | null; timestamp: number | null } | null = null;
+    try {
+      deviceLoc = await getDeviceLocation();
+    } catch (err) {
+      console.warn("No se pudo obtener la ubicación del dispositivo en processFiles:", err);
     }
 
-    const needsManual: File[] = [];
+    const needsManual: ManualQueueItem[] = [];
+
     for (const selected of files) {
-      // IMPORTANTE: Extraer GPS de la imagen ORIGINAL antes de comprimir, 
-      // ya que la compresión borra los metadatos EXIF.
-      let lat: number | null = liveLat;
-      let lng: number | null = liveLng;
-      
-      // Si la captura NO fue en vivo o falló el GPS del navegador, intentamos leer el EXIF de la imagen
-      if (lat == null || lng == null) {
-        try {
-          const exifGps = await exifr.gps(selected).catch(() => null);
-          if (
-            exifGps &&
-            typeof exifGps.latitude === "number" &&
-            typeof exifGps.longitude === "number"
-          ) {
-            lat = exifGps.latitude;
-            lng = exifGps.longitude;
-          } else {
-            const fullExif = (await exifr
-              .parse(selected, { gps: true })
-              .catch(() => null)) as Record<string, unknown> | null;
-            if (fullExif?.latitude != null && fullExif?.longitude != null) {
-              lat = fullExif.latitude as number;
-              lng = fullExif.longitude as number;
-            }
+      // 1. Extraer coordenadas EXIF de la imagen original antes de comprimir
+      let exifLat: number | null = null;
+      let exifLng: number | null = null;
+
+      try {
+        const exifGps = await exifr.gps(selected).catch(() => null);
+        if (
+          exifGps &&
+          typeof exifGps.latitude === "number" &&
+          typeof exifGps.longitude === "number"
+        ) {
+          exifLat = exifGps.latitude;
+          exifLng = exifGps.longitude;
+        } else {
+          const fullExif = (await exifr
+            .parse(selected, { gps: true })
+            .catch(() => null)) as Record<string, unknown> | null;
+          if (fullExif?.latitude != null && fullExif?.longitude != null) {
+            exifLat = fullExif.latitude as number;
+            exifLng = fullExif.longitude as number;
           }
-        } catch {
-          // ignorar error EXIF; lat/lng siguen null
         }
+      } catch (exifErr) {
+        console.warn("Error leyendo metadatos EXIF en processFiles:", exifErr);
       }
 
-      if ((lat == null || lng == null) && !fallbackFailed) {
-        try {
-          const fallback = await getFallbackLocation();
-          lat = fallback.lat;
-          lng = fallback.lng;
-          liveLat = fallback.lat;
-          liveLng = fallback.lng;
-        } catch (fbErr: any) {
-          fallbackFailed = true;
-          needsManual.push(selected);
-          continue;
-        }
-      } else if (lat == null || lng == null) {
-        needsManual.push(selected);
-        continue;
+      // 2. Sistema de Validación Redundante y Priorización
+      let finalLat: number | null = null;
+      let finalLng: number | null = null;
+      let gpsSource = "SIN_GEOLOCALIZACION";
+      let validado = false;
+      const logsArray: string[] = [];
+
+      const logTimestamp = new Date().toISOString();
+      logsArray.push(`--- DIAGNÓSTICO DE GEOLOCALIZACIÓN (${logTimestamp}) ---`);
+      logsArray.push(`Archivo: ${selected.name}`);
+      logsArray.push(`Modo de captura: ${isLiveCapture ? "Cámara In-Situ" : "Galería / Carrete"}`);
+
+      if (deviceLoc) {
+        logsArray.push(`GPS Dispositivo: Lat ${deviceLoc.lat}, Lng ${deviceLoc.lng} (Precisión: ${deviceLoc.accuracy}m, Timestamp: ${new Date(deviceLoc.timestamp || Date.now()).toISOString()})`);
+      } else {
+        logsArray.push("GPS Dispositivo: No disponible o Permiso denegado");
       }
 
-      if (lat != null && lng != null) {
+      if (exifLat !== null && exifLng !== null) {
+        logsArray.push(`GPS EXIF: Lat ${exifLat}, Lng ${exifLng}`);
+      } else {
+        logsArray.push("GPS EXIF: No disponible en metadatos de la imagen");
+      }
+
+      if (deviceLoc && exifLat !== null && exifLng !== null) {
+        // Validación cruzada (ambas fuentes disponibles)
+        const distanceMeters = getCoordinatesDistance(deviceLoc.lat, deviceLoc.lng, exifLat, exifLng);
+        const match = coordinatesMatch(deviceLoc.lat, deviceLoc.lng, exifLat, exifLng, 100);
+
+        logsArray.push(`Validación cruzada: Distancia de ${distanceMeters.toFixed(1)} metros entre GPS Dispositivo y GPS EXIF.`);
+
+        if (match) {
+          validado = true;
+          logsArray.push("Resultado: Coincidencia exitosa (dentro del umbral de 100 metros). Coordenadas validadas.");
+          
+          if (isLiveCapture) {
+            finalLat = deviceLoc.lat;
+            finalLng = deviceLoc.lng;
+            gpsSource = "VALIDACION_CRUZADA_DEVICE_PRIORITY";
+            logsArray.push("Criterio: Captura en vivo. Se priorizan coordenadas del GPS del dispositivo.");
+          } else {
+            finalLat = exifLat;
+            finalLng = exifLng;
+            gpsSource = "VALIDACION_CRUZADA_EXIF_PRIORITY";
+            logsArray.push("Criterio: Carga desde galería. Se priorizan coordenadas EXIF de la fotografía.");
+          }
+        } else {
+          validado = false;
+          logsArray.push(`Resultado: Discrepancia detectada (>100 metros). Coordenadas NO validadas.`);
+
+          if (isLiveCapture) {
+            finalLat = deviceLoc.lat;
+            finalLng = deviceLoc.lng;
+            gpsSource = "DISCREPANCIA_DEVICE_PRIORITY";
+            logsArray.push("Criterio: Captura en vivo. Se priorizan coordenadas del GPS del dispositivo por encima de EXIF.");
+          } else {
+            finalLat = exifLat;
+            finalLng = exifLng;
+            gpsSource = "DISCREPANCIA_EXIF_PRIORITY";
+            logsArray.push("Criterio: Carga desde galería. Se priorizan coordenadas EXIF de la fotografía por encima del GPS actual.");
+          }
+        }
+      } else if (deviceLoc) {
+        // Solo GPS del navegador/dispositivo
+        finalLat = deviceLoc.lat;
+        finalLng = deviceLoc.lng;
+        gpsSource = "SOLO_DEVICE_GPS";
+        // Si es captura en vivo in-situ, se considera validado de fábrica
+        validado = isLiveCapture; 
+        logsArray.push(`Resultado: Únicamente disponible GPS del dispositivo.`);
+        logsArray.push(isLiveCapture
+          ? "Criterio: Captura en vivo sin metadatos EXIF (común en iOS). Coordenadas asignadas automáticamente y marcadas como validadas."
+          : "Criterio: Carga de galería sin metadatos EXIF. Coordenadas asignadas desde la ubicación actual del dispositivo."
+        );
+      } else if (exifLat !== null && exifLng !== null) {
+        // Solo GPS EXIF
+        finalLat = exifLat;
+        finalLng = exifLng;
+        gpsSource = "SOLO_EXIF_GPS";
+        validado = true;
+        logsArray.push("Resultado: Únicamente disponible GPS EXIF.");
+        logsArray.push("Criterio: Coordenadas extraídas directamente de los metadatos EXIF de la imagen. Marcado como validado.");
+      } else {
+        // Ninguno
+        finalLat = null;
+        finalLng = null;
+        gpsSource = "SIN_GEOLOCALIZACION";
+        validado = false;
+        logsArray.push("Resultado: No se pudo determinar ninguna coordenada automática.");
+        logsArray.push("Criterio: Requiere intervención manual del usuario.");
+      }
+
+      const diagnosticLogsStr = logsArray.join("\n");
+
+      if (finalLat !== null && finalLng !== null) {
         try {
-          await uploadAndAddPhoto(selected, lat, lng);
+          await uploadAndAddPhoto(selected, finalLat, finalLng, {
+            gpsAccuracy: deviceLoc?.accuracy ?? null,
+            gpsTimestamp: deviceLoc?.timestamp ?? null,
+            gpsSource,
+            exifLat,
+            exifLng,
+            gpsLat: deviceLoc?.lat ?? null,
+            gpsLng: deviceLoc?.lng ?? null,
+            diagnosticLogs: diagnosticLogsStr,
+            validado,
+          });
         } catch (err) {
           console.error("[CaptureAndAddPhoto] Error subiendo foto:", err);
           setError(err instanceof Error ? err.message : "Error al subir la fotografía.");
           break;
         }
+      } else {
+        needsManual.push({
+          file: selected,
+          diagnosticLogs: diagnosticLogsStr,
+          exifLat,
+          exifLng,
+          gpsLat: deviceLoc?.lat ?? null,
+          gpsLng: deviceLoc?.lng ?? null,
+          gpsAccuracy: deviceLoc?.accuracy ?? null,
+          gpsTimestamp: deviceLoc?.timestamp ?? null,
+        });
       }
     }
 
     setIsFetchingGPS(false);
-    
+
     if (needsManual.length > 0) {
       setManualQueue(needsManual);
       setError(`No se pudo obtener la ubicación automáticamente para ${needsManual.length} foto(s). Ingrese las coordenadas manualmente.`);
@@ -221,8 +366,21 @@ export function CaptureAndAddPhoto() {
       return;
     }
 
+    const currentItem = manualQueue[0];
+    const userDiagnosticLogs = `${currentItem.diagnosticLogs}\n\n[${new Date().toISOString()}] REGISTRO MANUAL DE COORDENADAS:\n- Coordenadas manuales ingresadas: Lat ${latNum}, Lng ${lngNum}.\n- Motivo de la carga manual: El sistema requirió la intervención manual del operador.`;
+
     try {
-      await uploadAndAddPhoto(manualQueue[0], latNum, lngNum);
+      await uploadAndAddPhoto(currentItem.file, latNum, lngNum, {
+        gpsAccuracy: currentItem.gpsAccuracy,
+        gpsTimestamp: currentItem.gpsTimestamp,
+        gpsSource: "MANUAL",
+        exifLat: currentItem.exifLat,
+        exifLng: currentItem.exifLng,
+        gpsLat: currentItem.gpsLat,
+        gpsLng: currentItem.gpsLng,
+        diagnosticLogs: userDiagnosticLogs,
+        validado: true,
+      });
       const newQueue = manualQueue.slice(1);
       setManualQueue(newQueue);
       if (newQueue.length === 0) {
@@ -319,7 +477,7 @@ export function CaptureAndAddPhoto() {
             Acción Requerida: Ubicación Manual ({manualQueue.length} pendiente(s))
           </p>
           <p className="text-xs text-slate-400">
-            La imagen &quot;{manualQueue[0].name}&quot; no tiene GPS. Ingrese la latitud y longitud.
+            La imagen &quot;{manualQueue[0].file.name}&quot; no tiene GPS. Ingrese la latitud y longitud.
           </p>
           <div className="flex flex-col gap-3">
             <input type="number" placeholder="Latitud (ej. 21.8853)" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />

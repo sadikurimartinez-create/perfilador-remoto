@@ -50,6 +50,15 @@ export type AlbumPhoto = {
   contextualizedAt?: number;
   contextualizedBy?: string;
   isContextualized?: boolean;
+  gpsAccuracy?: number | null;
+  gpsTimestamp?: number | null;
+  gpsSource?: string;
+  exifLat?: number | null;
+  exifLng?: number | null;
+  gpsLat?: number | null;
+  gpsLng?: number | null;
+  diagnosticLogs?: string;
+  validado?: boolean;
 };
 
 export type Project = {
@@ -119,7 +128,22 @@ type ProjectContextValue = {
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
   addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">, id?: string) => void;
-  uploadAndAddPhoto: (file: File, lat: number, lng: number) => Promise<void>;
+  uploadAndAddPhoto: (
+    file: File,
+    lat: number,
+    lng: number,
+    metadata?: {
+      gpsAccuracy?: number | null;
+      gpsTimestamp?: number | null;
+      gpsSource?: string;
+      exifLat?: number | null;
+      exifLng?: number | null;
+      gpsLat?: number | null;
+      gpsLng?: number | null;
+      diagnosticLogs?: string;
+      validado?: boolean;
+    }
+  ) => Promise<void>;
   removePhotoFromAlbum: (id: string) => Promise<void>;
   removeAllPhotosFromAlbum: (projectId: string) => Promise<void>;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
@@ -441,7 +465,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const uploadAndAddPhoto = useCallback(async (file: File, lat: number, lng: number) => {
+  const uploadAndAddPhoto = useCallback(async (
+    file: File,
+    lat: number,
+    lng: number,
+    metadata?: {
+      gpsAccuracy?: number | null;
+      gpsTimestamp?: number | null;
+      gpsSource?: string;
+      exifLat?: number | null;
+      exifLng?: number | null;
+      gpsLat?: number | null;
+      gpsLng?: number | null;
+      diagnosticLogs?: string;
+      validado?: boolean;
+    }
+  ) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
     if (!project) throw new Error("No hay un proyecto activo para subir la foto.");
 
@@ -471,6 +510,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       createdAt: Date.now(),
       tipo: defaultTipo,
       comentario: "",
+      gpsAccuracy: metadata?.gpsAccuracy ?? null,
+      gpsTimestamp: metadata?.gpsTimestamp ?? null,
+      gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",
+      exifLat: metadata?.exifLat ?? null,
+      exifLng: metadata?.exifLng ?? null,
+      gpsLat: metadata?.gpsLat ?? null,
+      gpsLng: metadata?.gpsLng ?? null,
+      diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
+      validado: metadata?.validado ?? false,
     };
     const photoDocRef = await addDoc(photosColRef, photoDocData);
 
@@ -488,6 +536,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       tipo: defaultTipo,
       comentario: "",
       file: compressedFile,
+      gpsAccuracy: metadata?.gpsAccuracy ?? null,
+      gpsTimestamp: metadata?.gpsTimestamp ?? null,
+      gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",
+      exifLat: metadata?.exifLat ?? null,
+      exifLng: metadata?.exifLng ?? null,
+      gpsLat: metadata?.gpsLat ?? null,
+      gpsLng: metadata?.gpsLng ?? null,
+      diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
+      validado: metadata?.validado ?? false,
     }, photoDocRef.id);
 
   }, [project, addPhotoToAlbum, isReadOnly]);
