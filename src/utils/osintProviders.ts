@@ -248,3 +248,110 @@ export const searchDENUE = async (
   }
 
 };
+
+export const searchYouTubeOSINT = async (query: string) => {
+  const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY || "";
+  if (!YOUTUBE_KEY) {
+    console.warn("YOUTUBE_API_KEY no configurada. Omitiendo búsqueda de YouTube.");
+    return [];
+  }
+
+  try {
+    console.log(`[YOUTUBE OSINT] 🚀 Buscando videos para: "${query}"`);
+    // 1. Ejecutar búsqueda
+    const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+      params: {
+        part: 'snippet',
+        q: query,
+        type: 'video',
+        maxResults: 5,
+        relevanceLanguage: 'es',
+        key: YOUTUBE_KEY
+      }
+    });
+
+    const searchItems = searchRes.data?.items || [];
+    if (searchItems.length === 0) return [];
+
+    const videoIds = searchItems.map((item: any) => item.id?.videoId).filter(Boolean);
+
+    // 2. Obtener estadísticas e información adicional de los videos
+    const detailsMap: Record<string, any> = {};
+    if (videoIds.length > 0) {
+      try {
+        const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+          params: {
+            part: 'snippet,statistics,recordingDetails',
+            id: videoIds.join(','),
+            key: YOUTUBE_KEY
+          }
+        });
+        const videoDetails = videosRes.data?.items || [];
+        videoDetails.forEach((detail: any) => {
+          detailsMap[detail.id] = detail;
+        });
+      } catch (err) {
+        console.error("Error obteniendo detalles de videos de YouTube:", err);
+      }
+    }
+
+    // 3. Obtener hilos de comentarios para cada video
+    const results = [];
+    for (const item of searchItems) {
+      const videoId = item.id?.videoId;
+      if (!videoId) continue;
+
+      const detail = detailsMap[videoId] || {};
+      const snippet = item.snippet || {};
+
+      let comments: string[] = [];
+      try {
+        const commentsRes = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
+          params: {
+            part: 'snippet',
+            videoId: videoId,
+            maxResults: 3,
+            order: 'relevance',
+            key: YOUTUBE_KEY
+          }
+        });
+        const commentItems = commentsRes.data?.items || [];
+        comments = commentItems.map((cmt: any) => {
+          return cmt.snippet?.topLevelComment?.snippet?.textDisplay || "";
+        }).filter(Boolean);
+      } catch (err) {
+        // Ignorar si los comentarios están desactivados
+        console.warn(`No se pudieron obtener comentarios para el video ${videoId}`);
+      }
+
+      // 4. Ubicación (recordingDetails)
+      let location = null;
+      if (detail.recordingDetails?.location) {
+        const loc = detail.recordingDetails.location;
+        location = {
+          type: "Point",
+          coordinates: [parseFloat(loc.longitude), parseFloat(loc.latitude)]
+        };
+      }
+
+      results.push({
+        videoId,
+        title: snippet.title || "",
+        description: snippet.description || "",
+        channelTitle: snippet.channelTitle || "",
+        channelId: snippet.channelId || "",
+        publishedAt: snippet.publishedAt || "",
+        views: detail.statistics?.viewCount ? parseInt(detail.statistics.viewCount) : 0,
+        likes: detail.statistics?.likeCount ? parseInt(detail.statistics.likeCount) : 0,
+        commentCount: detail.statistics?.commentCount ? parseInt(detail.statistics.commentCount) : 0,
+        comments,
+        location
+      });
+    }
+
+    return results;
+  } catch (error: any) {
+    console.error('YOUTUBE DATA API ERROR:', error.response?.data?.error?.message || error.message);
+    return [];
+  }
+};

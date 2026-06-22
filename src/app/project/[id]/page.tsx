@@ -37,10 +37,12 @@ export default function ProjectWorkspacePage() {
   const params = useParams();
   const router = useRouter();
   const projectId = typeof params.id === "string" ? params.id : null;
-  const { project, loadProject, removePhotoFromAlbum, album } = useProject();
+  const { project, loadProject, removePhotoFromAlbum, album, renameProject } = useProject();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const { user, loading: loadingAuth } = useAuth();
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameInput, setRenameInput] = useState("");
 
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
@@ -157,6 +159,18 @@ export default function ProjectWorkspacePage() {
     removePhotoFromAlbum(id);
   };
 
+  const handleRenameActiveProject = async () => {
+    if (!renameInput.trim() || !project) return;
+    try {
+      await renameProject(project.id, renameInput.trim());
+      setIsRenaming(false);
+      alert("Nombre del expediente modificado correctamente.");
+    } catch (err: any) {
+      console.error("Error al renombrar expediente:", err);
+      alert("Error al renombrar: " + err.message);
+    }
+  };
+
   if (loading || loadingAuth) {
     return (
       <div className="flex items-center justify-center min-h-[200px] text-slate-400">
@@ -226,9 +240,24 @@ export default function ProjectWorkspacePage() {
             >
               ← Volver a Mis Expedientes
             </Link>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
-              {project.nombre}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
+                {project.nombre}
+              </h2>
+              {project.estado !== "CERRADO" && project.estado !== "EN REVISIÓN" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameInput(project.nombre);
+                    setIsRenaming(true);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-slate-800/60 transition-colors text-sm"
+                  title="Renombrar expediente"
+                >
+                  ✏️
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-400 mt-0.5 font-mono tracking-tight text-blue-300/90">
               ID expediente: {project.id}
             </p>
@@ -518,6 +547,51 @@ export default function ProjectWorkspacePage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {isRenaming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              ✏️ Modificar Nombre de Expediente
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Cambia el nombre de identificación de este expediente de manera permanente.
+            </p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nuevo Nombre:</label>
+                <input
+                  type="text"
+                  value={renameInput}
+                  onChange={(e) => setRenameInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-sky-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none"
+                  placeholder="Ej. Aguascalientes Operativo Norte"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRenaming(false);
+                  setRenameInput("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleRenameActiveProject}
+                disabled={!renameInput.trim() || renameInput.trim() === project.nombre}
+                className="px-4 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg shadow-lg transition-colors"
+              >
+                Guardar Cambios
+              </button>
+            </div>
           </div>
         </div>
       )}

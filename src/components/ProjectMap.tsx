@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, Polygon, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
 import AnalysisPanel from "./AnalysisPanel";
 // @ts-ignore
 import Supercluster from 'supercluster';
@@ -21,8 +21,7 @@ import MultiUserPanel
   from './MultiUserPanel';
 import PredictivePanel
   from './PredictivePanel';
-import OsintEnginePanel
-  from './OsintEnginePanel';
+import { OsintTerritorialPanel } from './OsintTerritorialPanel';
 import ThreatMapOverlay
   from './ThreatMapOverlay';
 import {
@@ -150,6 +149,10 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const [osintResults,
     setOsintResults] =
       React.useState<any>(null);
+
+  const [showOsintMarkers, setShowOsintMarkers] = useState(true);
+  const [showOsintRoutes, setShowOsintRoutes] = useState(true);
+  const [selectedOsintEvent, setSelectedOsintEvent] = useState<any>(null);
 
   useEffect(() => {
     if (!project) return;
@@ -306,7 +309,8 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const heatmapData = useMemo(() => {
     if (!isLoaded || typeof window === "undefined" || !(window as any).google) return [];
     
-    return project?.iaAnalysis
+    // 1. Puntos de fotos in situ
+    const photoPoints = project?.iaAnalysis
       ?.filter(
         (item: any) =>
           item.latitude &&
@@ -314,30 +318,41 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           isPointInActiveGeography({ lat: item.latitude, lng: item.longitude })
       )
       .map((item: any) => {
-
         let weight = 1;
-
-        if (
-          item.riskLevel === 'high' ||
-          item.riskLevel === 'alto'
-        ) {
+        if (item.riskLevel === 'high' || item.riskLevel === 'alto') {
           weight = 5;
-        } else if (
-          item.riskLevel === 'medium' ||
-          item.riskLevel === 'medio'
-        ) {
+        } else if (item.riskLevel === 'medium' || item.riskLevel === 'medio') {
           weight = 3;
         }
-
         return {
-          location: new (window as any).google.maps.LatLng(
-            item.latitude,
-            item.longitude
-          ),
+          location: new (window as any).google.maps.LatLng(item.latitude, item.longitude),
           weight,
         };
       }) || [];
-  }, [isLoaded, project?.iaAnalysis, isPointInActiveGeography]);
+
+    // 2. Puntos del barrido OSINT Territorial v2.0
+    const osintPoints: any[] = [];
+    if (osintResults?.normalizedEvents) {
+      osintResults.normalizedEvents.forEach((evt: any) => {
+        if (evt.location && evt.location.coordinates) {
+          const [lng, lat] = evt.location.coordinates;
+          if (isPointInActiveGeography({ lat, lng })) {
+            let weight = 2;
+            if (evt.risk_level === "Crítico") weight = 8;
+            else if (evt.risk_level === "Alto") weight = 5;
+            else if (evt.risk_level === "Medio") weight = 3;
+
+            osintPoints.push({
+              location: new (window as any).google.maps.LatLng(lat, lng),
+              weight,
+            });
+          }
+        }
+      });
+    }
+
+    return [...photoPoints, ...osintPoints];
+  }, [isLoaded, project?.iaAnalysis, osintResults, isPointInActiveGeography]);
 
   const clusterPoints = useMemo(() => {
     return project?.iaAnalysis
@@ -600,6 +615,84 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           return null;
         })}
 
+        {/* RUTAS DE RIESGO SUGERIDAS POR OSINT TERRITORIAL V2.0 */}
+        {showOsintRoutes && osintResults?.territorialIntelligence?.riskRoutes?.map((route: any, rIdx: number) => {
+          const strokeColor = route.riskLevel === "Crítico" ? "#dc2626" : route.riskLevel === "Alto" ? "#f97316" : "#eab308";
+          const path = route.points.map((p: [number, number]) => ({ lat: p[0], lng: p[1] }));
+          return (
+            <Polyline
+              key={`osint-route-${rIdx}`}
+              path={path}
+              options={{
+                strokeColor: strokeColor,
+                strokeOpacity: 0.8,
+                strokeWeight: 5,
+                zIndex: 60,
+              }}
+            />
+          );
+        })}
+
+        {/* MARCADORES DE EVENTOS OSINT TERRITORIAL V2.0 */}
+        {showOsintMarkers && osintResults?.normalizedEvents?.map((evt: any) => {
+          if (!evt.location || !evt.location.coordinates) return null;
+          const [lng, lat] = evt.location.coordinates;
+          
+          const markerColor = 
+            evt.risk_level === "Crítico" ? "#991b1b" : 
+            evt.risk_level === "Alto" ? "#ea580c" : 
+            evt.risk_level === "Medio" ? "#eab308" : "#16a34a";
+          
+          return (
+            <Marker
+              key={`osint-marker-${evt.id}`}
+              position={{ lat, lng }}
+              onClick={() => setSelectedOsintEvent(evt)}
+              icon={{
+                path: 0 as any,
+                scale: 7,
+                fillColor: markerColor,
+                fillOpacity: 0.9,
+                strokeColor: "#ffffff",
+                strokeWeight: 1.5,
+              }}
+            />
+          );
+        })}
+
+        {/* INFO WINDOW PARA EVENTO SELECCIONADO */}
+        {selectedOsintEvent && (() => {
+          const [lng, lat] = selectedOsintEvent.location.coordinates;
+          return (
+            <InfoWindow
+              position={{ lat, lng }}
+              onCloseClick={() => setSelectedOsintEvent(null)}
+            >
+              <div className="p-2 text-slate-800 max-w-[280px]">
+                <div className="flex justify-between items-center gap-2 mb-1">
+                  <span className="font-extrabold text-[10px] uppercase text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded border border-indigo-100">
+                    {selectedOsintEvent.platform}
+                  </span>
+                  <span className="font-black text-[10px] text-red-600 bg-red-50 px-1 py-0.5 rounded border border-red-100">
+                    Riesgo: {selectedOsintEvent.risk_level} ({selectedOsintEvent.risk_score}%)
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-slate-900 truncate mb-1">
+                  {selectedOsintEvent.source}
+                </p>
+                <p className="text-[11px] text-slate-600 leading-normal line-clamp-3">
+                  {selectedOsintEvent.content}
+                </p>
+                {selectedOsintEvent.neighborhood && (
+                  <p className="text-[10px] text-cyan-700 font-extrabold mt-1.5 uppercase">
+                    📍 {selectedOsintEvent.neighborhood}
+                  </p>
+                )}
+              </div>
+            </InfoWindow>
+          );
+        })()}
+
         <ThreatMapOverlay
           project={project}
           osintResults={osintResults}
@@ -652,11 +745,13 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           <PredictivePanel
             project={project}
           />
-          <OsintEnginePanel
+          <OsintTerritorialPanel
             project={project}
-            setOsintResults={
-              setOsintResults
-            }
+            onUpdateMapResults={(data) => setOsintResults(data)}
+            showMapMarkers={showOsintMarkers}
+            onToggleMapMarkers={setShowOsintMarkers}
+            showMapRoutes={showOsintRoutes}
+            onToggleMapRoutes={setShowOsintRoutes}
           />
         </div>
       )}

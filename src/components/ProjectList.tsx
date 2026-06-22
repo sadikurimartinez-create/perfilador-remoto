@@ -845,6 +845,36 @@ export function ProjectList() {
                           🗑️ Eliminar
                         </button>
                         )}
+                        {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
+                        <button
+                          type="button"
+                          onClick={() => handleRenameProject(p)}
+                          title="Cambiar el nombre del expediente"
+                          className="p-2 rounded text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-900/30 transition-colors border border-transparent hover:border-sky-700/50"
+                        >
+                          ✏️ Renombrar
+                        </button>
+                        )}
+                        {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveProject(p)}
+                          title="Archivar este expediente"
+                          className="p-2 rounded text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-900/30 transition-colors border border-transparent hover:border-amber-700/50"
+                        >
+                          📦 Archivar
+                        </button>
+                        )}
+                        {p.estado === "ARCHIVADO" && (
+                        <button
+                          type="button"
+                          onClick={() => handleReactivateProject(p)}
+                          title="Reactivar este expediente archivado"
+                          className="p-2 rounded text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30 transition-colors border border-transparent hover:border-emerald-700/50"
+                        >
+                          🔄 Reactivar
+                        </button>
+                        )}
                         {isAdmin && (
                           <button
                             type="button"
@@ -1120,6 +1150,197 @@ export function ProjectList() {
                 setDevueltoProject(null);
                 router.push(`/project/${id}`);
               }} className="px-4 py-2 text-sm font-bold bg-red-600 hover:bg-red-500 text-white rounded shadow-lg transition-colors">Entendido, corregir expediente</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameModalOpen && projectToRename && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              ✏️ Modificar Nombre de Expediente
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Cambia el nombre de identificación de este expediente. Se guardará de manera permanente en los registros.
+            </p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nuevo Nombre:</label>
+                <input
+                  type="text"
+                  value={renameInput}
+                  onChange={(e) => setRenameInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-sky-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none"
+                  placeholder="Ej. Aguascalientes Operativo Norte"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setRenameModalOpen(false);
+                  setProjectToRename(null);
+                  setRenameInput("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmRenameProject}
+                disabled={!renameInput.trim()}
+                className="px-4 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
+              >
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {archiveModalOpen && projectToArchive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-amber-500 mb-2 flex items-center gap-2">
+              📦 Archivar Expediente
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              ¿Estás seguro de que deseas archivar este expediente? Esto cambiará su estado a ARCHIVADO.
+            </p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Motivo del Archivado:</label>
+                <textarea
+                  value={archiveReason}
+                  onChange={(e) => setArchiveReason(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-amber-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none resize-none"
+                  placeholder="Escribe el motivo por el cual archivas este expediente..."
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setArchiveModalOpen(false);
+                  setProjectToArchive(null);
+                  setArchiveReason("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmArchiveProject}
+                disabled={!archiveReason.trim()}
+                className="px-4 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
+              >
+                Archivar Expediente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reactivateModalOpen && projectToReactivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-emerald-500 mb-2 flex items-center gap-2">
+              🔄 Reactivar Expediente
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              ¿Deseas reactivar este expediente archivado? Volverá a estar ABIERTO para edición.
+            </p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Motivo de la Reactivación:</label>
+                <textarea
+                  value={reactivateReason}
+                  onChange={(e) => setReactivateReason(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none resize-none"
+                  placeholder="Escribe el motivo de la reactivación..."
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setReactivateModalOpen(false);
+                  setProjectToReactivate(null);
+                  setReactivateReason("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmReactivateProject}
+                disabled={!reactivateReason.trim()}
+                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
+              >
+                Reactivar Expediente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteModalOpen && projectToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-red-900/30 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-red-500 mb-2 flex items-center gap-2">
+              🗑️ Enviar Expediente a Papelera
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              ¿Estás seguro de que deseas eliminar este expediente? Se moverá de manera lógica a la Papelera de Reciclaje de conformidad con la cadena de custodia digital y gobernanza de la información.
+            </p>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Motivo de la Eliminación:</label>
+                <select
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-red-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none mb-3"
+                >
+                  <option value="">-- Selecciona un motivo --</option>
+                  <option value="Error en captura de datos">Error en captura de datos</option>
+                  <option value="Duplicado de expediente">Duplicado de expediente</option>
+                  <option value="Cancelación de orden operativa">Cancelación de orden de operativo</option>
+                  <option value="Otro">Otro (Especificar motivo personalizado)</option>
+                </select>
+
+                {deleteReason === "Otro" && (
+                  <textarea
+                    value={deleteReasonCustom}
+                    onChange={(e) => setDeleteReasonCustom(e.target.value)}
+                    rows={3}
+                    className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-red-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none resize-none"
+                    placeholder="Describe detalladamente el motivo institucional para eliminar este expediente..."
+                  />
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setProjectToDelete(null);
+                  setDeleteReason("");
+                  setDeleteReasonCustom("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteProject}
+                disabled={!deleteReason || (deleteReason === "Otro" && !deleteReasonCustom.trim())}
+                className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
+              >
+                Enviar a Papelera
+              </button>
             </div>
           </div>
         </div>
