@@ -36,9 +36,13 @@ export function InstitutionalHeader() {
         <div className="flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1 sm:gap-x-4">
           {user && (
             <div className="flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-3 border-r border-slate-700/50 pr-2 sm:pr-4 min-w-0">
-              {(user as any).fotografia ? (
+              {((user as any).fotografia || (user as any).foto_url || (user as any).foto) ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={(user as any).fotografia} alt="Usuario" className="h-7 w-7 sm:h-9 sm:w-9 rounded-full object-cover border border-slate-500 shadow-sm" />
+                <img 
+                  src={(user as any).fotografia || (user as any).foto_url || (user as any).foto} 
+                  alt="Usuario" 
+                  className="h-7 w-7 sm:h-9 sm:w-9 rounded-full object-cover border border-slate-500 shadow-sm" 
+                />
               ) : (
                 <div className="h-7 w-7 sm:h-9 sm:w-9 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs sm:text-sm shadow-sm">👤</div>
               )}

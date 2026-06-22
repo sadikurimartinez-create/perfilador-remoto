@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { jsPDF } from "jspdf";
+import { SecaiDashboard } from "@/components/SecaiDashboard";
 
 type UserDoc = {
   id: string;
@@ -92,7 +93,7 @@ export default function AdminPage() {
     });
 
     let unsubUsers = () => {};
-    if (user.role === "SUPER_ADMIN") {
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") {
       unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       const list: UserDoc[] = snap.docs
         .map((d) => {
@@ -911,31 +912,33 @@ export default function AdminPage() {
 
                   return (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Abiertos</p><p className="text-2xl font-black text-slate-200">{pAbiertos}</p></div>
-                      <div className="bg-blue-950/30 border border-blue-900/50 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-1">En Revisión</p><p className="text-2xl font-black text-blue-300">{pRevision}</p></div>
-                      <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-red-400 font-bold uppercase tracking-wider mb-1">Devueltos</p><p className="text-2xl font-black text-red-300">{pDevueltos}</p></div>
-                      <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-4 text-center shadow-md"><p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Validados</p><p className="text-2xl font-black text-emerald-300">{pValidados}</p></div>
+                      <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4 text-center shadow-md">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Abiertos</p>
+                        <p className="text-2xl font-black text-slate-200">{pAbiertos}</p>
+                      </div>
+                      <div className="bg-blue-950/30 border border-blue-900/50 rounded-xl p-4 text-center shadow-md">
+                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-1">En Revisión</p>
+                        <p className="text-2xl font-black text-blue-300">{pRevision}</p>
+                      </div>
+                      <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4 text-center shadow-md">
+                        <p className="text-[10px] text-red-400 font-bold uppercase tracking-wider mb-1">Devueltos</p>
+                        <p className="text-2xl font-black text-red-300">{pDevueltos}</p>
+                      </div>
+                      <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-4 text-center shadow-md">
+                        <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-1">Validados</p>
+                        <p className="text-2xl font-black text-emerald-300">{pValidados}</p>
+                      </div>
                     </div>
-                  )
+                  );
                 })()}
 
-                {/* Análisis FODA Declarado */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-emerald-950/10 border border-emerald-900/30 rounded-xl p-5 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3 border-b border-emerald-900/50 pb-2">
-                      <span className="text-emerald-400 text-lg">⚡</span>
-                      <h4 className="font-bold text-emerald-400 tracking-wide">FORTALEZAS</h4>
-                    </div>
-                    <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedUserForPerf?.fortalezas || "No ha declarado fortalezas en su perfil."}</p>
-                  </div>
-                  <div className="bg-orange-950/10 border border-orange-900/30 rounded-xl p-5 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3 border-b border-orange-900/50 pb-2">
-                      <span className="text-orange-400 text-lg">🎯</span>
-                      <h4 className="font-bold text-orange-400 tracking-wide">DEBILIDADES / ÁREAS DE MEJORA</h4>
-                    </div>
-                    <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedUserForPerf?.debilidades || "No ha declarado áreas de oportunidad en su perfil."}</p>
-                  </div>
-                </div>
+                {/* Sistema SECAI de Evaluación Integral */}
+                <SecaiDashboard
+                  selectedUser={selectedUserForPerf}
+                  projects={projects}
+                  auditLogs={auditLogs}
+                />
+
               </div>
             )}
           </div>
