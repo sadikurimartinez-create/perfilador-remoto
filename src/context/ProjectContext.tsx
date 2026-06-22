@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode
 } from "react";
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, orderBy, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, orderBy, getDocs, deleteDoc, runTransaction } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
@@ -46,6 +46,10 @@ export type AlbumPhoto = {
   tipo: string;
   comentario: string;
   file?: File;
+  evidenceId?: string;
+  contextualizedAt?: number;
+  contextualizedBy?: string;
+  isContextualized?: boolean;
 };
 
 export type Project = {
@@ -57,6 +61,9 @@ export type Project = {
   printedAt?: number;
   linkedGeoReportId?: string | null;
   linkedGangReport?: any | null;
+  ceipolId?: string;
+  estado?: string;
+  status?: "ACTIVO" | "ARCHIVADO";
 };
 
 export type PerPhotoFinding = {
@@ -107,7 +114,7 @@ type ProjectContextValue = {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
-  }) => Promise<void>;
+  }) => Promise<string>;
 
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
@@ -130,6 +137,25 @@ type ProjectContextValue = {
   datosGobMxResult: DatosGobMxResult | null;
   setDatosGobMxResult: (result: DatosGobMxResult | null) => void;
   isReadOnly: boolean;
+  renameProject: (projectId: string, newName: string) => Promise<void>;
+  softDeleteDoc: (params: {
+    type: "Proyecto" | "Fotografía" | "Documento";
+    id: string;
+    projectId?: string;
+    reason: string;
+  }) => Promise<void>;
+  restoreDoc: (trashId: string) => Promise<void>;
+  archiveProject: (projectId: string, reason: string) => Promise<void>;
+  reactivateProject: (projectId: string, reason: string) => Promise<void>;
+  savePhotoContextualization: (photoId: string) => Promise<string>;
+  logAuditAction: (params: {
+    action: string;
+    module: string;
+    projectId?: string;
+    projectName?: string;
+    result?: "ÉXITO" | "FALLO" | "BLOQUEADO";
+    details: string;
+  }) => Promise<void>;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -142,6 +168,16 @@ const COMPRESSION_OPTIONS = {
   alwaysKeepResolution: true,
   preserveExif: true,
 } as const;
+
+async function getClientIp(): Promise<string> {
+  try {
+    const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(2000) });
+    const data = await res.json();
+    return data.ip || "127.0.0.1";
+  } catch (e) {
+    return "127.0.0.1";
+  }
+}
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -157,6 +193,42 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [datosGobMxResult, setDatosGobMxResult] = useState<DatosGobMxResult | null>(null);
 
+  const logAuditAction = useCallback(async (params: {
+    action: string;
+    module: string;
+    projectId?: string;
+    projectName?: string;
+    result?: "ÉXITO" | "FALLO" | "BLOQUEADO";
+    details: string;
+  }) => {
+    try {
+      const firestore = getDb();
+      const ip = await getClientIp();
+      const now = new Date();
+      const dateStr = now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const timeStr = now.toLocaleTimeString("es-MX", { hour12: false });
+      
+      const auditCol = collection(firestore, "audit_logs");
+      await addDoc(auditCol, {
+        user: user?.username || "Usuario Local",
+        userName: user?.name || "Usuario Local",
+        userRole: user?.role || "USER",
+        action: params.action,
+        module: params.module,
+        projectId: params.projectId || "",
+        projectName: params.projectName || "",
+        ip,
+        timestamp: Date.now(),
+        date: dateStr,
+        time: timeStr,
+        result: params.result || "ÉXITO",
+        details: params.details
+      });
+    } catch (err) {
+      console.error("Error writing audit log:", err);
+    }
+  }, [user]);
+
   const createProject = useCallback(async ({
     nombre,
     geometryType,
@@ -168,23 +240,49 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }) => {
     try {
       const firestore = getDb();
-      const col = collection(firestore, "projects");
-      const docRef = await addDoc(col, {
-        name: nombre.trim() || "Sin nombre",
-        geometryType,
-        descripcion: descripcion || "",
-        createdAt: Date.now(),
-        createdBy: user?.username || "Usuario Local",
-        lockedBy: null,
-        photoCount: 0,
+      const counterRef = doc(firestore, "counters", "projects");
+      const projectCol = collection(firestore, "projects");
+      const projectDocRef = doc(projectCol);
+
+      let ceipolId = "";
+      
+      await runTransaction(firestore, async (transaction) => {
+        const counterSnap = await transaction.get(counterRef);
+        let currentCount = 0;
+        if (counterSnap.exists()) {
+          currentCount = counterSnap.data().count || 0;
+        }
+        const nextCount = currentCount + 1;
+        
+        const now = new Date();
+        const day = now.getDate().toString().padStart(2, "0");
+        const month = (now.getMonth() + 1).toString().padStart(2, "0");
+        const year = now.getFullYear();
+        ceipolId = `CEIPOL/${nextCount.toString().padStart(6, "0")}/${day}/${month}/${year}`;
+
+        transaction.set(counterRef, { count: nextCount });
+
+        transaction.set(projectDocRef, {
+          ceipolId,
+          name: nombre.trim() || "Sin nombre",
+          geometryType,
+          descripcion: descripcion || "",
+          createdAt: Date.now(),
+          createdBy: user?.username || "Usuario Local",
+          lockedBy: null,
+          photoCount: 0,
+          estado: "ABIERTO",
+        });
       });
 
       setProject({
-        id: docRef.id,
+        id: projectDocRef.id,
         nombre: nombre.trim() || "Sin nombre",
         geometryType,
         descripcion: descripcion || "",
         createdBy: user?.username || "Usuario Local",
+        ceipolId,
+        estado: "ABIERTO",
       });
 
       setAlbum([]);
@@ -192,11 +290,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setAnalysisResultState(null);
       setDocuments([]);
       setIsReadOnly(false);
+
+      await logAuditAction({
+        action: "CREAR",
+        module: "Expedientes",
+        projectId: projectDocRef.id,
+        projectName: ceipolId,
+        details: `Creado expediente oficial con folio ${ceipolId} y nombre descriptivo "${nombre}".`
+      });
+      return projectDocRef.id;
     } catch (err: any) {
       console.error("Error creando proyecto:", err);
       alert("Error al crear expediente: " + err.message);
+      throw err;
     }
-  }, [user?.username]);
+  }, [user, logAuditAction]);
 
   const closeProject = useCallback(() => {
     setProject(null);
@@ -263,17 +371,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const photosQuery = query(photosColRef, orderBy("createdAt", "asc"));
       const photosSnap = await getDocs(photosQuery);
 
-      const albumPhotos: AlbumPhoto[] = photosSnap.docs.map((photoDoc) => {
-        const data = photoDoc.data();
-        return {
-          id: photoDoc.id,
-          previewUrl: data.url,
-          lat: data.lat,
-          lng: data.lng,
-          tipo: data.tipo,
-          comentario: data.comentario,
-        };
-      });
+      const albumPhotos: AlbumPhoto[] = photosSnap.docs
+        .map((photoDoc) => {
+          const data = photoDoc.data();
+          return {
+            id: photoDoc.id,
+            previewUrl: data.url,
+            lat: data.lat,
+            lng: data.lng,
+            tipo: data.tipo,
+            comentario: data.comentario,
+            deleted: data.deleted === true,
+            evidenceId: data.evidenceId || null,
+            contextualizedAt: data.contextualizedAt || null,
+            contextualizedBy: data.contextualizedBy || null,
+            isContextualized: data.isContextualized || false,
+          };
+        })
+        .filter((p) => !p.deleted) as any;
+
       setProject({
         id: projectId,
         nombre: projectData.name,
@@ -286,10 +402,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       const docsColRef = collection(firestore, "projects", projectId, "documents");
       const docsSnap = await getDocs(query(docsColRef, orderBy("createdAt", "asc")));
-      const projectDocs: ProjectDocument[] = docsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as ProjectDocument));
+      const projectDocs: ProjectDocument[] = docsSnap.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as any))
+        .filter((d: any) => !d.deleted);
       setDocuments(projectDocs);
 
       if (projectData.iaAnalysis) {
@@ -574,6 +692,308 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const renameProject = useCallback(async (projectId: string, newName: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
+    const firestore = getDb();
+    const projectRef = doc(firestore, "projects", projectId);
+    const snap = await getDoc(projectRef);
+    if (!snap.exists()) throw new Error("El expediente no existe.");
+
+    const data = snap.data();
+    const oldName = data.name;
+
+    const isOwner = data.createdBy === user?.username;
+    const isAuthorized = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || isOwner;
+    if (!isAuthorized) {
+      throw new Error("No tiene permisos para renombrar este expediente.");
+    }
+
+    await updateDoc(projectRef, { name: newName.trim() });
+
+    if (project?.id === projectId) {
+      setProject((prev) => prev ? { ...prev, nombre: newName.trim() } : prev);
+    }
+
+    await logAuditAction({
+      action: "RENOMBRAR_EXPEDIENTE",
+      module: "Expedientes",
+      projectId,
+      projectName: data.ceipolId || oldName,
+      details: `Cambiado nombre de expediente. Anterior: "${oldName}", Nuevo: "${newName.trim()}".`
+    });
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const softDeleteDoc = useCallback(async (params: {
+    type: "Proyecto" | "Fotografía" | "Documento";
+    id: string;
+    projectId?: string;
+    reason: string;
+  }) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
+    const firestore = getDb();
+    const deletedBy = user?.username || "Usuario Local";
+    const deletedAt = Date.now();
+    const expiresAt = deletedAt + 7 * 24 * 60 * 60 * 1000;
+
+    let originalPath = "";
+    let name = "";
+    let originalData: any = null;
+    let projCeipolId = "";
+    const activeProjId = params.projectId || project?.id;
+
+    if (params.type === "Proyecto") {
+      originalPath = `projects/${params.id}`;
+      const projectRef = doc(firestore, "projects", params.id);
+      const snap = await getDoc(projectRef);
+      if (snap.exists()) {
+        originalData = snap.data();
+        name = originalData.name;
+        projCeipolId = originalData.ceipolId || "";
+      }
+    } else if (params.type === "Fotografía") {
+      if (!activeProjId) throw new Error("Proyecto no especificado.");
+      originalPath = `projects/${activeProjId}/photos/${params.id}`;
+      const photoRef = doc(firestore, originalPath);
+      const snap = await getDoc(photoRef);
+      if (snap.exists()) {
+        originalData = snap.data();
+        name = originalData.tipo || "Fotografía";
+        if (originalData.comentario) {
+          name += ` (${originalData.comentario.slice(0, 30)}...)`;
+        }
+      }
+    } else if (params.type === "Documento") {
+      if (!activeProjId) throw new Error("Proyecto no especificado.");
+      originalPath = `projects/${activeProjId}/documents/${params.id}`;
+      const docRef = doc(firestore, originalPath);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        originalData = snap.data();
+        name = originalData.name;
+      }
+    }
+
+    if (!originalData) throw new Error("No se encontró el elemento original.");
+
+    const trashCol = collection(firestore, "trash");
+    await addDoc(trashCol, {
+      originalId: params.id,
+      originalPath,
+      type: params.type,
+      name,
+      deletedBy,
+      deletedAt,
+      expiresAt,
+      deletionReason: params.reason,
+      originalData,
+      projectId: activeProjId || "",
+      projectCeipolId: projCeipolId || project?.ceipolId || ""
+    });
+
+    const itemRef = doc(firestore, originalPath);
+    await updateDoc(itemRef, {
+      deleted: true,
+      deletedBy,
+      deletedAt,
+      deletionReason: params.reason,
+      expiresAt
+    });
+
+    if (params.type === "Proyecto") {
+      if (project?.id === params.id) {
+        closeProject();
+      }
+    } else if (params.type === "Fotografía") {
+      setAlbum((prev) => prev.filter((p) => p.id !== params.id));
+      setSelectedIds((prev) => prev.filter((x) => x !== params.id));
+    } else if (params.type === "Documento") {
+      setDocuments((prev) => prev.filter((d) => d.id !== params.id));
+    }
+
+    await logAuditAction({
+      action: "ELIMINAR",
+      module: params.type === "Proyecto" ? "Expedientes" : params.type === "Fotografía" ? "Album Fotografico" : "Documentos",
+      projectId: activeProjId || params.id,
+      projectName: projCeipolId || project?.ceipolId || name,
+      details: `Eliminación lógica de ${params.type} "${name}". Motivo: "${params.reason}".`
+    });
+  }, [project, isReadOnly, user, closeProject, logAuditAction]);
+
+  const restoreDoc = useCallback(async (trashId: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
+    const firestore = getDb();
+    const trashRef = doc(firestore, "trash", trashId);
+    const trashSnap = await getDoc(trashRef);
+    if (!trashSnap.exists()) throw new Error("El elemento no existe en la papelera.");
+
+    const trashData = trashSnap.data();
+    const { originalPath, originalId, type, name, projectId, projectCeipolId } = trashData;
+
+    const itemRef = doc(firestore, originalPath);
+    const itemSnap = await getDoc(itemRef);
+
+    if (itemSnap.exists()) {
+      await updateDoc(itemRef, {
+        deleted: false,
+        deletedBy: null,
+        deletedAt: null,
+        deletionReason: null,
+        expiresAt: null
+      });
+    } else {
+      await setDoc(itemRef, {
+        ...trashData.originalData,
+        deleted: false,
+        deletedBy: null,
+        deletedAt: null,
+        deletionReason: null,
+        expiresAt: null
+      });
+    }
+
+    if (project?.id === projectId) {
+      if (type === "Fotografía") {
+        const p = trashData.originalData;
+        setAlbum((prev) => [
+          ...prev,
+          {
+            id: originalId,
+            previewUrl: p.url,
+            lat: p.lat,
+            lng: p.lng,
+            tipo: p.tipo,
+            comentario: p.comentario,
+            evidenceId: p.evidenceId || null,
+            contextualizedAt: p.contextualizedAt || null,
+            contextualizedBy: p.contextualizedBy || null,
+            isContextualized: p.isContextualized || false,
+          } as any
+        ]);
+      } else if (type === "Documento") {
+        const d = trashData.originalData;
+        setDocuments((prev) => [...prev, { id: originalId, ...d }]);
+      }
+    }
+
+    await deleteDoc(trashRef);
+
+    await logAuditAction({
+      action: "RESTAURAR",
+      module: "Papelera",
+      projectId: projectId || originalId,
+      projectName: projectCeipolId || name,
+      details: `Restaurado elemento "${name}" (${type}) a su ubicación original.`
+    });
+  }, [project, isReadOnly, logAuditAction]);
+
+  const archiveProject = useCallback(async (projectId: string, reason: string) => {
+    const firestore = getDb();
+    const projectRef = doc(firestore, "projects", projectId);
+    const snap = await getDoc(projectRef);
+    if (!snap.exists()) throw new Error("El expediente no existe.");
+
+    const data = snap.data();
+    const isAuthorized = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+    if (!isAuthorized) throw new Error("Solo los administradores pueden archivar expedientes.");
+
+    await updateDoc(projectRef, {
+      estado: "ARCHIVADO",
+      archiveReason: reason,
+      archivedAt: Date.now(),
+      archivedBy: user?.username || "Usuario Local"
+    });
+
+    if (project?.id === projectId) {
+      setProject((prev) => prev ? { ...prev, estado: "ARCHIVADO" } : prev);
+    }
+
+    await logAuditAction({
+      action: "ARCHIVAR",
+      module: "Expedientes",
+      projectId,
+      projectName: data.ceipolId || data.name,
+      details: `Expediente archivado. Motivo: "${reason}".`
+    });
+  }, [project, user, logAuditAction]);
+
+  const reactivateProject = useCallback(async (projectId: string, reason: string) => {
+    const firestore = getDb();
+    const projectRef = doc(firestore, "projects", projectId);
+    const snap = await getDoc(projectRef);
+    if (!snap.exists()) throw new Error("El expediente no existe.");
+
+    const data = snap.data();
+    const isAuthorized = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
+    if (!isAuthorized) throw new Error("Solo los administradores pueden reactivar expedientes.");
+
+    await updateDoc(projectRef, {
+      estado: "ABIERTO",
+      reactivateReason: reason,
+      reactivatedAt: Date.now(),
+      reactivatedBy: user?.username || "Usuario Local"
+    });
+
+    if (project?.id === projectId) {
+      setProject((prev) => prev ? { ...prev, estado: "ABIERTO" } : prev);
+    }
+
+    await logAuditAction({
+      action: "REACTIVAR",
+      module: "Expedientes",
+      projectId,
+      projectName: data.ceipolId || data.name,
+      details: `Expediente reactivado (vuelto a estado ABIERTO). Motivo: "${reason}".`
+    });
+  }, [project, user, logAuditAction]);
+
+  const savePhotoContextualization = useCallback(async (photoId: string) => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura.");
+    if (!project) throw new Error("No hay un proyecto activo.");
+
+    const photo = album.find((p) => p.id === photoId);
+    if (!photo) throw new Error("Fotografía no encontrada.");
+
+    const firestore = getDb();
+    const evidenceId = photo.evidenceId || `EVI-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+    const contextualizedAt = Date.now();
+    const contextualizedBy = user?.username || "Usuario Local";
+
+    const photoRef = doc(firestore, "projects", project.id, "photos", photoId);
+    await updateDoc(photoRef, {
+      evidenceId,
+      tipo: photo.tipo || "",
+      comentario: photo.comentario || "",
+      contextualizedAt,
+      contextualizedBy,
+      isContextualized: true,
+      savedCoordinates: photo.lat && photo.lng ? { lat: photo.lat, lng: photo.lng } : null
+    });
+
+    setAlbum((prev) =>
+      prev.map((p) =>
+        p.id === photoId
+          ? {
+              ...p,
+              evidenceId,
+              contextualizedAt,
+              contextualizedBy,
+              isContextualized: true,
+            }
+          : p
+      )
+    );
+
+    await logAuditAction({
+      action: "GUARDAR_CONTEXTUALIZACION",
+      module: "Album Fotografico",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Guardada contextualización de evidencia ${evidenceId} para foto con ID ${photoId}.`
+    });
+
+    return evidenceId;
+  }, [project, album, isReadOnly, user, logAuditAction]);
+
   const value = useMemo<ProjectContextValue>(
     () => ({
       project,
@@ -601,7 +1021,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       markAsPrinted,
       datosGobMxResult,
       setDatosGobMxResult,
-      isReadOnly
+      isReadOnly,
+      renameProject,
+      softDeleteDoc,
+      restoreDoc,
+      archiveProject,
+      reactivateProject,
+      savePhotoContextualization,
+      logAuditAction
     }),
     [
       project,
@@ -629,7 +1056,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       markAsPrinted,
       datosGobMxResult,
       setDatosGobMxResult,
-      isReadOnly
+      isReadOnly,
+      renameProject,
+      softDeleteDoc,
+      restoreDoc,
+      archiveProject,
+      reactivateProject,
+      savePhotoContextualization,
+      logAuditAction
     ]
   );
 

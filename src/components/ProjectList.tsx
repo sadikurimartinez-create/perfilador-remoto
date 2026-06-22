@@ -33,11 +33,22 @@ type ProjectWithCount = {
   analysisContent?: string;
   deleted?: boolean;
   deadlineAt?: number;
+  printedAt?: number | null;
+  ceipolId?: string;
 };
 
 export function ProjectList() {
   const router = useRouter();
-  const { exportProjectData, importProjectData } = useProject();
+  const { 
+    exportProjectData, 
+    importProjectData, 
+    createProject, 
+    renameProject, 
+    softDeleteDoc, 
+    archiveProject, 
+    reactivateProject,
+    logAuditAction 
+  } = useProject();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
@@ -63,6 +74,24 @@ export function ProjectList() {
 
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [selectedPreview, setSelectedPreview] = useState<any>(null);
+
+  // Estados para gobernanza, papelera, renombrado, archivado y reactivación
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [projectToRename, setProjectToRename] = useState<ProjectWithCount | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<ProjectWithCount | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteReasonCustom, setDeleteReasonCustom] = useState("");
+
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [projectToArchive, setProjectToArchive] = useState<ProjectWithCount | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+
+  const [reactivateModalOpen, setReactivateModalOpen] = useState(false);
+  const [projectToReactivate, setProjectToReactivate] = useState<ProjectWithCount | null>(null);
+  const [reactivateReason, setReactivateReason] = useState("");
   const [devueltoProject, setDevueltoProject] = useState<ProjectWithCount | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -265,31 +294,21 @@ export function ProjectList() {
   const handleConfirmarNombre = async () => {
     const nombre = nombreInput.trim();
     if (!nombre || !user) return;
-    const firestore = getDb();
-    const col = collection(firestore, "projects");
-    const createdAt = Date.now();
     try {
       if (pendingPhotos.length > 0) {
         (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
       }
-      const ref = await import("firebase/firestore").then(({ addDoc }) =>
-        addDoc(col, {
-          name: nombre,
-          geometryType,
-          descripcion: "",
-          createdAt,
-          createdBy: user.username,
-          lockedBy: null,
-          photoCount: 0,
-          estado: "ABIERTO",
-        })
-      );
+      const newId = await createProject({
+        nombre,
+        geometryType,
+        descripcion: ""
+      });
       pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);
       setNombreInput("");
       setPendingPhotos([]);
       setGeometryType("individual");
-      router.push(`/project/${ref.id}`);
+      router.push(`/project/${newId}`);
     } catch (err: any) {
       delete (window as any).pendingProjectPhotos;
       console.error("Error creando proyecto:", err);
@@ -359,48 +378,167 @@ export function ProjectList() {
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    const firstConfirm = window.confirm(
-      "Advertencia 1/2: Está a punto de ELIMINAR por completo este expediente y su evidencia asociada (fotos y análisis locales). ¿Desea continuar?"
-    );
-    if (!firstConfirm) return;
-
-    const secondConfirm = window.confirm(
-      "Confirmación final 2/2: Esta acción es irreversible. El expediente dejará de aparecer en la lista y se eliminarán sus datos locales. ¿CONFIRMA la eliminación definitiva?"
-    );
-    if (!secondConfirm) return;
+    const projObj = projects.find(p => p.id === projectId);
+    if (!projObj) return;
 
     try {
       const firestore = getDb();
 
-      // Eliminar documento del proyecto en Firestore
-      const projectRef = doc(firestore, "projects", projectId);
-      await deleteDoc(projectRef);
-
-      // Eliminar análisis en Firestore vinculados a este proyecto (colección 'analyses')
-      const analysesCol = collection(firestore, "analyses");
-      const analysesSnap = await getDocs(
-        query(analysesCol, where("projectId", "==", projectId))
-      );
-      const deletePromises: Promise<void>[] = [];
-      analysesSnap.forEach((d) => {
-        deletePromises.push(deleteDoc(d.ref));
-      });
-      const photosCol = collection(firestore, "projects", projectId, "photos");
-      const photosSnap = await getDocs(photosCol);
-      photosSnap.forEach((d) => {
-        deletePromises.push(deleteDoc(d.ref));
-      });
-      if (deletePromises.length > 0) {
-        await Promise.all(deletePromises);
+      // Verificar si tiene printedAt
+      if (projObj.printedAt) {
+        alert("Este expediente contiene productos de inteligencia emitidos y no puede ser eliminado por razones de integridad histórica y trazabilidad institucional.");
+        
+        await logAuditAction({
+          action: "INTENTO_ELIMINACION_BLOQUEADO",
+          module: "Expedientes",
+          projectId,
+          projectName: projObj.ceipolId || projObj.name,
+          result: "BLOQUEADO",
+          details: `Intento bloqueado de eliminar expediente con productos de inteligencia emitidos (printedAt definido).`
+        });
+        return;
       }
-    } catch (err) {
-      console.error(
-        "[ProjectList] Error al eliminar expediente y su evidencia:",
-        err
-      );
-      window.alert(
-        "Ocurrió un error al eliminar el expediente. Revise la consola o intente de nuevo."
-      );
+
+      // Verificar si hay análisis generados
+      const projectAnalyses = allAnalyses.filter(a => a.projectId === projectId);
+      if (projectAnalyses.length > 0 || projObj.analysisContent) {
+        alert("Este expediente contiene productos de inteligencia emitidos y no puede ser eliminado por razones de integridad histórica y trazabilidad institucional.");
+        
+        await logAuditAction({
+          action: "INTENTO_ELIMINACION_BLOQUEADO",
+          module: "Expedientes",
+          projectId,
+          projectName: projObj.ceipolId || projObj.name,
+          result: "BLOQUEADO",
+          details: `Intento bloqueado de eliminar expediente con análisis generados.`
+        });
+        return;
+      }
+
+      // Verificar subcolección de documentos
+      const docsCol = collection(firestore, "projects", projectId, "documents");
+      const docsSnap = await getDocs(docsCol);
+      const activeDocs = docsSnap.docs.filter(d => !d.data().deleted);
+      if (activeDocs.length > 0) {
+        alert("Este expediente contiene productos de inteligencia emitidos y no puede ser eliminado por razones de integridad histórica y trazabilidad institucional.");
+        
+        await logAuditAction({
+          action: "INTENTO_ELIMINACION_BLOQUEADO",
+          module: "Expedientes",
+          projectId,
+          projectName: projObj.ceipolId || projObj.name,
+          result: "BLOQUEADO",
+          details: `Intento bloqueado de eliminar expediente con documentos formalizados/reportes.`
+        });
+        return;
+      }
+
+      // Proceder con modal de eliminación lógica
+      setProjectToDelete(projObj);
+      setDeleteReason("");
+      setDeleteReasonCustom("");
+      setDeleteModalOpen(true);
+
+    } catch (err: any) {
+      console.error("Error al validar eliminación de expediente:", err);
+      alert("Error al validar eliminación de expediente: " + err.message);
+    }
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+    const finalReason = deleteReason === "Otro" ? deleteReasonCustom.trim() : deleteReason;
+    if (!finalReason) {
+      alert("Debe ingresar o seleccionar un motivo para la eliminación.");
+      return;
+    }
+
+    try {
+      await softDeleteDoc({
+        type: "Proyecto",
+        id: projectToDelete.id,
+        reason: finalReason
+      });
+      setDeleteModalOpen(false);
+      setProjectToDelete(null);
+      setDeleteReason("");
+      setDeleteReasonCustom("");
+      alert("Expediente enviado a la papelera de reciclaje exitosamente.");
+    } catch (err: any) {
+      console.error("Error al eliminar expediente:", err);
+      alert("Error al eliminar: " + err.message);
+    }
+  };
+
+  const handleArchiveProject = (proj: ProjectWithCount) => {
+    setProjectToArchive(proj);
+    setArchiveReason("");
+    setArchiveModalOpen(true);
+  };
+
+  const confirmArchiveProject = async () => {
+    if (!projectToArchive) return;
+    if (!archiveReason.trim()) {
+      alert("Debe ingresar un motivo para archivar el expediente.");
+      return;
+    }
+    try {
+      await archiveProject(projectToArchive.id, archiveReason.trim());
+      setArchiveModalOpen(false);
+      setProjectToArchive(null);
+      setArchiveReason("");
+      alert("Expediente archivado exitosamente.");
+    } catch (err: any) {
+      console.error("Error al archivar expediente:", err);
+      alert("Error al archivar: " + err.message);
+    }
+  };
+
+  const handleReactivateProject = (proj: ProjectWithCount) => {
+    setProjectToReactivate(proj);
+    setReactivateReason("");
+    setReactivateModalOpen(true);
+  };
+
+  const confirmReactivateProject = async () => {
+    if (!projectToReactivate) return;
+    if (!reactivateReason.trim()) {
+      alert("Debe ingresar un motivo para reactivar el expediente.");
+      return;
+    }
+    try {
+      await reactivateProject(projectToReactivate.id, reactivateReason.trim());
+      setReactivateModalOpen(false);
+      setProjectToReactivate(null);
+      setReactivateReason("");
+      alert("Expediente reactivado exitosamente.");
+    } catch (err: any) {
+      console.error("Error al reactivar expediente:", err);
+      alert("Error al reactivar: " + err.message);
+    }
+  };
+
+  const handleRenameProject = (proj: ProjectWithCount) => {
+    setProjectToRename(proj);
+    setRenameInput(proj.name);
+    setRenameModalOpen(true);
+  };
+
+  const confirmRenameProject = async () => {
+    if (!projectToRename) return;
+    if (!renameInput.trim()) {
+      alert("Debe ingresar un nombre descriptivo válido.");
+      return;
+    }
+    try {
+      await renameProject(projectToRename.id, renameInput.trim());
+      setRenameModalOpen(false);
+      setProjectToRename(null);
+      setRenameInput("");
+      alert("Nombre del expediente modificado correctamente.");
+    } catch (err: any) {
+      console.error("Error al renombrar expediente:", err);
+      alert("Error al renombrar: " + err.message);
     }
   };
 

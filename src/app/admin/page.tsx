@@ -3,6 +3,7 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useProject } from "@/context/ProjectContext";
 import Link from "next/link";
 import {
   collection,
@@ -40,7 +41,8 @@ const CHECKLIST_QUESTIONS = [
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"supervision" | "usuarios" | "desempeno">("supervision");
+  const { restoreDoc, logAuditAction } = useProject();
+  const [activeTab, setActiveTab] = useState<"supervision" | "usuarios" | "desempeno" | "papelera" | "auditoria">("supervision");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -51,6 +53,13 @@ export default function AdminPage() {
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [pwdMessage, setPwdMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  // Estados para Papelera y Auditoría
+  const [trashItems, setTrashItems] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditModuleFilter, setAuditModuleFilter] = useState("TODOS");
+  const [auditResultFilter, setAuditResultFilter] = useState("TODOS");
 
   // Estados para Supervisión
   const [projects, setProjects] = useState<any[]>([]);
@@ -70,6 +79,16 @@ export default function AdminPage() {
     const unsubProjects = onSnapshot(collection(db, "projects"), (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setProjects(list.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0)));
+    });
+
+    const unsubTrash = onSnapshot(collection(db, "trash"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setTrashItems(list.sort((a: any, b: any) => (b.deletedAt || 0) - (a.deletedAt || 0)));
+    });
+
+    const unsubAudit = onSnapshot(collection(db, "audit_logs"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAuditLogs(list.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0)));
     });
 
     let unsubUsers = () => {};
@@ -99,6 +118,8 @@ export default function AdminPage() {
 
     return () => {
       unsubProjects();
+      unsubTrash();
+      unsubAudit();
       unsubUsers();
     };
   }, [user]);
@@ -188,6 +209,38 @@ export default function AdminPage() {
       setPwdMessage({ type: "ok", text: "Contraseña actualizada exitosamente." });
     } catch (err: any) {
       setPwdMessage({ type: "error", text: err?.message || "Error al actualizar contraseña." });
+    }
+  };
+
+  const handleRestoreDoc = async (itemId: string, type: string, name: string) => {
+    try {
+      await restoreDoc(itemId);
+      alert(`El elemento "${name}" (${type}) ha sido restaurado exitosamente.`);
+    } catch (err: any) {
+      alert("Error al restaurar elemento: " + err.message);
+    }
+  };
+
+  const handleDefinitiveDelete = async (item: any) => {
+    if (!confirm("¿Está seguro de eliminar DEFINITIVAMENTE este registro? Esta acción es totalmente irreversible y quedará registrada en auditoría.")) return;
+    try {
+      const db = getDb();
+      // 1. Borrar de la colección de la papelera
+      await deleteDoc(doc(db, "trash", item.id));
+      // 2. Borrar permanentemente el documento original
+      await deleteDoc(doc(db, item.originalPath));
+
+      await logAuditAction({
+        action: "ELIMINACION_DEFINITIVA",
+        module: "Papelera",
+        projectId: item.projectId || item.originalId,
+        projectName: item.projectCeipolId || item.name,
+        result: "ÉXITO",
+        details: `Eliminación definitiva de ${item.type} "${item.name}" tras vencimiento de papelera.`
+      });
+      alert("Elemento eliminado definitivamente.");
+    } catch (err: any) {
+      alert("Error en eliminación definitiva: " + err.message);
     }
   };
 
@@ -337,6 +390,72 @@ export default function AdminPage() {
   const aprobados = projects.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
   const devueltos = projects.filter(p => p.estado === "DEVUELTO").length;
 
+  const getRemainingTime = (expiresAt?: number) => {
+    if (!expiresAt) return { text: "7d 0h", critical: false };
+    const diff = expiresAt - Date.now();
+    if (diff <= 0) return { text: "Expirado (Listo para purga)", critical: true };
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    
+    if (days === 0) {
+      const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+      return { text: `${hours}h ${minutes}m`, critical: true };
+    }
+    return { text: `${days}d ${hours}h`, critical: false };
+  };
+
+  const handleExportCSV = () => {
+    const headers = [
+      "Fecha",
+      "Hora",
+      "Usuario",
+      "Nombre",
+      "Rol",
+      "Modulo",
+      "Accion",
+      "Resultado",
+      "Direccion IP",
+      "Detalles"
+    ];
+
+    const escapeCSVCell = (val: any) => {
+      if (val === null || val === undefined) return "";
+      let str = String(val);
+      str = str.replace(/"/g, '""');
+      if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+        return `"${str}"`;
+      }
+      return str;
+    };
+
+    const rows = auditLogs.map(log => [
+      log.date || "",
+      log.time || "",
+      log.user || "",
+      log.userName || "",
+      log.userRole || "",
+      log.module || "",
+      log.action || "",
+      log.result || "",
+      log.ip || "",
+      log.details || ""
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(escapeCSVCell).join(","))
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bitacora_auditoria_ceipol_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -356,7 +475,7 @@ export default function AdminPage() {
         </Link>
       </div>
 
-      <div className="flex gap-4 border-b border-slate-800 pb-2">
+      <div className="flex gap-4 border-b border-slate-800 pb-2 overflow-x-auto whitespace-nowrap">
         <button
           onClick={() => setActiveTab("supervision")}
           className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${activeTab === "supervision" ? "border-sky-500 text-sky-400" : "border-transparent text-slate-400 hover:text-slate-300"}`}
@@ -377,7 +496,47 @@ export default function AdminPage() {
             Gestión de Usuarios
           </button>
         )}
+        <button
+          onClick={() => setActiveTab("papelera")}
+          className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${activeTab === "papelera" ? "border-amber-500 text-amber-400" : "border-transparent text-slate-400 hover:text-slate-300"}`}
+        >
+          ♻️ Papelera de Reciclaje
+        </button>
+        <button
+          onClick={() => setActiveTab("auditoria")}
+          className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${activeTab === "auditoria" ? "border-cyan-500 text-cyan-400" : "border-transparent text-slate-400 hover:text-slate-300"}`}
+        >
+          📜 Auditoría Central
+        </button>
       </div>
+
+      {/* Alerta de Expiración Preventiva (Papelera) */}
+      {(() => {
+        const criticalCount = trashItems.filter((item) => {
+          const diff = (item.expiresAt || 0) - Date.now();
+          return diff > 0 && diff <= 24 * 60 * 60 * 1000;
+        }).length;
+
+        if (criticalCount === 0) return null;
+
+        return (
+          <div className="bg-red-950/20 border border-red-900/50 rounded-xl p-4 flex items-start gap-3 shadow-lg text-red-300 animate-pulse">
+            <span className="text-xl">🚨</span>
+            <div className="flex-1 space-y-1">
+              <h4 className="font-bold text-sm text-red-400">Atención: Eliminación Definitiva Inminente</h4>
+              <p className="text-xs text-slate-300">
+                Hay <span className="font-bold text-red-400">{criticalCount}</span> elemento(s) en la papelera de reciclaje con <span className="text-red-400 font-semibold">menos de 24 horas restantes</span> antes de ser eliminados permanentemente del sistema sin posibilidad de recuperación.
+              </p>
+              <button
+                onClick={() => setActiveTab("papelera")}
+                className="text-xs text-red-400 font-semibold hover:text-red-300 hover:underline mt-1 block text-left"
+              >
+                Ir a la Papelera de Reciclaje →
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {activeTab === "supervision" && (
         <div className="space-y-6">
@@ -782,6 +941,277 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Papelera de Reciclaje Tab Body */}
+      {activeTab === "papelera" && (
+        <div className="space-y-6">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3">
+            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <span>♻️</span> Papelera de Reciclaje Institucional
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              De acuerdo con las normativas de preservación de evidencia y gobernanza de la información, los elementos eliminados (proyectos, fotografías o documentos) no se borran de inmediato. Permanecen bajo resguardo temporal por <strong className="text-amber-400">7 días naturales (168 horas)</strong> para permitir su recuperación. Después de este plazo, se vuelven elegibles para eliminación definitiva irreversible.
+            </p>
+          </div>
+
+          <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden shadow-md">
+            <div className="p-4 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-slate-200">
+                Elementos bajo Resguardo Temporal ({trashItems.length})
+              </h4>
+            </div>
+
+            {trashItems.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 border-t border-slate-800 border-dashed text-xs">
+                No hay elementos en la papelera de reciclaje actualmente.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-950/60 text-slate-400 font-bold border-b border-slate-800">
+                      <th className="p-3">Tipo</th>
+                      <th className="p-3">Nombre / Folio</th>
+                      <th className="p-3">Eliminado por</th>
+                      <th className="p-3">Fecha de Eliminación</th>
+                      <th className="p-3">Justificación / Motivo</th>
+                      <th className="p-3">Tiempo Restante</th>
+                      <th className="p-3 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    {trashItems.map((item) => {
+                      const timeInfo = getRemainingTime(item.expiresAt);
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              item.type === "Proyecto" ? "bg-blue-900/40 text-blue-400 border border-blue-800/50" :
+                              item.type === "Fotografía" ? "bg-purple-900/40 text-purple-400 border border-purple-800/50" :
+                              "bg-orange-900/40 text-orange-400 border border-orange-800/50"
+                            }`}>
+                              {item.type}
+                            </span>
+                          </td>
+                          <td className="p-3 font-medium">
+                            <p className="text-slate-200 font-bold">{item.name}</p>
+                            {item.projectCeipolId && (
+                              <p className="text-[10px] text-slate-400">CEIPOL: {item.projectCeipolId}</p>
+                            )}
+                          </td>
+                          <td className="p-3 text-slate-400">
+                            {item.deletedBy || "N/A"}
+                          </td>
+                          <td className="p-3 text-slate-400">
+                            {item.deletedAt ? new Date(item.deletedAt).toLocaleString("es-MX") : "N/A"}
+                          </td>
+                          <td className="p-3 text-slate-400 max-w-[200px] truncate" title={item.deletionReason}>
+                            {item.deletionReason || "Sin justificación"}
+                          </td>
+                          <td className="p-3 font-medium">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              timeInfo.critical
+                                ? "bg-red-950/40 text-red-400 border border-red-800 animate-pulse"
+                                : "bg-slate-800/60 text-slate-300 border border-slate-700"
+                            }`}>
+                              {timeInfo.critical ? "🚨 " : ""}{timeInfo.text}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right space-x-2 whitespace-nowrap">
+                            <button
+                              onClick={() => handleRestoreDoc(item.id, item.type, item.name)}
+                              className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white px-2.5 py-1 rounded text-[11px] font-semibold border border-emerald-700/50 transition-all inline-flex items-center gap-1"
+                            >
+                              ♻️ Restaurar
+                            </button>
+                            <button
+                              onClick={() => handleDefinitiveDelete(item)}
+                              className="bg-red-950/20 hover:bg-red-600 text-red-400 hover:text-white px-2.5 py-1 rounded text-[11px] font-semibold border border-red-900/50 transition-all inline-flex items-center gap-1"
+                            >
+                              🗑️ Eliminar Definitivo
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Auditoría Central Tab Body */}
+      {activeTab === "auditoria" && (() => {
+        const filteredLogs = auditLogs.filter((log) => {
+          const matchesSearch =
+            !auditSearch.trim() ||
+            String(log.user || "").toLowerCase().includes(auditSearch.toLowerCase()) ||
+            String(log.userName || "").toLowerCase().includes(auditSearch.toLowerCase()) ||
+            String(log.details || "").toLowerCase().includes(auditSearch.toLowerCase()) ||
+            String(log.action || "").toLowerCase().includes(auditSearch.toLowerCase()) ||
+            String(log.module || "").toLowerCase().includes(auditSearch.toLowerCase()) ||
+            String(log.ip || "").toLowerCase().includes(auditSearch.toLowerCase());
+
+          const matchesModule =
+            auditModuleFilter === "TODOS" ||
+            String(log.module || "").toUpperCase() === auditModuleFilter.toUpperCase();
+
+          const matchesResult =
+            auditResultFilter === "TODOS" ||
+            String(log.result || "").toUpperCase() === auditResultFilter.toUpperCase();
+
+          return matchesSearch && matchesModule && matchesResult;
+        });
+
+        const availableModules = Array.from(
+          new Set(auditLogs.map((l) => String(l.module || "").toUpperCase()))
+        ).filter(Boolean);
+
+        return (
+          <div className="space-y-6">
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <span>📜</span> Bitácora de Auditoría Central (CEIPOL)
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Registro criptográfico e inalterable de accesos, intentos de intrusión, modificaciones, eliminaciones y descargas de información de inteligencia.
+                </p>
+              </div>
+              <button
+                onClick={handleExportCSV}
+                className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg text-xs font-bold tracking-wide shadow-lg transition-colors flex items-center gap-2 shrink-0 self-start md:self-center"
+              >
+                📥 Exportar Bitácora en CSV
+              </button>
+            </div>
+
+            {/* Controles de Filtro */}
+            <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">Buscar en Bitácora</label>
+                <input
+                  type="text"
+                  placeholder="Buscar usuario, IP, acción o detalles..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-xs text-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">Filtrar por Módulo</label>
+                <select
+                  value={auditModuleFilter}
+                  onChange={(e) => setAuditModuleFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-xs text-slate-200 focus:border-sky-500 outline-none transition-all"
+                >
+                  <option value="TODOS">Todos los Módulos</option>
+                  {availableModules.map((mod) => (
+                    <option key={mod} value={mod}>
+                      {mod}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">Filtrar por Resultado</label>
+                <select
+                  value={auditResultFilter}
+                  onChange={(e) => setAuditResultFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-xs text-slate-200 focus:border-sky-500 outline-none transition-all"
+                >
+                  <option value="TODOS">Todos los Resultados</option>
+                  <option value="ÉXITO">ÉXITO</option>
+                  <option value="FALLO">FALLO</option>
+                  <option value="BLOQUEADO">BLOQUEADO</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tabla de Auditoría */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden shadow-md">
+              <div className="p-4 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-slate-200">
+                  Eventos de Seguridad Registrados ({filteredLogs.length})
+                </h4>
+              </div>
+
+              {filteredLogs.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 border-t border-slate-800 border-dashed text-xs">
+                  No se encontraron eventos coincidentes con los filtros de búsqueda.
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="sticky top-0 bg-slate-950 text-slate-400 font-bold border-b border-slate-800 z-10">
+                      <tr>
+                        <th className="p-3 bg-slate-950">Fecha / Hora</th>
+                        <th className="p-3 bg-slate-950">Usuario / Rol</th>
+                        <th className="p-3 bg-slate-950">Módulo</th>
+                        <th className="p-3 bg-slate-950">Acción</th>
+                        <th className="p-3 bg-slate-950">Origen IP</th>
+                        <th className="p-3 bg-slate-950">Resultado</th>
+                        <th className="p-3 bg-slate-950">Detalles de Operación</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                      {filteredLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="p-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                            {log.date} {log.time}
+                          </td>
+                          <td className="p-3">
+                            <p className="font-bold text-slate-200">{log.user}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`px-1.5 py-0.5 rounded-[3px] text-[9px] font-bold uppercase tracking-wider ${
+                                log.userRole === "SUPER_ADMIN" ? "bg-red-900/30 text-red-400 border border-red-800/40" :
+                                log.userRole === "ADMIN" ? "bg-amber-900/30 text-amber-400 border border-amber-800/40" :
+                                "bg-slate-800 text-slate-400 border border-slate-700/50"
+                              }`}>
+                                {log.userRole || "USER"}
+                              </span>
+                              {log.userName && (
+                                <span className="text-[10px] text-slate-400 truncate max-w-[120px]" title={log.userName}>
+                                  {log.userName}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 text-slate-300 font-medium whitespace-nowrap">
+                            {log.module}
+                          </td>
+                          <td className="p-3 font-bold text-slate-300 whitespace-nowrap">
+                            {log.action}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-slate-400">
+                            {log.ip || "127.0.0.1"}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              log.result === "ÉXITO" ? "bg-emerald-900/40 text-emerald-400 border border-emerald-800/50" :
+                              log.result === "FALLO" ? "bg-red-900/40 text-red-400 border border-red-800/50" :
+                              "bg-red-950/60 text-red-400 border border-red-800 animate-pulse font-extrabold"
+                            }`}>
+                              {log.result || "ÉXITO"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-400 max-w-[320px] whitespace-normal break-words leading-relaxed">
+                            {log.details}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

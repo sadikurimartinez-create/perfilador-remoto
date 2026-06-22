@@ -270,8 +270,18 @@ export function PhotoAlbum({
     uploadAndAddPhoto,
     datosGobMxResult, // <-- Obtener del contexto
     setDatosGobMxResult,
+    softDeleteDoc,
+    savePhotoContextualization,
   } = useProject();
   const [error, setError] = useState<string | null>(null);
+  const [savingPhotoId, setSavingPhotoId] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    type: "Proyecto" | "Fotografía" | "Documento";
+    id: string;
+    projectId?: string;
+  } | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -1144,15 +1154,20 @@ const hasMinimumPhotos =
                       className="w-full h-auto max-h-[75vh] object-contain"
                     />
                   </div>
-                  {!isReadOnly && (
+                  {!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
-                        void removePhotoFromAlbum(p.id);
+                        setDeleteModal({
+                          isOpen: true,
+                          type: "Fotografía",
+                          id: p.id,
+                          projectId: projectId || project?.id
+                        });
                       }}
                       className="absolute top-0 right-0 rounded p-1 bg-red-600/90 text-white hover:bg-red-500"
-                      title="Eliminar fotografía"
+                      title="Eliminar fotografía (Controlado)"
                       aria-label="Eliminar fotografía"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1225,6 +1240,71 @@ const hasMinimumPhotos =
                         style={{ width: `${Math.min(((p.comentario || "").length / 200) * 100, 100)}%` }}
                       ></div>
                     </div>
+                  </div>
+
+                  {/* BOTÓN Y ESTADO DE GUARDAR CONTEXTUALIZACIÓN (REQUERIMIENTO 1) */}
+                  <div className="mt-2.5 mb-2.5 bg-slate-900/50 p-2 rounded-lg border border-slate-800/40 flex flex-col gap-2">
+                    {p.evidenceId ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/40">
+                            🛡️ EVIDENCIA: {p.evidenceId}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-400">
+                            Guardado el {new Date(p.contextualizedAt || Date.now()).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <span className="text-[8px] text-slate-400 leading-normal">
+                          Usuario: <strong className="text-slate-300">@{p.contextualizedBy || "Local"}</strong> | Coords: <strong className="text-slate-300">{p.lat?.toFixed(5)}, {p.lng?.toFixed(5)}</strong>
+                        </span>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            disabled={savingPhotoId === p.id}
+                            onClick={async () => {
+                              try {
+                                setSavingPhotoId(p.id);
+                                const evId = await savePhotoContextualization(p.id);
+                                alert(`¡Contextualización actualizada!\nFolio: ${evId}`);
+                              } catch (err: any) {
+                                alert("Error: " + err.message);
+                              } finally {
+                                setSavingPhotoId(null);
+                              }
+                            }}
+                            className="mt-1 text-center w-full bg-slate-800 hover:bg-slate-750 text-slate-300 text-[10px] py-1 px-2 rounded border border-slate-700 font-semibold transition"
+                          >
+                            {savingPhotoId === p.id ? "Actualizando..." : "Actualizar Contextualización"}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="text-[9px] text-amber-400 font-medium leading-relaxed flex items-center gap-1">
+                          ⚠️ Pendiente de guardar en Cadena de Custodia.
+                        </div>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            disabled={savingPhotoId === p.id}
+                            onClick={async () => {
+                              try {
+                                setSavingPhotoId(p.id);
+                                const evId = await savePhotoContextualization(p.id);
+                                alert(`¡Evidencia contextualizada y guardada con éxito!\nFolio único generado: ${evId}`);
+                              } catch (err: any) {
+                                alert("Error: " + err.message);
+                              } finally {
+                                setSavingPhotoId(null);
+                              }
+                            }}
+                            className="w-full bg-gradient-to-r from-sky-700 to-indigo-850 hover:from-sky-600 hover:to-indigo-750 text-white font-bold text-[10px] py-1.5 px-3 rounded shadow-md hover:shadow-lg transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-1"
+                          >
+                            {savingPhotoId === p.id ? "Guardando..." : "💾 Guardar Contextualización"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {visionData[p.id]?.extractedText && (
@@ -2288,8 +2368,18 @@ const hasMinimumPhotos =
               <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
                 <div className="flex justify-between items-start gap-2">
                   <a href={d.url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold text-[11px] truncate flex-1" title={d.name}>📄 {d.name}</a>
-                  {!isReadOnly && (
-                    <button onClick={() => removeDocument(d.id)} className="text-red-400 hover:text-red-300 text-[10px] shrink-0">Eliminar</button>
+                  {!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+                    <button
+                      onClick={() => setDeleteModal({
+                        isOpen: true,
+                        type: "Documento",
+                        id: d.id,
+                        projectId: projectId || project?.id
+                      })}
+                      className="text-red-400 hover:text-red-300 text-[10px] shrink-0"
+                    >
+                      Eliminar
+                    </button>
                   )}
                 </div>
                 {d.context === "PENDIENTE DE CONTEXTUALIZAR EN GABINETE" ? (
@@ -3067,6 +3157,71 @@ const hasMinimumPhotos =
             <div className="flex justify-end gap-2">
               <button onClick={() => setEditingPhoto(null)} className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition-colors shadow-md">
                 Aceptar y Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ELIMINACIÓN CONTROLADA (JUSTIFICACIÓN OBLIGATORIA) */}
+      {deleteModal?.isOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 print:hidden">
+          <div className="w-full max-w-md bg-slate-950 border border-red-700/50 p-6 rounded-2xl shadow-2xl space-y-4 text-left">
+            <h3 className="text-lg font-black text-red-400 flex items-center gap-2">
+              ⚠️ Confirmar Eliminación Controlada
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Está a punto de enviar este elemento ({deleteModal.type}) a la <span className="font-bold text-amber-400">Papelera de Reciclaje Institucional</span>. Permanecerá allí por 7 días naturales antes de su eliminación definitiva.
+            </p>
+            
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-slate-400 uppercase">Motivo de Eliminación (Obligatorio)</label>
+              <select
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+              >
+                <option value="">-- Seleccione un motivo --</option>
+                <option value="Registro duplicado">Registro duplicado</option>
+                <option value="Captura incorrecta">Captura incorrecta</option>
+                <option value="Evidencia errónea">Evidencia errónea</option>
+                <option value="Expediente cancelado">Expediente cancelado</option>
+                <option value="Corrección administrativa">Corrección administrativa</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setDeleteModal(null);
+                  setDeleteReason("");
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!deleteReason.trim()}
+                onClick={async () => {
+                  if (!deleteReason) return;
+                  try {
+                    await softDeleteDoc({
+                      type: deleteModal.type,
+                      id: deleteModal.id,
+                      projectId: deleteModal.projectId,
+                      reason: deleteReason
+                    });
+                    setDeleteModal(null);
+                    setDeleteReason("");
+                    alert(`El elemento (${deleteModal.type}) ha sido enviado a la Papelera de Reciclaje.`);
+                  } catch (err: any) {
+                    alert("Error al eliminar: " + err.message);
+                  }
+                }}
+                className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-red-900/30"
+              >
+                Confirmar Eliminación
               </button>
             </div>
           </div>
