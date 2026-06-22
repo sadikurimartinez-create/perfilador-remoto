@@ -35,18 +35,18 @@ export function InstitutionalHeader() {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1 sm:gap-x-4">
           {user && (
-            <div className="flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-3 border-r border-slate-700/50 pr-2 sm:pr-4">
+            <div className="flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-3 border-r border-slate-700/50 pr-2 sm:pr-4 min-w-0">
               {(user as any).fotografia ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={(user as any).fotografia} alt="Usuario" className="h-7 w-7 sm:h-9 sm:w-9 rounded-full object-cover border border-slate-500 shadow-sm" />
               ) : (
                 <div className="h-7 w-7 sm:h-9 sm:w-9 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs sm:text-sm shadow-sm">👤</div>
               )}
-              <div className="hidden md:flex flex-col">
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-200 uppercase leading-tight truncate max-w-[120px]">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[9px] sm:text-[11px] font-bold text-slate-200 uppercase leading-tight truncate max-w-[70px] xs:max-w-[100px] sm:max-w-[150px]">
                   {(user as any).name || (user as any).username}
                 </span>
-                <span className="text-[9px] text-sky-400 font-semibold uppercase leading-tight">
+                <span className="text-[8px] sm:text-[9px] text-sky-400 font-semibold uppercase leading-tight">
                   {(user as any).role === "SUPER_ADMIN" ? "S-ADMIN" : (user as any).role || "USER"}
                 </span>
               </div>
@@ -63,9 +63,13 @@ export function InstitutionalHeader() {
           {user && (
             <Link
               href="/perfil"
-              className="text-[11px] sm:text-xs font-semibold text-slate-400 hover:text-sky-300 transition-colors"
+              className={`text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors ${
+                (user as any).perfilCompleto
+                  ? "text-slate-500 hover:text-slate-400"
+                  : "text-slate-400 hover:text-sky-300"
+              }`}
             >
-              Mi Perfil
+              Mi Perfil {(user as any).perfilCompleto && <span className="text-[10px]" title="Perfil guardado y bloqueado">🔒</span>}
             </Link>
           )}
           {user && (

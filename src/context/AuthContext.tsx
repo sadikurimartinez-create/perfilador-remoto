@@ -16,6 +16,9 @@ type AuthUser = {
   username: string;
   role: "SUPER_ADMIN" | "ADMIN" | "USER";
   name: string;
+  fotografia?: string;
+  perfilCompleto?: boolean;
+  [key: string]: any;
 };
 
 type AuthContextValue = {
@@ -34,6 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
+
     (async () => {
       try {
         const stored =
@@ -42,14 +47,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : null;
         if (stored) {
           const parsed = JSON.parse(stored) as AuthUser;
-          if (!cancelled) setUser(parsed);
+          if (!cancelled) {
+            setUser(parsed);
+
+            // Set up a real-time listener for the current user's profile in Firestore
+            const { getDb } = await import("@/lib/firebase");
+            const { doc, onSnapshot } = await import("firebase/firestore");
+            const db = getDb();
+
+            unsubscribe = onSnapshot(doc(db, "users", String(parsed.id)), (snapshot) => {
+              if (snapshot.exists() && !cancelled) {
+                const data = snapshot.data();
+                setUser((prev) => {
+                  if (!prev) return null;
+                  const updated = {
+                    ...prev,
+                    ...data,
+                    id: snapshot.id,
+                  };
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem("perfilador.currentUser", JSON.stringify(updated));
+                  }
+                  return updated;
+                });
+              }
+            });
+          }
         }
+      } catch (err) {
+        console.error("Error setting up real-time profile listener:", err);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, []);
 
