@@ -14,7 +14,7 @@ import { runOSINTScan } from "../utils/osintEngine";
 import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 import { OsintTerritorialPanel } from "./OsintTerritorialPanel";
 
-import { PowerUpsModule } from "./PowerUpsModule";
+import { PowerUpsModule } from "./powerups/PowerUpsModule";
 
 type EvidencePhotoType = {
   id: string;
