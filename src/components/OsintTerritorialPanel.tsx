@@ -517,6 +517,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                                     e.stopPropagation();
                                     const textToAppend = `[OSINT TERRITORIAL V2.0 - EVENTO DETECTADO]\nPlataforma: ${evt.platform} | Origen: ${evt.source}\nFecha: ${new Date(evt.timestamp).toLocaleString('es-MX')}\nColonia: ${evt.neighborhood || 'Sin especificar'}\nContenido/Resumen: ${evt.content}\nConceptos Clave: ${evt.keywords.join(', ')}\nNivel de Riesgo: ${evt.risk_level} (${evt.risk_score}%)`;
                                     onAppendToAnalysis(textToAppend);
+                                    alert("✅ El hallazgo de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe.");
                                   }}
                                   className="px-2.5 py-1 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-extrabold text-cyan-400 hover:bg-cyan-900/60 transition-colors flex items-center gap-1 cursor-pointer"
                                 >
@@ -592,6 +593,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                               onClick={() => {
                                 const textToAppend = `[OSINT TERRITORIAL V2.0 - PATRÓN DE COLONIA DE RIESGO]\nColonia: ${neighborhood}\nEventos Relacionados: ${pattern.eventCount} incidentes\nRiesgo Promedio: ${pattern.riskScoreAverage}%\nRiesgo Máximo Detectado: ${pattern.highestRisk}\nConceptos recurrentes: ${pattern.predominantKeywords.join(', ')}`;
                                 onAppendToAnalysis(textToAppend);
+                                alert("✅ El patrón de colonia de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe.");
                               }}
                               className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[9px] font-extrabold text-slate-300 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
                             >
@@ -705,6 +707,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                             onClick={() => {
                               const textToAppend = `[OSINT TERRITORIAL V2.0 - RUTA TÁCTICA DE RIESGO]\nRuta: ${route.name}\nNivel de Riesgo: ${route.riskLevel}\nDescripción de Alerta: ${route.description}`;
                               onAppendToAnalysis(textToAppend);
+                              alert("✅ La ruta de riesgo de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe.");
                             }}
                             className="px-2.5 py-1 rounded-md bg-indigo-950/85 border border-indigo-500/40 text-[10px] font-extrabold text-indigo-400 hover:text-white hover:bg-indigo-900 transition-colors cursor-pointer"
                           >
