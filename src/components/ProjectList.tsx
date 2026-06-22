@@ -382,66 +382,14 @@ export function ProjectList() {
     if (!projObj) return;
 
     try {
-      const firestore = getDb();
-
-      // Verificar si tiene printedAt
-      if (projObj.printedAt) {
-        alert("Este expediente contiene productos de inteligencia emitidos y no puede ser eliminado por razones de integridad histórica y trazabilidad institucional.");
-        
-        await logAuditAction({
-          action: "INTENTO_ELIMINACION_BLOQUEADO",
-          module: "Expedientes",
-          projectId,
-          projectName: projObj.ceipolId || projObj.name,
-          result: "BLOQUEADO",
-          details: `Intento bloqueado de eliminar expediente con productos de inteligencia emitidos (printedAt definido).`
-        });
-        return;
-      }
-
-      // Verificar si hay análisis generados
-      const projectAnalyses = allAnalyses.filter(a => a.projectId === projectId);
-      if (projectAnalyses.length > 0 || projObj.analysisContent) {
-        alert("Este expediente contiene productos de inteligencia emitidos y no puede ser eliminado por razones de integridad histórica y trazabilidad institucional.");
-        
-        await logAuditAction({
-          action: "INTENTO_ELIMINACION_BLOQUEADO",
-          module: "Expedientes",
-          projectId,
-          projectName: projObj.ceipolId || projObj.name,
-          result: "BLOQUEADO",
-          details: `Intento bloqueado de eliminar expediente con análisis generados.`
-        });
-        return;
-      }
-
-      // Verificar subcolección de documentos
-      const docsCol = collection(firestore, "projects", projectId, "documents");
-      const docsSnap = await getDocs(docsCol);
-      const activeDocs = docsSnap.docs.filter(d => !d.data().deleted);
-      if (activeDocs.length > 0) {
-        alert("Este expediente contiene productos de inteligencia emitidos y no puede ser eliminado por razones de integridad histórica y trazabilidad institucional.");
-        
-        await logAuditAction({
-          action: "INTENTO_ELIMINACION_BLOQUEADO",
-          module: "Expedientes",
-          projectId,
-          projectName: projObj.ceipolId || projObj.name,
-          result: "BLOQUEADO",
-          details: `Intento bloqueado de eliminar expediente con documentos formalizados/reportes.`
-        });
-        return;
-      }
-
-      // Proceder con modal de eliminación lógica
+      // Proceder directamente con modal de eliminación lógica para enviarlo a la Papelera de Reciclaje
       setProjectToDelete(projObj);
       setDeleteReason("");
       setDeleteReasonCustom("");
       setDeleteModalOpen(true);
-
     } catch (err: any) {
-      console.error("Error al validar eliminación de expediente:", err);
-      alert("Error al validar eliminación de expediente: " + err.message);
+      console.error("Error al preparar eliminación de expediente:", err);
+      alert("Error al preparar eliminación de expediente: " + err.message);
     }
   };
 

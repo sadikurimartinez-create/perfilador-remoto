@@ -53,18 +53,31 @@ export default function ProjectWorkspacePage() {
 
   const handleLinkGeoReport = async (geoId: string) => {
     if (!geoId.trim() || !project) return;
+    const trimmedId = geoId.trim();
+
+    // Strict validation for CEIPOL-GEO-[NOMBRE]-[RIESGO]-[ID]
+    // Allowing letters, numbers, hyphens, and underscores for the sections
+    const geoIdRegex = /^CEIPOL-GEO-[A-Z0-9Ñ_.-]+-[A-Z0-9_.-]+-[A-Z0-9_.-]+$/i;
+    if (!geoIdRegex.test(trimmedId)) {
+      alert("❌ El ID de geointeligencia ingresado no cumple con el formato obligatorio endurecido:\n\n" +
+            "CEIPOL-GEO-[NOMBRE]-[RIESGO]-[ID]\n\n" +
+            "Ejemplo válido: CEIPOL-GEO-PANDILLAX-ALTO-ABC12\n\n" +
+            "Por favor, verifique el código y vuelva a intentarlo.");
+      return;
+    }
+
     setIsLinking(true);
     try {
-      const gang = await PandillasService.getGangByGeoReportId(geoId.trim());
+      const gang = await PandillasService.getGangByGeoReportId(trimmedId);
       if (!gang) {
-        alert("❌ No se encontró ningún informe de geointeligencia con ese ID.");
+        alert("❌ No se encontró ningún informe de geointeligencia con ese ID en la base de datos.");
         setIsLinking(false);
         return;
       }
       const db = getDb();
       const projectRef = doc(db, "projects", project.id);
       await updateDoc(projectRef, {
-        linkedGeoReportId: geoId.trim(),
+        linkedGeoReportId: trimmedId,
         linkedGangReport: gang,
       });
       await loadProject(project.id);

@@ -10,6 +10,7 @@ interface Props {
   onToggleMapMarkers?: (show: boolean) => void;
   showMapRoutes?: boolean;
   onToggleMapRoutes?: (show: boolean) => void;
+  onAppendToAnalysis?: (text: string) => void;
 }
 
 function ElapsedTime({ running }: { running: boolean }) {
@@ -35,7 +36,8 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
   showMapMarkers = true,
   onToggleMapMarkers,
   showMapRoutes = true,
-  onToggleMapRoutes
+  onToggleMapRoutes,
+  onAppendToAnalysis
 }) => {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<OSINTTerritorialV2Response | null>(null);
@@ -493,7 +495,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                             )}
 
                             {/* Actions / Links */}
-                            <div className="flex items-center justify-between pt-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
                               {evt.url && (
                                 <a
                                   href={evt.url}
@@ -507,6 +509,21 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                                   </svg>
                                 </a>
                               )}
+
+                              {onAppendToAnalysis && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const textToAppend = `[OSINT TERRITORIAL V2.0 - EVENTO DETECTADO]\nPlataforma: ${evt.platform} | Origen: ${evt.source}\nFecha: ${new Date(evt.timestamp).toLocaleString('es-MX')}\nColonia: ${evt.neighborhood || 'Sin especificar'}\nContenido/Resumen: ${evt.content}\nConceptos Clave: ${evt.keywords.join(', ')}\nNivel de Riesgo: ${evt.risk_level} (${evt.risk_score}%)`;
+                                    onAppendToAnalysis(textToAppend);
+                                  }}
+                                  className="px-2.5 py-1 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-extrabold text-cyan-400 hover:bg-cyan-900/60 transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  📥 Integrar a Hipótesis
+                                </button>
+                              )}
+
                               <span className="text-[10px] text-slate-500">
                                 Coordenadas: [{evt.location?.coordinates.join(', ') || 'No Geo'}]
                               </span>
@@ -557,7 +574,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                           </div>
                         </div>
 
-                        <div>
+                        <div className="mt-2.5">
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide block mb-1">Keywords recurrentes:</span>
                           <div className="flex flex-wrap gap-1">
                             {pattern.predominantKeywords.map((kw: string) => (
@@ -567,6 +584,21 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                             ))}
                           </div>
                         </div>
+
+                        {onAppendToAnalysis && (
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const textToAppend = `[OSINT TERRITORIAL V2.0 - PATRÓN DE COLONIA DE RIESGO]\nColonia: ${neighborhood}\nEventos Relacionados: ${pattern.eventCount} incidentes\nRiesgo Promedio: ${pattern.riskScoreAverage}%\nRiesgo Máximo Detectado: ${pattern.highestRisk}\nConceptos recurrentes: ${pattern.predominantKeywords.join(', ')}`;
+                                onAppendToAnalysis(textToAppend);
+                              }}
+                              className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[9px] font-extrabold text-slate-300 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                            >
+                              📥 Integrar Patrón a Hipótesis
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -665,6 +697,21 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                         </svg>
                         Trazado en mapa: {route.points.length} vértices geoespaciales correlacionados.
                       </div>
+
+                      {onAppendToAnalysis && (
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const textToAppend = `[OSINT TERRITORIAL V2.0 - RUTA TÁCTICA DE RIESGO]\nRuta: ${route.name}\nNivel de Riesgo: ${route.riskLevel}\nDescripción de Alerta: ${route.description}`;
+                              onAppendToAnalysis(textToAppend);
+                            }}
+                            className="px-2.5 py-1 rounded-md bg-indigo-950/85 border border-indigo-500/40 text-[10px] font-extrabold text-indigo-400 hover:text-white hover:bg-indigo-900 transition-colors cursor-pointer"
+                          >
+                            📥 Integrar Ruta a Hipótesis
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
