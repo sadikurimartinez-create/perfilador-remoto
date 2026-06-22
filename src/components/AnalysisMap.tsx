@@ -1229,7 +1229,7 @@ export function AnalysisMap({
                   mapPaneName="overlayMouseTarget"
                   getPixelPositionOffset={() => ({ x: 10, y: -16 })}
                 >
-                  <span className="bg-slate-950 border border-slate-700 text-white rounded-full w-4.5 h-4.5 font-sans font-black text-[9px] flex items-center justify-center shadow-lg px-1 text-center select-none">
+                  <span className="bg-slate-950 border border-slate-700 text-white rounded-full w-5 h-5 font-sans font-black text-[9px] flex items-center justify-center shadow-lg px-1 text-center select-none">
                     #{idx + 1}
                   </span>
                 </OverlayView>
