@@ -16,7 +16,7 @@ import {
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { jsPDF } from "jspdf";
-import { SecaiDashboard } from "@/components/SecaiDashboard";
+import { ImiDashboard } from "@/components/ImiDashboard";
 
 type UserDoc = {
   id: string;
@@ -30,6 +30,7 @@ type UserDoc = {
   fortalezas?: string;
   debilidades?: string;
   fotografia?: string;
+  aniosSspe?: string;
 };
 
 const CHECKLIST_QUESTIONS = [
@@ -110,6 +111,7 @@ export default function AdminPage() {
             fortalezas: data.fortalezas || "",
             debilidades: data.debilidades || "",
             fotografia: data.fotografia || data.foto_url || "",
+            aniosSspe: data.aniosSspe || "",
           };
         })
         .sort((a, b) => b.id.localeCompare(a.id));
@@ -252,12 +254,12 @@ export default function AdminPage() {
     // 1. Cabecera Ejecutiva
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("REPORTE EJECUTIVO DE DESEMPEÑO DE ANALISTAS", 14, y);
+    doc.text("REPORTE INSTITUCIONAL DEL ÍNDICE DE MADUREZ INVESTIGATIVA", 14, y);
     y += 8;
     
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("Centro de Estudios en Seguridad Pública y Política Criminal (CEIPOL)", 14, y);
+    doc.text("Plataforma Perfilador Remoto de Geointeligencia - SSP / CEIPOL", 14, y);
     y += 6;
     doc.text(`Fecha de emisión: ${new Date().toLocaleDateString("es-MX")} - ${new Date().toLocaleTimeString("es-MX")}`, 14, y);
     y += 6;
@@ -268,13 +270,13 @@ export default function AdminPage() {
     doc.line(14, y, 196, y);
     y += 10;
 
-    // 2. Resumen Global
+    // 2. Resumen Global de la Población de Analistas
     const totalProjs = projects.length;
     const totalValidados = projects.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
     
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text("MÉTRICAS GLOBALES", 14, y);
+    doc.text("SINOPSIS METODOLÓGICA", 14, y);
     y += 6;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
@@ -283,18 +285,21 @@ export default function AdminPage() {
     doc.text(`Expedientes Validados: ${totalValidados}`, 140, y);
     y += 10;
 
-    // 3. Tabla de Desempeño (Iterando sobre usuarios)
+    // 3. Tabla de Desempeño IMI (Iterando sobre usuarios con el Motor Matemático Oficial)
     const drawHeaders = (posY: number) => {
-      doc.setFillColor(240, 244, 248);
+      doc.setFillColor(15, 23, 42); // slate-900 look for header
       doc.rect(14, posY, 182, 8, "F");
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 255, 255);
       doc.text("ANALISTA", 16, posY + 5.5);
-      doc.text("NO. EMPLEADO", 70, posY + 5.5);
-      doc.text("ABIERTOS", 105, posY + 5.5);
-      doc.text("REVISIÓN", 125, posY + 5.5);
-      doc.text("DEVUELTOS", 150, posY + 5.5);
-      doc.text("VALIDADOS", 175, posY + 5.5);
+      doc.text("ID EMPLEADO", 65, posY + 5.5);
+      doc.text("TOTAL EXP", 92, posY + 5.5);
+      doc.text("IMI GRAL", 115, posY + 5.5);
+      doc.text("IMI OPER", 137, posY + 5.5);
+      doc.text("IMI ESTRAT", 160, posY + 5.5);
+      doc.text("NIVEL", 182, posY + 5.5);
+      doc.setTextColor(0, 0, 0); // reset
       doc.setFont("helvetica", "normal");
     };
 
@@ -303,19 +308,202 @@ export default function AdminPage() {
 
     users.forEach((u) => {
       if (y > 275) { doc.addPage(); y = 20; drawHeaders(y); y += 13; }
+      
       const userProjs = projects.filter(p => p.createdBy === u.username);
+      const totalProjects = userProjs.length;
       const pAbiertos = userProjs.filter(p => !p.estado || p.estado === "ABIERTO").length;
       const pRevision = userProjs.filter(p => p.estado === "EN REVISIÓN").length;
       const pDevueltos = userProjs.filter(p => p.estado === "DEVUELTO").length;
       const pValidados = userProjs.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
 
-      const name = (u.name || u.username).substring(0, 26);
+      const userLogs = auditLogs.filter(
+        (log) => log.user === u.username || log.userId === u.id
+      );
+
+      // MOTOR DE METRICAS
+      const avgDescLen = totalProjects > 0
+        ? userProjs.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / totalProjects
+        : 0;
+
+      const analyticalKeywords = [
+        "vulnerabilidad", "atractor", "patrón", "riesgo", "osint", "geoint", 
+        "hipótesis", "criminógeno", "acecho", "movilidad", "rutina", "rutinas", 
+        "conexiones", "ambiente", "delictivo", "entorno", "focalizado", "análisis"
+      ];
+      let keywordMatches = 0;
+      userProjs.forEach((p) => {
+        const desc = (p.descripcion || "").toLowerCase();
+        analyticalKeywords.forEach((kw) => {
+          if (desc.includes(kw)) keywordMatches++;
+        });
+      });
+
+      const iccScore = Math.max(
+        10,
+        Math.min(
+          100,
+          totalProjects === 0
+            ? 45
+            : Math.round((avgDescLen / 250) * 55 + Math.min(45, keywordMatches * 3))
+        )
+      );
+
+      let logicalConnectives = 0;
+      userProjs.forEach((p) => {
+        const desc = (p.descripcion || "").toLowerCase();
+        ["porque", "debido a", "consecuencia", "por lo tanto", "causal", "hipótesis", "origen", "foco", "razon", "motivo", "factor"].forEach(
+          (conn) => {
+            if (desc.includes(conn)) logicalConnectives++;
+          }
+        );
+      });
+      const ishScore = Math.max(
+        10,
+        Math.min(
+          100,
+          totalProjects === 0
+            ? 45
+            : Math.round(50 + logicalConnectives * 5 + pValidados * 8 - pDevueltos * 6)
+        )
+      );
+
+      const correlationActions = userLogs.filter((log) => {
+        const act = (log.action || log.details || "").toLowerCase();
+        return (
+          act.includes("vínculo") || act.includes("conexion") || act.includes("correlación") ||
+          act.includes("pandillas") || act.includes("mapa") || act.includes("asociación") ||
+          act.includes("cruce") || act.includes("coincidencia")
+        );
+      }).length;
+      const icaScore = Math.max(
+        10,
+        Math.min(
+          100,
+          totalProjects === 0 ? 45 : Math.round(45 + correlationActions * 8 + totalProjects * 3)
+        )
+      );
+
+      const iaaScore = Math.max(
+        20,
+        Math.min(
+          100,
+          totalProjects === 0
+            ? 75
+            : Math.round(100 - pDevueltos * 10 + Math.min(15, avgDescLen / 15))
+        )
+      );
+
+      const evidenceCount = userProjs.reduce((sum, p) => sum + (p.photoCount || 2), 0);
+      const iceScore = Math.max(
+        15,
+        Math.min(
+          100,
+          totalProjects === 0
+            ? 40
+            : Math.round(Math.min(100, (evidenceCount / (totalProjects * 2 + 1)) * 40 + 40))
+        )
+      );
+
+      const geointProjects = userProjs.filter(
+        (p) => (p.geometryType && p.geometryType !== "individual") || p.latitud || p.coordenadas
+      ).length;
+      const igeoScore = Math.max(
+        15,
+        Math.min(
+          100,
+          totalProjects === 0 ? 45 : Math.round(50 + geointProjects * 15 + totalProjects * 3)
+        )
+      );
+
+      const osintKeywords = ["osint", "curp", "rfc", "denue", "registro", "búsqueda", "consulta", "fuente", "osint-query"];
+      let osintQueriesCount = userLogs.filter((log) => {
+        const act = (log.action || log.details || "").toLowerCase();
+        return osintKeywords.some((kw) => act.includes(kw));
+      }).length;
+      const iosintScore = Math.max(
+        15,
+        Math.min(
+          100,
+          totalProjects === 0 ? 45 : Math.round(48 + osintQueriesCount * 8 + totalProjects * 3)
+        )
+      );
+
+      const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
+      const ipiScore = Math.max(
+        10,
+        Math.min(
+          100,
+          totalProjects === 0
+            ? 40
+            : Math.round(completionRate * 50 + pValidados * 8 + totalProjects * 2)
+        )
+      );
+
+      const yearsSSPE = parseInt(u.aniosSspe || "0", 10);
+      let rawExperiencePoints = totalProjects * 0.8 + pValidados * 1.5 + yearsSSPE * 1.2;
+      const componentsBaseScore =
+        iccScore * 0.20 +
+        ishScore * 0.15 +
+        icaScore * 0.15 +
+        iaaScore * 0.10 +
+        iceScore * 0.10 +
+        igeoScore * 0.10 +
+        iosintScore * 0.10 +
+        ipiScore * 0.10;
+      const experienceCapFactor = componentsBaseScore < 45 ? 0.3 : componentsBaseScore < 60 ? 0.7 : 1.0;
+      const finalExperiencePoints = Math.min(15, Math.round(rawExperiencePoints * experienceCapFactor * 10) / 10);
+
+      const recentProjects = userProjs.filter((p) => {
+        if (!p.createdAt) return false;
+        const diffMs = Date.now() - p.createdAt;
+        return diffMs <= 30 * 24 * 60 * 60 * 1000;
+      });
+      let trend: "Crecimiento" | "Estable" | "Retroceso" = "Estable";
+      let improvementBonus = 0;
+      if (totalProjects > 2) {
+        if (recentProjects.length > 0) {
+          const avgRecentDesc = recentProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / recentProjects.length;
+          if (avgRecentDesc > avgDescLen * 1.1) {
+            trend = "Crecimiento";
+            improvementBonus = 4;
+          } else if (avgRecentDesc < avgDescLen * 0.9) {
+            trend = "Retroceso";
+          }
+        }
+      }
+
+      let penaltyDeductions = 0;
+      if (avgDescLen < 120 && totalProjects > 0) penaltyDeductions += 4;
+      if (pDevueltos > pValidados && totalProjects > 1) penaltyDeductions += 5;
+      if (evidenceCount < totalProjects && totalProjects > 0) penaltyDeductions += 3;
+      if (logicalConnectives === 0 && totalProjects > 0) penaltyDeductions += 3;
+      if (iaaScore < 50 && totalProjects > 0) penaltyDeductions += 2;
+
+      const imiBase = componentsBaseScore * 0.85 + finalExperiencePoints;
+      const imiFinal = Math.max(0, Math.min(100, Math.round(imiBase + improvementBonus - penaltyDeductions)));
+
+      const imiOperativo = Math.round(iccScore * 0.40 + iceScore * 0.30 + ipiScore * 0.30);
+      const imiEstrategico = Math.round(ishScore * 0.25 + icaScore * 0.25 + igeoScore * 0.20 + iosintScore * 0.20 + iaaScore * 0.10);
+
+      const getImiLevel = (score: number) => {
+        if (score >= 81) return "Experto";
+        if (score >= 61) return "Avanzado";
+        if (score >= 41) return "Intermedio";
+        if (score >= 21) return "Básico";
+        return "Inicial";
+      };
+      const currentLevel = getImiLevel(imiFinal);
+
+      const name = (u.name || u.username).substring(0, 24);
       doc.text(name, 16, y);
-      doc.text(u.id_empleado || "N/A", 70, y);
-      doc.text(String(pAbiertos), 112, y);
-      doc.text(String(pRevision), 132, y);
-      doc.text(String(pDevueltos), 158, y);
-      doc.text(String(pValidados), 183, y);
+      doc.text(u.id_empleado || "N/A", 65, y);
+      doc.text(String(totalProjects), 95, y);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${imiFinal}%`, 117, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${imiOperativo}%`, 140, y);
+      doc.text(`${imiEstrategico}%`, 163, y);
+      doc.text(currentLevel, 182, y);
       
       y += 4;
       doc.setDrawColor(226, 232, 240);
@@ -323,7 +511,11 @@ export default function AdminPage() {
       y += 7;
     });
 
-    doc.save(`Desempeño_Analistas_${new Date().getTime()}.pdf`);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Nota: El IMI se calcula a partir de 8 subíndices ponderados (85%) y experiencia histórica de campo (15%).", 14, y + 4);
+
+    doc.save(`Desempeño_IMI_Analistas_${new Date().getTime()}.pdf`);
   };
 
   const openEvaluation = (proyecto: any) => {
@@ -932,11 +1124,12 @@ export default function AdminPage() {
                   );
                 })()}
 
-                {/* Sistema SECAI de Evaluación Integral */}
-                <SecaiDashboard
+                {/* Sistema IMI de Evaluación de Madurez Investigativa */}
+                <ImiDashboard
                   selectedUser={selectedUserForPerf}
                   projects={projects}
                   auditLogs={auditLogs}
+                  allUsers={users}
                 />
 
               </div>

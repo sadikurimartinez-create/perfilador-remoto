@@ -4,10 +4,37 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { getDb } from "@/lib/firebase";
+import { collection, onSnapshot } from "firebase/firestore";
+import { ImiDashboard } from "@/components/ImiDashboard";
 
 export default function PerfilPage() {
   const { user } = useAuth();
   const router = useRouter();
+  
+  const [activeTab, setActiveTab] = useState<"registro" | "imi">("registro");
+  const [projects, setProjects] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    const db = getDb();
+    
+    const unsubProjects = onSnapshot(collection(db, "projects"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setProjects(list);
+    });
+
+    const unsubAudit = onSnapshot(collection(db, "audit_logs"), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAuditLogs(list);
+    });
+
+    return () => {
+      unsubProjects();
+      unsubAudit();
+    };
+  }, [user]);
   
   const [formData, setFormData] = useState({
     nombre: "",
@@ -98,31 +125,57 @@ export default function PerfilPage() {
   };
 
   return (
-    <div className="w-full mt-4">
-      <header className="mb-6 space-y-4">
+    <div className="w-full mt-4 space-y-6">
+      <header className="space-y-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Mi Perfil Operativo</h1>
+          <h1 className="text-2xl font-bold text-slate-100">Mi Perfil y Desempeño</h1>
           <p className="text-sm text-slate-400 mt-2">
-            Es <strong>obligatorio</strong> completar todos los campos para poder acceder al sistema y generar análisis. Esta regla aplica para todos los roles (Analistas, Administradores y Superadministradores).
+            Consulta y completa tu información operativa, y visualiza tu Índice de Madurez Investigativa (IMI) institucional.
           </p>
         </div>
-
-        {isLocked && (
-          <div className="bg-amber-950/40 border border-amber-800/60 rounded-xl p-5 flex items-start gap-4 shadow-lg text-amber-200">
-            <span className="text-3xl flex-shrink-0">🔒</span>
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-amber-300">
-                Pestaña Bloqueada - Registro de Perfil Completado
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Por motivos de seguridad, integridad y auditoría institucional, una vez que has dado de alta tus datos operativos de perfilador, esta pestaña queda bloqueada para edición. No se admiten modificaciones adicionales. Si requieres corregir algún dato, por favor contacta al Super Administrador de la plataforma.
-              </p>
-            </div>
-          </div>
-        )}
       </header>
 
-      <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg space-y-5">
+      {/* Navegación de Pestañas del Módulo */}
+      <div className="flex gap-4 border-b border-slate-800 pb-2 overflow-x-auto whitespace-nowrap">
+        <button
+          onClick={() => setActiveTab("registro")}
+          className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${
+            activeTab === "registro"
+              ? "border-sky-500 text-sky-400"
+              : "border-transparent text-slate-400 hover:text-slate-300"
+          }`}
+        >
+          📝 Datos de Registro
+        </button>
+        <button
+          onClick={() => setActiveTab("imi")}
+          className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${
+            activeTab === "imi"
+              ? "border-amber-500 text-amber-400"
+              : "border-transparent text-slate-400 hover:text-slate-300"
+          }`}
+        >
+          🏆 Mi Desempeño (IMI)
+        </button>
+      </div>
+
+      {activeTab === "registro" && (
+        <div className="space-y-6">
+          {isLocked && (
+            <div className="bg-amber-950/40 border border-amber-800/60 rounded-xl p-5 flex items-start gap-4 shadow-lg text-amber-200 animate-fadeIn">
+              <span className="text-3xl flex-shrink-0">🔒</span>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-amber-300">
+                  Pestaña Bloqueada - Registro de Perfil Completado
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Por motivos de seguridad, integridad y auditoría institucional, una vez que has dado de alta tus datos operativos de perfilador, esta pestaña queda bloqueada para edición. No se admiten modificaciones adicionales. Si requieres corregir algún dato, por favor contacta al Super Administrador de la plataforma.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg space-y-5">
         {message && (
           <div className={`p-3 rounded-md text-sm font-semibold ${message.includes("error") ? "bg-red-900/50 text-red-300 border border-red-800" : "bg-emerald-900/50 text-emerald-300 border border-emerald-800"}`}>
             {message}
@@ -309,6 +362,18 @@ export default function PerfilPage() {
           </button>
         </div>
       </form>
+        </div>
+      )}
+
+      {activeTab === "imi" && (
+        <div className="animate-fadeIn">
+          <ImiDashboard
+            selectedUser={user as any}
+            projects={projects}
+            auditLogs={auditLogs}
+          />
+        </div>
+      )}
     </div>
   );
 }
