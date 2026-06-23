@@ -49,15 +49,21 @@ export default function DriveIngestPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [activeTab, setActiveCategoryTab] = useState<"all" | "Pandillas" | "OSINT" | "Evidencia" | "Desaparecidos">("all");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
       setRefreshing(true);
+      setErrorMessage(null);
+      
       // Load logs
       const logsRes = await fetch("/api/drive-ingest?type=logs");
       if (logsRes.ok) {
         const logsData = await logsRes.json();
         setLogs(logsData.logs || []);
+      } else {
+        const errorData = await logsRes.json().catch(() => ({}));
+        setErrorMessage(errorData.details || errorData.error || "Error de comunicación con el servidor al cargar bitácoras.");
       }
 
       // Load intelligence
@@ -65,9 +71,15 @@ export default function DriveIngestPage() {
       if (intelRes.ok) {
         const intelData = await intelRes.json();
         setIntelligenceList(intelData.intelligence || []);
+      } else {
+        const errorData = await intelRes.json().catch(() => ({}));
+        if (!errorMessage) {
+          setErrorMessage(errorData.details || errorData.error || "Error al recuperar datos de inteligencia extraídos.");
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error loading ingestion logs:", err);
+      setErrorMessage(err.message || "Error de red al conectar con el servidor.");
     } finally {
       setRefreshing(false);
     }
@@ -81,6 +93,7 @@ export default function DriveIngestPage() {
     if (loading) return;
     try {
       setLoading(true);
+      setErrorMessage(null);
       const res = await fetch("/api/drive-ingest", { method: "POST" });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -91,10 +104,13 @@ export default function DriveIngestPage() {
           `• Fallidos: ${data.report.failedCount}`
         );
       } else {
-        alert(`Error al ejecutar la ingesta: ${data.error || "Error desconocido"}`);
+        const detailMsg = data.details ? `\n\nDetalles técnicos:\n${data.details}` : "";
+        setErrorMessage(data.details || data.error || "Error al ejecutar la ingesta.");
+        alert(`Error al ejecutar la ingesta: ${data.error || "Error desconocido"}${detailMsg}`);
       }
       loadData();
     } catch (err: any) {
+      setErrorMessage(err.message);
       alert(`Error en el servidor: ${err.message}`);
     } finally {
       setLoading(false);
@@ -160,6 +176,29 @@ export default function DriveIngestPage() {
           </button>
         </div>
       </header>
+
+      {errorMessage && (
+        <div className="bg-red-950/40 border border-red-500/30 rounded-2xl p-5 text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-start gap-3">
+            <span className="text-xl shrink-0 mt-0.5">⚠️</span>
+            <div className="space-y-1">
+              <p className="font-bold text-red-200 uppercase tracking-wider text-[10px]">Error de Ingesta o Sincronización</p>
+              <p className="text-red-300 font-mono text-[11px] leading-relaxed select-all">
+                {errorMessage}
+              </p>
+              <p className="text-slate-400 text-[10.5px]">
+                Recomendación: Verifica que la base de datos de PostgreSQL esté en línea y accesible, y que el ID de carpeta de Google Drive `GOOGLE_DRIVE_FOLDER_ID` esté debidamente configurado en Vercel.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-[10px] font-bold text-red-400 hover:text-red-300 bg-red-950/30 hover:bg-red-950/50 px-3 py-1.5 rounded-lg border border-red-500/15 shrink-0 transition"
+          >
+            OCULTAR ERROR
+          </button>
+        </div>
+      )}
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
