@@ -9,6 +9,7 @@ yarn-error.log*
 dist/
 out/
 perfil-remoto-fa3fa74486fa.json
+perfil-remoto-94869497361e.json
 .vercel
 .env*
 INCID DELICT/*.zip

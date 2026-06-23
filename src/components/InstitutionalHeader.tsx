@@ -84,6 +84,15 @@ export function InstitutionalHeader() {
               Pandillas
             </Link>
           )}
+          {user && (
+            <Link
+              href="/drive-ingest"
+              className="text-[11px] sm:text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+              Ingesta Drive
+            </Link>
+          )}
           {user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
             <Link
               href="/admin"
