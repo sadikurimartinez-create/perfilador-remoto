@@ -195,6 +195,11 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
                 setIsAudited(false);
               }}
               isReadOnly={isReadOnly}
+              insumoText={context || ""}
+              insumoType="document_pending"
+              insumoId={d.id}
+              insumoName={d.name || "Evidencia de Campo"}
+              isContextualized={isAudited}
             />
           </div>
         )}
@@ -1202,6 +1207,12 @@ const hasMinimumPhotos =
                           })
                         }
                         isReadOnly={isReadOnly}
+                        insumoText={p.comentario || ""}
+                        insumoType="photo"
+                        insumoId={p.id}
+                        insumoName={p.tipo || "Evidencia Fotográfica"}
+                        locationCoords={p.lat && p.lng ? { lat: p.lat, lng: p.lng } : undefined}
+                        isContextualized={p.isContextualized}
                       />
                     </div>
                   )}
@@ -2119,6 +2130,11 @@ const hasMinimumPhotos =
                     setIsDocContextAudited(false);
                   }}
                   isReadOnly={isReadOnly}
+                  insumoText={docContext || ""}
+                  insumoType="document_upload"
+                  insumoId="new_document"
+                  insumoName="Documento Cargado"
+                  isContextualized={isDocContextAudited}
                 />
               </div>
             )}
@@ -2757,6 +2773,15 @@ const hasMinimumPhotos =
                         setIsAnalysisContextAudited(false);
                       }}
                       isReadOnly={isReadOnly}
+                      insumoText={analysisContext || ""}
+                      insumoType="hypothesis"
+                      insumoId="main_hypothesis"
+                      insumoName="Hipótesis de Análisis"
+                      isContextualized={isAnalysisContextAudited}
+                      locationCoords={(() => {
+                        const geo = album.find(p => p.lat != null && p.lng != null);
+                        return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
+                      })()}
                     />
                   </div>
                 )}

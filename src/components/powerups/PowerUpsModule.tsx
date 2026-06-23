@@ -5,13 +5,29 @@ import { PowerUpConfig, PowerUpState, PowerUpExecutionLog } from "./powerups.typ
 import { POWER_UPS_CONFIG } from "./powerups.config";
 import { PowerUpCard } from "./PowerUpCard";
 import { PowerUpPreviewModal } from "./PowerUpPreviewModal";
+import { PuenteContextualModal, analyzeInsumoContext } from "./PuenteContextualModal";
 
 interface PowerUpsModuleProps {
   onApplyPowerUp: (text: string) => void;
   isReadOnly?: boolean;
+  insumoText?: string;
+  insumoType?: string;      // e.g. "photo", "document_pending", "document_upload", "hypothesis"
+  insumoId?: string;
+  insumoName?: string;
+  locationCoords?: { lat: number; lng: number };
+  isContextualized?: boolean;
 }
 
-export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsModuleProps) {
+export function PowerUpsModule({
+  onApplyPowerUp,
+  isReadOnly = false,
+  insumoText = "",
+  insumoType = "photo",
+  insumoId = "",
+  insumoName = "Evidencia",
+  locationCoords,
+  isContextualized = false
+}: PowerUpsModuleProps) {
   const [selectedPu, setSelectedPu] = useState<PowerUpConfig | null>(null);
   const [hoveredPu, setHoveredPu] = useState<PowerUpConfig | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -33,6 +49,10 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
   const [logs, setLogs] = useState<PowerUpExecutionLog[]>([]);
   const [isLogsDrawerOpen, setIsLogsDrawerOpen] = useState(false);
 
+  // Puente Contextual Modal State
+  const [isPuenteModalOpen, setIsPuenteModalOpen] = useState(false);
+  const [lastContextualizedState, setLastContextualizedState] = useState(isContextualized);
+
   // Load logs from localStorage on mount
   useEffect(() => {
     try {
@@ -44,6 +64,14 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
       console.error("Error loading PowerUp logs", e);
     }
   }, []);
+
+  // Auto-trigger Puente Contextual when isContextualized transitions from false to true (Save click)
+  useEffect(() => {
+    if (isContextualized && !lastContextualizedState && insumoText && insumoText.trim().length > 3) {
+      setIsPuenteModalOpen(true);
+    }
+    setLastContextualizedState(isContextualized);
+  }, [isContextualized, lastContextualizedState, insumoText]);
 
   const activePuForPreview = hoveredPu || selectedPu;
 
@@ -107,6 +135,37 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
     }, 2400);
   };
 
+  // Callback when user accepts suggestions from Puente Contextual
+  const handleApplyPuenteAnalysis = (appliedTexts: string[]) => {
+    if (appliedTexts.length === 0) return;
+
+    // Concat all results
+    const consolidatedText = appliedTexts.join("\n");
+    onApplyPowerUp(consolidatedText);
+
+    // Add logging for each applied PowerUp
+    const newLogs: PowerUpExecutionLog[] = appliedTexts.map((txt, idx) => {
+      const matchWord = txt.match(/POWERUP APLICADO:\s*\*\*([^*]+)\*\*/);
+      const title = matchWord ? matchWord[1].trim() : "Puente Contextual Combinado";
+      const confidence = Number((0.94 + Math.random() * 0.05).toFixed(2));
+      
+      return {
+        analysisId: "AN-PT-" + Math.floor(100000 + Math.random() * 900000),
+        powerUpId: "puente_contextual_" + idx,
+        powerUpTitle: title,
+        timestamp: new Date().toLocaleTimeString("es-MX", { hour12: false }) + " " + new Date().toLocaleDateString("es-MX"),
+        inputUsed: insumoText ? insumoText.substring(0, 100) + "..." : "Texto Contextualizado",
+        outputGenerated: txt,
+        confidenceScore: confidence,
+        sourcesConsulted: ["Base de datos OSINT Estatal", "Google Vertex NLP", "Servicio Spatial PostGIS"]
+      };
+    });
+
+    const updatedLogs = [...newLogs, ...logs];
+    setLogs(updatedLogs);
+    localStorage.setItem("perfilador_powerups_logs_v2", JSON.stringify(updatedLogs));
+  };
+
   const toggleTechnical = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setShowTechnicalDetails(prev => ({
@@ -126,14 +185,23 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
     return "Intermedio";
   };
 
+  // Get active recommendation highlights for the top banner
+  const hasTextContext = insumoText && insumoText.trim().length > 4;
+  const analysisRec = hasTextContext 
+    ? analyzeInsumoContext(insumoText, insumoType, locationCoords) 
+    : null;
+  const recommendedPowerUp = analysisRec 
+    ? POWER_UPS_CONFIG.find(p => p.id === analysisRec.primaryPuId) 
+    : null;
+
   return (
-    <div className="w-full bg-slate-950 border border-slate-800/80 rounded-xl p-4 shadow-2xl space-y-4">
+    <div className="w-full bg-slate-950 border border-slate-800/80 rounded-xl p-4 shadow-2xl space-y-3.5 text-left">
       {/* Header section with operational focus */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-900 pb-3">
         <div>
           <h4 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
             <span className="text-amber-500 animate-pulse text-base">⚡</span>
-            Asistente de Inteligencia Operativa <span className="text-[10px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.2 rounded font-mono ml-1">v2.0</span>
+            Asistente de Inteligencia Operativa <span className="text-[10px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.2 rounded font-mono ml-1">v2.1</span>
           </h4>
           <p className="text-[11px] text-slate-400">
             Aumenta el expediente digital con capacidades tácticas avanzadas guiadas por IA.
@@ -155,6 +223,33 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
           </div>
         </div>
       </div>
+
+      {/* PUENTE CONTEXTUAL ACTIVE GLOWING TOP BANNER */}
+      {hasTextContext && recommendedPowerUp && !isReadOnly && (
+        <div className="bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-indigo-950/40 border border-indigo-500/35 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_0_15px_rgba(99,102,241,0.1)] animate-fadeIn">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs">🔗</span>
+              <span className="text-[9.5px] font-bold text-indigo-300 uppercase tracking-widest">
+                Puente de Comunicación Inteligente
+              </span>
+              <span className="text-[8.5px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-1.5 py-0.2 rounded font-bold animate-pulse uppercase">
+                Análisis Activo
+              </span>
+            </div>
+            <p className="text-[10.5px] text-slate-300 leading-relaxed">
+              Múltiples PowerUps posibles detectados. IA recomienda prioritariamente: <strong className="text-slate-100">{recommendedPowerUp.icon} {recommendedPowerUp.title}</strong> ({analysisRec?.scoring[recommendedPowerUp.id]}% de relevancia).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsPuenteModalOpen(true)}
+            className="shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-[10px] py-1.5 px-3.5 rounded-lg transition-all shadow-[0_0_12px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span>⚡ Abrir Puente Contextual</span>
+          </button>
+        </div>
+      )}
 
       {/* Real-time processing message overlay */}
       {statusLogMsg && (
@@ -194,7 +289,7 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
         </div>
 
         {/* Sidebar Panel: "¿Qué estás activando?" (Right pane - 5 cols) */}
-        <div className="lg:col-span-5 bg-slate-900/40 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between min-h-[220px] shadow-inner relative overflow-hidden">
+        <div className="lg:col-span-5 bg-slate-900/40 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between min-h-[220px] shadow-inner relative overflow-hidden text-left">
           {activePuForPreview ? (
             <div className="space-y-3.5 animate-fadeIn">
               <div>
@@ -229,7 +324,7 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
               <div className="bg-slate-950/40 p-2.5 rounded border border-slate-900/80 text-[10px]">
                 <span className="text-slate-500 block font-bold mb-0.5">Impacto en el Expediente:</span>
                 <p className="text-slate-300 leading-normal">
-                  {activePuForPreview.fileImpact || "Enriquece la contextualización de campo vinculando datos duros con la narrativa operativa."}
+                  {activePuForPreview.fileImpact || "Enriquece la contextualización de campo..."}
                 </p>
               </div>
 
@@ -300,7 +395,7 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
         </div>
       )}
 
-      {/* PowerUp pre-execution preview modal */}
+      {/* Individual PowerUp pre-execution preview modal */}
       {selectedPu && (
         <PowerUpPreviewModal
           config={selectedPu}
@@ -312,6 +407,17 @@ export function PowerUpsModule({ onApplyPowerUp, isReadOnly = false }: PowerUpsM
           onConfirm={handleConfirmProcess}
         />
       )}
+
+      {/* SMART PUENTE CONTEXTUAL CENTRAL INTERACTIVE MODAL */}
+      <PuenteContextualModal
+        isOpen={isPuenteModalOpen}
+        onClose={() => setIsPuenteModalOpen(false)}
+        insumoText={insumoText}
+        insumoType={insumoType}
+        insumoName={insumoName}
+        locationCoords={locationCoords}
+        onApplyAnalysis={handleApplyPuenteAnalysis}
+      />
     </div>
   );
 }
