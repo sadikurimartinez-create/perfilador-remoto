@@ -524,7 +524,7 @@ export default function ProjectWorkspacePage() {
       </a>
       {previewAnalysis && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto relative">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto relative">
             <button
               type="button"
               onClick={() => setPreviewAnalysis(null)}
@@ -567,7 +567,7 @@ export default function ProjectWorkspacePage() {
 
       {isRenaming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
             <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
               ✏️ Modificar Nombre de Expediente
             </h3>

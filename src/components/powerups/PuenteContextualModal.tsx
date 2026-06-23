@@ -411,29 +411,6 @@ export function PuenteContextualModal({
     }, 4500);
   };
 
-  const getFloatingStyle = () => {
-    if (!coords) return {};
-    let top = coords.y + 15;
-    let left = coords.x + 15;
-    if (typeof window !== "undefined") {
-      const modalWidth = 672; // max-w-2xl is 672px
-      const modalHeight = 650; 
-      if (left + modalWidth > window.innerWidth) {
-        left = window.innerWidth - modalWidth - 25;
-      }
-      if (top + modalHeight > window.innerHeight) {
-        top = window.innerHeight - modalHeight - 25;
-      }
-    }
-    return {
-      position: "fixed" as const,
-      top: `${Math.max(15, top)}px`,
-      left: `${Math.max(15, left)}px`,
-      transform: "none",
-      margin: "0",
-    };
-  };
-
   return (
     <>
       {/* Fullscreen processing blocker for UI block execution */}
@@ -495,9 +472,10 @@ export function PuenteContextualModal({
         onClick={onClose}
       >
         <div 
+          role="dialog"
+          aria-modal="true"
           onClick={(e) => e.stopPropagation()}
-          style={getFloatingStyle()}
-          className="bg-slate-950 border border-slate-800/80 rounded-2xl w-full max-w-2xl p-5 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto gap-4 scrollbar-thin"
+          className="cursor-anchored-dialog bg-slate-950 border border-slate-800/80 rounded-2xl w-full max-w-2xl p-5 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto gap-4 scrollbar-thin"
         >
         {/* Top styling bar */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />

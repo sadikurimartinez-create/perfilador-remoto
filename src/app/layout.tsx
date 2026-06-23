@@ -4,6 +4,7 @@ import { InstitutionalHeader } from "@/components/InstitutionalHeader";
 import { ProjectProvider } from "@/context/ProjectContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { ProfileGuard } from "@/components/ProfileGuard";
+import { CursorAnchoredDialogs } from "@/components/CursorAnchoredDialogs";
 
 export const metadata: Metadata = {
   title: "Perfilador Remoto",
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className="min-h-screen bg-slate-950 text-slate-100">
+        <CursorAnchoredDialogs />
         <AuthProvider>
           <ProfileGuard>
             <InstitutionalHeader />

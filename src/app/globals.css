@@ -22,3 +22,19 @@ body {
   @apply flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-700 rounded-xl cursor-pointer hover:border-sky-500 transition-colors;
 }
 
+/* Modal panels are placed by CursorAnchoredDialogs next to the last pointer action. */
+.cursor-anchored-dialog {
+  position: fixed !important;
+  margin: 0 !important;
+  max-width: calc(100vw - 2rem) !important;
+  max-height: calc(100vh - 2rem) !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 640px) {
+  .cursor-anchored-dialog {
+    width: calc(100vw - 2rem) !important;
+  }
+}
+

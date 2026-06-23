@@ -2835,7 +2835,7 @@ const hasMinimumPhotos =
 
       {showConfigModal && (
         <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div className="w-full max-w-[98vw] 2xl:max-w-none rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-8 md:py-10 my-8 md:my-auto max-h-[95vh] overflow-y-auto">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-[98vw] 2xl:max-w-none rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-8 md:py-10 my-8 md:my-auto max-h-[95vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
@@ -3329,7 +3329,7 @@ const hasMinimumPhotos =
       {/* MODAL DE EDICIÓN DE VENTANA */}
       {editingPhoto && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm print:hidden">
-          <div className="w-full max-w-6xl bg-slate-900 border border-sky-600 rounded-xl p-6 shadow-2xl space-y-4">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-6xl bg-slate-900 border border-sky-600 rounded-xl p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-sky-200">Ventana de Edición de Contexto</h3>
             <p className="text-xs text-slate-400">Edite la contextualización de la evidencia de manera cómoda.</p>
             <textarea
@@ -3354,7 +3354,7 @@ const hasMinimumPhotos =
       {/* MODAL DE ELIMINACIÓN CONTROLADA (JUSTIFICACIÓN OBLIGATORIA) */}
       {deleteModal?.isOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 print:hidden">
-          <div className="w-full max-w-md bg-slate-950 border border-red-700/50 p-6 rounded-2xl shadow-2xl space-y-4 text-left">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-md bg-slate-950 border border-red-700/50 p-6 rounded-2xl shadow-2xl space-y-4 text-left">
             <h3 className="text-lg font-black text-red-400 flex items-center gap-2">
               ⚠️ Confirmar Eliminación Controlada
             </h3>
