@@ -15,6 +15,7 @@ import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 import { OsintTerritorialPanel } from "./OsintTerritorialPanel";
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
+import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
 
 type EvidencePhotoType = {
   id: string;
@@ -98,6 +99,7 @@ function ElapsedTime({ running }: { running: boolean }) {
 }
 
 function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isReadOnly }: any) {
+  const { documents, saveCustomDocument, removeDocument } = useProject();
   const [context, setContext] = useState("");
   const [suggestions, setSuggestions] = useState("");
   const [auditScore, setAuditScore] = useState<number | null>(null);
@@ -187,22 +189,57 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
          <span className="animate-pulse">⚠️</span> Evidencia In-Situ: Requiere Trabajo de Gabinete (Contextualización)
        </p>
        <textarea value={context} disabled={isReadOnly} onChange={(e) => { setContext(e.target.value); setIsAudited(false); }} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[80px]" placeholder="Describa el contexto y justificación de esta evidencia capturada en campo..." />
+       
        {!isReadOnly && (
-          <div className="mt-1.5 mb-1.5">
-            <PowerUpsModule
-              onApplyPowerUp={(text) => {
-                setContext((prev) => (prev ? prev.trim() + " " : "") + text);
-                setIsAudited(false);
-              }}
-              isReadOnly={isReadOnly}
-              insumoText={context || ""}
-              insumoType="document_pending"
-              insumoId={d.id}
-              insumoName={d.name || "Evidencia de Campo"}
-              isContextualized={isAudited}
-            />
-          </div>
-        )}
+         <div className="mt-1.5 mb-1.5">
+           <PowerUpsModule
+             onApplyPowerUp={(text) => {
+               setContext((prev) => (prev ? prev.trim() + " " : "") + text);
+               setIsAudited(false);
+             }}
+             isReadOnly={isReadOnly}
+             insumoText={context || ""}
+             insumoType="document_pending"
+             insumoId={d.id}
+             insumoName={d.name || "Evidencia de Campo"}
+             isContextualized={isAudited}
+             onApplyDetailedAnalysis={async (results) => {
+               for (const res of results) {
+                 res.insumoId = d.id;
+                 await saveCustomDocument(
+                   `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                   "powerup_execution",
+                   JSON.stringify(res)
+                 );
+               }
+             }}
+           />
+         </div>
+       )}
+
+       {/* Persisted Puente Results */}
+       {documents && documents
+         .filter((doc: any) => doc.type === "powerup_execution")
+         .map((doc: any) => {
+           try {
+             const parsed = JSON.parse(doc.context);
+             if (parsed.insumoId === d.id) {
+               return (
+                 <div key={doc.id} className="mt-2 text-left">
+                   <VentanaResultadosPuente
+                     data={parsed}
+                     onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                   />
+                 </div>
+               );
+             }
+           } catch (err) {
+             console.error("Error parsing powerup_execution doc.context", err);
+           }
+           return null;
+         })
+       }
+
        <div className="flex items-center gap-2 mt-1">
           <button type="button" onClick={handleRequestSuggestions} disabled={isRefining || !context.trim() || isReadOnly} className="bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-md text-white text-[11px] font-semibold disabled:opacity-50 transition-colors">
               {isRefining ? "Consultando IA..." : "Auditar Contexto"}
@@ -251,6 +288,7 @@ export function PhotoAlbum({
     documents,
     uploadDocument,
     removeDocument,
+    saveCustomDocument,
     isReadOnly,
     markAsPrinted,
     uploadAndAddPhoto,
@@ -1213,9 +1251,42 @@ const hasMinimumPhotos =
                         insumoName={p.tipo || "Evidencia Fotográfica"}
                         locationCoords={p.lat && p.lng ? { lat: p.lat, lng: p.lng } : undefined}
                         isContextualized={p.isContextualized}
+                        onApplyDetailedAnalysis={async (results) => {
+                          for (const res of results) {
+                            res.insumoId = p.id;
+                            await saveCustomDocument(
+                              `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                              "powerup_execution",
+                              JSON.stringify(res)
+                            );
+                          }
+                        }}
                       />
                     </div>
                   )}
+
+                  {/* Persisted Puente Results for this photo */}
+                  {documents && documents
+                    .filter((doc: any) => doc.type === "powerup_execution")
+                    .map((doc: any) => {
+                      try {
+                        const parsed = JSON.parse(doc.context);
+                        if (parsed.insumoId === p.id) {
+                          return (
+                            <div key={doc.id} className="mt-2 text-left">
+                              <VentanaResultadosPuente
+                                data={parsed}
+                                onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                              />
+                            </div>
+                          );
+                        }
+                      } catch (err) {
+                        console.error("Error parsing powerup_execution doc.context", err);
+                      }
+                      return null;
+                    })
+                  }
 
                   <div className="mt-1 mb-2">
                     <div className="flex justify-between items-center text-[9px] mb-0.5">
@@ -2135,9 +2206,42 @@ const hasMinimumPhotos =
                   insumoId="new_document"
                   insumoName="Documento Cargado"
                   isContextualized={isDocContextAudited}
+                  onApplyDetailedAnalysis={async (results) => {
+                    for (const res of results) {
+                      res.insumoId = "new_document";
+                      await saveCustomDocument(
+                        `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                        "powerup_execution",
+                        JSON.stringify(res)
+                      );
+                    }
+                  }}
                 />
               </div>
             )}
+
+            {/* Persisted Puente Results for document upload */}
+            {documents && documents
+              .filter((doc: any) => doc.type === "powerup_execution")
+              .map((doc: any) => {
+                try {
+                  const parsed = JSON.parse(doc.context);
+                  if (parsed.insumoId === "new_document") {
+                    return (
+                      <div key={doc.id} className="mt-2 text-left">
+                        <VentanaResultadosPuente
+                          data={parsed}
+                          onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                        />
+                      </div>
+                    );
+                  }
+                } catch (err) {
+                  console.error("Error parsing powerup_execution doc.context", err);
+                }
+                return null;
+              })
+            }
             
             <div className="mt-1 mb-2">
               <div className="flex justify-between items-center text-[10px] mb-1">
@@ -2390,31 +2494,55 @@ const hasMinimumPhotos =
             </button>
           </div>
           <div className="w-full space-y-2">
-            {documents && documents.length > 0 ? documents.map(d => (
-              <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
-                <div className="flex justify-between items-start gap-2">
-                  <a href={d.url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold text-[11px] truncate flex-1" title={d.name}>📄 {d.name}</a>
-                  {!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
-                    <button
-                      onClick={() => setDeleteModal({
-                        isOpen: true,
-                        type: "Documento",
-                        id: d.id,
-                        projectId: projectId || project?.id
-                      })}
-                      className="text-red-400 hover:text-red-300 text-[10px] shrink-0"
-                    >
-                      Eliminar
-                    </button>
+            {documents && documents.length > 0 ? documents.map(d => {
+              if (d.type === "powerup_execution") {
+                try {
+                  const parsed = JSON.parse(d.context);
+                  return (
+                    <div key={d.id} className="w-full">
+                      <VentanaResultadosPuente
+                        data={parsed}
+                        onRemove={!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") ? () => {
+                          removeDocument(d.id);
+                        } : undefined}
+                        isInsideEvidencias={true}
+                      />
+                    </div>
+                  );
+                } catch (err) {
+                  console.error("Error parsing powerup_execution inside Evidencias list", err);
+                }
+              }
+              return (
+                <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
+                  <div className="flex justify-between items-start gap-2">
+                    {d.url ? (
+                      <a href={d.url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold text-[11px] truncate flex-1" title={d.name}>📄 {d.name}</a>
+                    ) : (
+                      <span className="text-slate-300 font-semibold text-[11px] truncate flex-1">📄 {d.name}</span>
+                    )}
+                    {!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+                      <button
+                        onClick={() => setDeleteModal({
+                          isOpen: true,
+                          type: "Documento",
+                          id: d.id,
+                          projectId: projectId || project?.id
+                        })}
+                        className="text-red-400 hover:text-red-300 text-[10px] shrink-0"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
+                  {d.context === "PENDIENTE DE CONTEXTUALIZAR EN GABINETE" ? (
+                    <PendingEvidenceEditor d={d} projectId={projectId} album={album} selectedIds={selectedIds} project={project} isReadOnly={isReadOnly} />
+                  ) : (
+                    <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
                   )}
                 </div>
-                {d.context === "PENDIENTE DE CONTEXTUALIZAR EN GABINETE" ? (
-                  <PendingEvidenceEditor d={d} projectId={projectId} album={album} selectedIds={selectedIds} project={project} isReadOnly={isReadOnly} />
-                ) : (
-                  <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
-                )}
-              </div>
-            )) : (
+              );
+            }) : (
               <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-700 rounded-lg">No hay evidencias adicionales en este expediente.</div>
             )}
           </div>
@@ -2782,9 +2910,42 @@ const hasMinimumPhotos =
                         const geo = album.find(p => p.lat != null && p.lng != null);
                         return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
                       })()}
+                      onApplyDetailedAnalysis={async (results) => {
+                        for (const res of results) {
+                          res.insumoId = "main_hypothesis";
+                          await saveCustomDocument(
+                            `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                            "powerup_execution",
+                            JSON.stringify(res)
+                          );
+                        }
+                      }}
                     />
                   </div>
                 )}
+
+                {/* Persisted Puente Results for Hipótesis de Análisis */}
+                {documents && documents
+                  .filter((doc: any) => doc.type === "powerup_execution")
+                  .map((doc: any) => {
+                    try {
+                      const parsed = JSON.parse(doc.context);
+                      if (parsed.insumoId === "main_hypothesis") {
+                        return (
+                          <div key={doc.id} className="mt-2 text-left">
+                            <VentanaResultadosPuente
+                              data={parsed}
+                              onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                            />
+                          </div>
+                        );
+                      }
+                    } catch (err) {
+                      console.error("Error parsing powerup_execution doc.context", err);
+                    }
+                    return null;
+                  })
+                }
                 <div className="mt-1 mb-2">
                   <div className="flex justify-between items-center text-[10px] mb-1">
                     <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>

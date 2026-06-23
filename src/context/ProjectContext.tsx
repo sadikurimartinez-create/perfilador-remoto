@@ -156,6 +156,7 @@ type ProjectContextValue = {
   importProjectData: (file: File, username: string) => Promise<void>;
   documents: ProjectDocument[];
   uploadDocument: (file: File, context: string) => Promise<void>;
+  saveCustomDocument: (name: string, type: string, context: string, url?: string) => Promise<string>;
   removeDocument: (id: string) => Promise<void>;
   markAsPrinted: () => Promise<void>;
   datosGobMxResult: DatosGobMxResult | null;
@@ -569,6 +570,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
     const docRef = await addDoc(docsColRef, docData);
     setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);
+  }, [project, isReadOnly]);
+
+  const saveCustomDocument = useCallback(async (name: string, type: string, context: string, url = "") => {
+    if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
+    if (!project) throw new Error("No hay un proyecto activo para guardar el anexo.");
+    const firestore = getDb();
+    const docsColRef = collection(firestore, "projects", project.id, "documents");
+    const docData = {
+      name,
+      url,
+      type,
+      context,
+      createdAt: Date.now()
+    };
+    const docRef = await addDoc(docsColRef, docData);
+    setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);
+    return docRef.id;
   }, [project, isReadOnly]);
 
   const removeDocument = useCallback(async (id: string) => {
@@ -1074,6 +1092,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProjectData,
       documents,
       uploadDocument,
+      saveCustomDocument,
       removeDocument,
       markAsPrinted,
       datosGobMxResult,
@@ -1109,6 +1128,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProjectData,
       documents,
       uploadDocument,
+      saveCustomDocument,
       removeDocument,
       markAsPrinted,
       datosGobMxResult,

@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { PowerUpConfig, PowerUpState } from "./powerups.types";
 import { POWER_UPS_CONFIG } from "./powerups.config";
 
+import { PowerUpExecutionResultData } from "./VentanaResultadosPuente";
+
 interface PuenteContextualModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -12,6 +14,8 @@ interface PuenteContextualModalProps {
   insumoName: string;
   locationCoords?: { lat: number; lng: number };
   onApplyAnalysis: (appliedTexts: string[]) => void;
+  coords?: { x: number; y: number } | null;
+  onApplyDetailedAnalysis?: (results: PowerUpExecutionResultData[]) => void;
 }
 
 // Interface for parsed context
@@ -238,7 +242,9 @@ export function PuenteContextualModal({
   insumoType,
   insumoName,
   locationCoords,
-  onApplyAnalysis
+  onApplyAnalysis,
+  coords,
+  onApplyDetailedAnalysis
 }: PuenteContextualModalProps) {
   const [activeTab, setActiveTab] = useState<"sugerido" | "manual">("sugerido");
   const [selectedPuIds, setSelectedPuIds] = useState<string[]>([]);
@@ -340,16 +346,99 @@ export function PuenteContextualModal({
         return `\n👉 POWERUP APLICADO: **${config?.title}**\n   - Proceso IA: ${config?.technicalText}${paramSnippet}${extraNote}\n   - Impacto del Expediente: ${config?.fileImpact}`;
       });
 
+      // Generate structured detailed results for audit sync
+      const detailedResults: PowerUpExecutionResultData[] = selectedPuIds.map(id => {
+        const config = POWER_UPS_CONFIG.find(p => p.id === id);
+        
+        // Generate simulated findings or summaries based on text and parameters
+        let summaryText = "";
+        let correlations: string[] = [];
+        let entitiesFound: string[] = [];
+        
+        if (id === "analisis_ubicacion") {
+          summaryText = `Análisis espacial completado con éxito en un radio de ${searchRadius}m. Se detectó una densidad delictiva media-alta en las inmediaciones de la vía referenciada, con correlación a carpetas previas por robo a comercio y narcomenudeo. Se recomienda patrullaje preventivo nocturno.`;
+          correlations = ["Correlación con Carpeta CI-2025/4892 (Robo)", "Cercanía a 3 expendios de alcohol registrados"];
+        } else if (id === "detectar_entidades") {
+          summaryText = `Extracción NLP completada. Se aislaron actores y apodos relevantes del texto. El grafo de vínculos de la zona se ha enriquecido con un nuevo nodo sospechoso.`;
+          entitiesFound = ["Sujeto referenciado como Alias 'El Cholo'", "Banda local 'Los de la 14'"];
+        } else if (id === "analizar_imagen") {
+          summaryText = `OCR Multimodal finalizado. Se extrajo texto de la imagen con un 98% de confianza. Se identificaron indicios vehiculares (placas legibles) y fachada de riesgo comercial.`;
+          entitiesFound = ["Placa vehicular: ABC-123-X", "Establecimiento: Bar 'La Oficina'"];
+        } else {
+          summaryText = `Búsqueda semántica OSINT completada. Cruce de modus operandi arrojó coincidencia del 94% con incidentes registrados en el sector poniente durante el último bimestre.`;
+          correlations = ["Cruce con Carpeta Sector Poniente v3", "Antecedentes OSINT de halconeo registrados"];
+        }
+
+        if (extraContext.trim()) {
+          summaryText += `\n\nDirectriz adicional del analista considerada: "${extraContext.trim()}"`;
+        }
+
+        return {
+          insumoId: "", // Will be assigned by parent
+          insumoName: insumoName,
+          insumoText: insumoText,
+          powerUpId: id,
+          powerUpTitle: config?.title || "Análisis",
+          powerUpIcon: config?.icon || "⚡",
+          detectedEntities: analysis.detectedEntities,
+          detectedObjects: analysis.detectedObjects,
+          detectedPlaces: analysis.detectedPlaces,
+          detectedActivities: analysis.detectedActivities,
+          riskLevel: analysis.riskLevel,
+          analysisPerformed: config?.technicalText || "",
+          userValidation: {
+            searchRadius: id === "analisis_ubicacion" ? searchRadius : undefined,
+            analysisPriority: analysisPriority,
+            catalogTypes: id === "detectar_entidades" ? catalogTypes : undefined,
+            extraContext: extraContext.trim() || undefined,
+            finalText: `\n👉 POWERUP APLICADO: **${config?.title}**\n   - Proceso IA: ${config?.technicalText}`
+          },
+          finalFindings: {
+            entitiesFound: entitiesFound.length > 0 ? entitiesFound : undefined,
+            correlations: correlations.length > 0 ? correlations : undefined,
+            summary: summaryText
+          },
+          timestamp: new Date().toLocaleTimeString("es-MX", { hour12: false }) + " " + new Date().toLocaleDateString("es-MX")
+        };
+      });
+
+      if (onApplyDetailedAnalysis) {
+        onApplyDetailedAnalysis(detailedResults);
+      }
+
       onApplyAnalysis(resultSnippets);
       onClose();
     }, 4500);
   };
 
+  const getFloatingStyle = () => {
+    if (!coords) return {};
+    let top = coords.y + 15;
+    let left = coords.x + 15;
+    if (typeof window !== "undefined") {
+      const modalWidth = 672; // max-w-2xl is 672px
+      const modalHeight = 650; 
+      if (left + modalWidth > window.innerWidth) {
+        left = window.innerWidth - modalWidth - 25;
+      }
+      if (top + modalHeight > window.innerHeight) {
+        top = window.innerHeight - modalHeight - 25;
+      }
+    }
+    return {
+      position: "fixed" as const,
+      top: `${Math.max(15, top)}px`,
+      left: `${Math.max(15, left)}px`,
+      transform: "none",
+      margin: "0",
+    };
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[300] p-4 animate-fadeIn">
+    <>
       {/* Fullscreen processing blocker for UI block execution */}
       {isProcessing && (
-        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-xl z-[400] flex flex-col items-center justify-center text-center p-6 select-none animate-fadeIn">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-[500] flex flex-col items-center justify-center text-center p-6 select-none animate-fadeIn">
           {/* Tactical radar spinner */}
           <div className="relative w-44 h-44 mb-8 flex items-center justify-center">
             {/* Green glowing outer radar line */}
@@ -371,7 +460,7 @@ export function PuenteContextualModal({
 
           <div className="max-w-md space-y-4">
             <h5 className="text-base font-bold text-slate-100 uppercase tracking-wider">
-              Ejecutando Pipeline de Geointeligencia
+              El Perfilador está procesando inteligencia operativa…
             </h5>
             
             {/* Loader active step explanation */}
@@ -400,8 +489,16 @@ export function PuenteContextualModal({
         </div>
       )}
 
-      {/* Main Modal Box */}
-      <div className="bg-slate-950 border border-slate-800/80 rounded-2xl w-full max-w-2xl p-5 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto gap-4 scrollbar-thin">
+      {/* Main Modal Backdrop Container */}
+      <div 
+        className="fixed inset-0 bg-black/5 backdrop-blur-[1px] z-[300] animate-fadeIn"
+        onClick={onClose}
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          style={getFloatingStyle()}
+          className="bg-slate-950 border border-slate-800/80 rounded-2xl w-full max-w-2xl p-5 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto gap-4 scrollbar-thin"
+        >
         {/* Top styling bar */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
 
@@ -820,7 +917,8 @@ export function PuenteContextualModal({
         <div className="text-center text-[9px] text-slate-500">
           ⚖️ Principio de control operativo: <strong className="text-slate-400">“La inteligencia sugiere, el usuario decide.”</strong>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

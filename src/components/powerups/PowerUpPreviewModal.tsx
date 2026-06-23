@@ -9,16 +9,47 @@ interface PowerUpPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  coords?: { x: number; y: number } | null;
 }
 
-export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm }: PowerUpPreviewModalProps) {
+export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm, coords }: PowerUpPreviewModalProps) {
   if (!isOpen) return null;
   const theme = config.colorTheme;
   const preview = config.preview;
 
+  const getFloatingStyle = () => {
+    if (!coords) return {};
+    let top = coords.y + 15;
+    let left = coords.x + 15;
+    if (typeof window !== "undefined") {
+      const modalWidth = 512; // max-w-lg is 512px
+      const modalHeight = 450; 
+      if (left + modalWidth > window.innerWidth) {
+        left = window.innerWidth - modalWidth - 25;
+      }
+      if (top + modalHeight > window.innerHeight) {
+        top = window.innerHeight - modalHeight - 25;
+      }
+    }
+    return {
+      position: "fixed" as const,
+      top: `${Math.max(15, top)}px`,
+      left: `${Math.max(15, left)}px`,
+      transform: "none",
+      margin: "0",
+    };
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[250] p-4 animate-fadeIn">
-      <div className="bg-slate-950 border border-slate-800/80 rounded-xl w-full max-w-lg p-5 shadow-2xl relative overflow-hidden flex flex-col gap-4">
+    <div 
+      className="fixed inset-0 bg-black/5 backdrop-blur-[1px] z-[250] animate-fadeIn"
+      onClick={onClose}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        style={getFloatingStyle()}
+        className="bg-slate-950 border border-slate-800/80 rounded-xl w-full max-w-lg p-5 shadow-2xl relative overflow-hidden flex flex-col gap-4"
+      >
         {/* Top visual accent bar */}
         <div className={`absolute top-0 left-0 right-0 h-1.5 ${theme.accentBg}`} />
 

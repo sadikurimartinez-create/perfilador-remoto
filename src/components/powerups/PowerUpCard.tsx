@@ -7,7 +7,7 @@ interface PowerUpCardProps {
   config: PowerUpConfig;
   state: PowerUpState;
   isReadOnly?: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onToggleTechnical: (e: React.MouseEvent) => void;

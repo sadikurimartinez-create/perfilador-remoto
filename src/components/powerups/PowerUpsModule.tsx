@@ -6,6 +6,7 @@ import { POWER_UPS_CONFIG } from "./powerups.config";
 import { PowerUpCard } from "./PowerUpCard";
 import { PowerUpPreviewModal } from "./PowerUpPreviewModal";
 import { PuenteContextualModal, analyzeInsumoContext } from "./PuenteContextualModal";
+import { PowerUpExecutionResultData } from "./VentanaResultadosPuente";
 
 interface PowerUpsModuleProps {
   onApplyPowerUp: (text: string) => void;
@@ -16,6 +17,7 @@ interface PowerUpsModuleProps {
   insumoName?: string;
   locationCoords?: { lat: number; lng: number };
   isContextualized?: boolean;
+  onApplyDetailedAnalysis?: (results: PowerUpExecutionResultData[]) => void;
 }
 
 export function PowerUpsModule({
@@ -26,12 +28,14 @@ export function PowerUpsModule({
   insumoId = "",
   insumoName = "Evidencia",
   locationCoords,
-  isContextualized = false
+  isContextualized = false,
+  onApplyDetailedAnalysis
 }: PowerUpsModuleProps) {
   const [selectedPu, setSelectedPu] = useState<PowerUpConfig | null>(null);
   const [hoveredPu, setHoveredPu] = useState<PowerUpConfig | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState<Record<string, boolean>>({});
+  const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   
   // PowerUp states
   const [puStates, setPuStates] = useState<Record<string, PowerUpState>>({
@@ -75,8 +79,13 @@ export function PowerUpsModule({
 
   const activePuForPreview = hoveredPu || selectedPu;
 
-  const handleCardClick = (pu: PowerUpConfig) => {
+  const handleCardClick = (pu: PowerUpConfig, e?: React.MouseEvent) => {
     if (isReadOnly) return;
+    if (e) {
+      setClickCoords({ x: e.clientX, y: e.clientY });
+    } else {
+      setClickCoords(null);
+    }
     setSelectedPu(pu);
     setIsPreviewOpen(true);
   };
@@ -243,7 +252,10 @@ export function PowerUpsModule({
           </div>
           <button
             type="button"
-            onClick={() => setIsPuenteModalOpen(true)}
+            onClick={(e) => {
+              setClickCoords({ x: e.clientX, y: e.clientY });
+              setIsPuenteModalOpen(true);
+            }}
             className="shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-[10px] py-1.5 px-3.5 rounded-lg transition-all shadow-[0_0_12px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1 hover:scale-[1.02] active:scale-[0.98]"
           >
             <span>⚡ Abrir Puente Contextual</span>
@@ -270,7 +282,7 @@ export function PowerUpsModule({
                 config={pu}
                 state={puStates[pu.id]}
                 isReadOnly={isReadOnly}
-                onClick={() => handleCardClick(pu)}
+                onClick={(e) => handleCardClick(pu, e)}
                 onMouseEnter={() => !isReadOnly && setHoveredPu(pu)}
                 onMouseLeave={() => setHoveredPu(null)}
                 onToggleTechnical={(e) => toggleTechnical(pu.id, e)}
@@ -405,6 +417,7 @@ export function PowerUpsModule({
             setSelectedPu(null);
           }}
           onConfirm={handleConfirmProcess}
+          coords={clickCoords}
         />
       )}
 
@@ -417,6 +430,8 @@ export function PowerUpsModule({
         insumoName={insumoName}
         locationCoords={locationCoords}
         onApplyAnalysis={handleApplyPuenteAnalysis}
+        coords={clickCoords}
+        onApplyDetailedAnalysis={onApplyDetailedAnalysis}
       />
     </div>
   );
