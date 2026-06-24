@@ -67,6 +67,13 @@ export default function HomePage() {
         </h1>
         <div className="flex flex-wrap items-center gap-3">
           <Link
+            href="/inundaciones"
+            className="inline-flex items-center gap-2 rounded-md bg-blue-950/60 border border-blue-800/50 px-4 py-2 text-sm font-semibold text-blue-400 shadow-sm hover:bg-blue-900/50 transition-colors"
+          >
+            <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+            Módulo de Inundaciones
+          </Link>
+          <Link
             href="/pandillas"
             className="inline-flex items-center gap-2 rounded-md bg-sky-950/60 border border-sky-800/50 px-4 py-2 text-sm font-semibold text-sky-400 shadow-sm hover:bg-sky-900/50 transition-colors"
           >
