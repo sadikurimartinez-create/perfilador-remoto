@@ -1321,7 +1321,7 @@ ${analysisResult.ficha.crossCheckJuridico}
 
         {/* TAB 3: MEMBER DOSSIER */}
         {activeTab === "integrantes" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* MEMBER CAPTURE COLUMN (6 cols) */}
             <div className="lg:col-span-6 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-2">
@@ -1681,7 +1681,7 @@ ${analysisResult.ficha.crossCheckJuridico}
 
         {/* TAB 4: RELATIONSHIPS & LINK NETWORK */}
         {activeTab === "relaciones" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* LINK REGISTRATION (5 cols) */}
             <div className="lg:col-span-5 bg-slate-900/30 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-2">
@@ -1881,7 +1881,7 @@ ${analysisResult.ficha.crossCheckJuridico}
 
         {/* TAB 5: GEOINTELIGENCIA TÁCTICA */}
         {activeTab === "geointeligencia" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* GIS TOOLBOX PANEL (4 cols) */}
             <div className="lg:col-span-4 bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-2">

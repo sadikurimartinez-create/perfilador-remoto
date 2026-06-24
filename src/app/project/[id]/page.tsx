@@ -406,7 +406,7 @@ export default function ProjectWorkspacePage() {
             />
           </>
         ) : (
-          <div className="bg-slate-950/20 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+          <div className="w-full bg-slate-950/20 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
             <PandillasUI projectId={project.id} onSaveAnalysisToCloud={handleSaveAnalysisToCloud} />
           </div>
         )}
