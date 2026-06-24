@@ -353,7 +353,7 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       {/* HEADER DE MÓDULO */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 backdrop-blur-md shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -410,7 +410,7 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* PANEL LATERAL DE HISTORIAL Y CONFIGURACIÓN */}
         <div className="lg:col-span-4 space-y-6 flex flex-col">
           {/* CONFIGURACIÓN DEL ANÁLISIS */}
