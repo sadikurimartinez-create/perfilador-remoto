@@ -6,8 +6,7 @@ import { InundacionesService } from "./inundaciones.service";
 import { FloodAssessment } from "./inundaciones.types";
 import { useAuth } from "@/context/AuthContext";
 
-// Configuración de Google Maps
-const MAP_LIBRARIES: "places"[] = ["places"];
+const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 const mapContainerStyle = {
   width: "100%",
   height: "500px",
@@ -116,7 +115,7 @@ export function InundacionesUI() {
   // Cargar Google Maps JS API
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
   const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script-inundaciones",
+    id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries: MAP_LIBRARIES,
   });

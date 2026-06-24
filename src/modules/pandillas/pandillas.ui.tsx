@@ -16,6 +16,8 @@ import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
 import { GoogleMap, Polygon, Polyline, Marker, Circle, useJsApiLoader } from "@react-google-maps/api";
 
+const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
+
 const darkMapStyles = [
   { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
@@ -178,9 +180,9 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
   const { isLoaded } = useJsApiLoader({
-    id: "google-map-script-pandillas-re",
+    id: "google-map-script",
     googleMapsApiKey: apiKey,
-    libraries: useMemo(() => ["places", "visualization"], []),
+    libraries: MAP_LIBRARIES,
   });
 
   // Load registered gangs on mount
