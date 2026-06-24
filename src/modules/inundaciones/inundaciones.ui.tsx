@@ -135,10 +135,20 @@ export function InundacionesUI() {
     libraries: MAP_LIBRARIES,
   });
 
-  // Cargar historial al iniciar
+  // Cargar historial al iniciar y autoseleccionar el primer registro para poblar el mapa
   const loadHistory = async () => {
     const data = await InundacionesService.getAllAssessments();
     setAssessments(data);
+    if (data.length > 0) {
+      const first = data[0];
+      setSelectedAssessment(first);
+      setZonaInput(first.zona_analizada);
+      setLatInput(String(first.lat));
+      setLngInput(String(first.lng));
+      setRadioInput(first.radioMetros);
+      setObservacionesInput(first.observaciones_campo || "");
+      setPronosticoInput(first.pronostico_lluvia || "");
+    }
   };
 
   useEffect(() => {
@@ -634,9 +644,9 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
               </div>
 
               {isLoaded ? (
-                <div className="relative">
+                <div className="relative h-[500px] w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl">
                   <GoogleMap
-                    mapContainerStyle={mapContainerStyle}
+                    mapContainerStyle={{ width: "100%", height: "100%" }}
                     center={mapCenter}
                     zoom={14}
                     onLoad={onMapLoad}

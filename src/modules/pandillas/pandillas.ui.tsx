@@ -225,6 +225,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     try {
       const list = await PandillasService.getAllGangs();
       setStoredGangs(list);
+      if (list.length > 0) {
+        // Autoseleccionamos el primer expediente del listado para poblar inmediatamente la UI
+        loadGangIntoState(list[0]);
+      }
     } catch (e) {
       console.error("[Gangs UI] Error al cargar pandillas:", e);
     }

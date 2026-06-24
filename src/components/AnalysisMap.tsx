@@ -559,7 +559,6 @@ export function AnalysisMap({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries: MAP_LIBRARIES,
-    version: "3.64",
   });
 
   const heatmapCrimeData = useMemo(() => {
