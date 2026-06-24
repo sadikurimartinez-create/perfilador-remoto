@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
   GangEntity,
@@ -122,6 +122,34 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
   // --- INTERACTION & EDITING SUB-STATES ---
   const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos">("dashboard");
+
+  const onMapLoad = useCallback((mapInstance: any) => {
+    if (typeof window !== "undefined") {
+      if ((window as any).map && (window as any).map !== mapInstance) {
+        try {
+          (window as any).map.remove();
+        } catch (e) {
+          console.warn("Error removing previous map instance:", e);
+        }
+      }
+      (window as any).map = mapInstance;
+      if (!(window as any).map.invalidateSize) {
+        (window as any).map.invalidateSize = () => {
+          if (typeof window !== "undefined" && (window as any).google?.maps) {
+            (window as any).google.maps.event.trigger(mapInstance, "resize");
+          }
+        };
+      }
+      if (!(window as any).map.remove) {
+        (window as any).map.remove = () => {
+          if ((window as any).map === mapInstance) {
+            (window as any).map = null;
+          }
+        };
+      }
+    }
+  }, []);
+
   const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
   const [tempMember, setTempMember] = useState<Partial<GangMember>>({
     nombre: "", alias: "", estatusPandilla: "Integrante", sexo: "Masculino", edad: "", curp: "", domicilioConocido: "",
@@ -776,7 +804,19 @@ ${analysisResult.ficha.crossCheckJuridico}
         ].map(t => (
           <button
             key={t.id}
-            onClick={() => setActiveTab(t.id as any)}
+            onClick={() => {
+              setActiveTab(t.id as any);
+              setTimeout(() => {
+                if ((window as any).map && typeof (window as any).map.invalidateSize === "function") {
+                  (window as any).map.invalidateSize();
+                }
+              }, 300);
+              requestAnimationFrame(() => {
+                if ((window as any).map && typeof (window as any).map.invalidateSize === "function") {
+                  (window as any).map.invalidateSize();
+                }
+              });
+            }}
             className={`flex-1 min-w-[130px] px-3 py-2 rounded-lg text-xs font-black tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${
               activeTab === t.id
                 ? "bg-sky-500 text-slate-950 font-black shadow-lg shadow-sky-500/10 scale-[1.02]"
@@ -2003,6 +2043,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                     mapContainerStyle={{ width: "100%", height: "100%" }}
                     center={mapCenter}
                     zoom={13}
+                    onLoad={onMapLoad}
                     onClick={handleMapClick}
                     options={{
                       streetViewControl: false,

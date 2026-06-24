@@ -98,6 +98,21 @@ export function InundacionesUI() {
   // Estados de carga y flujo
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"dictamen" | "osint" | "infraestructura" | "recomendaciones">("dictamen");
+
+  const handleTabChange = useCallback((tab: "dictamen" | "osint" | "infraestructura" | "recomendaciones") => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      if ((window as any).map && typeof (window as any).map.invalidateSize === "function") {
+        (window as any).map.invalidateSize();
+      }
+    }, 300);
+    requestAnimationFrame(() => {
+      if ((window as any).map && typeof (window as any).map.invalidateSize === "function") {
+        (window as any).map.invalidateSize();
+      }
+    });
+  }, []);
+
   const [activeLayers, setActiveLayers] = useState({
     calor: true,
     infraestructura: true,
@@ -232,6 +247,30 @@ export function InundacionesUI() {
 
   const onMapLoad = useCallback((mapInstance: any) => {
     setMap(mapInstance);
+    if (typeof window !== "undefined") {
+      if ((window as any).map && (window as any).map !== mapInstance) {
+        try {
+          (window as any).map.remove();
+        } catch (e) {
+          console.warn("Error removing previous map instance:", e);
+        }
+      }
+      (window as any).map = mapInstance;
+      if (!(window as any).map.invalidateSize) {
+        (window as any).map.invalidateSize = () => {
+          if (typeof window !== "undefined" && (window as any).google?.maps) {
+            (window as any).google.maps.event.trigger(mapInstance, "resize");
+          }
+        };
+      }
+      if (!(window as any).map.remove) {
+        (window as any).map.remove = () => {
+          if ((window as any).map === mapInstance) {
+            (window as any).map = null;
+          }
+        };
+      }
+    }
   }, []);
 
   // Generar datos geoespaciales para renderizado táctico (curvas de nivel, escurrimientos artificiales)
@@ -815,7 +854,7 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
               <div className="space-y-4">
                 <div className="flex border-b border-slate-800">
                   <button
-                    onClick={() => setActiveTab("dictamen")}
+                    onClick={() => handleTabChange("dictamen")}
                     className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors ${
                       activeTab === "dictamen" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-300"
                     }`}
@@ -823,7 +862,7 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
                     📄 Dictamen Técnico
                   </button>
                   <button
-                    onClick={() => setActiveTab("osint")}
+                    onClick={() => handleTabChange("osint")}
                     className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors ${
                       activeTab === "osint" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-300"
                     }`}
@@ -831,7 +870,7 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
                     💬 Evidencias OSINT ({selectedAssessment.evidencia_osint.length})
                   </button>
                   <button
-                    onClick={() => setActiveTab("infraestructura")}
+                    onClick={() => handleTabChange("infraestructura")}
                     className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors ${
                       activeTab === "infraestructura" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-300"
                     }`}
@@ -839,7 +878,7 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
                     🏥 Infraestructura ({selectedAssessment.infraestructura_critica.length})
                   </button>
                   <button
-                    onClick={() => setActiveTab("recomendaciones")}
+                    onClick={() => handleTabChange("recomendaciones")}
                     className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-colors ${
                       activeTab === "recomendaciones" ? "border-blue-500 text-blue-400" : "border-transparent text-slate-400 hover:text-slate-300"
                     }`}

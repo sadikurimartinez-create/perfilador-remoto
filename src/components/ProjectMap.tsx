@@ -278,6 +278,30 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const onMapLoad = useCallback((map: any) => {
     mapRef.current = map;
     setMapReady(true);
+    if (typeof window !== "undefined") {
+      if ((window as any).map && (window as any).map !== map) {
+        try {
+          (window as any).map.remove();
+        } catch (e) {
+          console.warn("Error removing previous map instance:", e);
+        }
+      }
+      (window as any).map = map;
+      if (!(window as any).map.invalidateSize) {
+        (window as any).map.invalidateSize = () => {
+          if (typeof window !== "undefined" && (window as any).google?.maps) {
+            (window as any).google.maps.event.trigger(map, "resize");
+          }
+        };
+      }
+      if (!(window as any).map.remove) {
+        (window as any).map.remove = () => {
+          if ((window as any).map === map) {
+            (window as any).map = null;
+          }
+        };
+      }
+    }
   }, []);
 
   useEffect(() => {
