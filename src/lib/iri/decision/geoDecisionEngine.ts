@@ -118,7 +118,7 @@ export class GeoDecisionEngine {
       recs.push("🌧️ LLUVIA EXTREMA: Vigilar zonas propensas a colapso de colectores pluviales");
     }
     if (signals.hydrology > 0.75) {
-      recs.push("🌊 SATURACIÓN HÍDRICA: Alerta por posible desborde inminente de canales o arroyos");
+      recs.push("🌊 SATURACIÓN HÍDRICA (COORDINACIÓN NOAA + CONAGUA + CENAPRED): Alerta de desborde inminente en canales, colectores de drenaje o vertederos de presas registradas.");
     }
     if (signals.osint > 0.60) {
       recs.push("🌐 OSINT CONVERGENTE: Reportes ciudadanos confirman inundaciones locales activas");

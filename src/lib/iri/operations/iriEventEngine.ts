@@ -17,6 +17,9 @@ export interface GeoEvent {
     osint: number;
     satellite: number;
   };
+  metadata?: {
+    active_triggers: string[];
+  };
 }
 
 export interface OperationalCellState {
@@ -209,6 +212,16 @@ export class IRIEventEngine {
       activeTriggerNames.push("NOAA_STORM_MATCH");
     }
 
+    // HydroFusion Specific Trigger — Coordinated physical flood truth alarm (extreme risk or dam overspill match)
+    const hasHydroFusion = responses["hydro_fusion"]?.status === "ok";
+    const hydroFusionPayload = hasHydroFusion ? (responses["hydro_fusion"]?.payload as any)?.payload : null;
+    const isHydroCritical = hydroFusionPayload && (hydroFusionPayload.fused_metrics?.combined_physical_risk > 0.75);
+    const damAlert = hydroFusionPayload && (hydroFusionPayload.fused_metrics?.dam_risk_factor > 0.85);
+    const hydroFusionMatch = (isHydroCritical || damAlert) && (hasSpike || extremeRain);
+    if (hydroFusionMatch) {
+      activeTriggerNames.push("HYDRO_FUSION_PHYSICAL_TRUTH_ALERT");
+    }
+
     // 5. DETERMINE STATE
     let newState = this.determineOperationalState(
       currentIri,
@@ -217,7 +230,7 @@ export class IRIEventEngine {
       signals
     );
 
-    if (noaaStormMatch) {
+    if (noaaStormMatch || hydroFusionMatch) {
       newState = "CRITICAL";
     }
 
@@ -253,6 +266,9 @@ export class IRIEventEngine {
         state: newState,
         sources,
         signals,
+        metadata: {
+          active_triggers: activeTriggerNames.length > 0 ? activeTriggerNames : ["PERIODIC_HEARTBEAT"]
+        }
       };
     }
 

@@ -13,6 +13,10 @@ import { FacebookProvider } from "./facebookProvider";
 import { InstagramProvider } from "./instagramProvider";
 import { RedditProvider } from "./redditProvider";
 import { NoaaProvider } from "./noaa_provider";
+import { HydroFusionProvider } from "./hydroFusionProvider";
+import { CircuitBreaker } from "../infra/circuitBreaker";
+import { GeointTelemetry } from "../infra/geointTelemetry";
+import { GlobalErrorHandler } from "../infra/globalErrorHandler";
 
 export class ApiOrchestrator {
   private providers: Map<string, IProvider> = new Map();
@@ -39,6 +43,7 @@ export class ApiOrchestrator {
     this.register(new InstagramProvider());
     this.register(new RedditProvider());
     this.register(new NoaaProvider());
+    this.register(new HydroFusionProvider());
   }
 
   private register(provider: IProvider) {
@@ -91,6 +96,7 @@ export class ApiOrchestrator {
   ): Promise<Record<string, ProviderResponse>> {
     const results: Record<string, ProviderResponse> = {};
     const promises: Promise<{ id: string; response: ProviderResponse }>[] = [];
+    const osintIds = ["telegram", "x", "facebook", "instagram", "reddit"];
 
     for (const id of providerIds) {
       const provider = this.getProvider(id);
@@ -128,15 +134,52 @@ export class ApiOrchestrator {
         continue;
       }
 
+      // Check Circuit Breaker before executing
+      const breaker = CircuitBreaker.getBreaker(id);
+      if (!breaker.canExecute()) {
+        const duration = Date.now() - start;
+        results[id] = {
+          provider: id,
+          status: "disabled",
+          timestamp: new Date().toISOString(),
+          confidence: 0,
+          payload: null,
+          latency: duration,
+          errors: [`Circuit breaker is OPEN for provider '${id}'. Execution blocked.`],
+          metadata: { circuit_breaker_blocked: true, fallback_used: true }
+        };
+        this.logStructured(id, start, duration, "disabled", new Error("Circuit breaker blocked execution"), "circuit_breaker_degraded_fallback");
+        continue;
+      }
+
       // Wrap execution in timeout and error handler
       const execPromise = this.withTimeout(provider.fetchData(params), timeoutMs, id)
         .then((response) => {
           const duration = Date.now() - start;
+          
+          // Record success in Circuit Breaker & Telemetry
+          breaker.recordSuccess();
+          GeointTelemetry.recordRequest(id, duration, true);
+          if (osintIds.includes(id)) {
+            GeointTelemetry.recordRequest("osint", duration, true);
+          }
+
           this.logStructured(id, start, duration, "ok", undefined, response.metadata?.is_simulated ? "simulated_fallback" : undefined);
           return { id, response };
         })
         .catch((error: any) => {
           const duration = Date.now() - start;
+
+          // Record failure in Circuit Breaker & Telemetry
+          breaker.recordFailure();
+          GeointTelemetry.recordRequest(id, duration, false);
+          if (osintIds.includes(id)) {
+            GeointTelemetry.recordRequest("osint", duration, false);
+          }
+
+          // Normalize and register in global error handler
+          GlobalErrorHandler.handleError(id, error, true);
+
           this.logStructured(id, start, duration, "error", error);
           return {
             id,

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import GeoCommandDashboard from "@/components/command/GeoCommandDashboard";
+import GeoIntCommandDashboard from "@/components/command/GeoIntCommandDashboard";
 import Link from "next/link";
 
 export default function CommandPage() {
@@ -15,7 +15,7 @@ export default function CommandPage() {
         </p>
       </header>
 
-      <GeoCommandDashboard />
+      <GeoIntCommandDashboard />
     </div>
   );
 }

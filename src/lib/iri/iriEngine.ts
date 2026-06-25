@@ -1,6 +1,7 @@
 import { ApiOrchestrator } from "../providers/orchestrator";
 import { ProviderResponse } from "../providers/baseProvider";
 import { UnifiedGeoDataset } from "../providers/geoNormalizer";
+import { GeointReliabilityEngine } from "../infra/geointReliabilityEngine";
 
 export interface GeoCell {
   id: string;
@@ -227,7 +228,7 @@ export class IRIEngine {
     const weights = this.weights;
 
     // --- EXTRACT DATA FROM UNIFIED GEODATASETS ---
-    const google = responses["google"]?.payload as UnifiedGeoDataset | null;
+     const google = responses["google"]?.payload as UnifiedGeoDataset | null;
     const inegi = responses["inegi"]?.payload as UnifiedGeoDataset | null;
     const nasa = responses["nasa"]?.payload as UnifiedGeoDataset | null;
     const copernicus = responses["copernicus"]?.payload as UnifiedGeoDataset | null;
@@ -235,6 +236,7 @@ export class IRIEngine {
     const conagua = responses["conagua"]?.payload as UnifiedGeoDataset | null;
     const tomorrow_io = responses["tomorrow_io"]?.payload as UnifiedGeoDataset | null;
     const noaa = responses["noaa"]?.payload as UnifiedGeoDataset | null;
+    const hydro_fusion = responses["hydro_fusion"]?.payload as UnifiedGeoDataset | null;
 
     // --- DETERMINISTIC GEOGRAPHICAL PHYSICS FALLBACKS ---
     // High-fidelity fallback models so the map feels organic and is mathematically reproducible
@@ -283,6 +285,11 @@ export class IRIEngine {
       const noaa_hydrology = noaa.payload?.hydrology || 0.0;
       f_hydrology = 0.75 * f_hydrology + 0.25 * noaa_hydrology; // NOAA contribution with 0.25 weight
     }
+    if (responses["hydro_fusion"]?.status === "ok" && hydro_fusion) {
+      const hydroPayload = hydro_fusion.payload as any;
+      const fusion_risk = hydroPayload?.fused_metrics?.combined_physical_risk ?? 0.0;
+      f_hydrology = 0.60 * f_hydrology + 0.40 * fusion_risk; // Controlled blending of physical truth with 0.40 weight
+    }
 
     // --- 2. PRECIPITATION FACTORS ---
     // rainfall_intensity: rain in mm/hr
@@ -300,6 +307,12 @@ export class IRIEngine {
     if (responses["noaa"]?.status === "ok" && noaa) {
       const noaa_precipitation = noaa.payload?.hydrology || 0.0;
       rainfall_intensity = Math.min(1.0, Math.max(rainfall_intensity, noaa_precipitation));
+    }
+
+    if (responses["hydro_fusion"]?.status === "ok" && hydro_fusion) {
+      const hydroPayload = hydro_fusion.payload as any;
+      const precipitation_intensity = Math.min(1.0, (hydroPayload?.fused_metrics?.precipitation_mm_hr || 0.0) / 15);
+      rainfall_intensity = Math.max(rainfall_intensity, precipitation_intensity);
     }
 
     // rainfall_accumulation_24h
@@ -330,7 +343,12 @@ export class IRIEngine {
     // terrain_convergence_index
     const terrain_convergence_index = Math.min(1.0, proximity_to_rivers * slope_factor * 1.5);
 
-    const f_topography = (elevation_inverse + slope_factor + terrain_convergence_index) / 3;
+    let f_topography = (elevation_inverse + slope_factor + terrain_convergence_index) / 3;
+    if (responses["hydro_fusion"]?.status === "ok" && hydro_fusion) {
+      const hydroPayload = hydro_fusion.payload as any;
+      const susceptibility = hydroPayload?.fused_metrics?.susceptibility_weight ?? 0.5;
+      f_topography = 0.80 * f_topography + 0.20 * susceptibility; // Controlled blending of CENAPRED terrain susceptibility
+    }
 
     // --- 4. INFRASTRUCTURE FACTORS ---
     // urban_density: DENUE commercial counts or Google Places types
@@ -436,19 +454,55 @@ export class IRIEngine {
 
     const f_satellite = (soil_moisture_anomaly + surface_water_detection_index) / 2;
 
-    // --- FINAL DETERMINISTIC SUMMATION ---
-    const iri_score =
-      weights.hydrology * f_hydrology +
-      weights.precipitation * f_precipitation +
-      weights.topography * f_topography +
-      weights.infrastructure * f_infrastructure +
-      weights.population * f_population +
-      weights.landUse * f_landUse +
-      weights.osint * f_osint +
-      weights.satellite * f_satellite;
+    // --- DYNAMIC RELIABILITY WEIGHTS ---
+    const eff_hydrology = GeointReliabilityEngine.getEffectiveWeight("hydro_fusion", weights.hydrology);
+    const eff_precipitation = GeointReliabilityEngine.getEffectiveWeight("noaa", weights.precipitation);
+    const eff_topography = GeointReliabilityEngine.getEffectiveWeight("google", weights.topography);
+    const eff_infrastructure = GeointReliabilityEngine.getEffectiveWeight("inegi", weights.infrastructure);
+    const eff_population = GeointReliabilityEngine.getEffectiveWeight("inegi", weights.population);
+    const eff_landUse = GeointReliabilityEngine.getEffectiveWeight("copernicus", weights.landUse);
+    const eff_osint = GeointReliabilityEngine.getEffectiveWeight("osint", weights.osint);
+    const eff_satellite = GeointReliabilityEngine.getEffectiveWeight("nasa", weights.satellite);
 
-    // Capping just in case of float anomalies
-    const final_score = Math.min(1.0, Math.max(0.0, iri_score));
+    const sumWeights = eff_hydrology + eff_precipitation + eff_topography + eff_infrastructure + eff_population + eff_landUse + eff_osint + eff_satellite;
+
+    let final_score = 0.0;
+    if (sumWeights > 0) {
+      const normalized_hydrology = eff_hydrology / sumWeights;
+      const normalized_precipitation = eff_precipitation / sumWeights;
+      const normalized_topography = eff_topography / sumWeights;
+      const normalized_infrastructure = eff_infrastructure / sumWeights;
+      const normalized_population = eff_population / sumWeights;
+      const normalized_landUse = eff_landUse / sumWeights;
+      const normalized_osint = eff_osint / sumWeights;
+      const normalized_satellite = eff_satellite / sumWeights;
+
+      const iri_score =
+        normalized_hydrology * f_hydrology +
+        normalized_precipitation * f_precipitation +
+        normalized_topography * f_topography +
+        normalized_infrastructure * f_infrastructure +
+        normalized_population * f_population +
+        normalized_landUse * f_landUse +
+        normalized_osint * f_osint +
+        normalized_satellite * f_satellite;
+
+      final_score = Math.min(1.0, Math.max(0.0, iri_score));
+    } else {
+      const iri_score =
+        weights.hydrology * f_hydrology +
+        weights.precipitation * f_precipitation +
+        weights.topography * f_topography +
+        weights.infrastructure * f_infrastructure +
+        weights.population * f_population +
+        weights.landUse * f_landUse +
+        weights.osint * f_osint +
+        weights.satellite * f_satellite;
+
+      final_score = Math.min(1.0, Math.max(0.0, iri_score));
+    }
+
+    final_score = parseFloat(final_score.toFixed(3));
 
     // --- RISK CLASSIFICATION ---
     let risk_level: IRICellResult["risk_level"] = "LOW";

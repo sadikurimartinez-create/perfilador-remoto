@@ -285,6 +285,18 @@ export class GeoDataNormalizerEngine {
         }
         break;
 
+      case "hydro_fusion":
+        sourceName = "GEOINT HydroFusion Operational Layer";
+        license = "Coordinated Multi-Source Hydrometeorological Consortium (NOAA + CONAGUA + CENAPRED)";
+        sourceAuthority = 40; // absolute fused physical authority
+        dataType = "hydrology";
+        spatialVal = 250;
+        spatialUnit = "meters";
+        spatialDesc = "GEOINT Coordinated Hydrological Core Grid";
+        payload = rawData;
+        break;
+
+
       case "telegram":
       case "x":
       case "reddit":
@@ -494,6 +506,18 @@ export class GeoDataNormalizerEngine {
           "Standardize outputs to UnifiedGeoDataset hydrology and meteorology weights"
         );
         break;
+
+      case "hydro_fusion":
+        primarySource = "Consolidated NOAA + CONAGUA + CENAPRED Physical Observations";
+        intermediary = "GEOINT HydroFusion Provider Pipeline";
+        transformations.push(
+          "Aggregate NOAA (precipitation, storm alerts, and temperature anomalies)",
+          "Integrate CONAGUA (real-time dam storages and monitored river flow capacity)",
+          "Superimpose CENAPRED (national landslide and flood risk susceptibility metrics)",
+          "Fuse multiple physical indicators into a unified physical truth flood risk coefficient"
+        );
+        break;
+
 
       case "telegram":
       case "x":
