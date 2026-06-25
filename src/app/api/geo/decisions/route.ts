@@ -3,6 +3,8 @@ import { IRIEngine } from "@/lib/iri/iriEngine";
 import { IRIEventEngine } from "@/lib/iri/operations/iriEventEngine";
 import { IRIGeneralizationEngine } from "@/lib/iri/validation/iriGeneralizationEngine";
 import { GeoDecisionEngine } from "@/lib/iri/decision/geoDecisionEngine";
+import { GeoActionOrchestrator } from "@/lib/iri/actions/geoActionOrchestrator";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // Strictly dynamic to prevent production build static rendering errors
@@ -107,6 +109,11 @@ export async function POST(req: Request) {
 
     // 5. Evaluate Operational Decisions and prioritize zones
     const decisions = decisionEngine.evaluateDecisions(activeEvents, cellResults);
+
+    // Register calculated decisions into the action orchestrator cache to enable action execution
+    decisions.forEach(d => {
+      GeoActionOrchestrator.registerDecision(d);
+    });
 
     console.log(
       `[POST_DECISIONS] Evaluated ${cellResults.length} grid cells. Found ${activeEvents.length} events, compiled ${decisions.length} prioritized decisions.`
