@@ -234,6 +234,7 @@ export class IRIEngine {
     const usgs = responses["usgs"]?.payload as UnifiedGeoDataset | null;
     const conagua = responses["conagua"]?.payload as UnifiedGeoDataset | null;
     const tomorrow_io = responses["tomorrow_io"]?.payload as UnifiedGeoDataset | null;
+    const noaa = responses["noaa"]?.payload as UnifiedGeoDataset | null;
 
     // --- DETERMINISTIC GEOGRAPHICAL PHYSICS FALLBACKS ---
     // High-fidelity fallback models so the map feels organic and is mathematically reproducible
@@ -277,7 +278,11 @@ export class IRIEngine {
     const tci = proximity_to_rivers * (1.0 - getDeterministicSlope(lat, lng));
     const watershed_accumulation_index = Math.min(1.0, 0.7 * proximity_to_rivers + 0.3 * tci);
 
-    const f_hydrology = (proximity_to_rivers + river_flow_anomaly + watershed_accumulation_index) / 3;
+    let f_hydrology = (proximity_to_rivers + river_flow_anomaly + watershed_accumulation_index) / 3;
+    if (responses["noaa"]?.status === "ok" && noaa) {
+      const noaa_hydrology = noaa.payload?.hydrology || 0.0;
+      f_hydrology = 0.75 * f_hydrology + 0.25 * noaa_hydrology; // NOAA contribution with 0.25 weight
+    }
 
     // --- 2. PRECIPITATION FACTORS ---
     // rainfall_intensity: rain in mm/hr
@@ -290,6 +295,11 @@ export class IRIEngine {
       if (Array.isArray(alerts) && alerts.length > 0) {
         rainfall_intensity = 0.8; // severe municipal rain alert
       }
+    }
+
+    if (responses["noaa"]?.status === "ok" && noaa) {
+      const noaa_precipitation = noaa.payload?.hydrology || 0.0;
+      rainfall_intensity = Math.min(1.0, Math.max(rainfall_intensity, noaa_precipitation));
     }
 
     // rainfall_accumulation_24h
@@ -405,7 +415,11 @@ export class IRIEngine {
     // emergency_reports_signals
     const emergency_reports_signals = Math.min(1.0, totalSeverity / 10);
 
-    const f_osint = (flood_mentions_density + emergency_reports_signals) / 2;
+    let f_osint = (flood_mentions_density + emergency_reports_signals) / 2;
+    if (responses["noaa"]?.status === "ok" && noaa) {
+      const noaa_storm = noaa.payload?.meteorology || 0.0;
+      f_osint = Math.min(1.0, Math.max(f_osint, noaa_storm)); // storm_event_weight
+    }
 
     // --- 8. SATELLITE FACTORS ---
     // soil_moisture_anomaly: Sentinel-1 SMAP or NASA Soil Moisture Anomaly index

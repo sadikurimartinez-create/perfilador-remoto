@@ -201,13 +201,25 @@ export class IRIEventEngine {
     if (convergentOsint) activeTriggerNames.push("CONVERGENT_OSINT");
     if (satelliteAnomaly) activeTriggerNames.push("SATELLITE_ANOMALY");
 
+    // NOAA Specific Trigger 2 — Storm event match: storm_event + IRI spike -> CRITICAL EVENT
+    const hasNoaa = responses["noaa"]?.status === "ok";
+    const isNoaaStorm = hasNoaa && ((responses["noaa"]?.payload as any)?.payload?.meteorology || 0) > 0.5;
+    const noaaStormMatch = isNoaaStorm && hasSpike;
+    if (noaaStormMatch) {
+      activeTriggerNames.push("NOAA_STORM_MATCH");
+    }
+
     // 5. DETERMINE STATE
-    const newState = this.determineOperationalState(
+    let newState = this.determineOperationalState(
       currentIri,
       prevState,
       { hasSpike, extremeRain, convergentOsint, satelliteAnomaly },
       signals
     );
+
+    if (noaaStormMatch) {
+      newState = "CRITICAL";
+    }
 
     // 6. SAVE STATE
     this.saveCellState(cell.id, currentIri, newState);

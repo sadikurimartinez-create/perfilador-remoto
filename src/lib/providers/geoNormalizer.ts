@@ -243,6 +243,48 @@ export class GeoDataNormalizerEngine {
         payload = rawData;
         break;
 
+      case "noaa":
+        sourceName = "National Oceanic and Atmospheric Administration (NOAA)";
+        license = "NOAA CDO Public Domain Reference";
+        sourceAuthority = 39; // high official meteorological authority
+        dataType = action === "storm_events" ? "meteorology" : "hydrology";
+        spatialVal = 5000;
+        spatialUnit = "kilometer_grid";
+        spatialDesc = "NOAA high-fidelity meteorological station grid cell";
+
+        if (action === "precipitation") {
+          payload = {
+            source: "NOAA",
+            geometry: { type: "Point" as const, coordinates: [lng, lat] },
+            hydrology: Math.min(1.0, (rawData?.precipitation_mm || 0) / 50), // 50mm as severe precipitation saturation limit
+            meteorology: 0.0,
+            confidence: 0.95,
+            timestamp: ingested_at
+          };
+        } else if (action === "storm_events") {
+          const stormWeight = rawData?.active_storms?.[0]?.weight || (rawData?.active_storms?.length > 0 ? 0.65 : 0.0);
+          payload = {
+            source: "NOAA",
+            geometry: { type: "Point" as const, coordinates: [lng, lat] },
+            hydrology: 0.0,
+            meteorology: stormWeight, // maps storm events directly to meteorology scoring factor
+            confidence: 0.95,
+            timestamp: ingested_at
+          };
+        } else if (action === "temperature_anomalies") {
+          payload = {
+            source: "NOAA",
+            geometry: { type: "Point" as const, coordinates: [lng, lat] },
+            hydrology: rawData?.soil_saturation_proxy || 0.0, // maps temperature anomalies directly to soil saturation proxy
+            meteorology: 0.0,
+            confidence: 0.95,
+            timestamp: ingested_at
+          };
+        } else {
+          payload = rawData;
+        }
+        break;
+
       case "telegram":
       case "x":
       case "reddit":
@@ -439,6 +481,17 @@ export class GeoDataNormalizerEngine {
           "Ingest high-resolution atmospheric and precipitation datasets",
           "Map local weather grid matching (2km cell precision)",
           "Assign private commercial license permissions"
+        );
+        break;
+
+      case "noaa":
+        primarySource = "NOAA Integrated National Climate Observing Systems";
+        intermediary = "NOAA CDO Web Services API V2";
+        transformations.push(
+          "Ingest precipitation, temperature, and storm event metrics",
+          "Deduplicate stations and query nearest daily summaries",
+          "Convert temperature anomalies to high-fidelity soil saturation proxy",
+          "Standardize outputs to UnifiedGeoDataset hydrology and meteorology weights"
         );
         break;
 

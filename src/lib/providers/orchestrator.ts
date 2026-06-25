@@ -12,6 +12,7 @@ import { XProvider } from "./xProvider";
 import { FacebookProvider } from "./facebookProvider";
 import { InstagramProvider } from "./instagramProvider";
 import { RedditProvider } from "./redditProvider";
+import { NoaaProvider } from "./noaa_provider";
 
 export class ApiOrchestrator {
   private providers: Map<string, IProvider> = new Map();
@@ -21,7 +22,7 @@ export class ApiOrchestrator {
   }
 
   /**
-   * Discovers and registers all 13 unified providers.
+   * Discovers and registers all unified providers.
    */
   private registerProviders() {
     this.register(new GoogleProvider());
@@ -37,6 +38,7 @@ export class ApiOrchestrator {
     this.register(new FacebookProvider());
     this.register(new InstagramProvider());
     this.register(new RedditProvider());
+    this.register(new NoaaProvider());
   }
 
   private register(provider: IProvider) {
