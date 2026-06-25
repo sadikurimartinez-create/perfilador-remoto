@@ -5,6 +5,7 @@ import { IRIGeneralizationEngine } from "@/lib/iri/validation/iriGeneralizationE
 import { GeoVisualEngine } from "@/lib/geo-visual/geoVisualEngine";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 60s max execution time
 
 // Initialize engines
