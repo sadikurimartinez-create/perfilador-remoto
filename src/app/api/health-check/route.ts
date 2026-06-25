@@ -5,6 +5,7 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
 import { getPool } from "@/lib/db";
+import { ApiOrchestrator } from "@/lib/providers/orchestrator";
 
 type ServiceStatus = {
   id: string;
@@ -258,10 +259,50 @@ export async function GET() {
     }
   }
 
+  // Orquestador de Proveedores - Diagnósticos Unificados
+  const providersReport: any[] = [];
+  {
+    try {
+      const orchestrator = new ApiOrchestrator();
+      const providerChecks = await orchestrator.runHealthChecks();
+      
+      Object.entries(providerChecks).forEach(([id, check]) => {
+        // Enforce backward compatibility for standard services list
+        services.push({
+          id: `provider-${id}`,
+          name: `Proveedor Unificado: ${id.toUpperCase()}`,
+          status: check.isHealthy ? "ok" : "error",
+          latencyMs: check.latencyMs !== undefined ? check.latencyMs : null,
+          errorMessage: check.isHealthy ? undefined : (check.details || "Discapacitado o sin conexión")
+        });
+
+        // Enforce expanded reporting fields for all 13 providers as requested
+        providersReport.push({
+          proveedor: id,
+          estado: check.isHealthy ? "ok" : "error",
+          tiempo_de_respuesta: `${check.latencyMs !== undefined ? check.latencyMs : 0}ms`,
+          autenticacion: check.authenticationStatus || (check.isHealthy ? "valid" : "invalid"),
+          expiracion_del_token: check.tokenExpiration || null,
+          disponibilidad: check.availability !== undefined ? check.availability : (check.isHealthy ? 100 : 0),
+          numero_de_registros: check.recordsCount || 0
+        });
+      });
+    } catch (error: any) {
+      services.push({
+        id: "orchestrator",
+        name: "Orquestador de APIs (Fallo)",
+        status: "error",
+        latencyMs: null,
+        errorMessage: error.message || String(error)
+      });
+    }
+  }
+
   return NextResponse.json(
     {
       timestamp: new Date().toISOString(),
       services,
+      providers: providersReport
     },
     { status: 200 }
   );
