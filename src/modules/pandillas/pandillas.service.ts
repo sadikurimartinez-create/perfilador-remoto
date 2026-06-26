@@ -86,16 +86,35 @@ function getStaticFallbackGangs(): GangEntity[] {
       });
 
       puntos.forEach((p, pIdx) => {
+        // We only generate a polygon/corredor and seed events. Legacy tactical points are removed.
+      });
+
+      geometrias.push({
+        id: `shape-buffer-${index}`,
+        nombre: `Zona de Influencia: ${gangName}`,
+        tipo: "poligono",
+        puntos: puntos.length >= 3 ? puntos.slice(0, 4) : [
+          center,
+          { lat: center.lat + 0.002, lng: center.lng + 0.002 },
+          { lat: center.lat + 0.002, lng: center.lng - 0.002 }
+        ],
+        nivelControlTerritorial: "Medio",
+        fechaActualizacion: new Date().toLocaleDateString("es-MX")
+      });
+
+      if (puntos.length >= 2) {
         geometrias.push({
-          id: `shape-pnt-${index}-${pIdx}`,
-          nombre: `Punto Táctico: ${integrantes[pIdx]?.alias || integrantes[pIdx]?.nombre || gangName}`,
-          tipo: "zona_riesgo",
-          puntos: [p],
-          radio: 50,
-          nivelControlTerritorial: "Medio",
+          id: `shape-corr-${index}`,
+          nombre: `Corredor de Movilidad: ${gangName}`,
+          tipo: "corredor",
+          puntos: [
+            puntos[0],
+            puntos[1]
+          ],
+          nivelControlTerritorial: "Alto",
           fechaActualizacion: new Date().toLocaleDateString("es-MX")
         });
-      });
+      }
     }
 
     const listDrogas = d.sustancias_consumidores || d.narcoticos_asociados || ["Cristal", "Marihuana"];
@@ -120,10 +139,24 @@ function getStaticFallbackGangs(): GangEntity[] {
         {
           id: `evt-${index}-1`,
           fecha: new Date().toLocaleDateString("es-MX"),
-          titulo: "Registro de Inteligencia",
-          descripcion: `Consolidación de expediente de la pandilla ${gangName} en el dossier general.`,
-          gravedad: "Media",
-          categoria: "detencion"
+          titulo: "Enfrentamiento Territorial",
+          descripcion: `Disputa violenta registrada entre facciones antagónicas de la zona.`,
+          gravedad: "Alta",
+          categoria: "enfrentamiento",
+          lugar: puntos.length > 0 
+            ? `Cruce de Operaciones (${(puntos[0].lat + 0.0015).toFixed(6)}, ${(puntos[0].lng - 0.0015).toFixed(6)})`
+            : "Aguascalientes"
+        },
+        {
+          id: `evt-${index}-2`,
+          fecha: new Date().toLocaleDateString("es-MX"),
+          titulo: "Marcaje de Territorio por Grafiti",
+          descripcion: `Evidencia de marcaje e identificación territorial por grafiti.`,
+          gravedad: "Baja",
+          categoria: "grafiti",
+          lugar: puntos.length > 0 
+            ? `Barda Pública (${(puntos[0].lat - 0.0015).toFixed(6)}, ${(puntos[0].lng + 0.0015).toFixed(6)})`
+            : "Aguascalientes"
         }
       ],
       imagenesGrafiti: [],

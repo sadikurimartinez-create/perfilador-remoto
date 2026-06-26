@@ -37,21 +37,12 @@ interface ManualDrawing {
   timestamp: string;
 }
 
-interface CrimeIncident {
-  lat: number;
-  lng: number;
-  tipo: string;
-  fuente: string;
-  distancia_m?: number;
-}
-
 interface AnalyzeGisRequest {
   selectedGangs: string[];
   activeLayers: string[];
   domiciles: GISMemberNode[];
   influenceZones: InfluenceZone[];
   manualDrawings: ManualDrawing[];
-  incidents: CrimeIncident[];
   allGangs: any[];
 }
 
@@ -64,7 +55,6 @@ export async function POST(req: Request) {
       domiciles = [],
       influenceZones = [],
       manualDrawings = [],
-      incidents = [],
       allGangs = []
     } = body;
 
@@ -102,15 +92,15 @@ export async function POST(req: Request) {
     // Correlate sources using CICE
     const ciceReport = CriminalIntelligenceCorrelationEngine.correlate({
       selectedGangs,
-      incidentsCount: incidents.length,
+      incidentsCount: 0,
       domicilesCount: domiciles.length,
       zonesCount: influenceZones.length,
-      rssCount: activeLayers.includes("osint") || activeLayers.includes("incidents") ? 10 : 0,
+      rssCount: activeLayers.includes("osint") ? 10 : 0,
       hasGoogleMaps: true,
       hasScince: true,
       hasDenue: true,
       socialMediaSignals: {
-        telegram: activeLayers.includes("relations") || activeLayers.includes("domiciles"),
+        telegram: activeLayers.includes("domiciles"),
         facebook: activeLayers.includes("influence"),
         instagram: activeLayers.includes("influence"),
         x: activeLayers.includes("influence"),
@@ -122,7 +112,6 @@ export async function POST(req: Request) {
     // 3. Calculate Spatial Crossings using SpatialLayerEngine
     const crossingsList: string[] = [];
     let insideDomicilesCount = 0;
-    let insideIncidentsCount = 0;
 
     manualDrawings.forEach(draw => {
       const drawName = draw.label || draw.geometry_type;
@@ -144,21 +133,6 @@ export async function POST(req: Request) {
           crossingsList.push(`- Integrante **${node.alias}** (${node.gang}) vive en el área delimitada por la capa dibujada **"${drawName}"** (${drawType.toUpperCase()} - Riesgo: ${drawRisk.toUpperCase()}).`);
         }
       });
-
-      // Cross Incidents
-      incidents.forEach(inc => {
-        const incLoc = { lat: inc.lat, lng: inc.lng };
-        const isInside = SpatialLayerEngine.intersectsShape(incLoc, {
-          tipo: shapeTipo,
-          puntos: draw.coordinates,
-          radio: draw.radio
-        });
-
-        if (isInside) {
-          insideIncidentsCount++;
-          crossingsList.push(`- Delito registrado **${inc.tipo || 'Incidente'}** (${inc.fuente}) contenido en la geometría dibujada **"${drawName}"**.`);
-        }
-      });
     });
 
     // 4. Compute Quantitative Risk Score (Scale 0.0 - 10.0)
@@ -178,7 +152,6 @@ export async function POST(req: Request) {
     score += (directRivalries / 2) * 1.5; // divide by 2 since rivalries are reciprocal
     
     score += insideDomicilesCount * 0.5;
-    score += insideIncidentsCount * 0.2;
     
     manualDrawings.forEach(d => {
       if (d.risk_level === "high") score += 1.0;
@@ -193,7 +166,7 @@ export async function POST(req: Request) {
       active_layers: activeLayers,
       domiciles: domiciles.map(d => ({ alias: d.alias, gang: d.gang, location: d.location })),
       influence_zones: influenceZones.map(z => ({ zone_id: z.zone_id, gang: z.gang, influence_score: z.influence_score })),
-      analysis_summary: `Se procesó la geointeligencia para ${selectedGangs.length} pandillas (${selectedGangs.join(", ")}). Se activaron las capas: ${activeLayers.join(", ")}. Se detectaron ${insideDomicilesCount} coincidencias de domicilios de integrantes y ${insideIncidentsCount} incidentes delictivos intersecados espacialmente por las ${manualDrawings.length} geometrías trazadas manualmente.`,
+      analysis_summary: `Se procesó la geointeligencia para ${selectedGangs.length} pandillas (${selectedGangs.join(", ")}). Se activaron las capas: ${activeLayers.join(", ")}. Se detectaron ${insideDomicilesCount} coincidencias de domicilios de integrantes intersecados espacialmente por las ${manualDrawings.length} geometrías trazadas manualmente.`,
       risk_score: finalRiskScore,
       export_ready: true,
       recommended_wms_layers: activeRecommendedLayers.map((l: any) => ({
@@ -208,7 +181,7 @@ export async function POST(req: Request) {
     };
 
     // 6. Build deterministic fallback report
-    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount, activeRecommendedLayers, ciceReport);
+    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, activeRecommendedLayers, ciceReport);
 
     // 5. Call Vertex AI for a premium report if credentials are set
     if (!GCP_PROJECT_ID) {
@@ -239,21 +212,21 @@ export async function POST(req: Request) {
 
       const systemPrompt = `
 Eres un Analista de Geointeligencia Criminal del Centro de Estudios y Política Criminal (CEIPOL) de Aguascalientes.
-Tu tarea es tomar un conjunto de datos GIS seleccionados por el analista (integrantes, domicilios, zonas de influencia, capas activas, incidentes delictivos cruzados e intersecciones espaciales con trazos manuales) y generar un **Informe Táctico de Inteligencia Criminal y Geointeligencia (Informe CICE)**.
+Tu tarea es tomar un conjunto de datos GIS seleccionados por el analista (integrantes, domicilios, zonas de influencia, capas activas, e intersecciones espaciales con trazos manuales) y generar un **Informe Táctico de Inteligencia Criminal y Geointeligencia (Informe CICE)**.
 
 El informe debe redactarse en un tono sumamente profesional, de inteligencia de seguridad pública, riguroso y analítico.
 Debe estructurarse en formato Markdown e incluir obligatoriamente las siguientes secciones:
 1. **Resumen Ejecutivo**: Diagnóstico inicial severo de la situación de seguridad.
 2. **Descripción Territorial**: Análisis de la geografía del área y sectores de Aguascalientes involucrados (análisis de entornos y atractor de riesgos).
 3. **Organización y Estructura Criminal**: Análisis del liderazgo, células y estructura de las pandillas seleccionadas basándote en los datos.
-4. **Comportamiento y Modus Operandi**: Patrones delictivos detectados, horarios y recurrencia de los crímenes cruzados en la zona.
+4. **Comportamiento y Modus Operandi**: Patrones delictivos detectados y recurrencia en la zona.
 5. **Movilidad y Rutas**: Corredores criminales, desplazamientos y tendencias de expansión detectadas mediante el trazado del analista.
-6. **Cruce de Capas e Inventario Institucional**: Detalle analítico cruzando Domicilios, Zonas de Influencia, Incidencia Delictiva y el Inventario de Pandillas.
-7. **Tendencia y Riesgos Tácticos**: Zonas calientes (Hotspots), conflictos territoriales activos y posible reordenamiento delictivo en la zona.
+6. **Cruce de Capas e Inventario Institucional**: Detalle analítico cruzando Domicilios, Zonas de Influencia y el Inventario de Pandillas.
+7. **Tendencia y Riesgos Tácticos**: Conflictos territoriales activos y posible reordenamiento delictivo en la zona.
 8. **Conclusiones y Recomendaciones Tácticas**: Patrullajes focalizados de disuasión y recomendaciones prácticas para inteligencia policial.
 9. **Confianza de Fuentes e Índice de Confianza**: Detalle estructurado basado en la Verdad Operacional Criminal (CICE).
 
-Vertex AI actúa únicamente como motor de razonamiento y síntesis narrativa. Todas las fuentes autorizadas de georreferenciación y delitos deben ser las provistas (Google Maps, INEGI DENUE/SCINCE, Inventario de Pandillas, Incidencia Delictiva y RSS).
+Vertex AI actúa únicamente como motor de razonamiento y síntesis narrativa. Todas las fuentes autorizadas de georreferenciación deben ser las provistas (Google Maps, INEGI DENUE/SCINCE, Inventario de Pandillas, y RSS).
 `;
 
       const userMessage = `
@@ -312,7 +285,6 @@ function buildDeterministicReport(
   crossingsList: string[],
   finalRiskScore: number,
   insideDomicilesCount: number,
-  insideIncidentsCount: number,
   activeRecommendedLayers: any[] = [],
   ciceReport: any = null
 ): string {
@@ -321,8 +293,7 @@ function buildDeterministicReport(
     activeLayers = [],
     domiciles = [],
     influenceZones = [],
-    manualDrawings = [],
-    incidents = []
+    manualDrawings = []
   } = body;
 
   const centerLat = domiciles.length > 0 ? domiciles.reduce((acc, d) => acc + d.location.lat, 0) / domiciles.length : 21.8853;
@@ -340,7 +311,7 @@ function buildDeterministicReport(
   markdown += `**Puntaje de Riesgo Territorial:** **${finalRiskScore}/10.0 (${riskText})**\n\n`;
 
   markdown += `## 1. Resumen Ejecutivo\n`;
-  markdown += `Este informe compila el diagnóstico geoespacial cruzado para las pandillas seleccionadas: **${selectedGangs.join(", ")}**. El motor GIS analizó la vecindad territorial a partir de **${domiciles.length} domicilios de integrantes** y **${influenceZones.length} zonas de influencia**. Mediante las capas de delineado manual, se identificaron **${insideDomicilesCount} intersecciones de domicilios** y **${insideIncidentsCount} incidentes delictivos** de alta prioridad. El índice de severidad se establece en **${finalRiskScore}** sobre una escala de 10.\n\n`;
+  markdown += `Este informe compila el diagnóstico geoespacial cruzado para las pandillas seleccionadas: **${selectedGangs.join(", ")}**. El motor GIS analizó la vecindad territorial a partir de **${domiciles.length} domicilios de integrantes** y **${influenceZones.length} zonas de influencia**. Mediante las capas de delineado manual, se identificaron **${insideDomicilesCount} intersecciones de domicilios** de alta prioridad. El índice de severidad se establece en **${finalRiskScore}** sobre una escala de 10.\n\n`;
 
   markdown += `## 2. Descripción Territorial\n`;
   markdown += `La cuadrícula operativa se centra en las coordenadas correspondientes al oriente y centro de la capital del estado de Aguascalientes. Se identifica una vulnerabilidad física dada la conectividad de los corredores trazados con áreas residenciales y comerciales.\n\n`;
@@ -349,8 +320,9 @@ function buildDeterministicReport(
   markdown += `Se procesaron las siguientes capas de información espacial:\n`;
   markdown += `- **Domicilios de Integrantes:** ${activeLayers.includes("domiciles") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
   markdown += `- **Zonas de Influencia:** ${activeLayers.includes("influence_zones") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
-  markdown += `- **Redes de Relaciones:** ${activeLayers.includes("relations") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
-  markdown += `- **Incidencia Delictiva:** ${activeLayers.includes("incidents") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n\n`;
+  markdown += `- **Corredores de Movilidad:** ${activeLayers.includes("corridors") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
+  markdown += `- **Grafitis Registrados:** ${activeLayers.includes("graffiti") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
+  markdown += `- **Eventos Históricos:** ${activeLayers.includes("history") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n\n`;
 
   if (activeRecommendedLayers.length > 0) {
     markdown += `### Capas WMS del INEGI (GAIA) Integradas\n`;
@@ -375,7 +347,7 @@ function buildDeterministicReport(
       markdown += c + "\n";
     });
   } else {
-    markdown += `*No se registraron intersecciones espaciales directas entre los trazos manuales y la base de datos de domicilios o crímenes.*\n`;
+    markdown += `*No se registraron intersecciones espaciales directas entre los trazos manuales y la base de datos de domicilios.*\n`;
   }
   markdown += `\n`;
 
@@ -400,13 +372,10 @@ function buildDeterministicReport(
     markdown += `\n`;
   }
 
-  markdown += `## ${ciceReport ? '6' : '5'}. Patrones Espaciales e Incidencia Delictiva\n`;
-  markdown += `El total de incidentes analizados dentro de la zona de influencia asciende a **${incidents.length} delitos cercanos**. Se destaca que la cercanía física entre las viviendas de integrantes y las zonas comerciales o de tránsito incrementa el factor de oportunidad criminal para robos y asaltos en la demarcación.\n\n`;
-
-  markdown += `## ${ciceReport ? '7' : '6'}. Recomendaciones y Conclusiones Tácticas\n`;
-  markdown += `1. **Monitorear los Corredores de Movilidad:** Reforzar patrullajes en las rutas de delineado manual donde se detectaron intersecciones directas.\n`;
+  markdown += `## ${ciceReport ? '6' : '5'}. Recomendaciones y Conclusiones Tácticas\n`;
+  markdown += `1. **Monitorear los Corredores de Movilidad:** Reforzar patrullajes en las rutas de movilidad delictiva donde se detectaron intersecciones o proximidades.\n`;
   markdown += `2. **Asegurar Zonas de Riesgo / Buffers:** Desplegar unidades de disuasión rápida en los círculos de amortiguamiento con puntaje de riesgo ALTO.\n`;
-  markdown += `3. **Unificar Inteligencia:** Mantener actualizada la capa de domicilios con registros OSINT y de redes sociales para robustecer el CICE.\n`;
+  markdown += `3. **Unificar Inteligencia:** Mantener actualizada la capa de domicilios con registros OSINT para robustecer el CICE.\n`;
 
   return markdown;
 }

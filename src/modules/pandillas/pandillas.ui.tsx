@@ -14,9 +14,11 @@ import {
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
-import { GoogleMap, Polygon, Polyline, Marker, Circle, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Polygon, Polyline, Marker, Circle, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { GangGISAnalysisLayer, GISRelationshipLine } from "@/lib/providers/gangGISAnalysisLayer";
 import { GISMemberNode, InfluenceZone } from "@/lib/providers/gangInfluenceEngine";
+import { getDb } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
@@ -123,6 +125,61 @@ const calculateCentroid = (points: { lat: number; lng: number }[]) => {
     lngSum += p.lng;
   });
   return { lat: latSum / points.length, lng: lngSum / points.length };
+};
+
+const ICON_PATHS = {
+  star: "M 0,-8 L 2.4,-2.4 L 8,-2.4 L 3.4,1 L 5.2,6.4 L 0,3 L -5.2,6.4 L -3.4,1 L -8,-2.4 L -2.4,-2.4 Z",
+  crosshair: "M -6,0 L -2,0 M 2,0 L 6,0 M 0,-6 L 0,-2 M 0,2 L 0,6 M -4,0 A 4,4 0 1,0 4,0 A 4,4 0 1,0 -4,0",
+  eye: "M -8,0 C -5,5 5,5 8,0 C 5,-5 -5,-5 -8,0 Z M -2,0 A 2,2 0 1,0 2,0 A 2,2 0 1,0 -2,0",
+  dot: "M 0,0 A 4,4 0 1,0 0,-0.01 Z"
+};
+
+const getGangColor = (gangName: string): string => {
+  const colors = ["#06b6d4", "#f59e0b", "#a855f7", "#ec4899", "#10b981", "#ef4444", "#3b82f6", "#f43f5e", "#14b8a6", "#84cc16"];
+  let hash = 0;
+  for (let i = 0; i < gangName.length; i++) {
+    hash = gangName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
+
+const getMarkerIcon = (rol: string | undefined, gangColor: string) => {
+  const r = (rol || "").toLowerCase();
+  let path = ICON_PATHS.dot;
+  let scale = 1.5;
+  if (r.includes("lider") || r.includes("segundo")) {
+    path = ICON_PATHS.star;
+    scale = 1.8;
+  } else if (r.includes("sicario")) {
+    path = ICON_PATHS.crosshair;
+    scale = 2.0;
+  } else if (r.includes("halcon") || r.includes("vigilante")) {
+    path = ICON_PATHS.eye;
+    scale = 1.8;
+  }
+  
+  return {
+    path,
+    scale,
+    fillColor: gangColor,
+    fillOpacity: 1,
+    strokeColor: "#ffffff",
+    strokeWeight: 1.5,
+  };
+};
+
+const parseCoordinates = (str: string | undefined): { lat: number; lng: number } | null => {
+  if (!str) return null;
+  const match = str.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+  }
+  return null;
 };
 
 interface PandillasUIProps {
@@ -294,27 +351,13 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [activeGisLayers, setActiveGisLayers] = useState<Record<string, boolean>>({
     domiciles: true,
     influence: true,
-    corridors: false,
-    graffiti: false,
-    history: false,
-    tactical: false,
-    clusters: false,
-    relations: true,
-    incidents: true,
-    hotspots: false,
+    corridors: true,
+    graffiti: true,
+    history: true,
   });
   const showGisNodes = activeGisLayers.domiciles;
   const showGisZones = activeGisLayers.influence;
-  const showGisRelations = activeGisLayers.relations;
-  const showGisIncidents = activeGisLayers.incidents;
   const [selectedGangsForGis, setSelectedGangsForGis] = useState<string[]>([]);
-  const [selectedCrimeTypes, setSelectedCrimeTypes] = useState<string[]>([
-    "Homicidios_2025.csv", "Feminicidios_2025.csv", "Robo negocio 2025.csv",
-    "Robo casa 2025.csv", "Robo vehicular 2025.csv", "Robo motocicleta 2025.csv",
-    "Extorsion & Fraude 2025.csv", "PERSONA 2025.csv", "Autopartes & Cristalazo 2025.csv"
-  ]);
-  const [gisIncidents, setGisIncidents] = useState<any[]>([]);
-  const [isFetchingIncidents, setIsFetchingIncidents] = useState(false);
   const [editingGeometryId, setEditingGeometryId] = useState<string | null>(null);
   const [gisStructuredOutput, setGisStructuredOutput] = useState<any | null>(null);
   const [activeModalTab, setActiveModalTab] = useState<"report" | "json">("report");
@@ -325,6 +368,30 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [multiSelectedZones, setMultiSelectedZones] = useState<InfluenceZone[]>([]);
   const [isGisAnalyzing, setIsGisAnalyzing] = useState(false);
   const [gisAnalysisReport, setGisAnalysisReport] = useState<string | null>(null);
+
+  const [hoveredGisElement, setHoveredGisElement] = useState<any | null>(null);
+  const [selectedGisElement, setSelectedGisElement] = useState<any | null>(null);
+  const [projectPhotos, setProjectPhotos] = useState<any[]>([]);
+
+  // Load project photos
+  useEffect(() => {
+    if (projectId) {
+      const fetchProjectPhotos = async () => {
+        try {
+          const firestore = getDb();
+          const photosColRef = collection(firestore, "projects", projectId, "photos");
+          const photosSnap = await getDocs(photosColRef);
+          const photos = photosSnap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter((p: any) => !p.deleted && p.lat != null && p.lng != null);
+          setProjectPhotos(photos);
+        } catch (e) {
+          console.error("Error loading project photos for GIS:", e);
+        }
+      };
+      void fetchProjectPhotos();
+    }
+  }, [projectId]);
 
   // Process and memoize GIS Layer structures
   const gisAnalysisResult = useMemo(() => {
@@ -339,7 +406,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     return {
       nodes: gisAnalysisResult.nodes.filter(n => selectedGangsForGis.includes(n.gang)),
       zones: gisAnalysisResult.zones.filter(z => selectedGangsForGis.includes(z.gang)),
-      relationships: gisAnalysisResult.relationships.filter(r => selectedGangsForGis.includes(r.gang))
+      relationships: []
     };
   }, [gisAnalysisResult, selectedGangsForGis]);
 
@@ -365,86 +432,99 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     return { lat: latSum / count, lng: lngSum / count };
   }, [storedGangs, selectedGangsForGis]);
 
-  const fetchIncidentsForGis = async (lat: number, lng: number) => {
-    setIsFetchingIncidents(true);
-    try {
-      const res = await fetch("/api/incidencia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setGisIncidents(json.data || []);
-      }
-    } catch (err) {
-      console.error("Error fetching incidents for GIS:", err);
-    } finally {
-      setIsFetchingIncidents(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedGangsForGis.length > 0) {
-      const centroid = selectedGangsCentroid;
-      void fetchIncidentsForGis(centroid.lat, centroid.lng);
-    }
-  }, [selectedGangsForGis, selectedGangsCentroid]);
-
-  const filteredIncidents = useMemo(() => {
-    if (!showGisIncidents) return [];
-    return gisIncidents.filter(inc => selectedCrimeTypes.includes(inc.fuente));
-  }, [gisIncidents, showGisIncidents, selectedCrimeTypes]);
-
-  const mockGisLayersData = useMemo(() => {
-    const center = selectedGangsCentroid;
-    const getOffset = (seed: number) => {
-      const x = Math.sin(seed) * 10000;
-      return (x - Math.floor(x)) - 0.5;
-    };
-
-    return {
-      corridors: [
-        {
-          id: "corr-1",
-          path: [
-            { lat: center.lat + getOffset(1) * 0.015, lng: center.lng + getOffset(2) * 0.015 },
-            { lat: center.lat + getOffset(3) * 0.015, lng: center.lng + getOffset(4) * 0.015 },
-            { lat: center.lat + getOffset(5) * 0.015, lng: center.lng + getOffset(6) * 0.015 },
-          ],
-          color: "#a855f7"
-        },
-        {
-          id: "corr-2",
-          path: [
-            { lat: center.lat + getOffset(7) * 0.015, lng: center.lng + getOffset(8) * 0.015 },
-            { lat: center.lat + getOffset(9) * 0.015, lng: center.lng + getOffset(10) * 0.015 },
-          ],
-          color: "#ec4899"
+  // 1. Mobility Corridors (from database shape.tipo === "corredor")
+  const realCorridors = useMemo(() => {
+    const list: any[] = [];
+    const activeGangs = storedGangs.filter(g => selectedGangsForGis.includes(g.nombre));
+    activeGangs.forEach(gang => {
+      const gangColor = getGangColor(gang.nombre);
+      (gang.geometrias || []).forEach(shape => {
+        if (shape.tipo === "corredor") {
+          list.push({
+            id: shape.id,
+            gang: gang.nombre,
+            path: shape.puntos,
+            color: gangColor,
+            nombre: shape.nombre,
+            nivel: shape.nivelControlTerritorial
+          });
         }
-      ],
-      graffiti: [
-        { id: "graf-1", location: { lat: center.lat + getOffset(11) * 0.01, lng: center.lng + getOffset(12) * 0.01 }, text: "Grafiti Clica Sur" },
-        { id: "graf-2", location: { lat: center.lat + getOffset(13) * 0.01, lng: center.lng + getOffset(14) * 0.01 }, text: "Tag Territorial 13" },
-        { id: "graf-3", location: { lat: center.lat + getOffset(15) * 0.01, lng: center.lng + getOffset(16) * 0.01 }, text: "Símbolos Antagónicos" }
-      ],
-      history: [
-        { id: "hist-1", location: { lat: center.lat + getOffset(17) * 0.012, lng: center.lng + getOffset(18) * 0.012 }, text: "Enfrentamiento Armado (2025)", date: "2025-11-12" },
-        { id: "hist-2", location: { lat: center.lat + getOffset(19) * 0.012, lng: center.lng + getOffset(20) * 0.012 }, text: "Detención de Líder", date: "2026-02-18" }
-      ],
-      tactical: [
-        { id: "tact-1", location: { lat: center.lat + getOffset(21) * 0.008, lng: center.lng + getOffset(22) * 0.008 }, text: "Punto de Vigilancia / Halconeo" },
-        { id: "tact-2", location: { lat: center.lat + getOffset(23) * 0.008, lng: center.lng + getOffset(24) * 0.008 }, text: "Centro de Acopio Táctico" }
-      ],
-      clusters: [
-        { id: "clust-1", center: { lat: center.lat + getOffset(25) * 0.006, lng: center.lng + getOffset(26) * 0.006 }, radius: 350 },
-        { id: "clust-2", center: { lat: center.lat + getOffset(27) * 0.006, lng: center.lng + getOffset(28) * 0.006 }, radius: 250 }
-      ],
-      hotspots: [
-        { id: "hot-1", center: { lat: center.lat + getOffset(29) * 0.005, lng: center.lng + getOffset(30) * 0.005 }, radius: 500 }
-      ]
-    };
-  }, [selectedGangsCentroid]);
+      });
+    });
+    return list;
+  }, [storedGangs, selectedGangsForGis]);
+
+  // 2. Graffiti (from timeline categoria === "grafiti" and georeferenced project photos)
+  const realGraffiti = useMemo(() => {
+    const list: any[] = [];
+    const activeGangs = storedGangs.filter(g => selectedGangsForGis.includes(g.nombre));
+    activeGangs.forEach(gang => {
+      const gangColor = getGangColor(gang.nombre);
+      (gang.cronologiaEventos || []).forEach(evt => {
+        const isGrafiti = evt.categoria === "grafiti" || evt.titulo.toLowerCase().includes("grafiti") || evt.descripcion.toLowerCase().includes("grafiti");
+        if (isGrafiti) {
+          const coords = parseCoordinates(evt.lugar);
+          if (coords) {
+            list.push({
+              id: evt.id,
+              gang: gang.nombre,
+              color: gangColor,
+              location: coords,
+              text: evt.titulo,
+              description: evt.descripcion,
+              date: evt.fecha,
+              source: "Historial de Eventos"
+            });
+          }
+        }
+      });
+    });
+
+    projectPhotos.forEach(p => {
+      list.push({
+        id: p.id,
+        gang: "Proyecto / Evidencia",
+        color: "#f97316",
+        location: { lat: p.lat, lng: p.lng },
+        text: p.tipo || "Foto de Campo",
+        description: p.comentario || "Foto de evidencia georreferenciada.",
+        date: p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "",
+        imageUrl: p.previewUrl || p.url,
+        source: "Fotos de Proyecto"
+      });
+    });
+
+    return list;
+  }, [storedGangs, selectedGangsForGis, projectPhotos]);
+
+  // 3. Historical Events (from timeline parsed events)
+  const realHistory = useMemo(() => {
+    const list: any[] = [];
+    const activeGangs = storedGangs.filter(g => selectedGangsForGis.includes(g.nombre));
+    activeGangs.forEach(gang => {
+      const gangColor = getGangColor(gang.nombre);
+      (gang.cronologiaEventos || []).forEach(evt => {
+        const isGrafiti = evt.categoria === "grafiti" || evt.titulo.toLowerCase().includes("grafiti") || evt.descripcion.toLowerCase().includes("grafiti");
+        if (!isGrafiti) {
+          const coords = parseCoordinates(evt.lugar);
+          if (coords) {
+            list.push({
+              id: evt.id,
+              gang: gang.nombre,
+              color: gangColor,
+              location: coords,
+              text: evt.titulo,
+              description: evt.descripcion,
+              date: evt.fecha,
+              categoria: evt.categoria,
+              gravedad: evt.gravedad
+            });
+          }
+        }
+      });
+    });
+    return list;
+  }, [storedGangs, selectedGangsForGis]);
 
   const handleVertexDrag = (geoId: string, idx: number, lat: number, lng: number) => {
     if (!isWithinAguascalientes(lat, lng)) {
@@ -527,12 +607,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
             influence: "Zonas de Influencia",
             corridors: "Corredores de Movilidad",
             graffiti: "Grafitis Registrados",
-            history: "Eventos Históricos",
-            tactical: "Puntos Tácticos",
-            clusters: "Clusters Territoriales",
-            relations: "Relaciones entre Integrantes",
-            incidents: "Incidencia Delictiva",
-            hotspots: "Hotspots"
+            history: "Eventos Históricos"
           };
           return map[key] || key;
         })
@@ -547,12 +622,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
         influence: { color: "#eab308", label: "Zonas de Influencia" },
         corridors: { color: "#a855f7", label: "Corredores de Movilidad" },
         graffiti: { color: "#f97316", label: "Grafitis Registrados" },
-        history: { color: "#ef4444", label: "Eventos Históricos" },
-        tactical: { color: "#3b82f6", label: "Puntos Tácticos" },
-        clusters: { color: "#06b6d4", label: "Clusters Territoriales (Buffer)" },
-        relations: { color: "#a855f7", label: "Relaciones entre Integrantes" },
-        incidents: { color: "#e11d48", label: "Incidencia Delictiva" },
-        hotspots: { color: "#ef4444", label: "Hotspots" }
+        history: { color: "#ef4444", label: "Eventos Históricos" }
       };
 
       Object.entries(activeGisLayers).forEach(([key, active]) => {
@@ -1082,10 +1152,11 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     setGisStructuredOutput(null);
     try {
       const activeLayers = [
-        showGisNodes && "domiciles",
-        showGisZones && "influence_zones",
-        showGisRelations && "relations",
-        showGisIncidents && "incidents"
+        activeGisLayers.domiciles && "domiciles",
+        activeGisLayers.influence && "influence_zones",
+        activeGisLayers.corridors && "corridors",
+        activeGisLayers.graffiti && "graffiti",
+        activeGisLayers.history && "history"
       ].filter(Boolean) as string[];
 
       const payload = {
@@ -1094,14 +1165,13 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
         domiciles: filteredGisData.nodes,
         influenceZones: filteredGisData.zones,
         manualDrawings: geometrias.map(geo => ({
-          geometry_type: geo.tipo === "zona_riesgo" ? "buffer" : geo.tipo,
+          geometry_type: geo.tipo === "zona_riesgo" ? "buffer" : (geo.tipo === "poligono" ? "polygon" : geo.tipo),
           coordinates: geo.puntos,
           radio: geo.radio,
           risk_level: geo.riskLevel || "medium",
           label: geo.nombre,
           timestamp: geo.fechaActualizacion || new Date().toISOString()
         })),
-        incidents: filteredIncidents,
         allGangs: storedGangs
       };
 
@@ -2402,91 +2472,361 @@ ${analysisResult.ficha.crossCheckJuridico}
         {/* TAB 5: GEOINTELIGENCIA TÁCTICA */}
         {activeTab === "geointeligencia" && (
           <div className="w-full space-y-6">
-            <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* GIS TOOLBOX PANEL (4 cols) */}
-              <div className="lg:col-span-4 bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5 flex flex-col justify-start">
-                
-                {/* SECTION 1: SELECCIÓN DE PANDILLAS */}
-                <div className="space-y-2 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
-                    <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
-                      👥 Selección de Pandillas
-                    </h3>
-                    <span className="text-[10px] bg-slate-850 px-1.5 py-0.5 rounded text-sky-400 font-bold">
-                      {selectedGangsForGis.length}
-                    </span>
-                  </div>
-                  
-                  {storedGangs.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic">No hay pandillas registradas</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {/* Seleccionar Todas Checkbox */}
-                      <label className="flex items-center justify-between text-xs text-slate-200 font-bold cursor-pointer border-b border-slate-800/60 pb-1.5">
-                        <span>Seleccionar Todas</span>
-                        <input
-                          type="checkbox"
-                          checked={selectedGangsForGis.length === storedGangs.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedGangsForGis(storedGangs.map(g => g.nombre));
-                            } else {
-                              setSelectedGangsForGis([]);
-                            }
+            
+            {/* 1. MAPA GIS PANDILLAS (Elemento central absoluto, 100% ancho, h-[70vh]) */}
+            <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="border-b border-slate-900 pb-3 flex justify-between items-center">
+                <div>
+                  <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">🗺️ Mapa Táctico GEOINT de Pandillas</h3>
+                  <p className="text-[10px] text-slate-500">Visualización de capas espaciales activas en tiempo real.</p>
+                </div>
+              </div>
+              
+              {!isLoaded ? (
+                <div className="w-full h-[70vh] rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
+                  Cargando cartografía táctica...
+                </div>
+              ) : (
+                <div id="gis-tactical-map" className="relative h-[70vh] w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                  <GoogleMap
+                    mapContainerStyle={{ width: "100%", height: "100%" }}
+                    center={mapCenter}
+                    zoom={13}
+                    onLoad={onMapLoad}
+                    options={{
+                      streetViewControl: false,
+                      mapTypeControl: false,
+                      fullscreenControl: false,
+                      styles: darkMapStyles,
+                      disableDefaultUI: false
+                    }}
+                  >
+                    {/* 1. Domicilios de integrantes */}
+                    {showGisNodes && filteredGisData.nodes.map((node) => {
+                      const gangColor = getGangColor(node.gang);
+                      return (
+                        <Marker
+                          key={node.member_id}
+                          position={node.location}
+                          title={`${node.alias || "Integrante"} (${node.gang})`}
+                          onClick={() => {
+                            setSelectedGisNode(node);
+                            setSelectedGisElement({
+                              tipo: "Domicilio de Integrante",
+                              titulo: node.alias || "Integrante",
+                              subtitulo: node.gang,
+                              rol: node.rol || "Integrante",
+                              detalle: node.domicilioExacto || "Sin dirección exacta registrada.",
+                              gang: node.gang,
+                              color: gangColor,
+                              lat: node.location.lat,
+                              lng: node.location.lng,
+                              source: node.source
+                            });
                           }}
-                          className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-4 h-4"
+                          onMouseOver={() => setHoveredGisElement(node)}
+                          onMouseOut={() => setHoveredGisElement(null)}
+                          icon={getMarkerIcon(node.rol, gangColor)}
                         />
-                      </label>
-                      
-                      {/* List of Gangs */}
-                      <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
-                        {storedGangs.map((g) => {
-                          const isChecked = selectedGangsForGis.includes(g.nombre);
-                          return (
-                            <label key={g.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/20 p-1 rounded transition-colors">
-                              <span>👥 {g.nombre}</span>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  if (isChecked) {
-                                    setSelectedGangsForGis(selectedGangsForGis.filter(n => n !== g.nombre));
-                                  } else {
-                                    setSelectedGangsForGis([...selectedGangsForGis, g.nombre]);
-                                  }
-                                }}
-                                className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5"
-                              />
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                      );
+                    })}
+                    
+                    {/* 2. Zonas de influencia */}
+                    {showGisZones && filteredGisData.zones.map((zone) => {
+                      const gangColor = getGangColor(zone.gang);
+                      return (
+                        <Polygon
+                          key={zone.zone_id}
+                          paths={zone.points}
+                          onClick={() => {
+                            setSelectedGisZone(zone);
+                            setSelectedGisElement({
+                              tipo: "Zona de Influencia",
+                              titulo: `Zona de Influencia DBSCAN`,
+                              subtitulo: zone.gang,
+                              detalle: `Área de control territorial calculada mediante agrupamiento de domicilios (DBSCAN). Contiene ${zone.memberCount} integrantes mapeados con una densidad de ${zone.density.toFixed(2)} integrantes/km². Score de influencia: ${zone.influence_score}.`,
+                              gang: zone.gang,
+                              color: gangColor,
+                              lat: zone.points[0]?.lat || 21.88,
+                              lng: zone.points[0]?.lng || -102.29,
+                              source: "Análisis Espacial DBSCAN"
+                            });
+                          }}
+                          options={{
+                            strokeColor: gangColor,
+                            strokeOpacity: 0.6,
+                            strokeWeight: 2,
+                            fillColor: gangColor,
+                            fillOpacity: 0.25,
+                          }}
+                        />
+                      );
+                    })}
+                    
+                    {/* 3. Corredores de movilidad */}
+                    {activeGisLayers.corridors && realCorridors.map((corr) => {
+                      const gangColor = getGangColor(corr.gang);
+                      return (
+                        <Polyline
+                          key={corr.id}
+                          path={corr.path}
+                          onClick={() => {
+                            setSelectedGisElement({
+                              tipo: "Corredor de Movilidad",
+                              titulo: corr.nombre || "Corredor Táctico",
+                              subtitulo: corr.gang,
+                              detalle: `Ruta de desplazamiento y corredor de movilidad delictiva identificado para la organización. Nivel de control territorial: ${corr.nivel || "Medio"}.`,
+                              gang: corr.gang,
+                              color: gangColor,
+                              lat: corr.path[0]?.lat || 21.88,
+                              lng: corr.path[0]?.lng || -102.29,
+                              source: "Registros del Inventario"
+                            });
+                          }}
+                          options={{
+                            strokeColor: gangColor,
+                            strokeOpacity: 0.85,
+                            strokeWeight: 4.5,
+                          }}
+                        />
+                      );
+                    })}
+                    
+                    {/* 4. Grafitis registrados */}
+                    {activeGisLayers.graffiti && realGraffiti.map((graf) => {
+                      const gangColor = getGangColor(graf.gang);
+                      return (
+                        <Marker
+                          key={graf.id}
+                          position={graf.location}
+                          title={`${graf.text} (${graf.gang})`}
+                          onClick={() => {
+                            setSelectedGisElement({
+                              tipo: "Grafiti / Marcaje Territorial",
+                              titulo: graf.text || "Grafiti de Marcaje",
+                              subtitulo: graf.gang,
+                              detalle: graf.description || "Evidencia física de marcaje e identificación territorial por grafiti.",
+                              gang: graf.gang,
+                              color: gangColor,
+                              lat: graf.location.lat,
+                              lng: graf.location.lng,
+                              date: graf.date,
+                              source: graf.source
+                            });
+                          }}
+                          onMouseOver={() => setHoveredGisElement(graf)}
+                          onMouseOut={() => setHoveredGisElement(null)}
+                          icon={{
+                            path: ICON_PATHS.dot,
+                            scale: 1.5,
+                            fillColor: gangColor,
+                            fillOpacity: 1,
+                            strokeColor: "#f97316",
+                            strokeWeight: 2,
+                          }}
+                        />
+                      );
+                    })}
+                    
+                    {/* 5. Eventos históricos */}
+                    {activeGisLayers.history && realHistory.map((hist) => {
+                      const gangColor = getGangColor(hist.gang);
+                      return (
+                        <Marker
+                          key={hist.id}
+                          position={hist.location}
+                          title={`${hist.text} (${hist.date})`}
+                          onClick={() => {
+                            setSelectedGisElement({
+                              tipo: `Evento Histórico - ${hist.categoria?.toUpperCase() || "INTELIGENCIA"}`,
+                              titulo: hist.text,
+                              subtitulo: hist.gang,
+                              detalle: hist.description || "Registro histórico de interés criminológico y de seguridad pública.",
+                              gang: hist.gang,
+                              color: gangColor,
+                              lat: hist.location.lat,
+                              lng: hist.location.lng,
+                              date: hist.date,
+                              source: "Cronología CEIPOL"
+                            });
+                          }}
+                          onMouseOver={() => setHoveredGisElement(hist)}
+                          onMouseOut={() => setHoveredGisElement(null)}
+                          icon={{
+                            path: ICON_PATHS.dot,
+                            scale: 1.6,
+                            fillColor: gangColor,
+                            fillOpacity: 1,
+                            strokeColor: "#ef4444",
+                            strokeWeight: 2,
+                          }}
+                        />
+                      );
+                    })}
+
+                    {/* Tooltip en Hover */}
+                    {hoveredGisElement && (
+                      <InfoWindow
+                        position={hoveredGisElement.location}
+                        options={{ disableAutoPan: true }}
+                      >
+                        <div className="bg-slate-950 text-slate-200 p-2 rounded-lg border border-slate-800 shadow-xl max-w-[240px] text-[11px] space-y-1">
+                          {hoveredGisElement.alias ? (
+                            <>
+                              <p className="font-bold text-sky-400 text-xs">🏠 {hoveredGisElement.alias}</p>
+                              <p><span className="text-slate-500 font-semibold">Rol:</span> {hoveredGisElement.rol || "Integrante"}</p>
+                              <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
+                              {hoveredGisElement.domicilioExacto && (
+                                <p className="truncate"><span className="text-slate-500 font-semibold">Dirección:</span> {hoveredGisElement.domicilioExacto}</p>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <p className="font-bold text-rose-400 text-xs">📍 {hoveredGisElement.text}</p>
+                              <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
+                              {hoveredGisElement.date && (
+                                <p><span className="text-slate-500 font-semibold">Fecha:</span> {hoveredGisElement.date}</p>
+                              )}
+                              {hoveredGisElement.description && (
+                                <p className="line-clamp-2 text-slate-300 italic">"{hoveredGisElement.description}"</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </InfoWindow>
+                    )}
+                  </GoogleMap>
+                </div>
+              )}
+            </div>
+
+            {/* 2. DETALLE EXPANDIDO DE INTELIGENCIA TERRITORIAL (Clic en marcador, abajo del mapa) */}
+            {selectedGisElement && (
+              <div className="bg-slate-950/80 border rounded-2xl p-5 shadow-2xl animate-fadeIn space-y-4" style={{ borderColor: selectedGisElement.color }}>
+                <div className="flex justify-between items-start border-b border-slate-900 pb-3">
+                  <div>
+                    <span className="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 rounded animate-pulse" style={{ backgroundColor: `${selectedGisElement.color}20`, color: selectedGisElement.color }}>
+                      {selectedGisElement.tipo}
+                    </span>
+                    <h3 className="text-base font-black text-slate-100 uppercase mt-2">
+                      {selectedGisElement.titulo}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Pandilla: <strong style={{ color: selectedGisElement.color }}>{selectedGisElement.subtitulo}</strong></p>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedGisElement(null)}
+                    className="text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors"
+                  >
+                    ❌ Cerrar Detalle
+                  </button>
                 </div>
                 
-                {/* SECTION 2: CAPAS GIS ACTIVAS */}
-                <div className="space-y-2 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
-                  <div className="border-b border-slate-800 pb-2 mb-2">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+                  <div className="md:col-span-8 space-y-3">
+                    {selectedGisElement.rol && (
+                      <p><strong className="text-slate-400">Rol en Estructura:</strong> <span className="font-bold text-slate-200">{selectedGisElement.rol}</span></p>
+                    )}
+                    <p><strong className="text-slate-400">Detalle Operativo:</strong></p>
+                    <p className="bg-slate-900/60 p-3 rounded-lg border border-slate-850 text-slate-300 leading-relaxed italic">
+                      {selectedGisElement.detalle}
+                    </p>
+                  </div>
+                  <div className="md:col-span-4 bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-2">
+                    <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Metadatos Geográficos</span>
+                    <p><strong className="text-slate-400">Latitud:</strong> <span className="font-mono">{selectedGisElement.lat.toFixed(6)}</span></p>
+                    <p><strong className="text-slate-400">Longitud:</strong> <span className="font-mono">{selectedGisElement.lng.toFixed(6)}</span></p>
+                    {selectedGisElement.date && (
+                      <p><strong className="text-slate-400">Fecha de Registro:</strong> <span>{selectedGisElement.date}</span></p>
+                    )}
+                    {selectedGisElement.source && (
+                      <p><strong className="text-slate-400">Fuente:</strong> <span className="px-1.5 py-0.5 bg-slate-800 text-[10px] text-slate-300 rounded font-bold">{selectedGisElement.source}</span></p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. BARRA DE CONTROLES INFERIOR (Debajo del mapa) */}
+            <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl">
+              
+              {/* SECCIÓN 1: SELECCIÓN DE PANDILLAS */}
+              <div className="md:col-span-6 space-y-3 border-r border-slate-800/60 pr-6">
+                <div className="flex justify-between items-center border-b border-slate-850 pb-2">
+                  <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                    👥 Selección de Pandillas
+                  </h3>
+                  <span className="text-[10px] bg-slate-850 px-1.5 py-0.5 rounded text-sky-400 font-bold">
+                    {selectedGangsForGis.length}
+                  </span>
+                </div>
+                
+                {storedGangs.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">No hay pandillas registradas</p>
+                ) : (
+                  <div className="space-y-2">
+                    {/* Seleccionar Todas Checkbox */}
+                    <label className="flex items-center justify-between text-xs text-slate-200 font-bold cursor-pointer border-b border-slate-900/60 pb-1.5">
+                      <span>Seleccionar Todas</span>
+                      <input
+                        type="checkbox"
+                        checked={selectedGangsForGis.length === storedGangs.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGangsForGis(storedGangs.map(g => g.nombre));
+                          } else {
+                            setSelectedGangsForGis([]);
+                          }
+                        }}
+                        className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+                    
+                    {/* List of Gangs */}
+                    <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                      {storedGangs.map((g) => {
+                        const isChecked = selectedGangsForGis.includes(g.nombre);
+                        const gangColor = getGangColor(g.nombre);
+                        return (
+                          <label key={g.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/30 p-1.5 rounded transition-colors border border-slate-900/50" style={{ borderLeft: `3px solid ${gangColor}` }}>
+                            <span className="truncate pr-1">👥 {g.nombre}</span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setSelectedGangsForGis(selectedGangsForGis.filter(n => n !== g.nombre));
+                                } else {
+                                  setSelectedGangsForGis([...selectedGangsForGis, g.nombre]);
+                                }
+                              }}
+                              className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* SECCIÓN 2: CAPAS GIS ACTIVAS & EJECUTAR ANÁLISIS */}
+              <div className="md:col-span-6 flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="border-b border-slate-850 pb-2">
                     <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
-                      ⚙️ Capas GIS Activas
+                      ⚙️ Capas GIS Activas (Máx. 5 Capas)
                     </h3>
                   </div>
                   
-                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                  <div className="grid grid-cols-2 gap-2">
                     {[
                       { id: "domiciles", label: "🏠 Domicilios de integrantes", color: "bg-cyan-500" },
                       { id: "influence", label: "🗺️ Zonas de influencia", color: "bg-yellow-500" },
                       { id: "corridors", label: "📈 Corredores de movilidad", color: "bg-purple-500" },
                       { id: "graffiti", label: "🎨 Grafitis registrados", color: "bg-orange-500" },
-                      { id: "history", label: "⚠️ Eventos históricos", color: "bg-red-500" },
-                      { id: "tactical", label: "🛡️ Puntos tácticos", color: "bg-blue-500" },
-                      { id: "clusters", label: "⭕ Clusters territoriales", color: "bg-cyan-500" },
-                      { id: "relations", label: "🔗 Relaciones entre integrantes", color: "bg-purple-500" },
-                      { id: "incidents", label: "🚨 Incidencia delictiva", color: "bg-red-600" },
-                      { id: "hotspots", label: "🔥 Hotspots", color: "bg-red-500" }
+                      { id: "history", label: "⚠️ Eventos históricos", color: "bg-red-500" }
                     ].map(layer => (
-                      <label key={layer.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/20 p-1 rounded transition-colors">
+                      <label key={layer.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/20 p-1.5 rounded transition-colors border border-slate-900">
                         <span className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full ${layer.color}`} />
                           {layer.label}
@@ -2500,7 +2840,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                               [layer.id]: e.target.checked
                             }));
                           }}
-                          className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                          className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
                         />
                       </label>
                     ))}
@@ -2524,203 +2864,9 @@ ${analysisResult.ficha.crossCheckJuridico}
                   )}
                 </button>
               </div>
-              
-              {/* GOOGLE MAP PANEL (8 cols) */}
-              <div className="lg:col-span-8 bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-                <div className="border-b border-slate-900 pb-3 flex justify-between items-center">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">🗺️ Mapa Táctico GEOINT</h3>
-                    <p className="text-[10px] text-slate-500">Visualización de capas espaciales activas en tiempo real.</p>
-                  </div>
-                </div>
-                
-                {!isLoaded ? (
-                  <div className="w-full h-[480px] rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
-                    Cargando cartografía táctica...
-                  </div>
-                ) : (
-                  <div id="gis-tactical-map" className="relative h-[480px] w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
-                    <GoogleMap
-                      mapContainerStyle={{ width: "100%", height: "100%" }}
-                      center={mapCenter}
-                      zoom={13}
-                      onLoad={onMapLoad}
-                      options={{
-                        streetViewControl: false,
-                        mapTypeControl: false,
-                        fullscreenControl: false,
-                        styles: darkMapStyles,
-                        disableDefaultUI: false
-                      }}
-                    >
-                      {/* 1. Domicilios individuales */}
-                      {showGisNodes && filteredGisData.nodes.map((node) => (
-                        <Marker
-                          key={node.member_id}
-                          position={node.location}
-                          title={`${node.alias} (${node.gang})`}
-                          icon={{
-                            path: 0,
-                            scale: 6,
-                            fillColor: "#06b6d4",
-                            fillOpacity: 1,
-                            strokeColor: "#ffffff",
-                            strokeWeight: 1.5,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 2. Zonas de influencia */}
-                      {showGisZones && filteredGisData.zones.map((zone) => (
-                        <Polygon
-                          key={zone.zone_id}
-                          paths={zone.points}
-                          options={{
-                            strokeColor: zone.color,
-                            strokeOpacity: 0.5,
-                            strokeWeight: 1.5,
-                            fillColor: zone.color,
-                            fillOpacity: 0.2,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 3. Relaciones entre integrantes */}
-                      {showGisRelations && filteredGisData.relationships.map((rel) => (
-                        <Polyline
-                          key={rel.id}
-                          path={rel.path}
-                          options={{
-                            strokeColor: "#06b6d4",
-                            strokeOpacity: 0.4,
-                            strokeWeight: 1.2,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 4. Incidencia delictiva */}
-                      {showGisIncidents && filteredIncidents.map((inc, idx) => {
-                        const crimeMeta = CRIME_TYPES_MAP.find(c => c.id === inc.fuente);
-                        const crimeColor = crimeMeta?.color || "#ef4444";
-                        return (
-                          <Marker
-                            key={`crime-incident-${idx}`}
-                            position={{ lat: inc.lat, lng: inc.lng }}
-                            title={`${inc.tipo || "Delito"} (${inc.fuente})`}
-                            icon={{
-                              path: 0,
-                              scale: 5,
-                              fillColor: crimeColor,
-                              fillOpacity: 0.9,
-                              strokeColor: "#ffffff",
-                              strokeWeight: 1,
-                            }}
-                          />
-                        );
-                      })}
-                      
-                      {/* 5. Corredores de movilidad */}
-                      {activeGisLayers.corridors && mockGisLayersData.corridors.map((corr) => (
-                        <Polyline
-                          key={corr.id}
-                          path={corr.path}
-                          options={{
-                            strokeColor: corr.color,
-                            strokeOpacity: 0.8,
-                            strokeWeight: 4,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 6. Grafitis registrados */}
-                      {activeGisLayers.graffiti && mockGisLayersData.graffiti.map((graf) => (
-                        <Marker
-                          key={graf.id}
-                          position={graf.location}
-                          title={graf.text}
-                          icon={{
-                            path: 0,
-                            scale: 5.5,
-                            fillColor: "#f97316",
-                            fillOpacity: 1,
-                            strokeColor: "#ffffff",
-                            strokeWeight: 1,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 7. Eventos históricos */}
-                      {activeGisLayers.history && mockGisLayersData.history.map((hist) => (
-                        <Marker
-                          key={hist.id}
-                          position={hist.location}
-                          title={`${hist.text} (${hist.date})`}
-                          icon={{
-                            path: 0,
-                            scale: 6,
-                            fillColor: "#ef4444",
-                            fillOpacity: 1,
-                            strokeColor: "#ffffff",
-                            strokeWeight: 1.5,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 8. Puntos tácticos */}
-                      {activeGisLayers.tactical && mockGisLayersData.tactical.map((tact) => (
-                        <Marker
-                          key={tact.id}
-                          position={tact.location}
-                          title={tact.text}
-                          icon={{
-                            path: 0,
-                            scale: 6.5,
-                            fillColor: "#3b82f6",
-                            fillOpacity: 1,
-                            strokeColor: "#ffffff",
-                            strokeWeight: 1.5,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 9. Clusters territoriales */}
-                      {activeGisLayers.clusters && mockGisLayersData.clusters.map((clust) => (
-                        <Circle
-                          key={clust.id}
-                          center={clust.center}
-                          radius={clust.radius}
-                          options={{
-                            strokeColor: "#06b6d4",
-                            strokeOpacity: 0.6,
-                            strokeWeight: 1.5,
-                            fillColor: "#06b6d4",
-                            fillOpacity: 0.15,
-                          }}
-                        />
-                      ))}
-                      
-                      {/* 10. Hotspots */}
-                      {activeGisLayers.hotspots && mockGisLayersData.hotspots.map((hot) => (
-                        <Circle
-                          key={hot.id}
-                          center={hot.center}
-                          radius={hot.radius}
-                          options={{
-                            strokeColor: "#ef4444",
-                            strokeOpacity: 0.75,
-                            strokeWeight: 2,
-                            fillColor: "#ef4444",
-                            fillOpacity: 0.25,
-                          }}
-                        />
-                      ))}
-                    </GoogleMap>
-                  </div>
-                )}
-              </div>
             </div>
             
-            {/* INTERPRETACIÓN GEOINT & BOTÓN FINAL */}
+            {/* 4. INTERPRETACIÓN GEOINT & BOTÓN FINAL */}
             {gisAnalysisReport && (
               <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 animate-fadeIn">
                 <div className="border-b border-slate-900 pb-3">

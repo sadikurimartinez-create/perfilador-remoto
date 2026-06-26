@@ -16,6 +16,8 @@ export interface GISMemberNode {
   confidence: number;
   source: "OSINT" | "investigation" | "registry";
   zone_id?: string;
+  rol?: string;
+  domicilioExacto?: string;
 }
 
 export interface InfluenceZone {

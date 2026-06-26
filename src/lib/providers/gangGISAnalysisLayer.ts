@@ -85,7 +85,9 @@ export class GangGISAnalysisLayer {
             gang: gangName,
             location: coords,
             confidence,
-            source
+            source,
+            rol: m.estatusPandilla || m.rol || "Integrante",
+            domicilioExacto: m.domicilioConocido || ""
           });
         }
       });
@@ -95,40 +97,8 @@ export class GangGISAnalysisLayer {
     // Epsilon threshold: 1800m, MinPoints: 2
     const { zones, clusteredNodes } = GangInfluenceEngine.generateAllZones(nodes, 1800, 2);
 
-    // 3. Generate internal networks/proximity polylines for nodes of the SAME GANG
-    const nodesByGang: { [gang: string]: GISMemberNode[] } = {};
-    for (const node of clusteredNodes) {
-      if (!nodesByGang[node.gang]) {
-        nodesByGang[node.gang] = [];
-      }
-      nodesByGang[node.gang].push(node);
-    }
-
-    let lineCounter = 1;
-    for (const gangName of Object.keys(nodesByGang)) {
-      const gangNodes = nodesByGang[gangName];
-      
-      // Calculate proximity lines (all-to-all if within a reasonable distance threshold)
-      for (let i = 0; i < gangNodes.length; i++) {
-        for (let j = i + 1; j < gangNodes.length; j++) {
-          const n1 = gangNodes[i];
-          const n2 = gangNodes[j];
-          const dist = getHaversineDistance(n1.location, n2.location);
-
-          // If the domiciles are within 3 km of each other, represent the proximity relationship
-          if (dist <= 3000) {
-            relationships.push({
-              id: `rel-line-${lineCounter++}`,
-              gang: gangName,
-              fromMember: n1.alias,
-              toMember: n2.alias,
-              path: [n1.location, n2.location],
-              distanceMeters: Math.round(dist)
-            });
-          }
-        }
-      }
-    }
+    // 3. Relationships layer is completely removed. Returning empty list.
+    // (Proximity lines between members are no longer calculated)
 
     // 4. Build summary
     const byGangSummary: { [gang: string]: { nodes: number; zones: number; relationships: number } } = {};
