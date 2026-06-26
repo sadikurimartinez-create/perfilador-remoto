@@ -15,6 +15,8 @@ import {
 import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
 import { GoogleMap, Polygon, Polyline, Marker, Circle, useJsApiLoader } from "@react-google-maps/api";
+import { GangGISAnalysisLayer, GISRelationshipLine } from "@/lib/providers/gangGISAnalysisLayer";
+import { GISMemberNode, InfluenceZone } from "@/lib/providers/gangInfluenceEngine";
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
@@ -194,6 +196,39 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [tempShapeControl, setTempShapeControl] = useState<GeointeligenciaShape["nivelControlTerritorial"]>("Medio");
   const [tempShapePoints, setTempShapePoints] = useState<{ lat: number; lng: number }[]>([]);
   const [tempShapeRadius, setTempShapeRadius] = useState<number>(300); // meters for buffer circles
+
+  // --- GANG GIS ANALYSIS LAYER STATES ---
+  const [gisSidebarTab, setGisSidebarTab] = useState<"drawing" | "analysis">("analysis");
+  const [showGisNodes, setShowGisNodes] = useState(true);
+  const [showGisZones, setShowGisZones] = useState(true);
+  const [showGisRelations, setShowGisRelations] = useState(true);
+  const [gisGangFilter, setGisGangFilter] = useState<string>("all");
+  const [selectedGisNode, setSelectedGisNode] = useState<GISMemberNode | null>(null);
+  const [selectedGisZone, setSelectedGisZone] = useState<InfluenceZone | null>(null);
+  const [multiSelectedNodes, setMultiSelectedNodes] = useState<GISMemberNode[]>([]);
+  const [multiSelectedZones, setMultiSelectedZones] = useState<InfluenceZone[]>([]);
+
+  // Process and memoize GIS Layer structures
+  const gisAnalysisResult = useMemo(() => {
+    return GangGISAnalysisLayer.processGISData(storedGangs);
+  }, [storedGangs]);
+
+  const filteredGisData = useMemo(() => {
+    if (!gisAnalysisResult) return { nodes: [], zones: [], relationships: [] };
+    if (gisGangFilter === "all") {
+      return gisAnalysisResult;
+    }
+    return {
+      nodes: gisAnalysisResult.nodes.filter(n => n.gang === gisGangFilter),
+      zones: gisAnalysisResult.zones.filter(z => z.gang === gisGangFilter),
+      relationships: gisAnalysisResult.relationships.filter(r => r.gang === gisGangFilter)
+    };
+  }, [gisAnalysisResult, gisGangFilter]);
+
+  const crossInfluenceIntersection = useMemo(() => {
+    const zonesToAnalyze = multiSelectedZones.length > 0 ? multiSelectedZones : filteredGisData.zones;
+    return GangGISAnalysisLayer.analyzeCrossInfluence(zonesToAnalyze);
+  }, [multiSelectedZones, filteredGisData.zones]);
 
   // --- BARRIDO & AI ENGINE STATES ---
   const [barridoTarget, setBarridoTarget] = useState<"all" | "member" | "zone" | "shape">("all");
@@ -1883,149 +1918,431 @@ ${analysisResult.ficha.crossCheckJuridico}
         {activeTab === "geointeligencia" && (
           <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* GIS TOOLBOX PANEL (4 cols) */}
-            <div className="lg:col-span-4 bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="border-b border-slate-800 pb-2">
-                <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide">
-                  🛠️ GIS Tactical Drawing Toolbox
-                </h3>
+            <div className="lg:col-span-4 bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 flex flex-col justify-start">
+              {/* GIS TAB SWITCHER */}
+              <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setGisSidebarTab("analysis")}
+                  className={`flex-1 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all ${
+                    gisSidebarTab === "analysis"
+                      ? "bg-sky-500 text-slate-950"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  🗺️ Análisis GIS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGisSidebarTab("drawing")}
+                  className={`flex-1 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all ${
+                    gisSidebarTab === "drawing"
+                      ? "bg-sky-500 text-slate-950"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  📐 Delineado Manual
+                </button>
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold text-slate-400 uppercase block">1. Seleccionar Geometría</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: "poligono", label: "🔷 Polígono", desc: "Zonas de dominio" },
-                      { id: "corredor", label: "📈 Corredor", desc: "Líneas de paso/rutas" },
-                      { id: "buffer", label: "⭕ Buffer", desc: "Radios de acción" },
-                      { id: "zona_riesgo", label: "📍 Zona Riesgo", desc: "Punto caliente" }
-                    ].map(type => (
-                      <button
-                        key={type.id}
-                        type="button"
-                        onClick={() => {
-                          setDrawingMode(type.id as any);
-                          setTempShapePoints([]);
-                        }}
-                        className={`p-2 rounded-lg border text-xs font-bold text-left flex flex-col justify-between transition-all ${
-                          drawingMode === type.id
-                            ? "bg-sky-950/60 border-sky-500 text-sky-400"
-                            : "bg-slate-950/45 border-slate-800 hover:border-slate-700 text-slate-300"
-                        }`}
-                      >
-                        <span>{type.label}</span>
-                        <span className="text-[8px] text-slate-500 font-medium mt-0.5">{type.desc}</span>
-                      </button>
-                    ))}
+              {gisSidebarTab === "drawing" ? (
+                <div className="space-y-4">
+                  <div className="border-b border-slate-800 pb-2">
+                    <h3 className="text-sm font-black text-slate-200 uppercase tracking-wide">
+                      🛠️ GIS Tactical Drawing Toolbox
+                    </h3>
                   </div>
-                </div>
 
-                {drawingMode && (
-                  <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3.5 animate-fadeIn">
-                    <p className="text-[9px] font-black text-sky-400 uppercase tracking-widest">📐 Editando Nueva Capa GIS</p>
-
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Nombre de la Capa</label>
-                      <input
-                        type="text"
-                        placeholder="Ej. Polígono de Venta Este, Corredor de Huida"
-                        value={tempShapeName}
-                        onChange={e => setTempShapeName(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-xs text-slate-200"
-                      />
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-extrabold text-slate-400 uppercase block">1. Seleccionar Geometría</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "poligono", label: "🔷 Polígono", desc: "Zonas de dominio" },
+                          { id: "corredor", label: "📈 Corredor", desc: "Líneas de paso/rutas" },
+                          { id: "buffer", label: "⭕ Buffer", desc: "Radios de acción" },
+                          { id: "zona_riesgo", label: "📍 Zona Riesgo", desc: "Punto caliente" }
+                        ].map(type => (
+                          <button
+                            key={type.id}
+                            type="button"
+                            onClick={() => {
+                              setDrawingMode(type.id as any);
+                              setTempShapePoints([]);
+                            }}
+                            className={`p-2 rounded-lg border text-xs font-bold text-left flex flex-col justify-between transition-all ${
+                              drawingMode === type.id
+                                ? "bg-sky-950/60 border-sky-500 text-sky-400"
+                                : "bg-slate-950/45 border-slate-800 hover:border-slate-700 text-slate-300"
+                            }`}
+                          >
+                            <span>{type.label}</span>
+                            <span className="text-[8px] text-slate-500 font-medium mt-0.5">{type.desc}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Control Territorial</label>
-                      <select
-                        value={tempShapeControl}
-                        onChange={e => setTempShapeControl(e.target.value as any)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
-                      >
-                        <option value="Nulo">Nulo</option>
-                        <option value="Bajo">Bajo</option>
-                        <option value="Medio">Medio</option>
-                        <option value="Alto">Alto</option>
-                        <option value="Absoluto">Absoluto (Control delictivo total)</option>
-                      </select>
-                    </div>
+                    {drawingMode && (
+                      <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3.5 animate-fadeIn">
+                        <p className="text-[9px] font-black text-sky-400 uppercase tracking-widest">📐 Editando Nueva Capa GIS</p>
 
-                    {drawingMode === "buffer" && (
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase flex justify-between">
-                          <span>Radio Buffer:</span>
-                          <span className="text-sky-400 font-bold">{tempShapeRadius} metros</span>
-                        </label>
-                        <input
-                          type="range"
-                          min="100"
-                          max="1500"
-                          step="50"
-                          value={tempShapeRadius}
-                          onChange={e => setTempShapeRadius(parseInt(e.target.value))}
-                          className="w-full accent-sky-500"
-                        />
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Nombre de la Capa</label>
+                          <input
+                            type="text"
+                            placeholder="Ej. Polígono de Venta Este, Corredor de Huida"
+                            value={tempShapeName}
+                            onChange={e => setTempShapeName(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-xs text-slate-200"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Control Territorial</label>
+                          <select
+                            value={tempShapeControl}
+                            onChange={e => setTempShapeControl(e.target.value as any)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                          >
+                            <option value="Nulo">Nulo</option>
+                            <option value="Bajo">Bajo</option>
+                            <option value="Medio">Medio</option>
+                            <option value="Alto">Alto</option>
+                            <option value="Absoluto">Absoluto (Control delictivo total)</option>
+                          </select>
+                        </div>
+
+                        {drawingMode === "buffer" && (
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase flex justify-between">
+                              <span>Radio Buffer:</span>
+                              <span className="text-sky-400 font-bold">{tempShapeRadius} metros</span>
+                            </label>
+                            <input
+                              type="range"
+                              min="100"
+                              max="1500"
+                              step="50"
+                              value={tempShapeRadius}
+                              onChange={e => setTempShapeRadius(parseInt(e.target.value))}
+                              className="w-full accent-sky-500"
+                            />
+                          </div>
+                        )}
+
+                        <div className="text-[10px] text-slate-400 bg-slate-900/60 p-2.5 rounded border border-slate-800 leading-relaxed font-medium">
+                          👉 Haga clic directamente sobre el mapa táctico para establecer los vértices correspondientes en la geografía.
+                          <div className="mt-1.5 flex justify-between font-bold">
+                            <span>Vértices colocados:</span>
+                            <span className="text-sky-400">{tempShapePoints.length}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setTempShapePoints([]);
+                              setDrawingMode(null);
+                            }}
+                            className="flex-1 py-1 rounded bg-slate-900 border border-slate-800 text-xs text-slate-300"
+                          >
+                            Descartar
+                          </button>
+                          <button
+                            onClick={handleSaveGeometry}
+                            className="flex-1 py-1 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black uppercase"
+                          >
+                            Guardar Capa
+                          </button>
+                        </div>
                       </div>
                     )}
+                  </div>
 
-                    <div className="text-[10px] text-slate-400 bg-slate-900/60 p-2.5 rounded border border-slate-800 leading-relaxed font-medium">
-                      👉 Haga clic directamente sobre el mapa táctico para establecer los vértices correspondientes en la geografía.
-                      <div className="mt-1.5 flex justify-between font-bold">
-                        <span>Vértices colocados:</span>
-                        <span className="text-sky-400">{tempShapePoints.length}</span>
+                  {/* LIST OF SAVED DELINEATED LAYERS */}
+                  <div className="border-t border-slate-800 pt-3 space-y-2">
+                    <h4 className="text-xs font-black text-slate-400 uppercase">Capas Espaciales Guardadas</h4>
+                    {geometrias.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">No hay geometrías delineadas en este registro.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {geometrias.map((geo, idx) => (
+                          <div key={geo.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 flex justify-between items-center text-xs">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px]">
+                                  {geo.tipo === "poligono" ? "🔷" : geo.tipo === "corredor" ? "📈" : geo.tipo === "buffer" ? "⭕" : "📍"}
+                                </span>
+                                <span className="font-extrabold text-slate-300 uppercase">{geo.nombre}</span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-1">Control: <strong className="text-sky-400 uppercase">{geo.nivelControlTerritorial}</strong></p>
+                            </div>
+                            <button
+                              onClick={() => setGeometrias(geometrias.filter(g => g.id !== geo.id))}
+                              className="text-slate-500 hover:text-red-400 text-xs"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 flex-1 flex flex-col justify-start">
+                  <div className="border-b border-slate-800 pb-2">
+                    <h3 className="text-xs font-black text-sky-400 uppercase tracking-widest">
+                      🗺️ GANG GIS ANALYSIS LAYER
+                    </h3>
+                  </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setTempShapePoints([]);
-                          setDrawingMode(null);
-                        }}
-                        className="flex-1 py-1 rounded bg-slate-900 border border-slate-800 text-xs text-slate-300"
-                      >
-                        Descartar
-                      </button>
-                      <button
-                        onClick={handleSaveGeometry}
-                        className="flex-1 py-1 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black uppercase"
-                      >
-                        Guardar Capa
-                      </button>
+                  {/* FILTER BY GANG */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-extrabold text-slate-400 uppercase block">Filtro por Pandilla</label>
+                    <select
+                      value={gisGangFilter}
+                      onChange={e => {
+                        setGisGangFilter(e.target.value);
+                        setSelectedGisNode(null);
+                        setSelectedGisZone(null);
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 font-extrabold"
+                    >
+                      <option value="all">🌐 Todas las pandillas</option>
+                      {storedGangs.map((g) => (
+                        <option key={g.id} value={g.nombre}>👥 {g.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* LAYER TOGGLES */}
+                  <div className="space-y-2 bg-slate-950/45 p-3 rounded-xl border border-slate-800/80">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">Capas GIS Activas</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-rose-500" /> Domicilios de Integrantes
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={showGisNodes}
+                          onChange={e => setShowGisNodes(e.target.checked)}
+                          className="rounded bg-slate-900 border-slate-850 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-orange-500" /> Zonas de Influencia
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={showGisZones}
+                          onChange={e => setShowGisZones(e.target.checked)}
+                          className="rounded bg-slate-900 border-slate-850 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-cyan-500" /> Redes de Proximidad
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={showGisRelations}
+                          onChange={e => setShowGisRelations(e.target.checked)}
+                          className="rounded bg-slate-900 border-slate-850 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                        />
+                      </label>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* LIST OF SAVED DELINEATED LAYERS */}
-              <div className="border-t border-slate-800 pt-3 space-y-2">
-                <h4 className="text-xs font-black text-slate-400 uppercase">Capas Espaciales Guardadas</h4>
-                {geometrias.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic">No hay geometrías delineadas en este registro.</p>
-                ) : (
-                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    {geometrias.map((geo, idx) => (
-                      <div key={geo.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 flex justify-between items-center text-xs">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[11px]">
-                              {geo.tipo === "poligono" ? "🔷" : geo.tipo === "corredor" ? "📈" : geo.tipo === "buffer" ? "⭕" : "📍"}
-                            </span>
-                            <span className="font-extrabold text-slate-300 uppercase">{geo.nombre}</span>
+                  {/* INTERACTIVE DETAIL VIEW */}
+                  {!selectedGisNode && !selectedGisZone ? (
+                    <div className="bg-slate-950/20 border border-slate-900/60 p-4 rounded-xl text-center">
+                      <p className="text-xs text-slate-500 italic">
+                        Haga clic en un domicilio (marcador) o en una zona de influencia (polígono) sobre el mapa para analizar sus detalles tácticos.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* NODE CARD */}
+                      {selectedGisNode && (
+                        <div className="bg-slate-950/90 border border-slate-800 p-3.5 rounded-xl space-y-2 animate-fadeIn relative">
+                          <div className="flex justify-between items-start">
+                            <span className="px-2 py-0.5 rounded text-[8px] font-black bg-rose-500/20 text-rose-400 uppercase">Domicilio Detectado</span>
+                            <button onClick={() => setSelectedGisNode(null)} className="text-slate-500 hover:text-slate-300">✕</button>
                           </div>
-                          <p className="text-[10px] text-slate-500 mt-1">Control: <strong className="text-sky-400 uppercase">{geo.nivelControlTerritorial}</strong></p>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-200 uppercase">{selectedGisNode.alias}</h4>
+                            <p className="text-[10px] text-slate-400 font-semibold">{selectedGisNode.gang}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[10px] pt-1.5 border-t border-slate-900/60">
+                            <div>
+                              <span className="text-slate-500 block text-[8px] uppercase">Confianza</span>
+                              <strong className="text-slate-300 font-bold">{(selectedGisNode.confidence * 100).toFixed(0)}%</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[8px] uppercase">Fuente</span>
+                              <strong className="text-slate-300 uppercase font-bold">{selectedGisNode.source}</strong>
+                            </div>
+                          </div>
+                          <div className="pt-1">
+                            {multiSelectedNodes.some(n => n.member_id === selectedGisNode.member_id) ? (
+                              <button
+                                type="button"
+                                onClick={() => setMultiSelectedNodes(multiSelectedNodes.filter(n => n.member_id !== selectedGisNode.member_id))}
+                                className="w-full py-1 rounded bg-purple-950/40 border border-purple-800/30 text-[9px] font-black text-purple-400 uppercase hover:bg-purple-950/60 transition-all"
+                              >
+                                ✕ Quitar de Comparación
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setMultiSelectedNodes([...multiSelectedNodes, selectedGisNode])}
+                                className="w-full py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-slate-950 text-[9px] font-black uppercase transition-all"
+                              >
+                                ➕ Comparar Domicilio
+                              </button>
+                            )}
+                          </div>
                         </div>
+                      )}
+
+                      {/* ZONE CARD */}
+                      {selectedGisZone && (
+                        <div className="bg-slate-950/90 border border-slate-800 p-3.5 rounded-xl space-y-2 animate-fadeIn">
+                          <div className="flex justify-between items-start">
+                            <span className="px-2 py-0.5 rounded text-[8px] font-black bg-orange-500/20 text-orange-400 uppercase">Zona de Influencia</span>
+                            <button onClick={() => setSelectedGisZone(null)} className="text-slate-500 hover:text-slate-300">✕</button>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-200 uppercase">{selectedGisZone.zone_id}</h4>
+                            <p className="text-[10px] text-slate-400 font-semibold">Pandilla: <strong className="text-sky-400">{selectedGisZone.gang}</strong></p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[9px] pt-1.5 border-t border-slate-900/60">
+                            <div>
+                              <span className="text-slate-500 block text-[8px] uppercase">Score Total</span>
+                              <strong className="text-sky-400 text-xs font-black">{selectedGisZone.influence_score}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[8px] uppercase">Intensidad</span>
+                              <strong className={`uppercase font-bold ${selectedGisZone.intensity === "alto" ? "text-red-400" : selectedGisZone.intensity === "medio" ? "text-orange-400" : "text-yellow-400"}`}>
+                                {selectedGisZone.intensity}
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[8px] uppercase">Domicilios</span>
+                              <strong className="text-slate-300 font-bold">{selectedGisZone.memberCount} nodos</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[8px] uppercase">Densidad</span>
+                              <strong className="text-slate-300 font-bold">{selectedGisZone.density}</strong>
+                            </div>
+                          </div>
+                          <div className="pt-1">
+                            {multiSelectedZones.some(z => z.zone_id === selectedGisZone.zone_id) ? (
+                              <button
+                                type="button"
+                                onClick={() => setMultiSelectedZones(multiSelectedZones.filter(z => z.zone_id !== selectedGisZone.zone_id))}
+                                className="w-full py-1 rounded bg-purple-950/40 border border-purple-800/30 text-[9px] font-black text-purple-400 uppercase"
+                              >
+                                ✕ Quitar de Comparación
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setMultiSelectedZones([...multiSelectedZones, selectedGisZone])}
+                                className="w-full py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-slate-950 text-[9px] font-black uppercase"
+                              >
+                                ➕ Comparar Influencia
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MULTI-SELECTION COMPARE LISTS */}
+                  {(multiSelectedNodes.length > 0 || multiSelectedZones.length > 0) && (
+                    <div className="space-y-2 bg-slate-950/45 p-3 rounded-xl border border-slate-800/80">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-black text-purple-400 uppercase tracking-wider">🔬 Comparador Multitáctico</span>
                         <button
-                          onClick={() => setGeometrias(geometrias.filter(g => g.id !== geo.id))}
-                          className="text-slate-500 hover:text-red-400 text-xs"
+                          onClick={() => {
+                            setMultiSelectedNodes([]);
+                            setMultiSelectedZones([]);
+                          }}
+                          className="text-[8px] text-slate-500 hover:text-slate-300 uppercase font-black"
                         >
-                          ✕
+                          Limpiar
                         </button>
                       </div>
-                    ))}
+
+                      {multiSelectedNodes.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[8px] text-slate-500 uppercase font-black">Nodos Domicilio ({multiSelectedNodes.length})</p>
+                          <div className="flex flex-wrap gap-1">
+                            {multiSelectedNodes.map(n => (
+                              <span key={n.member_id} className="inline-flex items-center gap-1 bg-purple-950/50 border border-purple-800/50 px-2 py-0.5 rounded text-[9px] text-purple-300 uppercase font-bold">
+                                {n.alias}
+                                <button onClick={() => setMultiSelectedNodes(multiSelectedNodes.filter(x => x.member_id !== n.member_id))} className="text-purple-500 hover:text-purple-300 font-bold ml-1">✕</button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {multiSelectedZones.length > 0 && (
+                        <div className="space-y-1 pt-1.5 border-t border-slate-900/60">
+                          <p className="text-[8px] text-slate-500 uppercase font-black">Polígonos de Zona ({multiSelectedZones.length})</p>
+                          <div className="flex flex-wrap gap-1">
+                            {multiSelectedZones.map(z => (
+                              <span key={z.zone_id} className="inline-flex items-center gap-1 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded text-[9px] text-amber-300 uppercase font-bold">
+                                {z.zone_id}
+                                <button onClick={() => setMultiSelectedZones(multiSelectedZones.filter(x => x.zone_id !== z.zone_id))} className="text-amber-500 hover:text-amber-300 font-bold ml-1">✕</button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CROSS INFLUENCE INTERSECTIONS OVERLAY (Análisis de Influencia Cruzada) */}
+                  <div className="space-y-2 pt-2 border-t border-slate-850 mt-auto">
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">⚡ Análisis de Influencia Cruzada</h4>
+                    
+                    {crossInfluenceIntersection.totalOverlaps === 0 ? (
+                      <p className="text-[10px] text-slate-500 italic bg-slate-950/30 p-2.5 rounded border border-slate-900/60">
+                        No se detectan solapamientos de influencia fronteriza entre las zonas analizadas.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                        {crossInfluenceIntersection.intersections.map((inter, idx) => (
+                          <div key={idx} className="p-2.5 rounded-lg border border-red-900/30 bg-red-950/15 text-[10px] space-y-1">
+                            <div className="flex justify-between items-center font-bold">
+                              <span className="text-red-400 uppercase text-[9px] tracking-wide">Solapamiento Crítico</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                inter.conflictRisk === "Alto" ? "bg-red-500 text-slate-950 animate-pulse" : inter.conflictRisk === "Medio" ? "bg-orange-500 text-slate-950" : "bg-yellow-500 text-slate-950"
+                              }`}>
+                                {inter.conflictRisk}
+                              </span>
+                            </div>
+                            <p className="text-slate-300 leading-normal">
+                              Zona de <strong className="text-sky-400 font-bold">{inter.gangA}</strong> cruza con <strong className="text-rose-400 font-bold">{inter.gangB}</strong>.
+                            </p>
+                            <p className="text-[9px] text-slate-500 font-mono">
+                              Distancia entre focos: {inter.avgDistanceMeters} metros
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* GOOGLE MAP LAYER PANEL (8 cols) */}
@@ -2171,6 +2488,100 @@ ${analysisResult.ficha.crossCheckJuridico}
                                 fillOpacity: 1,
                                 strokeColor: "#ffffff",
                                 strokeWeight: 2,
+                              }}
+                            />
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* REDES DE PROXIMIDAD (CAPA 3) */}
+                    {showGisRelations && filteredGisData.relationships.map((rel) => {
+                      const isRelatedToSelectedNode = selectedGisNode && (
+                        rel.fromMember === selectedGisNode.alias || rel.toMember === selectedGisNode.alias
+                      );
+                      return (
+                        <Polyline
+                          key={rel.id}
+                          path={rel.path}
+                          options={{
+                            strokeColor: isRelatedToSelectedNode ? "#a855f7" : "#06b6d4",
+                            strokeOpacity: isRelatedToSelectedNode ? 0.9 : 0.4,
+                            strokeWeight: isRelatedToSelectedNode ? 2.5 : 1.2,
+                          }}
+                        />
+                      );
+                    })}
+
+                    {/* ZONAS DE INFLUENCIA (CAPA 2) */}
+                    {showGisZones && filteredGisData.zones.map((zone) => {
+                      const isSelected = selectedGisZone && selectedGisZone.zone_id === zone.zone_id;
+                      const isMultiSelected = multiSelectedZones.some(z => z.zone_id === zone.zone_id);
+                      return (
+                        <Polygon
+                          key={zone.zone_id}
+                          paths={zone.points}
+                          onClick={() => {
+                            setSelectedGisZone(zone);
+                            setSelectedGisNode(null);
+                          }}
+                          options={{
+                            strokeColor: zone.color,
+                            strokeOpacity: isSelected || isMultiSelected ? 0.95 : 0.5,
+                            strokeWeight: isSelected || isMultiSelected ? 3.5 : 1.5,
+                            fillColor: zone.color,
+                            fillOpacity: isSelected ? 0.45 : isMultiSelected ? 0.35 : 0.2,
+                          }}
+                        />
+                      );
+                    })}
+
+                    {/* DOMICILIOS INDIVIDUALES (CAPA 1) */}
+                    {showGisNodes && filteredGisData.nodes.map((node) => {
+                      const isSelected = selectedGisNode && selectedGisNode.member_id === node.member_id;
+                      const isMultiSelected = multiSelectedNodes.some(n => n.member_id === node.member_id);
+                      return (
+                        <React.Fragment key={node.member_id}>
+                          <Marker
+                            position={node.location}
+                            onClick={() => {
+                              setSelectedGisNode(node);
+                              setSelectedGisZone(null);
+                            }}
+                            title={`${node.alias} (${node.gang})`}
+                            icon={{
+                              path: 0, // Circle
+                              scale: isSelected ? 9 : isMultiSelected ? 8 : 6,
+                              fillColor: isSelected ? "#ec4899" : isMultiSelected ? "#a855f7" : "#06b6d4", // Pink/Purple for selected/multi-selected, Cyan/Blue for default
+                              fillOpacity: 1,
+                              strokeColor: "#ffffff",
+                              strokeWeight: isSelected || isMultiSelected ? 2 : 1.5,
+                            }}
+                          />
+                          {/* Pulsing/Highlight Halo around selectedGisNode (150-meter radius) */}
+                          {isSelected && (
+                            <Circle
+                              center={node.location}
+                              radius={150}
+                              options={{
+                                strokeColor: "#ec4899",
+                                strokeOpacity: 0.8,
+                                strokeWeight: 2,
+                                fillColor: "#ec4899",
+                                fillOpacity: 0.25,
+                              }}
+                            />
+                          )}
+                          {isMultiSelected && !isSelected && (
+                            <Circle
+                              center={node.location}
+                              radius={100}
+                              options={{
+                                strokeColor: "#a855f7",
+                                strokeOpacity: 0.7,
+                                strokeWeight: 1.5,
+                                fillColor: "#a855f7",
+                                fillOpacity: 0.15,
                               }}
                             />
                           )}
