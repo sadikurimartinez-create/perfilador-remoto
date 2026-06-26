@@ -11,8 +11,10 @@ import { TacticalMaps } from "./TacticalMaps";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
-import DatosAbiertosAnalyzer from "./DatosAbiertosAnalyzer";
 import { OsintTerritorialPanel } from "./OsintTerritorialPanel";
+import { ProjectMap } from "./ProjectMap";
+import { GangGeoSweepPanel } from "./GangGeoSweepPanel";
+import { CrimeCharts } from "./CrimeCharts";
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
@@ -267,6 +269,18 @@ type PhotoAlbumProps = {
   ) => Promise<void>;
 };
 
+const DELITOS_CATEGORIES = [
+  { id: "Homicidios_2025.csv", label: "Homicidios" },
+  { id: "Feminicidios_2025.csv", label: "Feminicidios" },
+  { id: "Extorsion & Fraude 2025.csv", label: "Extorsión y Fraude" },
+  { id: "PERSONA 2025.csv", label: "Delitos contra las Personas" },
+  { id: "Robo casa 2025.csv", label: "Robo a Casa Habitación" },
+  { id: "Robo negocio 2025.csv", label: "Robo a Negocio" },
+  { id: "Robo vehicular 2025.csv", label: "Robo Vehicular" },
+  { id: "Robo motocicleta 2025.csv", label: "Robo de Motocicleta" },
+  { id: "Autopartes & Cristalazo 2025.csv", label: "Autopartes y Cristalazo" }
+];
+
 export function PhotoAlbum({
   onDeletePhoto,
   projectId,
@@ -296,7 +310,77 @@ export function PhotoAlbum({
     setDatosGobMxResult,
     softDeleteDoc,
     savePhotoContextualization,
+    updateProjectDetails,
+    updatePhotoCoordinates,
+    loadProject,
   } = useProject();
+
+  const svContainerRef = useRef<HTMLDivElement | null>(null);
+  const [svError, setSvError] = useState<string | null>(null);
+  const [activeDelitos, setActiveDelitos] = useState<string[]>(DELITOS_CATEGORIES.map(d => d.id));
+  const [incidents, setIncidents] = useState<any[]>([]);
+  const [isCheckingIncidencia, setIsCheckingIncidencia] = useState(false);
+  const [delitoText, setDelitoText] = useState("");
+
+  useEffect(() => {
+    if (project) {
+      if (project.contextoIncidencia) {
+        setDelitoText(project.contextoIncidencia);
+      }
+      if (project.delitosSeleccionados && project.delitosSeleccionados.length > 0) {
+        setActiveDelitos(project.delitosSeleccionados);
+      }
+    }
+  }, [project]);
+
+  useEffect(() => {
+    let active = true;
+    const initStreetView = () => {
+      if (typeof window === "undefined" || !window.google || !svContainerRef.current) {
+        if (active) {
+          setTimeout(initStreetView, 1000);
+        }
+        return;
+      }
+      const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+      const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat && p.lng);
+      if (photosToUse.length === 0) return;
+      const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
+      const centerLng = photosToUse.reduce((acc, p) => acc + p.lng!, 0) / photosToUse.length;
+
+      try {
+        const svService = new window.google.maps.StreetViewService();
+        svService.getPanorama({
+          location: { lat: centerLat, lng: centerLng },
+          radius: 150
+        }, (data, status) => {
+          if (!active) return;
+          if (status === window.google.maps.StreetViewStatus.OK && data && data.location && data.location.latLng) {
+            setSvError(null);
+            new window.google.maps.StreetViewPanorama(svContainerRef.current!, {
+              position: data.location.latLng,
+              pov: { heading: 34, pitch: 10 },
+              zoom: 1,
+              addressControl: true,
+              linksControl: true,
+              panControl: true,
+              enableCloseButton: false
+            });
+          } else {
+            setSvError("No se encontraron panoramas de Street View en un radio de 150 metros de esta ubicación.");
+          }
+        });
+      } catch (e) {
+        console.error("Error loading Street View panorama:", e);
+      }
+    };
+
+    initStreetView();
+    return () => {
+      active = false;
+    };
+  }, [album, selectedIds]);
+
   const [error, setError] = useState<string | null>(null);
   const [savingPhotoId, setSavingPhotoId] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{
@@ -490,7 +574,7 @@ const hasMinimumPhotos =
     }
   };
 
-  const handleOpenConfigModal = async () => {
+  const handleGenerateFinalReport = async () => {
     if (selectedIds.length === 0) {
       setError("Seleccione al menos una fotografía.");
       return;
@@ -539,21 +623,16 @@ const hasMinimumPhotos =
         setIsValidatingPhotos(false);
         return;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al validar fotos:", err);
-      setError("Error de comunicación al validar evidencia. Intente de nuevo.");
+      setError(err.message || "Error de comunicación al validar evidencia. Intente de nuevo.");
       setIsValidatingPhotos(false);
       return;
     }
     setIsValidatingPhotos(false);
 
-    setError(null);
-    setQaIteration(0);
-    setAiQuestionsList([]);
-    setUserAnswersMap({});
-    setAnalysisAuditScore(null);
-    setIsAnalysisContextAudited(false);
-    setShowConfigModal(true);
+    // If validation passes, proceed directly to generation
+    await confirmAndGenerateProfile();
   };
 
   const handleSaveAnalysis = async () => {
@@ -1430,324 +1509,341 @@ const hasMinimumPhotos =
       })()}
 
       <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
-      {/* MÓDULO DE CONSULTA VEHICULAR OSINT (CheckAuto / REPUVE) */}
+
+      {/* PASO 2: MAPA INTERACTIVO */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Consulta Vehicular (OSINT Automático)</h4>
+          <h4 className="text-base font-semibold text-slate-200">📍 Mapa Interactivo de Evidencias (Paso 2)</h4>
           <p className="text-xs text-slate-400">
-            Realice un barrido automatizado simulando la consulta pública de placas vehiculares detectadas en las fotos. El resultado se inyectará en la hipótesis. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+            Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
           </p>
         </header>
-        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
-          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
-            <input
-              type="text"
-              placeholder="Ingrese placa o NIV..."
-              value={plateQuery}
-              onChange={(e) => setPlateQuery(e.target.value.toUpperCase().replace(/[-\s]/g, ""))}
-              disabled={isCheckingPlate || isReadOnly}
-              className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
+        <div className="w-full overflow-hidden rounded-lg border border-slate-700">
+          {album.length > 0 && project && (
+            <ProjectMap
+              project={project}
+              album={album.filter(p => p.lat != null && p.lng != null)}
+              geometryType={project.geometryType || "individual"}
+              coordinates={album.filter(p => p.lat != null && p.lng != null).map((photo) => ({
+                lat: photo.lat as number,
+                lng: photo.lng as number,
+              }))}
+              onUpdateCoordinates={(newCoords) => {
+                newCoords.forEach((coord, idx) => {
+                  const photo = album.filter(p => p.lat != null && p.lng != null)[idx];
+                  if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
+                    void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
+                  }
+                });
+              }}
             />
-          </div>
-          <div className="w-full relative">
-            {!isReadOnly && (
-              <button
-                type="button"
-                onClick={() => toggleDictation('plateContext', (text) => setPlateContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'plateContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
-              >
-                <span>🎙️</span> {listeningField === 'plateContext' ? "Grabando..." : "Dictar"}
-              </button>
-            )}
-            <textarea
-              spellCheck={true}
-              value={plateContext}
-              disabled={isReadOnly}
-              onChange={(e) => setPlateContext(e.target.value)}
-              placeholder="Contexto, justificación o instrucción específica para la IA sobre este vehículo (Obligatorio)..."
-              className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!plateContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
-            />
-          </div>
-          <div className="mt-1 mb-2">
-            <div className="flex justify-between items-center text-[10px] mb-1">
-              <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-              <span className={`font-bold ${plateContext.length < 40 ? "text-red-400" : plateContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
-                {plateContext.length === 0 ? "Sin contexto" : plateContext.length < 40 ? "Básico" : plateContext.length < 120 ? "Aceptable" : "Óptimo"}
-              </span>
-            </div>
-            <div className="w-full bg-slate-800 rounded-full h-1.5">
-              <div 
-                className={`h-1.5 rounded-full transition-all duration-300 ${plateContext.length < 40 ? "bg-red-500" : plateContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
-                style={{ width: `${Math.min((plateContext.length / 200) * 100, 100)}%` }}
-              ></div>
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={!plateQuery.trim() || !plateContext.trim() || isCheckingPlate || isReadOnly}
-            onClick={async () => {
-              setIsCheckingPlate(true);
-              setError(null);
-              try {
-                const data = await getRepuveData(plateQuery.trim());
-                
-                if (data.exito) {
-                  // Inyectamos el resumen detallado (vehículo + instituciones) proveniente del Robot
-                  const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nInstrucción/Contexto del Analista: ${plateContext}\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
-                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setPlateQuery("");
-                  setPlateContext("");
-                  setIsAnalysisContextAudited(false); // Forzar a reevaluar la hipótesis con la IA
-                  alert(`¡Búsqueda Vehicular Completada!\n\nEstatus: ${data.estatus}\n\n${data.resumenTexto || ""}\n\n* La información ha sido anexada a su Hipótesis Táctica.`);
-                } else {
-                  setError(data.error || "Error al consultar la placa.");
-                }
-              } catch (err) {
-                console.error("[Frontend] Error crítico al consultar placa:", err);
-                setError(err instanceof Error ? err.message : "Error de red al comunicarse con el cuartel general.");
-              } finally {
-                setIsCheckingPlate(false);
-              }
-            }}
-            className="w-full md:w-auto bg-sky-700 hover:bg-sky-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
-          >
-            {isCheckingPlate ? <span className="flex items-center justify-center">Consultando Base de Datos... <ElapsedTime running={isCheckingPlate} /></span> : "🔍 Consultar y Añadir a Hipótesis"}
-          </button>
+          )}
         </div>
       </div>
 
-
-
-      {/* CONSOLIDATED OSINT SUITE: INTELIGENCIA DE FUENTES ABIERTAS Y OSINT TERRITORIAL V2.0 */}
+      {/* PASO 3: STREET VIEW PANORAMA */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Inteligencia de Fuentes Abiertas y OSINT Territorial v2.0</h4>
+          <h4 className="text-base font-semibold text-slate-200">🛣️ Street View - Entorno Virtual (Paso 3)</h4>
           <p className="text-xs text-slate-400">
-            Suite unificada de recolección de información abierta de Aguascalientes. Explore el motor geoespacial de streaming multifuente o consulte bases de datos filtradas.
+            Exploración a pie de calle de las inmediaciones del punto central de las evidencias seleccionadas.
           </p>
         </header>
-
-        {/* Tab Toggle Header */}
-        <div className="flex border-b border-slate-800 gap-1 pb-1">
-          <button
-            type="button"
-            onClick={() => setOsintSuiteTab("territorial")}
-            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 flex items-center gap-1.5 ${
-              osintSuiteTab === "territorial"
-                ? "border-b-2 border-cyan-400 text-cyan-400 bg-cyan-950/20"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
-            }`}
-          >
-            <span>🛰️</span> OSINT Territorial v2.0
-          </button>
-          <button
-            type="button"
-            onClick={() => setOsintSuiteTab("telegram")}
-            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 flex items-center gap-1.5 ${
-              osintSuiteTab === "telegram"
-                ? "border-b-2 border-indigo-400 text-indigo-400 bg-indigo-950/20"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
-            }`}
-          >
-            <span>🕵️</span> Búsqueda de Leaks (Telegram OSINT)
-          </button>
-        </div>
-
-        {osintSuiteTab === "territorial" ? (
-          <div className="w-full">
-            <OsintTerritorialPanel
-              project={project}
-              onAppendToAnalysis={(text) => {
-                setAnalysisContext((prev) => (prev ? `${prev}\n\n${text}` : text));
-                setIsAnalysisContextAudited(false);
-              }}
-            />
+        {svError ? (
+          <div className="p-4 bg-amber-950/20 border border-amber-800 text-amber-300 rounded-lg text-xs">
+            ⚠️ {svError}
           </div>
         ) : (
-          <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 animate-fadeIn">
-            <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
-              <input
-                type="text"
-                placeholder="Ingrese objetivo (Ej. Apodo, Teléfono)..."
-                value={telegramQuery}
-                onChange={(e) => setTelegramQuery(e.target.value)}
-                disabled={isCheckingTelegram || isReadOnly}
-                className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50 font-mono"
-              />
-            </div>
-            <div className="w-full relative">
-              {!isReadOnly && (
+          <div 
+            ref={svContainerRef} 
+            style={{ width: "100%", height: "400px" }} 
+            className="rounded-lg border border-slate-700 overflow-hidden bg-black"
+          />
+        )}
+      </div>
+
+      {/* PASO 4: CONTEXTUALIZACIÓN GENERAL */}
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200">🧠 Contextualización General e Hipótesis (Paso 4)</h4>
+          <p className="text-xs text-slate-400">
+            Escriba la hipótesis de análisis táctico y audítela con la IA para afinar el rigor técnico (Mínimo 80% requerido).
+          </p>
+        </header>
+        <div className="flex flex-col gap-4 items-start w-full">
+          <div className="space-y-4 w-full">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-xs font-medium text-slate-300">
+                Hipótesis de la Persona Perfiladora (contexto del cruce de ubicaciones)
+              </label>
+              <div className="flex items-center gap-2">
+                {!isReadOnly && projectId && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { getDb } = await import("@/lib/firebase");
+                        const { doc, updateDoc } = await import("firebase/firestore");
+                        const firestore = getDb();
+                        await updateDoc(doc(firestore, "projects", projectId), {
+                          hipotesis: analysisContext
+                        });
+                        window.alert("Hipótesis guardada exitosamente en el expediente.");
+                      } catch (err) {
+                        console.error("Error al guardar hipótesis:", err);
+                        window.alert("Error al guardar la hipótesis.");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border border-emerald-600 text-emerald-300 bg-emerald-900/40 hover:bg-emerald-800 transition-colors"
+                  >
+                    <span>💾</span> Guardar
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => toggleDictation('telegramContext', (text) => setTelegramContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                  className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'telegramContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+                  onClick={() => toggleDictation('analysisContext', (text) => {
+                    setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
+                    setIsAnalysisContextAudited(false);
+                  })}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
                 >
-                  <span>🎙️</span> {listeningField === 'telegramContext' ? "Grabando..." : "Dictar"}
+                  <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
                 </button>
-              )}
-              <textarea
-                spellCheck={true}
-                value={telegramContext}
-                disabled={isReadOnly}
-                onChange={(e) => setTelegramContext(e.target.value)}
-                placeholder="Contexto, justificación o instrucción específica para la IA sobre esta búsqueda..."
-                className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!telegramContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
-              />
+              </div>
             </div>
+            <textarea
+              spellCheck={true}
+              value={analysisContext}
+              onChange={(e) => {
+                setAnalysisContext(e.target.value);
+                setIsAnalysisContextAudited(false);
+              }}
+              rows={6}
+              className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-4 py-3 text-sm resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
+              placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin de vigilancia..."
+            />
+            {!isReadOnly && (
+              <div className="mt-1.5">
+                <PowerUpsModule
+                  onApplyPowerUp={(text) => {
+                    setAnalysisContext((prev) => (prev ? prev.trim() + " " : "") + text);
+                    setIsAnalysisContextAudited(false);
+                  }}
+                  isReadOnly={isReadOnly}
+                  insumoText={analysisContext || ""}
+                  insumoType="hypothesis"
+                  insumoId="main_hypothesis"
+                  insumoName="Hipótesis de Análisis"
+                  isContextualized={isAnalysisContextAudited}
+                  locationCoords={(() => {
+                    const geo = album.find(p => p.lat != null && p.lng != null);
+                    return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
+                  })()}
+                  onApplyDetailedAnalysis={async (results) => {
+                    for (const res of results) {
+                      res.insumoId = "main_hypothesis";
+                      await saveCustomDocument(
+                        `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                        "powerup_execution",
+                        JSON.stringify(res)
+                      );
+                    }
+                  }}
+                />
+              </div>
+            )}
+            {documents && documents
+              .filter((doc: any) => doc.type === "powerup_execution")
+              .map((doc: any) => {
+                try {
+                  const parsed = JSON.parse(doc.context);
+                  if (parsed.insumoId === "main_hypothesis") {
+                    return (
+                      <div key={doc.id} className="mt-2 text-left">
+                        <VentanaResultadosPuente
+                          data={parsed}
+                          onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                        />
+                      </div>
+                    );
+                  }
+                } catch (err) {
+                  console.error("Error parsing powerup_execution doc.context", err);
+                }
+                return null;
+              })
+            }
             <div className="mt-1 mb-2">
               <div className="flex justify-between items-center text-[10px] mb-1">
                 <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-                <span className={`font-bold ${telegramContext.length < 40 ? "text-red-400" : telegramContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {telegramContext.length === 0 ? "Sin contexto" : telegramContext.length < 40 ? "Básico" : telegramContext.length < 120 ? "Aceptable" : "Óptimo"}
+                <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
                 </span>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5">
                 <div 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${telegramContext.length < 40 ? "bg-red-500" : telegramContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{ width: `${Math.min((telegramContext.length / 200) * 100, 100)}%` }}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
                 ></div>
               </div>
             </div>
-            <button
-              type="button"
-              disabled={!telegramQuery.trim() || !telegramContext.trim() || isCheckingTelegram || isReadOnly}
-              onClick={async () => {
-                setIsCheckingTelegram(true);
-                setError(null);
-                try {
-                  // 1. Expandir la consulta con IA
-                  const expansionRes = await fetch("/api/refine-context", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      context: `Dada la siguiente consulta de inteligencia: "${telegramQuery.trim()}". Genera al menos 8 palabras clave, entidades o conceptos relacionados para profundizar la búsqueda en bases de datos de fuentes abiertas. (INSTRUCCIÓN DEL SISTEMA: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con las palabras clave separadas por comas).)`,
-                      mode: "suggest",
-                      photos: [],
-                      geometryType: project?.geometryType || "individual",
-                      projectDescription: project?.descripcion || "",
-                    }),
-                  });
-
-                  let expandedQuery = telegramQuery.trim();
-                  if (expansionRes.ok) {
-                    const expansionText = await expansionRes.text();
+            <div className="space-y-4 pt-2 border-t border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsRefining(true);
+                    setAnalysisAuditScore(null);
                     try {
-                      const expansionData = JSON.parse(expansionText);
-                      let suggestionsVal = expansionData.suggestions || "";
-                      // Lógica de parseo robusta
-                      if (suggestionsVal.includes("```")) {
-                        const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                        if (match && match[1]) {
-                          try { const parsed = JSON.parse(match[1]); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
-                        }
-                      } else if (suggestionsVal.trim().startsWith("{")) {
-                        try { const parsed = JSON.parse(suggestionsVal); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
-                      }
+                      const selected = album.filter((p) => selectedIds.includes(p.id));
+                      const minimalPhotos = selected.map((p) => ({
+                        lat: p.lat,
+                        lng: p.lng,
+                        tipo: p.tipo || "",
+                        comentario: p.comentario || ""
+                      }));
                       
-                      if (suggestionsVal) {
-                        expandedQuery += ", " + suggestionsVal;
+                      let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
+                      if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
+                      
+                      let answersString = Object.entries(userAnswersMap)
+                        .filter(([_, ans]) => ans.trim())
+                        .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
+                        .join("\n\n");
+
+                      const fullContext = analysisContext + focusContext + (answersString ? `\n\nRespuestas a preguntas previas:\n${answersString}` : "") + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la hipótesis. Endurece el criterio: debe dar dirección técnica a las APIs. Si es sólida, score >= 80; si es vaga, score < 80. OBLIGATORIO: SIEMPRE incorpora en tus 'questions' o 'suggestions' al menos 3 sugerencias técnicas que inviten a usar: "Consulta de Proximidad ST_DWithin", "Grounding Dinámico", "Extracción de Entidades Salientes", o "Búsqueda Semántica en Discovery Engine". Explica brevemente el porqué. DEVUELVE UN JSON VÁLIDO.)`;
+
+                      const res = await fetch("/api/refine-context", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          context: fullContext,
+                          photos: minimalPhotos,
+                          mode: "hypothesis-qa",
+                          geometryType: project?.geometryType || "individual",
+                          projectDescription: project?.descripcion || "",
+                          analysisRadius,
+                        }),
+                      });
+                      const textRes = await res.text();
+                      let data;
+                      try {
+                        data = JSON.parse(textRes);
+                      } catch (e) {
+                        throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
                       }
-                    } catch(e) {
-                       console.error("Error al parsear la expansión de IA:", e);
+                      if (res.ok) {
+                        let scoreVal = data.score ?? 0;
+                        let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
+                        if (questionsVal.length === 0 && typeof data.suggestions === "string" && scoreVal < 80) {
+                            questionsVal = data.suggestions.split('\n').filter((l: string) => l.trim().length > 10).slice(0,5);
+                        }
+
+                        setAnalysisAuditScore(scoreVal);
+                        if (scoreVal >= 80) {
+                          setIsAnalysisContextAudited(true);
+                          if (answersString.trim()) {
+                             setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
+                          }
+                          setAiQuestionsList([]);
+                          setUserAnswersMap({});
+                        } else {
+                          setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
+                          "¿A qué hora del día percibe mayor vulnerabilidad en este punto?",
+                          "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",
+                          "¿Hacia dónde se dirigen las posibles rutas de escape físicas desde este nodo?",
+                          "¿Qué tipo de personas transitaban o frecuentan esta zona cuando observó?",
+                          "¿Observó algún obstáculo visual (bardas, maleza, autos) que facilite el acecho?"
+                          ]);
+                          setIsAnalysisContextAudited(false);
+                          if (answersString.trim()) {
+                              setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
+                              setUserAnswersMap({});
+                          }
+                          setQaIteration((prev) => prev + 1);
+                        }
+                      } else {
+                        setError(data.error || "No se pudieron obtener sugerencias de IA.");
+                      }
+                    } catch (err) {
+                      setError("Error de comunicación con IA.");
+                    } finally {
+                      setIsRefining(false);
                     }
-                  }
-
-                  // 2. Ejecutar la búsqueda OSINT con la consulta expandida (Vía Server Action)
-                  const data = await getTelegramOsintData(expandedQuery);
-                  if (data.success) {
-                    const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda Ampliada por IA: ${expandedQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
-                    setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                    setTelegramQuery("");
-                    setTelegramContext("");
-                    setIsAnalysisContextAudited(false);
-                    alert(`Consulta Telegram OSINT (Ampliada por IA) finalizada.\n\nResultado integrado a la hipótesis.`);
-                  } else {
-                    setError(data.error || "Error al consultar Telegram OSINT.");
-                  }
-                } catch (err: any) {
-                  console.error("Error Telegram OSINT:", err);
-                  setError(err.message || "Error de red al conectar con el módulo OSINT o de expansión de IA.");
-                } finally {
-                  setIsCheckingTelegram(false);
-                }
-              }}
-              className="w-full md:w-auto bg-indigo-700 hover:bg-indigo-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
-            >
-              {isCheckingTelegram ? <span className="flex items-center justify-center">Consultando OSINT... <ElapsedTime running={isCheckingTelegram} /></span> : "🕵️ Consultar OSINT y Añadir a Hipótesis"}
-            </button>
+                  }}
+                  disabled={isRefining || !analysisContext.trim() || isAnalysisContextAudited || (qaIteration > 0 && Object.values(userAnswersMap).filter(a => a.trim().length > 0).length === 0)}
+                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+                >
+                  {isRefining ? <span className="flex items-center justify-center">Validando... <ElapsedTime running={isRefining} /></span> : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
+                </button>
+                <div className="flex items-center gap-2">
+                  {!isAnalysisContextAudited && aiQuestionsList.length === 0 && (
+                    <p className="text-[10px] text-amber-400 font-medium">⚠️ Requiere validar hipótesis (80%+).</p>
+                  )}
+                  {isAnalysisContextAudited && (
+                    <p className="text-[10px] text-emerald-400 font-semibold">✅ Hipótesis validada ({analysisAuditScore}%).</p>
+                  )}
+                </div>
+              </div>
+              {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
+                <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-xs text-yellow-200 space-y-4">
+                  <div className="flex flex-col border-b border-yellow-800 pb-2">
+                    <p className="font-bold text-yellow-400">💡 La IA sugiere ampliar el espectro para fortalecer el dictamen (Idoneidad actual: {analysisAuditScore}%)</p>
+                    <p className="text-xs text-yellow-200/80 mt-1">Responde al menos a una pregunta para sumar puntos de idoneidad y avanzar. No hay respuestas incorrectas, todo aporta al análisis.</p>
+                  </div>
+                  {aiQuestionsList.map((q, idx) => (
+                    <div key={idx} className="space-y-2">
+                      <p className="text-yellow-100 whitespace-pre-wrap leading-relaxed font-semibold">{idx + 1}. {q}</p>
+                      <div className="relative w-full">
+                        <button
+                          type="button"
+                          onClick={() => toggleDictation(`userAnswer-${idx}`, (text) => setUserAnswersMap(prev => ({ ...prev, [idx]: (prev[idx] ? `${prev[idx].trim()} ${text}` : text) })))}
+                          className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === `userAnswer-${idx}` ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
+                        >
+                          <span>🎙️</span>
+                        </button>
+                        <textarea
+                          spellCheck={true}
+                          value={userAnswersMap[idx] || ""}
+                          onChange={(e) => setUserAnswersMap(prev => ({ ...prev, [idx]: e.target.value }))}
+                          className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-xs text-yellow-100 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y"
+                          placeholder="Responde aquí para esclarecer la hipótesis..."
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <label className="block text-xs font-medium text-slate-300">
+                  Radio de búsqueda geoespacial
+                </label>
+                <input
+                  type="range"
+                  min={100}
+                  max={10000}
+                  step={100}
+                  value={analysisRadius}
+                  onChange={(e) => setAnalysisRadius(Number(e.target.value))}
+                  className="w-full accent-sky-500"
+                />
+                <p className="text-xs text-slate-400">
+                  Radio de búsqueda:{" "}
+                  <span className="font-semibold text-slate-100">
+                    {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
+                  </span>
+                </p>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* MÓDULO DE INTELIGENCIA DE PERSONAS DESAPARECIDAS (RNPDNO) */}
-      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Registro de Desaparecidos (RNPDNO - SEGOB)</h4>
-          <p className="text-xs text-slate-400">
-            Extrae cifras del Registro Nacional de Personas Desaparecidas. Identifica patrones de violencia extrema y trata en el Estado/Municipio. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
-          </p>
-        </header>
-        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
-          <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
-            <input
-              type="text"
-              placeholder="Estado (Ej. Aguascalientes)"
-              value={rnpdnoEstado}
-              onChange={(e) => setRnpdnoEstado(e.target.value)}
-              disabled={isCheckingRnpdno || isReadOnly}
-              className="w-full md:w-1/2 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
-            />
-            <input
-              type="text"
-              placeholder="Municipio (Ej. Todos)"
-              value={rnpdnoMunicipio}
-              onChange={(e) => setRnpdnoMunicipio(e.target.value)}
-              disabled={isCheckingRnpdno || isReadOnly}
-              className="w-full md:w-1/2 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
-            />
-          </div>
-          <div className="w-full relative">
-            {!isReadOnly && (
-              <button type="button" onClick={() => toggleDictation('rnpdnoContext', (text) => setRnpdnoContext(prev => (prev ? `${prev.trim()} ${text}` : text)))} className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'rnpdnoContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}><span>🎙️</span> {listeningField === 'rnpdnoContext' ? "Grabando..." : "Dictar"}</button>
-            )}
-            <textarea spellCheck={true} value={rnpdnoContext} disabled={isReadOnly} onChange={(e) => setRnpdnoContext(e.target.value)} placeholder="Contexto, justificación o instrucción específica para la IA sobre estas cifras..." className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-sm outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!rnpdnoContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`} />
-          </div>
-          <button
-            type="button"
-            disabled={isCheckingRnpdno || isReadOnly}
-            onClick={async () => {
-              if (!rnpdnoContext.trim()) {
-                alert("⚠️ Acción requerida: Por favor, escriba o dicte el contexto/justificación antes de ejecutar la consulta a SEGOB.");
-                return;
-              }
-              setIsCheckingRnpdno(true);
-              setError(null);
-              try {
-                const data = await getRnpdnoData(rnpdnoEstado, rnpdnoMunicipio);
-                if (data.exito) {
-                  const newContext = `[INTELIGENCIA DE PERSONAS DESAPARECIDAS - RNPDNO]\nInstrucción/Contexto del Analista: ${rnpdnoContext}\nResultados Oficiales: ${data.resumenTexto}\nObservaciones tácticas: Estas métricas deben cruzarse con los indicadores de violencia y marginación del polígono para evaluar la presencia delictiva de alto impacto.`;
-                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setRnpdnoContext("");
-                  setIsAnalysisContextAudited(false);
-                  alert(`Consulta RNPDNO Finalizada:\n\n${data.resumenTexto}`);
-                } else {
-                  setError(data.error || "Error al extraer datos de SEGOB.");
-                }
-              } catch (err: any) { setError(err.message || "Error de red conectando al Cuartel General."); }
-              finally { setIsCheckingRnpdno(false); }
-            }}
-            className="w-full md:w-auto bg-fuchsia-700 hover:bg-fuchsia-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
-          >
-            {isCheckingRnpdno ? <span className="flex items-center justify-center">Extrayendo Datos... <ElapsedTime running={isCheckingRnpdno} /></span> : "⚠️ Consultar SEGOB y Añadir a Hipótesis"}
-          </button>
         </div>
       </div>
 
-      {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) */}
+      {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) (Paso 5) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
-            <h4 className="text-base font-semibold text-slate-200">Demografía y Marginación (INEGI SCINCE)</h4>
+            <h4 className="text-base font-semibold text-slate-200 font-bold">Demografía y Marginación (INEGI SCINCE) (Paso 5)</h4>
             {statusScince === "checking" && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full animate-pulse">⏳ Verificando...</span>}
             {statusScince === "online" && <span className="text-[10px] bg-emerald-900/60 border border-emerald-700 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE</span>}
             {statusScince === "offline" && <span className="text-[10px] bg-red-900/60 border border-red-700 text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> OFFLINE (404)</span>}
@@ -1782,7 +1878,7 @@ const hasMinimumPhotos =
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setIsAnalysisContextAudited(false); // Forzar reevaluación por la IA
+                  setIsAnalysisContextAudited(false);
                   alert(`Consulta SCINCE finalizada. ${data.viviendasDeshabitadas} casas deshabitadas detectadas en la cuadra.`);
                 } else {
                   setError(data.error || "Error al consultar INEGI SCINCE.");
@@ -1797,11 +1893,11 @@ const hasMinimumPhotos =
         </div>
       </div>
 
-      {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) */}
+      {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) (Paso 6) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
-            <h4 className="text-base font-semibold text-slate-200">Giros Comerciales (INEGI DENUE)</h4>
+            <h4 className="text-base font-semibold text-slate-200 font-bold">Giros Comerciales (INEGI DENUE) (Paso 6)</h4>
             {statusDenue === "checking" && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full animate-pulse">⏳ Verificando...</span>}
             {statusDenue === "online" && <span className="text-[10px] bg-emerald-900/60 border border-emerald-700 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE</span>}
             {statusDenue === "offline" && <span className="text-[10px] bg-red-900/60 border border-red-700 text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> OFFLINE (404)</span>}
@@ -1851,41 +1947,10 @@ const hasMinimumPhotos =
         </div>
       </div>
 
-      {/* MÓDULO DE DATOS ABIERTOS (datos.gob.mx) */}
+      {/* MÓDULO DE FUSIÓN OSINT (NOTICIAS RSS) (Paso 7) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Datos Abiertos del Gobierno Federal</h4>
-          <p className="text-xs text-slate-400">Busca bases de datos y registros oficiales cerca de las coordenadas del polígono.</p>
-        </header>
-        <DatosAbiertosAnalyzer
-        lat={(() => {
-          const valid = album.filter(p => p.lat && p.lng);
-          if (valid.length > 0) return valid.reduce((acc, p) => acc + p.lat!, 0) / valid.length;
-          if (analysisPolygon && analysisPolygon.length > 0) return analysisPolygon.reduce((acc, p) => acc + p.lat, 0) / analysisPolygon.length;
-          if (manualPois && manualPois.length > 0) return manualPois.reduce((acc, p) => acc + p.lat, 0) / manualPois.length;
-          return 21.8818;
-        })()}
-        lng={(() => {
-          const valid = album.filter(p => p.lat && p.lng);
-          if (valid.length > 0) return valid.reduce((acc, p) => acc + p.lng!, 0) / valid.length;
-          if (analysisPolygon && analysisPolygon.length > 0) return analysisPolygon.reduce((acc, p) => acc + p.lng, 0) / analysisPolygon.length;
-          if (manualPois && manualPois.length > 0) return manualPois.reduce((acc, p) => acc + p.lng, 0) / manualPois.length;
-          return -102.2915;
-        })()}
-          onAnalysisComplete={(data) => {
-            setDatosGobMxResult(data);
-            const newContext = `[DATOS ABIERTOS GUBERNAMENTALES]\nDataset: ${data.datasetTitle}\nResumen: ${data.resumen}\n\nObservaciones tácticas: Elementos extraídos del padrón federal.`;
-            setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-            setIsAnalysisContextAudited(false); // Obliga a reevaluar la hipótesis
-            alert(`Análisis de Datos Abiertos completado y anexado a su Hipótesis:\n\n${data.resumen}`);
-          }}
-        />
-      </div>
-
-      {/* MÓDULO DE FUSIÓN OSINT (NOTICIAS RSS) */}
-      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Radar OSINT Regional (Noticias RSS)</h4>
+          <h4 className="text-base font-semibold text-slate-200 font-bold">Radar OSINT Regional (Noticias RSS) (Paso 7)</h4>
           <p className="text-xs text-slate-400">
             Escanea medios locales y nacionales en tiempo real. La IA correlacionará automáticamente las noticias de alto impacto con tu hipótesis, la marginación y los comercios detectados.
           </p>
@@ -1926,7 +1991,7 @@ const hasMinimumPhotos =
                   const newContext = `[FUSIÓN OSINT REGIONAL - Noticias RSS]\nSe analizaron ${d.totalNoticiasLeidas} noticias recientes.\n\nEVENTOS TÁCTICOS DETECTADOS:\n${criticos}\n\nCORRELACIÓN DE INTELIGENCIA:\n- Cruce Comercial (DENUE): ${d.correlacionPlataforma?.conexionDenue || "N/A"}\n- Cruce Sociodemográfico (SCINCE): ${d.correlacionPlataforma?.conexionScince || "N/A"}\n- Incidencia Histórica: ${d.correlacionPlataforma?.conexionHistorica || "N/A"}\n\nCONCLUSIÓN OPERATIVA: ${d.conclusionOperativa || "Revisar entorno con precaución."}`;
                   
                   setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setIsAnalysisContextAudited(false); // Forzamos a la IA a reevaluar la hipótesis con los nuevos datos
+                  setIsAnalysisContextAudited(false);
                   alert("¡Fusión OSINT completada!\nLas noticias y su correlación han sido inyectadas en tu Hipótesis.");
                 } else {
                   setError(data.message || data.error || "No se pudieron obtener noticias recientes.");
@@ -1944,894 +2009,980 @@ const hasMinimumPhotos =
         </div>
       </div>
 
-      {/* MÓDULO DE BÚSQUEDA MULTIMODAL GEO-ESPACIAL */}
+      {/* PASO 8: INCIDENCIA DELICTIVA */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Búsqueda Multimodal Geo-Espacial</h4>
+          <h4 className="text-base font-semibold text-slate-200">🚔 Incidencia Delictiva (Paso 8)</h4>
           <p className="text-xs text-slate-400">
-            Realice un barrido inteligente (IA + Grounding) a 1km de radio usando conceptos visuales y de contexto. Puede agregar múltiples imágenes y búsquedas. La información es obligatoria para cada imagen.
+            Filtre los delitos y visualice gráficas de severidad basadas en la base local georreferenciada.
           </p>
         </header>
-        <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
-          
-          <div className="bg-sky-900/30 border border-sky-800 p-3 rounded-lg text-xs text-sky-200 space-y-2">
-            <p className="font-bold text-sky-300">💡 Guía de Contextualización para el Usuario:</p>
-            <p>Para obtener los mejores resultados en el barrido de 1km, estructura tu descripción. Ejemplos que activan el barrido:</p>
-            <ul className="list-disc pl-4 space-y-1 opacity-90">
-              <li>&quot;Busca patrones visuales similares a este grafiti en un radio de 1km para identificar firmas de la misma banda.&quot;</li>
-              <li>&quot;Analiza el entorno y ubica puntos de acecho como callejones oscuros o entradas sin visibilidad.&quot;</li>
-              <li>&quot;Realiza un barrido de infraestructura dañada; busca postes de luz apagados o muros derribados.&quot;</li>
-            </ul>
+        
+        <div className="space-y-4 w-full">
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-300">Filtro de Delitos a Analizar:</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-slate-800/20 rounded-lg border border-slate-700/50">
+              {DELITOS_CATEGORIES.map((cat) => {
+                const isChecked = activeDelitos.includes(cat.id);
+                return (
+                  <label key={cat.id} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {
+                        const newDelitos = activeDelitos.includes(cat.id)
+                          ? activeDelitos.filter(d => d !== cat.id)
+                          : [...activeDelitos, cat.id];
+                        setActiveDelitos(newDelitos);
+                        if (!isReadOnly && project) {
+                          void updateProjectDetails({ delitosSeleccionados: newDelitos });
+                        }
+                      }}
+                      className="rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500 w-3.5 h-3.5"
+                    />
+                    <span>{cat.label}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <label className="flex-1 min-w-[140px] text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 px-2 text-xs font-semibold hover:bg-emerald-800/50 transition-colors">
-              📷 Usar Cámara
-              <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => {
-                if (e.target.files) {
-                  const newQueries = Array.from(e.target.files).map(file => ({
-                    id: Math.random().toString(36).substring(2, 9), file, previewUrl: URL.createObjectURL(file), subject: "", action: "", environment: ""
-                  }));
-                  setGeoQueries(prev => [...prev, ...newQueries]);
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-slate-300">Contextualización Soft (Incidencia Delictiva)</label>
+              {!isReadOnly && project && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await updateProjectDetails({ contextoIncidencia: delitoText });
+                      alert("Contextualización de incidencia delictiva guardada.");
+                    } catch (err) {
+                      alert("Error al guardar la contextualización.");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded bg-emerald-900/40 border border-emerald-700 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold hover:bg-emerald-800/40"
+                >
+                  <span>💾</span> Guardar
+                </button>
+              )}
+            </div>
+            <textarea
+              spellCheck={true}
+              value={delitoText}
+              onChange={(e) => setDelitoText(e.target.value)}
+              onBlur={() => {
+                if (!isReadOnly && project) {
+                  void updateProjectDetails({ contextoIncidencia: delitoText });
                 }
-                e.target.value = "";
-              }} disabled={isCheckingGeo || isReadOnly} />
-            </label>
-            <label className="flex-1 min-w-[140px] text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 px-2 text-xs font-semibold hover:bg-sky-800/50 transition-colors">
-              📸 Subir Archivo(s)
-              <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
-                if (e.target.files) {
-                  const newQueries = Array.from(e.target.files).map(file => ({
-                    id: Math.random().toString(36).substring(2, 9), file, previewUrl: URL.createObjectURL(file), subject: "", action: "", environment: ""
-                  }));
-                  setGeoQueries(prev => [...prev, ...newQueries]);
+              }}
+              placeholder="Escriba comentarios, interpretaciones o notas sobre la incidencia delictiva de este sector..."
+              className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-xs outline-none focus:border-sky-500 min-h-[80px]"
+            />
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+            <p className="text-xs text-slate-300 flex-1">
+              {selectedIds.length > 0
+                ? `El barrido buscará delitos a 1 km del centro de las ${selectedIds.length} fotos.`
+                : "⚠️ Seleccione al menos una fotografía para establecer las coordenadas de búsqueda."}
+            </p>
+            <button
+              type="button"
+              disabled={selectedIds.length === 0 || isCheckingIncidencia || isReadOnly}
+              onClick={async () => {
+                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+                const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat && p.lng);
+                if (photosToUse.length === 0) {
+                  alert("⚠️ Debe seleccionar al menos una fotografía con coordenadas GPS.");
+                  return;
                 }
-                e.target.value = "";
-              }} disabled={isCheckingGeo || isReadOnly} />
-            </label>
-            <button type="button" onClick={() => setGeoQueries(prev => [...prev, { id: Math.random().toString(36).substring(2, 9), file: null, previewUrl: null, subject: "", action: "", environment: "" }])} disabled={isCheckingGeo || isReadOnly} className="flex-1 min-w-[140px] rounded-lg border border-indigo-600 bg-indigo-900/30 text-indigo-100 py-2 px-2 text-xs font-semibold hover:bg-indigo-800/50 transition-colors">
-              📝 Búsqueda solo texto
+                const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
+                const centerLng = photosToUse.reduce((acc, p) => acc + p.lng!, 0) / photosToUse.length;
+
+                if (incidents.length > 0) {
+                  alert("Los incidentes ya se encuentran cargados.");
+                  return;
+                }
+
+                setIsCheckingIncidencia(true);
+                setError(null);
+                try {
+                  const res = await fetch("/api/incidencia", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ lat: centerLat, lng: centerLng })
+                  });
+                  const data = await res.json();
+                  if (data.success && data.data) {
+                    setIncidents(data.data);
+                  } else {
+                    setError(data.error || "Error al obtener la incidencia delictiva.");
+                  }
+                } catch (err: any) {
+                  setError(err.message || "Error al conectar con la API de incidencia.");
+                } finally {
+                  setIsCheckingIncidencia(false);
+                }
+              }}
+              className="w-full md:w-auto bg-sky-700 hover:bg-sky-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+            >
+              {isCheckingIncidencia ? <span className="flex items-center justify-center">Consultando Incidencia... <ElapsedTime running={isCheckingIncidencia} /></span> : "🚔 Ejecutar Barrido Delictivo"}
             </button>
           </div>
 
-          {geoQueries.length > 0 && (
-            <div className="space-y-4">
-              {geoQueries.map((query, index) => (
-                <div key={query.id} className="flex flex-col md:flex-row gap-4 p-4 bg-slate-900/80 rounded-lg border border-slate-600 relative shadow-md">
-                  <button type="button" onClick={() => {
-                    setGeoQueries(prev => {
-                      const item = prev.find(q => q.id === query.id);
-                      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
-                      return prev.filter(q => q.id !== query.id);
-                    });
-                  }} disabled={isCheckingGeo || isReadOnly} className="absolute top-2 right-2 text-red-400 hover:text-red-300 font-bold text-lg bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center border border-red-900/50 z-10 shadow-sm" title="Borrar y volver a capturar">
-                    ✕
-                  </button>
-                  
-                  {query.previewUrl && (
-                    <div className="w-full md:w-1/4 flex flex-col gap-2 relative">
-                      <img src={query.previewUrl} alt="Preview" className="w-full h-32 md:h-full object-cover rounded border border-slate-600 bg-black" />
-                      <div className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.5 rounded text-[9px] text-emerald-400 max-w-[90%] truncate">
-                        {query.file?.name}
-                      </div>
+          {(() => {
+            const filteredInc = incidents.filter(inc => activeDelitos.includes(inc.fuente));
+            if (filteredInc.length > 0) {
+              return (
+                <div className="space-y-4">
+                  <div className="bg-slate-800/40 p-4 rounded-lg border border-slate-700">
+                    <h5 className="text-xs font-semibold text-slate-300 mb-3">Gráficas de Severidad Criminal</h5>
+                    <CrimeCharts crimes={filteredInc.map(inc => ({
+                      ...inc,
+                      tipoDelito: inc.INCIDENTE || "Delito No Especificado",
+                      lat: inc.lat,
+                      lng: inc.lng
+                    }))} />
+                  </div>
+
+                  <div className="bg-slate-800/40 rounded-lg border border-slate-700 overflow-hidden">
+                    <div className="overflow-x-auto max-h-60">
+                      <table className="w-full text-left border-collapse text-[10px]">
+                        <thead>
+                          <tr className="bg-slate-900 text-slate-300 border-b border-slate-700">
+                            <th className="p-2">Delito</th>
+                            <th className="p-2">Fecha</th>
+                            <th className="p-2">Colonia / Asentamiento</th>
+                            <th className="p-2 text-right">Distancia</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 text-slate-200">
+                          {filteredInc.slice(0, 50).map((inc, index) => (
+                            <tr key={index} className="hover:bg-slate-800/30">
+                              <td className="p-2 font-semibold text-sky-400">{inc.INCIDENTE || "No especificado"}</td>
+                              <td className="p-2">{inc.FECHA || "N/A"}</td>
+                              <td className="p-2">{inc.NOM_ASEN || "N/A"}</td>
+                              <td className="p-2 text-right text-slate-400">{inc.distancia_m ? `${Math.round(inc.distancia_m)}m` : "N/A"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-                  
-                  <div className={`w-full ${query.previewUrl ? 'md:w-3/4' : 'md:w-full'} space-y-3`}>
-                    <div className="flex justify-between items-center pr-8">
-                      <h5 className="text-xs font-bold text-sky-300">Búsqueda {index + 1}</h5>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold text-slate-300">Sujeto (¿Qué buscar?)</label>
-                        <input type="text" placeholder='ej. "grafitis", "callejones"' value={query.subject} onChange={(e) => {
-                          setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, subject: e.target.value } : q));
-                        }} disabled={isCheckingGeo || isReadOnly} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50" />
+                    {filteredInc.length > 50 && (
+                      <div className="p-2 bg-slate-900/50 text-[10px] text-center text-slate-400 border-t border-slate-800">
+                        Mostrando los 50 delitos más cercanos de {filteredInc.length} detectados.
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold text-slate-300">Acción (¿Qué hacer?)</label>
-                        <input type="text" placeholder='ej. "busca similares", "identifica"' value={query.action} onChange={(e) => {
-                          setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, action: e.target.value } : q));
-                        }} disabled={isCheckingGeo || isReadOnly} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-semibold text-slate-300">Ambiente (Entorno)</label>
-                        <input type="text" placeholder='ej. "zona comercial", "baldío"' value={query.environment} onChange={(e) => {
-                          setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, environment: e.target.value } : q));
-                        }} disabled={isCheckingGeo || isReadOnly} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50" />
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          <button
-            type="button"
-            disabled={geoQueries.length === 0 || !geoQueries.every(q => q.subject.trim() && q.action.trim() && q.environment.trim()) || isCheckingGeo || isReadOnly}
-            onClick={async () => {
-              setIsCheckingGeo(true);
-              setError(null);
-              try {
-                const selectedPhotos = album.filter((p: any) => selectedIds.includes(p.id) && p.lat && p.lng);
-                const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter((p: any) => p.lat && p.lng);
-                if (photosToUse.length === 0) { setError("No hay fotos georreferenciadas en el álbum para establecer el epicentro del barrido."); setIsCheckingGeo(false); return; }
-                const centerLat = photosToUse.reduce((acc: number, p: any) => acc + p.lat!, 0) / photosToUse.length;
-                const centerLng = photosToUse.reduce((acc: number, p: any) => acc + p.lng!, 0) / photosToUse.length;
-
-                let allFindings = "";
-                let allPois: any[] = [];
-                let allConcepts: string[] = [];
-
-                for (let i = 0; i < geoQueries.length; i++) {
-                   const q = geoQueries[i];
-                   let imageBase64 = null;
-                   if (q.file) {
-                     try { imageBase64 = await resizeImageToBase64(q.file, 800, 0.6); } catch (e) { console.warn(`No se pudo procesar la imagen de referencia ${i+1}.`); }
-                   }
-                   
-                   const res = await fetch("/api/osint/geo-spatial-search", {
-                     method: "POST", headers: { "Content-Type": "application/json" },
-                     body: JSON.stringify({ lat: centerLat, lng: centerLng, subject: q.subject, action: q.action, environment: q.environment, imageBase64 })
-                   });
-                   if (!res.ok) {
-                     const errorText = await res.text().catch(() => `Error del servidor (código ${res.status})`);
-                     if (errorText.toLowerCase().includes("<!doctype html>")) {
-                       throw new Error(`Error del servidor (código ${res.status}). La ruta /api/osint/geo-spatial-search no está funcionando correctamente o no existe.`);
-                     }
-                     throw new Error(errorText);
-                   }
-                   const data = await res.json();
-                   if (data.success) {
-                      const d = data.data;
-                      const hallazgos = d.hallazgos && d.hallazgos.length > 0 ? d.hallazgos.map((h: any) => `- ${h.nombre} (${h.nivelCoincidencia}): ${h.descripcion}`).join("\n") : "No se identificaron zonas de riesgo coincidentes.";
-                      allFindings += `\n\n--- BARRIDO ${i + 1} ---\nParámetros:\n- Sujeto: ${q.subject}\n- Acción: ${q.action}\n- Ambiente: ${q.environment}\nConceptos: ${d.conceptosExtraidos?.join(", ")}\nHallazgos:\n${hallazgos}\nConclusión: ${d.conclusion}`;
-                      
-                      if (d.conceptosExtraidos) allConcepts.push(...d.conceptosExtraidos);
-
-                      if (d.hallazgos && d.hallazgos.length > 0) {
-                        const newPois = d.hallazgos.map((h: any) => ({
-                          lat: h.lat,
-                          lng: h.lng,
-                          label: `Geo-IA: ${h.nombre}`
-                        }));
-                        allPois.push(...newPois);
-                      }
-                   } else {
-                      throw new Error(data.error || `Error en la búsqueda ${i+1}`);
-                   }
-                }
-
-                if (allFindings) {
-                  const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL MÚLTIPLE]\n(INSTRUCCIÓN OBLIGATORIA PARA LA IA: Debes detallar e insertar de manera explícita en tu dictamen final todos y cada uno de los siguientes hallazgos).${allFindings}`;
-                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setIsAnalysisContextAudited(false); 
-                  
-                  // Cleanup object URLs
-                  geoQueries.forEach(q => { if(q.previewUrl) URL.revokeObjectURL(q.previewUrl) });
-                  setGeoQueries([]); 
-                  
-                  if (allPois.length > 0) {
-                    setManualPois(prev => [...prev, ...allPois]);
-                  }
-                  alert("¡Barridos Geo-Espaciales completados con éxito!\nSe han inyectado los análisis en la hipótesis.");
-                }
-              } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
-            }}
-            className="w-full bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-4 rounded-lg text-xs font-bold disabled:opacity-50 transition shadow-lg mt-2 uppercase tracking-wide"
-          >
-            {isCheckingGeo ? <span className="flex items-center justify-center">Realizando Barrido(s) Multimodal(es)... <ElapsedTime running={isCheckingGeo} /></span> : `🌐 Ejecutar Barrido Geo-Espacial y Añadir a Hipótesis ${geoQueries.length > 0 && geoQueries.every(q => q.subject.trim() && q.action.trim() && q.environment.trim()) ? `(${geoQueries.length})` : ''}`}
-          </button>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
-      </div>
 
-      {/* EVIDENCIAS ADICIONALES */}
-      <div className="pt-6 mt-4 border-t border-slate-800 space-y-4 print:hidden">
+      {/* PASO 9: BARRIDO DE PANDILLAS */}
+      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">Evidencias</h4>
+          <h4 className="text-base font-semibold text-slate-200">👥 Barrido Territorial de Pandillas (Paso 9)</h4>
           <p className="text-xs text-slate-400">
-            Adjunte archivos de evidencia adicionales (documentos, imágenes, audios, videos).{" "}
-            <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+            Analice la presencia, zonas de influencia y domicilios de integrantes registrados en la base institucional.
           </p>
         </header>
-        <div className="flex flex-col gap-4 items-start w-full">
-          <div className="w-full space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
-            <div className="flex gap-2">
-              <label className="flex-1 text-center cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors">
-                📄 Seleccionar Archivo(s)
-                <input
-                  type="file"
-                  multiple
-                  disabled={isReadOnly}
-                  onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
-                  className="hidden"
-                  accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
-                />
-              </label>
-              <label className="flex-1 text-center cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors">
-                📁 Subir Carpeta Completa
-                <input
-                  type="file"
-                  {...{ webkitdirectory: "true", directory: "true" } as any}
-                  multiple
-                  disabled={isReadOnly}
-                  onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
-                  className="hidden"
-                />
-              </label>
+        <div className="w-full">
+          {projectId && project && (
+            <GangGeoSweepPanel
+              projectId={projectId}
+              project={project}
+              onUpdateProject={async () => {
+                if (projectId) await loadProject(projectId);
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* PASO 10: RESTO DEL ANÁLISIS GEOINT */}
+      <div className="flex flex-col space-y-6 pt-6 mt-6 border-t border-slate-800 w-full">
+        <header className="space-y-1 border-b border-slate-800 pb-2">
+          <h3 className="text-sm font-bold text-slate-300 tracking-wider uppercase">Resto del Análisis GEOINT (Paso 10)</h3>
+        </header>
+
+        {/* 10.1: Consulta Vehicular */}
+        <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+          <header className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200">Consulta Vehicular (OSINT Automático)</h4>
+            <p className="text-xs text-slate-400">
+              Realice un barrido automatizado simulando la consulta pública de placas vehiculares detectadas en las fotos. El resultado se inyectará en la hipótesis. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+            </p>
+          </header>
+          <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+            <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+              <input
+                type="text"
+                placeholder="Ingrese placa o NIV..."
+                value={plateQuery}
+                onChange={(e) => setPlateQuery(e.target.value.toUpperCase().replace(/[-\s]/g, ""))}
+                disabled={isCheckingPlate || isReadOnly}
+                className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50 uppercase font-mono"
+              />
             </div>
-            {docFiles.length > 0 && (
-              <div className="flex justify-between items-center bg-sky-900/20 border border-sky-800 p-2 rounded">
-                <span className="text-xs text-sky-400 font-semibold">✓ {docFiles.length} archivo(s) preparado(s) para contextualizar</span>
-                <button type="button" onClick={() => setDocFiles([])} className="text-red-400 hover:text-red-300 text-[10px] font-bold">Cancelar</button>
-              </div>
-            )}
             <div className="w-full relative">
               {!isReadOnly && (
                 <button
                   type="button"
-                  onClick={() => toggleDictation('docContext', (text) => {
-                    setDocContext(prev => (prev ? `${prev.trim()} ${text}` : text));
-                    setIsDocContextAudited(false);
-                  })}
-                  className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'docContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+                  onClick={() => toggleDictation('plateContext', (text) => setPlateContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                  className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[9px] font-semibold border ${listeningField === 'plateContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
                 >
-                  <span>🎙️</span> {listeningField === 'docContext' ? "Grabando..." : "Dictar"}
+                  <span>🎙️</span> {listeningField === 'plateContext' ? "Grabando..." : "Dictar"}
                 </button>
               )}
               <textarea
                 spellCheck={true}
-                value={docContext}
+                value={plateContext}
                 disabled={isReadOnly}
-                onChange={(e) => {
-                  setDocContext(e.target.value);
-                  setIsDocContextAudited(false);
-                }}
-                placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
-                className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-sm outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
+                onChange={(e) => setPlateContext(e.target.value)}
+                placeholder="Contexto, justificación o instrucción específica para la IA sobre este vehículo (Obligatorio)..."
+                className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-xs outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!plateContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
               />
             </div>
-            {!isReadOnly && (
-              <div className="mt-1.5">
-                <PowerUpsModule
-                  onApplyPowerUp={(text) => {
-                    setDocContext((prev) => (prev ? prev.trim() + " " : "") + text);
-                    setIsDocContextAudited(false);
-                  }}
-                  isReadOnly={isReadOnly}
-                  insumoText={docContext || ""}
-                  insumoType="document_upload"
-                  insumoId="new_document"
-                  insumoName="Documento Cargado"
-                  isContextualized={isDocContextAudited}
-                  onApplyDetailedAnalysis={async (results) => {
-                    for (const res of results) {
-                      res.insumoId = "new_document";
-                      await saveCustomDocument(
-                        `Resultados Puente Contextual: ${res.powerUpTitle}`,
-                        "powerup_execution",
-                        JSON.stringify(res)
-                      );
-                    }
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Persisted Puente Results for document upload */}
-            {documents && documents
-              .filter((doc: any) => doc.type === "powerup_execution")
-              .map((doc: any) => {
-                try {
-                  const parsed = JSON.parse(doc.context);
-                  if (parsed.insumoId === "new_document") {
-                    return (
-                      <div key={doc.id} className="mt-2 text-left">
-                        <VentanaResultadosPuente
-                          data={parsed}
-                          onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
-                        />
-                      </div>
-                    );
-                  }
-                } catch (err) {
-                  console.error("Error parsing powerup_execution doc.context", err);
-                }
-                return null;
-              })
-            }
-            
             <div className="mt-1 mb-2">
               <div className="flex justify-between items-center text-[10px] mb-1">
                 <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-                <span className={`font-bold ${docContext.length < 60 ? "text-red-400" : docContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {docContext.length === 0 ? "Sin contexto" : docContext.length < 60 ? "Básico" : docContext.length < 180 ? "Aceptable" : "Óptimo"}
+                <span className={`font-bold ${plateContext.length < 40 ? "text-red-400" : plateContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {plateContext.length === 0 ? "Sin contexto" : plateContext.length < 40 ? "Básico" : plateContext.length < 120 ? "Aceptable" : "Óptimo"}
                 </span>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5">
                 <div 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 60 ? "bg-red-500" : docContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{ width: `${Math.min((docContext.length / 250) * 100, 100)}%` }}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${plateContext.length < 40 ? "bg-red-500" : plateContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  style={{ width: `${Math.min((plateContext.length / 200) * 100, 100)}%` }}
                 ></div>
               </div>
             </div>
+            <button
+              type="button"
+              disabled={!plateQuery.trim() || !plateContext.trim() || isCheckingPlate || isReadOnly}
+              onClick={async () => {
+                setIsCheckingPlate(true);
+                setError(null);
+                try {
+                  const data = await getRepuveData(plateQuery.trim());
+                  if (data.exito) {
+                    const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nInstrucción/Contexto del Analista: ${plateContext}\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
+                    setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                    setPlateQuery("");
+                    setPlateContext("");
+                    setIsAnalysisContextAudited(false);
+                    alert(`¡Búsqueda Vehicular Completada!\n\nEstatus: ${data.estatus}\n\n${data.resumenTexto || ""}\n\n* La información ha sido anexada a su Hipótesis Táctica.`);
+                  } else {
+                    setError(data.error || "Error al consultar la placa.");
+                  }
+                } catch (err) {
+                  console.error("[Frontend] Error crítico al consultar placa:", err);
+                  setError(err instanceof Error ? err.message : "Error de red al comunicarse con el cuartel general.");
+                } finally {
+                  setIsCheckingPlate(false);
+                }
+              }}
+              className="w-full md:w-auto bg-sky-700 hover:bg-sky-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+            >
+              {isCheckingPlate ? <span className="flex items-center justify-center">Consultando Base de Datos... <ElapsedTime running={isCheckingPlate} /></span> : "🔍 Consultar y Añadir a Hipótesis"}
+            </button>
+          </div>
+        </div>
 
-            <div className="flex items-center gap-2">
+        {/* 10.2: OSINT Suite */}
+        <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+          <header className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200">Inteligencia de Fuentes Abiertas y OSINT Territorial v2.0</h4>
+            <p className="text-xs text-slate-400">
+              Suite unificada de recolección de información abierta de Aguascalientes. Explore el motor geoespacial de streaming multifuente o consulte bases de datos filtradas.
+            </p>
+          </header>
+          <div className="flex border-b border-slate-800 gap-1 pb-1">
+            <button
+              type="button"
+              onClick={() => setOsintSuiteTab("territorial")}
+              className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 flex items-center gap-1.5 ${
+                osintSuiteTab === "territorial"
+                  ? "border-b-2 border-cyan-400 text-cyan-400 bg-cyan-950/20"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+              }`}
+            >
+              <span>🛰️</span> OSINT Territorial v2.0
+            </button>
+            <button
+              type="button"
+              onClick={() => setOsintSuiteTab("telegram")}
+              className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 flex items-center gap-1.5 ${
+                osintSuiteTab === "telegram"
+                  ? "border-b-2 border-indigo-400 text-indigo-400 bg-indigo-950/20"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+              }`}
+            >
+              <span>🕵️</span> Búsqueda de Leaks (Telegram OSINT)
+            </button>
+          </div>
+          {osintSuiteTab === "territorial" ? (
+            <div className="w-full">
+              <OsintTerritorialPanel
+                project={project}
+                onAppendToAnalysis={(text) => {
+                  setAnalysisContext((prev) => (prev ? `${prev}\n\n${text}` : text));
+                  setIsAnalysisContextAudited(false);
+                }}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 animate-fadeIn">
+              <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+                <input
+                  type="text"
+                  placeholder="Ingrese objetivo (Ej. Apodo, Teléfono)..."
+                  value={telegramQuery}
+                  onChange={(e) => setTelegramQuery(e.target.value)}
+                  disabled={isCheckingTelegram || isReadOnly}
+                  className="w-full md:w-64 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50 font-mono"
+                />
+              </div>
+              <div className="w-full relative">
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('telegramContext', (text) => setTelegramContext(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                    className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[9px] font-semibold border ${listeningField === 'telegramContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+                  >
+                    <span>🎙️</span> {listeningField === 'telegramContext' ? "Grabando..." : "Dictar"}
+                  </button>
+                )}
+                <textarea
+                  spellCheck={true}
+                  value={telegramContext}
+                  disabled={isReadOnly}
+                  onChange={(e) => setTelegramContext(e.target.value)}
+                  placeholder="Contexto, justificación o instrucción específica para la IA sobre esta búsqueda..."
+                  className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-xs outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!telegramContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`}
+                />
+              </div>
+              <div className="mt-1 mb-2">
+                <div className="flex justify-between items-center text-[10px] mb-1">
+                  <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                  <span className={`font-bold ${telegramContext.length < 40 ? "text-red-400" : telegramContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {telegramContext.length === 0 ? "Sin contexto" : telegramContext.length < 40 ? "Básico" : telegramContext.length < 120 ? "Aceptable" : "Óptimo"}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full transition-all duration-300 ${telegramContext.length < 40 ? "bg-red-500" : telegramContext.length < 120 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    style={{ width: `${Math.min((telegramContext.length / 200) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
               <button
                 type="button"
+                disabled={!telegramQuery.trim() || !telegramContext.trim() || isCheckingTelegram || isReadOnly}
                 onClick={async () => {
-                  setIsRefiningDoc(true);
-                  setDocSuggestions("");
-                  setDocAuditScore(null);
+                  setIsCheckingTelegram(true);
+                  setError(null);
                   try {
-                    const selected = album.filter((p) => selectedIds.includes(p.id));
-                    const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
-                    const minimalPhotos = photosToUse.map((p) => ({
-                      lat: p.lat,
-                      lng: p.lng,
-                      tipo: p.tipo || "",
-                      comentario: p.comentario || ""
-                    }));
-                    const res = await fetch("/api/refine-context", {
+                    const expansionRes = await fetch("/api/refine-context", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        context: docContext + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la idoneidad técnica del documento. Endurece tu criterio: exige que el usuario guíe a las APIs. Si es claro, score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE genera 3 sugerencias de refinamiento técnico usando estos Power-Ups según el tipo de archivo: 1. AUDIO/VIDEO: "Aplica Análisis de Diarización y Sentimiento". 2. IMAGEN/PDF: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 3. GEOESPACIAL: "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 4. TEXTO: "Activa Extracción de Entidades Salientes". 5. HISTÓRICO: "Búsqueda Semántica en Discovery Engine". Explica por qué esto mejora el análisis. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues markdown.)`,
-                        photos: minimalPhotos,
+                        context: `Dada la siguiente consulta de inteligencia: "${telegramQuery.trim()}". Genera al menos 8 palabras clave, entidades o conceptos relacionados para profundizar la búsqueda en bases de datos de fuentes abiertas. (INSTRUCCIÓN DEL SISTEMA: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con las palabras clave separadas por comas).)`,
                         mode: "suggest",
+                        photos: [],
                         geometryType: project?.geometryType || "individual",
                         projectDescription: project?.descripcion || "",
                       }),
                     });
-                    const textRes = await res.text();
-                    let data;
-                    try {
-                      data = JSON.parse(textRes);
-                    } catch (e) {
-                      throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
-                    }
-                    if (res.ok) {
-                      let scoreVal = data.score ?? 0;
-                      let suggestionsVal = data.suggestions ?? "";
-                      
-                      if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
-                        try {
+
+                    let expandedQuery = telegramQuery.trim();
+                    if (expansionRes.ok) {
+                      const expansionText = await expansionRes.text();
+                      try {
+                        const expansionData = JSON.parse(expansionText);
+                        let suggestionsVal = expansionData.suggestions || "";
+                        if (suggestionsVal.includes("```")) {
                           const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
                           if (match && match[1]) {
-                              const parsed = JSON.parse(match[1]) as Record<string, any>;
-                              if (parsed && typeof parsed === 'object') {
-                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
-                              }
-                          } else {
-                            const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
-                            if (jsonMatch) {
-                                const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
-                                if (parsed && typeof parsed === 'object') {
-                                  if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                  if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
-                                }
-                            }
+                            try { const parsed = JSON.parse(match[1]); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
                           }
-                        } catch (e) {}
+                        } else if (suggestionsVal.trim().startsWith("{")) {
+                          try { const parsed = JSON.parse(suggestionsVal); if (parsed.suggestions) suggestionsVal = parsed.suggestions; } catch(e) {}
+                        }
+                        if (suggestionsVal) {
+                          expandedQuery += ", " + suggestionsVal;
+                        }
+                      } catch(e) {
+                         console.error("Error al parsear la expansión de IA:", e);
                       }
-
-                      setDocSuggestions(suggestionsVal);
-                      setDocAuditScore(scoreVal);
-                      if (scoreVal >= 80) {
-                        setIsDocContextAudited(true);
-                      }
-                    } else {
-                      setError(data.error || "No se pudieron obtener sugerencias de IA.");
                     }
-                  } catch (err) {
-                    setError("Error de comunicación con IA.");
+
+                    const data = await getTelegramOsintData(expandedQuery);
+                    if (data.success) {
+                      const newContext = `[INTELIGENCIA OSINT AVANZADA - Búsqueda Ampliada por IA: ${expandedQuery}]\nInstrucción/Contexto del Analista: ${telegramContext}\nResultados: ${data.osintSummary}. Observaciones tácticas: Elemento identificado en campo con posible vinculación a bases de datos filtradas. Evaluar impacto en la estructura del entorno.`;
+                      setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                      setTelegramQuery("");
+                      setTelegramContext("");
+                      setIsAnalysisContextAudited(false);
+                      alert(`Consulta Telegram OSINT (Ampliada por IA) finalizada.\n\nResultado integrado a la hipótesis.`);
+                    } else {
+                      setError(data.error || "Error al consultar Telegram OSINT.");
+                    }
+                  } catch (err: any) {
+                    console.error("Error Telegram OSINT:", err);
+                    setError(err.message || "Error de red al conectar con el módulo OSINT o de expansión de IA.");
                   } finally {
-                    setIsRefiningDoc(false);
+                    setIsCheckingTelegram(false);
                   }
                 }}
-                disabled={isRefiningDoc || !docContext.trim() || isReadOnly}
-                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+                className="w-full md:w-auto bg-indigo-700 hover:bg-indigo-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
               >
-                {isRefiningDoc ? <span className="flex items-center justify-center">Consultando IA... <ElapsedTime running={isRefiningDoc} /></span> : "Pedir Sugerencias y Auditar Contexto"}
+                {isCheckingTelegram ? <span className="flex items-center justify-center">Consultando OSINT... <ElapsedTime running={isCheckingTelegram} /></span> : "🕵️ Consultar OSINT y Añadir a Hipótesis"}
               </button>
             </div>
+          )}
+        </div>
 
-            {docSuggestions && (
-              <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2 w-full">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="font-semibold">Borrador y Sugerencias de IA (Editable):</p>
-                  {docAuditScore !== null && (
-                    <span className={`px-2 py-1 rounded font-bold ${docAuditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
-                      Lógica: {docAuditScore}%
-                    </span>
-                  )}
-                </div>
-            <div className="relative w-full">
-              <button
-                type="button"
-                onClick={() => toggleDictation('docSuggestions', (text) => setDocSuggestions(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === 'docSuggestions' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
-              >
-                <span>🎙️</span>
-              </button>
-              <textarea
-                spellCheck={true}
-                value={docSuggestions}
-                onChange={(e) => setDocSuggestions(e.target.value)}
-                className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
+        {/* 10.3: Disappeared Persons (SEGOB) */}
+        <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+          <header className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200">Registro de Desaparecidos (RNPDNO - SEGOB)</h4>
+            <p className="text-xs text-slate-400">
+              Extrae cifras del Registro Nacional de Personas Desaparecidas. Identifica patrones de violencia extrema y trata en el Estado/Municipio. <strong className="text-amber-400">Obligatorio contextualizar.</strong>
+            </p>
+          </header>
+          <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+            <div className="flex flex-col md:flex-row gap-3 items-start md:items-center w-full">
+              <input
+                type="text"
+                placeholder="Estado (Ej. Aguascalientes)"
+                value={rnpdnoEstado}
+                onChange={(e) => setRnpdnoEstado(e.target.value)}
+                disabled={isCheckingRnpdno || isReadOnly}
+                className="w-full md:w-1/2 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50"
+              />
+              <input
+                type="text"
+                placeholder="Municipio (Ej. Todos)"
+                value={rnpdnoMunicipio}
+                onChange={(e) => setRnpdnoMunicipio(e.target.value)}
+                disabled={isCheckingRnpdno || isReadOnly}
+                className="w-full md:w-1/2 bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 disabled:opacity-50"
               />
             </div>
-                <div className="flex flex-wrap gap-2 pt-2">
+            <div className="w-full relative">
+              {!isReadOnly && (
+                <button type="button" onClick={() => toggleDictation('rnpdnoContext', (text) => setRnpdnoContext(prev => (prev ? `${prev.trim()} ${text}` : text)))} className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[9px] font-semibold border ${listeningField === 'rnpdnoContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}><span>🎙️</span> {listeningField === 'rnpdnoContext' ? "Grabando..." : "Dictar"}</button>
+              )}
+              <textarea spellCheck={true} value={rnpdnoContext} disabled={isReadOnly} onChange={(e) => setRnpdnoContext(e.target.value)} placeholder="Contexto, justificación o instrucción específica para la IA sobre estas cifras..." className={`w-full bg-slate-900 text-slate-200 border rounded-md p-3 pr-14 text-xs outline-none focus:border-sky-500 min-h-[80px] disabled:opacity-50 ${!rnpdnoContext.trim() ? 'border-amber-500/70 bg-amber-900/10' : 'border-slate-600'}`} />
+            </div>
+            <button
+              type="button"
+              disabled={isCheckingRnpdno || isReadOnly}
+              onClick={async () => {
+                if (!rnpdnoContext.trim()) {
+                  alert("⚠️ Acción requerida: Por favor, escriba o dicte el contexto/justificación antes de ejecutar la consulta a SEGOB.");
+                  return;
+                }
+                setIsCheckingRnpdno(true);
+                setError(null);
+                try {
+                  const data = await getRnpdnoData(rnpdnoEstado, rnpdnoMunicipio);
+                  if (data.exito) {
+                    const newContext = `[INTELIGENCIA DE PERSONAS DESAPARECIDAS - RNPDNO]\nInstrucción/Contexto del Analista: ${rnpdnoContext}\nResultados Oficiales: ${data.resumenTexto}\nObservaciones tácticas: Estas métricas deben cruzarse con los indicadores de violencia y marginación del polígono para evaluar la presencia delictiva de alto impacto.`;
+                    setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                    setRnpdnoContext("");
+                    setIsAnalysisContextAudited(false);
+                    alert(`Consulta RNPDNO Finalizada:\n\n${data.resumenTexto}`);
+                  } else {
+                    setError(data.error || "Error al extraer datos de SEGOB.");
+                  }
+                } catch (err: any) { setError(err.message || "Error de red conectando al Cuartel General."); }
+                finally { setIsCheckingRnpdno(false); }
+              }}
+              className="w-full md:w-auto bg-fuchsia-700 hover:bg-fuchsia-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+            >
+              {isCheckingRnpdno ? <span className="flex items-center justify-center">Extrayendo Datos... <ElapsedTime running={isCheckingRnpdno} /></span> : "⚠️ Consultar SEGOB y Añadir a Hipótesis"}
+            </button>
+          </div>
+        </div>
+
+        {/* 10.4: Multimodal Search */}
+        <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+          <header className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200">Búsqueda Multimodal Geo-Espacial</h4>
+            <p className="text-xs text-slate-400">
+              Realice un barrido inteligente (IA + Grounding) a 1km de radio usando conceptos visuales y de contexto. Puede agregar múltiples imágenes y búsquedas. La información es obligatoria para cada imagen.
+            </p>
+          </header>
+          <div className="flex flex-col gap-4 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700">
+            <div className="bg-sky-900/30 border border-sky-800 p-3 rounded-lg text-[10px] text-sky-200 space-y-2">
+              <p className="font-bold text-sky-300">💡 Guía de Contextualización para el Usuario:</p>
+              <p>Para obtener los mejores resultados en el barrido de 1km, estructura tu descripción. Ejemplos que activan el barrido:</p>
+              <ul className="list-disc pl-4 space-y-1 opacity-90">
+                <li>&quot;Busca patrones visuales similares a este grafiti en un radio de 1km para identificar firmas de la misma banda.&quot;</li>
+                <li>&quot;Analiza el entorno y ubica puntos de acecho como callejones oscuros o entradas sin visibilidad.&quot;</li>
+                <li>&quot;Realiza un barrido de infraestructura dañada; busca postes de luz apagados o muros derribados.&quot;</li>
+              </ul>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="flex-1 min-w-[140px] text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2 px-2 text-xs font-semibold hover:bg-emerald-800/50 transition-colors">
+                📷 Usar Cámara
+                <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => {
+                  if (e.target.files) {
+                    const newQueries = Array.from(e.target.files).map(file => ({
+                      id: Math.random().toString(36).substring(2, 9), file, previewUrl: URL.createObjectURL(file), subject: "", action: "", environment: ""
+                    }));
+                    setGeoQueries(prev => [...prev, ...newQueries]);
+                  }
+                  e.target.value = "";
+                }} disabled={isCheckingGeo || isReadOnly} />
+              </label>
+              <label className="flex-1 min-w-[140px] text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2 px-2 text-xs font-semibold hover:bg-sky-800/50 transition-colors">
+                📸 Subir Archivo(s)
+                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+                  if (e.target.files) {
+                    const newQueries = Array.from(e.target.files).map(file => ({
+                      id: Math.random().toString(36).substring(2, 9), file, previewUrl: URL.createObjectURL(file), subject: "", action: "", environment: ""
+                    }));
+                    setGeoQueries(prev => [...prev, ...newQueries]);
+                  }
+                  e.target.value = "";
+                }} disabled={isCheckingGeo || isReadOnly} />
+              </label>
+              <button type="button" onClick={() => setGeoQueries(prev => [...prev, { id: Math.random().toString(36).substring(2, 9), file: null, previewUrl: null, subject: "", action: "", environment: "" }])} disabled={isCheckingGeo || isReadOnly} className="flex-1 min-w-[140px] rounded-lg border border-indigo-600 bg-indigo-900/30 text-indigo-100 py-2 px-2 text-xs font-semibold hover:bg-indigo-800/50 transition-colors">
+                📝 Búsqueda solo texto
+              </button>
+            </div>
+            {geoQueries.length > 0 && (
+              <div className="space-y-4">
+                {geoQueries.map((query, index) => (
+                  <div key={query.id} className="flex flex-col md:flex-row gap-4 p-4 bg-slate-900/80 rounded-lg border border-slate-600 relative shadow-md">
+                    <button type="button" onClick={() => {
+                      setGeoQueries(prev => {
+                        const item = prev.find(q => q.id === query.id);
+                        if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+                        return prev.filter(q => q.id !== query.id);
+                      });
+                    }} disabled={isCheckingGeo || isReadOnly} className="absolute top-2 right-2 text-red-400 hover:text-red-300 font-bold text-lg bg-slate-800 w-8 h-8 rounded-full flex items-center justify-center border border-red-900/50 z-10 shadow-sm" title="Borrar y volver a capturar">
+                      ✕
+                    </button>
+                    {query.previewUrl && (
+                      <div className="w-full md:w-1/4 flex flex-col gap-2 relative">
+                        <img src={query.previewUrl} alt="Preview" className="w-full h-32 md:h-full object-cover rounded border border-slate-600 bg-black" />
+                        <div className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.5 rounded text-[8px] text-emerald-400 max-w-[90%] truncate">
+                          {query.file?.name}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-300 font-semibold">🔍 ¿Qué objeto visual buscas? (Ej: Grafiti 18, cámara domo, callejón cerrado) *</label>
+                        <input type="text" value={query.subject} onChange={(e) => setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, subject: e.target.value } : q))} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-1.5 text-xs outline-none focus:border-sky-500" placeholder="Escriba el objeto o firma visual..." disabled={isCheckingGeo || isReadOnly} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-300 font-semibold">👣 ¿Qué comportamiento o acción táctica investigarás? *</label>
+                        <input type="text" value={query.action} onChange={(e) => setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, action: e.target.value } : q))} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-1.5 text-xs outline-none focus:border-sky-500" placeholder="Escriba la acción (Ej: marcar territorio, escape rápido, punto ciego)" disabled={isCheckingGeo || isReadOnly} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-300 font-semibold">🏘️ ¿Cómo es la infraestructura o entorno donde se encuentra? *</label>
+                        <input type="text" value={query.environment} onChange={(e) => setGeoQueries(prev => prev.map(q => q.id === query.id ? { ...q, environment: e.target.value } : q))} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-1.5 text-xs outline-none focus:border-sky-500" placeholder="Escriba el entorno (Ej: barda de ladrillo, poste de concreto, baldío)" disabled={isCheckingGeo || isReadOnly} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={geoQueries.length === 0 || !geoQueries.every(q => q.subject.trim() && q.action.trim() && q.environment.trim()) || isCheckingGeo || isReadOnly}
+              onClick={async () => {
+                setIsCheckingGeo(true);
+                setError(null);
+                try {
+                  const itemsPayload = await Promise.all(geoQueries.map(async q => {
+                    let base64: string | null = null;
+                    if (q.file) {
+                      try { base64 = await resizeImageToBase64(q.file, 640, 0.5); } catch { base64 = await readFileAsBase64(q.file); }
+                    }
+                    return { subject: q.subject, action: q.action, environment: q.environment, imageBase64: base64 || undefined };
+                  }));
+
+                  const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+                  const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat && p.lng);
+                  const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
+                  const centerLng = photosToUse.reduce((acc, p) => acc + p.lng!, 0) / photosToUse.length;
+
+                  const res = await fetch("/api/refine-context", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      mode: "multimodal-sweep",
+                      queries: itemsPayload,
+                      lat: centerLat || 21.8818,
+                      lng: centerLng || -102.2915,
+                      radius: 1000
+                    })
+                  });
+                  const text = await res.text();
+                  const data = JSON.parse(text);
+                  if (res.ok && data.success) {
+                    const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL (1km)]\nSe procesaron ${geoQueries.length} consultas tácticas.\n\nANÁLISIS DE PATRONES ENCONTRADOS:\n${data.data?.analysis || "Cruce multimodal ejecutado."}`;
+                    setAnalysisContext(prev => prev ? `${prev}\n\n${newContext}` : newContext);
+                    setIsAnalysisContextAudited(false);
+                    setGeoQueries([]);
+                    alert("¡Barridos Geo-Espaciales completados con éxito!\nSe han inyectado los análisis en la hipótesis.");
+                  }
+                } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
+              }}
+              className="w-full bg-indigo-700 hover:bg-indigo-600 text-white py-3 px-4 rounded-lg text-xs font-bold disabled:opacity-50 transition shadow-lg mt-2 uppercase tracking-wide"
+            >
+              {isCheckingGeo ? <span className="flex items-center justify-center">Realizando Barrido(s) Multimodal(es)... <ElapsedTime running={isCheckingGeo} /></span> : `🌐 Ejecutar Barrido Geo-Espacial y Añadir a Hipótesis ${geoQueries.length > 0 && geoQueries.every(q => q.subject.trim() && q.action.trim() && q.environment.trim()) ? `(${geoQueries.length})` : ''}`}
+            </button>
+          </div>
+        </div>
+
+        {/* 10.5: Additional Evidence */}
+        <div className="pt-6 mt-4 border-t border-slate-800 space-y-4">
+          <header className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200 font-bold">Evidencias Adicionales</h4>
+            <p className="text-xs text-slate-400">
+              Adjunte archivos de evidencia adicionales (documentos, imágenes, audios, de video) y contextualícelos.
+            </p>
+          </header>
+          <div className="flex flex-col gap-4 items-start w-full">
+            <div className="w-full space-y-3 p-5 bg-slate-800/40 rounded-lg border border-slate-700">
+              <div className="flex gap-2">
+                <label className="flex-1 text-center cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors">
+                  📄 Seleccionar Archivo(s)
+                  <input
+                    type="file"
+                    multiple
+                    disabled={isReadOnly}
+                    onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
+                    className="hidden"
+                    accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
+                  />
+                </label>
+                <label className="flex-1 text-center cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors">
+                  📁 Subir Carpeta
+                  <input
+                    type="file"
+                    {...{ webkitdirectory: "true", directory: "true" } as any}
+                    multiple
+                    disabled={isReadOnly}
+                    onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              {docFiles.length > 0 && (
+                <div className="flex justify-between items-center bg-sky-900/20 border border-sky-800 p-2 rounded">
+                  <span className="text-xs text-sky-400 font-semibold">✓ {docFiles.length} archivo(s) preparado(s)</span>
+                  <button type="button" onClick={() => setDocFiles([])} className="text-red-400 hover:text-red-300 text-[10px] font-bold">Cancelar</button>
+                </div>
+              )}
+              <div className="w-full relative">
+                {!isReadOnly && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setDocSuggestions("");
-                      setDocAuditScore(null);
+                    onClick={() => toggleDictation('docContext', (text) => {
+                      setDocContext(prev => (prev ? `${prev.trim()} ${text}` : text));
+                      setIsDocContextAudited(false);
+                    })}
+                    className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[9px] font-semibold border ${listeningField === 'docContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800/80 hover:bg-slate-700"}`}
+                  >
+                    <span>🎙️</span> {listeningField === 'docContext' ? "Grabando..." : "Dictar"}
+                  </button>
+                )}
+                <textarea
+                  spellCheck={true}
+                  value={docContext}
+                  disabled={isReadOnly}
+                  onChange={(e) => {
+                    setDocContext(e.target.value);
+                    setIsDocContextAudited(false);
+                  }}
+                  placeholder="Contexto, justificación o descripción del documento (Obligatorio)..."
+                  className="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-md p-3 text-xs outline-none focus:border-sky-500 min-h-[100px] disabled:opacity-50"
+                />
+              </div>
+              {!isReadOnly && (
+                <div className="mt-1.5">
+                  <PowerUpsModule
+                    onApplyPowerUp={(text) => {
+                      setDocContext((prev) => (prev ? prev.trim() + " " : "") + text);
                       setIsDocContextAudited(false);
                     }}
-                    className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
-                  >
-                    Descartar (Usar Original)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setIsAuditingDoc(true);
-                      setError(null);
+                    isReadOnly={isReadOnly}
+                    insumoText={docContext || ""}
+                    insumoType="document_upload"
+                    insumoId="new_document"
+                    insumoName="Documento Cargado"
+                    isContextualized={isDocContextAudited}
+                    onApplyDetailedAnalysis={async (results) => {
+                      for (const res of results) {
+                        res.insumoId = "new_document";
+                        await saveCustomDocument(
+                          `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                          "powerup_execution",
+                          JSON.stringify(res)
+                        );
+                      }
+                    }}
+                  />
+                </div>
+              )}
+
+              {documents && documents
+                .filter((doc: any) => doc.type === "powerup_execution")
+                .map((doc: any) => {
+                  try {
+                    const parsed = JSON.parse(doc.context);
+                    if (parsed.insumoId === "new_document") {
+                      return (
+                        <div key={doc.id} className="mt-2 text-left">
+                          <VentanaResultadosPuente
+                            data={parsed}
+                            onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                          />
+                        </div>
+                      );
+                    }
+                  } catch (err) {
+                    console.error("Error parsing powerup_execution doc.context", err);
+                  }
+                  return null;
+                })
+              }
+              
+              <div className="mt-1 mb-2">
+                <div className="flex justify-between items-center text-[10px] mb-1">
+                  <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                  <span className={`font-bold ${docContext.length < 60 ? "text-red-400" : docContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {docContext.length === 0 ? "Sin contexto" : docContext.length < 60 ? "Básico" : docContext.length < 180 ? "Aceptable" : "Óptimo"}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full transition-all duration-300 ${docContext.length < 60 ? "bg-red-500" : docContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    style={{ width: `${Math.min((docContext.length / 250) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsRefiningDoc(true);
+                    setDocSuggestions("");
+                    setDocAuditScore(null);
+                    try {
+                      const selected = album.filter((p) => selectedIds.includes(p.id));
+                      const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
+                      const minimalPhotos = photosToUse.map((p) => ({
+                        lat: p.lat,
+                        lng: p.lng,
+                        tipo: p.tipo || "",
+                        comentario: p.comentario || ""
+                      }));
+                      const res = await fetch("/api/refine-context", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          context: docContext + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la idoneidad técnica del documento. Endurece tu criterio: exige que el usuario guíe a las APIs. Si es claro, score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE genera 3 sugerencias de refinamiento técnico usando estos Power-Ups según el tipo de archivo: 1. AUDIO/VIDEO: "Aplica Análisis de Diarización y Sentimiento". 2. IMAGEN/PDF: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 3. GEOESPACIAL: "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 4. TEXTO: "Activa Extracción de Entidades Salientes". 5. HISTÓRICO: "Búsqueda Semántica en Discovery Engine". Explica por qué esto mejora el análisis. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues markdown.)`,
+                          photos: minimalPhotos,
+                          mode: "suggest",
+                          geometryType: project?.geometryType || "individual",
+                          projectDescription: project?.descripcion || "",
+                        }),
+                      });
+                      const textRes = await res.text();
+                      let data;
                       try {
-                        const selected = album.filter((p) => selectedIds.includes(p.id));
-                        const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
-                        const minimalPhotos = photosToUse.map((p) => ({
-                          lat: p.lat,
-                          lng: p.lng,
-                          tipo: p.tipo || "",
-                          comentario: p.comentario || ""
-                        }));
-                        const res = await fetch("/api/refine-context", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ 
-                            context: docSuggestions + `\n\n(INSTRUCCIÓN DEL SISTEMA: Evalúa la pertinencia técnica. Endurece el criterio. Score >= 80 si tiene sentido técnico. OBLIGATORIO: Asegura incluir 3 sugerencias usando Power-Ups como 'OCR Avanzado', 'Diarización', 'Extracción de Entidades' o 'Búsqueda Semántica'. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con 'score' y 'suggestions'. NO agregues markdown.)`, 
-                            photos: minimalPhotos,
-                            mode: "audit",
-                            geometryType: project?.geometryType || "individual",
-                            projectDescription: project?.descripcion || "",
-                          }),
-                        });
-                        const textRes = await res.text();
-                        let data;
-                        try {
-                          data = JSON.parse(textRes);
-                        } catch (e) {
-                          throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
-                        }
+                        data = JSON.parse(textRes);
+                      } catch (e) {
+                        throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
+                      }
                       if (res.ok) {
                         let scoreVal = data.score ?? 0;
                         let suggestionsVal = data.suggestions ?? "";
+                        
                         if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
                           try {
                             const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
                             if (match && match[1]) {
-                              const parsed = JSON.parse(match[1]) as Record<string, any>;
-                              if (parsed && typeof parsed === 'object') {
-                                if (typeof parsed.score === 'number') scoreVal = parsed.score;
-                                if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
-                              }
-                            } else {
-                              const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
-                              if (jsonMatch) {
-                                const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
+                                const parsed = JSON.parse(match[1]) as Record<string, any>;
                                 if (parsed && typeof parsed === 'object') {
                                   if (typeof parsed.score === 'number') scoreVal = parsed.score;
                                   if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
                                 }
+                            } else {
+                              const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
+                              if (jsonMatch) {
+                                  const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
+                                  if (parsed && typeof parsed === 'object') {
+                                    if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                    if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                  }
                               }
                             }
-                          } catch(e) {}
+                          } catch (e) {}
                         }
+
                         setDocSuggestions(suggestionsVal);
                         setDocAuditScore(scoreVal);
-                        if (scoreVal >= 80) setIsDocContextAudited(true);
+                        if (scoreVal >= 80) {
+                          setIsDocContextAudited(true);
+                        }
+                      } else {
+                        setError(data.error || "No se pudieron obtener sugerencias de IA.");
                       }
-                        else setError(data.error || "Error al auditar sugerencia.");
-                      } catch (err) { setError("Error de comunicación al auditar."); }
-                      finally { setIsAuditingDoc(false); }
-                    }}
-                    disabled={isAuditingDoc || !docSuggestions.trim()}
-                    className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
-                  >
-                    {isAuditingDoc ? <span className="flex items-center justify-center">Auditando... <ElapsedTime running={isAuditingDoc} /></span> : "Auditar y Mejorar Redacción"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDocContext((prev) => (prev ? `${prev}\n\n${docSuggestions}` : docSuggestions));
-                      setDocSuggestions("");
-                      setIsDocContextAudited(true);
-                    }}
-                    disabled={isAuditingDoc || (docAuditScore !== null && docAuditScore < 80)}
-                    className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
-                  >
-                    Aplicar Power-Up Sugerido {(docAuditScore !== null && docAuditScore < 80) ? '(Requiere 80%)' : ''}
-                  </button>
-                </div>
+                    } catch (err) {
+                      setError("Error de comunicación con IA.");
+                    } finally {
+                      setIsRefiningDoc(false);
+                    }
+                  }}
+                  disabled={isRefiningDoc || !docContext.trim() || isReadOnly}
+                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+                >
+                  {isRefiningDoc ? <span className="flex items-center justify-center">Consultando IA... <ElapsedTime running={isRefiningDoc} /></span> : "Auditar Evidencia"}
+                </button>
               </div>
-            )}
 
-            {docContext.trim() && !isDocContextAudited && !docSuggestions && (
-              <p className="text-xs text-amber-400 mt-1">⚠️ Requiere solicitar sugerencias y auditar el contexto antes de poder subir la evidencia.</p>
-            )}
-            {isDocContextAudited && (
-              <p className="text-xs text-emerald-400 mt-1">✅ Contexto auditado y validado. Listo para subir.</p>
-            )}
-
-            <button
-              type="button"
-              disabled={docFiles.length === 0 || !docContext.trim() || isUploadingDoc || isReadOnly || !isDocContextAudited}
-              onClick={async () => {
-                if (docFiles.length === 0 || !docContext.trim()) return;
-                setIsUploadingDoc(true);
-                setError(null);
-                try {
-                  for (const file of docFiles) {
-                    await uploadDocument(file, docContext);
-                  }
-                  setDocFiles([]);
-                  setDocContext("");
-                  setIsDocContextAudited(false);
-                } catch (e: any) {
-                  setError("Error al subir documento(s): " + e.message);
-                } finally {
-                  setIsUploadingDoc(false);
-                }
-              }}
-              className="w-full bg-sky-700 hover:bg-sky-600 text-white py-1.5 px-4 rounded text-xs font-semibold disabled:opacity-50 transition"
-            >
-              {isUploadingDoc ? <span className="flex items-center justify-center">Subiendo Evidencia... <ElapsedTime running={isUploadingDoc} /></span> : "Subir Evidencia Contextualizada"}
-            </button>
-          </div>
-          <div className="w-full space-y-2">
-            {documents && documents.length > 0 ? documents.map(d => {
-              if (d.type === "powerup_execution") {
-                try {
-                  const parsed = JSON.parse(d.context);
-                  return (
-                    <div key={d.id} className="w-full">
-                      <VentanaResultadosPuente
-                        data={parsed}
-                        onRemove={!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") ? () => {
-                          removeDocument(d.id);
-                        } : undefined}
-                        isInsideEvidencias={true}
-                      />
-                    </div>
-                  );
-                } catch (err) {
-                  console.error("Error parsing powerup_execution inside Evidencias list", err);
-                }
-              }
-              return (
-                <div key={d.id} className="p-2 bg-slate-800/60 rounded border border-slate-700 flex flex-col gap-1">
-                  <div className="flex justify-between items-start gap-2">
-                    {d.url ? (
-                      <a href={d.url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline font-semibold text-[11px] truncate flex-1" title={d.name}>📄 {d.name}</a>
-                    ) : (
-                      <span className="text-slate-300 font-semibold text-[11px] truncate flex-1">📄 {d.name}</span>
-                    )}
-                    {!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
-                      <button
-                        onClick={() => setDeleteModal({
-                          isOpen: true,
-                          type: "Documento",
-                          id: d.id,
-                          projectId: projectId || project?.id
-                        })}
-                        className="text-red-400 hover:text-red-300 text-[10px] shrink-0"
-                      >
-                        Eliminar
-                      </button>
+              {docSuggestions && (
+                <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2 w-full">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-semibold">Sugerencias de IA (Editable):</p>
+                    {docAuditScore !== null && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${docAuditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                        Lógica: {docAuditScore}%
+                      </span>
                     )}
                   </div>
-                  {d.context === "PENDIENTE DE CONTEXTUALIZAR EN GABINETE" ? (
-                    <PendingEvidenceEditor d={d} projectId={projectId} album={album} selectedIds={selectedIds} project={project} isReadOnly={isReadOnly} />
-                  ) : (
-                    <p className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">{d.context}</p>
-                  )}
-                </div>
-              );
-            }) : (
-              <div className="text-xs text-slate-500 text-center py-6 border border-dashed border-slate-700 rounded-lg">No hay evidencias adicionales en este expediente.</div>
-            )}
-          </div>
-        </div>
-      </div>
-      {/* FIN EVIDENCIAS ADICIONALES */}
-
-      <div className="pt-4 border-t border-slate-800 space-y-2 hidden md:block print:hidden">
-        <button
-          type="button"
-          onClick={() => void handleOpenConfigModal()}
-          disabled={isGeneratingAI || isValidatingPhotos || selectedIds.length === 0 || isReadOnly}
-          className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isGeneratingAI || isValidatingPhotos ? (
-            <>
-              <svg
-                className="mr-2 h-4 w-4 animate-spin text-slate-100"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  className="opacity-25"
-                  fill="currentColor"
-                  d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
-                />
-              </svg>
-              {isValidatingPhotos ? <span className="flex items-center gap-1">Auditando evidencia fotográfica... <ElapsedTime running={isValidatingPhotos} /></span> : <span className="flex items-center gap-1">Ejecutando Barrido OSINT e Inteligencia Artificial... <ElapsedTime running={isGeneratingAI} /></span>}
-            </>
-          ) : aiProfile ? (
-            isReadOnly ? "Análisis Protegido (Solo Lectura)" : "Actualizar Informe"
-          ) : (
-            "Generar Informe"
-          )}
-        </button>
-        {error && <p className="text-sm text-red-400 mt-2">{typeof error === "string" ? error : (error as any)?.message || JSON.stringify(error)}</p>}
-      </div>
-
-      {isGeneratingAI && (
-        <div className="animate-pulse space-y-4 p-6 bg-slate-900/40 rounded-xl border border-slate-700/50">
-          <div className="h-4 bg-slate-700 rounded w-3/4" />
-          <div className="h-4 bg-slate-700 rounded w-full" />
-          <div className="h-4 bg-slate-700 rounded w-5/6" />
-          <div className="h-32 bg-slate-700/50 rounded w-full mt-6" />
-        </div>
-      )}
-
-      {(analysisResult || aiProfile) && (
-        <div className="flex flex-col space-y-6 w-full">
-
-          {aiProfile && (
-            <div className="flex flex-col space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4 w-full">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-base font-bold text-indigo-200">
-                  Perfil criminológico ambiental (IA completa)
-                </h4>
-                {profileRiskLevel && (
-                  <div
-                    className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-1.5"
-                    title="Nivel de riesgo según incidencia en la zona"
-                  >
-                    <span className="text-xs font-medium text-slate-400">
-                      Riesgo:
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span
-                        className={`inline-block h-3 w-3 rounded-full ${
-                          profileRiskLevel === "bajo"
-                            ? "bg-emerald-500 ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900"
-                            : "bg-emerald-500/40"
-                        }`}
-                        aria-hidden
-                      />
-                      <span
-                        className={`inline-block h-3 w-3 rounded-full ${
-                          profileRiskLevel === "medio"
-                            ? "bg-amber-500 ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900"
-                            : "bg-amber-500/40"
-                        }`}
-                        aria-hidden
-                      />
-                      <span
-                        className={`inline-block h-3 w-3 rounded-full ${
-                          profileRiskLevel === "alto"
-                            ? "bg-red-500 ring-2 ring-red-400 ring-offset-1 ring-offset-slate-900"
-                            : "bg-red-500/40"
-                        }`}
-                        aria-hidden
-                      />
-                    </div>
-                    <span
-                      className={`text-xs font-semibold capitalize ${
-                        profileRiskLevel === "bajo"
-                          ? "text-emerald-400"
-                          : profileRiskLevel === "medio"
-                            ? "text-amber-400"
-                            : "text-red-400"
-                      }`}
-                    >
-                      {profileRiskLevel}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2 w-full flex flex-col">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="block text-xs font-semibold text-slate-200">
-                    Dictamen editable por el analista
-                  </label>
-                  {!isReadOnly && (
+                  <div className="relative w-full">
                     <button
                       type="button"
-                      onClick={() => toggleDictation('editableProfile', (text) => setEditableProfile(prev => (prev ? `${prev.trim()} ${text}` : text)))}
-                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'editableProfile' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
+                      onClick={() => toggleDictation('docSuggestions', (text) => setDocSuggestions(prev => (prev ? `${prev.trim()} ${text}` : text)))}
+                      className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[9px] font-semibold border ${listeningField === 'docSuggestions' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-805"}`}
                     >
-                      <span>🎙️</span> {listeningField === 'editableProfile' ? "Grabando..." : "Dictar edición"}
+                      <span>🎙️</span>
                     </button>
-                  )}
-                </div>
-                <textarea
-                  spellCheck={true}
-                  value={editableProfile}
-                  onChange={(e) => setEditableProfile(e.target.value)}
-                  disabled={isReadOnly}
-                  className="w-full min-h-[500px] md:min-h-[750px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-8 text-base md:text-lg leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y shadow-inner disabled:opacity-80 disabled:cursor-not-allowed"
-                />
-              </div>
-            </div>
-          )}
-
-          {analysisResult && (
-            <div className="flex flex-col space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4 w-full">
-              <h4 className="text-lg font-bold text-sky-200 tracking-tight">
-                Análisis Espacial y Estadístico
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:hidden">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Número de Expediente</label>
-                  <input 
-                    type="text" 
-                    value={reportNumber} 
-                    onChange={(e) => setReportNumber(e.target.value)} 
-                    className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-slate-300">Breve Resumen (Carátula)</label>
-                    <button 
+                    <textarea
+                      spellCheck={true}
+                      value={docSuggestions}
+                      onChange={(e) => setDocSuggestions(e.target.value)}
+                      className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-xs text-yellow-100 min-h-[80px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocSuggestions("");
+                        setDocAuditScore(null);
+                        setIsDocContextAudited(false);
+                      }}
+                      className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
+                    >
+                      Descartar (Usar Original)
+                    </button>
+                    <button
                       type="button"
                       onClick={async () => {
-                        const contentToSummarize = editableProfile || aiProfile || (project as any)?.analysisContent;
-                        if (!contentToSummarize) {
-                          alert("No hay dictamen para resumir. Genérelo primero.");
-                          return;
-                        }
-                        setIsGeneratingSummary(true);
+                        setIsAuditingDoc(true);
+                        setError(null);
                         try {
-                          const sumRes = await fetch("/api/refine-context", {
+                          const selected = album.filter((p) => selectedIds.includes(p.id));
+                          const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
+                          const minimalPhotos = photosToUse.map((p) => ({
+                            lat: p.lat,
+                            lng: p.lng,
+                            tipo: p.tipo || "",
+                            comentario: p.comentario || ""
+                          }));
+                          const res = await fetch("/api/refine-context", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              context: "Resume el siguiente dictamen en un solo párrafo de máximo 40 palabras para usarlo en la carátula oficial. Dictamen:\n" + contentToSummarize.substring(0, 2000) + "\n\n(INSTRUCCIÓN: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con el resumen). NO agregues markdown ni comillas invertidas.)",
-                              photos: [],
-                              mode: "suggest",
+                            body: JSON.stringify({ 
+                              context: docSuggestions + `\n\n(INSTRUCCIÓN DEL SISTEMA: Evalúa la pertinencia técnica. Endurece el criterio. Score >= 80 si tiene sentido técnico. OBLIGATORIO: Asegura incluir 3 sugerencias usando Power-Ups como 'OCR Avanzado', 'Diarización', 'Extracción de Entidades' o 'Búsqueda Semántica'. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con 'score' y 'suggestions'. NO agregues markdown.)`, 
+                              photos: minimalPhotos,
+                              mode: "audit",
                               geometryType: project?.geometryType || "individual",
                               projectDescription: project?.descripcion || "",
-                            })
+                            }),
                           });
-                          const sumText = await sumRes.text();
-                          let sumData;
-                          try { sumData = JSON.parse(sumText); } catch(e) {}
-                          if (sumData) {
-                            let sVal = sumData.suggestions || "";
-                            const match = sVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                            if (match && match) { try { const parsed = JSON.parse(match); if (parsed.suggestions) sVal = parsed.suggestions; } catch(e) {} }
-                            else if (sVal.trim().startsWith("{")) { try { const parsed = JSON.parse(sVal); if (parsed.suggestions) sVal = parsed.suggestions; } catch(e) {} }
-                            setReportSummary(sVal.trim());
+                          const textRes = await res.text();
+                          let data;
+                          try {
+                            data = JSON.parse(textRes);
+                          } catch (e) {
+                            throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
                           }
-                        } catch (err) {
-                          alert("Error al autogenerar el resumen.");
-                        } finally {
-                          setIsGeneratingSummary(false);
-                        }
+                          if (res.ok) {
+                            let scoreVal = data.score ?? 0;
+                            let suggestionsVal = data.suggestions ?? "";
+                            if (suggestionsVal.includes("La respuesta de la IA") || suggestionsVal.includes("```")) {
+                              try {
+                                const match = suggestionsVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                                if (match && match[1]) {
+                                  const parsed = JSON.parse(match[1]) as Record<string, any>;
+                                  if (parsed && typeof parsed === 'object') {
+                                    if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                    if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                  }
+                                } else {
+                                  const jsonMatch = suggestionsVal.match(/\{[\s\S]*\}/);
+                                  if (jsonMatch) {
+                                    const parsed = JSON.parse(jsonMatch[0]) as Record<string, any>;
+                                    if (parsed && typeof parsed === 'object') {
+                                      if (typeof parsed.score === 'number') scoreVal = parsed.score;
+                                      if (typeof parsed.suggestions === 'string') suggestionsVal = parsed.suggestions;
+                                    }
+                                  }
+                                }
+                              } catch(e) {}
+                            }
+                            setDocSuggestions(suggestionsVal);
+                            setDocAuditScore(scoreVal);
+                            if (scoreVal >= 80) setIsDocContextAudited(true);
+                          }
+                          else setError(data.error || "Error al auditar sugerencia.");
+                        } catch (err) { setError("Error de comunicación al auditar."); }
+                        finally { setIsAuditingDoc(false); }
                       }}
-                      disabled={isGeneratingSummary || isReadOnly}
-                      className="text-[10px] text-sky-400 hover:text-sky-300 font-medium disabled:opacity-50 transition-colors"
+                      disabled={isAuditingDoc || !docSuggestions.trim()}
+                      className="rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
                     >
-                      {isGeneratingSummary ? "⏳ Generando..." : "🪄 Auto-Generar"}
+                      {isAuditingDoc ? <span className="flex items-center justify-center">Auditando... <ElapsedTime running={isAuditingDoc} /></span> : "Auditar y Mejorar Redacción"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDocContext((prev) => (prev ? `${prev}\n\n${docSuggestions}` : docSuggestions));
+                        setDocSuggestions("");
+                        setIsDocContextAudited(true);
+                      }}
+                      disabled={isAuditingDoc || (docAuditScore !== null && docAuditScore < 80)}
+                      className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                    >
+                      Aplicar Power-Up Sugerido {(docAuditScore !== null && docAuditScore < 80) ? '(Requiere 80%)' : ''}
                     </button>
                   </div>
-                  <textarea 
-                    value={reportSummary} 
-                    onChange={(e) => setReportSummary(e.target.value)} 
-                    disabled={isReadOnly}
-                    placeholder="Resumen del contenido del informe..."
-                    className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded p-2 text-xs outline-none focus:border-sky-500 resize-y min-h-[40px] disabled:opacity-60"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1 print:hidden">
-                {!isReadOnly && projectId && (
-                  <button
-                    type="button"
-                    onClick={handleSaveAnalysis}
-                    disabled={isSavingAnalysis}
-                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {isSavingAnalysis
-                      ? "Guardando análisis en expediente…"
-                      : hasSavedAnalysis
-                      ? "Guardado en expediente"
-                      : "Guardar Análisis en Expediente"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handleExportToWord()}
-                  className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
-                >
-                  Exportar a Word
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportToPDF}
-                  className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
-                >
-                  Descargar PDF
-                </button>
-              </div>
-
-              {analysisResult?.scinceDemographics?.svs !== undefined && (
-                <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 print:hidden">
-                   <div className="bg-slate-800/60 p-4 border border-slate-700/80 rounded-xl flex items-center justify-between col-span-1 lg:col-span-2">
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-200">Vulnerabilidad Sociodemográfica</h4>
-                        <div className="text-[11px] text-slate-400 mt-0.5">CENSINT • SocioDemographic Vulnerability Score</div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-3xl">🚨</div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-2xl font-black" style={{color: `#${analysisResult.scinceDemographics.svsColor}`}}>{analysisResult.scinceDemographics.svs}</span>
-                          <span className="text-[10px] font-bold uppercase tracking-widest" style={{color: `#${analysisResult.scinceDemographics.svsColor}`}}>{analysisResult.scinceDemographics.svsNivel}</span>
-                        </div>
-                      </div>
-                   </div>
-                </div>
-              )}
-              {analysisResult && (
-                <div className="w-full mb-3 print:mb-0">
-                  <TacticalCharts analysisResult={analysisResult} />
-                </div>
-              )}
-              <div className="w-full mt-3 flex flex-col print:mb-0">
-                <TacticalMaps
-                  album={album.filter((p) => selectedIds.includes(p.id))}
-                  analysisResult={analysisResult}
-                  analysisRadius={analysisRadius}
-                  analysisPolygon={analysisPolygon}
-                  manualPois={manualPois}
-                  geometryType={project?.geometryType}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3 print:hidden">
-                <button
-                  type="button"
-                  onClick={handleAttachMapSnapshot}
-                  className="inline-flex items-center justify-center rounded-md bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 transition-colors"
-                >
-                  📸 Añadir 4 Mapas al Informe Word
-                </button>
-              </div>
-              {mapSnapshots.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700">
-                  <div className="w-full text-xs font-semibold text-slate-300 mb-1">Mapas adjuntos al reporte Word:</div>
-                  {mapSnapshots.map((snap, idx) => (
-                    <div key={idx} className="relative group rounded border border-sky-500 overflow-hidden w-28 h-20 bg-black">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={snap.dataUrl} alt={snap.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                      <button onClick={() => setMapSnapshots(prev => prev.filter((_, i) => i !== idx))} className="absolute top-0 right-0 bg-red-600 text-white text-[10px] px-1.5 py-0.5 hover:bg-red-500 rounded-bl" title="Quitar mapa del reporte">×</button>
-                      <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center truncate px-1 py-0.5">{snap.title.replace("Mapa de ", "")}</div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
-      )}
+      </div>
+    </div>
 
       {showConfigModal && (
         <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">

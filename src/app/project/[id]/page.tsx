@@ -314,14 +314,6 @@ export default function ProjectWorkspacePage() {
       <div className="w-full space-y-6 overflow-y-auto pb-20 lg:pb-0">
         {activeWorkspaceTab === "environmental" ? (
           <>
-            <GangGeoSweepPanel
-              projectId={project.id}
-              project={project}
-              onUpdateProject={async () => {
-                await loadProject(project.id);
-              }}
-            />
-
             <CaptureAndAddPhoto />
             <PhotoAlbum
               onDeletePhoto={handleDeletePhoto}

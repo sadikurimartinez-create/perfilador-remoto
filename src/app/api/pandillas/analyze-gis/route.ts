@@ -4,7 +4,7 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 import { InegiWmsProvider } from "@/lib/providers/inegi_wms_provider";
 import { LayerRecommendationEngine } from "@/lib/providers/layerRecommendationEngine";
 import { SpatialLayerEngine } from "@/lib/providers/spatialLayerEngine";
-import { MultiSourceCorrelationEngine } from "@/lib/geoint/multiSourceCorrelationEngine";
+import { CriminalIntelligenceCorrelationEngine } from "@/lib/criminal/correlation/criminalCorrelationEngine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,11 +99,24 @@ export async function POST(req: Request) {
 
     const activeRecommendedLayers = allLayers.filter((l: any) => recommendedLayerIds.includes(l.id));
 
-    // Correlate sources using MSCE
-    const msceReport = MultiSourceCorrelationEngine.correlate("pandillas", {
-      lat: centerLat,
-      lng: centerLng,
-      query: selectedGangs.join(" ")
+    // Correlate sources using CICE
+    const ciceReport = CriminalIntelligenceCorrelationEngine.correlate({
+      selectedGangs,
+      incidentsCount: incidents.length,
+      domicilesCount: domiciles.length,
+      zonesCount: influenceZones.length,
+      rssCount: activeLayers.includes("osint") || activeLayers.includes("incidents") ? 10 : 0,
+      hasGoogleMaps: true,
+      hasScince: true,
+      hasDenue: true,
+      socialMediaSignals: {
+        telegram: activeLayers.includes("relations") || activeLayers.includes("domiciles"),
+        facebook: activeLayers.includes("influence"),
+        instagram: activeLayers.includes("influence"),
+        x: activeLayers.includes("influence"),
+        reddit: activeLayers.includes("influence"),
+        search: true,
+      }
     });
 
     // 3. Calculate Spatial Crossings using SpatialLayerEngine
@@ -191,11 +204,11 @@ export async function POST(req: Request) {
         description: l.description,
         url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
       })),
-      msce_report: msceReport
+      cice_report: ciceReport
     };
 
     // 6. Build deterministic fallback report
-    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount, activeRecommendedLayers, msceReport);
+    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount, activeRecommendedLayers, ciceReport);
 
     // 5. Call Vertex AI for a premium report if credentials are set
     if (!GCP_PROJECT_ID) {
@@ -226,21 +239,21 @@ export async function POST(req: Request) {
 
       const systemPrompt = `
 Eres un Analista de Geointeligencia Criminal del Centro de Estudios y Política Criminal (CEIPOL) de Aguascalientes.
-Tu tarea es tomar un conjunto de datos GIS seleccionados por el analista (integrantes, domicilios, zonas de influencia, capas activas, incidentes delictivos cruzados e intersecciones espaciales con trazos manuales) y generar un **Informe Táctico de Geointeligencia (Informe GEOINT)**.
+Tu tarea es tomar un conjunto de datos GIS seleccionados por el analista (integrantes, domicilios, zonas de influencia, capas activas, incidentes delictivos cruzados e intersecciones espaciales con trazos manuales) y generar un **Informe Táctico de Inteligencia Criminal y Geointeligencia (Informe CICE)**.
 
-El informe debe redactarse en un tono profesional, institucional, riguroso y analítico.
+El informe debe redactarse en un tono sumamente profesional, de inteligencia de seguridad pública, riguroso y analítico.
 Debe estructurarse en formato Markdown e incluir obligatoriamente las siguientes secciones:
-1. **Resumen Ejecutivo**: Diagnóstico inicial severo de la situación.
-2. **Descripción Territorial**: Análisis de la geografía del área y sectores de Aguascalientes involucrados.
-3. **Nivel de Influencia**: Evaluación de la intensidad y presencia criminal en la zona.
-4. **Pandillas Relacionadas**: Detalle de organizaciones, clicas o bandas involucradas.
-5. **Cruce de Delineado Manual y Riesgo**: Explicar detalladamente qué domicilios e incidentes caen dentro de las geometrías dibujadas por el analista.
-6. **Posibles Conflictos**: Evaluación de riesgos de enfrentamientos o disputas de frontera en base a las rivalidades documentadas.
-7. **Patrones Espaciales e Incidencia Delictiva**: Análisis de concentración de delitos e integrantes.
-8. **Conclusiones y Recomendaciones Tácticas**: Patrullajes focalizados o intervenciones específicas.
-9. **Nivel de Confianza e Índice de Riesgo**: Calificación de la severidad con un puntaje de riesgo del 1 al 10.
+1. **Resumen Ejecutivo**: Diagnóstico inicial severo de la situación de seguridad.
+2. **Descripción Territorial**: Análisis de la geografía del área y sectores de Aguascalientes involucrados (análisis de entornos y atractor de riesgos).
+3. **Organización y Estructura Criminal**: Análisis del liderazgo, células y estructura de las pandillas seleccionadas basándote en los datos.
+4. **Comportamiento y Modus Operandi**: Patrones delictivos detectados, horarios y recurrencia de los crímenes cruzados en la zona.
+5. **Movilidad y Rutas**: Corredores criminales, desplazamientos y tendencias de expansión detectadas mediante el trazado del analista.
+6. **Cruce de Capas e Inventario Institucional**: Detalle analítico cruzando Domicilios, Zonas de Influencia, Incidencia Delictiva y el Inventario de Pandillas.
+7. **Tendencia y Riesgos Tácticos**: Zonas calientes (Hotspots), conflictos territoriales activos y posible reordenamiento delictivo en la zona.
+8. **Conclusiones y Recomendaciones Tácticas**: Patrullajes focalizados de disuasión y recomendaciones prácticas para inteligencia policial.
+9. **Confianza de Fuentes e Índice de Confianza**: Detalle estructurado basado en la Verdad Operacional Criminal (CICE).
 
-Te proporcionaremos un análisis técnico estructurado preliminar para que lo expandas y complementes utilizando tu conocimiento táctico y opcionalmente búsquedas de internet (Google Search) sobre eventos delictivos recientes en Aguascalientes en las zonas analizadas.
+Vertex AI actúa únicamente como motor de razonamiento y síntesis narrativa. Todas las fuentes autorizadas de georreferenciación y delitos deben ser las provistas (Google Maps, INEGI DENUE/SCINCE, Inventario de Pandillas, Incidencia Delictiva y RSS).
 `;
 
       const userMessage = `
@@ -252,11 +265,15 @@ Puntaje cuantitativo de riesgo: ${finalRiskScore}/10.0
 Cruces espaciales detectados:
 ${crossingsList.join("\n") || "No se detectaron intersecciones directas."}
 
---- ANÁLISIS DE CORRELACIÓN DE FUENTES (MSCE) ---
-Verdad Operacional Dominante: ${msceReport.dominantProvider.toUpperCase()} (Confiabilidad: ${msceReport.dominantScore}%)
-Justificación del Motor: ${msceReport.dominantReason}
+--- ANÁLISIS DE VERDAD OPERACIONAL CRIMINAL (CICE) ---
+Fuente Dominante: ${ciceReport.dominantProvider} (Confianza: ${ciceReport.dominantScore}%)
+Justificación del Motor: ${ciceReport.dominantReason}
+Consenso: ${ciceReport.consensusLevel}% | Incertidumbre: ${ciceReport.uncertaintyLevel}%
+Inventario Institucional Consultado: ${ciceReport.institutionalInventoryUsed.join(", ") || "Ninguno"}
+Correlaciones Detectadas:
+${ciceReport.correlationsDetected.map(c => `- ${c}`).join("\n")}
 Pesos detallados de proveedores:
-${msceReport.results.map((r: any) => `- ${r.name} (${r.decision.toUpperCase()} - Score: ${r.truthScore}%): ${r.explanation}`).join("\n")}
+${ciceReport.results.map((r: any) => `- ${r.name} (${r.decision.toUpperCase()} - Score: ${r.truthScore}%): ${r.explanation}`).join("\n")}
 
 --- INFORME DETERMINISTA PRELIMINAR (Úsalo como base técnica y expande) ---
 ${reportText}
@@ -267,7 +284,7 @@ ${reportText}
           { role: "user", parts: [{ text: systemPrompt + "\n\n" + userMessage }] }
         ],
         generationConfig: {
-          temperature: 0.25,
+          temperature: 0.2,
         }
       });
 
@@ -276,13 +293,13 @@ ${reportText}
         return NextResponse.json({ report: responseText, structuredOutput, isAiGenerated: true });
       }
     } catch (aiErr: any) {
-      console.error("[API GIS Analysis] Error calling Vertex AI, falling back to deterministic report:", aiErr);
+      console.error("[API CICE Analysis] Error calling Vertex AI, falling back to deterministic report:", aiErr);
     }
 
     return NextResponse.json({ report: reportText, structuredOutput, isAiGenerated: false });
 
   } catch (error: any) {
-    console.error("[API GIS Analysis] Error general:", error);
+    console.error("[API CICE Analysis] Error general:", error);
     return NextResponse.json(
       { error: "Error interno al procesar el análisis de geointeligencia.", details: error.message },
       { status: 500 }
@@ -297,7 +314,7 @@ function buildDeterministicReport(
   insideDomicilesCount: number,
   insideIncidentsCount: number,
   activeRecommendedLayers: any[] = [],
-  msceReport: any = null
+  ciceReport: any = null
 ): string {
   const {
     selectedGangs = [],
@@ -316,7 +333,7 @@ function buildDeterministicReport(
   else if (finalRiskScore >= 5.0) riskText = "ALTO";
   else if (finalRiskScore >= 3.0) riskText = "MEDIO";
 
-  let markdown = `# INFORME DE INTELIGENCIA TÁCTICA GEOINT\n`;
+  let markdown = `# INFORME DE INTELIGENCIA TÁCTICA GEOINT CRIMINAL (CICE)\n`;
   markdown += `**Centro de Estudios y Política Criminal (CEIPOL)**\n`;
   markdown += `**Fecha de Emisión:** ${new Date().toLocaleDateString("es-MX")}\n`;
   markdown += `**Foco de Operaciones:** Aguascalientes, Sector Centro-Oriente [${centerLat.toFixed(5)}, ${centerLng.toFixed(5)}]\n`;
@@ -362,25 +379,34 @@ function buildDeterministicReport(
   }
   markdown += `\n`;
 
-  if (msceReport) {
-    markdown += `## 5. Auditoría de Verdad Operacional (MSCE)\n`;
-    markdown += `El motor de correlación MSCE identificó la fuente dominante y calculó la confiabilidad operacional:\n`;
-    markdown += `- **Fuente Dominante:** **${msceReport.dominantProvider.toUpperCase()}** (Confianza: **${msceReport.dominantScore}%**)\n`;
-    markdown += `- **Justificación:** ${msceReport.dominantReason}\n\n`;
+  if (ciceReport) {
+    markdown += `## 5. Auditoría de Verdad Operacional Criminal (CICE)\n`;
+    markdown += `El motor de correlación CICE identificó la fuente dominante y calculó la confiabilidad operacional criminal:\n`;
+    markdown += `- **Fuente Dominante:** **${ciceReport.dominantProvider}** (Confianza: **${ciceReport.dominantScore}%**)\n`;
+    markdown += `- **Justificación:** ${ciceReport.dominantReason}\n`;
+    markdown += `- **Consenso de Inteligencia:** ${ciceReport.consensusLevel}% | **Nivel de Incertidumbre:** ${ciceReport.uncertaintyLevel}%\n`;
+    markdown += `- **Inventario Institucional Utilizado:** ${ciceReport.institutionalInventoryUsed.join(", ") || "Ninguno"}\n\n`;
+    
+    markdown += `**Correlaciones de Inteligencia Detectadas:**\n`;
+    ciceReport.correlationsDetected.forEach((c: string) => {
+      markdown += `- ${c}\n`;
+    });
+    markdown += `\n`;
+    
     markdown += `**Detalle Ponderado de Fuentes:**\n`;
-    msceReport.results.forEach((r: any) => {
+    ciceReport.results.forEach((r: any) => {
       markdown += `- **${r.name}** (Decisión: \`${r.decision.toUpperCase()}\` - Score: **${r.truthScore}%**): ${r.explanation}\n`;
     });
     markdown += `\n`;
   }
 
-  markdown += `## ${msceReport ? '6' : '5'}. Patrones Espaciales e Incidencia Delictiva\n`;
+  markdown += `## ${ciceReport ? '6' : '5'}. Patrones Espaciales e Incidencia Delictiva\n`;
   markdown += `El total de incidentes analizados dentro de la zona de influencia asciende a **${incidents.length} delitos cercanos**. Se destaca que la cercanía física entre las viviendas de integrantes y las zonas comerciales o de tránsito incrementa el factor de oportunidad criminal para robos y asaltos en la demarcación.\n\n`;
 
-  markdown += `## ${msceReport ? '7' : '6'}. Recomendaciones y Conclusiones Tácticas\n`;
+  markdown += `## ${ciceReport ? '7' : '6'}. Recomendaciones y Conclusiones Tácticas\n`;
   markdown += `1. **Monitorear los Corredores de Movilidad:** Reforzar patrullajes en las rutas de delineado manual donde se detectaron intersecciones directas.\n`;
   markdown += `2. **Asegurar Zonas de Riesgo / Buffers:** Desplegar unidades de disuasión rápida en los círculos de amortiguamiento con puntaje de riesgo ALTO.\n`;
-  markdown += `3. **Unificar Inteligencia:** Mantener actualizada la capa de domicilios con registros OSINT recientes para evitar fallas en la detección espacial de proximidades.\n`;
+  markdown += `3. **Unificar Inteligencia:** Mantener actualizada la capa de domicilios con registros OSINT y de redes sociales para robustecer el CICE.\n`;
 
   return markdown;
 }

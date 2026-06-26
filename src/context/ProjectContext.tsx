@@ -73,6 +73,8 @@ export type Project = {
   ceipolId?: string;
   estado?: string;
   status?: "ACTIVO" | "ARCHIVADO";
+  contextoIncidencia?: string;
+  delitosSeleccionados?: string[];
 };
 
 export type PerPhotoFinding = {
@@ -181,6 +183,7 @@ type ProjectContextValue = {
     result?: "ÉXITO" | "FALLO" | "BLOQUEADO";
     details: string;
   }) => Promise<void>;
+  updateProjectDetails: (details: Partial<Project>) => Promise<void>;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -798,6 +801,27 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }, [project, isReadOnly, user, logAuditAction]);
 
+  const updateProjectDetails = useCallback(async (details: Partial<Project>) => {
+    if (!project || isReadOnly) return;
+    try {
+      const firestore = getDb();
+      const projectRef = doc(firestore, "projects", project.id);
+      await updateDoc(projectRef, details);
+      setProject((prev) => (prev ? { ...prev, ...details } : prev));
+      
+      await logAuditAction({
+        action: "ACTUALIZAR_EXPEDIENTE_DETALLES",
+        module: "Expedientes",
+        projectId: project.id,
+        projectName: project.ceipolId || project.nombre,
+        details: `Actualizados detalles del expediente: ${Object.keys(details).join(", ")}.`
+      });
+    } catch (err) {
+      console.error("[ProjectContext] Error al actualizar detalles del expediente:", err);
+      throw err;
+    }
+  }, [project, isReadOnly, logAuditAction]);
+
   const softDeleteDoc = useCallback(async (params: {
     type: "Proyecto" | "Fotografía" | "Documento";
     id: string;
@@ -1104,7 +1128,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       archiveProject,
       reactivateProject,
       savePhotoContextualization,
-      logAuditAction
+      logAuditAction,
+      updateProjectDetails
     }),
     [
       project,
@@ -1140,7 +1165,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       archiveProject,
       reactivateProject,
       savePhotoContextualization,
-      logAuditAction
+      logAuditAction,
+      updateProjectDetails
     ]
   );
 

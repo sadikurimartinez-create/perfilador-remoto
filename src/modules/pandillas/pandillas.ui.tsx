@@ -2730,53 +2730,126 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <p className="text-xs text-slate-400 mt-1">Análisis territorial narrativo de geointeligencia del sector.</p>
                 </div>
                 
-                {/* MSCE TELEMETRY PANEL INTEGRATION */}
-                {gisStructuredOutput?.msce_report && (
-                  <div className="bg-slate-900/60 border border-slate-850 rounded-xl p-4 shadow-inner space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                {/* 🧠 VERDAD OPERACIONAL CRIMINAL (CICE) */}
+                {gisStructuredOutput?.cice_report && (
+                  <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-inner space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                       <div>
-                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                          🧠 Verdad Operacional (MSCE Telemetry)
+                        <h4 className="text-sm font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                          🧠 Verdad Operacional Criminal (CICE Telemetry)
                         </h4>
-                        <p className="text-[10px] text-slate-500">Correlación dinámica y confiabilidad ponderada de proveedores</p>
+                        <p className="text-[10px] text-slate-500">
+                          Consenso dinámico y nivel de confianza analítico de inteligencia criminal
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-slate-400 uppercase font-black">Fuente Dominante:</span>
-                        <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded text-[9px] font-black uppercase">
-                          {gisStructuredOutput.msce_report.dominantProvider?.toUpperCase()}
-                        </span>
-                        <span className="text-sm font-black text-cyan-400 font-mono">
-                          {gisStructuredOutput.msce_report.dominantScore}%
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-end">
+                          <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Confianza CICE</span>
+                          <span className="text-xl font-mono font-black text-rose-400">
+                            {gisStructuredOutput.cice_report.dominantScore}%
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <p className="text-[11px] text-slate-300 italic leading-relaxed">
-                      <strong>Ponderación:</strong> {gisStructuredOutput.msce_report.dominantReason}
-                    </p>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-900/60">
-                      {gisStructuredOutput.msce_report.results?.map((res: any) => (
-                        <div key={res.providerId} className="flex items-center justify-between p-2 bg-slate-950/40 border border-slate-900 rounded-lg text-[10px]">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              res.decision === "use" ? "bg-emerald-500" :
-                              res.decision === "merge" ? "bg-sky-500" :
-                              res.decision === "degrade" ? "bg-amber-500" : "bg-slate-700"
-                            }`} />
-                            <span className="font-bold text-slate-300 truncate" title={res.name}>{res.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className={`text-[8px] font-black uppercase px-1 rounded border ${
-                              res.decision === "use" ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/5" :
-                              res.decision === "merge" ? "border-sky-500/30 text-sky-400 bg-sky-500/5" :
-                              res.decision === "degrade" ? "border-amber-500/30 text-amber-400 bg-amber-500/5" : "border-slate-800 text-slate-500"
-                            }`}>
-                              {res.decision}
-                            </span>
-                            <span className="font-mono text-slate-400 font-bold w-8 text-right">{res.truthScore}%</span>
-                          </div>
+
+                    {/* Dominant source and reason */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-950/40 p-4 rounded-xl border border-slate-850">
+                      <div className="md:col-span-4 border-r border-slate-850/60 pr-2">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuente Dominante</span>
+                        <span className="text-xs font-black text-slate-200 mt-1 block uppercase truncate" title={gisStructuredOutput.cice_report.dominantProvider}>
+                          👑 {gisStructuredOutput.cice_report.dominantProvider}
+                        </span>
+                      </div>
+                      <div className="md:col-span-8 pl-1">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Justificación Metodológica</span>
+                        <p className="text-[11px] text-slate-300 italic leading-relaxed mt-1">
+                          {gisStructuredOutput.cice_report.dominantReason}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Consensus & Uncertainty progress bars */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400 font-extrabold">NIVEL DE CONSENSO:</span>
+                          <span className="text-emerald-400 font-mono font-black">{gisStructuredOutput.cice_report.consensusLevel}%</span>
                         </div>
-                      ))}
+                        <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-850">
+                          <div 
+                            className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" 
+                            style={{ width: `${gisStructuredOutput.cice_report.consensusLevel}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-400 font-extrabold">NIVEL DE INCERTIDUMBRE:</span>
+                          <span className="text-amber-500 font-mono font-black">{gisStructuredOutput.cice_report.uncertaintyLevel}%</span>
+                        </div>
+                        <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-850">
+                          <div 
+                            className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" 
+                            style={{ width: `${gisStructuredOutput.cice_report.uncertaintyLevel}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Institutional Inventories Used */}
+                    {gisStructuredOutput.cice_report.institutionalInventoryUsed && gisStructuredOutput.cice_report.institutionalInventoryUsed.length > 0 && (
+                      <div className="space-y-1 bg-slate-950/20 p-3 rounded-lg border border-slate-850/50">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Inventario Institucional Utilizado</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {gisStructuredOutput.cice_report.institutionalInventoryUsed.map((inv: string, idx: number) => (
+                            <span key={idx} className="px-2 py-0.5 bg-rose-950/50 text-rose-300 border border-rose-900/40 rounded text-[9px] font-bold">
+                              🛡️ {inv}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Correlations Detected */}
+                    {gisStructuredOutput.cice_report.correlationsDetected && gisStructuredOutput.cice_report.correlationsDetected.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Correlaciones Cruzadas Detectadas</span>
+                        <ul className="space-y-1 pl-1">
+                          {gisStructuredOutput.cice_report.correlationsDetected.map((corr: string, idx: number) => (
+                            <li key={idx} className="text-[10.5px] text-cyan-300 leading-normal flex items-start gap-1.5 bg-cyan-950/20 p-2 border border-cyan-900/30 rounded-lg">
+                              <span className="text-cyan-400 select-none mt-0.5">🔗</span>
+                              <span>{corr}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Sources detail */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-900/60">
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuentes Utilizadas</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {gisStructuredOutput.cice_report.activeUsedProviders?.map((prov: string, idx: number) => (
+                            <span key={idx} className="px-2 py-0.5 bg-emerald-950/50 text-emerald-300 border border-emerald-900/30 rounded text-[9px] font-bold">
+                              {prov}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuentes Descartadas</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {gisStructuredOutput.cice_report.activeDiscardedProviders?.map((prov: string, idx: number) => (
+                            <span key={idx} className="px-2 py-0.5 bg-slate-950/60 text-slate-400 border border-slate-850 rounded text-[9px] font-semibold line-through opacity-60">
+                              {prov}
+                            </span>
+                          ))}
+                          {(!gisStructuredOutput.cice_report.activeDiscardedProviders || gisStructuredOutput.cice_report.activeDiscardedProviders.length === 0) && (
+                            <span className="text-[9px] text-slate-600 italic">Ninguna fuente descartada.</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

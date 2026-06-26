@@ -11,7 +11,7 @@ export type NewsOsintResult = {
 const NEWS_API_KEY = process.env.NEWS_API_TOKEN || "ec9ae852706040efa3a92fea10feb23f";
 
 // Canales RSS hiperlocales y nacionales de nota roja
-const RSS_FEEDS = [
+export const RSS_FEEDS = [
   // Nacionales y Aguascalientes (Existentes)
   { nombre: "El Heraldo de Ags", url: "https://www.heraldo.mx/feed/" },
   { nombre: "El Sol del Centro", url: "https://www.elsoldelcentro.com.mx/policiaca/rss.xml" },
