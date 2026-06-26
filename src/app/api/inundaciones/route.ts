@@ -5,6 +5,9 @@ import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { FloodAssessment } from "@/modules/inundaciones/inundaciones.types";
+import { InegiWmsProvider } from "@/lib/providers/inegi_wms_provider";
+import { LayerRecommendationEngine } from "@/lib/providers/layerRecommendationEngine";
+import { SpatialLayerEngine } from "@/lib/providers/spatialLayerEngine";
 
 export async function POST(req: Request) {
   try {
@@ -18,10 +21,30 @@ export async function POST(req: Request) {
       zona_analizada = "Zona Aguascalientes"
     } = body;
 
+    // Fetch and suggest WMS layers via recommendation engine
+    const wmsProvider = new InegiWmsProvider();
+    const capabilitiesRes = await wmsProvider.fetchData({
+      action: "get_capabilities",
+      lat,
+      lng
+    });
+
+    const allLayers = capabilitiesRes.status === "ok" && capabilitiesRes.payload
+      ? (capabilitiesRes.payload.layers || [])
+      : [];
+
+    const recommendedLayerIds = LayerRecommendationEngine.recommend("inundaciones", {
+      lat,
+      lng,
+      query: observaciones_campo
+    });
+
+    const activeRecommendedLayers = allLayers.filter((l: any) => recommendedLayerIds.includes(l.id));
+
     // 1. DETECTAR SI LA IA ESTÁ CONFIGURADA
     if (!GCP_PROJECT_ID) {
       console.warn("[API Inundaciones] Falta GCP_PROJECT_ID, usando simulación local determinista.");
-      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada);
+      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada, activeRecommendedLayers);
       return NextResponse.json({ ...fallback, isAiGenerated: false });
     }
 
@@ -105,6 +128,10 @@ Zona del Polígono Tentativa: ${zona_analizada}
 Pronóstico de Precipitación (CONAGUA): ${pronostico_lluvia}
 Observaciones Adicionales del Investigador en Campo: ${observaciones_campo || "Ninguna proporcionada"}
 
+--- CAPAS WMS RECOMENDADAS E INTEGRACIÓN DE CONTEXTO INEGI (GAIA) ---
+El sistema recomendó e integró las siguientes capas oficiales de INEGI GAIA en base al contexto geográfico del análisis de inundaciones:
+${activeRecommendedLayers.map((l: any) => `- **${l.title}** (${l.category.toUpperCase()}): ${l.description}`).join("\n")}
+
 --- TAREA ---
 1. Ejecuta una búsqueda en internet mediante Google Search para detectar reportes de inundaciones, desbordamiento de arroyos/canales, socavones o problemas de drenaje en la zona "${zona_analizada}" o cerca de las coordenadas ${lat}, ${lng} en Aguascalientes, México.
 2. Combina esta información con la topografía típica del sector (por ejemplo, colonias del oriente, sur u poniente de Aguascalientes, zonas bajas cercanas al Río San Pedro o arroyos como el de San Cedazo, San Ignacio, etc.).
@@ -135,15 +162,31 @@ Observaciones Adicionales del Investigador en Campo: ${observaciones_campo || "N
         radioMetros,
         observaciones_campo,
         pronostico_lluvia,
-        isAiGenerated: true
+        isAiGenerated: true,
+        recommended_wms_layers: activeRecommendedLayers.map((l: any) => ({
+          id: l.id,
+          name: l.name,
+          title: l.title,
+          category: l.category,
+          description: l.description,
+          url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
+        }))
       });
 
     } catch (aiErr: any) {
       console.error("[API Inundaciones] Error en la invocación de Gemini VertexAI:", aiErr);
-      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada);
+      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada, activeRecommendedLayers);
       return NextResponse.json({
         ...fallback,
         isAiGenerated: false,
+        recommended_wms_layers: activeRecommendedLayers.map((l: any) => ({
+          id: l.id,
+          name: l.name,
+          title: l.title,
+          category: l.category,
+          description: l.description,
+          url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
+        })),
         warning: "Fallo temporal de IA (usando motor de simulación geoespacial local): " + aiErr.message
       });
     }
@@ -166,7 +209,8 @@ function generateLocalFloodAnalysis(
   radioMetros: number,
   observaciones: string,
   pronostico: string,
-  zona: string
+  zona: string,
+  activeRecommendedLayers: any[] = []
 ): FloodAssessment {
   // Determinamos IRI basado en palabras clave o proximidad a ríos virtuales (como Río San Pedro lat: 21.885, lng: -102.32)
   let baseScore = 45; // riesgo medio base
@@ -192,6 +236,14 @@ function generateLocalFloodAnalysis(
   // Generar desviaciones pequeñas de coordenadas para pintar en el mapa interactivo
   const offset = () => (Math.random() - 0.5) * 0.007;
 
+  const distanceToRioSanPedro = SpatialLayerEngine.getDistance(
+    { lat, lng },
+    { lat: 21.885, lng: -102.32 }
+  );
+  const proximityText = distanceToRioSanPedro < 1500 
+    ? `Proximidad inmediata (${Math.round(distanceToRioSanPedro)} metros) al cuerpo receptor principal (Río San Pedro).`
+    : `Ubicado a ${Math.round(distanceToRioSanPedro / 1000)} km del cauce principal del Río San Pedro. Escurrimientos dirigidos hacia la subcuenca central.`;
+
   return {
     zona_analizada: zona || "Sector Central (San Marcos / Río San Pedro)",
     iri_score: score,
@@ -208,8 +260,8 @@ function generateLocalFloodAnalysis(
         coordenadas: { lat: lat + 0.001, lng: lng - 0.001 }
       },
       {
-        tipo: "Red de Hidrografía Activa",
-        descripcion: "Cercanía inmediata a colectores pluviales y ramificaciones del Río San Pedro/Arroyo del Cedazo.",
+        tipo: "Red de Hidrografía Activa (SpatialEngine)",
+        descripcion: proximityText,
         coordenadas: { lat: lat - 0.002, lng: lng + 0.002 }
       }
     ],
@@ -258,6 +310,14 @@ function generateLocalFloodAnalysis(
     lng,
     radioMetros,
     observaciones_campo: observaciones,
-    pronostico_lluvia: pronostico
+    pronostico_lluvia: pronostico,
+    recommended_wms_layers: activeRecommendedLayers.map((l: any) => ({
+      id: l.id,
+      name: l.name,
+      title: l.title,
+      category: l.category,
+      description: l.description,
+      url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
+    }))
   };
 }

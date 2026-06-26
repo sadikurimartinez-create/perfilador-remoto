@@ -80,6 +80,18 @@ const darkMapStyle = [
   },
 ];
 
+const WMS_LAYERS_CATALOG = [
+  { id: "corrientes_agua_lineal", name: "corrientes_agua_lineal", title: "💧 Corrientes de Agua", category: "hidrologia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/hidrografia/wms" },
+  { id: "cuerpos_agua_poligonal", name: "cuerpos_agua_poligonal", title: "🌊 Cuerpos de Agua", category: "hidrologia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/hidrografia/wms" },
+  { id: "cuencas_hidrograficas", name: "cuencas_hidrograficas", title: "⛰️ Cuencas Hidrográficas", category: "hidrologia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/hidrografia/wms" },
+  { id: "curvas_nivel_30m", name: "curvas_nivel_30m", title: "📐 Curvas de Nivel (30m)", category: "topografia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/cem/wms" },
+  { id: "continente_elevacion_cem_30m", name: "continente_elevacion_cem_30m", title: "🏔️ Elevación CEM", category: "topografia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/cem/wms" },
+  { id: "uso_suelo_serie_vii", name: "uso_suelo_serie_vii", title: "🌾 Uso de Suelo Serie VII", category: "uso_suelo", providerUrl: "https://geoportal.inegi.org.mx/geoserver/uso_suelo_vegetacion/wms" },
+  { id: "m_ageb_m_g", name: "m_ageb_m_g", title: "🗺️ AGEB Urbanas", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" },
+  { id: "m_localidad_p_g", name: "m_localidad_p_g", title: "📍 Localidades", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" },
+  { id: "m_municipio_g", name: "m_municipio_g", title: "🏢 Límites Municipales", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" }
+];
+
 export function InundacionesUI() {
   const { user } = useAuth();
   const [assessments, setAssessments] = useState<FloodAssessment[]>([]);
@@ -124,6 +136,57 @@ export function InundacionesUI() {
   // Estados interactivos del mapa
   const [map, setMap] = useState<any | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<any | null>(null);
+
+  // WMS overlays states
+  const [selectedWmsLayers, setSelectedWmsLayers] = useState<string[]>([]);
+  const wmsOverlaysRef = useRef<Record<string, any>>({});
+
+  useEffect(() => {
+    if (!map) return;
+
+    // Remove existing WMS overlays
+    Object.entries(wmsOverlaysRef.current).forEach(([layerId, overlay]) => {
+      try {
+        const index = map.overlayMapTypes.indexOf(overlay);
+        if (index !== -1) {
+          map.overlayMapTypes.removeAt(index);
+        }
+      } catch (e) {
+        console.warn("Error removing WMS overlay:", e);
+      }
+    });
+    wmsOverlaysRef.current = {};
+
+    // Helper to get Web Mercator tile bounds (EPSG:3857)
+    const getEPSG3857BBox = (x: number, y: number, zoom: number) => {
+      const max = 20037508.34;
+      const size = (max * 2) / Math.pow(2, zoom);
+      const minX = -max + x * size;
+      const maxX = -max + (x + 1) * size;
+      const minY = max - (y + 1) * size;
+      const maxY = max - y * size;
+      return `${minX},${minY},${maxX},${maxY}`;
+    };
+
+    // Add selected WMS overlays
+    selectedWmsLayers.forEach(layerId => {
+      const matched = WMS_LAYERS_CATALOG.find(l => l.id === layerId);
+      if (!matched) return;
+
+      const overlay = new window.google.maps.ImageMapType({
+        getTileUrl: (coord: any, zoom: number) => {
+          const bbox = getEPSG3857BBox(coord.x, coord.y, zoom);
+          return `${matched.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${matched.name}&FORMAT=image/png&TRANSPARENT=TRUE&SRS=EPSG:3857&BBOX=${bbox}&WIDTH=256&HEIGHT=256`;
+        },
+        tileSize: new window.google.maps.Size(256, 256),
+        opacity: 0.65,
+        name: matched.title
+      });
+
+      wmsOverlaysRef.current[layerId] = overlay;
+      map.overlayMapTypes.push(overlay);
+    });
+  }, [selectedWmsLayers, map]);
   const [loadingStep, setLoadingStep] = useState("");
   const stepsIndex = useRef(0);
 
@@ -640,6 +703,47 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
                   >
                     💬 OSINT
                   </button>
+
+                  {/* INEGI WMS Dropdown */}
+                  <div className="relative group">
+                    <button
+                      className="px-2.5 py-1 rounded text-[10px] font-bold border bg-slate-900 border-slate-800 text-slate-300 hover:border-sky-500/50 flex items-center gap-1"
+                    >
+                      🗺️ Capas INEGI WMS {selectedWmsLayers.length > 0 && `(${selectedWmsLayers.length})`}
+                    </button>
+                    <div className="hidden group-hover:block absolute right-0 mt-1 w-64 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl z-50 space-y-2">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-900/60 pb-1">Seleccionar Capa WMS (GAIA)</p>
+                      <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                        {WMS_LAYERS_CATALOG.map(wms => {
+                          const isChecked = selectedWmsLayers.includes(wms.id);
+                          return (
+                            <label key={wms.id} className="flex items-center justify-between text-[11px] text-slate-300 font-medium cursor-pointer hover:bg-slate-900/30 p-1 rounded transition-colors">
+                              <span className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  wms.category === "hidrologia" ? "bg-blue-500" :
+                                  wms.category === "topografia" ? "bg-emerald-500" :
+                                  wms.category === "uso_suelo" ? "bg-yellow-600" :
+                                  wms.category === "organizacion_territorial" ? "bg-purple-500" : "bg-slate-400"
+                                }`} /> {wms.title}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setSelectedWmsLayers(selectedWmsLayers.filter(x => x !== wms.id));
+                                  } else {
+                                    setSelectedWmsLayers([...selectedWmsLayers, wms.id]);
+                                  }
+                                }}
+                                className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3 h-3"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

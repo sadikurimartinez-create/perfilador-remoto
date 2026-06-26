@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 import {
   ResponsiveContainer,
@@ -28,6 +28,15 @@ const ExecutiveDashboard: React.FC<Props> = ({
 
   const { user } = useAuth();
   const isSuperAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN";
+
+  const [wmsTelemetry, setWmsTelemetry] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/providers/telemetry')
+      .then(res => res.json())
+      .then(data => setWmsTelemetry(data))
+      .catch(err => console.error("Error fetching telemetry:", err));
+  }, []);
 
   const metrics =
     calculateExecutiveMetrics(
@@ -76,6 +85,62 @@ const ExecutiveDashboard: React.FC<Props> = ({
           </button>
         )}
       </div>
+
+      {/* WMS TELEMETRY CARD */}
+      {wmsTelemetry && (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-850 pb-3 mb-4">
+            <div>
+              <h2 className="text-sm font-black text-cyan-400 uppercase tracking-wider">🗺️ Telemetría INEGI WMS (GAIA)</h2>
+              <p className="text-[10px] text-slate-500 mt-0.5">Estado en tiempo real del catálogo geoespacial y capas de soporte</p>
+            </div>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${wmsTelemetry.health?.isHealthy ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}>
+              {wmsTelemetry.health?.isHealthy ? '🟢 ACTIVO & CONECTADO' : '⚠️ DEGRADADO / CATÁLOGO CACHÉ'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-900">
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Consultas Totales</p>
+              <p className="text-xl font-extrabold text-white mt-1">{wmsTelemetry.telemetry?.totalQueries || 0}</p>
+            </div>
+            <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-900">
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Cache Hits</p>
+              <p className="text-xl font-extrabold text-sky-400 mt-1">
+                {wmsTelemetry.telemetry?.cacheHits || 0}
+                <span className="text-[10px] text-slate-500 font-normal ml-1.5 font-sans">
+                  ({wmsTelemetry.telemetry?.totalQueries ? Math.round((wmsTelemetry.telemetry.cacheHits / wmsTelemetry.telemetry.totalQueries) * 100) : 0}%)
+                </span>
+              </p>
+            </div>
+            <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-900">
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Latencia Promedio</p>
+              <p className="text-xl font-extrabold text-teal-400 mt-1">
+                {wmsTelemetry.telemetry?.totalQueries ? Math.round(wmsTelemetry.telemetry.latencySum / wmsTelemetry.telemetry.totalQueries) : 0} ms
+              </p>
+            </div>
+            <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-900">
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Errores de Enlace</p>
+              <p className={`text-xl font-extrabold mt-1 ${wmsTelemetry.telemetry?.errorsCount > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                {wmsTelemetry.telemetry?.errorsCount || 0}
+              </p>
+            </div>
+          </div>
+
+          {wmsTelemetry.telemetry?.mostUsedLayers && Object.keys(wmsTelemetry.telemetry.mostUsedLayers).length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-800/40">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Capas más Solicitadas</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(wmsTelemetry.telemetry.mostUsedLayers).map(([layer, count]: any) => (
+                  <span key={layer} className="px-2 py-1 bg-slate-950/60 border border-slate-850 rounded text-[10px] text-slate-300 font-mono">
+                    {layer}: <strong className="text-cyan-400">{count}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 mb-6">
 

@@ -14,6 +14,7 @@ import { InstagramProvider } from "./instagramProvider";
 import { RedditProvider } from "./redditProvider";
 import { NoaaProvider } from "./noaa_provider";
 import { HydroFusionProvider } from "./hydroFusionProvider";
+import { InegiWmsProvider } from "./inegi_wms_provider";
 import { CircuitBreaker } from "../infra/circuitBreaker";
 import { GeointTelemetry } from "../infra/geointTelemetry";
 import { GlobalErrorHandler } from "../infra/globalErrorHandler";
@@ -44,6 +45,7 @@ export class ApiOrchestrator {
     this.register(new RedditProvider());
     this.register(new NoaaProvider());
     this.register(new HydroFusionProvider());
+    this.register(new InegiWmsProvider());
   }
 
   private register(provider: IProvider) {

@@ -30,4 +30,5 @@ export interface FloodAssessment {
   radioMetros: number;
   observaciones_campo?: string;
   pronostico_lluvia?: string;
+  recommended_wms_layers?: any[];
 }

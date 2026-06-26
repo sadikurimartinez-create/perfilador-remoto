@@ -32,6 +32,18 @@ const CRIME_TYPES_MAP = [
   { id: "Autopartes & Cristalazo 2025.csv", label: "💎 Autopartes y Cristalazo", color: "#6b7280" }
 ];
 
+const WMS_LAYERS_CATALOG = [
+  { id: "corrientes_agua_lineal", name: "corrientes_agua_lineal", title: "💧 Corrientes de Agua", category: "hidrologia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/hidrografia/wms" },
+  { id: "cuerpos_agua_poligonal", name: "cuerpos_agua_poligonal", title: "🌊 Cuerpos de Agua", category: "hidrologia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/hidrografia/wms" },
+  { id: "cuencas_hidrograficas", name: "cuencas_hidrograficas", title: "⛰️ Cuencas Hidrográficas", category: "hidrologia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/hidrografia/wms" },
+  { id: "curvas_nivel_30m", name: "curvas_nivel_30m", title: "📐 Curvas de Nivel (30m)", category: "topografia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/cem/wms" },
+  { id: "continente_elevacion_cem_30m", name: "continente_elevacion_cem_30m", title: "🏔️ Elevación CEM", category: "topografia", providerUrl: "https://geoportal.inegi.org.mx/geoserver/cem/wms" },
+  { id: "uso_suelo_serie_vii", name: "uso_suelo_serie_vii", title: "🌾 Uso de Suelo Serie VII", category: "uso_suelo", providerUrl: "https://geoportal.inegi.org.mx/geoserver/uso_suelo_vegetacion/wms" },
+  { id: "m_ageb_m_g", name: "m_ageb_m_g", title: "🗺️ AGEB Urbanas", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" },
+  { id: "m_localidad_p_g", name: "m_localidad_p_g", title: "📍 Localidades", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" },
+  { id: "m_municipio_g", name: "m_municipio_g", title: "🏢 Límites Municipales", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" }
+];
+
 const darkMapStyles = [
   { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
@@ -98,6 +110,21 @@ const darkMapStyles = [
   },
 ];
 
+const isWithinAguascalientes = (lat: number, lng: number) => {
+  return lat >= 21.5 && lat <= 22.5 && lng >= -103.0 && lng <= -101.5;
+};
+
+const calculateCentroid = (points: { lat: number; lng: number }[]) => {
+  if (!points || points.length === 0) return { lat: 21.8853, lng: -102.2916 };
+  let latSum = 0;
+  let lngSum = 0;
+  points.forEach(p => {
+    latSum += p.lat;
+    lngSum += p.lng;
+  });
+  return { lat: latSum / points.length, lng: lngSum / points.length };
+};
+
 interface PandillasUIProps {
   projectId?: string;
   onSaveAnalysisToCloud?: (content: string) => Promise<void>;
@@ -132,12 +159,65 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [geometrias, setGeometrias] = useState<GeointeligenciaShape[]>([]);
   const [cronologiaEventos, setCronologiaEventos] = useState<TimelineEvent[]>([]);
   const [imagenesGrafiti, setImagenesGrafiti] = useState<GraffitiImage[]>([]);
+
+  // --- INEGI WMS STATE ---
+  const [selectedWmsLayers, setSelectedWmsLayers] = useState<string[]>([]);
+  const [mapInstance, setMapInstance] = useState<any>(null);
+  const wmsOverlaysRef = useRef<Record<string, any>>({});
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    // Remove existing WMS overlays
+    Object.entries(wmsOverlaysRef.current).forEach(([layerId, overlay]) => {
+      try {
+        const index = mapInstance.overlayMapTypes.indexOf(overlay);
+        if (index !== -1) {
+          mapInstance.overlayMapTypes.removeAt(index);
+        }
+      } catch (e) {
+        console.warn("Error removing WMS overlay:", e);
+      }
+    });
+    wmsOverlaysRef.current = {};
+
+    // Helper to get Web Mercator tile bounds (EPSG:3857)
+    const getEPSG3857BBox = (x: number, y: number, zoom: number) => {
+      const max = 20037508.34;
+      const size = (max * 2) / Math.pow(2, zoom);
+      const minX = -max + x * size;
+      const maxX = -max + (x + 1) * size;
+      const minY = max - (y + 1) * size;
+      const maxY = max - y * size;
+      return `${minX},${minY},${maxX},${maxY}`;
+    };
+
+    // Add selected WMS overlays
+    selectedWmsLayers.forEach(layerId => {
+      const matched = WMS_LAYERS_CATALOG.find(l => l.id === layerId);
+      if (!matched) return;
+
+      const overlay = new window.google.maps.ImageMapType({
+        getTileUrl: (coord: any, zoom: number) => {
+          const bbox = getEPSG3857BBox(coord.x, coord.y, zoom);
+          return `${matched.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${matched.name}&FORMAT=image/png&TRANSPARENT=TRUE&SRS=EPSG:3857&BBOX=${bbox}&WIDTH=256&HEIGHT=256`;
+        },
+        tileSize: new window.google.maps.Size(256, 256),
+        opacity: 0.65,
+        name: matched.title
+      });
+
+      wmsOverlaysRef.current[layerId] = overlay;
+      mapInstance.overlayMapTypes.push(overlay);
+    });
+  }, [selectedWmsLayers, mapInstance]);
   const [archivos, setArchivos] = useState<{ nombre: string; size: number; tipo: string; contexto?: string }[]>([]);
 
   // --- INTERACTION & EDITING SUB-STATES ---
   const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos">("dashboard");
 
   const onMapLoad = useCallback((mapInstance: any) => {
+    setMapInstance(mapInstance);
     if (typeof window !== "undefined") {
       if ((window as any).map && (window as any).map !== mapInstance) {
         try {
@@ -511,22 +591,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     setSelectedGangsForGis([gang.nombre || ""]);
   };
 
-  // --- GEOGRAPHIC VALIDATION BOUNDS FOR AGUASCALIENTES ---
-  const isWithinAguascalientes = (lat: number, lng: number) => {
-    // Envelope for the State of Aguascalientes, Mexico
-    return lat >= 21.5 && lat <= 22.5 && lng >= -103.0 && lng <= -101.5;
-  };
 
-  const calculateCentroid = (points: { lat: number; lng: number }[]) => {
-    if (!points || points.length === 0) return { lat: 21.8853, lng: -102.2916 };
-    let latSum = 0;
-    let lngSum = 0;
-    points.forEach(p => {
-      latSum += p.lat;
-      lngSum += p.lng;
-    });
-    return { lat: latSum / points.length, lng: lngSum / points.length };
-  };
 
   const mapCenter = useMemo(() => {
     if (tempShapePoints.length > 0) {
@@ -2549,6 +2614,40 @@ ${analysisResult.ficha.crossCheckJuridico}
                           </div>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* INEGI WMS LAYERS */}
+                  <div className="space-y-2 bg-slate-950/45 p-3 rounded-xl border border-slate-800/80">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">Capas WMS INEGI (GAIA)</p>
+                    <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                      {WMS_LAYERS_CATALOG.map(wms => {
+                        const isChecked = selectedWmsLayers.includes(wms.id);
+                        return (
+                          <label key={wms.id} className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer hover:bg-slate-900/10 p-0.5 rounded transition-colors">
+                            <span className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${
+                                wms.category === "hidrologia" ? "bg-blue-500" :
+                                wms.category === "topografia" ? "bg-emerald-500" :
+                                wms.category === "uso_suelo" ? "bg-yellow-600" :
+                                wms.category === "organizacion_territorial" ? "bg-purple-500" : "bg-slate-400"
+                              }`} /> {wms.title}
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setSelectedWmsLayers(selectedWmsLayers.filter(x => x !== wms.id));
+                                } else {
+                                  setSelectedWmsLayers([...selectedWmsLayers, wms.id]);
+                                }
+                              }}
+                              className="rounded bg-slate-900 border-slate-850 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                            />
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
 

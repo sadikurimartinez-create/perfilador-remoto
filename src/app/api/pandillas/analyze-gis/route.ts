@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import { InegiWmsProvider } from "@/lib/providers/inegi_wms_provider";
+import { LayerRecommendationEngine } from "@/lib/providers/layerRecommendationEngine";
+import { SpatialLayerEngine } from "@/lib/providers/spatialLayerEngine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,59 +54,6 @@ interface AnalyzeGisRequest {
   allGangs: any[];
 }
 
-function getHaversineDistance(
-  p1: { lat: number; lng: number },
-  p2: { lat: number; lng: number }
-): number {
-  const R = 6371000; // Earth radius in meters
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(p2.lat - p1.lat);
-  const dLng = toRad(p2.lng - p1.lng);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(p1.lat)) *
-      Math.cos(toRad(p2.lat)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function isPointInPolygon(point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]): boolean {
-  if (polygon.length < 3) return false;
-  const x = point.lng, y = point.lat;
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].lng, yi = polygon[i].lat;
-    const xj = polygon[j].lng, yj = polygon[j].lat;
-    const intersect = ((yi > y) !== (yj > y))
-        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-function distToSegment(p: { lat: number; lng: number }, v: { lat: number; lng: number }, w: { lat: number; lng: number }): number {
-  const l2 = getHaversineDistance(v, w);
-  if (l2 === 0) return getHaversineDistance(p, v);
-  const t = Math.max(0, Math.min(1, ((p.lng - v.lng) * (w.lng - v.lng) + (p.lat - v.lat) * (w.lat - v.lat)) / (Math.pow(w.lng - v.lng, 2) + Math.pow(w.lat - v.lat, 2))));
-  const projection = {
-    lat: v.lat + t * (w.lat - v.lat),
-    lng: v.lng + t * (w.lng - v.lng)
-  };
-  return getHaversineDistance(p, projection);
-}
-
-function distToPolyline(point: { lat: number; lng: number }, path: { lat: number; lng: number }[]): number {
-  if (path.length < 2) return Infinity;
-  let minDist = Infinity;
-  for (let i = 0; i < path.length - 1; i++) {
-    const dist = distToSegment(point, path[i], path[i+1]);
-    if (dist < minDist) minDist = dist;
-  }
-  return minDist;
-}
-
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as AnalyzeGisRequest;
@@ -124,7 +74,31 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Calculate Spatial Crossings
+    // 1. Calculate Centroid for Spatial Queries and WMS recommendations
+    const centerLat = domiciles.length > 0 ? domiciles.reduce((acc, d) => acc + d.location.lat, 0) / domiciles.length : 21.8853;
+    const centerLng = domiciles.length > 0 ? domiciles.reduce((acc, d) => acc + d.location.lng, 0) / domiciles.length : -102.2916;
+
+    // 2. Fetch and suggest WMS layers via recommendation engine
+    const wmsProvider = new InegiWmsProvider();
+    const capabilitiesRes = await wmsProvider.fetchData({
+      action: "get_capabilities",
+      lat: centerLat,
+      lng: centerLng
+    });
+
+    const allLayers = capabilitiesRes.status === "ok" && capabilitiesRes.payload
+      ? (capabilitiesRes.payload.layers || [])
+      : [];
+
+    const recommendedLayerIds = LayerRecommendationEngine.recommend("pandillas", {
+      lat: centerLat,
+      lng: centerLng,
+      query: selectedGangs.join(" ")
+    });
+
+    const activeRecommendedLayers = allLayers.filter((l: any) => recommendedLayerIds.includes(l.id));
+
+    // 3. Calculate Spatial Crossings using SpatialLayerEngine
     const crossingsList: string[] = [];
     let insideDomicilesCount = 0;
     let insideIncidentsCount = 0;
@@ -134,16 +108,15 @@ export async function POST(req: Request) {
       const drawType = draw.geometry_type;
       const drawRisk = draw.risk_level;
 
+      const shapeTipo = drawType === "polygon" ? "poligono" as const : (drawType === "corridor" ? "corredor" as const : "buffer" as const);
+
       // Cross Domiciles
       domiciles.forEach(node => {
-        let isInside = false;
-        if (drawType === "polygon") {
-          isInside = isPointInPolygon(node.location, draw.coordinates);
-        } else if (drawType === "corridor") {
-          isInside = distToPolyline(node.location, draw.coordinates) <= 100; // 100 meters corridor buffer
-        } else if (drawType === "buffer") {
-          isInside = getHaversineDistance(node.location, draw.coordinates[0]) <= (draw.radio || 300);
-        }
+        const isInside = SpatialLayerEngine.intersectsShape(node.location, {
+          tipo: shapeTipo,
+          puntos: draw.coordinates,
+          radio: draw.radio
+        });
 
         if (isInside) {
           insideDomicilesCount++;
@@ -153,15 +126,12 @@ export async function POST(req: Request) {
 
       // Cross Incidents
       incidents.forEach(inc => {
-        let isInside = false;
         const incLoc = { lat: inc.lat, lng: inc.lng };
-        if (drawType === "polygon") {
-          isInside = isPointInPolygon(incLoc, draw.coordinates);
-        } else if (drawType === "corridor") {
-          isInside = distToPolyline(incLoc, draw.coordinates) <= 100;
-        } else if (drawType === "buffer") {
-          isInside = getHaversineDistance(incLoc, draw.coordinates[0]) <= (draw.radio || 300);
-        }
+        const isInside = SpatialLayerEngine.intersectsShape(incLoc, {
+          tipo: shapeTipo,
+          puntos: draw.coordinates,
+          radio: draw.radio
+        });
 
         if (isInside) {
           insideIncidentsCount++;
@@ -170,7 +140,7 @@ export async function POST(req: Request) {
       });
     });
 
-    // 2. Compute Quantitative Risk Score (Scale 0.0 - 10.0)
+    // 4. Compute Quantitative Risk Score (Scale 0.0 - 10.0)
     let score = 2.0; // baseline
     const selectedGangDetails = allGangs.filter(g => selectedGangs.includes(g.nombre));
     
@@ -196,7 +166,7 @@ export async function POST(req: Request) {
 
     const finalRiskScore = Math.max(1.0, Math.min(10.0, parseFloat(score.toFixed(1))));
 
-    // 3. Build structured JSON Output
+    // 5. Build structured JSON Output
     const structuredOutput = {
       selected_gangs: selectedGangs,
       active_layers: activeLayers,
@@ -204,11 +174,19 @@ export async function POST(req: Request) {
       influence_zones: influenceZones.map(z => ({ zone_id: z.zone_id, gang: z.gang, influence_score: z.influence_score })),
       analysis_summary: `Se procesó la geointeligencia para ${selectedGangs.length} pandillas (${selectedGangs.join(", ")}). Se activaron las capas: ${activeLayers.join(", ")}. Se detectaron ${insideDomicilesCount} coincidencias de domicilios de integrantes y ${insideIncidentsCount} incidentes delictivos intersecados espacialmente por las ${manualDrawings.length} geometrías trazadas manualmente.`,
       risk_score: finalRiskScore,
-      export_ready: true
+      export_ready: true,
+      recommended_wms_layers: activeRecommendedLayers.map((l: any) => ({
+        id: l.id,
+        name: l.name,
+        title: l.title,
+        category: l.category,
+        description: l.description,
+        url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
+      }))
     };
 
-    // 4. Build deterministic fallback report
-    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount);
+    // 6. Build deterministic fallback report
+    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount, activeRecommendedLayers);
 
     // 5. Call Vertex AI for a premium report if credentials are set
     if (!GCP_PROJECT_ID) {
@@ -302,7 +280,8 @@ function buildDeterministicReport(
   crossingsList: string[],
   finalRiskScore: number,
   insideDomicilesCount: number,
-  insideIncidentsCount: number
+  insideIncidentsCount: number,
+  activeRecommendedLayers: any[] = []
 ): string {
   const {
     selectedGangs = [],
@@ -339,6 +318,14 @@ function buildDeterministicReport(
   markdown += `- **Zonas de Influencia:** ${activeLayers.includes("influence_zones") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
   markdown += `- **Redes de Relaciones:** ${activeLayers.includes("relations") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n`;
   markdown += `- **Incidencia Delictiva:** ${activeLayers.includes("incidents") ? "🟢 ACTIVA" : "🔴 INACTIVA"}\n\n`;
+
+  if (activeRecommendedLayers.length > 0) {
+    markdown += `### Capas WMS del INEGI (GAIA) Integradas\n`;
+    activeRecommendedLayers.forEach(l => {
+      markdown += `- **${l.title}** (${l.category.toUpperCase()}): ${l.description}\n`;
+    });
+    markdown += `\n`;
+  }
 
   markdown += `## 4. Cruce de Delineado Manual y Geometrías Tácticas\n`;
   markdown += `Se evaluaron **${manualDrawings.length} geometrías dibujadas a mano** por el analista:\n`;
