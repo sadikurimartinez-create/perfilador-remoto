@@ -70,6 +70,7 @@ export interface GeointeligenciaShape {
   puntos: { lat: number; lng: number }[]; // Array of points
   radio?: number; // Used for buffer circles
   nivelControlTerritorial: "Nulo" | "Bajo" | "Medio" | "Alto" | "Absoluto";
+  riskLevel?: "low" | "medium" | "high";
   fechaActualizacion: string;
 }
 

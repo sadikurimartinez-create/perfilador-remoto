@@ -20,6 +20,18 @@ import { GISMemberNode, InfluenceZone } from "@/lib/providers/gangInfluenceEngin
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
+const CRIME_TYPES_MAP = [
+  { id: "Homicidios_2025.csv", label: "💀 Homicidios", color: "#f43f5e" },
+  { id: "Feminicidios_2025.csv", label: "🌸 Feminicidios", color: "#ec4899" },
+  { id: "Robo negocio 2025.csv", label: "🏢 Robo a Negocio", color: "#f97316" },
+  { id: "Robo casa 2025.csv", label: "🏠 Robo a Casa", color: "#eab308" },
+  { id: "Robo vehicular 2025.csv", label: "🚗 Robo Vehicular", color: "#3b82f6" },
+  { id: "Robo motocicleta 2025.csv", label: "🏍️ Robo Motocicleta", color: "#06b6d4" },
+  { id: "Extorsion & Fraude 2025.csv", label: "📞 Extorsión y Fraude", color: "#8b5cf6" },
+  { id: "PERSONA 2025.csv", label: "👥 Delitos contra Personas", color: "#10b981" },
+  { id: "Autopartes & Cristalazo 2025.csv", label: "💎 Autopartes y Cristalazo", color: "#6b7280" }
+];
+
 const darkMapStyles = [
   { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
@@ -202,7 +214,19 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [showGisNodes, setShowGisNodes] = useState(true);
   const [showGisZones, setShowGisZones] = useState(true);
   const [showGisRelations, setShowGisRelations] = useState(true);
-  const [gisGangFilter, setGisGangFilter] = useState<string>("all");
+  const [showGisIncidents, setShowGisIncidents] = useState(true);
+  const [selectedGangsForGis, setSelectedGangsForGis] = useState<string[]>([]);
+  const [selectedCrimeTypes, setSelectedCrimeTypes] = useState<string[]>([
+    "Homicidios_2025.csv", "Feminicidios_2025.csv", "Robo negocio 2025.csv",
+    "Robo casa 2025.csv", "Robo vehicular 2025.csv", "Robo motocicleta 2025.csv",
+    "Extorsion & Fraude 2025.csv", "PERSONA 2025.csv", "Autopartes & Cristalazo 2025.csv"
+  ]);
+  const [gisIncidents, setGisIncidents] = useState<any[]>([]);
+  const [isFetchingIncidents, setIsFetchingIncidents] = useState(false);
+  const [editingGeometryId, setEditingGeometryId] = useState<string | null>(null);
+  const [gisStructuredOutput, setGisStructuredOutput] = useState<any | null>(null);
+  const [activeModalTab, setActiveModalTab] = useState<"report" | "json">("report");
+
   const [selectedGisNode, setSelectedGisNode] = useState<GISMemberNode | null>(null);
   const [selectedGisZone, setSelectedGisZone] = useState<InfluenceZone | null>(null);
   const [multiSelectedNodes, setMultiSelectedNodes] = useState<GISMemberNode[]>([]);
@@ -217,15 +241,193 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
   const filteredGisData = useMemo(() => {
     if (!gisAnalysisResult) return { nodes: [], zones: [], relationships: [] };
-    if (gisGangFilter === "all") {
-      return gisAnalysisResult;
+    if (selectedGangsForGis.length === 0) {
+      return { nodes: [], zones: [], relationships: [] };
     }
     return {
-      nodes: gisAnalysisResult.nodes.filter(n => n.gang === gisGangFilter),
-      zones: gisAnalysisResult.zones.filter(z => z.gang === gisGangFilter),
-      relationships: gisAnalysisResult.relationships.filter(r => r.gang === gisGangFilter)
+      nodes: gisAnalysisResult.nodes.filter(n => selectedGangsForGis.includes(n.gang)),
+      zones: gisAnalysisResult.zones.filter(z => selectedGangsForGis.includes(z.gang)),
+      relationships: gisAnalysisResult.relationships.filter(r => selectedGangsForGis.includes(r.gang))
     };
-  }, [gisAnalysisResult, gisGangFilter]);
+  }, [gisAnalysisResult, selectedGangsForGis]);
+
+  const selectedGangsCentroid = useMemo(() => {
+    const activeGangs = storedGangs.filter(g => selectedGangsForGis.includes(g.nombre));
+    if (activeGangs.length === 0) return { lat: 21.8853, lng: -102.2916 };
+    let latSum = 0;
+    let lngSum = 0;
+    let count = 0;
+    activeGangs.forEach(g => {
+      if (g.coordenadas?.lat && g.coordenadas?.lng) {
+        latSum += g.coordenadas.lat;
+        lngSum += g.coordenadas.lng;
+        count++;
+      } else if (g.geometrias && g.geometrias.length > 0) {
+        const c = calculateCentroid(g.geometrias[0].puntos);
+        latSum += c.lat;
+        lngSum += c.lng;
+        count++;
+      }
+    });
+    if (count === 0) return { lat: 21.8853, lng: -102.2916 };
+    return { lat: latSum / count, lng: lngSum / count };
+  }, [storedGangs, selectedGangsForGis]);
+
+  const fetchIncidentsForGis = async (lat: number, lng: number) => {
+    setIsFetchingIncidents(true);
+    try {
+      const res = await fetch("/api/incidencia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lng }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setGisIncidents(json.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching incidents for GIS:", err);
+    } finally {
+      setIsFetchingIncidents(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedGangsForGis.length > 0) {
+      const centroid = selectedGangsCentroid;
+      void fetchIncidentsForGis(centroid.lat, centroid.lng);
+    }
+  }, [selectedGangsForGis, selectedGangsCentroid]);
+
+  const filteredIncidents = useMemo(() => {
+    if (!showGisIncidents) return [];
+    return gisIncidents.filter(inc => selectedCrimeTypes.includes(inc.fuente));
+  }, [gisIncidents, showGisIncidents, selectedCrimeTypes]);
+
+  const handleVertexDrag = (geoId: string, idx: number, lat: number, lng: number) => {
+    if (!isWithinAguascalientes(lat, lng)) {
+      alert("⛔ ERROR DE GEORREFERENCIACIÓN:\nEl punto se encuentra fuera de los límites del Estado de Aguascalientes.");
+      return;
+    }
+    setGeometrias(prev => prev.map(geo => {
+      if (geo.id === geoId) {
+        const nextPoints = [...geo.puntos];
+        nextPoints[idx] = { lat, lng };
+        return {
+          ...geo,
+          puntos: nextPoints,
+          fechaActualizacion: new Date().toISOString().split("T")[0]
+        };
+      }
+      return geo;
+    }));
+  };
+
+  const handleVertexDelete = (geoId: string, idx: number) => {
+    setGeometrias(prev => prev.map(geo => {
+      if (geo.id === geoId) {
+        if (geo.tipo === "poligono" && geo.puntos.length <= 3) {
+          alert("⚠️ Un polígono requiere al menos 3 vértices.");
+          return geo;
+        }
+        if (geo.tipo === "corredor" && geo.puntos.length <= 2) {
+          alert("⚠️ Un corredor requiere al menos 2 vértices.");
+          return geo;
+        }
+        if (geo.tipo === "buffer" || geo.tipo === "zona_riesgo") {
+          alert("⚠️ No se puede eliminar el nodo de una geometría de punto único.");
+          return geo;
+        }
+        const nextPoints = geo.puntos.filter((_, i) => i !== idx);
+        return {
+          ...geo,
+          puntos: nextPoints,
+          fechaActualizacion: new Date().toISOString().split("T")[0]
+        };
+      }
+      return geo;
+    }));
+  };
+
+  const handleExportGisMap = async () => {
+    const el = document.getElementById("gis-tactical-map");
+    if (!el) {
+      alert("No se encontró el contenedor del mapa para exportar.");
+      return;
+    }
+    const html2canvasLib = (await import("html2canvas")).default;
+    try {
+      const canvas = await html2canvasLib(el, { useCORS: true, scale: 2 });
+      const dataUrl = canvas.toDataURL("image/png");
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        alert("El navegador bloqueó la apertura de la ventana de exportación. Habilite las ventanas emergentes.");
+        return;
+      }
+      const nowStr = new Date().toLocaleString("es-MX");
+      const activeLayersStr = [
+        showGisNodes && "Domicilios de Integrantes",
+        showGisZones && "Zonas de Influencia",
+        showGisRelations && "Redes de Proximidad",
+        showGisIncidents && "Incidencia Delictiva"
+      ].filter(Boolean).join(", ") || "Ninguna";
+      const selectedGangsStr = selectedGangsForGis.join(", ") || "Ninguna";
+      const summaryText = gisAnalysisReport || "Realice un análisis primero para ver la síntesis de inteligencia aquí.";
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>REPORTE DE GEOINTELIGENCIA TÁCTICA CEIPOL</title>
+            <style>
+              body { font-family: Arial, sans-serif; background-color: #ffffff; color: #1e293b; margin: 40px; line-height: 1.6; }
+              .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #0f172a; padding-bottom: 20px; margin-bottom: 30px; }
+              .header-title h1 { margin: 0; font-size: 24px; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
+              .header-title p { margin: 5px 0 0 0; color: #64748b; font-size: 12px; font-weight: bold; }
+              .meta-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 15px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin-bottom: 30px; font-size: 12px; }
+              .meta-item strong { color: #334155; }
+              .map-container { text-align: center; margin-bottom: 35px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+              .map-img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+              .section-title { font-size: 16px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; margin-bottom: 15px; text-transform: uppercase; }
+              .content-text { font-size: 13px; color: #334155; white-space: pre-wrap; font-weight: 500; }
+              .footer { margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center; font-size: 10px; color: #94a3b8; }
+              .no-print button { background-color: #0f172a; color: white; border: none; padding: 8px 16px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+              @media print { body { margin: 20px; } .no-print { display: none; } }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="header-title">
+                <h1>Reporte de Geointeligencia GEOINT</h1>
+                <p>Centro de Estudios y Política Criminal (CEIPOL)</p>
+              </div>
+              <div class="no-print">
+                <button onclick="window.print()">Imprimir / Guardar PDF</button>
+              </div>
+            </div>
+            <div class="meta-grid">
+              <div class="meta-item"><strong>Pandillas Analizadas:</strong> ${selectedGangsStr}</div>
+              <div class="meta-item"><strong>Fecha y Hora:</strong> ${nowStr}</div>
+              <div class="meta-item"><strong>Capas GIS Activas:</strong> ${activeLayersStr}</div>
+              <div class="meta-item"><strong>Clasificación:</strong> Reservado - Uso Exclusivo Policial</div>
+            </div>
+            <div class="section-title">Mapa de Situación Geopolítica</div>
+            <div class="map-container">
+              <img class="map-img" src="${dataUrl}" alt="Mapa Táctico GEOINT" />
+            </div>
+            <div class="section-title">Resultados de Cruce y Explicación del Análisis</div>
+            <div class="content-text">${summaryText}</div>
+            <div class="footer">
+              Este documento contiene información confidencial de inteligencia criminal de Aguascalientes.
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err) {
+      console.error("Error al exportar mapa:", err);
+      alert("Error al exportar el mapa táctico.");
+    }
+  };
 
   const crossInfluenceIntersection = useMemo(() => {
     const zonesToAnalyze = multiSelectedZones.length > 0 ? multiSelectedZones : filteredGisData.zones;
@@ -306,6 +508,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
     setImagenesGrafiti(gang.imagenesGrafiti || []);
     setArchivos(gang.archivosAnexos || []);
     setAnalysisResult(null); // Clear previous visual report to let user sweep again
+    setSelectedGangsForGis([gang.nombre || ""]);
   };
 
   // --- GEOGRAPHIC VALIDATION BOUNDS FOR AGUASCALIENTES ---
@@ -477,7 +680,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
   // --- MAP CLICK HANDLER FOR GEOSPATIAL DRAWING ---
   const handleMapClick = (e: google.maps.MapMouseEvent) => {
-    if (!drawingMode || !e.latLng) return;
+    if (!e.latLng) return;
 
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
@@ -487,6 +690,25 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       alert("⛔ ERROR DE GEORREFERENCIACIÓN:\nEl punto seleccionado se encuentra fuera de los límites del Estado de Aguascalientes. Todo elemento cartográfico debe quedar estrictamente contenido dentro de la geografía del estado.");
       return;
     }
+
+    if (editingGeometryId) {
+      const geo = geometrias.find(g => g.id === editingGeometryId);
+      if (geo && (geo.tipo === "poligono" || geo.tipo === "corredor")) {
+        setGeometrias(prev => prev.map(g => {
+          if (g.id === editingGeometryId) {
+            return {
+              ...g,
+              puntos: [...g.puntos, { lat, lng }],
+              fechaActualizacion: new Date().toISOString().split("T")[0]
+            };
+          }
+          return g;
+        }));
+      }
+      return;
+    }
+
+    if (!drawingMode) return;
 
     if (drawingMode === "zona_riesgo" || drawingMode === "buffer") {
       // Single point geometries
@@ -511,13 +733,16 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       return;
     }
 
-    const newShape: GeointeligenciaShape = {
+    const nextRisk = tempShapeControl === "Nulo" || tempShapeControl === "Bajo" ? "low" : tempShapeControl === "Medio" ? "medium" : "high";
+
+    const newShape: GeointeligenciaShape & { riskLevel?: "low" | "medium" | "high" } = {
       id: "shape-" + Date.now(),
       nombre: tempShapeName,
       tipo: drawingMode!,
       puntos: [...tempShapePoints],
       radio: drawingMode === "buffer" ? tempShapeRadius : undefined,
       nivelControlTerritorial: tempShapeControl,
+      riskLevel: nextRisk,
       fechaActualizacion: new Date().toISOString().split("T")[0]
     };
 
@@ -647,30 +872,54 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   };
 
   const handleGisAnalysis = async () => {
-    if (multiSelectedNodes.length === 0 && multiSelectedZones.length === 0) {
-      alert("⚠️ Seleccione al menos un integrante o una zona de influencia para analizar.");
+    if (selectedGangsForGis.length === 0) {
+      alert("⚠️ Seleccione al menos una pandilla para realizar el análisis.");
       return;
     }
     setIsGisAnalyzing(true);
     setGisAnalysisReport(null);
+    setGisStructuredOutput(null);
     try {
+      const activeLayers = [
+        showGisNodes && "domiciles",
+        showGisZones && "influence_zones",
+        showGisRelations && "relations",
+        showGisIncidents && "incidents"
+      ].filter(Boolean) as string[];
+
+      const payload = {
+        selectedGangs: selectedGangsForGis,
+        activeLayers,
+        domiciles: filteredGisData.nodes,
+        influenceZones: filteredGisData.zones,
+        manualDrawings: geometrias.map(geo => ({
+          geometry_type: geo.tipo === "zona_riesgo" ? "buffer" : geo.tipo,
+          coordinates: geo.puntos,
+          radio: geo.radio,
+          risk_level: geo.riskLevel || "medium",
+          label: geo.nombre,
+          timestamp: geo.fechaActualizacion || new Date().toISOString()
+        })),
+        incidents: filteredIncidents,
+        allGangs: storedGangs
+      };
+
       const response = await fetch("/api/pandillas/analyze-gis", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          nodes: multiSelectedNodes,
-          zones: multiSelectedZones,
-          allGangs: storedGangs
-        }),
+        body: JSON.stringify(payload),
       });
+
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || response.statusText);
       }
+
       const data = await response.json();
       setGisAnalysisReport(data.report);
+      setGisStructuredOutput(data.structuredOutput);
     } catch (err: any) {
       console.error("GIS Analysis error:", err);
       alert("❌ Falló el análisis de geointeligencia: " + err.message);
@@ -1995,8 +2244,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                         {[
                           { id: "poligono", label: "🔷 Polígono", desc: "Zonas de dominio" },
                           { id: "corredor", label: "📈 Corredor", desc: "Líneas de paso/rutas" },
-                          { id: "buffer", label: "⭕ Buffer", desc: "Radios de acción" },
-                          { id: "zona_riesgo", label: "📍 Zona Riesgo", desc: "Punto caliente" }
+                          { id: "buffer", label: "⭕ Buffer", desc: "Radios de acción" }
                         ].map(type => (
                           <button
                             key={type.id}
@@ -2020,7 +2268,7 @@ ${analysisResult.ficha.crossCheckJuridico}
 
                     {drawingMode && (
                       <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3.5 animate-fadeIn">
-                        <p className="text-[9px] font-black text-sky-400 uppercase tracking-widest">📐 Editando Nueva Capa GIS</p>
+                        <p className="text-[9px] font-black text-sky-400 uppercase tracking-widest">📐 Dibujando Nueva Capa GIS</p>
 
                         <div className="space-y-1">
                           <label className="text-[9px] font-bold text-slate-400 uppercase">Nombre de la Capa</label>
@@ -2067,7 +2315,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                         )}
 
                         <div className="text-[10px] text-slate-400 bg-slate-900/60 p-2.5 rounded border border-slate-800 leading-relaxed font-medium">
-                          👉 Haga clic directamente sobre el mapa táctico para establecer los vértices correspondientes en la geografía.
+                          👉 Haga clic directamente sobre el mapa táctico para establecer los vértices correspondientes.
                           <div className="mt-1.5 flex justify-between font-bold">
                             <span>Vértices colocados:</span>
                             <span className="text-sky-400">{tempShapePoints.length}</span>
@@ -2099,28 +2347,81 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div className="border-t border-slate-800 pt-3 space-y-2">
                     <h4 className="text-xs font-black text-slate-400 uppercase">Capas Espaciales Guardadas</h4>
                     {geometrias.length === 0 ? (
-                      <p className="text-xs text-slate-500 italic">No hay geometrías delineadas en este registro.</p>
+                      <p className="text-xs text-slate-505 italic">No hay geometrías delineadas aún.</p>
                     ) : (
                       <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                        {geometrias.map((geo, idx) => (
-                          <div key={geo.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 flex justify-between items-center text-xs">
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px]">
-                                  {geo.tipo === "poligono" ? "🔷" : geo.tipo === "corredor" ? "📈" : geo.tipo === "buffer" ? "⭕" : "📍"}
-                                </span>
-                                <span className="font-extrabold text-slate-300 uppercase">{geo.nombre}</span>
+                        {geometrias.map((geo) => {
+                          const isEditing = editingGeometryId === geo.id;
+                          return (
+                            <div key={geo.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 space-y-2 text-xs">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px]">
+                                      {geo.tipo === "poligono" ? "🔷" : geo.tipo === "corredor" ? "📈" : geo.tipo === "buffer" ? "⭕" : "📍"}
+                                    </span>
+                                    <span className="font-extrabold text-slate-300 uppercase">{geo.nombre}</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 mt-1">Control: <strong className="text-sky-400 uppercase">{geo.nivelControlTerritorial}</strong></p>
+                                </div>
+                                <div className="flex gap-1">
+                                  {isEditing ? (
+                                    <button
+                                      onClick={() => setEditingGeometryId(null)}
+                                      className="px-2 py-1 bg-emerald-600 text-slate-950 text-[10px] font-bold rounded"
+                                    >
+                                      Terminar
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setEditingGeometryId(geo.id);
+                                        setDrawingMode(null);
+                                      }}
+                                      className="px-2 py-1 bg-slate-800 text-slate-300 text-[10px] font-bold rounded hover:bg-slate-700"
+                                    >
+                                      Editar
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      if (isEditing) setEditingGeometryId(null);
+                                      setGeometrias(geometrias.filter(g => g.id !== geo.id));
+                                    }}
+                                    className="text-slate-500 hover:text-red-400 text-xs px-1.5"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
                               </div>
-                              <p className="text-[10px] text-slate-500 mt-1">Control: <strong className="text-sky-400 uppercase">{geo.nivelControlTerritorial}</strong></p>
+                              {isEditing && geo.tipo === "buffer" && (
+                                <div className="space-y-1 bg-slate-900/60 p-2 rounded border border-slate-800 animate-fadeIn">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase flex justify-between">
+                                    <span>Radio del Buffer:</span>
+                                    <span className="text-sky-400 font-bold">{geo.radio || 300}m</span>
+                                  </label>
+                                  <input
+                                    type="range"
+                                    min="100"
+                                    max="1500"
+                                    step="50"
+                                    value={geo.radio || 300}
+                                    onChange={e => {
+                                      const newRadius = parseInt(e.target.value);
+                                      setGeometrias(prev => prev.map(g => g.id === geo.id ? { ...g, radio: newRadius } : g));
+                                    }}
+                                    className="w-full accent-sky-500"
+                                  />
+                                </div>
+                              )}
+                              {isEditing && (
+                                <p className="text-[9px] text-slate-500 italic leading-snug">
+                                  💡 Arrastre los vértices numerados sobre el mapa para modificar el trazado. Haga doble clic en un vértice para eliminarlo.
+                                </p>
+                              )}
                             </div>
-                            <button
-                              onClick={() => setGeometrias(geometrias.filter(g => g.id !== geo.id))}
-                              className="text-slate-500 hover:text-red-400 text-xs"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2133,26 +2434,42 @@ ${analysisResult.ficha.crossCheckJuridico}
                     </h3>
                   </div>
 
-                  {/* FILTER BY GANG */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-extrabold text-slate-400 uppercase block">Filtro por Pandilla</label>
-                    <select
-                      value={gisGangFilter}
-                      onChange={e => {
-                        setGisGangFilter(e.target.value);
-                        setSelectedGisNode(null);
-                        setSelectedGisZone(null);
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 font-extrabold"
-                    >
-                      <option value="all">🌐 Todas las pandillas</option>
-                      {storedGangs.map((g) => (
-                        <option key={g.id} value={g.nombre}>👥 {g.nombre}</option>
-                      ))}
-                    </select>
+                  {/* MULTI-GANG CHECKBOXES */}
+                  <div className="space-y-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">👥 Seleccionar Pandillas ({selectedGangsForGis.length})</p>
+                    {storedGangs.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 italic">No hay pandillas registradas</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                        {storedGangs.map((g) => {
+                          const isChecked = selectedGangsForGis.includes(g.nombre);
+                          return (
+                            <label key={g.id} className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer hover:bg-slate-900/40 p-1 rounded transition-colors">
+                              <span className="flex items-center gap-2">
+                                👥 {g.nombre}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setSelectedGangsForGis(selectedGangsForGis.filter(n => n !== g.nombre));
+                                  } else {
+                                    setSelectedGangsForGis([...selectedGangsForGis, g.nombre]);
+                                  }
+                                  setSelectedGisNode(null);
+                                  setSelectedGisZone(null);
+                                }}
+                                className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
-                  {/* LAYER TOGGLES */}
+                  {/* LAYER TOGGLES WITH CRIME FILTERS */}
                   <div className="space-y-2 bg-slate-950/45 p-3 rounded-xl border border-slate-800/80">
                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">Capas GIS Activas</p>
                     <div className="space-y-2">
@@ -2189,7 +2506,72 @@ ${analysisResult.ficha.crossCheckJuridico}
                           className="rounded bg-slate-900 border-slate-850 text-sky-500 focus:ring-0 w-3.5 h-3.5"
                         />
                       </label>
+                      
+                      <label className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer pt-1 border-t border-slate-900/60">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" /> Incidencia Delictiva
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={showGisIncidents}
+                          onChange={e => setShowGisIncidents(e.target.checked)}
+                          className="rounded bg-slate-900 border-slate-850 text-sky-500 focus:ring-0 w-3.5 h-3.5"
+                        />
+                      </label>
+
+                      {showGisIncidents && (
+                        <div className="pl-4 pt-1.5 space-y-1.5 border-l border-slate-800 animate-fadeIn">
+                          <p className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Tipos de Delito</p>
+                          <div className="space-y-1 max-h-[120px] overflow-y-auto pr-1">
+                            {CRIME_TYPES_MAP.map(crime => {
+                              const isChecked = selectedCrimeTypes.includes(crime.id);
+                              return (
+                                <label key={crime.id} className="flex items-center justify-between text-[10px] text-slate-400 cursor-pointer hover:bg-slate-900/20 p-0.5 rounded transition-colors">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: crime.color }} />
+                                    {crime.label}
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      if (isChecked) {
+                                        setSelectedCrimeTypes(selectedCrimeTypes.filter(x => x !== crime.id));
+                                      } else {
+                                        setSelectedCrimeTypes([...selectedCrimeTypes, crime.id]);
+                                      }
+                                    }}
+                                    className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3 h-3"
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  </div>
+
+                  {/* UNIFIED GIS ANALYSIS TRIGGER */}
+                  <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 space-y-2.5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase leading-relaxed font-mono">
+                      ⚡ Análisis geoespacial cruzando pandillas, capas activas, trazos manuales y delitos de sector.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGisAnalysis}
+                      disabled={isGisAnalyzing || selectedGangsForGis.length === 0}
+                      className="w-full h-9 bg-gradient-to-r from-sky-400 to-indigo-600 hover:opacity-90 disabled:opacity-40 text-slate-950 text-xs font-black uppercase rounded-lg shadow-lg flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      {isGisAnalyzing ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
+                          <span>Analizando...</span>
+                        </>
+                      ) : (
+                        <span>Ejecutar Análisis GEOINT</span>
+                      )}
+                    </button>
                   </div>
 
                   {/* INTERACTIVE DETAIL VIEW */}
@@ -2342,28 +2724,10 @@ ${analysisResult.ficha.crossCheckJuridico}
                           </div>
                         </div>
                       )}
-
-                      <div className="pt-2.5 border-t border-slate-900/60">
-                        <button
-                          type="button"
-                          onClick={handleGisAnalysis}
-                          disabled={isGisAnalyzing}
-                          className="w-full h-8 bg-gradient-to-r from-sky-400 to-indigo-600 hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-black uppercase rounded-lg shadow-lg flex items-center justify-center gap-1.5 transition-all"
-                        >
-                          {isGisAnalyzing ? (
-                            <>
-                              <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
-                              <span>Analizando...</span>
-                            </>
-                          ) : (
-                            <span>Análisis</span>
-                          )}
-                        </button>
-                      </div>
                     </div>
                   )}
 
-                  {/* CROSS INFLUENCE INTERSECTIONS OVERLAY (Análisis de Influencia Cruzada) */}
+                  {/* CROSS INFLUENCE INTERSECTIONS OVERLAY */}
                   <div className="space-y-2 pt-2 border-t border-slate-850 mt-auto">
                     <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">⚡ Análisis de Influencia Cruzada</h4>
                     
@@ -2403,7 +2767,7 @@ ${analysisResult.ficha.crossCheckJuridico}
               <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
                 <div>
                   <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">🗺️ Canvas de Geopolítica y Control Territorial</h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Delineado con geovalidación obligatoria para Aguascalientes. Prohibido fallbacks automáticos centralizados.</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Delineado con geovalidación obligatoria para Aguascalientes. Prohibido fallbacks automáticos.</p>
                 </div>
               </div>
 
@@ -2412,7 +2776,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                   Cargando cartografía táctica...
                 </div>
               ) : (
-                <div className="relative h-[450px] w-full rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                <div id="gis-tactical-map" className="relative h-[450px] w-full rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
                   <GoogleMap
                     mapContainerStyle={{ width: "100%", height: "100%" }}
                     center={mapCenter}
@@ -2424,6 +2788,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                       mapTypeControl: false,
                       fullscreenControl: false,
                       styles: darkMapStyles,
+                      disableDoubleClickZoom: drawingMode !== null || editingGeometryId !== null
                     }}
                   >
                     {/* DRAWING TEMP POINTS */}
@@ -2485,8 +2850,9 @@ ${analysisResult.ficha.crossCheckJuridico}
                     )}
 
                     {/* SAVED GEOMETRIES RENDERING */}
-                    {geometrias.map((geo, idx) => {
-                      const color =
+                    {geometrias.map((geo) => {
+                      const isEditing = editingGeometryId === geo.id;
+                      const color = isEditing ? "#eab308" :
                         geo.nivelControlTerritorial === "Absoluto" ? "#ef4444" :
                         geo.nivelControlTerritorial === "Alto" ? "#f97316" :
                         geo.nivelControlTerritorial === "Medio" ? "#eab308" : "#3b82f6";
@@ -2499,9 +2865,9 @@ ${analysisResult.ficha.crossCheckJuridico}
                               options={{
                                 strokeColor: color,
                                 strokeOpacity: 0.9,
-                                strokeWeight: 2.5,
+                                strokeWeight: isEditing ? 3.5 : 2.5,
                                 fillColor: color,
-                                fillOpacity: 0.25,
+                                fillOpacity: isEditing ? 0.35 : 0.25,
                               }}
                             />
                           )}
@@ -2512,7 +2878,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                               options={{
                                 strokeColor: color,
                                 strokeOpacity: 0.9,
-                                strokeWeight: 4,
+                                strokeWeight: isEditing ? 5 : 4,
                               }}
                             />
                           )}
@@ -2524,26 +2890,43 @@ ${analysisResult.ficha.crossCheckJuridico}
                               options={{
                                 strokeColor: color,
                                 strokeOpacity: 0.8,
-                                strokeWeight: 1.5,
+                                strokeWeight: isEditing ? 3 : 1.5,
                                 fillColor: color,
-                                fillOpacity: 0.15,
+                                fillOpacity: isEditing ? 0.25 : 0.15,
                               }}
                             />
                           )}
 
-                          {geo.tipo === "zona_riesgo" && (
+                          {/* INTERACTIVE MARKERS FOR EDITING GEOMETRY VERTICES */}
+                          {isEditing && geo.puntos.map((pt, pIdx) => (
                             <Marker
-                              position={geo.puntos[0]}
+                              key={`edit-vertex-${geo.id}-${pIdx}`}
+                              position={pt}
+                              draggable={true}
+                              onDragEnd={(e) => {
+                                if (e.latLng) {
+                                  handleVertexDrag(geo.id, pIdx, e.latLng.lat(), e.latLng.lng());
+                                }
+                              }}
+                              onDblClick={() => {
+                                handleVertexDelete(geo.id, pIdx);
+                              }}
+                              label={{
+                                text: String(pIdx + 1),
+                                color: "#ffffff",
+                                fontSize: "9px",
+                                fontWeight: "bold"
+                              }}
                               icon={{
                                 path: 0,
-                                scale: 8,
-                                fillColor: color,
+                                scale: 7,
+                                fillColor: "#eab308",
                                 fillOpacity: 1,
                                 strokeColor: "#ffffff",
-                                strokeWeight: 2,
+                                strokeWeight: 1.5,
                               }}
                             />
-                          )}
+                          ))}
                         </React.Fragment>
                       );
                     })}
@@ -2605,7 +2988,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                             icon={{
                               path: 0, // Circle
                               scale: isSelected ? 9 : isMultiSelected ? 8 : 6,
-                              fillColor: isSelected ? "#ec4899" : isMultiSelected ? "#a855f7" : "#06b6d4", // Pink/Purple for selected/multi-selected, Cyan/Blue for default
+                              fillColor: isSelected ? "#ec4899" : isMultiSelected ? "#a855f7" : "#06b6d4",
                               fillOpacity: 1,
                               strokeColor: "#ffffff",
                               strokeWeight: isSelected || isMultiSelected ? 2 : 1.5,
@@ -2641,6 +3024,27 @@ ${analysisResult.ficha.crossCheckJuridico}
                         </React.Fragment>
                       );
                     })}
+
+                    {/* INCIDENCIA DELICTIVA PINS */}
+                    {showGisIncidents && filteredIncidents.map((inc, idx) => {
+                      const crimeMeta = CRIME_TYPES_MAP.find(c => c.id === inc.fuente);
+                      const crimeColor = crimeMeta?.color || "#ef4444";
+                      return (
+                        <Marker
+                          key={`crime-incident-${idx}`}
+                          position={{ lat: inc.lat, lng: inc.lng }}
+                          title={`${inc.tipo || "Delito"} (${inc.fuente})`}
+                          icon={{
+                            path: 0, // Circle
+                            scale: 5,
+                            fillColor: crimeColor,
+                            fillOpacity: 0.9,
+                            strokeColor: "#ffffff",
+                            strokeWeight: 1,
+                          }}
+                        />
+                      );
+                    })}
                   </GoogleMap>
 
                   {/* FLOATING LEGEND */}
@@ -2653,6 +3057,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                 </div>
               )}
             </div>
+
             {/* GIS ANALYSIS REPORT MODAL */}
             {gisAnalysisReport && (
               <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fadeIn">
@@ -2673,23 +3078,71 @@ ${analysisResult.ficha.crossCheckJuridico}
                     </button>
                   </div>
 
+                  {/* Modal Tab Switcher */}
+                  <div className="flex bg-slate-950 p-1 border-b border-slate-800">
+                    <button
+                      onClick={() => setActiveModalTab("report")}
+                      className={`flex-1 py-2 text-xs font-black uppercase tracking-wider transition-all ${
+                        activeModalTab === "report"
+                          ? "bg-slate-900 text-sky-400 border-b-2 border-sky-400"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      📄 Informe Narrativo
+                    </button>
+                    <button
+                      onClick={() => setActiveModalTab("json")}
+                      className={`flex-1 py-2 text-xs font-black uppercase tracking-wider transition-all ${
+                        activeModalTab === "json"
+                          ? "bg-slate-900 text-purple-400 border-b-2 border-purple-400"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      ⚙️ Payload JSON Estructurado
+                    </button>
+                  </div>
+
                   {/* Modal Content */}
                   <div className="p-6 overflow-y-auto flex-1 space-y-4 text-xs text-slate-300 leading-relaxed font-semibold">
-                    <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-850 whitespace-pre-wrap font-sans">
-                      {gisAnalysisReport}
-                    </div>
+                    {activeModalTab === "report" ? (
+                      <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-850 whitespace-pre-wrap font-sans">
+                        {gisAnalysisReport}
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(JSON.stringify(gisStructuredOutput, null, 2));
+                            alert("📋 ¡JSON copiado con éxito!");
+                          }}
+                          className="absolute right-4 top-4 px-2.5 py-1 bg-purple-950/60 border border-purple-800 text-[10px] font-black text-purple-300 rounded hover:bg-purple-900 transition-colors uppercase"
+                        >
+                          Copiar JSON
+                        </button>
+                        <pre className="bg-slate-950/80 p-5 rounded-xl border border-slate-850 font-mono text-[11px] text-purple-300 overflow-x-auto whitespace-pre">
+                          {JSON.stringify(gisStructuredOutput, null, 2)}
+                        </pre>
+                      </div>
+                    )}
                   </div>
 
                   {/* Modal Footer */}
                   <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex justify-end gap-2.5">
                     <button
+                      onClick={handleExportGisMap}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-slate-100 font-extrabold rounded-lg text-xs transition-colors uppercase"
+                    >
+                      🖨️ Exportar Mapa GEOINT
+                    </button>
+                    <button
                       onClick={() => {
-                        navigator.clipboard.writeText(gisAnalysisReport);
-                        alert("📋 ¡Informe copiado al portapapeles con éxito!");
+                        const content = activeModalTab === "report" ? gisAnalysisReport : JSON.stringify(gisStructuredOutput, null, 2);
+                        navigator.clipboard.writeText(content || "");
+                        alert("📋 ¡Contenido copiado al portapapeles con éxito!");
                       }}
                       className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold rounded-lg text-xs transition-colors"
                     >
-                      Copiar Informe
+                      Copiar
                     </button>
                     <button
                       onClick={() => setGisAnalysisReport(null)}
