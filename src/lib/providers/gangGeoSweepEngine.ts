@@ -153,6 +153,108 @@ export class GangGeoSweepEngine {
     const fullText = `${narrativeContext} ${softPrompt}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     let keywordsMatched = 0;
 
+    // --- STEP 2.1: DATABASE-WIDE TEXT MATCHING ENGINE ---
+    // Search the registered gangs database for name, alias, members, addresses, and grab locations
+    const databaseMatches: { lat: number; lng: number; label: string; confidence: number; source: "NARRATIVE_ESTIMATE" }[] = [];
+
+    registeredGangs.forEach(gang => {
+      const gangNameLower = (gang.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const gangAliasLower = (gang.aliasConocidos || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const gangZoneLower = (gang.zonaInfluencia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+      let isGangMatched = false;
+      if (gangNameLower && fullText.includes(gangNameLower)) {
+        isGangMatched = true;
+      }
+      if (gangAliasLower && fullText.includes(gangAliasLower)) {
+        isGangMatched = true;
+      }
+
+      // 1. Search members
+      const members = gang.integrantes || [];
+      members.forEach((m: any) => {
+        const mNameLower = (m.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const mAliasLower = (m.alias || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        let isMemberMatched = false;
+        if (mNameLower && mNameLower.length > 3 && fullText.includes(mNameLower)) {
+          isMemberMatched = true;
+        }
+        if (mAliasLower && mAliasLower.length > 2 && fullText.includes(mAliasLower)) {
+          isMemberMatched = true;
+        }
+
+        if (isMemberMatched) {
+          isGangMatched = true;
+          // If the member has a georreferencia/location, use it!
+          if (m.georreferencia && typeof m.georreferencia.lat === "number" && typeof m.georreferencia.lng === "number") {
+            databaseMatches.push({
+              lat: m.georreferencia.lat,
+              lng: m.georreferencia.lng,
+              label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
+              confidence: 0.90,
+              source: "NARRATIVE_ESTIMATE"
+            });
+          } else if (m.location && typeof m.location.lat === "number" && typeof m.location.lng === "number") {
+            databaseMatches.push({
+              lat: m.location.lat,
+              lng: m.location.lng,
+              label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
+              confidence: 0.90,
+              source: "NARRATIVE_ESTIMATE"
+            });
+          }
+        }
+      });
+
+      // 2. Search geometries/points of the matched gang
+      if (isGangMatched) {
+        const geometries = gang.geometrias || [];
+        geometries.forEach((geo: any) => {
+          if (geo.puntos && geo.puntos.length > 0) {
+            geo.puntos.forEach((p: any) => {
+              databaseMatches.push({
+                lat: p.lat,
+                lng: p.lng,
+                label: `Punto de Control: ${geo.nombre} (${gang.nombre})`,
+                confidence: 0.85,
+                source: "NARRATIVE_ESTIMATE"
+              });
+            });
+          }
+        });
+      }
+
+      // 3. Search zone name inside narrative
+      if (gangZoneLower && gangZoneLower.length > 3 && fullText.includes(gangZoneLower)) {
+        // Find default coordinates for this zone inside KEYWORD_COORDINATE_MAP
+        for (const [key, geo] of Object.entries(KEYWORD_COORDINATE_MAP)) {
+          if (gangZoneLower.includes(key) || key.includes(gangZoneLower)) {
+            databaseMatches.push({
+              lat: geo.lat + (Math.random() - 0.5) * 0.002,
+              lng: geo.lng + (Math.random() - 0.5) * 0.002,
+              label: `Zona de Influencia: ${gang.nombre} en ${geo.label}`,
+              confidence: 0.80,
+              source: "NARRATIVE_ESTIMATE"
+            });
+          }
+        }
+      }
+    });
+
+    // Add database matches to detectedLocations and pointsForClustering
+    databaseMatches.forEach(match => {
+      if (!detectedLocations.some(l => Math.abs(l.lat - match.lat) < 0.0001 && Math.abs(l.lng - match.lng) < 0.0001)) {
+        detectedLocations.push(match);
+        pointsForClustering.push({
+          lat: match.lat,
+          lng: match.lng,
+          confidence: match.confidence,
+          source: match.source
+        });
+      }
+    });
+
     for (const [key, geo] of Object.entries(KEYWORD_COORDINATE_MAP)) {
       if (fullText.includes(key)) {
         keywordsMatched++;

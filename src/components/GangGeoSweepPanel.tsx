@@ -120,30 +120,26 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   // Execute the automated spatial sweeps
   const handleRunGeoSweep = async () => {
     if (!narrative.trim()) {
-      alert("⚠️ Por favor describe el contexto del evento observado antes de iniciar el barrido.");
+      alert("⚠️ Por favor describa qué información desea localizar dentro de la Base de Datos de Pandillas.");
       return;
     }
 
     setIsProcessing(true);
-    setProgressMsg("Iniciando Extracción de Capa de Datos...");
+    setProgressMsg("Iniciando barrido de base de datos...");
 
     try {
       // Step 1: Simulated delays for realistic premium feeling
       await new Promise(resolve => setTimeout(resolve, 800));
-      setProgressMsg("Extrayendo geolocalización EXIF de evidencia...");
-
-      // Step 2: Query existing registered gangs database to cross-reference
-      await new Promise(resolve => setTimeout(resolve, 600));
-      setProgressMsg("Cruzando datos con el Inventario Estatal de Pandillas...");
+      setProgressMsg("Cruzando información con el inventario de pandillas...");
       const dbGangs = await PandillasService.getAllGangs();
 
-      // Step 3: Run the custom spatial sweep engine
-      await new Promise(resolve => setTimeout(resolve, 650));
-      setProgressMsg("Correlacionando patrones geoespaciales y OSINT...");
+      // Step 2: Run the custom spatial sweep engine
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setProgressMsg("Consolidando registros de inteligencia...");
       const result = await GangGeoSweepEngine.executeSweep(
-        uploadedFiles,
+        [],
         narrative,
-        softPrompt,
+        "",
         dbGangs
       );
 
@@ -186,7 +182,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
       });
 
       await onUpdateProject();
-      alert("✅ ¡Resultados del barrido geosemántico vinculados exitosamente al expediente actual!");
+      alert("✅ ¡Resultados del barrido vinculados exitosamente al expediente actual!");
     } catch (err: any) {
       console.error("[GangGeoSweepPanel] Error linking sweep:", err);
       alert("❌ Error al guardar y vincular el barrido: " + err.message);
@@ -251,109 +247,51 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
-              🧠 Descubrimiento Geoespacial Basado en Evidencia
+              📡 Barrido de Pandillas
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Rastreo geosemántico táctico utilizando análisis EXIF, estimación visual y cruce territorial OSINT.
-            </p>
           </div>
-          <span className="text-[10px] font-mono font-bold bg-sky-950 text-sky-400 border border-sky-900/50 px-3 py-1 rounded-full uppercase tracking-widest">
-            Automatizado v3.0
-          </span>
         </div>
 
         {/* Input Pipeline (Only display when no active sweep result is shown) */}
         {!sweepResult && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Context forms (7 cols) */}
-            <div className="lg:col-span-7 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-300 uppercase tracking-wider block">
-                  1. Contexto Narrativo del Evento *
-                </label>
-                <textarea
-                  placeholder="Describe la situación observada, calle, colonia o indicios visuales relevantes (Ej. 'Se avistaron sujetos del grupo Los Monstruos realizando pintas tipo frontera en el sector Loma del Cardenal, cerca de Mirador de las Culturas, portando marcas alusivas...')"
-                  value={narrative}
-                  onChange={e => setNarrative(e.target.value)}
-                  rows={4}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50 transition-colors"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-wider block flex justify-between">
-                  <span>2. Análisis de Entorno (Soft Prompt)</span>
-                  <span className="text-[10px] text-slate-500 italic lowercase">Opcional</span>
-                </label>
-                <textarea
-                  placeholder="Describe personas, vestimenta, actividad urbana o contexto demográfico del entorno..."
-                  value={softPrompt}
-                  onChange={e => setSoftPrompt(e.target.value)}
-                  rows={2}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 placeholder-slate-700 focus:outline-none focus:border-sky-500/50 transition-colors"
-                />
-              </div>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-black text-slate-300 uppercase tracking-wider block">
+                Barrido Soft
+              </label>
+              <textarea
+                placeholder="Ejemplos:
+• Buscar integrantes relacionados con...
+• Localizar pandillas que operen en...
+• Buscar domicilios asociados a...
+• Identificar zonas de influencia cercanas a...
+• Buscar pandillas rivales de...
+• Localizar grafitis relacionados con..."
+                value={narrative}
+                onChange={e => setNarrative(e.target.value)}
+                rows={6}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50 transition-colors"
+              />
+              <span className="text-[10px] text-slate-400 italic block mt-1">
+                Describa qué información desea localizar dentro de la Base de Datos de Pandillas.
+              </span>
             </div>
 
-            {/* Photo Drops & Metadata (5 cols) */}
-            <div className="lg:col-span-5 flex flex-col justify-between space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-300 uppercase tracking-wider block">
-                  3. Módulo de Evidencia Fotográfica (Múltiples)
-                </label>
-
-                {/* Upload Trigger Area */}
-                <div className="border border-dashed border-slate-800 hover:border-sky-500/50 bg-slate-950/40 rounded-xl p-6 transition-all text-center relative group">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <span className="text-2xl block mb-1">📸</span>
-                  <span className="text-xs font-extrabold text-slate-300 block">Arrastrar o seleccionar imágenes</span>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">Soporte EXIF GPS parser & visual estimate</span>
-                </div>
-
-                {/* Previews Grid */}
-                {filePreviews.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2 mt-2 max-h-[140px] overflow-y-auto pr-1">
-                    {filePreviews.map((f, idx) => (
-                      <div key={idx} className="relative rounded-lg overflow-hidden border border-slate-800 group h-[55px]">
-                        <img src={f.preview} alt="upload preview" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFile(idx)}
-                          className="absolute inset-0 bg-red-950/80 text-white font-bold text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          ✕ Quitar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Execution Block */}
-              <button
-                type="button"
-                onClick={handleRunGeoSweep}
-                disabled={isProcessing}
-                className="w-full h-[45px] bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-600 hover:opacity-90 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all"
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent" />
-                    <span>Procesando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>📡 Lanzar Barrido Geosemántico</span>
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleRunGeoSweep}
+              disabled={isProcessing}
+              className="w-full h-[45px] bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-600 hover:opacity-90 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent" />
+                  <span>Procesando...</span>
+                </>
+              ) : (
+                <span>Ejecutar Barrido</span>
+              )}
+            </button>
           </div>
         )}
 

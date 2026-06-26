@@ -207,6 +207,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [selectedGisZone, setSelectedGisZone] = useState<InfluenceZone | null>(null);
   const [multiSelectedNodes, setMultiSelectedNodes] = useState<GISMemberNode[]>([]);
   const [multiSelectedZones, setMultiSelectedZones] = useState<InfluenceZone[]>([]);
+  const [isGisAnalyzing, setIsGisAnalyzing] = useState(false);
+  const [gisAnalysisReport, setGisAnalysisReport] = useState<string | null>(null);
 
   // Process and memoize GIS Layer structures
   const gisAnalysisResult = useMemo(() => {
@@ -642,6 +644,39 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
     setCronologiaEventos(prev => [...prev, newEvent].sort((a, b) => b.fecha.localeCompare(a.fecha)));
     setTempEvent({ fecha: new Date().toISOString().split("T")[0], titulo: "", descripcion: "", gravedad: "Media", categoria: "otro", lugar: "" });
+  };
+
+  const handleGisAnalysis = async () => {
+    if (multiSelectedNodes.length === 0 && multiSelectedZones.length === 0) {
+      alert("⚠️ Seleccione al menos un integrante o una zona de influencia para analizar.");
+      return;
+    }
+    setIsGisAnalyzing(true);
+    setGisAnalysisReport(null);
+    try {
+      const response = await fetch("/api/pandillas/analyze-gis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nodes: multiSelectedNodes,
+          zones: multiSelectedZones,
+          allGangs: storedGangs
+        }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || response.statusText);
+      }
+      const data = await response.json();
+      setGisAnalysisReport(data.report);
+    } catch (err: any) {
+      console.error("GIS Analysis error:", err);
+      alert("❌ Falló el análisis de geointeligencia: " + err.message);
+    } finally {
+      setIsGisAnalyzing(false);
+    }
   };
 
   // --- GRANULAR GEOSPATIAL SWEEPS ---
@@ -2307,6 +2342,24 @@ ${analysisResult.ficha.crossCheckJuridico}
                           </div>
                         </div>
                       )}
+
+                      <div className="pt-2.5 border-t border-slate-900/60">
+                        <button
+                          type="button"
+                          onClick={handleGisAnalysis}
+                          disabled={isGisAnalyzing}
+                          className="w-full h-8 bg-gradient-to-r from-sky-400 to-indigo-600 hover:opacity-90 disabled:opacity-50 text-slate-950 text-xs font-black uppercase rounded-lg shadow-lg flex items-center justify-center gap-1.5 transition-all"
+                        >
+                          {isGisAnalyzing ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
+                              <span>Analizando...</span>
+                            </>
+                          ) : (
+                            <span>Análisis</span>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -2600,6 +2653,54 @@ ${analysisResult.ficha.crossCheckJuridico}
                 </div>
               )}
             </div>
+            {/* GIS ANALYSIS REPORT MODAL */}
+            {gisAnalysisReport && (
+              <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fadeIn">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+                  {/* Modal Header */}
+                  <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                        📋 INFORME DE INTELIGENCIA TÁCTICA GEOINT
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-1">Análisis cruzado de proximidad territorial, clicas y conflictos.</p>
+                    </div>
+                    <button
+                      onClick={() => setGisAnalysisReport(null)}
+                      className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Modal Content */}
+                  <div className="p-6 overflow-y-auto flex-1 space-y-4 text-xs text-slate-300 leading-relaxed font-semibold">
+                    <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-850 whitespace-pre-wrap font-sans">
+                      {gisAnalysisReport}
+                    </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex justify-end gap-2.5">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(gisAnalysisReport);
+                        alert("📋 ¡Informe copiado al portapapeles con éxito!");
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold rounded-lg text-xs transition-colors"
+                    >
+                      Copiar Informe
+                    </button>
+                    <button
+                      onClick={() => setGisAnalysisReport(null)}
+                      className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black uppercase rounded-lg text-xs transition-colors"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
