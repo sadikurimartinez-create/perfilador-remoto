@@ -52,7 +52,7 @@ export class CopernicusProvider implements IProvider {
         // Query Sentinel products covering coordinates via standard OData
         const point = `POINT(${lng} ${lat})`;
         const url = `https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=OData.CSC.Intersects(area=geography'SRID=4326;${point}')&$top=2`;
-        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+        const res = await fetch(url, { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(4000) });
         if (!res.ok) throw new Error(`Copernicus OData Catalog returned HTTP status ${res.status}`);
         const odata = await res.json();
         data = {
@@ -67,7 +67,7 @@ export class CopernicusProvider implements IProvider {
       } else if (action === "stac") {
         // Verify connectivity with Copernicus STAC (SpatioTemporal Asset Catalog) API
         const url = "https://catalogue.dataspace.copernicus.eu/stac";
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
         if (!res.ok) throw new Error(`Copernicus STAC Catalog endpoint returned status ${res.status}`);
         const stac = await res.json();
         data = {
@@ -154,7 +154,7 @@ export class CopernicusProvider implements IProvider {
 
       // Query Copernicus OData catalog root
       const url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$top=1";
-      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      const res = await fetch(url, { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(4000) });
       if (!res.ok) {
         throw new Error(`Copernicus OData endpoint returned HTTP status ${res.status}`);
       }

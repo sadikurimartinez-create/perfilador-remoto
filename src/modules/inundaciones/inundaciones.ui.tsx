@@ -964,6 +964,57 @@ ${selectedAssessment.recomendaciones.map((r, i) => `- ${r}`).join("\n")}
                 </div>
               </div>
 
+              {/* MSCE TRUTH SCORE & TELEMETRY PANEL */}
+              {selectedAssessment.msce_report && (
+                <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 shadow-inner space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div>
+                      <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                        🧠 Verdad Operacional (MSCE Telemetry)
+                      </h4>
+                      <p className="text-[10px] text-slate-500">Correlación dinámica y confiabilidad ponderada de proveedores</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-slate-400 uppercase font-black">Fuente Dominante:</span>
+                      <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded text-[9px] font-black uppercase">
+                        {selectedAssessment.msce_report.dominantProvider?.toUpperCase()}
+                      </span>
+                      <span className="text-sm font-black text-cyan-400 font-mono">
+                        {selectedAssessment.msce_report.dominantScore}%
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-300 italic leading-relaxed">
+                    <strong>Ponderación:</strong> {selectedAssessment.msce_report.dominantReason}
+                  </p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-900">
+                    {selectedAssessment.msce_report.results?.map((res: any) => (
+                      <div key={res.providerId} className="flex items-center justify-between p-2 bg-slate-950/40 border border-slate-900 rounded-lg text-[10px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            res.decision === "use" ? "bg-emerald-500" :
+                            res.decision === "merge" ? "bg-sky-500" :
+                            res.decision === "degrade" ? "bg-amber-500" : "bg-slate-700"
+                          }`} />
+                          <span className="font-bold text-slate-300 truncate" title={res.name}>{res.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[8px] font-black uppercase px-1 rounded border ${
+                            res.decision === "use" ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/5" :
+                            res.decision === "merge" ? "border-sky-500/30 text-sky-400 bg-sky-500/5" :
+                            res.decision === "degrade" ? "border-amber-500/30 text-amber-400 bg-amber-500/5" : "border-slate-800 text-slate-500"
+                          }`}>
+                            {res.decision}
+                          </span>
+                          <span className="font-mono text-slate-400 font-bold w-8 text-right">{res.truthScore}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* TABS DE DETALLE */}
               <div className="space-y-4">
                 <div className="flex border-b border-slate-800">

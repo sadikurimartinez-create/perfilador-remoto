@@ -4,6 +4,7 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 import { InegiWmsProvider } from "@/lib/providers/inegi_wms_provider";
 import { LayerRecommendationEngine } from "@/lib/providers/layerRecommendationEngine";
 import { SpatialLayerEngine } from "@/lib/providers/spatialLayerEngine";
+import { MultiSourceCorrelationEngine } from "@/lib/geoint/multiSourceCorrelationEngine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,6 +99,13 @@ export async function POST(req: Request) {
 
     const activeRecommendedLayers = allLayers.filter((l: any) => recommendedLayerIds.includes(l.id));
 
+    // Correlate sources using MSCE
+    const msceReport = MultiSourceCorrelationEngine.correlate("pandillas", {
+      lat: centerLat,
+      lng: centerLng,
+      query: selectedGangs.join(" ")
+    });
+
     // 3. Calculate Spatial Crossings using SpatialLayerEngine
     const crossingsList: string[] = [];
     let insideDomicilesCount = 0;
@@ -182,11 +190,12 @@ export async function POST(req: Request) {
         category: l.category,
         description: l.description,
         url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
-      }))
+      })),
+      msce_report: msceReport
     };
 
     // 6. Build deterministic fallback report
-    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount, activeRecommendedLayers);
+    const reportText = buildDeterministicReport(body, crossingsList, finalRiskScore, insideDomicilesCount, insideIncidentsCount, activeRecommendedLayers, msceReport);
 
     // 5. Call Vertex AI for a premium report if credentials are set
     if (!GCP_PROJECT_ID) {
@@ -243,6 +252,12 @@ Puntaje cuantitativo de riesgo: ${finalRiskScore}/10.0
 Cruces espaciales detectados:
 ${crossingsList.join("\n") || "No se detectaron intersecciones directas."}
 
+--- ANÁLISIS DE CORRELACIÓN DE FUENTES (MSCE) ---
+Verdad Operacional Dominante: ${msceReport.dominantProvider.toUpperCase()} (Confiabilidad: ${msceReport.dominantScore}%)
+Justificación del Motor: ${msceReport.dominantReason}
+Pesos detallados de proveedores:
+${msceReport.results.map((r: any) => `- ${r.name} (${r.decision.toUpperCase()} - Score: ${r.truthScore}%): ${r.explanation}`).join("\n")}
+
 --- INFORME DETERMINISTA PRELIMINAR (Úsalo como base técnica y expande) ---
 ${reportText}
 `;
@@ -281,7 +296,8 @@ function buildDeterministicReport(
   finalRiskScore: number,
   insideDomicilesCount: number,
   insideIncidentsCount: number,
-  activeRecommendedLayers: any[] = []
+  activeRecommendedLayers: any[] = [],
+  msceReport: any = null
 ): string {
   const {
     selectedGangs = [],
@@ -346,10 +362,22 @@ function buildDeterministicReport(
   }
   markdown += `\n`;
 
-  markdown += `## 5. Patrones Espaciales e Incidencia Delictiva\n`;
+  if (msceReport) {
+    markdown += `## 5. Auditoría de Verdad Operacional (MSCE)\n`;
+    markdown += `El motor de correlación MSCE identificó la fuente dominante y calculó la confiabilidad operacional:\n`;
+    markdown += `- **Fuente Dominante:** **${msceReport.dominantProvider.toUpperCase()}** (Confianza: **${msceReport.dominantScore}%**)\n`;
+    markdown += `- **Justificación:** ${msceReport.dominantReason}\n\n`;
+    markdown += `**Detalle Ponderado de Fuentes:**\n`;
+    msceReport.results.forEach((r: any) => {
+      markdown += `- **${r.name}** (Decisión: \`${r.decision.toUpperCase()}\` - Score: **${r.truthScore}%**): ${r.explanation}\n`;
+    });
+    markdown += `\n`;
+  }
+
+  markdown += `## ${msceReport ? '6' : '5'}. Patrones Espaciales e Incidencia Delictiva\n`;
   markdown += `El total de incidentes analizados dentro de la zona de influencia asciende a **${incidents.length} delitos cercanos**. Se destaca que la cercanía física entre las viviendas de integrantes y las zonas comerciales o de tránsito incrementa el factor de oportunidad criminal para robos y asaltos en la demarcación.\n\n`;
 
-  markdown += `## 6. Recomendaciones y Conclusiones Tácticas\n`;
+  markdown += `## ${msceReport ? '7' : '6'}. Recomendaciones y Conclusiones Tácticas\n`;
   markdown += `1. **Monitorear los Corredores de Movilidad:** Reforzar patrullajes en las rutas de delineado manual donde se detectaron intersecciones directas.\n`;
   markdown += `2. **Asegurar Zonas de Riesgo / Buffers:** Desplegar unidades de disuasión rápida en los círculos de amortiguamiento con puntaje de riesgo ALTO.\n`;
   markdown += `3. **Unificar Inteligencia:** Mantener actualizada la capa de domicilios con registros OSINT recientes para evitar fallas en la detección espacial de proximidades.\n`;

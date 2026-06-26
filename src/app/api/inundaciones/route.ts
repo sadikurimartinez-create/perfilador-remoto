@@ -8,6 +8,7 @@ import { FloodAssessment } from "@/modules/inundaciones/inundaciones.types";
 import { InegiWmsProvider } from "@/lib/providers/inegi_wms_provider";
 import { LayerRecommendationEngine } from "@/lib/providers/layerRecommendationEngine";
 import { SpatialLayerEngine } from "@/lib/providers/spatialLayerEngine";
+import { MultiSourceCorrelationEngine } from "@/lib/geoint/multiSourceCorrelationEngine";
 
 export async function POST(req: Request) {
   try {
@@ -41,10 +42,17 @@ export async function POST(req: Request) {
 
     const activeRecommendedLayers = allLayers.filter((l: any) => recommendedLayerIds.includes(l.id));
 
+    // Correlate sources using MSCE
+    const msceReport = MultiSourceCorrelationEngine.correlate("inundaciones", {
+      lat,
+      lng,
+      query: observaciones_campo
+    });
+
     // 1. DETECTAR SI LA IA ESTÁ CONFIGURADA
     if (!GCP_PROJECT_ID) {
       console.warn("[API Inundaciones] Falta GCP_PROJECT_ID, usando simulación local determinista.");
-      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada, activeRecommendedLayers);
+      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada, activeRecommendedLayers, msceReport);
       return NextResponse.json({ ...fallback, isAiGenerated: false });
     }
 
@@ -132,6 +140,12 @@ Observaciones Adicionales del Investigador en Campo: ${observaciones_campo || "N
 El sistema recomendó e integró las siguientes capas oficiales de INEGI GAIA en base al contexto geográfico del análisis de inundaciones:
 ${activeRecommendedLayers.map((l: any) => `- **${l.title}** (${l.category.toUpperCase()}): ${l.description}`).join("\n")}
 
+--- ANÁLISIS DE CORRELACIÓN DE FUENTES (MSCE) ---
+Verdad Operacional Dominante: ${msceReport.dominantProvider.toUpperCase()} (Confiabilidad: ${msceReport.dominantScore}%)
+Justificación del Motor: ${msceReport.dominantReason}
+Pesos detallados de proveedores:
+${msceReport.results.map((r: any) => `- ${r.name} (${r.decision.toUpperCase()} - Score: ${r.truthScore}%): ${r.explanation}`).join("\n")}
+
 --- TAREA ---
 1. Ejecuta una búsqueda en internet mediante Google Search para detectar reportes de inundaciones, desbordamiento de arroyos/canales, socavones o problemas de drenaje en la zona "${zona_analizada}" o cerca de las coordenadas ${lat}, ${lng} en Aguascalientes, México.
 2. Combina esta información con la topografía típica del sector (por ejemplo, colonias del oriente, sur u poniente de Aguascalientes, zonas bajas cercanas al Río San Pedro o arroyos como el de San Cedazo, San Ignacio, etc.).
@@ -170,12 +184,13 @@ ${activeRecommendedLayers.map((l: any) => `- **${l.title}** (${l.category.toUppe
           category: l.category,
           description: l.description,
           url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
-        }))
+        })),
+        msce_report: msceReport
       });
 
     } catch (aiErr: any) {
       console.error("[API Inundaciones] Error en la invocación de Gemini VertexAI:", aiErr);
-      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada, activeRecommendedLayers);
+      const fallback = generateLocalFloodAnalysis(lat, lng, radioMetros, observaciones_campo, pronostico_lluvia, zona_analizada, activeRecommendedLayers, msceReport);
       return NextResponse.json({
         ...fallback,
         isAiGenerated: false,
@@ -210,7 +225,8 @@ function generateLocalFloodAnalysis(
   observaciones: string,
   pronostico: string,
   zona: string,
-  activeRecommendedLayers: any[] = []
+  activeRecommendedLayers: any[] = [],
+  msceReport: any = null
 ): FloodAssessment {
   // Determinamos IRI basado en palabras clave o proximidad a ríos virtuales (como Río San Pedro lat: 21.885, lng: -102.32)
   let baseScore = 45; // riesgo medio base
@@ -318,6 +334,7 @@ function generateLocalFloodAnalysis(
       category: l.category,
       description: l.description,
       url: `${l.providerUrl}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${l.name}&FORMAT=image/png&TRANSPARENT=TRUE`
-    }))
+    })),
+    msce_report: msceReport
   };
 }

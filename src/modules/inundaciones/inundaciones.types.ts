@@ -31,4 +31,5 @@ export interface FloodAssessment {
   observaciones_campo?: string;
   pronostico_lluvia?: string;
   recommended_wms_layers?: any[];
+  msce_report?: any;
 }

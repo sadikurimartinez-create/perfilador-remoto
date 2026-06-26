@@ -3,10 +3,17 @@ import { ApiOrchestrator } from "@/lib/providers/orchestrator";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   const startTotal = Date.now();
   const orchestrator = new ApiOrchestrator();
-  const providers = orchestrator.getProviders();
+  const { searchParams } = new URL(req.url);
+  const targetProviderId = searchParams.get("provider");
+
+  let providers = orchestrator.getProviders();
+  if (targetProviderId) {
+    providers = providers.filter(p => p.getId() === targetProviderId);
+  }
+
   const results: any[] = [];
 
   // Coordenadas de prueba por defecto (Aguascalientes)
