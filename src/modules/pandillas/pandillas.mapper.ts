@@ -52,6 +52,12 @@ export interface GangMember {
     | "Integrante"
     | "Exintegrante"
     | "Colaborador externo";
+  georreferencia?: {
+    lat: number;
+    lng: number;
+    confidence?: number;
+    status?: string;
+  };
 }
 
 export interface GangRelationship {

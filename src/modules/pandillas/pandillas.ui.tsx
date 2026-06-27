@@ -347,6 +347,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [tempShapeRadius, setTempShapeRadius] = useState<number>(300); // meters for buffer circles
 
   // --- GANG GIS ANALYSIS LAYER STATES ---
+  const [geointSubTab, setGeointSubTab] = useState<"mapa" | "album">("mapa");
+  const [albumGangId, setAlbumGangId] = useState<string>("");
   const [gisSidebarTab, setGisSidebarTab] = useState<"drawing" | "analysis">("analysis");
   const [activeGisLayers, setActiveGisLayers] = useState<Record<string, boolean>>({
     domiciles: true,
@@ -392,6 +394,15 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       void fetchProjectPhotos();
     }
   }, [projectId]);
+
+  // Synchronize albumGangId with active selectedGangId or default to first gang
+  useEffect(() => {
+    if (selectedGangId) {
+      setAlbumGangId(selectedGangId);
+    } else if (storedGangs.length > 0 && !albumGangId) {
+      setAlbumGangId(storedGangs[0].id || "");
+    }
+  }, [selectedGangId, storedGangs, albumGangId]);
 
   // Process and memoize GIS Layer structures
   const gisAnalysisResult = useMemo(() => {
@@ -1075,7 +1086,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       vehiculosAsociados: tempMember.vehiculosAsociados,
       estatusPandilla: tempMember.estatusPandilla as any,
       peligrosidadCalculada: danger,
-      fotografiaUrl: tempMember.fotografiaUrl || (tempMember.sexo === "Femenino" ? "/avatars/avatar_fem.png" : "/avatars/avatar_male.png")
+      fotografiaUrl: tempMember.fotografiaUrl || (tempMember.sexo === "Femenino" ? "/avatars/avatar_fem.png" : "/avatars/avatar_male.png"),
+      georreferencia: tempMember.georreferencia
     };
 
     if (editingMemberIndex !== null) {
@@ -1092,7 +1104,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
       nombre: "", alias: "", estatusPandilla: "Integrante", sexo: "Masculino", edad: "", curp: "", domicilioConocido: "",
       telefono: "", detencionesPrevias: "", ingresosCentrosInternamiento: "", consumoDrogas: "", nivelViolencia: "Bajo",
       riesgoCriminogeno: "Bajo", cicatrices: "", marcasDistintivas: "", lugarTrabajo: "", actividadEconomica: "", escuela: "",
-      tatuajes: "", complexion: "", estatura: "", vestimentaUsual: "", telefonoRedes: "", vehiculosAsociados: "", fotografiaUrl: ""
+      tatuajes: "", complexion: "", estatura: "", vestimentaUsual: "", telefonoRedes: "", vehiculosAsociados: "", fotografiaUrl: "",
+      georreferencia: undefined
     });
   };
 
@@ -2036,15 +2049,55 @@ ${analysisResult.ficha.crossCheckJuridico}
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Domicilio Conocido</label>
-                  <input
-                    type="text"
-                    placeholder="Calle, No, Colonia, Municipio"
-                    value={tempMember.domicilioConocido}
-                    onChange={e => setTempMember({ ...tempMember, domicilioConocido: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                  />
+                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div className="md:col-span-6 space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Domicilio Conocido</label>
+                    <input
+                      type="text"
+                      placeholder="Calle, No, Colonia, Municipio"
+                      value={tempMember.domicilioConocido}
+                      onChange={e => setTempMember({ ...tempMember, domicilioConocido: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Latitud (Opcional)</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      placeholder="Ej. 21.8853"
+                      value={tempMember.georreferencia?.lat ?? ""}
+                      onChange={e => setTempMember({
+                        ...tempMember,
+                        georreferencia: {
+                          lat: parseFloat(e.target.value) || 0,
+                          lng: tempMember.georreferencia?.lng ?? -102.2916,
+                          confidence: 1.0,
+                          status: "investigation"
+                        }
+                      })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Longitud (Opcional)</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      placeholder="Ej. -102.2916"
+                      value={tempMember.georreferencia?.lng ?? ""}
+                      onChange={e => setTempMember({
+                        ...tempMember,
+                        georreferencia: {
+                          lat: tempMember.georreferencia?.lat ?? 21.8853,
+                          lng: parseFloat(e.target.value) || 0,
+                          confidence: 1.0,
+                          status: "investigation"
+                        }
+                      })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
+                    />
+                  </div>
                 </div>
 
                 {/* CRIMINOLOGICAL INFORMATION */}
@@ -2455,9 +2508,15 @@ ${analysisResult.ficha.crossCheckJuridico}
                           r="12"
                           fill={rel.tipo === "rival" ? "#7f1d1d" : "#064e3b"}
                           stroke={rel.tipo === "rival" ? "#ef4444" : "#10b981"}
-                          strokeWidth="2"
+                          strokeWidth="1.5"
                         />
-                        <text y="24" textAnchor="middle" fill="#cbd5e1" fontSize="9" fontWeight="extrabold" className="uppercase">
+                        <text
+                          y="22"
+                          textAnchor="middle"
+                          fill="#cbd5e1"
+                          fontSize="9"
+                          className="uppercase font-semibold"
+                        >
                           {rel.pandillaNombre}
                         </text>
                       </g>
@@ -2473,553 +2532,1161 @@ ${analysisResult.ficha.crossCheckJuridico}
         {activeTab === "geointeligencia" && (
           <div className="w-full space-y-6">
             
-            {/* 1. MAPA GIS PANDILLAS (Elemento central absoluto, 100% ancho, h-[70vh]) */}
-            <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="border-b border-slate-900 pb-3 flex justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">🗺️ Mapa Táctico GEOINT de Pandillas</h3>
-                  <p className="text-[10px] text-slate-500">Visualización de capas espaciales activas en tiempo real.</p>
-                </div>
-              </div>
-              
-              {!isLoaded ? (
-                <div className="w-full h-[70vh] rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
-                  Cargando cartografía táctica...
-                </div>
-              ) : (
-                <div id="gis-tactical-map" className="relative h-[70vh] w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
-                  <GoogleMap
-                    mapContainerStyle={{ width: "100%", height: "100%" }}
-                    center={mapCenter}
-                    zoom={13}
-                    onLoad={onMapLoad}
-                    options={{
-                      streetViewControl: false,
-                      mapTypeControl: false,
-                      fullscreenControl: false,
-                      styles: darkMapStyles,
-                      disableDefaultUI: false
-                    }}
-                  >
-                    {/* 1. Domicilios de integrantes */}
-                    {showGisNodes && filteredGisData.nodes.map((node) => {
-                      const gangColor = getGangColor(node.gang);
-                      return (
-                        <Marker
-                          key={node.member_id}
-                          position={node.location}
-                          title={`${node.alias || "Integrante"} (${node.gang})`}
-                          onClick={() => {
-                            setSelectedGisNode(node);
-                            setSelectedGisElement({
-                              tipo: "Domicilio de Integrante",
-                              titulo: node.alias || "Integrante",
-                              subtitulo: node.gang,
-                              rol: node.rol || "Integrante",
-                              detalle: node.domicilioExacto || "Sin dirección exacta registrada.",
-                              gang: node.gang,
-                              color: gangColor,
-                              lat: node.location.lat,
-                              lng: node.location.lng,
-                              source: node.source
-                            });
-                          }}
-                          onMouseOver={() => setHoveredGisElement(node)}
-                          onMouseOut={() => setHoveredGisElement(null)}
-                          icon={getMarkerIcon(node.rol, gangColor)}
-                        />
-                      );
-                    })}
-                    
-                    {/* 2. Zonas de influencia */}
-                    {showGisZones && filteredGisData.zones.map((zone) => {
-                      const gangColor = getGangColor(zone.gang);
-                      return (
-                        <Polygon
-                          key={zone.zone_id}
-                          paths={zone.points}
-                          onClick={() => {
-                            setSelectedGisZone(zone);
-                            setSelectedGisElement({
-                              tipo: "Zona de Influencia",
-                              titulo: `Zona de Influencia DBSCAN`,
-                              subtitulo: zone.gang,
-                              detalle: `Área de control territorial calculada mediante agrupamiento de domicilios (DBSCAN). Contiene ${zone.memberCount} integrantes mapeados con una densidad de ${zone.density.toFixed(2)} integrantes/km². Score de influencia: ${zone.influence_score}.`,
-                              gang: zone.gang,
-                              color: gangColor,
-                              lat: zone.points[0]?.lat || 21.88,
-                              lng: zone.points[0]?.lng || -102.29,
-                              source: "Análisis Espacial DBSCAN"
-                            });
-                          }}
-                          options={{
-                            strokeColor: gangColor,
-                            strokeOpacity: 0.6,
-                            strokeWeight: 2,
-                            fillColor: gangColor,
-                            fillOpacity: 0.25,
-                          }}
-                        />
-                      );
-                    })}
-                    
-                    {/* 3. Corredores de movilidad */}
-                    {activeGisLayers.corridors && realCorridors.map((corr) => {
-                      const gangColor = getGangColor(corr.gang);
-                      return (
-                        <Polyline
-                          key={corr.id}
-                          path={corr.path}
-                          onClick={() => {
-                            setSelectedGisElement({
-                              tipo: "Corredor de Movilidad",
-                              titulo: corr.nombre || "Corredor Táctico",
-                              subtitulo: corr.gang,
-                              detalle: `Ruta de desplazamiento y corredor de movilidad delictiva identificado para la organización. Nivel de control territorial: ${corr.nivel || "Medio"}.`,
-                              gang: corr.gang,
-                              color: gangColor,
-                              lat: corr.path[0]?.lat || 21.88,
-                              lng: corr.path[0]?.lng || -102.29,
-                              source: "Registros del Inventario"
-                            });
-                          }}
-                          options={{
-                            strokeColor: gangColor,
-                            strokeOpacity: 0.85,
-                            strokeWeight: 4.5,
-                          }}
-                        />
-                      );
-                    })}
-                    
-                    {/* 4. Grafitis registrados */}
-                    {activeGisLayers.graffiti && realGraffiti.map((graf) => {
-                      const gangColor = getGangColor(graf.gang);
-                      return (
-                        <Marker
-                          key={graf.id}
-                          position={graf.location}
-                          title={`${graf.text} (${graf.gang})`}
-                          onClick={() => {
-                            setSelectedGisElement({
-                              tipo: "Grafiti / Marcaje Territorial",
-                              titulo: graf.text || "Grafiti de Marcaje",
-                              subtitulo: graf.gang,
-                              detalle: graf.description || "Evidencia física de marcaje e identificación territorial por grafiti.",
-                              gang: graf.gang,
-                              color: gangColor,
-                              lat: graf.location.lat,
-                              lng: graf.location.lng,
-                              date: graf.date,
-                              source: graf.source
-                            });
-                          }}
-                          onMouseOver={() => setHoveredGisElement(graf)}
-                          onMouseOut={() => setHoveredGisElement(null)}
-                          icon={{
-                            path: ICON_PATHS.dot,
-                            scale: 1.5,
-                            fillColor: gangColor,
-                            fillOpacity: 1,
-                            strokeColor: "#f97316",
-                            strokeWeight: 2,
-                          }}
-                        />
-                      );
-                    })}
-                    
-                    {/* 5. Eventos históricos */}
-                    {activeGisLayers.history && realHistory.map((hist) => {
-                      const gangColor = getGangColor(hist.gang);
-                      return (
-                        <Marker
-                          key={hist.id}
-                          position={hist.location}
-                          title={`${hist.text} (${hist.date})`}
-                          onClick={() => {
-                            setSelectedGisElement({
-                              tipo: `Evento Histórico - ${hist.categoria?.toUpperCase() || "INTELIGENCIA"}`,
-                              titulo: hist.text,
-                              subtitulo: hist.gang,
-                              detalle: hist.description || "Registro histórico de interés criminológico y de seguridad pública.",
-                              gang: hist.gang,
-                              color: gangColor,
-                              lat: hist.location.lat,
-                              lng: hist.location.lng,
-                              date: hist.date,
-                              source: "Cronología CEIPOL"
-                            });
-                          }}
-                          onMouseOver={() => setHoveredGisElement(hist)}
-                          onMouseOut={() => setHoveredGisElement(null)}
-                          icon={{
-                            path: ICON_PATHS.dot,
-                            scale: 1.6,
-                            fillColor: gangColor,
-                            fillOpacity: 1,
-                            strokeColor: "#ef4444",
-                            strokeWeight: 2,
-                          }}
-                        />
-                      );
-                    })}
-
-                    {/* Tooltip en Hover */}
-                    {hoveredGisElement && (
-                      <InfoWindow
-                        position={hoveredGisElement.location}
-                        options={{ disableAutoPan: true }}
-                      >
-                        <div className="bg-slate-950 text-slate-200 p-2 rounded-lg border border-slate-800 shadow-xl max-w-[240px] text-[11px] space-y-1">
-                          {hoveredGisElement.alias ? (
-                            <>
-                              <p className="font-bold text-sky-400 text-xs">🏠 {hoveredGisElement.alias}</p>
-                              <p><span className="text-slate-500 font-semibold">Rol:</span> {hoveredGisElement.rol || "Integrante"}</p>
-                              <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
-                              {hoveredGisElement.domicilioExacto && (
-                                <p className="truncate"><span className="text-slate-500 font-semibold">Dirección:</span> {hoveredGisElement.domicilioExacto}</p>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <p className="font-bold text-rose-400 text-xs">📍 {hoveredGisElement.text}</p>
-                              <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
-                              {hoveredGisElement.date && (
-                                <p><span className="text-slate-500 font-semibold">Fecha:</span> {hoveredGisElement.date}</p>
-                              )}
-                              {hoveredGisElement.description && (
-                                <p className="line-clamp-2 text-slate-300 italic">"{hoveredGisElement.description}"</p>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </InfoWindow>
-                    )}
-                  </GoogleMap>
-                </div>
-              )}
+            {/* Sub-tab selection: Mapa Táctico vs Álbum de Pandilla */}
+            <div className="flex border-b border-slate-800 pb-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setGeointSubTab("mapa")}
+                className={`pb-2 px-1 text-xs font-black uppercase tracking-wider transition-all border-b-2 ${
+                  geointSubTab === "mapa"
+                    ? "border-sky-500 text-sky-400"
+                    : "border-transparent text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                🗺️ Mapa Táctico GIS
+              </button>
+              <button
+                type="button"
+                onClick={() => setGeointSubTab("album")}
+                className={`pb-2 px-1 text-xs font-black uppercase tracking-wider transition-all border-b-2 ${
+                  geointSubTab === "album"
+                    ? "border-sky-500 text-sky-400"
+                    : "border-transparent text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                📁 Álbum de Pandilla
+              </button>
             </div>
 
-            {/* 2. DETALLE EXPANDIDO DE INTELIGENCIA TERRITORIAL (Clic en marcador, abajo del mapa) */}
-            {selectedGisElement && (
-              <div className="bg-slate-950/80 border rounded-2xl p-5 shadow-2xl animate-fadeIn space-y-4" style={{ borderColor: selectedGisElement.color }}>
-                <div className="flex justify-between items-start border-b border-slate-900 pb-3">
-                  <div>
-                    <span className="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 rounded animate-pulse" style={{ backgroundColor: `${selectedGisElement.color}20`, color: selectedGisElement.color }}>
-                      {selectedGisElement.tipo}
-                    </span>
-                    <h3 className="text-base font-black text-slate-100 uppercase mt-2">
-                      {selectedGisElement.titulo}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Pandilla: <strong style={{ color: selectedGisElement.color }}>{selectedGisElement.subtitulo}</strong></p>
+            {geointSubTab === "mapa" && (
+              <>
+                {/* 1. MAPA GIS PANDILLAS (Elemento central absoluto, 100% ancho, h-[70vh]) */}
+                <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                  <div className="border-b border-slate-900 pb-3 flex justify-between items-center">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">🗺️ Mapa Táctico GEOINT de Pandillas</h3>
+                      <p className="text-[10px] text-slate-500">Visualización de capas espaciales activas en tiempo real.</p>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => setSelectedGisElement(null)}
-                    className="text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors"
-                  >
-                    ❌ Cerrar Detalle
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
-                  <div className="md:col-span-8 space-y-3">
-                    {selectedGisElement.rol && (
-                      <p><strong className="text-slate-400">Rol en Estructura:</strong> <span className="font-bold text-slate-200">{selectedGisElement.rol}</span></p>
-                    )}
-                    <p><strong className="text-slate-400">Detalle Operativo:</strong></p>
-                    <p className="bg-slate-900/60 p-3 rounded-lg border border-slate-850 text-slate-300 leading-relaxed italic">
-                      {selectedGisElement.detalle}
-                    </p>
-                  </div>
-                  <div className="md:col-span-4 bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-2">
-                    <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Metadatos Geográficos</span>
-                    <p><strong className="text-slate-400">Latitud:</strong> <span className="font-mono">{selectedGisElement.lat.toFixed(6)}</span></p>
-                    <p><strong className="text-slate-400">Longitud:</strong> <span className="font-mono">{selectedGisElement.lng.toFixed(6)}</span></p>
-                    {selectedGisElement.date && (
-                      <p><strong className="text-slate-400">Fecha de Registro:</strong> <span>{selectedGisElement.date}</span></p>
-                    )}
-                    {selectedGisElement.source && (
-                      <p><strong className="text-slate-400">Fuente:</strong> <span className="px-1.5 py-0.5 bg-slate-800 text-[10px] text-slate-300 rounded font-bold">{selectedGisElement.source}</span></p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. BARRA DE CONTROLES INFERIOR (Debajo del mapa) */}
-            <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl">
-              
-              {/* SECCIÓN 1: SELECCIÓN DE PANDILLAS */}
-              <div className="md:col-span-6 space-y-3 border-r border-slate-800/60 pr-6">
-                <div className="flex justify-between items-center border-b border-slate-850 pb-2">
-                  <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
-                    👥 Selección de Pandillas
-                  </h3>
-                  <span className="text-[10px] bg-slate-850 px-1.5 py-0.5 rounded text-sky-400 font-bold">
-                    {selectedGangsForGis.length}
-                  </span>
-                </div>
-                
-                {storedGangs.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic">No hay pandillas registradas</p>
-                ) : (
-                  <div className="space-y-2">
-                    {/* Seleccionar Todas Checkbox */}
-                    <label className="flex items-center justify-between text-xs text-slate-200 font-bold cursor-pointer border-b border-slate-900/60 pb-1.5">
-                      <span>Seleccionar Todas</span>
-                      <input
-                        type="checkbox"
-                        checked={selectedGangsForGis.length === storedGangs.length}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedGangsForGis(storedGangs.map(g => g.nombre));
-                          } else {
-                            setSelectedGangsForGis([]);
-                          }
+                  
+                  {!isLoaded ? (
+                    <div className="w-full h-[70vh] rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center text-xs text-slate-500">
+                      Cargando cartografía táctica...
+                    </div>
+                  ) : (
+                    <div id="gis-tactical-map" className="relative h-[70vh] w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                      <GoogleMap
+                        mapContainerStyle={{ width: "100%", height: "100%" }}
+                        center={mapCenter}
+                        zoom={13}
+                        onLoad={onMapLoad}
+                        options={{
+                          streetViewControl: false,
+                          mapTypeControl: false,
+                          fullscreenControl: false,
+                          styles: darkMapStyles,
+                          disableDefaultUI: false
                         }}
-                        className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-4 h-4 cursor-pointer"
-                      />
-                    </label>
+                      >
+                        {/* 1. Domicilios de integrantes */}
+                        {showGisNodes && filteredGisData.nodes.map((node) => {
+                          const gangColor = getGangColor(node.gang);
+                          return (
+                            <Marker
+                              key={node.member_id}
+                              position={node.location}
+                              title={`${node.alias || "Integrante"} (${node.gang})`}
+                              onClick={() => {
+                                setSelectedGisNode(node);
+                                setSelectedGisElement({
+                                  tipo: "Domicilio de Integrante",
+                                  titulo: node.alias || "Integrante",
+                                  subtitulo: node.gang,
+                                  rol: node.rol || "Integrante",
+                                  detalle: node.domicilioExacto || "Sin dirección exacta registrada.",
+                                  gang: node.gang,
+                                  color: gangColor,
+                                  lat: node.location.lat,
+                                  lng: node.location.lng,
+                                  source: node.source
+                                });
+                              }}
+                              onMouseOver={() => setHoveredGisElement(node)}
+                              onMouseOut={() => setHoveredGisElement(null)}
+                              icon={getMarkerIcon(node.rol, gangColor)}
+                            />
+                          );
+                        })}
+                        
+                        {/* 2. Zonas de influencia */}
+                        {showGisZones && filteredGisData.zones.map((zone) => {
+                          const gangColor = getGangColor(zone.gang);
+                          return (
+                            <Polygon
+                              key={zone.zone_id}
+                              paths={zone.points}
+                              onClick={() => {
+                                setSelectedGisZone(zone);
+                                setSelectedGisElement({
+                                  tipo: "Zona de Influencia",
+                                  titulo: `Zona de Influencia DBSCAN`,
+                                  subtitulo: zone.gang,
+                                  detalle: `Área de control territorial calculada mediante agrupamiento de domicilios (DBSCAN). Contiene ${zone.memberCount} integrantes mapeados con una densidad de ${zone.density.toFixed(2)} integrantes/km². Score de influencia: ${zone.influence_score}.`,
+                                  gang: zone.gang,
+                                  color: gangColor,
+                                  lat: zone.points[0]?.lat || 21.88,
+                                  lng: zone.points[0]?.lng || -102.29,
+                                  source: "Análisis Espacial DBSCAN"
+                                });
+                              }}
+                              options={{
+                                strokeColor: gangColor,
+                                strokeOpacity: 0.6,
+                                strokeWeight: 2,
+                                fillColor: gangColor,
+                                fillOpacity: 0.25,
+                              }}
+                            />
+                          );
+                        })}
+                        
+                        {/* 3. Corredores de movilidad */}
+                        {activeGisLayers.corridors && realCorridors.map((corr) => {
+                          const gangColor = getGangColor(corr.gang);
+                          return (
+                            <Polyline
+                              key={corr.id}
+                              path={corr.path}
+                              onClick={() => {
+                                setSelectedGisElement({
+                                  tipo: "Corredor de Movilidad",
+                                  titulo: corr.nombre || "Corredor Táctico",
+                                  subtitulo: corr.gang,
+                                  detalle: `Ruta de desplazamiento y corredor de movilidad delictiva identificado para la organización. Nivel de control territorial: ${corr.nivel || "Medio"}.`,
+                                  gang: corr.gang,
+                                  color: gangColor,
+                                  lat: corr.path[0]?.lat || 21.88,
+                                  lng: corr.path[0]?.lng || -102.29,
+                                  source: "Registros del Inventario"
+                                });
+                              }}
+                              options={{
+                                strokeColor: gangColor,
+                                strokeOpacity: 0.85,
+                                strokeWeight: 4.5,
+                              }}
+                            />
+                          );
+                        })}
+                        
+                        {/* 4. Grafitis registrados */}
+                        {activeGisLayers.graffiti && realGraffiti.map((graf) => {
+                          const gangColor = getGangColor(graf.gang);
+                          return (
+                            <Marker
+                              key={graf.id}
+                              position={graf.location}
+                              title={`${graf.text} (${graf.gang})`}
+                              onClick={() => {
+                                setSelectedGisElement({
+                                  tipo: "Grafiti / Marcaje Territorial",
+                                  titulo: graf.text || "Grafiti de Marcaje",
+                                  subtitulo: graf.gang,
+                                  detalle: graf.description || "Evidencia física de marcaje e identificación territorial por grafiti.",
+                                  gang: graf.gang,
+                                  color: gangColor,
+                                  lat: graf.location.lat,
+                                  lng: graf.location.lng,
+                                  date: graf.date,
+                                  source: graf.source
+                                });
+                              }}
+                              onMouseOver={() => setHoveredGisElement(graf)}
+                              onMouseOut={() => setHoveredGisElement(null)}
+                              icon={{
+                                path: ICON_PATHS.dot,
+                                scale: 1.5,
+                                fillColor: gangColor,
+                                fillOpacity: 1,
+                                strokeColor: "#f97316",
+                                strokeWeight: 2,
+                              }}
+                            />
+                          );
+                        })}
+                        
+                        {/* 5. Eventos históricos */}
+                        {activeGisLayers.history && realHistory.map((hist) => {
+                          const gangColor = getGangColor(hist.gang);
+                          return (
+                            <Marker
+                              key={hist.id}
+                              position={hist.location}
+                              title={`${hist.text} (${hist.date})`}
+                              onClick={() => {
+                                setSelectedGisElement({
+                                  tipo: `Evento Histórico - ${hist.categoria?.toUpperCase() || "INTELIGENCIA"}`,
+                                  titulo: hist.text,
+                                  subtitulo: hist.gang,
+                                  detalle: hist.description || "Registro histórico de interés criminológico y de seguridad pública.",
+                                  gang: hist.gang,
+                                  color: gangColor,
+                                  lat: hist.location.lat,
+                                  lng: hist.location.lng,
+                                  date: hist.date,
+                                  source: "Cronología CEIPOL"
+                                });
+                              }}
+                              onMouseOver={() => setHoveredGisElement(hist)}
+                              onMouseOut={() => setHoveredGisElement(null)}
+                              icon={{
+                                path: ICON_PATHS.dot,
+                                scale: 1.6,
+                                fillColor: gangColor,
+                                fillOpacity: 1,
+                                strokeColor: "#ef4444",
+                                strokeWeight: 2,
+                              }}
+                            />
+                          );
+                        })}
+
+                        {/* Tooltip en Hover */}
+                        {hoveredGisElement && (
+                          <InfoWindow
+                            position={hoveredGisElement.location}
+                            options={{ disableAutoPan: true }}
+                          >
+                            <div className="bg-slate-950 text-slate-200 p-2 rounded-lg border border-slate-800 shadow-xl max-w-[240px] text-[11px] space-y-1">
+                              {hoveredGisElement.alias ? (
+                                <>
+                                  <p className="font-bold text-sky-400 text-xs">🏠 {hoveredGisElement.alias}</p>
+                                  <p><span className="text-slate-500 font-semibold">Rol:</span> {hoveredGisElement.rol || "Integrante"}</p>
+                                  <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
+                                  {hoveredGisElement.domicilioExacto && (
+                                    <p className="truncate"><span className="text-slate-500 font-semibold">Dirección:</span> {hoveredGisElement.domicilioExacto}</p>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <p className="font-bold text-rose-400 text-xs">📍 {hoveredGisElement.text}</p>
+                                  <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
+                                  {hoveredGisElement.date && (
+                                    <p><span className="text-slate-500 font-semibold">Fecha:</span> {hoveredGisElement.date}</p>
+                                  )}
+                                  {hoveredGisElement.description && (
+                                    <p className="line-clamp-2 text-slate-300 italic">"{hoveredGisElement.description}"</p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </InfoWindow>
+                        )}
+                      </GoogleMap>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. DETALLE EXPANDIDO DE INTELIGENCIA TERRITORIAL (Clic en marcador, abajo del mapa) */}
+                {selectedGisElement && (
+                  <div className="bg-slate-950/80 border rounded-2xl p-5 shadow-2xl animate-fadeIn space-y-4" style={{ borderColor: selectedGisElement.color }}>
+                    <div className="flex justify-between items-start border-b border-slate-900 pb-3">
+                      <div>
+                        <span className="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 rounded animate-pulse" style={{ backgroundColor: `${selectedGisElement.color}20`, color: selectedGisElement.color }}>
+                          {selectedGisElement.tipo}
+                        </span>
+                        <h3 className="text-base font-black text-slate-100 uppercase mt-2">
+                          {selectedGisElement.titulo}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Pandilla: <strong style={{ color: selectedGisElement.color }}>{selectedGisElement.subtitulo}</strong></p>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedGisElement(null)}
+                        className="text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition-colors"
+                      >
+                        ❌ Cerrar Detalle
+                      </button>
+                    </div>
                     
-                    {/* List of Gangs */}
-                    <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
-                      {storedGangs.map((g) => {
-                        const isChecked = selectedGangsForGis.includes(g.nombre);
-                        const gangColor = getGangColor(g.nombre);
-                        return (
-                          <label key={g.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/30 p-1.5 rounded transition-colors border border-slate-900/50" style={{ borderLeft: `3px solid ${gangColor}` }}>
-                            <span className="truncate pr-1">👥 {g.nombre}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+                      <div className="md:col-span-8 space-y-3">
+                        {selectedGisElement.rol && (
+                          <p><strong className="text-slate-400">Rol en Estructura:</strong> <span className="font-bold text-slate-200">{selectedGisElement.rol}</span></p>
+                        )}
+                        <p><strong className="text-slate-400">Detalle Operativo:</strong></p>
+                        <p className="bg-slate-900/60 p-3 rounded-lg border border-slate-850 text-slate-300 leading-relaxed italic">
+                          {selectedGisElement.detalle}
+                        </p>
+                      </div>
+                      <div className="md:col-span-4 bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-2">
+                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Metadatos Geográficos</span>
+                        <p><strong className="text-slate-400">Latitud:</strong> <span className="font-mono">{selectedGisElement.lat.toFixed(6)}</span></p>
+                        <p><strong className="text-slate-400">Longitud:</strong> <span className="font-mono">{selectedGisElement.lng.toFixed(6)}</span></p>
+                        {selectedGisElement.date && (
+                          <p><strong className="text-slate-400">Fecha de Registro:</strong> <span>{selectedGisElement.date}</span></p>
+                        )}
+                        {selectedGisElement.source && (
+                          <p><strong className="text-slate-400">Fuente:</strong> <span className="px-1.5 py-0.5 bg-slate-800 text-[10px] text-slate-300 rounded font-bold">{selectedGisElement.source}</span></p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. BARRA DE CONTROLES INFERIOR (Debajo del mapa) */}
+                <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                  
+                  {/* SECCIÓN 1: SELECCIÓN DE PANDILLAS */}
+                  <div className="md:col-span-6 space-y-3 border-r border-slate-800/60 pr-6">
+                    <div className="flex justify-between items-center border-b border-slate-850 pb-2">
+                      <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                        👥 Selección de Pandillas
+                      </h3>
+                      <span className="text-[10px] bg-slate-850 px-1.5 py-0.5 rounded text-sky-400 font-bold">
+                        {selectedGangsForGis.length}
+                      </span>
+                    </div>
+                    
+                    {storedGangs.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">No hay pandillas registradas</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Seleccionar Todas Checkbox */}
+                        <label className="flex items-center justify-between text-xs text-slate-200 font-bold cursor-pointer border-b border-slate-900/60 pb-1.5">
+                          <span>Seleccionar Todas</span>
+                          <input
+                            type="checkbox"
+                            checked={selectedGangsForGis.length === storedGangs.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                  setSelectedGangsForGis(storedGangs.map(g => g.nombre));
+                              } else {
+                                  setSelectedGangsForGis([]);
+                              }
+                            }}
+                            className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-4 h-4 cursor-pointer"
+                          />
+                        </label>
+                        
+                        {/* List of Gangs */}
+                        <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                          {storedGangs.map((g) => {
+                            const isChecked = selectedGangsForGis.includes(g.nombre);
+                            const gangColor = getGangColor(g.nombre);
+                            return (
+                              <label key={g.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/30 p-1.5 rounded transition-colors border border-slate-900/50" style={{ borderLeft: `3px solid ${gangColor}` }}>
+                                <span className="truncate pr-1">👥 {g.nombre}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (isChecked) {
+                                      setSelectedGangsForGis(selectedGangsForGis.filter(n => n !== g.nombre));
+                                    } else {
+                                      setSelectedGangsForGis([...selectedGangsForGis, g.nombre]);
+                                    }
+                                  }}
+                                  className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* SECCIÓN 2: CAPAS GIS ACTIVAS & EJECUTAR ANÁLISIS */}
+                  <div className="md:col-span-6 flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="border-b border-slate-850 pb-2">
+                        <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                          ⚙️ Capas GIS Activas (Máx. 5 Capas)
+                        </h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "domiciles", label: "🏠 Domicilios de integrantes", color: "bg-cyan-500" },
+                          { id: "influence", label: "🗺️ Zonas de influencia", color: "bg-yellow-500" },
+                          { id: "corridors", label: "📈 Corredores de movilidad", color: "bg-purple-500" },
+                          { id: "graffiti", label: "🎨 Grafitis registrados", color: "bg-orange-500" },
+                          { id: "history", label: "⚠️ Eventos históricos", color: "bg-red-500" }
+                        ].map(layer => (
+                          <label key={layer.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/20 p-1.5 rounded transition-colors border border-slate-900">
+                            <span className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${layer.color}`} />
+                              {layer.label}
+                            </span>
                             <input
                               type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                if (isChecked) {
-                                  setSelectedGangsForGis(selectedGangsForGis.filter(n => n !== g.nombre));
-                                } else {
-                                  setSelectedGangsForGis([...selectedGangsForGis, g.nombre]);
-                                }
+                              checked={!!activeGisLayers[layer.id]}
+                              onChange={(e) => {
+                                setActiveGisLayers(prev => ({
+                                  ...prev,
+                                  [layer.id]: e.target.checked
+                                }));
                               }}
                               className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
                             />
                           </label>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* SECCIÓN 2: CAPAS GIS ACTIVAS & EJECUTAR ANÁLISIS */}
-              <div className="md:col-span-6 flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="border-b border-slate-850 pb-2">
-                    <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
-                      ⚙️ Capas GIS Activas (Máx. 5 Capas)
-                    </h3>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: "domiciles", label: "🏠 Domicilios de integrantes", color: "bg-cyan-500" },
-                      { id: "influence", label: "🗺️ Zonas de influencia", color: "bg-yellow-500" },
-                      { id: "corridors", label: "📈 Corredores de movilidad", color: "bg-purple-500" },
-                      { id: "graffiti", label: "🎨 Grafitis registrados", color: "bg-orange-500" },
-                      { id: "history", label: "⚠️ Eventos históricos", color: "bg-red-500" }
-                    ].map(layer => (
-                      <label key={layer.id} className="flex items-center justify-between text-xs text-slate-300 cursor-pointer hover:bg-slate-900/20 p-1.5 rounded transition-colors border border-slate-900">
-                        <span className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${layer.color}`} />
-                          {layer.label}
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={!!activeGisLayers[layer.id]}
-                          onChange={(e) => {
-                            setActiveGisLayers(prev => ({
-                              ...prev,
-                              [layer.id]: e.target.checked
-                            }));
-                          }}
-                          className="rounded bg-slate-900 border-slate-800 text-sky-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
-                        />
-                      </label>
-                    ))}
+                    
+                    {/* BOTÓN PRINCIPAL: EJECUTAR ANÁLISIS */}
+                    <button
+                      type="button"
+                      onClick={handleGisAnalysis}
+                      disabled={isGisAnalyzing || selectedGangsForGis.length === 0}
+                      className="w-full py-3 bg-gradient-to-r from-sky-400 to-indigo-600 hover:opacity-90 disabled:opacity-40 text-slate-950 text-xs font-black uppercase rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98]"
+                    >
+                      {isGisAnalyzing ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
+                          <span>Analizando...</span>
+                        </>
+                      ) : (
+                        <span>Ejecutar Análisis</span>
+                      )}
+                    </button>
                   </div>
                 </div>
                 
-                {/* BOTÓN PRINCIPAL: EJECUTAR ANÁLISIS */}
-                <button
-                  type="button"
-                  onClick={handleGisAnalysis}
-                  disabled={isGisAnalyzing || selectedGangsForGis.length === 0}
-                  className="w-full py-3 bg-gradient-to-r from-sky-400 to-indigo-600 hover:opacity-90 disabled:opacity-40 text-slate-950 text-xs font-black uppercase rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98]"
-                >
-                  {isGisAnalyzing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-slate-950 border-t-transparent" />
-                      <span>Analizando...</span>
-                    </>
-                  ) : (
-                    <span>Ejecutar Análisis</span>
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            {/* 4. INTERPRETACIÓN GEOINT & BOTÓN FINAL */}
-            {gisAnalysisReport && (
-              <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 animate-fadeIn">
-                <div className="border-b border-slate-900 pb-3">
-                  <h2 className="text-lg font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
-                    📋 Interpretación GEOINT
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">Análisis territorial narrativo de geointeligencia del sector.</p>
-                </div>
-                
-                {/* 🧠 VERDAD OPERACIONAL CRIMINAL (CICE) */}
-                {gisStructuredOutput?.cice_report && (
-                  <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-inner space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
-                      <div>
-                        <h4 className="text-sm font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                          🧠 Verdad Operacional Criminal (CICE Telemetry)
-                        </h4>
-                        <p className="text-[10px] text-slate-500">
-                          Consenso dinámico y nivel de confianza analítico de inteligencia criminal
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex flex-col items-end">
-                          <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Confianza CICE</span>
-                          <span className="text-xl font-mono font-black text-rose-400">
-                            {gisStructuredOutput.cice_report.dominantScore}%
-                          </span>
-                        </div>
-                      </div>
+                {/* 4. INTERPRETACIÓN GEOINT & BOTÓN FINAL */}
+                {gisAnalysisReport && (
+                  <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 animate-fadeIn">
+                    <div className="border-b border-slate-900 pb-3">
+                      <h2 className="text-lg font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                        📋 Interpretación GEOINT
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1">Análisis territorial narrativo de geointeligencia del sector.</p>
                     </div>
+                    
+                    {/* 🧠 VERDAD OPERACIONAL CRIMINAL (CICE) */}
+                    {gisStructuredOutput?.cice_report && (
+                      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-inner space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                          <div>
+                            <h4 className="text-sm font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                              🧠 Verdad Operacional Criminal (CICE Telemetry)
+                            </h4>
+                            <p className="text-[10px] text-slate-500">
+                              Consenso dinámico y nivel de confianza analítico de inteligencia criminal
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-end">
+                              <span className="text-[9px] text-slate-400 uppercase font-extrabold tracking-wider">Confianza CICE</span>
+                              <span className="text-xl font-mono font-black text-rose-400">
+                                {gisStructuredOutput.cice_report.dominantScore}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
 
-                    {/* Dominant source and reason */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-950/40 p-4 rounded-xl border border-slate-850">
-                      <div className="md:col-span-4 border-r border-slate-850/60 pr-2">
-                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuente Dominante</span>
-                        <span className="text-xs font-black text-slate-200 mt-1 block uppercase truncate" title={gisStructuredOutput.cice_report.dominantProvider}>
-                          👑 {gisStructuredOutput.cice_report.dominantProvider}
-                        </span>
-                      </div>
-                      <div className="md:col-span-8 pl-1">
-                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Justificación Metodológica</span>
-                        <p className="text-[11px] text-slate-300 italic leading-relaxed mt-1">
-                          {gisStructuredOutput.cice_report.dominantReason}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Consensus & Uncertainty progress bars */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-slate-400 font-extrabold">NIVEL DE CONSENSO:</span>
-                          <span className="text-emerald-400 font-mono font-black">{gisStructuredOutput.cice_report.consensusLevel}%</span>
-                        </div>
-                        <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-850">
-                          <div 
-                            className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" 
-                            style={{ width: `${gisStructuredOutput.cice_report.consensusLevel}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-slate-400 font-extrabold">NIVEL DE INCERTIDUMBRE:</span>
-                          <span className="text-amber-500 font-mono font-black">{gisStructuredOutput.cice_report.uncertaintyLevel}%</span>
-                        </div>
-                        <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-850">
-                          <div 
-                            className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" 
-                            style={{ width: `${gisStructuredOutput.cice_report.uncertaintyLevel}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Institutional Inventories Used */}
-                    {gisStructuredOutput.cice_report.institutionalInventoryUsed && gisStructuredOutput.cice_report.institutionalInventoryUsed.length > 0 && (
-                      <div className="space-y-1 bg-slate-950/20 p-3 rounded-lg border border-slate-850/50">
-                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Inventario Institucional Utilizado</span>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {gisStructuredOutput.cice_report.institutionalInventoryUsed.map((inv: string, idx: number) => (
-                            <span key={idx} className="px-2 py-0.5 bg-rose-950/50 text-rose-300 border border-rose-900/40 rounded text-[9px] font-bold">
-                              🛡️ {inv}
+                        {/* Dominant source and reason */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-950/40 p-4 rounded-xl border border-slate-850">
+                          <div className="md:col-span-4 border-r border-slate-850/60 pr-2">
+                            <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuente Dominante</span>
+                            <span className="text-xs font-black text-slate-200 mt-1 block uppercase truncate" title={gisStructuredOutput.cice_report.dominantProvider}>
+                              👑 {gisStructuredOutput.cice_report.dominantProvider}
                             </span>
-                          ))}
+                          </div>
+                          <div className="md:col-span-8 pl-1">
+                            <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Justificación Metodológica</span>
+                            <p className="text-[11px] text-slate-300 italic leading-relaxed mt-1">
+                              {gisStructuredOutput.cice_report.dominantReason}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Consensus & Uncertainty progress bars */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className="text-slate-400 font-extrabold">NIVEL DE CONSENSO:</span>
+                              <span className="text-emerald-400 font-mono font-black">{gisStructuredOutput.cice_report.consensusLevel}%</span>
+                            </div>
+                            <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-850">
+                              <div 
+                                className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" 
+                                style={{ width: `${gisStructuredOutput.cice_report.consensusLevel}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className="text-slate-400 font-extrabold">NIVEL DE INCERTIDUMBRE:</span>
+                              <span className="text-amber-500 font-mono font-black">{gisStructuredOutput.cice_report.uncertaintyLevel}%</span>
+                            </div>
+                            <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-850">
+                              <div 
+                                className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" 
+                                style={{ width: `${gisStructuredOutput.cice_report.uncertaintyLevel}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Institutional Inventories Used */}
+                        {gisStructuredOutput.cice_report.institutionalInventoryUsed && gisStructuredOutput.cice_report.institutionalInventoryUsed.length > 0 && (
+                          <div className="space-y-1 bg-slate-950/20 p-3 rounded-lg border border-slate-850/50">
+                            <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Inventario Institucional Utilizado</span>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {gisStructuredOutput.cice_report.institutionalInventoryUsed.map((inv: string, idx: number) => (
+                                <span key={idx} className="px-2 py-0.5 bg-rose-950/50 text-rose-300 border border-rose-900/40 rounded text-[9px] font-bold">
+                                  🛡️ {inv}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Correlations Detected */}
+                        {gisStructuredOutput.cice_report.correlationsDetected && gisStructuredOutput.cice_report.correlationsDetected.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Correlaciones Cruzadas Detectadas</span>
+                            <ul className="space-y-1 pl-1">
+                              {gisStructuredOutput.cice_report.correlationsDetected.map((corr: string, idx: number) => (
+                                <li key={idx} className="text-[10.5px] text-cyan-300 leading-normal flex items-start gap-1.5 bg-cyan-950/20 p-2 border border-cyan-900/30 rounded-lg">
+                                  <span className="text-cyan-400 select-none mt-0.5">🔗</span>
+                                  <span>{corr}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Sources detail */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-900/60">
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuentes Utilizadas</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {gisStructuredOutput.cice_report.activeUsedProviders?.map((prov: string, idx: number) => (
+                                <span key={idx} className="px-2 py-0.5 bg-emerald-950/50 text-emerald-300 border border-emerald-900/30 rounded text-[9px] font-bold">
+                                  {prov}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuentes Descartadas</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {gisStructuredOutput.cice_report.activeDiscardedProviders?.map((prov: string, idx: number) => (
+                                <span key={idx} className="px-2 py-0.5 bg-slate-950/60 text-slate-400 border border-slate-850 rounded text-[9px] font-semibold line-through opacity-60">
+                                  {prov}
+                                </span>
+                              ))}
+                              {(!gisStructuredOutput.cice_report.activeDiscardedProviders || gisStructuredOutput.cice_report.activeDiscardedProviders.length === 0) && (
+                                <span className="text-[9px] text-slate-600 italic">Ninguna fuente descartada.</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Correlations Detected */}
-                    {gisStructuredOutput.cice_report.correlationsDetected && gisStructuredOutput.cice_report.correlationsDetected.length > 0 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Correlaciones Cruzadas Detectadas</span>
-                        <ul className="space-y-1 pl-1">
-                          {gisStructuredOutput.cice_report.correlationsDetected.map((corr: string, idx: number) => (
-                            <li key={idx} className="text-[10.5px] text-cyan-300 leading-normal flex items-start gap-1.5 bg-cyan-950/20 p-2 border border-cyan-900/30 rounded-lg">
-                              <span className="text-cyan-400 select-none mt-0.5">🔗</span>
-                              <span>{corr}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Sources detail */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-900/60">
-                      <div className="space-y-1">
-                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuentes Utilizadas</span>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {gisStructuredOutput.cice_report.activeUsedProviders?.map((prov: string, idx: number) => (
-                            <span key={idx} className="px-2 py-0.5 bg-emerald-950/50 text-emerald-300 border border-emerald-900/30 rounded text-[9px] font-bold">
-                              {prov}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider block">Fuentes Descartadas</span>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {gisStructuredOutput.cice_report.activeDiscardedProviders?.map((prov: string, idx: number) => (
-                            <span key={idx} className="px-2 py-0.5 bg-slate-950/60 text-slate-400 border border-slate-850 rounded text-[9px] font-semibold line-through opacity-60">
-                              {prov}
-                            </span>
-                          ))}
-                          {(!gisStructuredOutput.cice_report.activeDiscardedProviders || gisStructuredOutput.cice_report.activeDiscardedProviders.length === 0) && (
-                            <span className="text-[9px] text-slate-600 italic">Ninguna fuente descartada.</span>
-                          )}
-                        </div>
-                      </div>
+                    <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-850 whitespace-pre-wrap font-sans text-slate-300 text-xs leading-relaxed font-medium">
+                      {gisAnalysisReport}
+                    </div>
+                    
+                    {/* BOTÓN FINAL: GENERAR MAPA REPORT */}
+                    <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-900 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateMap("png")}
+                        className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold rounded-lg text-xs uppercase transition-all shadow-md active:scale-[0.98] cursor-pointer"
+                      >
+                        🖼️ Exportar como PNG
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateMap("pdf")}
+                        className="px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-lg text-xs uppercase transition-all shadow-md active:scale-[0.98] cursor-pointer"
+                      >
+                        📄 Exportar como PDF (Dictamen Oficial)
+                      </button>
                     </div>
                   </div>
                 )}
+              </>
+            )}
 
-                <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-850 whitespace-pre-wrap font-sans text-slate-300 text-xs leading-relaxed font-medium">
-                  {gisAnalysisReport}
-                </div>
-                
-                {/* BOTÓN FINAL: GENERAR MAPA REPORT */}
-                <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-900 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleGenerateMap("png")}
-                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold rounded-lg text-xs uppercase transition-all shadow-md active:scale-[0.98] cursor-pointer"
-                  >
-                    🖼️ Exportar como PNG
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleGenerateMap("pdf")}
-                    className="px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-lg text-xs uppercase transition-all shadow-md active:scale-[0.98] cursor-pointer"
-                  >
-                    📄 Exportar como PDF (Dictamen Oficial)
-                  </button>
+            {geointSubTab === "album" && (
+              <div className="w-full space-y-6">
+                <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-900 pb-3">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">📁 Álbum de Pandilla</h3>
+                      <p className="text-[10px] text-slate-500">Expediente visual estructurado de cada organización criminal.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-400 font-bold uppercase">Expediente:</label>
+                      <select
+                        value={albumGangId}
+                        onChange={e => setAlbumGangId(e.target.value)}
+                        className="bg-slate-900 border border-slate-800 text-xs font-bold text-slate-200 rounded px-2.5 py-1.5 focus:ring-0"
+                      >
+                        {storedGangs.map(g => (
+                          <option key={g.id} value={g.id}>👥 {g.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const activeAlbumGang = storedGangs.find(g => g.id === albumGangId) || storedGangs[0];
+                    if (!activeAlbumGang) {
+                      return (
+                        <div className="p-8 text-center text-xs text-slate-500 italic">
+                          No hay expedientes de pandillas cargados en el sistema. Vaya al Panel de Registro para crear uno.
+                        </div>
+                      );
+                    }
+
+                    // 1. Identidad General
+                    const codeSnippet = activeAlbumGang.id ? activeAlbumGang.id.substring(0, 8).toUpperCase() : "N/A";
+                    
+                    // 2. Estructura Criminal Grouping
+                    const gangMembers = activeAlbumGang.integrantes || [];
+                    const lideres = gangMembers.filter(m => {
+                      const r = (m.estatusPandilla || m.rol || "").toLowerCase();
+                      return r.includes("lider") || r.includes("segundo");
+                    });
+                    const sicarios = gangMembers.filter(m => {
+                      const r = (m.estatusPandilla || m.rol || "").toLowerCase();
+                      return r.includes("sicario") || r.includes("distribuidor");
+                    });
+                    const halcones = gangMembers.filter(m => {
+                      const r = (m.estatusPandilla || m.rol || "").toLowerCase();
+                      return r.includes("halcon") || r.includes("vigilante");
+                    });
+                    const operadores = gangMembers.filter(m => {
+                      const r = (m.estatusPandilla || m.rol || "").toLowerCase();
+                      return r.includes("operador") || r.includes("reclutador");
+                    });
+                    const miembros = gangMembers.filter(m => {
+                      const r = (m.estatusPandilla || m.rol || "").toLowerCase();
+                      return !r.includes("lider") && !r.includes("segundo") && !r.includes("sicario") && !r.includes("distribuidor") && !r.includes("halcon") && !r.includes("vigilante") && !r.includes("operador") && !r.includes("reclutador");
+                    });
+
+                    // 3. Domicilios Registrados
+                    const gangNodes = filteredGisData.nodes.filter(n => n.gang === activeAlbumGang.nombre);
+
+                    // 4. Zonas de Influencia
+                    const gangZones = filteredGisData.zones.filter(z => z.gang === activeAlbumGang.nombre);
+
+                    // 5. Evidencia Visual
+                    const gangGraffiti = activeAlbumGang.imagenesGrafiti || [];
+                    const associatedPhotos = projectPhotos.filter(p => {
+                      const comment = (p.comentario || "").toLowerCase();
+                      const name = (p.nombre || "").toLowerCase();
+                      const gangName = activeAlbumGang.nombre.toLowerCase();
+                      return comment.includes(gangName) || name.includes(gangName);
+                    });
+
+                    // 6. Eventos Históricos
+                    const gangEvents = activeAlbumGang.cronologiaEventos || [];
+
+                    // 7. Relaciones
+                    const gangRelations = activeAlbumGang.relaciones || [];
+
+                    // 8. Análisis Automático
+                    let riskScore = 3.0; // Baseline
+                    if (activeAlbumGang.peligrosidad === "Crítico") riskScore += 3.0;
+                    else if (activeAlbumGang.peligrosidad === "Alto") riskScore += 2.0;
+                    else if (activeAlbumGang.peligrosidad === "Medio") riskScore += 1.0;
+                    riskScore += Math.min(2.0, gangMembers.length * 0.2);
+                    const riskText = riskScore >= 7.0 ? "Crítico" : riskScore >= 5.0 ? "Alto" : riskScore >= 3.0 ? "Medio" : "Bajo";
+
+                    const corridorCount = (activeAlbumGang.geometrias || []).filter(s => s.tipo === "corredor").length;
+                    const growthTrend = gangMembers.length >= 8 ? "Expansión Territorial Alta" : gangMembers.length >= 4 ? "Estable / Crecimiento Moderado" : "Bajo Control";
+                    
+                    const patterns: string[] = [];
+                    if (lideres.length > 0 && sicarios.length > 0) {
+                      patterns.push("Estructura Operativa Completa: Se detecta coexistencia de mando táctico (líderes) y ejecutores de calle (sicarios).");
+                    }
+                    if (gangZones.length > 1) {
+                      patterns.push("Fraccionamiento Territorial: Presencia de múltiples cuadrantes de influencia DBSCAN denota una distribución descentralizada.");
+                    }
+                    const gangRivals = gangRelations.filter(r => r.tipo === "rival");
+                    if (gangRivals.length > 0) {
+                      patterns.push(`Conflicto de Frontera Activo: Rivalidad declarada con ${gangRivals.map(r => r.pandillaNombre).join(", ")}, elevando el riesgo de colisión.`);
+                    }
+                    if (patterns.length === 0) {
+                      patterns.push("Célula Local Autónoma: Estructura simple orientada al control de un cuadrante menor.");
+                    }
+
+                    // Navigation handlers
+                    const zoomToCoords = (coords: { lat: number; lng: number }, elementData: any) => {
+                      setSelectedGisElement(elementData);
+                      setGeointSubTab("mapa");
+                      setTimeout(() => {
+                        if (mapInstance) {
+                          mapInstance.panTo(coords);
+                          mapInstance.setZoom(16);
+                        }
+                      }, 100);
+                    };
+
+                    const handleMemberClick = (m: GangMember) => {
+                      const node = gangNodes.find(n => n.alias === m.alias || n.alias === m.nombre);
+                      if (node) {
+                        zoomToCoords(node.location, {
+                          tipo: "Domicilio de Integrante",
+                          titulo: node.alias || "Integrante",
+                          subtitulo: node.gang,
+                          rol: node.rol || "Integrante",
+                          detalle: node.domicilioExacto || "Sin dirección exacta registrada.",
+                          gang: node.gang,
+                          color: getGangColor(node.gang),
+                          lat: node.location.lat,
+                          lng: node.location.lng,
+                          source: node.source
+                        });
+                        setSelectedGisNode(node);
+                      } else {
+                        alert("⚠️ Este integrante no tiene coordenadas válidas en el mapa.");
+                      }
+                    };
+
+                    const handleZoneClick = (z: any) => {
+                      if (z.points && z.points.length > 0) {
+                        zoomToCoords(z.points[0], {
+                          tipo: "Zona de Influencia",
+                          titulo: `Zona de Influencia DBSCAN`,
+                          subtitulo: z.gang,
+                          detalle: `Área de control territorial calculada mediante agrupamiento de domicilios. Contiene ${z.memberCount} integrantes. Score: ${z.influence_score}.`,
+                          gang: z.gang,
+                          color: getGangColor(z.gang),
+                          lat: z.points[0].lat,
+                          lng: z.points[0].lng,
+                          source: "Análisis Espacial DBSCAN"
+                        });
+                        setSelectedGisZone(z);
+                      }
+                    };
+
+                    const handleEventClick = (ev: any) => {
+                      const coords = parseCoordinates(ev.lugar);
+                      if (coords) {
+                        zoomToCoords(coords, {
+                          tipo: `Evento Histórico - ${ev.categoria?.toUpperCase() || "INTELIGENCIA"}`,
+                          titulo: ev.titulo,
+                          subtitulo: activeAlbumGang.nombre,
+                          detalle: ev.descripcion || "Registro histórico de interés criminológico.",
+                          gang: activeAlbumGang.nombre,
+                          color: getGangColor(activeAlbumGang.nombre),
+                          lat: coords.lat,
+                          lng: coords.lng,
+                          date: ev.fecha,
+                          source: "Cronología CEIPOL"
+                        });
+                      } else {
+                        alert("⚠️ Este evento no tiene coordenadas georreferenciadas.");
+                      }
+                    };
+
+                    const handleResaltarGang = () => {
+                      setSelectedGangsForGis([activeAlbumGang.nombre]);
+                      setGeointSubTab("mapa");
+                      if (gangNodes.length > 0) {
+                        setTimeout(() => {
+                          if (mapInstance) {
+                            mapInstance.panTo(gangNodes[0].location);
+                            mapInstance.setZoom(13);
+                          }
+                        }, 100);
+                      }
+                    };
+
+                    return (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        
+                        {/* LEFT COLUMN: GENERAL & STRUCTURE (7 cols) */}
+                        <div className="lg:col-span-7 space-y-6">
+                          
+                          {/* 1. IDENTIDAD GENERAL */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <div className="flex justify-between items-start border-b border-slate-800 pb-2">
+                              <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                                🧠 1. Identidad General
+                              </h4>
+                              <button
+                                type="button"
+                                onClick={handleResaltarGang}
+                                className="px-2.5 py-1 bg-sky-950 hover:bg-sky-900 text-sky-400 border border-sky-850 rounded text-[10px] font-bold uppercase transition-colors"
+                              >
+                                🗺️ Resaltar en Mapa Táctico
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                              <div>
+                                <span className="text-[10px] text-slate-500 uppercase font-bold block">Nombre</span>
+                                <span className="font-extrabold text-slate-200 mt-1 block uppercase">{activeAlbumGang.nombre}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 uppercase font-bold block">Código Interno</span>
+                                <span className="font-mono font-bold text-slate-200 mt-1 block">{codeSnippet}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 uppercase font-bold block">Nivel de Actividad</span>
+                                <span className="font-bold text-emerald-400 mt-1 block uppercase">{activeAlbumGang.estatus}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-500 uppercase font-bold block">Peligrosidad</span>
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black uppercase mt-1 ${
+                                  activeAlbumGang.peligrosidad === "Crítico" ? "bg-red-950 text-red-400 border border-red-900/40" :
+                                  activeAlbumGang.peligrosidad === "Alto" ? "bg-orange-950 text-orange-400 border border-orange-900/40" :
+                                  "bg-sky-950 text-sky-400 border border-sky-900/40"
+                                }`}>
+                                  {activeAlbumGang.peligrosidad || "Medio"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                              <span className="text-[9px] text-slate-500 uppercase font-bold block">Zona Principal de Operación</span>
+                              <p className="text-slate-300 mt-1 font-semibold">{activeAlbumGang.zonaInfluencia || "Sin delimitar en catálogo."}</p>
+                            </div>
+                          </div>
+
+                          {/* 2. ESTRUCTURA CRIMINAL */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2 flex items-center justify-between">
+                              <span>👥 2. Estructura Criminal ({gangMembers.length} integrantes)</span>
+                              <span className="text-[10px] text-slate-500 font-bold">Haz clic en un integrante para ubicar su domicilio</span>
+                            </h4>
+
+                            {gangMembers.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic text-center py-4">No hay integrantes registrados en esta pandilla.</p>
+                            ) : (
+                              <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+                                {/* Group: Líderes */}
+                                {lideres.length > 0 && (
+                                  <div className="space-y-2">
+                                    <h5 className="text-[10px] text-rose-400 font-black uppercase tracking-wider flex items-center gap-1">👑 Líderes / Mandos ({lideres.length})</h5>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {lideres.map((m, i) => (
+                                        <div key={i} onClick={() => handleMemberClick(m)} className="flex items-center gap-2.5 p-2 bg-slate-950/50 hover:bg-slate-900/60 border border-slate-850 rounded-lg cursor-pointer transition-all hover:scale-[1.01]">
+                                          <img src={m.fotografiaUrl || "/avatars/avatar_male.png"} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-800 object-cover" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold text-slate-200 truncate">"{m.alias || "Sin alias"}"</p>
+                                            <p className="text-[9px] text-slate-400 truncate">{m.nombre || "Nombre sin registrar"}</p>
+                                          </div>
+                                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-rose-950/40 text-rose-400 border border-rose-900/30 rounded">LÍDER</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Group: Sicarios */}
+                                {sicarios.length > 0 && (
+                                  <div className="space-y-2">
+                                    <h5 className="text-[10px] text-amber-500 font-black uppercase tracking-wider flex items-center gap-1">🎯 Sicarios / Distribuidores ({sicarios.length})</h5>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {sicarios.map((m, i) => (
+                                        <div key={i} onClick={() => handleMemberClick(m)} className="flex items-center gap-2.5 p-2 bg-slate-950/50 hover:bg-slate-900/60 border border-slate-850 rounded-lg cursor-pointer transition-all hover:scale-[1.01]">
+                                          <img src={m.fotografiaUrl || "/avatars/avatar_male.png"} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-800 object-cover" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold text-slate-200 truncate">"{m.alias || "Sin alias"}"</p>
+                                            <p className="text-[9px] text-slate-400 truncate">{m.nombre || "Nombre sin registrar"}</p>
+                                          </div>
+                                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-amber-950/40 text-amber-500 border border-amber-900/30 rounded">SICARIO</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Group: Halcones */}
+                                {halcones.length > 0 && (
+                                  <div className="space-y-2">
+                                    <h5 className="text-[10px] text-sky-400 font-black uppercase tracking-wider flex items-center gap-1">👁️ Halcones / Vigilantes ({halcones.length})</h5>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {halcones.map((m, i) => (
+                                        <div key={i} onClick={() => handleMemberClick(m)} className="flex items-center gap-2.5 p-2 bg-slate-950/50 hover:bg-slate-900/60 border border-slate-850 rounded-lg cursor-pointer transition-all hover:scale-[1.01]">
+                                          <img src={m.fotografiaUrl || "/avatars/avatar_male.png"} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-800 object-cover" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold text-slate-200 truncate">"{m.alias || "Sin alias"}"</p>
+                                            <p className="text-[9px] text-slate-400 truncate">{m.nombre || "Nombre sin registrar"}</p>
+                                          </div>
+                                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-900/30 rounded">HALCÓN</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Group: Operadores */}
+                                {operadores.length > 0 && (
+                                  <div className="space-y-2">
+                                    <h5 className="text-[10px] text-purple-400 font-black uppercase tracking-wider flex items-center gap-1">⚙️ Operadores ({operadores.length})</h5>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {operadores.map((m, i) => (
+                                        <div key={i} onClick={() => handleMemberClick(m)} className="flex items-center gap-2.5 p-2 bg-slate-950/50 hover:bg-slate-900/60 border border-slate-850 rounded-lg cursor-pointer transition-all hover:scale-[1.01]">
+                                          <img src={m.fotografiaUrl || "/avatars/avatar_male.png"} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-800 object-cover" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold text-slate-200 truncate">"{m.alias || "Sin alias"}"</p>
+                                            <p className="text-[9px] text-slate-400 truncate">{m.nombre || "Nombre sin registrar"}</p>
+                                          </div>
+                                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-purple-950/40 text-purple-400 border border-purple-900/30 rounded">OPERADOR</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Group: Miembros standard */}
+                                {miembros.length > 0 && (
+                                  <div className="space-y-2">
+                                    <h5 className="text-[10px] text-slate-400 font-black uppercase tracking-wider flex items-center gap-1">🟢 Miembros / Colaboradores ({miembros.length})</h5>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {miembros.map((m, i) => (
+                                        <div key={i} onClick={() => handleMemberClick(m)} className="flex items-center gap-2.5 p-2 bg-slate-950/50 hover:bg-slate-900/60 border border-slate-850 rounded-lg cursor-pointer transition-all hover:scale-[1.01]">
+                                          <img src={m.fotografiaUrl || "/avatars/avatar_male.png"} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-850 object-cover" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold text-slate-200 truncate">"{m.alias || "Sin alias"}"</p>
+                                            <p className="text-[9px] text-slate-400 truncate">{m.nombre || "Nombre sin registrar"}</p>
+                                          </div>
+                                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-slate-900 text-slate-400 border border-slate-800 rounded">MIEMBRO</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 3. DOMICILIOS REGISTRADOS */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                              🏠 3. Domicilios Registrados & Cartografía Embebida
+                            </h4>
+                            
+                            {/* Embedded Map */}
+                            {isLoaded && (
+                              <div className="w-full h-[250px] rounded-lg border border-slate-850 overflow-hidden shadow-inner bg-slate-950">
+                                <GoogleMap
+                                  mapContainerStyle={{ width: "100%", height: "100%" }}
+                                  center={activeAlbumGang.coordenadas || (gangNodes[0]?.location) || { lat: 21.8853, lng: -102.2916 }}
+                                  zoom={13}
+                                  options={{
+                                    streetViewControl: false,
+                                    mapTypeControl: false,
+                                    fullscreenControl: false,
+                                    styles: darkMapStyles,
+                                    disableDefaultUI: true
+                                  }}
+                                >
+                                  {gangNodes.map(node => (
+                                    <Marker
+                                      key={node.member_id}
+                                      position={node.location}
+                                      icon={getMarkerIcon(node.rol, getGangColor(node.gang))}
+                                      title={node.alias}
+                                    />
+                                  ))}
+                                </GoogleMap>
+                              </div>
+                            )}
+
+                            {/* Addresses List */}
+                            <div className="space-y-1.5 max-h-[220px] overflow-y-auto text-xs pr-1">
+                              {gangMembers.map((m, i) => {
+                                const node = gangNodes.find(n => n.alias === m.alias || n.alias === m.nombre);
+                                return (
+                                  <div key={i} onClick={() => handleMemberClick(m)} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg hover:bg-slate-900/35 transition-colors cursor-pointer flex justify-between items-center gap-4">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-extrabold text-slate-200">🏠 "{m.alias || "Integrante"}"</p>
+                                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{m.domicilioConocido || "Sin dirección exacta registrada."}</p>
+                                    </div>
+                                    {node ? (
+                                      <div className="flex flex-col items-end shrink-0">
+                                        <span className="font-mono text-[9px] text-emerald-400 font-bold">{node.location.lat.toFixed(5)}, {node.location.lng.toFixed(5)}</span>
+                                        <span className="text-[8px] bg-emerald-950/50 text-emerald-400 border border-emerald-900/30 px-1 rounded font-bold uppercase tracking-wider mt-0.5">GEORREFERENCIADO</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[8px] bg-slate-900 text-slate-500 border border-slate-800 px-1 rounded font-bold uppercase tracking-wider shrink-0">SIN COORDENADAS</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* RIGHT COLUMN: ZONES, PHOTOS, TIMELINE, RELATIONS & AI (5 cols) */}
+                        <div className="lg:col-span-5 space-y-6">
+                          
+                          {/* 4. ZONAS DE INFLUENCIA */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                              🗺️ 4. Zonas de Influencia
+                            </h4>
+                            {gangZones.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic text-center py-4">No hay zonas de influencia DBSCAN calculadas para esta pandilla. Se requiere un mínimo de 2 integrantes geolocalizados.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {gangZones.map((z, idx) => (
+                                  <div key={idx} onClick={() => handleZoneClick(z)} className="p-3 bg-slate-950/40 hover:bg-slate-900/35 border border-slate-900 rounded-xl transition-all cursor-pointer space-y-2 relative overflow-hidden" style={{ borderLeft: `4px solid ${getGangColor(z.gang)}` }}>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-[9px] font-black uppercase text-slate-400">POLÍGONO DBSCAN</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                        z.intensity === "alto" ? "bg-red-950 text-red-400 border border-red-900/40" :
+                                        z.intensity === "medio" ? "bg-orange-950 text-orange-400 border border-orange-900/40" :
+                                        "bg-yellow-950 text-yellow-400 border border-yellow-900/40"
+                                      }`}>
+                                        INTENSIDAD {z.intensity.toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-200 leading-normal font-semibold">
+                                      Área de influencia con un total de <strong>{z.memberCount} integrantes</strong> agrupados.
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                      <div>
+                                        <span className="text-slate-500 block font-bold">Score de Influencia:</span>
+                                        <span className="text-sky-400 font-extrabold">{z.influence_score}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 block font-bold">Densidad / km²:</span>
+                                        <span className="text-emerald-400 font-extrabold">{z.density}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 5. EVIDENCIA VISUAL */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                              📸 5. Evidencia Visual
+                            </h4>
+                            
+                            {gangGraffiti.length === 0 && associatedPhotos.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic text-center py-4">No hay grafitis ni fotografías asociadas a esta pandilla en Firestore.</p>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto pr-1">
+                                {gangGraffiti.map((img, i) => (
+                                  <div key={i} className="bg-slate-950/40 border border-slate-900 rounded-lg overflow-hidden relative group">
+                                    <img src={img.url} alt="Grafiti" className="w-full h-24 object-cover" />
+                                    <div className="p-1.5 text-[9px] text-slate-400 truncate bg-slate-950/80 absolute bottom-0 left-0 right-0">
+                                      🎨 {img.descripcion || "Marcaje Territorial"}
+                                    </div>
+                                  </div>
+                                ))}
+                                {associatedPhotos.map((img, i) => (
+                                  <div key={i} className="bg-slate-950/40 border border-slate-900 rounded-lg overflow-hidden relative group">
+                                    <img src={img.imageUrl || img.url} alt="Foto" className="w-full h-24 object-cover" />
+                                    <div className="p-1.5 text-[9px] text-slate-400 truncate bg-slate-950/80 absolute bottom-0 left-0 right-0">
+                                      📸 {img.description || "Foto de Evidencia"}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 6. EVENTOS HISTÓRICOS */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                              ⚠️ 6. Eventos Históricos
+                            </h4>
+                            {gangEvents.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic text-center py-4">No hay incidentes registrados en la cronología.</p>
+                            ) : (
+                              <div className="space-y-2.5 max-h-[250px] overflow-y-auto pr-1">
+                                {gangEvents.map((ev, i) => (
+                                  <div key={ev.id || i} onClick={() => handleEventClick(ev)} className="p-2.5 bg-slate-950/40 border border-slate-900 hover:bg-slate-900/35 rounded-lg cursor-pointer transition-colors space-y-1 relative">
+                                    <div className="flex justify-between items-center text-[9px]">
+                                      <span className="text-slate-500 font-bold">{ev.fecha}</span>
+                                      <span className={`px-1 rounded-[3px] font-black uppercase text-[8px] ${
+                                        ev.gravedad === "Crítica" ? "bg-red-500" : ev.gravedad === "Alta" ? "bg-orange-500" : "bg-sky-500"
+                                      }`}>
+                                        {ev.gravedad}
+                                      </span>
+                                    </div>
+                                    <h5 className="text-xs font-bold text-slate-200 uppercase truncate">💥 {ev.titulo}</h5>
+                                    <p className="text-[10px] text-slate-400 leading-normal line-clamp-2">{ev.descripcion}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 7. RELACIONES */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                              🔗 7. Relaciones & Alianzas
+                            </h4>
+                            {gangRelations.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic text-center py-4">No hay relaciones inter-pandillas declaradas.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {gangRelations.map((rel, i) => (
+                                  <div key={i} className="p-2.5 bg-slate-950/40 border border-slate-900 rounded-lg flex items-center justify-between gap-4 text-xs">
+                                    <div className="min-w-0">
+                                      <p className="font-extrabold text-slate-200">👥 {rel.pandillaNombre}</p>
+                                      <p className="text-[10px] text-slate-500 font-semibold uppercase mt-0.5">{rel.tipoVinculo || "Actividad delictiva"}</p>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${
+                                      rel.tipo === "rival" ? "bg-red-950 text-red-400 border border-red-900/40" : "bg-emerald-950 text-emerald-400 border border-emerald-900/40"
+                                    }`}>
+                                      {rel.tipo === "rival" ? "⚔️ RIVAL" : "🤝 ALIANZA"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 8. ANÁLISIS AUTOMÁTICO */}
+                          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5 shadow space-y-4">
+                            <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                              📈 8. Análisis Automático (GEOINT AI)
+                            </h4>
+                            <div className="space-y-3.5 text-xs">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-950/30 p-2.5 rounded-lg border border-slate-900">
+                                  <span className="text-[9px] text-slate-500 font-bold uppercase block">Riesgo Calculado</span>
+                                  <span className={`font-black uppercase text-xs mt-1 block ${
+                                    riskText === "Crítico" ? "text-red-400 animate-pulse" : riskText === "Alto" ? "text-orange-400" : "text-sky-400"
+                                  }`}>{riskText} ({riskScore.toFixed(1)}/10)</span>
+                                </div>
+                                <div className="bg-slate-950/30 p-2.5 rounded-lg border border-slate-900">
+                                  <span className="text-[9px] text-slate-500 font-bold uppercase block">Tendencia de Crecimiento</span>
+                                  <span className="font-extrabold text-slate-200 mt-1 block truncate">{growthTrend}</span>
+                                </div>
+                              </div>
+                              <div className="bg-slate-950/30 p-2.5 rounded-lg border border-slate-900">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase block">Movilidad y Control</span>
+                                <span className="font-extrabold text-slate-300 mt-1 block">
+                                  {corridorCount} Corredores de Movilidad Tácticos identificados en cuadrícula.
+                                </span>
+                              </div>
+                              <div className="space-y-1.5">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase block">Patrones Operacionales Inferidos</span>
+                                <div className="space-y-1.5">
+                                  {patterns.map((pat, idx) => (
+                                    <div key={idx} className="p-2.5 bg-sky-950/20 text-sky-300 border border-sky-900/30 rounded-lg text-[10.5px] leading-normal flex items-start gap-1.5">
+                                      <span className="text-sky-400 mt-0.5">🧠</span>
+                                      <span>{pat}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
