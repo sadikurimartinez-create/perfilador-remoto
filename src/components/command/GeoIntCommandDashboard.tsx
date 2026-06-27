@@ -387,118 +387,71 @@ export default function GeoIntCommandDashboard() {
         </div>
       </div>
 
-      {/* COCKPIT GRID LAYOUT */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 items-stretch">
+      {/* COCKPIT STACK LAYOUT */}
+      <div className="flex flex-col gap-6 w-full">
         
-        {/* LEFT COLUMN: SYSTEM OVERVIEW & EVENT STREAM */}
-        <div className="xl:col-span-1 flex flex-col gap-5">
-          
-          {/* PANEL 1 — SYSTEM OVERVIEW */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md flex flex-col justify-between">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+        {/* 1. ESTADO GENERAL DEL SISTEMA (System Overview) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🧭</span>
               <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                🧭 PANEL 1 — SYSTEM OVERVIEW
+                PANEL 1 — ESTADO GENERAL DEL SISTEMA (SYSTEM OVERVIEW)
               </h3>
+            </div>
+            <div className="flex items-center gap-3">
               <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/20">
                 ACTIVE
               </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="bg-slate-950 border border-slate-800/60 p-2.5 rounded-lg flex flex-col">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Estado Global</span>
-                <span className="text-xs font-black text-emerald-400 mt-1">OPERACIONAL</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/60 p-2.5 rounded-lg flex flex-col">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Modo Activo</span>
-                <span className="text-xs font-black text-amber-400 mt-1">{systemMode}</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/60 p-2.5 rounded-lg flex flex-col">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">IRI Promedio</span>
-                <span className="text-xs font-black text-orange-400 mt-1 font-mono">{iriGlobal.toFixed(2)}</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/60 p-2.5 rounded-lg flex flex-col">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Estabilidad</span>
-                <span className="text-xs font-black text-purple-400 mt-1 font-mono">{(metrics.stability_score * 100).toFixed(0)}%</span>
-              </div>
-            </div>
-          </div>
-
-          {/* PANEL 3 — EVENT STREAM ENGINE */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md flex-1 flex flex-col min-h-[350px]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                🚨 PANEL 3 — EVENT STREAM ENGINE
-              </h3>
-              <span className="text-[9px] font-mono bg-red-950/40 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
-                {events.length} ACTIVE
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] xl:max-h-[500px] pr-1.5 custom-scrollbar">
-              {events.map((evt) => {
-                const isSelected = selectedEventId === evt.id;
-                const isCritical = evt.severity === "CRITICAL_RESPONSE";
-                return (
-                  <div
-                    key={evt.id}
-                    onClick={() => setSelectedEventId(evt.id)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all duration-300 ${
-                      isSelected
-                        ? "bg-slate-800 border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.1)]"
-                        : "bg-slate-950 hover:bg-slate-900 border-slate-800/60"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-bold text-slate-400 font-mono">{evt.id}</span>
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold font-mono tracking-wider ${
-                        isCritical
-                          ? "bg-red-950 text-red-400 border border-red-500/20"
-                          : evt.severity === "ALERT"
-                          ? "bg-orange-950 text-orange-400 border border-orange-500/20"
-                          : "bg-slate-800 text-slate-300 border border-slate-700/50"
-                      }`}>
-                        {evt.severity.replace("_RESPONSE", "")}
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-slate-200 mt-2 line-clamp-2 leading-relaxed">
-                      {evt.description}
-                    </p>
-
-                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40 text-[9px]">
-                      <span className="text-slate-500 font-mono">IRI: {evt.iri_score.toFixed(2)}</span>
-                      <span className={`font-bold ${
-                        evt.status === "PENDING_APPROVAL"
-                          ? "text-amber-400 animate-pulse"
-                          : evt.status === "APPROVED" || evt.status === "AUTO_EXECUTED"
-                          ? "text-emerald-400"
-                          : "text-slate-400"
-                      }`}>
-                        {evt.status}
-                      </span>
-                    </div>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: System Overview
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Monitorea la estabilidad y el estado operativo general de todo el centro de mando en tiempo real.</p>
+                    <p><strong>¿Qué información presenta?</strong> Modo activo del sistema (En Vivo, Piloto, Simulación), el promedio del Índice de Riesgo Integrado (IRI) global y el porcentaje de estabilidad técnica.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Si el estado es "OPERACIONAL" y la estabilidad está por encima del 90%, el sistema se considera saludable. Un IRI promedio alto advierte riesgos territoriales crecientes.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Permite coordinar escalamientos técnicos, decidir el cambio de modo de ejecución o decretar estados de contingencia preventiva.</p>
+                    <p><strong>Significado de indicadores:</strong> Estado Global (salud general del backend), Modo Activo (entorno de ejecución), IRI Promedio (riesgo de inundación/delincuencia consolidado), Estabilidad (rendimiento de flujos).</p>
+                    <p><strong>Interacción:</strong> Concentra las métricas principales de todos los subsistemas en un panel consolidado de diagnóstico rápido.</p>
                   </div>
-                );
-              })}
+                </div>
+              </div>
             </div>
           </div>
 
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-slate-950 border border-slate-800/60 p-3.5 rounded-xl flex flex-col">
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Estado Global</span>
+              <span className="text-sm font-black text-emerald-400 mt-1">OPERACIONAL</span>
+            </div>
+            <div className="bg-slate-950 border border-slate-800/60 p-3.5 rounded-xl flex flex-col">
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Modo Activo</span>
+              <span className="text-sm font-black text-amber-400 mt-1 uppercase">{systemMode}</span>
+            </div>
+            <div className="bg-slate-950 border border-slate-800/60 p-3.5 rounded-xl flex flex-col">
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">IRI Promedio</span>
+              <span className="text-sm font-black text-orange-400 mt-1 font-mono">{iriGlobal.toFixed(2)}</span>
+            </div>
+            <div className="bg-slate-950 border border-slate-800/60 p-3.5 rounded-xl flex flex-col">
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Estabilidad</span>
+              <span className="text-sm font-black text-purple-400 mt-1 font-mono">{(metrics.stability_score * 100).toFixed(0)}%</span>
+            </div>
+          </div>
         </div>
 
-        {/* CENTER COLUMN (TACTICAL MAP & GEOGRAPHIC VIEW) */}
-        <div className="xl:col-span-2 flex flex-col gap-5">
-          
-          {/* PANEL 2 — IRI REAL-TIME GRID */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md flex flex-col">
-            <div className="flex flex-row justify-between items-center border-b border-slate-800 pb-3 mb-3 gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs">🌍</span>
-                <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                  PANEL 2 — IRI REAL-TIME GRID (TACTICAL MAP)
-                </h3>
-              </div>
-
+        {/* 2. MAPA GEOINT OPERACIONAL (Operational Map) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🌍</span>
+              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
+                PANEL 2 — MAPA GEOINT OPERACIONAL (TACTICAL MAP)
+              </h3>
+            </div>
+            <div className="flex items-center gap-3">
               {/* TACTICAL TAB SELECTOR */}
               <div className="flex bg-slate-950 border border-slate-800/60 p-0.5 rounded-md">
                 <button
@@ -522,414 +475,613 @@ export default function GeoIntCommandDashboard() {
                   SCHEMATIC
                 </button>
               </div>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: GEOINT Map
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Proporciona la representación cartográfica en tiempo real de las cuadrículas de análisis georreferenciadas y las alertas del territorio.</p>
+                    <p><strong>¿Qué información presenta?</strong> Muestra celdas de 250 metros con código de color de riesgo (Normal a Crítico), coordenadas, cauces hidrológicos del Río San Pedro y capas de sensores.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Las celdas rojas u oscuras representan zonas con picos inminentes de riesgo donde confluyen señales de inundación, precipitación o disturbios OSINT.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Despliegue inmediato de brigadas de emergencia, priorización de zonas de búsqueda y rescate, y cierres preventivos de infraestructura vial.</p>
+                    <p><strong>Significado de indicadores:</strong> IRI (score de riesgo por cuadrante), Hidro (nivel de caudal físico), Lluvia (precipitación), OSINT (reportes de redes sociales).</p>
+                    <p><strong>Interacción:</strong> Al hacer clic en una celda en el mapa, los metadatos detallados y sus indicadores específicos se cargan en el visor inferior.</p>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
 
-            {/* INTERACTIVE CONTAINER */}
-            <div className="bg-slate-950 border border-slate-800 rounded-lg h-[360px] relative overflow-hidden flex items-center justify-center">
-              {mapView === "MAP" ? (
-                <div className="w-full h-full">
-                  <GeoIntMap />
-                </div>
-              ) : (
-                <div className="w-full h-full relative">
-                  <svg width="100%" height="100%" viewBox="0 0 400 240" className="absolute top-0 left-0">
-                    <defs>
-                      <pattern id="grid-pattern" width="20" height="20" patternUnits="userSpaceOnUse">
-                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(51, 65, 85, 0.15)" strokeWidth="0.5" />
-                      </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#grid-pattern)" />
-                    
-                    {/* Río San Pedro line */}
-                    <path d="M 120,0 Q 140,80 120,160 T 140,240" fill="none" stroke="rgba(14, 165, 233, 0.25)" strokeWidth="6" />
-                    <path d="M 120,0 Q 140,80 120,160 T 140,240" fill="none" stroke="#0ea5e9" strokeWidth="1.5" strokeDasharray="4,4" />
+          {/* INTERACTIVE MAP CONTAINER - Altura dominante de 750px */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl h-[750px] relative overflow-hidden flex items-center justify-center w-full">
+            {mapView === "MAP" ? (
+              <div className="w-full h-full">
+                <GeoIntMap />
+              </div>
+            ) : (
+              <div className="w-full h-full relative">
+                <svg width="100%" height="100%" viewBox="0 0 400 240" className="absolute inset-0 m-auto max-h-full max-w-full z-0">
+                  <defs>
+                    <pattern id="grid-pattern" width="20" height="20" patternUnits="userSpaceOnUse">
+                      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(51, 65, 85, 0.15)" strokeWidth="0.5" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid-pattern)" />
+                  
+                  {/* Río San Pedro line */}
+                  <path d="M 120,0 Q 140,80 120,160 T 140,240" fill="none" stroke="rgba(14, 165, 233, 0.25)" strokeWidth="6" />
+                  <path d="M 120,0 Q 140,80 120,160 T 140,240" fill="none" stroke="#0ea5e9" strokeWidth="1.5" strokeDasharray="4,4" />
 
-                    {/* Schematic grid render */}
-                    {cells.map((cell, idx) => {
-                      const x = 50 + (idx % 3) * 110;
-                      const y = 30 + Math.floor(idx / 3) * 85;
-                      const config = getCellColor(cell.iri_score);
-                      const isSelected = selectedCell?.id === cell.id;
+                  {/* Schematic grid render */}
+                  {cells.map((cell, idx) => {
+                    const x = 50 + (idx % 3) * 110;
+                    const y = 30 + Math.floor(idx / 3) * 85;
+                    const config = getCellColor(cell.iri_score);
+                    const isSelected = selectedCell?.id === cell.id;
 
-                      return (
-                        <g key={cell.id} className="cursor-pointer" onClick={() => setSelectedCell(cell)}>
-                          <rect
-                            x={x}
-                            y={y}
-                            width="85"
-                            height="60"
-                            rx="5"
-                            fill={config.fill}
-                            stroke={isSelected ? "#f59e0b" : config.stroke}
-                            strokeWidth={isSelected ? "2" : "1.2"}
-                            className="transition-all duration-300"
-                          />
-                          {cell.iri_score > 0.8 && (
-                            <circle cx={x + 42} cy={y + 30} r="25" fill="none" stroke="#ef4444" strokeWidth="1">
-                              <animate attributeName="r" values="10;30;10" dur="2s" repeatCount="indefinite" />
-                              <animate attributeName="opacity" values="0.8;0;0.8" dur="2s" repeatCount="indefinite" />
-                            </circle>
-                          )}
-                          <text x={x + 10} y={y + 18} fill="#94a3b8" fontSize="8" fontWeight="bold">
-                            {cell.id.toUpperCase().replace("CELL_250M_", "C-")}
-                          </text>
-                          <text x={x + 10} y={y + 34} fill="#ffffff" fontSize="11" fontWeight="extrabold" className="font-mono">
-                            IRI {cell.iri_score.toFixed(2)}
-                          </text>
-                          <text x={x + 10} y={y + 48} fill={config.stroke} fontSize="7" fontWeight="bold">
-                            {config.text}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-                  <div className="absolute bottom-3 right-3 bg-black/60 px-2 py-1 rounded text-[8px] text-slate-500 font-mono tracking-widest uppercase">
-                    Cyber Grid Base
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* DETALLES DE CELDA SELECCIONADA */}
-            {selectedCell && (
-              <div className="bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 mt-3 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-slate-200">SELECCIÓN: {selectedCell.id.toUpperCase()}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{
-                      borderColor: getCellColor(selectedCell.iri_score).stroke,
-                      color: getCellColor(selectedCell.iri_score).stroke
-                    }}>
-                      Riesgo: {selectedCell.risk_level}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Capa física hidrológica consolidada Aguascalientes Central.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2.5 w-full sm:w-auto text-center font-mono">
-                  <div className="bg-slate-900 border border-slate-800/60 p-1.5 rounded min-w-[55px]">
-                    <div className="text-[8px] text-slate-500 font-bold">HIDRO</div>
-                    <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.hydrology.toFixed(2)}</div>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800/60 p-1.5 rounded min-w-[55px]">
-                    <div className="text-[8px] text-slate-500 font-bold">LLUVIA</div>
-                    <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.precipitation.toFixed(2)}</div>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800/60 p-1.5 rounded min-w-[55px]">
-                    <div className="text-[8px] text-slate-500 font-bold">OSINT</div>
-                    <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.osint.toFixed(2)}</div>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800/60 p-1.5 rounded min-w-[55px]">
-                    <div className="text-[8px] text-slate-500 font-bold">SAT</div>
-                    <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.satellite.toFixed(2)}</div>
-                  </div>
+                    return (
+                      <g key={cell.id} className="cursor-pointer" onClick={() => setSelectedCell(cell)}>
+                        <rect
+                          x={x}
+                          y={y}
+                          width="85"
+                          height="60"
+                          rx="5"
+                          fill={config.fill}
+                          stroke={isSelected ? "#f59e0b" : config.stroke}
+                          strokeWidth={isSelected ? "2" : "1.2"}
+                          className="transition-all duration-300"
+                        />
+                        {cell.iri_score > 0.8 && (
+                          <circle cx={x + 42} cy={y + 30} r="25" fill="none" stroke="#ef4444" strokeWidth="1">
+                            <animate attributeName="r" values="10;30;10" dur="2s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.8;0;0.8" dur="2s" repeatCount="indefinite" />
+                          </circle>
+                        )}
+                        <text x={x + 10} y={y + 18} fill="#94a3b8" fontSize="8" fontWeight="bold">
+                          {cell.id.toUpperCase().replace("CELL_250M_", "C-")}
+                        </text>
+                        <text x={x + 10} y={y + 34} fill="#ffffff" fontSize="11" fontWeight="extrabold" className="font-mono">
+                          IRI {cell.iri_score.toFixed(2)}
+                        </text>
+                        <text x={x + 10} y={y + 48} fill={config.stroke} fontSize="7" fontWeight="bold">
+                          {config.text}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+                <div className="absolute bottom-3 right-3 bg-black/60 px-2 py-1 rounded text-[8px] text-slate-500 font-mono tracking-widest uppercase">
+                  Cyber Grid Base
                 </div>
               </div>
             )}
           </div>
 
-          {/* PANEL 5 — MODEL GOVERNANCE VIEW */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                🏛️ PANEL 5 — MODEL GOVERNANCE VIEW
-              </h3>
-              <span className="text-[10px] text-purple-400 font-bold bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-500/20">
-                GOVERNANCE ACTIVE
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-2.5">
-                <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-slate-400">Fuente Dominante</span>
-                  <strong className="text-emerald-400 uppercase">{governanceState.dominant_source}</strong>
-                </div>
-                <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-slate-400">Peso de Autoridad</span>
-                  <strong className="text-slate-200">{(governanceState.active_authority_weight * 100).toFixed(0)}%</strong>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-slate-400">Conflictos Resueltos</span>
-                  <strong className="text-sky-400 font-mono">{governanceState.conflicts_resolved}</strong>
-                </div>
-                <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-slate-400">GeoTruthScore Consolidado</span>
-                  <strong className="text-purple-400 font-mono">{governanceState.geo_truth_score.toFixed(2)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-3 bg-slate-950 border border-slate-800/60 p-2.5 rounded-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                Fuentes Secundarias Suprimidas:
-              </span>
-              <div className="flex gap-2">
-                {governanceState.suppressed_sources.map(src => (
-                  <span key={src} className="text-[9px] font-bold bg-red-950/30 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-md uppercase">
-                    {src}
+          {/* DETALLES DE CELDA SELECCIONADA */}
+          {selectedCell && (
+            <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 mt-4 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 w-full">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-slate-200">SELECCIÓN DETALLADA: {selectedCell.id.toUpperCase()}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{
+                    borderColor: getCellColor(selectedCell.iri_score).stroke,
+                    color: getCellColor(selectedCell.iri_score).stroke
+                  }}>
+                    Riesgo: {selectedCell.risk_level}
                   </span>
-                ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Capa física hidrológica consolidada Aguascalientes Central.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2.5 w-full sm:w-auto text-center font-mono">
+                <div className="bg-slate-900 border border-slate-800/60 p-2 rounded min-w-[65px]">
+                  <div className="text-[8px] text-slate-500 font-bold">HIDRO</div>
+                  <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.hydrology.toFixed(2)}</div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800/60 p-2 rounded min-w-[65px]">
+                  <div className="text-[8px] text-slate-500 font-bold">LLUVIA</div>
+                  <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.precipitation.toFixed(2)}</div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800/60 p-2 rounded min-w-[65px]">
+                  <div className="text-[8px] text-slate-500 font-bold">OSINT</div>
+                  <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.osint.toFixed(2)}</div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800/60 p-2 rounded min-w-[65px]">
+                  <div className="text-[8px] text-slate-500 font-bold">SAT</div>
+                  <div className="text-[10px] text-amber-500 font-bold mt-0.5">{selectedCell.satellite.toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 3. FLUJO DE EVENTOS (Event Stream) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col min-h-[350px]">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🚨</span>
+              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
+                PANEL 3 — FLUJO DE EVENTOS (EVENT STREAM ENGINE)
+              </h3>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[9px] font-mono bg-red-950/40 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
+                {events.length} ACTIVE
+              </span>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: Event Stream
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Muestra el listado cronológico continuo de los incidentes y disparadores críticos registrados por el sistema de alerta.</p>
+                    <p><strong>¿Qué información presenta?</strong> Identificadores de evento, niveles de gravedad (Normal, Vigilancia, Alerta, Respuesta Crítica), descripciones y estado de aprobación.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Cada evento representa una anomalía detectada. Si el estado es "PENDING_APPROVAL", requiere validación del operador; "APPROVED" o "AUTO_EXECUTED" indican que ya fueron despachados.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Clasificación de incidentes para su despacho, y priorización de la cola de respuesta en momentos de alta saturación de alertas.</p>
+                    <p><strong>Significado de indicadores:</strong> Severidad (criticidad del evento), Status (estado de resolución), Triggers (sensores que dispararon la alerta).</p>
+                    <p><strong>Interacción:</strong> Al hacer clic en un evento de la lista, este se carga automáticamente en el Motor de Decisiones (HITL) para su procesamiento y validación.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
+          <div className="flex-1 overflow-y-auto space-y-3 max-h-[450px] pr-1.5 custom-scrollbar w-full">
+            {events.map((evt) => {
+              const isSelected = selectedEventId === evt.id;
+              const isCritical = evt.severity === "CRITICAL_RESPONSE";
+              return (
+                <div
+                  key={evt.id}
+                  onClick={() => setSelectedEventId(evt.id)}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all duration-300 w-full ${
+                    isSelected
+                      ? "bg-slate-800/80 border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.1)]"
+                      : "bg-slate-950 hover:bg-slate-900 border-slate-800/60"
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] font-bold text-slate-400 font-mono">{evt.id}</span>
+                    <span className={`text-[8px] px-2 py-0.5 rounded font-bold font-mono tracking-wider ${
+                      isCritical
+                        ? "bg-red-950 text-red-400 border border-red-500/20"
+                        : evt.severity === "ALERT"
+                        ? "bg-orange-950 text-orange-400 border border-orange-500/20"
+                        : "bg-slate-800 text-slate-300 border border-slate-700/50"
+                    }`}>
+                      {evt.severity.replace("_RESPONSE", "")}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-200 mt-2.5 leading-relaxed">
+                    {evt.description}
+                  </p>
+
+                  <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-slate-800/40 text-[9px]">
+                    <span className="text-slate-500 font-mono">IRI: {evt.iri_score.toFixed(2)}</span>
+                    <span className={`font-bold uppercase ${
+                      evt.status === "PENDING_APPROVAL"
+                        ? "text-amber-400 animate-pulse"
+                        : evt.status === "APPROVED" || evt.status === "AUTO_EXECUTED"
+                        ? "text-emerald-400"
+                        : "text-slate-400"
+                    }`}>
+                      {evt.status}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* RIGHT COLUMN: HITL CONTROLS, HEALTH, PILOT CONTROL */}
-        <div className="xl:col-span-1 flex flex-col gap-5">
-          
-          {/* PANEL 4 — DECISION ENGINE (HITL) */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+        {/* 4. MOTOR DE DECISIONES (Decision Engine) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🧠</span>
               <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                🧠 PANEL 4 — DECISION ENGINE (HITL)
+                PANEL 4 — MOTOR DE DECISIONES (DECISION ENGINE / HITL)
               </h3>
+            </div>
+            <div className="flex items-center gap-3">
               <span className="text-[9px] bg-amber-950/40 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
                 WAITING HITL
               </span>
-            </div>
-
-            {currentSelectedEvent ? (
-              <div className="space-y-3 text-xs">
-                <div className="bg-slate-950 border border-slate-800/60 p-3 rounded-lg">
-                  <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Acción Recomendada</div>
-                  <p className="text-[11px] text-slate-200 font-semibold mt-1 leading-relaxed">
-                    {currentSelectedEvent.description}
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Justificación de Control</label>
-                  <input
-                    type="text"
-                    value={justification}
-                    onChange={(e) => setJustification(e.target.value)}
-                    placeholder="Escriba motivo de decisión..."
-                    className="bg-slate-950 border border-slate-800 rounded px-2.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50"
-                  />
-                </div>
-
-                {actionSuccess && (
-                  <div className="text-[10px] text-emerald-400 bg-emerald-950/20 border border-emerald-500/30 p-2.5 rounded">
-                    {actionSuccess}
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: Decision Engine
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Interfaz de validación humana (Human-In-The-Loop) para despachar o suprimir recomendaciones generadas automáticamente por el motor de toma de decisiones.</p>
+                    <p><strong>¿Qué información presenta?</strong> Recomendación específica del algoritmo, campo de justificación del analista y opciones de resolución.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Presenta la acción óptima aconsejada por el sistema. El operador debe escribir una justificación obligatoria y seleccionar un veredicto.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Aprobación (Approve) de respuestas de rescate, rechazo (Reject) de falsas alarmas, y retención (Hold) de incidentes dudosos para investigación profunda.</p>
+                    <p><strong>Significado de indicadores:</strong> Approve (ejecuta protocolo y firma el log), Reject (cancela recomendación), Hold (congela el despacho en espera de más inteligencia).</p>
+                    <p><strong>Interacción:</strong> Consume los eventos seleccionados del Event Stream y escribe directamente en los registros de auditoría institucional del sistema al procesar una decisión.</p>
                   </div>
-                )}
-
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    disabled={processing || currentSelectedEvent.status !== "PENDING_APPROVAL"}
-                    onClick={() => handleHITLCommand("APPROVE")}
-                    className={`p-2.5 text-[10px] font-bold rounded transition-all duration-300 ${
-                      currentSelectedEvent.status === "PENDING_APPROVAL"
-                        ? "bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold"
-                        : "bg-slate-800 text-slate-500 border border-slate-700/30 cursor-not-allowed"
-                    }`}
-                  >
-                    APPROVE
-                  </button>
-                  <button
-                    disabled={processing || currentSelectedEvent.status !== "PENDING_APPROVAL"}
-                    onClick={() => handleHITLCommand("REJECT")}
-                    className={`p-2.5 text-[10px] font-bold rounded transition-all duration-300 ${
-                      currentSelectedEvent.status === "PENDING_APPROVAL"
-                        ? "bg-red-600 hover:bg-red-500 text-white font-extrabold"
-                        : "bg-slate-800 text-slate-500 border border-slate-700/30 cursor-not-allowed"
-                    }`}
-                  >
-                    REJECT
-                  </button>
-                  <button
-                    disabled={processing || currentSelectedEvent.status !== "PENDING_APPROVAL"}
-                    onClick={() => handleHITLCommand("HOLD")}
-                    className={`p-2.5 text-[10px] font-bold rounded transition-all duration-300 ${
-                      currentSelectedEvent.status === "PENDING_APPROVAL"
-                        ? "bg-amber-600 hover:bg-amber-500 text-white font-extrabold"
-                        : "bg-slate-800 text-slate-500 border border-slate-700/30 cursor-not-allowed"
-                    }`}
-                  >
-                    HOLD
-                  </button>
                 </div>
               </div>
-            ) : (
-              <p className="text-[11px] text-slate-500 text-center py-4">
-                Seleccione un evento crítico en el stream para operar.
-              </p>
-            )}
+            </div>
           </div>
 
-          {/* PANEL 6 — PROVIDER HEALTH MATRIX */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          {currentSelectedEvent ? (
+            <div className="space-y-4 text-xs w-full">
+              <div className="bg-slate-950 border border-slate-800/60 p-4 rounded-xl">
+                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Acción Recomendada</div>
+                <p className="text-[11px] text-slate-200 font-semibold mt-1.5 leading-relaxed">
+                  {currentSelectedEvent.description}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Justificación de Control</label>
+                <input
+                  type="text"
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  placeholder="Escriba motivo de decisión..."
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/50 w-full"
+                />
+              </div>
+
+              {actionSuccess && (
+                <div className="text-[10px] text-emerald-400 bg-emerald-950/20 border border-emerald-500/30 p-3 rounded-lg">
+                  {actionSuccess}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-3 w-full">
+                <button
+                  disabled={processing || currentSelectedEvent.status !== "PENDING_APPROVAL"}
+                  onClick={() => handleHITLCommand("APPROVE")}
+                  className={`p-3 text-[10px] font-bold rounded-lg transition-all duration-300 ${
+                    currentSelectedEvent.status === "PENDING_APPROVAL"
+                      ? "bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-md"
+                      : "bg-slate-850 text-slate-500 border border-slate-800/30 cursor-not-allowed"
+                  }`}
+                >
+                  APPROVE
+                </button>
+                <button
+                  disabled={processing || currentSelectedEvent.status !== "PENDING_APPROVAL"}
+                  onClick={() => handleHITLCommand("REJECT")}
+                  className={`p-3 text-[10px] font-bold rounded-lg transition-all duration-300 ${
+                    currentSelectedEvent.status === "PENDING_APPROVAL"
+                      ? "bg-red-600 hover:bg-red-500 text-white font-extrabold shadow-md"
+                      : "bg-slate-850 text-slate-500 border border-slate-800/30 cursor-not-allowed"
+                  }`}
+                >
+                  REJECT
+                </button>
+                <button
+                  disabled={processing || currentSelectedEvent.status !== "PENDING_APPROVAL"}
+                  onClick={() => handleHITLCommand("HOLD")}
+                  className={`p-3 text-[10px] font-bold rounded-lg transition-all duration-300 ${
+                    currentSelectedEvent.status === "PENDING_APPROVAL"
+                      ? "bg-amber-600 hover:bg-amber-500 text-white font-extrabold shadow-md"
+                      : "bg-slate-855 text-slate-500 border border-slate-800/30 cursor-not-allowed"
+                  }`}
+                >
+                  HOLD
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500 text-center py-6">
+              Seleccione un evento crítico en el stream para operar.
+            </p>
+          )}
+        </div>
+
+        {/* 5. VERDAD OPERACIONAL (Operational Truth / Governance) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🏛️</span>
               <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                🌐 PANEL 6 — PROVIDER HEALTH MATRIX
+                PANEL 5 — VERDAD OPERACIONAL (OPERATIONAL TRUTH / MODEL GOVERNANCE VIEW)
               </h3>
-              <span className="text-[9px] bg-slate-950 text-slate-400 px-1.5 py-0.5 rounded font-mono">
-                6 SYSTEMS
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-purple-400 font-bold bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-500/20">
+                GOVERNANCE ACTIVE
               </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {Object.values(healthMatrix).map((h) => {
-                const isHealthy = h.status === "healthy" || h.status === "stable";
-                return (
-                  <div key={h.provider} className="bg-slate-950 border border-slate-800/60 p-2 rounded-lg flex items-center justify-between gap-1">
-                    <div>
-                      <strong className="text-[10px] text-slate-200">{h.provider}</strong>
-                      <div className="text-[9px] text-slate-500 mt-0.5 font-mono">{h.latency_ms}ms</div>
-                    </div>
-                    <span className={`text-[7px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                      isHealthy
-                        ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/20"
-                        : "bg-red-950/60 text-red-400 border border-red-500/20"
-                    }`}>
-                      {h.status}
-                    </span>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: Operational Truth
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Monitorea las políticas de gobernanza de datos y la veracidad integrada de los modelos que sustentan el cálculo del IRI.</p>
+                    <p><strong>¿Qué información presenta?</strong> Identifica la fuente de información dominante elegida por el motor de consenso, su peso de autoridad y el score global de verdad espacial.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Muestra qué sensor tiene la máxima autoridad en este momento. Las fuentes con datos contradictorios o con ruido OSINT aparecen como "Suprimidas".</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Calibrar el peso de las fuentes y verificar si el consenso de verdad operativa ("GeoTruthScore") está alineado con los reportes oficiales.</p>
+                    <p><strong>Significado de indicadores:</strong> Fuente Dominante (proveedor primario), Peso de Autoridad (confiabilidad relativa), GeoTruthScore (coherencia de verdad espacial).</p>
+                    <p><strong>Interacción:</strong> Filtra y pondera el flujo de señales de entrada antes de que sean representadas en el mapa táctico o procesadas por el motor de eventos.</p>
                   </div>
-                );
-              })}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* PANEL 7 — PILOT CONTROL CENTER */}
-          <div className="bg-slate-900 border border-slate-800/80 rounded-lg p-4 shadow-md flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs w-full">
+            <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
+              <div className="flex justify-between border-b border-slate-800/60 pb-2">
+                <span className="text-slate-400 font-semibold">Fuente Dominante</span>
+                <strong className="text-emerald-400 uppercase font-black">{governanceState.dominant_source}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-semibold">Peso de Autoridad</span>
+                <strong className="text-slate-200 font-extrabold">{(governanceState.active_authority_weight * 100).toFixed(0)}%</strong>
+              </div>
+            </div>
+
+            <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
+              <div className="flex justify-between border-b border-slate-800/60 pb-2">
+                <span className="text-slate-400 font-semibold">Conflictos Resueltos</span>
+                <strong className="text-sky-400 font-mono font-black">{governanceState.conflicts_resolved}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-semibold">GeoTruthScore Consolidado</span>
+                <strong className="text-purple-400 font-mono font-black">{governanceState.geo_truth_score.toFixed(2)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 bg-slate-950 border border-slate-800/60 p-3 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3 w-full">
+            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">
+              Fuentes Secundarias Suprimidas en este Ciclo:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {governanceState.suppressed_sources.map(src => (
+                <span key={src} className="text-[9px] font-bold bg-red-950/40 text-red-400 border border-red-900/30 px-2.5 py-1 rounded-md uppercase font-mono">
+                  {src}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 6. ESTADO DE LOS PROVEEDORES (Provider Health) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🌐</span>
               <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                🧪 PANEL 7 — PILOT CONTROL CENTER
+                PANEL 6 — ESTADO DE LOS PROVEEDORES (PROVIDER HEALTH MATRIX)
               </h3>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[9px] bg-slate-950 text-slate-450 border border-slate-850 px-1.5 py-0.5 rounded font-mono font-bold">
+                {Object.keys(healthMatrix).length} SYSTEMS ONLINE
+              </span>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: Provider Health
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Monitorea en tiempo real la salud de la red de APIs, bases de datos y servicios externos que alimentan el Centro de Mando.</p>
+                    <p><strong>¿Qué información presenta?</strong> Latencia en milisegundos de cada proveedor (NOAA, NASA, CONAGUA, OSINT, etc.), su tasa de éxito y estado del disyuntor de red.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Los estados "healthy" o "stable" indican conexiones saludables. Un estado "degraded" o "circuit open" advierte de posible pérdida de datos y respuestas lentas.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Cambiar a modos de contingencia offline o alertar a los administradores de sistemas sobre la degradación de un satélite o API clave.</p>
+                    <p><strong>Significado de indicadores:</strong> Latencia (demora de respuesta en milisegundos), Status (salud del puente de conexión).</p>
+                    <p><strong>Interacción:</strong> Si un proveedor crítico falla, el sistema restringe su visualización en las capas del mapa y reduce su peso en el motor de decisiones.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 w-full">
+            {Object.values(healthMatrix).map((h) => {
+              const isHealthy = h.status === "healthy" || h.status === "stable";
+              return (
+                <div key={h.provider} className="bg-slate-950 border border-slate-800/60 p-3 rounded-xl flex items-center justify-between gap-2">
+                  <div>
+                    <strong className="text-[10px] text-slate-200 font-extrabold uppercase">{h.provider}</strong>
+                    <div className="text-[9px] text-slate-500 mt-1 font-mono">{h.latency_ms}ms</div>
+                  </div>
+                  <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                    isHealthy
+                      ? "bg-emerald-950/60 text-emerald-400 border-emerald-500/20"
+                      : "bg-red-950/60 text-red-400 border-red-500/20"
+                  }`}>
+                    {h.status}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 7. CENTRO DE CONTROL DEL PILOTO (Pilot Control) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🧪</span>
+              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
+                PANEL 7 — CENTRO DE CONTROL DEL PILOTO (PILOT CONTROL CENTER)
+              </h3>
+            </div>
+            <div className="flex items-center gap-3">
               <span className="text-[9px] bg-amber-950/40 text-amber-500 px-1.5 py-0.5 rounded font-mono border border-amber-500/20 font-bold">
                 SIM ACTIVA
               </span>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                <span className="text-slate-400">Simulación Escenario</span>
-                <strong className="text-amber-500 font-bold">{currentScenario}</strong>
-              </div>
-              <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                <span className="text-slate-400">HITL State</span>
-                <strong className="text-emerald-400 font-bold">OBLIGATORIO</strong>
-              </div>
-              <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                <span className="text-slate-400">Throttling Guard</span>
-                <strong className="text-sky-400 font-bold">ACTIVO (CACHE-OVER)</strong>
-              </div>
-              <div className="flex justify-between border-b border-slate-800 pb-1.5">
-                <span className="text-slate-400">OSINT Degradation Factor</span>
-                <strong className="text-orange-400 font-bold">55% (PILOT LIMITS)</strong>
-              </div>
-
-              {/* Stress trigger triggers */}
-              <div className="grid grid-cols-2 gap-1.5 pt-1">
-                {["LATENCY_SPIKE", "DATA_LOSS", "OSINT_OVERLOAD", "CONFLICTING_HYDRO"].map((scen) => (
-                  <button
-                    key={scen}
-                    onClick={() => handleTriggerScenario(scen)}
-                    className={`px-2 py-1.5 rounded text-[8px] font-bold uppercase transition-all duration-300 ${
-                      currentScenario === scen
-                        ? "bg-red-700 hover:bg-red-600 text-white font-black shadow-md border border-red-500/40"
-                        : "bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800/60"
-                    }`}
-                  >
-                    {scen.replace("_", " ")}
-                  </button>
-                ))}
-              </div>
-
-              {currentScenario !== "NONE" && (
-                <button
-                  onClick={() => handleTriggerScenario("NONE")}
-                  className="bg-emerald-950/60 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/30 rounded w-full p-1.5 text-[9px] font-black uppercase tracking-wider transition-all duration-300"
-                >
-                  Detener Simulación Stress
-                </button>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* FOOTER BAR: OBSERVABILITY DECK & TRANSACTION LOGS */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 bg-slate-900 border border-slate-800 rounded-lg shadow-lg overflow-hidden items-stretch">
-        
-        {/* PANEL 8 — TELEMETRY & OBSERVABILITY */}
-        <div className="lg:col-span-2 p-4 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-800">
-          <div>
-            <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400 flex items-center gap-1.5">
-              <span>📡</span> PANEL 8 — TELEMETRY & OBSERVABILITY
-            </h3>
-            <p className="text-[9px] text-slate-500 mt-0.5">
-              Métricas de estabilidad y comportamiento operacional en tiempo real.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 md:grid-cols-5 gap-3 text-center mt-3 font-mono">
-            <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/60">
-              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Estabilidad</div>
-              <div className="text-xs font-black text-purple-400 mt-1">{(metrics.stability_score * 100).toFixed(0)}%</div>
-            </div>
-            <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/60">
-              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Volatilidad</div>
-              <div className="text-xs font-black text-red-400 mt-1">{metrics.iri_volatility.toFixed(3)}</div>
-            </div>
-            <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/60">
-              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Authority Drift</div>
-              <div className="text-xs font-black text-amber-500 mt-1">{metrics.authority_drift.toFixed(3)}</div>
-            </div>
-            <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/60">
-              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Fallback Latency</div>
-              <div className="text-xs font-black text-sky-400 mt-1">{metrics.system_latency}ms</div>
-            </div>
-            <div className="bg-slate-950 p-2 rounded-lg border border-slate-800/60">
-              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Flapping Guard</div>
-              <div className={`text-xs font-black mt-1 ${metrics.event_flapping ? "text-red-400 animate-pulse" : "text-emerald-400"}`}>
-                {metrics.event_flapping ? "FLAPPING" : "STABLE"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SYSTEM AUDIT TRAIL STREAM TERMINAL */}
-        <div className="lg:col-span-2 p-4 flex flex-col justify-between">
-          <div>
-            <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400 flex items-center gap-1.5">
-              <span>📃</span> LOGS DE AUDITORÍA INSTITUCIONAL
-            </h3>
-            <p className="text-[9px] text-slate-500 mt-0.5">
-              Trazabilidad completa firmada digitalmente para protección civil y auditorías.
-            </p>
-          </div>
-
-          <div className="mt-3 bg-black/60 p-2.5 rounded-lg border border-slate-800/60 font-mono text-[9px] text-slate-400 h-24 overflow-y-auto pr-1.5 custom-scrollbar space-y-1.5">
-            {auditTrail.length > 0 ? (
-              auditTrail.map((log, idx) => (
-                <div key={idx} className="border-b border-slate-900/40 pb-1.5 last:border-0 last:pb-0">
-                  <div className="flex justify-between text-[8px] text-slate-500">
-                    <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                    <span className="text-sky-500 font-extrabold uppercase">actor: {log.actor}</span>
-                  </div>
-                  <div className="mt-0.5">
-                    <span className="text-amber-500/90 font-bold">[{log.action}]</span> <span className="text-slate-300">{log.justification}</span>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: Pilot Control
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Consola de simulación que permite a los operadores e instructores inyectar fallas artificiales para evaluar la resiliencia operativa.</p>
+                    <p><strong>¿Qué información presenta?</strong> Escenario de estrés activo, obligatoriedad del estado HITL y métricas de degradación impuestas por la simulación.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Muestra el tipo de anomalía sintética que está experimentando el sistema en tiempo real. Sirve para evaluar los mecanismos de autodefensa del software.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Planificación de entrenamientos operacionales y pruebas de robustez del sistema bajo escenarios de desastre de red o datos falsificados.</p>
+                    <p><strong>Significado de indicadores:</strong> Latency Spike (pico de latencia), Data Loss (pérdida de paquetes), OSINT Overload (saturación de rumores), Conflicting Hydro (datos hidrológicos contradictorios).</p>
+                    <p><strong>Interacción:</strong> Modifica dinámicamente los valores mostrados en Provider Health, Telemetry y Event Stream para modelar la contingencia seleccionada.</p>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="text-slate-600 text-center py-5">Ninguna acción de control humano registrada en el ciclo.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs w-full">
+            <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
+              <div className="flex justify-between border-b border-slate-800/60 pb-2">
+                <span className="text-slate-400 font-semibold">Simulación Escenario</span>
+                <strong className="text-amber-500 font-bold">{currentScenario}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-semibold">HITL State</span>
+                <strong className="text-emerald-400 font-bold">OBLIGATORIO</strong>
+              </div>
+            </div>
+
+            <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
+              <div className="flex justify-between border-b border-slate-800/60 pb-2">
+                <span className="text-slate-400 font-semibold">Throttling Guard</span>
+                <strong className="text-sky-400 font-bold">ACTIVO (CACHE-OVER)</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-semibold">OSINT Degradation Factor</span>
+                <strong className="text-orange-400 font-bold">55% (PILOT LIMITS)</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Stress trigger buttons */}
+          <div className="flex flex-col gap-3.5 pt-1 w-full">
+            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Inyectar Escenario de Contingencia:</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+              {["LATENCY_SPIKE", "DATA_LOSS", "OSINT_OVERLOAD", "CONFLICTING_HYDRO"].map((scen) => (
+                <button
+                  key={scen}
+                  onClick={() => handleTriggerScenario(scen)}
+                  className={`p-3 rounded-lg text-[9px] font-black uppercase transition-all duration-300 border ${
+                    currentScenario === scen
+                      ? "bg-red-700 hover:bg-red-600 text-white shadow-md border-red-500/40"
+                      : "bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-850"
+                  }`}
+                >
+                  {scen.replace("_", " ")}
+                </button>
+              ))}
+            </div>
+
+            {currentScenario !== "NONE" && (
+              <button
+                onClick={() => handleTriggerScenario("NONE")}
+                className="bg-emerald-950/60 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/30 rounded-lg w-full p-2.5 text-[9.5px] font-black uppercase tracking-wider transition-all duration-300"
+              >
+                🛑 Detener Simulación de Estrés
+              </button>
             )}
           </div>
         </div>
 
-      </div>
+        {/* 8. TELEMETRÍA DEL SISTEMA (System Telemetry & Logs) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📡</span>
+              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
+                PANEL 8 — TELEMETRÍA DEL SISTEMA & AUDITORÍA DE OPERACIÓN
+              </h3>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-slate-400 font-mono font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-850">
+                MONITOR ACTIVE
+              </span>
+              <div className="relative group flex items-center">
+                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                    ❓ Ayuda: Telemetría del Sistema
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    <p><strong>¿Qué hace el módulo?</strong> Registra de manera unificada las métricas técnicas del rendimiento de red y la consola histórica de decisiones de control humano.</p>
+                    <p><strong>¿Qué información presenta?</strong> Volatilidad de IRI, deriva de autoridad, latencias de respaldo (fallback), estado de oscilación de eventos (flapping) y logs oficiales firmados.</p>
+                    <p><strong>¿Cómo debe interpretarse?</strong> Permite analizar si las métricas de rendimiento del software están estables y repasar la cronología exacta de las firmas y justificaciones de los operadores.</p>
+                    <p><strong>¿Qué decisiones apoya?</strong> Auditorías legales post-incidente para deslindar responsabilidades y análisis forense del comportamiento del IRI durante crisis territoriales.</p>
+                    <p><strong>Significado de indicadores:</strong> Volatilidad (fluctuación de riesgo), Drift (desviación de autoridad), Fallback Latency (demora de respaldo), Logs (registro inmutable de transacciones).</p>
+                    <p><strong>Interacción:</strong> Recibe y graba persistente y cronológicamente cada decisión tomada en el Decision Engine (HITL).</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch w-full">
+            {/* Real-time metrics grid */}
+            <div className="lg:col-span-6 bg-slate-950 border border-slate-850 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-3 block">
+                Métricas de Estabilidad Operativa
+              </span>
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-center font-mono">
+                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800/40">
+                  <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Estabilidad</div>
+                  <div className="text-xs font-black text-purple-400 mt-1">{(metrics.stability_score * 100).toFixed(0)}%</div>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800/40">
+                  <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Volatilidad</div>
+                  <div className="text-xs font-black text-red-400 mt-1">{metrics.iri_volatility.toFixed(3)}</div>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800/40">
+                  <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Drift</div>
+                  <div className="text-xs font-black text-amber-500 mt-1">{metrics.authority_drift.toFixed(3)}</div>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800/40">
+                  <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Latency</div>
+                  <div className="text-xs font-black text-sky-400 mt-1">{metrics.system_latency}ms</div>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded-lg border border-slate-800/40">
+                  <div className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Flapping</div>
+                  <div className={`text-xs font-black mt-1 ${metrics.event_flapping ? "text-red-400 animate-pulse" : "text-emerald-400"}`}>
+                    {metrics.event_flapping ? "FLAPPING" : "STABLE"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Audit logs stream */}
+            <div className="lg:col-span-6 bg-slate-950 border border-slate-850 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-2 block">
+                Consola de Firmas y Auditorías de Control
+              </span>
+              <div className="bg-black/40 p-3 rounded-lg border border-slate-900 font-mono text-[9px] text-slate-400 h-24 overflow-y-auto pr-1.5 custom-scrollbar space-y-1.5 w-full">
+                {auditTrail.length > 0 ? (
+                  auditTrail.map((log, idx) => (
+                    <div key={idx} className="border-b border-slate-900/40 pb-1.5 last:border-0 last:pb-0">
+                      <div className="flex justify-between text-[8px] text-slate-500">
+                        <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span className="text-sky-500 font-extrabold uppercase">Actor: {log.actor}</span>
+                      </div>
+                      <div className="mt-0.5">
+                        <span className="text-amber-500/90 font-bold">[{log.action}]</span> <span className="text-slate-300">{log.justification}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-600 text-center py-5">Ninguna acción de control humano registrada en el ciclo.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
