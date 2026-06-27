@@ -63,6 +63,28 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   // Map instance & info window
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<any | null>(null);
+  const [baseLayer, setBaseLayer] = useState<"standard" | "satellite">("standard");
+
+  const handleZoomIn = () => {
+    if (map) {
+      const zoom = map.getZoom();
+      if (zoom !== undefined) map.setZoom(zoom + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (map) {
+      const zoom = map.getZoom();
+      if (zoom !== undefined) map.setZoom(zoom - 1);
+    }
+  };
+
+  const handleResetView = () => {
+    if (map) {
+      map.setCenter({ lat: 21.8853, lng: -102.2916 });
+      map.setZoom(13);
+    }
+  };
 
   // Pre-load Google Maps API
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
@@ -368,17 +390,76 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
 
                 {isLoaded ? (
                   <div className="border border-slate-800 rounded-2xl overflow-hidden relative">
+                    {/* Zoom & Base Layer Controls Overlay */}
+                    <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl shadow-2xl">
+                      <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
+                        Controles Zoom
+                      </div>
+                      <div className="flex gap-1.5 justify-center mb-1">
+                        <button
+                          onClick={handleZoomIn}
+                          className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+                          title="Zoom In"
+                        >
+                          +
+                        </button>
+                        <button
+                          onClick={handleZoomOut}
+                          className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+                          title="Zoom Out"
+                        >
+                          -
+                        </button>
+                        <button
+                          onClick={handleResetView}
+                          className="px-2 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 transition-all cursor-pointer flex items-center justify-center select-none"
+                          title="Reset View"
+                        >
+                          Reset
+                        </button>
+                      </div>
+
+                      <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
+                        Capa Base
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setBaseLayer("standard")}
+                          className={`flex-1 py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                            baseLayer === "standard"
+                              ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                              : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-355"
+                          }`}
+                        >
+                          Mapa
+                        </button>
+                        <button
+                          onClick={() => setBaseLayer("satellite")}
+                          className={`flex-1 py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                            baseLayer === "satellite"
+                              ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                              : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-355"
+                          }`}
+                        >
+                          Satélite
+                        </button>
+                      </div>
+                    </div>
+
                     <GoogleMap
                       mapContainerStyle={containerStyle}
                       center={mapCenter}
                       zoom={14.5}
                       onLoad={mapInstance => setMap(mapInstance)}
+                      mapTypeId={baseLayer === "standard" ? "roadmap" : "satellite"}
                       options={{
-                        styles: darkMapStyles,
-                        disableDefaultUI: false,
-                        zoomControl: true,
+                        styles: baseLayer === "standard" ? darkMapStyles : [],
+                        disableDefaultUI: true,
+                        zoomControl: false,
                         mapTypeControl: false,
                         streetViewControl: false,
+                        scrollwheel: false,
+                        gestureHandling: "cooperative"
                       }}
                     >
                       {/* 1. HEATMAP LAYER */}

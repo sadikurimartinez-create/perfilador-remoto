@@ -37,6 +37,72 @@ const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: num
   return R * c;
 };
 
+const darkMapStyles = [
+  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#64748b" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#cbd5e1" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#94a3b8" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#022c22" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#10b981" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#1e293b" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#334155" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#94a3b8" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#1e1b4b" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#312e81" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#c084fc" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#082f49" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#0284c7" }],
+  },
+];
+
 // Algoritmos de validación espacial de contención geográfica
 const isPointInPolygon = (point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]): boolean => {
   if (polygon.length < 3) return false;
@@ -224,6 +290,29 @@ export function AnalysisMap({
 }: AnalysisMapProps) {
   const mapRef = useRef<any | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapBaseLayer, setMapBaseLayer] = useState<"standard" | "satellite">("standard");
+
+  const handleZoomIn = () => {
+    if (mapRef.current) {
+      const zoom = mapRef.current.getZoom();
+      if (zoom !== undefined) mapRef.current.setZoom(zoom + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapRef.current) {
+      const zoom = mapRef.current.getZoom();
+      if (zoom !== undefined) mapRef.current.setZoom(zoom - 1);
+    }
+  };
+
+  const handleResetView = () => {
+    if (mapRef.current) {
+      mapRef.current.setCenter(center);
+      mapRef.current.setZoom(15);
+    }
+  };
+
   const [isPlacingManualPoi, setIsPlacingManualPoi] = useState(false);
   const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
   const [accessRoutes, setAccessRoutes] = useState<any[][]>([]);
@@ -692,6 +781,63 @@ export function AnalysisMap({
             </div>
           </div>
 
+          {/* Zoom Controls & Base Layer Switcher */}
+          <div className="border-b border-slate-800 pb-2.5 space-y-2">
+            <span className="text-[9px] uppercase font-bold text-slate-450 tracking-wider">Controles de Mapa</span>
+            <div className="flex gap-1.5 justify-between">
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  className="w-7 h-7 rounded bg-slate-900 hover:bg-slate-850 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center cursor-pointer select-none"
+                  title="Zoom In"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  className="w-7 h-7 rounded bg-slate-900 hover:bg-slate-850 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center cursor-pointer select-none"
+                  title="Zoom Out"
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetView}
+                  className="px-2 h-7 rounded bg-slate-900 hover:bg-slate-850 hover:text-blue-400 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 flex items-center justify-center cursor-pointer select-none"
+                  title="Reset View"
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMapBaseLayer("standard")}
+                  className={`py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                    mapBaseLayer === "standard"
+                      ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                      : "bg-slate-900 border-slate-800 text-slate-500"
+                  }`}
+                >
+                  Mapa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapBaseLayer("satellite")}
+                  className={`py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                    mapBaseLayer === "satellite"
+                      ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                      : "bg-slate-900 border-slate-800 text-slate-500"
+                  }`}
+                >
+                  Satélite
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* DESCRIPCIÓN TÉCNICA DINÁMICA OBLIGATORIA */}
           <div className="bg-slate-900/65 border border-slate-800/50 p-2.5 rounded-lg text-[10px] text-slate-300 leading-relaxed">
             <span className="font-extrabold text-white text-[10.5px] block mb-1 uppercase tracking-wide">🔬 Descripción Técnica:</span>
@@ -938,13 +1084,15 @@ export function AnalysisMap({
               ]);
             }
           }}
+          mapTypeId={mapBaseLayer === "standard" ? "roadmap" : (isOperativoMode ? "terrain" : "hybrid")}
           options={{
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: false,
-            // Modo Operativo Táctico simplifica los fondos a un Mapa de Calles (terrain)
-            // de alto contraste, en vez de satélite híbrido que sobrecarga la vista.
-            mapTypeId: isOperativoMode ? "terrain" : "hybrid",
+            styles: mapBaseLayer === "standard" ? darkMapStyles : [],
+            disableDefaultUI: true,
+            scrollwheel: false,
+            gestureHandling: "cooperative",
           }}
         >
           {/* LÍMITES / BUFFER (Ocultable) */}

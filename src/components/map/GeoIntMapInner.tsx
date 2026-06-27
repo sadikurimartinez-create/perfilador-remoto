@@ -82,27 +82,36 @@ export default function GeoIntMapInner() {
   // Selected event focus reference
   const [selectedEvent, setSelectedEvent] = useState<GeoEvent | null>(null);
 
+  const standardTileLayer = useRef<L.TileLayer | null>(null);
+  const satelliteTileLayer = useRef<L.TileLayer | null>(null);
+  const [baseLayer, setBaseLayer] = useState<"standard" | "satellite">("standard");
+
   // 1. Initialize map instance
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
 
-    // Default center in Aguascalientes
+    // Default center in Aguascalientes, with scroll wheel zoom disabled
     const map = L.map(mapRef.current, {
       center: [21.882, -102.291],
       zoom: 13,
       zoomControl: false,
+      scrollWheelZoom: false,
     });
 
     mapInstance.current = map;
 
     // Add CartoDB Dark Matter tile layer for slick premium UI
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    standardTileLayer.current = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       maxZoom: 20,
-    }).addTo(map);
+    });
 
-    // Zoom control at bottom right
-    L.control.zoom({ position: "bottomright" }).addTo(map);
+    satelliteTileLayer.current = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+      maxZoom: 19,
+    });
+
+    standardTileLayer.current.addTo(map);
 
     // Initialize layered visual controllers
     gridLayerGroup.current = L.layerGroup().addTo(map);
@@ -120,15 +129,46 @@ export default function GeoIntMapInner() {
       setBbox([minLat, minLng, maxLat, maxLng]);
     };
 
-    map.on("moveend", updateBbox);
-    updateBbox();
+    map.on("dragend", updateBbox);
+    map.on("zoomend", updateBbox);
 
     return () => {
-      map.off("moveend", updateBbox);
+      map.off("dragend", updateBbox);
+      map.off("zoomend", updateBbox);
       map.remove();
       mapInstance.current = null;
     };
   }, []);
+
+  // Handle switching layer
+  useEffect(() => {
+    if (!mapInstance.current || !standardTileLayer.current || !satelliteTileLayer.current) return;
+    if (baseLayer === "standard") {
+      mapInstance.current.removeLayer(satelliteTileLayer.current);
+      standardTileLayer.current.addTo(mapInstance.current);
+    } else {
+      mapInstance.current.removeLayer(standardTileLayer.current);
+      satelliteTileLayer.current.addTo(mapInstance.current);
+    }
+  }, [baseLayer]);
+
+  const handleZoomIn = () => {
+    if (mapInstance.current) {
+      mapInstance.current.zoomIn();
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstance.current) {
+      mapInstance.current.zoomOut();
+    }
+  };
+
+  const handleResetView = () => {
+    if (mapInstance.current) {
+      mapInstance.current.setView([21.882, -102.291], 13);
+    }
+  };
 
   // 2. Poll real-time visual streaming packet
   useEffect(() => {
@@ -356,7 +396,62 @@ export default function GeoIntMapInner() {
 
         {/* Map Layers Toggle Widget (Absolute Top Right over map) */}
         <div className="absolute top-4 right-4 z-[400] flex flex-col gap-2 p-3 rounded-lg glass-panel max-w-[200px]">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 border-b border-slate-800 pb-1">
+          {/* Zoom controls */}
+          <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-800 pb-1 mb-1">
+            Zoom Controls
+          </div>
+          <div className="flex gap-1.5 justify-center mb-1">
+            <button
+              onClick={handleZoomIn}
+              className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+              title="Zoom In"
+            >
+              +
+            </button>
+            <button
+              onClick={handleZoomOut}
+              className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+              title="Zoom Out"
+            >
+              -
+            </button>
+            <button
+              onClick={handleResetView}
+              className="px-2 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 transition-all cursor-pointer flex items-center justify-center select-none"
+              title="Reset View"
+            >
+              Reset
+            </button>
+          </div>
+
+          {/* Base Layer Switcher */}
+          <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-800 pb-1 mb-1">
+            Base Layer
+          </div>
+          <div className="flex gap-1.5 mb-1.5">
+            <button
+              onClick={() => setBaseLayer("standard")}
+              className={`flex-1 py-1 rounded text-[8px] font-black uppercase border transition-all ${
+                baseLayer === "standard"
+                  ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                  : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-350"
+              }`}
+            >
+              🗺️ Mapa
+            </button>
+            <button
+              onClick={() => setBaseLayer("satellite")}
+              className={`flex-1 py-1 rounded text-[8px] font-black uppercase border transition-all ${
+                baseLayer === "satellite"
+                  ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                  : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-350"
+              }`}
+            >
+              🛰️ Satélite
+            </button>
+          </div>
+
+          <div className="text-[9px] uppercase font-black tracking-wider text-slate-450 mb-1 border-b border-slate-800 pb-1">
             Map Overlays
           </div>
           <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">

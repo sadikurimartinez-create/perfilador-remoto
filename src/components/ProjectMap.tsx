@@ -47,6 +47,72 @@ const containerStyle = {
   minHeight: "500px",
 };
 
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#64748b" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#cbd5e1" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#94a3b8" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#022c22" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#10b981" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#1e293b" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#334155" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#94a3b8" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#1e1b4b" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#312e81" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#c084fc" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#082f49" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#0284c7" }],
+  },
+];
+
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
 // Algoritmos de validación espacial de contención geográfica
@@ -133,6 +199,37 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
   const [showClusters, setShowClusters] = useState(true);
   const [showAtlasRiesgos, setShowAtlasRiesgos] = useState(false);
   const { analysisResult } = useProject();
+  const [baseLayer, setBaseLayer] = useState<"standard" | "satellite">("standard");
+
+  const handleZoomIn = () => {
+    if (mapRef.current) {
+      const zoom = mapRef.current.getZoom();
+      if (zoom !== undefined) mapRef.current.setZoom(zoom + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapRef.current) {
+      const zoom = mapRef.current.getZoom();
+      if (zoom !== undefined) mapRef.current.setZoom(zoom - 1);
+    }
+  };
+
+  const handleResetView = () => {
+    if (mapRef.current && coordinates.length > 0) {
+      if (typeof window !== "undefined" && (window as any).google) {
+        const g = (window as any).google;
+        const bounds = new g.maps.LatLngBounds();
+        coordinates.forEach((pt) => bounds.extend(new g.maps.LatLng(pt.lat, pt.lng)));
+        if (coordinates.length > 1) {
+          mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
+        } else {
+          mapRef.current.setCenter(coordinates[0]);
+          mapRef.current.setZoom(15);
+        }
+      }
+    }
+  };
 
   const userRole = project?.userRole || 'USER';
   const permissions = usePermissions(userRole);
@@ -495,17 +592,77 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
             SSPE-CEIPOL
           </span>
         </div>
+        {/* Zoom & Base Layer Controls Overlay */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2 bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl shadow-2xl">
+          <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
+            Controles Zoom
+          </div>
+          <div className="flex gap-1.5 justify-center mb-1">
+            <button
+              onClick={handleZoomIn}
+              className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+              title="Zoom In"
+            >
+              +
+            </button>
+            <button
+              onClick={handleZoomOut}
+              className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+              title="Zoom Out"
+            >
+              -
+            </button>
+            <button
+              onClick={handleResetView}
+              className="px-2 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 transition-all cursor-pointer flex items-center justify-center select-none"
+              title="Reset View"
+            >
+              Reset
+            </button>
+          </div>
+
+          <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
+            Capa Base
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setBaseLayer("standard")}
+              className={`flex-1 py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                baseLayer === "standard"
+                  ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                  : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-350"
+              }`}
+            >
+              Mapa
+            </button>
+            <button
+              onClick={() => setBaseLayer("satellite")}
+              className={`flex-1 py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                baseLayer === "satellite"
+                  ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                  : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-350"
+              }`}
+            >
+              Satélite
+            </button>
+          </div>
+        </div>
+
         <GoogleMap
-        mapContainerStyle={containerStyle}
-        center={center}
-        zoom={15}
-        onLoad={onMapLoad}
-        options={{
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: false,
-          mapTypeId: "hybrid",
-        }}
+          mapContainerStyle={containerStyle}
+          center={center}
+          zoom={15}
+          onLoad={onMapLoad}
+          mapTypeId={baseLayer === "standard" ? "roadmap" : "hybrid"}
+          options={{
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+            styles: baseLayer === "standard" ? darkMapStyle : [],
+            disableDefaultUI: true,
+            scrollwheel: false,
+            gestureHandling: "cooperative",
+          }}
       >
         {coordinates.map((c, idx) => {
           const photo = album?.[idx];

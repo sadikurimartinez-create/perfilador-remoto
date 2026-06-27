@@ -221,6 +221,51 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const [selectedWmsLayers, setSelectedWmsLayers] = useState<string[]>([]);
   const [mapInstance, setMapInstance] = useState<any>(null);
   const wmsOverlaysRef = useRef<Record<string, any>>({});
+  const [baseLayer, setBaseLayer] = useState<"standard" | "satellite">("standard");
+
+  const handleZoomIn = () => {
+    if (mapInstance) {
+      const zoom = mapInstance.getZoom();
+      if (zoom !== undefined) mapInstance.setZoom(zoom + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstance) {
+      const zoom = mapInstance.getZoom();
+      if (zoom !== undefined) mapInstance.setZoom(zoom - 1);
+    }
+  };
+
+  const handleResetView = () => {
+    if (mapInstance) {
+      mapInstance.setCenter(mapCenter);
+      mapInstance.setZoom(13);
+    }
+  };
+
+  const [miniMapInstance, setMiniMapInstance] = useState<any>(null);
+
+  const handleMiniZoomIn = () => {
+    if (miniMapInstance) {
+      const zoom = miniMapInstance.getZoom();
+      if (zoom !== undefined) miniMapInstance.setZoom(zoom + 1);
+    }
+  };
+
+  const handleMiniZoomOut = () => {
+    if (miniMapInstance) {
+      const zoom = miniMapInstance.getZoom();
+      if (zoom !== undefined) miniMapInstance.setZoom(zoom - 1);
+    }
+  };
+
+  const handleMiniResetView = (center?: { lat: number; lng: number }) => {
+    if (miniMapInstance) {
+      miniMapInstance.setCenter(center || { lat: 21.8853, lng: -102.2916 });
+      miniMapInstance.setZoom(13);
+    }
+  };
 
   useEffect(() => {
     if (!mapInstance) return;
@@ -2575,17 +2620,76 @@ ${analysisResult.ficha.crossCheckJuridico}
                     </div>
                   ) : (
                     <div id="gis-tactical-map" className="relative h-[70vh] w-full rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                      {/* Zoom & Base Layer Controls Overlay */}
+                      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl shadow-2xl">
+                        <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
+                          Controles Zoom
+                        </div>
+                        <div className="flex gap-1.5 justify-center mb-1">
+                          <button
+                            onClick={handleZoomIn}
+                            className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+                            title="Zoom In"
+                          >
+                            +
+                          </button>
+                          <button
+                            onClick={handleZoomOut}
+                            className="w-7 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center transition-all cursor-pointer select-none"
+                            title="Zoom Out"
+                          >
+                            -
+                          </button>
+                          <button
+                            onClick={handleResetView}
+                            className="px-2 h-7 rounded-md bg-slate-900 hover:bg-slate-800 hover:text-blue-400 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 transition-all cursor-pointer flex items-center justify-center select-none"
+                            title="Reset View"
+                          >
+                            Reset
+                          </button>
+                        </div>
+
+                        <div className="text-[9px] uppercase font-black tracking-wider text-slate-400 border-b border-slate-850 pb-1 mb-1">
+                          Capa Base
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setBaseLayer("standard")}
+                            className={`flex-1 py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                              baseLayer === "standard"
+                                ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                               : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-350"
+                            }`}
+                          >
+                            Mapa
+                          </button>
+                          <button
+                            onClick={() => setBaseLayer("satellite")}
+                            className={`flex-1 py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
+                              baseLayer === "satellite"
+                                ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                                : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-350"
+                            }`}
+                          >
+                            Satélite
+                          </button>
+                        </div>
+                      </div>
+
                       <GoogleMap
                         mapContainerStyle={{ width: "100%", height: "100%" }}
                         center={mapCenter}
                         zoom={13}
                         onLoad={onMapLoad}
+                        mapTypeId={baseLayer === "standard" ? "roadmap" : "satellite"}
                         options={{
                           streetViewControl: false,
                           mapTypeControl: false,
                           fullscreenControl: false,
-                          styles: darkMapStyles,
-                          disableDefaultUI: false
+                          styles: baseLayer === "standard" ? darkMapStyles : [],
+                          disableDefaultUI: true,
+                          scrollwheel: false,
+                          gestureHandling: "cooperative"
                         }}
                       >
                         {/* 1. Domicilios de integrantes */}
@@ -3450,7 +3554,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                                             <p className="text-xs font-bold text-slate-200 truncate">"{m.alias || "Sin alias"}"</p>
                                             <p className="text-[9px] text-slate-400 truncate">{m.nombre || "Nombre sin registrar"}</p>
                                           </div>
-                                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-slate-900 text-slate-400 border border-slate-800 rounded">MIEMBRO</span>
+                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-slate-900 text-slate-400 border border-slate-800 rounded">MIEMBRO</span>
                                         </div>
                                       ))}
                                     </div>
@@ -3468,17 +3572,64 @@ ${analysisResult.ficha.crossCheckJuridico}
                             
                             {/* Embedded Map */}
                             {isLoaded && (
-                              <div className="w-full h-[250px] rounded-lg border border-slate-850 overflow-hidden shadow-inner bg-slate-950">
+                              <div className="w-full h-[250px] rounded-lg border border-slate-850 overflow-hidden shadow-inner bg-slate-950 relative">
+                                {/* Compact overlay controls */}
+                                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-slate-950/90 border border-slate-850 p-1.5 rounded-lg shadow-xl">
+                                  <button
+                                    onClick={handleMiniZoomIn}
+                                    className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] border border-slate-800 flex items-center justify-center cursor-pointer select-none"
+                                  >
+                                    +
+                                  </button>
+                                  <button
+                                    onClick={handleMiniZoomOut}
+                                    className="w-5 h-5 rounded bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] border border-slate-800 flex items-center justify-center cursor-pointer select-none"
+                                  >
+                                    -
+                                  </button>
+                                  <button
+                                    onClick={() => handleMiniResetView(activeAlbumGang.coordenadas || (gangNodes[0]?.location) || undefined)}
+                                    className="px-1.5 h-5 rounded bg-slate-900 hover:bg-slate-800 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 flex items-center justify-center cursor-pointer select-none"
+                                  >
+                                    Rst
+                                  </button>
+                                  <span className="w-[1px] h-3 bg-slate-800 mx-0.5"></span>
+                                  <button
+                                    onClick={() => setBaseLayer("standard")}
+                                    className={`py-0.5 px-1 rounded text-[7px] font-black uppercase border transition-all ${
+                                      baseLayer === "standard"
+                                        ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                                        : "bg-slate-900 border-slate-800 text-slate-500"
+                                    }`}
+                                  >
+                                    Map
+                                  </button>
+                                  <button
+                                    onClick={() => setBaseLayer("satellite")}
+                                    className={`py-0.5 px-1 rounded text-[7px] font-black uppercase border transition-all ${
+                                      baseLayer === "satellite"
+                                        ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
+                                        : "bg-slate-900 border-slate-800 text-slate-500"
+                                    }`}
+                                  >
+                                    Sat
+                                  </button>
+                                </div>
+
                                 <GoogleMap
                                   mapContainerStyle={{ width: "100%", height: "100%" }}
                                   center={activeAlbumGang.coordenadas || (gangNodes[0]?.location) || { lat: 21.8853, lng: -102.2916 }}
                                   zoom={13}
+                                  onLoad={(map) => setMiniMapInstance(map)}
+                                  mapTypeId={baseLayer === "standard" ? "roadmap" : "satellite"}
                                   options={{
                                     streetViewControl: false,
                                     mapTypeControl: false,
                                     fullscreenControl: false,
-                                    styles: darkMapStyles,
-                                    disableDefaultUI: true
+                                    styles: baseLayer === "standard" ? darkMapStyles : [],
+                                    disableDefaultUI: true,
+                                    scrollwheel: false,
+                                    gestureHandling: "cooperative"
                                   }}
                                 >
                                   {gangNodes.map(node => (
