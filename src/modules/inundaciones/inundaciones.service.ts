@@ -23,9 +23,36 @@ export class InundacionesService {
       },
       body: JSON.stringify(params),
     });
-
     if (!response.ok) {
       throw new Error(`Error en el motor de barrido de inundaciones: ${response.statusText}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Triggers the predictive flood forecast analysis from the backend API.
+   */
+  static async analyzePredictiveFlood(params: {
+    fecha: string;
+    hora: string;
+    horizonte: string;
+    scope: string;
+    scopeId: string;
+    lat?: number;
+    lng?: number;
+    radioMetros?: number;
+  }): Promise<any> {
+    const response = await fetch("/api/inundaciones/predict", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error en el motor predictivo de inundaciones: ${response.statusText}`);
     }
 
     return await response.json();
