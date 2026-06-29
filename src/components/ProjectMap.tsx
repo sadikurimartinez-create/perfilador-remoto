@@ -115,6 +115,7 @@ export function ProjectMap({
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
+    libraries: ["places", "visualization", "drawing"] as any,
   });
 
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
