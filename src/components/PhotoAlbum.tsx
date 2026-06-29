@@ -15,6 +15,9 @@ import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
 import { GangGeoSweepPanel } from "./GangGeoSweepPanel";
 import { CrimeCharts } from "./CrimeCharts";
+import dynamic from "next/dynamic";
+
+const NetworkDashboard = dynamic(() => import("./NetworkDashboard").then((mod) => mod.NetworkDashboard), { ssr: false });
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
@@ -538,7 +541,18 @@ export function PhotoAlbum({
     sweepRnpdno: true,
     sweepMultimodal: true,
     sweepCifa: true,
+    graphConnections: true,
   });
+
+  const [sweepsComments, setSweepsComments] = useState("");
+
+  useEffect(() => {
+    if (project) {
+      if (project.sweepsComments) {
+        setSweepsComments(project.sweepsComments);
+      }
+    }
+  }, [project]);
 
   // Automatically enable tools if there is an existing hypothesis loaded
   useEffect(() => {
@@ -546,6 +560,15 @@ export function PhotoAlbum({
       setIsHypothesisValidatedInWorkspace(true);
     }
   }, [project]);
+
+  const sweepsSummaryText = useMemo(() => {
+    if (!project?.sweeps || project.sweeps.length === 0) {
+      return "No hay barridos de información registrados o integrados en la hipótesis de este expediente todavía.";
+    }
+    return project.sweeps
+      .map((s: any) => `• [Barrido ${s.engine}] Tipo: ${s.type} | Relevancia: ${s.relevance}\n  Datos: ${s.extractedData || "Sin datos"}`)
+      .join("\n\n");
+  }, [project?.sweeps]);
 
   useEffect(() => {
     if (user && !reportNumber) {
@@ -1001,6 +1024,7 @@ const hasMinimumPhotos =
             datosGobMxData: datosGobMxResult, // <-- AÑADIR AQUÍ
             linkedGangReport: project?.linkedGangReport,
             sweeps: (project as any)?.sweeps || [],
+            sweepsComments: sweepsComments,
           }),
         });
 
@@ -1211,6 +1235,22 @@ const hasMinimumPhotos =
       }
     }
 
+    // Capturar Grafo de Conexiones
+    if (!currentSnapshots.some((s) => s.title.includes("GRAFO")) && analysisResult) {
+      const el = document.getElementById("network-graph-container");
+      if (el) {
+        try {
+          const resultMap = await html2canvas(el, { useCORS: true, scale: 2.0, backgroundColor: "#0f172a" });
+          const canvasMap = resultMap as unknown as HTMLCanvasElement;
+          const dataUrlMap = String(canvasMap.toDataURL("image/png"));
+          currentSnapshots.push({ title: "GRAFO 1: RELACIONES Y REDES DELICTIVAS (GRAFO)", dataUrl: dataUrlMap });
+          changed = true;
+        } catch(err) {
+          console.warn("Ignorar error de renderizado en grafo:", err);
+        }
+      }
+    }
+
     if (changed) {
       setMapSnapshots(currentSnapshots);
       await new Promise((r) => setTimeout(r, 500));
@@ -1234,8 +1274,26 @@ const hasMinimumPhotos =
     const snapshotsToExport = await autoCaptureSnapshots();
     const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
 
-    const chartsSnaps = snapshotsToExport.filter((s) => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
-    const mapsSnaps = snapshotsToExport.filter((s) => !chartsSnaps.some((c) => c.title === s.title));
+    const chartsSnaps = snapshotsToExport.filter((s) => {
+      const isChart = s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica");
+      if (!isChart) return false;
+      if (s.title.includes("1") && !selectedAnnexes.chartTemporal) return false;
+      if (s.title.includes("2") && !selectedAnnexes.chartTopology) return false;
+      if (s.title.includes("3") && !selectedAnnexes.chartEnvironmental) return false;
+      if (s.title.includes("4") && !selectedAnnexes.chartPrediction) return false;
+      return true;
+    });
+
+    const mapsSnaps = snapshotsToExport.filter((s) => {
+      const isChart = s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica");
+      if (isChart) return false;
+      if (s.title.toLowerCase().includes("densidad") && !selectedAnnexes.mapDensity) return false;
+      if (s.title.toLowerCase().includes("corredores") && !selectedAnnexes.mapMobility) return false;
+      if (s.title.toLowerCase().includes("atracción") && !selectedAnnexes.mapAttractors) return false;
+      if (s.title.toLowerCase().includes("proyección") && !selectedAnnexes.mapPredictive) return false;
+      return true;
+    });
+
     const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
 
     const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
@@ -1706,38 +1764,257 @@ const hasMinimumPhotos =
         ));
       })()}
 
-      {/* Botón para formular hipótesis y abrir la configuración de análisis */}
-      <div className="pt-8 mt-6 border-t border-slate-800 flex flex-col items-center w-full print:hidden">
+      {/* Formulario de Hipótesis y Precisiones de Barridos en la página principal */}
+      <div className="pt-8 mt-6 border-t border-slate-800 w-full print:hidden">
         {!isHypothesisValidatedInWorkspace ? (
-          <div className="text-center space-y-4 max-w-md w-full">
-            <p className="text-xs text-amber-400">⚠️ Por favor, formule y valide la hipótesis del expediente para habilitar las herramientas cartográficas y de inteligencia.</p>
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedIds.length === 0) {
-                  if (album.length > 0) {
-                    selectAllPhotos();
-                  } else {
-                    window.alert("Debe agregar al menos una fotografía al expediente para poder formular una hipótesis.");
-                    return;
-                  }
-                }
-                setShowConfigModal(true);
-              }}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 text-sm uppercase tracking-wider active:scale-98"
-            >
-              <span>🧠</span> Generar Hipótesis y Contextualización
-            </button>
+          <div className="space-y-6 max-w-4xl mx-auto w-full">
+            <header className="text-center space-y-2 mb-6">
+              <h3 className="text-lg font-black text-slate-100 uppercase tracking-wider">
+                🧠 Formulación de Hipótesis y Ajustes de Barridos
+              </h3>
+              <p className="text-xs text-slate-400">
+                Escriba la hipótesis central del expediente, revise el resumen de todos los barridos de inteligencia y agregue precisiones generales para validar con la IA.
+              </p>
+            </header>
+
+            {/* 1. TEXTAREA DE HIPÓTESIS */}
+            <div className="space-y-3 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  📝 Hipótesis de la Persona Perfiladora (Contexto de cruce de ubicaciones)
+                </label>
+                <div className="flex items-center gap-2">
+                  {!isReadOnly && projectId && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { getDb } = await import("@/lib/firebase");
+                          const { doc, updateDoc } = await import("firebase/firestore");
+                          const firestore = getDb();
+                          await updateDoc(doc(firestore, "projects", projectId), {
+                            hipotesis: analysisContext,
+                            sweepsComments: sweepsComments
+                          });
+                          window.alert("Hipótesis y precisiones guardadas exitosamente en el expediente.");
+                        } catch (err) {
+                          console.error("Error al guardar:", err);
+                          window.alert("Error al guardar.");
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold border border-emerald-600 text-emerald-300 bg-emerald-900/40 hover:bg-emerald-800 transition-colors"
+                    >
+                      <span>💾</span> Guardar Borrador
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('analysisContext', (text) => {
+                      setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
+                      setIsAnalysisContextAudited(false);
+                    })}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
+                  >
+                    <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                spellCheck={true}
+                value={analysisContext}
+                onChange={(e) => {
+                  setAnalysisContext(e.target.value);
+                  setIsAnalysisContextAudited(false);
+                }}
+                rows={6}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 text-slate-100 px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
+              />
+              
+              <div className="mt-1.5">
+                <div className="flex justify-between items-center text-[10px] mb-1">
+                  <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                  <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. RESUMEN Y PRECISIONES DE BARRIDOS */}
+            <div className="space-y-3 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+              <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+                📡 Resumen de todos los Barridos con sus hallazgos
+              </label>
+              
+              <div className="bg-slate-950 border border-slate-805 rounded-lg p-3 max-h-[160px] overflow-y-auto text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
+                {sweepsSummaryText}
+              </div>
+
+              <div className="space-y-1.5 pt-2">
+                <label className="block text-[11px] text-slate-400 uppercase tracking-wider font-bold">
+                  ✍️ Precisiones del Analista e Indicaciones para la IA
+                </label>
+                <textarea
+                  value={sweepsComments}
+                  onChange={(e) => setSweepsComments(e.target.value)}
+                  rows={4}
+                  placeholder="Escriba aquí los ajustes, exclusiones, precisiones sobre los hallazgos de los barridos, o instrucciones específicas que desea que la IA analice en conjunto..."
+                  className="w-full text-xs bg-slate-950 border border-slate-805 rounded-lg p-3 text-slate-100 focus:outline-none focus:border-sky-500 resize-none min-h-[80px]"
+                />
+              </div>
+            </div>
+
+            {/* 3. BOTÓN FUSIONADO DE VALIDACIÓN Y GENERACIÓN */}
+            <div className="bg-slate-900/20 p-5 rounded-xl border border-slate-800 space-y-4">
+              <div className="flex flex-col gap-2">
+                {!isAnalysisContextAudited && aiQuestionsList.length === 0 && (
+                  <p className="text-xs text-amber-400 text-center">⚠️ La hipótesis y las precisiones de barridos deben ser validadas por la IA para habilitar las herramientas (Idoneidad de al menos 80%).</p>
+                )}
+                {isAnalysisContextAudited && (
+                  <p className="text-xs text-emerald-400 text-center">✅ Hipótesis validada con éxito (Idoneidad: {analysisAuditScore}%). Las herramientas de análisis y el informe están listos.</p>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsRefining(true);
+                    setAnalysisAuditScore(null);
+                    try {
+                      let selected = album.filter((p) => selectedIds.includes(p.id));
+                      if (selected.length === 0) {
+                        if (album.length > 0) {
+                          selectAllPhotos();
+                          selected = album;
+                        } else {
+                          window.alert("Debe agregar al menos una fotografía al expediente para poder formular una hipótesis.");
+                          return;
+                        }
+                      }
+                      const minimalPhotos = selected.map((p) => ({
+                        lat: p.lat,
+                        lng: p.lng,
+                        tipo: p.tipo || "",
+                        comentario: p.comentario || ""
+                      }));
+                      
+                      let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
+                      if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
+                      
+                      let answersString = Object.entries(userAnswersMap)
+                        .filter(([_, ans]) => ans.trim())
+                        .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
+                        .join("\n\n");
+
+                      const fullContext = analysisContext + `\n\n[Precisiones de Barridos e Indicaciones del Analista]\n${sweepsComments}` + focusContext + (answersString ? `\n\nRespuestas a preguntas previas:\n${answersString}` : "") + `\n\n(INSTRUCCIÓN DEL SISTEMA: Evalúa la hipótesis. Score >= 80 si es sólida; si es vaga, score < 80. OBLIGATORIO: Sugiere usar ST_DWithin o Búsqueda Semántica.)`;
+
+                      const res = await fetch("/api/refine-context", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          context: fullContext,
+                          photos: minimalPhotos,
+                          mode: "hypothesis-qa",
+                          geometryType: project?.geometryType || "individual",
+                          projectDescription: project?.descripcion || "",
+                          analysisRadius,
+                        }),
+                      });
+                      const textRes = await res.text();
+                      let data = JSON.parse(textRes);
+                      if (res.ok) {
+                        let scoreVal = data.score ?? 0;
+                        let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
+                        
+                        setAnalysisAuditScore(scoreVal);
+                        if (scoreVal >= 80) {
+                          setIsAnalysisContextAudited(true);
+                          if (answersString.trim()) {
+                            setAnalysisContext((prev) => prev + "\n\nContexto adicional:\n" + answersString);
+                          }
+                          setAiQuestionsList([]);
+                          setUserAnswersMap({});
+                          
+                          // Guardar hipótesis y precisiones en la BDD
+                          const { getDb } = await import("@/lib/firebase");
+                          const { doc, updateDoc } = await import("firebase/firestore");
+                          const firestore = getDb();
+                          await updateDoc(doc(firestore, "projects", projectId), {
+                            hipotesis: analysisContext,
+                            sweepsComments: sweepsComments
+                          });
+
+                          // Habilitar herramientas
+                          setIsHypothesisValidatedInWorkspace(true);
+                          void loadAnalysisData();
+
+                          // Generar informe de manera automática
+                          window.alert("¡Validación exitosa! Habilitando herramientas y generando el dictamen oficial...");
+                          await confirmAndGenerateProfile();
+                        } else {
+                          setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
+                            "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",
+                            "¿Hacia dónde se dirigen las posibles rutas de escape físicas desde este nodo?",
+                            "¿Qué tipo de personas transitaban o frecuentan esta zona cuando observó?"
+                          ]);
+                          setIsAnalysisContextAudited(false);
+                          setQaIteration((prev) => prev + 1);
+                        }
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      alert("Error de comunicación con IA.");
+                    } finally {
+                      setIsRefining(false);
+                    }
+                  }}
+                  disabled={isRefining || !analysisContext.trim()}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-8 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {isRefining ? (
+                    <>Validando con IA...</>
+                  ) : (
+                    <>🧠 Validar Hipótesis y Habilitar Herramientas</>
+                  )}
+                </button>
+              </div>
+
+              {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
+                <div className="mt-4 rounded-md border border-yellow-750 bg-yellow-950/20 px-4 py-4 text-xs text-yellow-200 space-y-4 max-w-2xl mx-auto">
+                  <p className="font-bold text-yellow-400">💡 Preguntas de afinación de la IA (Idoneidad actual: {analysisAuditScore}%):</p>
+                  {aiQuestionsList.map((q, idx) => (
+                    <div key={idx} className="space-y-2">
+                      <p className="font-semibold text-yellow-100">{idx + 1}. {q}</p>
+                      <textarea
+                        value={userAnswersMap[idx] || ""}
+                        onChange={(e) => setUserAnswersMap(prev => ({ ...prev, [idx]: e.target.value }))}
+                        className="w-full bg-yellow-950/40 border border-yellow-750/40 rounded-md p-2.5 text-xs text-yellow-100 focus:outline-none"
+                        placeholder="Escriba su respuesta aquí..."
+                        rows={2}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">✅ Hipótesis de análisis validada. Herramientas habilitadas.</span>
+          <div className="flex flex-col items-center gap-2 max-w-md mx-auto text-center">
+            <span className="text-xs text-emerald-400 font-bold flex items-center justify-center gap-1">✅ Hipótesis de análisis y precisiones de barridos validadas con éxito. Herramientas habilitadas.</span>
             <button
               type="button"
-              onClick={() => setShowConfigModal(true)}
+              onClick={() => setIsHypothesisValidatedInWorkspace(false)}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-1.5 border border-slate-700"
             >
-              ⚙️ Re-editar/Re-validar Hipótesis
+              ⚙️ Re-editar/Re-validar Hipótesis y Precisiones
             </button>
           </div>
         )}
@@ -3055,6 +3332,19 @@ const hasMinimumPhotos =
         </div>
       </div>
     
+      {/* PASO 11: GRAFO DE CONEXIONES Y REDES DELICTIVAS (BigQuery) */}
+      <div id="network-graph-container" className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+        <header className="space-y-1">
+          <h4 className="text-base font-semibold text-slate-200 font-bold">👥 Grafo de Relaciones y Redes Delictivas (Paso 11 / BigQuery)</h4>
+          <p className="text-xs text-slate-400">
+            Visualización interactiva de vínculos cruzados, reincidencias de objetivos y relaciones en base a escaneos previos almacenados en BigQuery.
+          </p>
+        </header>
+        <div className="w-full">
+          <NetworkDashboard />
+        </div>
+      </div>
+
           {/* SELECCIÓN DE ANEXOS Y GENERAR INFORME */}
           <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-5 mt-6 print:hidden">
             <header className="space-y-1">
@@ -3160,6 +3450,15 @@ const hasMinimumPhotos =
                   />
                   <span>Gráfica 4: Predicción a 6 Meses</span>
                 </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.graphConnections}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, graphConnections: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Grafo 1: Relaciones y Redes delictivas (Grafo)</span>
+                </label>
               </div>
 
               {/* Datos de Inteligencia (Barridos) */}
@@ -3264,319 +3563,6 @@ const hasMinimumPhotos =
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {showConfigModal && (
-        <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-[98vw] 2xl:max-w-none rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-8 md:py-10 my-8 md:my-auto max-h-[95vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold text-slate-100">
-              Configuración del Análisis Táctico
-            </h3>
-            <div className="flex flex-col gap-8 items-start mt-6 w-full">
-            {selectedIds.length >= 1 && (
-              <>
-              <div className="space-y-6 w-full">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Hipótesis de la Persona Perfiladora (contexto del cruce de ubicaciones)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {!isReadOnly && projectId && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const { getDb } = await import("@/lib/firebase");
-                            const { doc, updateDoc } = await import("firebase/firestore");
-                            const firestore = getDb();
-                            await updateDoc(doc(firestore, "projects", projectId), {
-                              hipotesis: analysisContext
-                            });
-                            window.alert("Hipótesis guardada exitosamente en el expediente.");
-                          } catch (err) {
-                            console.error("Error al guardar hipótesis:", err);
-                            window.alert("Error al guardar la hipótesis.");
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border border-emerald-600 text-emerald-300 bg-emerald-900/40 hover:bg-emerald-800 transition-colors"
-                      >
-                        <span>💾</span> Guardar
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleDictation('analysisContext', (text) => {
-                        setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
-                        setIsAnalysisContextAudited(false);
-                      })}
-                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
-                    >
-                      <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  spellCheck={true}
-                  value={analysisContext}
-                  onChange={(e) => {
-                    setAnalysisContext(e.target.value);
-                    setIsAnalysisContextAudited(false);
-                  }}
-                  rows={8}
-                  className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-5 py-4 text-base md:text-lg resize-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
-                />
-                {!isReadOnly && (
-                  <div className="mt-1.5">
-                    <PowerUpsModule
-                      onApplyPowerUp={(text) => {
-                        setAnalysisContext((prev) => (prev ? prev.trim() + " " : "") + text);
-                        setIsAnalysisContextAudited(false);
-                      }}
-                      isReadOnly={isReadOnly}
-                      insumoText={analysisContext || ""}
-                      insumoType="hypothesis"
-                      insumoId="main_hypothesis"
-                      insumoName="Hipótesis de Análisis"
-                      isContextualized={isAnalysisContextAudited}
-                      locationCoords={(() => {
-                        const geo = album.find(p => p.lat != null && p.lng != null);
-                        return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
-                      })()}
-                      onApplyDetailedAnalysis={async (results) => {
-                        for (const res of results) {
-                          res.insumoId = "main_hypothesis";
-                          await saveCustomDocument(
-                            `Resultados Puente Contextual: ${res.powerUpTitle}`,
-                            "powerup_execution",
-                            JSON.stringify(res)
-                          );
-                        }
-                      }}
-                    />
-                  </div>
-                )}
-
-                {/* Persisted Puente Results for Hipótesis de Análisis */}
-                {documents && documents
-                  .filter((doc: any) => doc.type === "powerup_execution")
-                  .map((doc: any) => {
-                    try {
-                      const parsed = JSON.parse(doc.context);
-                      if (parsed.insumoId === "main_hypothesis") {
-                        return (
-                          <div key={doc.id} className="mt-2 text-left">
-                            <VentanaResultadosPuente
-                              data={parsed}
-                              onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
-                            />
-                          </div>
-                        );
-                      }
-                    } catch (err) {
-                      console.error("Error parsing powerup_execution doc.context", err);
-                    }
-                    return null;
-                  })
-                }
-                <div className="mt-1 mb-2">
-                  <div className="flex justify-between items-center text-[10px] mb-1">
-                    <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-                    <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
-                      {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5">
-                    <div 
-                      className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
-                      style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-                </div>
-                <div className="space-y-6">
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setIsRefining(true);
-                      setAnalysisAuditScore(null);
-                      try {
-                        const selected = album.filter((p) =>
-                          selectedIds.includes(p.id)
-                        );
-                        const minimalPhotos = selected.map((p) => ({
-                          lat: p.lat,
-                          lng: p.lng,
-                          tipo: p.tipo || "",
-                          comentario: p.comentario || ""
-                        }));
-                        
-                        let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
-                        if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
-                        
-                        let answersString = Object.entries(userAnswersMap)
-                          .filter(([_, ans]) => ans.trim())
-                          .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
-                          .join("\n\n");
-
-                        const fullContext = analysisContext + focusContext + (answersString ? `\n\nRespuestas a preguntas previas:\n${answersString}` : "") + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la hipótesis. Endurece el criterio: debe dar dirección técnica a las APIs. Si es sólida, score >= 80; si es vaga, score < 80. OBLIGATORIO: SIEMPRE incorpora en tus 'questions' o 'suggestions' al menos 3 sugerencias técnicas que inviten a usar: "Consulta de Proximidad ST_DWithin", "Grounding Dinámico", "Extracción de Entidades Salientes", o "Búsqueda Semántica en Discovery Engine". Explica brevemente el porqué. DEVUELVE UN JSON VÁLIDO.)`;
-
-                        const res = await fetch("/api/refine-context", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            context: fullContext,
-                            photos: minimalPhotos,
-                            mode: "hypothesis-qa",
-                            geometryType: project?.geometryType || "individual",
-                            projectDescription: project?.descripcion || "",
-                            analysisRadius,
-                          }),
-                        });
-                        const textRes = await res.text();
-                        let data;
-                        try {
-                          data = JSON.parse(textRes);
-                        } catch (e) {
-                          throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
-                        }
-                        if (res.ok) {
-                          let scoreVal = data.score ?? 0;
-                          let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
-                          if (questionsVal.length === 0 && typeof data.suggestions === "string" && scoreVal < 80) {
-                              questionsVal = data.suggestions.split('\n').filter((l: string) => l.trim().length > 10).slice(0,5);
-                          }
-
-                          setAnalysisAuditScore(scoreVal);
-                          if (scoreVal >= 80) {
-                            setIsAnalysisContextAudited(true);
-                            if (answersString.trim()) {
-                               setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
-                            }
-                            setAiQuestionsList([]);
-                            setUserAnswersMap({});
-                          } else {
-                            setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
-                            "¿A qué hora del día percibe mayor vulnerabilidad en este punto?",
-                            "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",
-                            "¿Hacia dónde se dirigen las posibles rutas de escape físicas desde este nodo?",
-                            "¿Qué tipo de personas transitaban o frecuentan esta zona cuando observó?",
-                            "¿Observó algún obstáculo visual (bardas, maleza, autos) que facilite el acecho?"
-                            ]);
-                            setIsAnalysisContextAudited(false);
-                            if (answersString.trim()) {
-                                setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
-                                setUserAnswersMap({});
-                            }
-                            setQaIteration((prev) => prev + 1);
-                          }
-                        } else {
-                          setError(
-                            data.error ||
-                              "No se pudieron obtener sugerencias de IA."
-                          );
-                        }
-                      } catch (err) {
-                        setError(
-                          "Error de comunicación con IA."
-                        );
-                      } finally {
-                        setIsRefining(false);
-                      }
-                    }}
-                    disabled={isRefining || !analysisContext.trim() || isAnalysisContextAudited || (qaIteration > 0 && Object.values(userAnswersMap).filter(a => a.trim().length > 0).length === 0)}
-                    className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
-                  >
-                  {isRefining ? <span className="flex items-center justify-center">Validando... <ElapsedTime running={isRefining} /></span> : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowConfigModal(false)}
-                    className="rounded-md border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
-                <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-sm text-yellow-200 space-y-4">
-                  <div className="flex flex-col border-b border-yellow-800 pb-2">
-                    <p className="font-bold text-yellow-400">💡 La IA sugiere ampliar el espectro para fortalecer el dictamen (Idoneidad actual: {analysisAuditScore}%)</p>
-                    <p className="text-xs text-yellow-200/80 mt-1">Responde al menos a una pregunta para sumar puntos de idoneidad y avanzar. No hay respuestas incorrectas, todo aporta al análisis.</p>
-                  </div>
-                  {aiQuestionsList.map((q, idx) => (
-                    <div key={idx} className="space-y-2">
-                      <p className="text-yellow-100 whitespace-pre-wrap leading-relaxed font-semibold">{idx + 1}. {q}</p>
-                      <div className="relative w-full">
-                        <button
-                          type="button"
-                          onClick={() => toggleDictation(`userAnswer-${idx}`, (text) => setUserAnswersMap(prev => ({ ...prev, [idx]: (prev[idx] ? `${prev[idx].trim()} ${text}` : text) })))}
-                          className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === `userAnswer-${idx}` ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
-                        >
-                          <span>🎙️</span>
-                        </button>
-                        <textarea
-                          spellCheck={true}
-                          value={userAnswersMap[idx] || ""}
-                          onChange={(e) => setUserAnswersMap(prev => ({ ...prev, [idx]: e.target.value }))}
-                          className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-sm text-yellow-100 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y shadow-inner"
-                          placeholder="Responde aquí para esclarecer la hipótesis..."
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              </div>
-              </>
-            )}
-            <div className="space-y-2 pt-1">
-              <label className="block text-xs font-medium text-slate-300">
-                Radio de búsqueda geoespacial
-              </label>
-              <input
-                type="range"
-                min={100}
-                max={10000}
-                step={100}
-                value={analysisRadius}
-                onChange={(e) => setAnalysisRadius(Number(e.target.value))}
-                className="w-full accent-sky-500"
-              />
-              <p className="text-xs text-slate-400">
-                Radio de búsqueda:{" "}
-                <span className="font-semibold text-slate-100">
-                  {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
-                </span>
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 pt-2">
-            {!isAnalysisContextAudited && aiQuestionsList.length === 0 && (
-                <p className="text-xs text-amber-400 text-right">⚠️ Debe validar la hipótesis con la IA antes de comenzar el análisis (Requiere 80%+).</p>
-              )}
-              {isAnalysisContextAudited && (
-                <p className="text-xs text-emerald-400 text-right">✅ Hipótesis validada con éxito (Idoneidad: {analysisAuditScore}%). Lista para generar el análisis.</p>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsHypothesisValidatedInWorkspace(true);
-                    setShowConfigModal(false);
-                    void loadAnalysisData();
-                  }}
-                  disabled={!isAnalysisContextAudited}
-                  className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                >
-                  Confirmar y Habilitar Herramientas
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      )}
     </section>
       {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
       <div className="absolute left-[-9999px] top-[-9999px]">

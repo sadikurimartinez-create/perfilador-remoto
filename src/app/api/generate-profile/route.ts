@@ -113,6 +113,9 @@ ${gangReportStr}
 BARRIDOS DE INTELIGENCIA Y AJUSTES DEL ANALISTA (ANÁLISIS EN CONJUNTO):
 ${sweepsSummary}
 
+[INDICACIONES GENERALES Y AJUSTES DE BARRIDOS POR EL ANALISTA]:
+${safeBody.sweepsComments || "Sin precisiones generales adicionales."}
+
 INFORMACIÓN ADICIONAL DE CAMPO:
 ${JSON.stringify(safeBody, null, 2)}
 
