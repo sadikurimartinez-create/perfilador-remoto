@@ -11,5 +11,20 @@ out/
 perfil-remoto-fa3fa74486fa.json
 perfil-remoto-94869497361e.json
 .vercel
-.env*
 INCID DELICT/*.zip
+
+# Ignore large executables and data folders
+Historial SHAPES/
+INCID DELICT/
+Incidencia Delictiva/
+Incidencia Delictiva 2025/
+Bibliografia/
+cloudflared.exe
+*.xls
+*.xlsx
+*.zip
+*.docx
+*.pptx
+*.pdf
+*.BAK
+

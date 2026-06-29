@@ -246,11 +246,10 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
     return { lat: 21.8821, lng: -102.2961 }; // Default Aguascalientes
   }, [sweepResult]);
 
-  // Construct Heatmap points for Google Maps API format
   const heatmapData = useMemo(() => {
     if (!sweepResult || !showHeatmap || typeof window === "undefined" || !(window as any).google) return [];
     return sweepResult.geo_heatmap.map(pt => ({
-      location: new google.maps.LatLng(pt.lat, pt.lng),
+      location: new (window as any).google.maps.LatLng(pt.lat, pt.lng),
       weight: pt.weight * 5,
     }));
   }, [sweepResult, showHeatmap]);
@@ -476,10 +475,23 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                         gestureHandling: "cooperative"
                       }}
                     >
-                      {/* 1. HEATMAP LAYER */}
-                      {showHeatmap && heatmapData.length > 0 && (
-                        <HeatmapLayer data={heatmapData} />
-                      )}
+                      {/* 1. DENSITY HEAT CLUSTERS (REPLACING DEPRECATED GOOGLE HEATMAPLAYER) */}
+                      {showHeatmap &&
+                        sweepResult.geo_heatmap.map((pt, idx) => (
+                          <Circle
+                            key={`heat-${idx}`}
+                            center={{ lat: pt.lat, lng: pt.lng }}
+                            radius={220 + pt.weight * 60}
+                            options={{
+                              fillColor: "#f43f5e",
+                              fillOpacity: Math.min(pt.weight * 0.12, 0.65),
+                              strokeColor: "#f43f5e",
+                              strokeOpacity: 0.2,
+                              strokeWeight: 1,
+                              clickable: false,
+                            }}
+                          />
+                        ))}
 
                       {/* 2. ACTIVITY CLUSTERS LAYER */}
                       {showClusters &&
@@ -488,7 +500,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                             key={`loc-${idx}`}
                             position={{ lat: loc.lat, lng: loc.lng }}
                             icon={{
-                              path: google.maps.SymbolPath.CIRCLE,
+                              path: 0, // SymbolPath.CIRCLE
                               fillColor: loc.source === "EXIF_GPS" ? "#38bdf8" : "#a855f7",
                               fillOpacity: 0.9,
                               strokeColor: "#0f172a",
@@ -507,7 +519,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                             key={`dom-${idx}`}
                             position={{ lat: dom.lat, lng: dom.lng }}
                             icon={{
-                              path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                              path: 1, // SymbolPath.FORWARD_CLOSED_ARROW
                               fillColor: "#34d399",
                               fillOpacity: 0.9,
                               strokeColor: "#065f46",

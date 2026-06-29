@@ -91,6 +91,15 @@ export async function POST(req: Request) {
 `;
     }
 
+    let sweepsSummary = "Ninguno registrado.";
+    if (Array.isArray(safeBody.sweeps) && safeBody.sweeps.length > 0) {
+      sweepsSummary = safeBody.sweeps
+        .map((s: any) => {
+          return `- [Barrido ${s.engine}] Tipo: ${s.type} | Estado: ${s.status} | Relevancia: ${s.relevance}\n  * Datos Extraídos: ${s.extractedData || "Sin datos"}\n  * Ajustes y Contextualización del Analista: ${s.comments || "Sin comentarios adicionales"}`;
+        })
+        .join("\n\n");
+    }
+
     const prompt = `
 INSTRUCCIONES DE SISTEMA (ADR):
 ${systemPrompt}
@@ -100,6 +109,9 @@ ${strategies}
 
 VÍNCULO DE GEOINTELIGENCIA DE PANDILLAS (CROSS-INTELLIGENCE):
 ${gangReportStr}
+
+BARRIDOS DE INTELIGENCIA Y AJUSTES DEL ANALISTA (ANÁLISIS EN CONJUNTO):
+${sweepsSummary}
 
 INFORMACIÓN ADICIONAL DE CAMPO:
 ${JSON.stringify(safeBody, null, 2)}

@@ -1,0 +1,20 @@
+# Ignore large executable files and manuals/documents
+cloudflared.exe
+*.docx
+*.pptx
+*.pdf
+*.xlsx
+*.csv
+Historial SHAPES/
+INCID DELICT/
+Incidencia Delictiva/
+Incidencia Delictiva 2025/
+Bibliografia/
+logo_ceipol.png
+logo_ssp.png
+~$IA DE BUSQUEDAS.docx
+perfil-remoto-web/
+.next/
+node_modules/
+.git/
+.vercel/

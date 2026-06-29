@@ -281,6 +281,96 @@ const DELITOS_CATEGORIES = [
   { id: "Autopartes & Cristalazo 2025.csv", label: "Autopartes y Cristalazo" }
 ];
 
+function SweepSummaryItemRow({ sweep, updateSweep }: { sweep: any; updateSweep: any }) {
+  const [comments, setComments] = useState(sweep.comments || "");
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setComments(sweep.comments || "");
+  }, [sweep.comments]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateSweep(sweep.id, { comments });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    } catch (err) {
+      console.error(err);
+      alert("Error al guardar los ajustes.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const relevanceColors = {
+    Alta: "bg-red-500/10 text-red-400 border-red-500/30",
+    Media: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    Baja: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+    Nula: "bg-slate-500/10 text-slate-400 border-slate-500/30",
+  };
+
+  const statusColors = {
+    Integrado: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    Pendiente: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    Rechazado: "bg-red-500/10 text-red-400 border-red-500/30",
+  };
+
+  return (
+    <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-black text-slate-100 text-xs tracking-wide">
+            📡 Motor: {sweep.engine}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${relevanceColors[sweep.relevance as keyof typeof relevanceColors] || relevanceColors.Baja}`}>
+            Relevancia: {sweep.relevance}
+          </span>
+          <span className="text-[10px] bg-slate-850 text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-700">
+            {sweep.type === "Directa" ? "⚡ Integración Directa" : "🧠 Contextualizado"}
+          </span>
+        </div>
+        <span className={`text-[10px] px-2 py-0.5 rounded-md border ${statusColors[sweep.status as keyof typeof statusColors] || statusColors.Pendiente}`}>
+          ● {sweep.status}
+        </span>
+      </div>
+
+      <div className="bg-slate-950/40 p-2.5 rounded-lg border border-slate-850 text-[11px] text-slate-300 max-h-[80px] overflow-y-auto font-mono whitespace-pre-wrap">
+        {sweep.extractedData}
+      </div>
+
+      <div className="flex items-end gap-3 pt-1">
+        <div className="flex-1 space-y-1">
+          <label className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+            ✍️ Ajustes y Contextualización del Analista
+          </label>
+          <textarea
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+            placeholder="Agregue consideraciones tácticas, exclusiones o notas que la IA deba tomar en cuenta para el análisis general..."
+            className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-sky-500 min-h-[50px] resize-y"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving || comments === (sweep.comments || "")}
+          className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all duration-200 ${
+            comments === (sweep.comments || "")
+              ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed"
+              : isSaved
+              ? "bg-emerald-900/60 text-emerald-200 border border-emerald-500/50"
+              : "bg-sky-900/60 text-sky-200 border border-sky-500/50 hover:bg-sky-850"
+          }`}
+        >
+          {isSaving ? "Guardando..." : isSaved ? "✓ Guardado" : "💾 Guardar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PhotoAlbum({
   onDeletePhoto,
   projectId,
@@ -314,6 +404,7 @@ export function PhotoAlbum({
     updatePhotoCoordinates,
     loadProject,
     registerSweep,
+    updateSweep,
   } = useProject();
 
   const svContainerRef = useRef<HTMLDivElement | null>(null);
@@ -429,6 +520,32 @@ export function PhotoAlbum({
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [reportSummary, setReportSummary] = useState("");
   const [reportNumber, setReportNumber] = useState("");
+
+  const [isHypothesisValidatedInWorkspace, setIsHypothesisValidatedInWorkspace] = useState(false);
+  const [selectedAnnexes, setSelectedAnnexes] = useState({
+    mapInteractive: true,
+    mapDensity: true,
+    mapMobility: true,
+    mapAttractors: true,
+    mapPredictive: true,
+    chartTemporal: true,
+    chartTopology: true,
+    chartEnvironmental: true,
+    chartPrediction: true,
+    sweepDenue: true,
+    sweepIncidencia: true,
+    sweepRepuve: true,
+    sweepRnpdno: true,
+    sweepMultimodal: true,
+    sweepCifa: true,
+  });
+
+  // Automatically enable tools if there is an existing hypothesis loaded
+  useEffect(() => {
+    if (project && project.hipotesis && project.hipotesis.trim().length > 10) {
+      setIsHypothesisValidatedInWorkspace(true);
+    }
+  }, [project]);
 
   useEffect(() => {
     if (user && !reportNumber) {
@@ -676,6 +793,71 @@ const hasMinimumPhotos =
     }
   };
 
+  const [isRetrievingAnalysisData, setIsRetrievingAnalysisData] = useState(false);
+
+  const loadAnalysisData = async () => {
+    const selected = album.filter((p) => selectedIds.includes(p.id));
+    const withCoords = selected.filter(
+      (p) =>
+        p.lat != null &&
+        p.lng != null &&
+        !Number.isNaN(p.lat) &&
+        !Number.isNaN(p.lng)
+    );
+    if (withCoords.length === 0) return;
+
+    setIsRetrievingAnalysisData(true);
+    try {
+      const photosPayload = await Promise.all(
+        selected.map(async (p) => {
+          let imageBase64: string | null = null;
+          if (p.file) {
+            try {
+              imageBase64 = await resizeImageToBase64(p.file, 640, 0.5);
+            } catch {
+              const sizeMb = p.file.size / (1024 * 1024);
+              if (sizeMb <= 2) imageBase64 = await readFileAsBase64(p.file);
+            }
+          }
+          return {
+            id: p.id,
+            lat: p.lat,
+            lng: p.lng,
+            tipo: p.tipo,
+            comentario: p.comentario,
+            imageBase64: imageBase64 ?? undefined,
+          };
+        })
+      );
+
+      const centerLat = withCoords.reduce((acc, p) => acc + p.lat!, 0) / withCoords.length;
+      const centerLng = withCoords.reduce((acc, p) => acc + p.lng!, 0) / withCoords.length;
+
+      const res = await fetch("/api/analyze-selection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photos: photosPayload,
+          analysisRadius,
+          analysisPolygon,
+          manualPois,
+        }),
+      });
+
+      if (res.ok) {
+        const text = await res.text();
+        if (text) {
+          const mapData = JSON.parse(text);
+          setAnalysisResult(mapData);
+        }
+      }
+    } catch (err) {
+      console.error("[PhotoAlbum] Error retrieving analysis data:", err);
+    } finally {
+      setIsRetrievingAnalysisData(false);
+    }
+  };
+
   const confirmAndGenerateProfile = async () => {
     const selected = album.filter((p) => selectedIds.includes(p.id));
     const withCoords = selected.filter(
@@ -818,6 +1000,7 @@ const hasMinimumPhotos =
             streetViews: svData,
             datosGobMxData: datosGobMxResult, // <-- AÑADIR AQUÍ
             linkedGangReport: project?.linkedGangReport,
+            sweeps: (project as any)?.sweeps || [],
           }),
         });
 
@@ -1523,7 +1706,45 @@ const hasMinimumPhotos =
         ));
       })()}
 
-      <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
+      {/* Botón para formular hipótesis y abrir la configuración de análisis */}
+      <div className="pt-8 mt-6 border-t border-slate-800 flex flex-col items-center w-full print:hidden">
+        {!isHypothesisValidatedInWorkspace ? (
+          <div className="text-center space-y-4 max-w-md w-full">
+            <p className="text-xs text-amber-400">⚠️ Por favor, formule y valide la hipótesis del expediente para habilitar las herramientas cartográficas y de inteligencia.</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedIds.length === 0) {
+                  if (album.length > 0) {
+                    selectAllPhotos();
+                  } else {
+                    window.alert("Debe agregar al menos una fotografía al expediente para poder formular una hipótesis.");
+                    return;
+                  }
+                }
+                setShowConfigModal(true);
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 text-sm uppercase tracking-wider active:scale-98"
+            >
+              <span>🧠</span> Generar Hipótesis y Contextualización
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">✅ Hipótesis de análisis validada. Herramientas habilitadas.</span>
+            <button
+              type="button"
+              onClick={() => setShowConfigModal(true)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-1.5 border border-slate-700"
+            >
+              ⚙️ Re-editar/Re-validar Hipótesis
+            </button>
+          </div>
+        )}
+      </div>
+
+      {isHypothesisValidatedInWorkspace && (
+        <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
 
       {/* PASO 2: MAPA INTERACTIVO */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
@@ -2833,28 +3054,218 @@ const hasMinimumPhotos =
           </div>
         </div>
       </div>
-    </div>
     
-      {/* Botón al final de la pantalla para formular hipótesis y abrir la configuración de análisis */}
-      <div className="pt-8 mt-8 border-t border-slate-800 flex justify-center w-full print:hidden">
-        <button
-          type="button"
-          onClick={() => {
-            if (selectedIds.length === 0) {
-              if (album.length > 0) {
-                selectAllPhotos();
-              } else {
-                window.alert("Debe agregar al menos una fotografía al expediente para poder formular una hipótesis.");
-                return;
-              }
-            }
-            setShowConfigModal(true);
-          }}
-          className="w-full max-w-md bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 text-sm uppercase tracking-wider active:scale-98"
-        >
-          <span>🧠</span> Generar Hipótesis y Contextualización
-        </button>
-      </div>
+          {/* SELECCIÓN DE ANEXOS Y GENERAR INFORME */}
+          <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-5 mt-6 print:hidden">
+            <header className="space-y-1">
+              <h4 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                📋 Configuración del Dictamen y Selección de Anexos
+              </h4>
+              <p className="text-xs text-slate-400">
+                Seleccione qué componentes y barridos de información desea adjuntar al documento oficial en formato PDF.
+              </p>
+            </header>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-300">
+              {/* Mapas (Atlas Cartográfico) */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                <p className="font-bold text-sky-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1">
+                  🗺️ Atlas Cartográfico
+                </p>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.mapInteractive}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapInteractive: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Mapa de Evidencias de Campo</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.mapDensity}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapDensity: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Mapa 1: Densidad Criminológica</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.mapMobility}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapMobility: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Mapa 2: Corredores y Movilidad</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.mapAttractors}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapAttractors: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Mapa 3: Atracción y Factores</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.mapPredictive}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapPredictive: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Mapa 4: Proyección Predictiva</span>
+                </label>
+              </div>
+
+              {/* Modelos Analíticos (Gráficas) */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                <p className="font-bold text-indigo-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1">
+                  📊 Modelos Analíticos
+                </p>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.chartTemporal}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTemporal: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Gráfica 1: Distribución por Turno</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.chartTopology}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTopology: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Gráfica 2: Topología y Frecuencia</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.chartEnvironmental}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartEnvironmental: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Gráfica 3: Facilitadores Ambientales</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.chartPrediction}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartPrediction: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Gráfica 4: Predicción a 6 Meses</span>
+                </label>
+              </div>
+
+              {/* Datos de Inteligencia (Barridos) */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                <p className="font-bold text-emerald-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1">
+                  📡 Barridos e Inteligencia
+                </p>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.sweepDenue}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepDenue: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Barrido DENUE (INEGI)</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.sweepIncidencia}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepIncidencia: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Barrido de Incidencia Delictiva</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.sweepRepuve}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRepuve: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Consulta Vehicular (REPUVE)</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.sweepRnpdno}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRnpdno: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Registro Desaparecidos (RNPDNO)</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.sweepMultimodal}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepMultimodal: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Búsqueda Multimodal Geo-Espacial</span>
+                </label>
+                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnnexes.sweepCifa}
+                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepCifa: e.target.checked }))}
+                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                  />
+                  <span>Fusión CIFA-CEIPOL</span>
+                </label>
+              </div>
+            </div>
+
+            {/* 3. RESUMEN Y AJUSTES DE BARRIDOS DE INTELIGENCIA */}
+            <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+              <p className="font-bold text-amber-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1 flex items-center gap-1.5">
+                📡 Resumen de Barridos e Integraciones de Inteligencia (Ajustes del Analista)
+              </p>
+              
+              {!project?.sweeps || project.sweeps.length === 0 ? (
+                <p className="text-slate-400 text-xs italic py-2">
+                  No hay barridos de información registrados o integrados en la hipótesis de este expediente todavía.
+                </p>
+              ) : (
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                  {project.sweeps.map((sweep: any) => (
+                    <SweepSummaryItemRow 
+                      key={sweep.id} 
+                      sweep={sweep} 
+                      updateSweep={updateSweep} 
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => void confirmAndGenerateProfile()}
+                disabled={isGeneratingAI}
+                className="w-full md:w-auto bg-sky-500 hover:bg-sky-400 text-slate-950 font-black px-8 py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isGeneratingAI ? (
+                  <>Procesando Informe...</>
+                ) : (
+                  <>
+                    <span>📄</span> Generar Informe Oficial
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showConfigModal && (
         <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">
@@ -3150,11 +3561,15 @@ const hasMinimumPhotos =
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => void confirmAndGenerateProfile()}
+                  onClick={() => {
+                    setIsHypothesisValidatedInWorkspace(true);
+                    setShowConfigModal(false);
+                    void loadAnalysisData();
+                  }}
                   disabled={!isAnalysisContextAudited}
-                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                 >
-                  Generar Informe
+                  Confirmar y Habilitar Herramientas
                 </button>
               </div>
             </div>
@@ -3244,8 +3659,22 @@ const hasMinimumPhotos =
 
           {/* ANEXOS DE MAPAS Y GRÁFICAS */}
           {(() => {
-            const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
-            const mapsSnaps = mapSnapshots.filter(s => !chartsSnaps.some((c) => c.title === s.title));
+            const chartsSnaps = mapSnapshots.filter(s => {
+              if (!s.title.toLowerCase().includes("gráfica") && !s.title.toLowerCase().includes("grafica")) return false;
+              if (s.title.includes("1") && !selectedAnnexes.chartTemporal) return false;
+              if (s.title.includes("2") && !selectedAnnexes.chartTopology) return false;
+              if (s.title.includes("3") && !selectedAnnexes.chartEnvironmental) return false;
+              if (s.title.includes("4") && !selectedAnnexes.chartPrediction) return false;
+              return true;
+            });
+            const mapsSnaps = mapSnapshots.filter(s => {
+              if (s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica")) return false;
+              if (s.title.toLowerCase().includes("densidad") && !selectedAnnexes.mapDensity) return false;
+              if (s.title.toLowerCase().includes("corredores") && !selectedAnnexes.mapMobility) return false;
+              if (s.title.toLowerCase().includes("atracción") && !selectedAnnexes.mapAttractors) return false;
+              if (s.title.toLowerCase().includes("proyección") && !selectedAnnexes.mapPredictive) return false;
+              return true;
+            });
 
             const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
               if (items.length === 0) return null;
@@ -3283,10 +3712,50 @@ const hasMinimumPhotos =
               ));
             };
 
+            const selectedSweeps = (project?.sweeps || []).filter(s => {
+              if (s.engine.toLowerCase().includes("denue") && !selectedAnnexes.sweepDenue) return false;
+              if (s.engine.toLowerCase().includes("incidencia") && !selectedAnnexes.sweepIncidencia) return false;
+              if (s.engine.toLowerCase().includes("vehicular") && !selectedAnnexes.sweepRepuve) return false;
+              if (s.engine.toLowerCase().includes("desaparecidos") && !selectedAnnexes.sweepRnpdno) return false;
+              if (s.engine.toLowerCase().includes("multimodal") && !selectedAnnexes.sweepMultimodal) return false;
+              if (s.engine.toLowerCase().includes("cifa") && !selectedAnnexes.sweepCifa) return false;
+              return s.status === "Integrado";
+            });
+
             return (
               <>
                 {renderAnnexPage("Atlas Cartográfico", mapsSnaps)}
                 {renderAnnexPage("Modelos Analíticos", chartsSnaps)}
+                {selectedSweeps.length > 0 && (
+                  <div className="html2pdf__page-break w-[794px] min-h-[1123px] flex flex-col p-10 bg-white relative text-left text-slate-900" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
+                    <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
+                       <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">ANEXO: BARRIDOS DE INTELIGENCIA</h2>
+                       <span className="text-[10px] font-bold text-slate-400 uppercase">SAI | CEIPOL</span>
+                    </div>
+                    
+                    <div className="space-y-6 flex-1 text-[11px] text-[#333333]">
+                      {selectedSweeps.map((sweep) => (
+                        <div key={sweep.id} className="border border-slate-350 p-4 rounded-lg bg-slate-50 space-y-2">
+                          <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                            <span className="font-extrabold text-[#0D2B52] text-xs uppercase">{sweep.engine}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">ID: {sweep.id} | Relevancia: {sweep.relevance}</span>
+                          </div>
+                          <p className="leading-relaxed font-mono whitespace-pre-wrap text-[10px] bg-white p-2.5 rounded border border-slate-200 text-slate-800">
+                            {sweep.data}
+                          </p>
+                          {sweep.context && (
+                            <p className="leading-relaxed"><strong className="text-slate-600">Comentarios de Contexto:</strong> {sweep.context}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2 shrink-0">
+                      <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
+                      <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                )}
               </>
             );
           })()}
