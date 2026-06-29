@@ -75,6 +75,8 @@ export type Project = {
   status?: "ACTIVO" | "ARCHIVADO";
   contextoIncidencia?: string;
   delitosSeleccionados?: string[];
+  hipotesis?: string;
+  reportSummary?: string;
 };
 
 export type PerPhotoFinding = {

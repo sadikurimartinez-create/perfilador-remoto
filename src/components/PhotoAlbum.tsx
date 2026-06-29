@@ -452,8 +452,11 @@ export function PhotoAlbum({
   }, [user, reportNumber]);
 
   useEffect(() => {
-    if (project && (project as any).reportSummary && !reportSummary) {
-      setReportSummary((project as any).reportSummary);
+    if (project && project.reportSummary && !reportSummary) {
+      setReportSummary(project.reportSummary);
+    }
+    if (project && project.hipotesis && !analysisContext) {
+      setAnalysisContext(project.hipotesis);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
@@ -1125,6 +1128,18 @@ const hasMinimumPhotos =
   return (
     <>
       <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-4 col-span-full w-full">
+      {error && (
+        <div className="bg-red-900/40 border border-red-500 text-red-200 px-4 py-3 rounded-lg text-xs font-semibold relative mb-4 flex justify-between items-center gap-2">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-red-200 hover:text-red-100 font-bold px-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <header className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <h3 className="text-lg font-semibold text-slate-100">Álbum fotográfico</h3>
         <div className="flex gap-2">
@@ -2983,6 +2998,27 @@ const hasMinimumPhotos =
         </div>
       </div>
     </div>
+    
+      {/* Botón al final de la pantalla para formular hipótesis y abrir la configuración de análisis */}
+      <div className="pt-8 mt-8 border-t border-slate-800 flex justify-center w-full print:hidden">
+        <button
+          type="button"
+          onClick={() => {
+            if (selectedIds.length === 0) {
+              if (album.length > 0) {
+                selectAllPhotos();
+              } else {
+                window.alert("Debe agregar al menos una fotografía al expediente para poder formular una hipótesis.");
+                return;
+              }
+            }
+            setShowConfigModal(true);
+          }}
+          className="w-full max-w-md bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 text-sm uppercase tracking-wider active:scale-98"
+        >
+          <span>🧠</span> Generar Hipótesis y Contextualización
+        </button>
+      </div>
 
       {showConfigModal && (
         <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/80 p-4 overflow-y-auto">
