@@ -701,6 +701,12 @@ export default function AdminPage() {
         >
           📜 Auditoría Central
         </button>
+        <Link
+          href="/admin/imfo"
+          className="text-sm font-semibold pb-2 border-b-2 border-transparent text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1"
+        >
+          📂 Inventario de Fuentes (IMFO)
+        </Link>
       </div>
 
       {/* Alerta de Expiración Preventiva (Papelera) */}

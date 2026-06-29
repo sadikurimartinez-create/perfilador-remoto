@@ -21,7 +21,7 @@ import MultiUserPanel
   from './MultiUserPanel';
 import PredictivePanel
   from './PredictivePanel';
-import { OsintTerritorialPanel } from './OsintTerritorialPanel';
+import { CifaCeipolPanel } from './CifaCeipolPanel';
 import ThreatMapOverlay
   from './ThreatMapOverlay';
 import {
@@ -926,13 +926,9 @@ export function ProjectMap({ geometryType, coordinates, onUpdateCoordinates, alb
           <PredictivePanel
             project={project}
           />
-          <OsintTerritorialPanel
+          <CifaCeipolPanel
             project={project}
             onUpdateMapResults={(data) => setOsintResults(data)}
-            showMapMarkers={showOsintMarkers}
-            onToggleMapMarkers={setShowOsintMarkers}
-            showMapRoutes={showOsintRoutes}
-            onToggleMapRoutes={setShowOsintRoutes}
           />
         </div>
       )}
