@@ -10,6 +10,8 @@ export function SweepIntegrationModal() {
   const [justificationInput, setJustificationInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [coords, setCoords] = useState({ x: 200, y: 200 });
+  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({});
 
   // Sync inputs when active sweep changes
   useEffect(() => {
@@ -20,6 +22,37 @@ export function SweepIntegrationModal() {
       setErrorMsg("");
     }
   }, [activeSweepForModal]);
+
+  // Track cursor position globally when modal is closed
+  useEffect(() => {
+    const updateCoords = (e: MouseEvent) => {
+      if (!activeSweepForModal) {
+        setCoords({ x: e.clientX, y: e.clientY });
+      }
+    };
+    window.addEventListener("mousemove", updateCoords);
+    return () => window.removeEventListener("mousemove", updateCoords);
+  }, [activeSweepForModal]);
+
+  // Calculate coordinates to keep the modal fully inside the viewport near the cursor
+  useEffect(() => {
+    if (activeSweepForModal) {
+      const modalWidth = 480;
+      const modalHeight = 460;
+      
+      const left = Math.max(15, Math.min(coords.x + 10, window.innerWidth - modalWidth - 15));
+      const top = Math.max(15, Math.min(coords.y + 10, window.innerHeight - modalHeight - 15));
+
+      setPositionStyle({
+        position: "fixed",
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${modalWidth}px`,
+        maxHeight: "90vh",
+        overflowY: "auto"
+      });
+    }
+  }, [activeSweepForModal, coords]);
 
   if (!activeSweepForModal) return null;
 
@@ -81,11 +114,12 @@ export function SweepIntegrationModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4 animate-fadeIn">
+    <div className="fixed inset-0 z-[300] bg-slate-950/40 backdrop-blur-[2px] pointer-events-auto">
       <div 
         role="dialog" 
         aria-modal="true" 
-        className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 relative overflow-hidden flex flex-col gap-5 text-slate-100"
+        style={positionStyle}
+        className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 relative overflow-hidden flex flex-col gap-5 text-slate-100 animate-fadeIn"
       >
         {/* Decorative glowing gradient arches */}
         <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none" />

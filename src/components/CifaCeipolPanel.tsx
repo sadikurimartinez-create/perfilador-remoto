@@ -24,7 +24,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
   
   // PRI Form States
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [customQuery, setCustomQuery] = useState("");
+  const [softContext, setSoftContext] = useState("");
   const [editableHypothesis, setEditableHypothesis] = useState("");
   const [editablePriority, setEditablePriority] = useState<IntelligencePlan["priority"]>("Medio");
   const [editableInvestigationType, setEditableInvestigationType] = useState("");
@@ -63,7 +63,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
     if (!project) return;
     setLoading(true);
     try {
-      const scanData = await runUnifiedCifaScan(project, selectedSources, customQuery || undefined);
+      const scanData = await runUnifiedCifaScan(project, selectedSources, softContext || undefined);
       setResults(scanData);
       
       // Notify map of the new georreferenciations
@@ -320,15 +320,15 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Custom Search Keywords query input */}
+                {/* Custom Soft Context query input */}
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Palabras clave adicionales (Personalizar Query):</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. 'camioneta negra', 'Los Cholos 13', 'El Cholo'..."
-                    value={customQuery}
-                    onChange={(e) => setCustomQuery(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 placeholder-slate-600"
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contexto soft de búsqueda (Parámetros/Detalles de interés):</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Ej. Describa el contexto operacional, vehículos sospechosos, marcas de interés, alias u orientación de la investigación..."
+                    value={softContext}
+                    onChange={(e) => setSoftContext(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 outline-none focus:border-cyan-500 placeholder-slate-600 resize-none font-sans"
                   />
                 </div>
 
