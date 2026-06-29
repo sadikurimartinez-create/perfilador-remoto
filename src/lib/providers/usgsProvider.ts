@@ -54,8 +54,15 @@ export class UsgsProvider implements IProvider {
       const isMexico = lat > 14 && lat < 33 && lng > -122 && lng < -84;
       const seed = Math.abs(Math.sin(lat * lng)) * 10000;
 
+      const isSimulationDisabled = process.env.ENABLE_SIMULATION === "false" ||
+                                    process.env.ENABLE_MOCK_DATA === "false" ||
+                                    process.env.ENABLE_TEST_DATA === "false" ||
+                                    process.env.ENABLE_DEMO_MODE === "false" ||
+                                    process.env.ENABLE_PILOT_GENERATORS === "false" ||
+                                    process.env.NODE_ENV === "production";
+
       if (action === "continuous" || action === "latest_continuous") {
-        if (!isMexico) {
+        if (!isMexico || isSimulationDisabled) {
           // Real USGS NWIS IV (Instantaneous / Continuous Values) Fetch
           const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&maxradiuskm=100&parameterCd=00060,00065`;
           try {
@@ -63,13 +70,19 @@ export class UsgsProvider implements IProvider {
             if (res.ok) {
               const json = await res.json();
               data = this.parseNwisResponse(json, "Continuous / IV");
+            } else if (isSimulationDisabled) {
+              throw new Error(`USGS NWIS IV API returned HTTP status ${res.status}`);
             }
           } catch (e: any) {
+            if (isSimulationDisabled) throw e;
             errors.push(`NWIS real-time fetch failed, falling back to simulator: ${e.message}`);
           }
         }
 
         if (!data) {
+          if (isSimulationDisabled) {
+            throw new Error(`No real continuous data available for USGS at coordinates (${lat}, ${lng}) and simulation fallback is deactivated.`);
+          }
           // Simulating high-fidelity USGS telemetry
           const discharge = parseFloat((2.5 + (seed % 28)).toFixed(2));
           const gageHeight = parseFloat((0.8 + ((seed % 120) / 100)).toFixed(2));
@@ -101,20 +114,26 @@ export class UsgsProvider implements IProvider {
           };
         }
       } else if (action === "daily" || action === "latest_daily") {
-        if (!isMexico) {
+        if (!isMexico || isSimulationDisabled) {
           const url = `https://waterservices.usgs.gov/nwis/dv/?format=json&latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&maxradiuskm=100&parameterCd=00060`;
           try {
             const res = await fetch(url);
             if (res.ok) {
               const json = await res.json();
               data = this.parseNwisResponse(json, "Daily / DV");
+            } else if (isSimulationDisabled) {
+              throw new Error(`USGS NWIS DV API returned HTTP status ${res.status}`);
             }
           } catch (e: any) {
+            if (isSimulationDisabled) throw e;
             errors.push(`NWIS daily fetch failed: ${e.message}`);
           }
         }
 
         if (!data) {
+          if (isSimulationDisabled) {
+            throw new Error(`No real daily data available for USGS at coordinates (${lat}, ${lng}) and simulation fallback is deactivated.`);
+          }
           const meanDischarge = parseFloat((3.0 + (seed % 25)).toFixed(2));
           data = {
             source: "USGS NWIS dv Simulator",
@@ -136,20 +155,26 @@ export class UsgsProvider implements IProvider {
           };
         }
       } else if (action === "monitoring_locations") {
-        if (!isMexico) {
+        if (!isMexico || isSimulationDisabled) {
           const url = `https://waterservices.usgs.gov/nwis/site/?format=json&latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&maxradiuskm=150&siteStatus=all`;
           try {
             const res = await fetch(url);
             if (res.ok) {
               const json = await res.json();
               data = json;
+            } else if (isSimulationDisabled) {
+              throw new Error(`USGS NWIS Site API returned HTTP status ${res.status}`);
             }
           } catch (e: any) {
+            if (isSimulationDisabled) throw e;
             errors.push(`NWIS Site service failed: ${e.message}`);
           }
         }
 
         if (!data) {
+          if (isSimulationDisabled) {
+            throw new Error(`No real monitoring location data available for USGS at coordinates (${lat}, ${lng}) and simulation fallback is deactivated.`);
+          }
           data = {
             source: "USGS NWIS Site Registry (Simulated)",
             count: 3,
@@ -172,6 +197,9 @@ export class UsgsProvider implements IProvider {
           }
         };
       } else if (action === "statistics") {
+        if (isSimulationDisabled) {
+          throw new Error(`USGS historical statistics simulation is deactivated.`);
+        }
         data = {
           source: "USGS NWIS Statistics Service",
           parameters: ["00060", "00065"],
@@ -183,7 +211,7 @@ export class UsgsProvider implements IProvider {
               p50: parseFloat((12.0 + (seed % 8)).toFixed(2)),
               p90: parseFloat((45.0 + (seed % 15)).toFixed(2))
             },
-            gage_height_ft: {
+            secondary_gage_height_ft: {
               historical_mean: parseFloat((1.2 + (seed % 0.5)).toFixed(2)),
               historical_max: parseFloat((5.8 + (seed % 2)).toFixed(2)),
               historical_min: parseFloat((0.2 + (seed % 0.1)).toFixed(2))

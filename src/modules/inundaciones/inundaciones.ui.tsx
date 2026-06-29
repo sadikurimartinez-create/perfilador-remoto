@@ -91,6 +91,12 @@ const WMS_LAYERS_CATALOG = [
 export function InundacionesUI() {
   const { user } = useAuth();
 
+  const isSimulationDisabled = typeof process !== "undefined" && (
+    process.env.NODE_ENV === "production" ||
+    process.env.NEXT_PUBLIC_ENABLE_SIMULATION === "false" ||
+    process.env.ENABLE_SIMULATION === "false"
+  );
+
   // Estados del Formulario Temporal y Ámbito
   const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
   const [hora, setHora] = useState("12:00");
@@ -432,20 +438,27 @@ export function InundacionesUI() {
             Sistema Unificado de Alerta Temprana • Estado de Aguascalientes • Predicción Multivariable v3.1
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={loadDemoEstatal}
-            className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-all active:scale-[0.97]"
-          >
-            ⚡ Demo Estatal (AGS)
-          </button>
-          <button
-            onClick={() => loadDemoMunicipal("Calvillo")}
-            className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-all active:scale-[0.97]"
-          >
-            ⚡ Demo Calvillo
-          </button>
-        </div>
+        {!isSimulationDisabled ? (
+          <div className="flex gap-2">
+            <button
+              onClick={loadDemoEstatal}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-all active:scale-[0.97]"
+            >
+              ⚡ Demo Estatal (AGS)
+            </button>
+            <button
+              onClick={() => loadDemoMunicipal("Calvillo")}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 transition-all active:scale-[0.97]"
+            >
+              ⚡ Demo Calvillo
+            </button>
+          </div>
+        ) : (
+          <div className="bg-slate-950/60 px-4 py-2 rounded-lg border border-slate-800 flex items-center gap-2 select-none shadow-inner">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
+            <span className="text-[10px] font-black tracking-widest text-blue-400 font-mono uppercase">LIVE OPERATION ACTIVE</span>
+          </div>
+        )}
       </div>
 
       {/* 10 STACKED FULL-WIDTH PANELS */}

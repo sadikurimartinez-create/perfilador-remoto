@@ -370,21 +370,28 @@ export default function GeoIntCommandDashboard() {
         </div>
 
         {/* MODE SWITCHER */}
-        <div className="flex items-center gap-2 bg-slate-950/60 p-1 rounded-lg border border-slate-800 self-start lg:self-auto">
-          {["LIVE", "PILOT", "SIMULATION"].map((mode) => (
-            <button
-              key={mode}
-              onClick={() => handleModeSwitch(mode as any)}
-              className={`px-3 py-1.5 rounded-md text-[11px] font-bold tracking-wider transition-all duration-300 ${
-                systemMode === mode
-                  ? "bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-md font-extrabold"
-                  : "text-slate-400 hover:text-white hover:bg-slate-900"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
+        {systemMode === "LIVE" ? (
+          <div className="bg-slate-950/60 px-4 py-2 rounded-lg border border-slate-800 flex items-center gap-2 select-none self-start lg:self-auto shadow-inner">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+            <span className="text-[10px] font-black tracking-widest text-emerald-400 font-mono uppercase">REAL DATA OPERATION</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-slate-950/60 p-1 rounded-lg border border-slate-800 self-start lg:self-auto">
+            {["LIVE", "PILOT", "SIMULATION"].map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleModeSwitch(mode as any)}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-bold tracking-wider transition-all duration-300 ${
+                  systemMode === mode
+                    ? "bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-md font-extrabold"
+                    : "text-slate-400 hover:text-white hover:bg-slate-900"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* COCKPIT STACK LAYOUT */}
@@ -907,90 +914,92 @@ export default function GeoIntCommandDashboard() {
         </div>
 
         {/* 7. CENTRO DE CONTROL DEL PILOTO (Pilot Control) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-1">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🧪</span>
-              <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
-                PANEL 7 — CENTRO DE CONTROL DEL PILOTO (PILOT CONTROL CENTER)
-              </h3>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[9px] bg-amber-950/40 text-amber-500 px-1.5 py-0.5 rounded font-mono border border-amber-500/20 font-bold">
-                SIM ACTIVA
-              </span>
-              <div className="relative group flex items-center">
-                <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
-                <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
-                  <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
-                    ❓ Ayuda: Pilot Control
-                  </h4>
-                  <div className="space-y-2 text-[11px]">
-                    <p><strong>¿Qué hace el módulo?</strong> Consola de simulación que permite a los operadores e instructores inyectar fallas artificiales para evaluar la resiliencia operativa.</p>
-                    <p><strong>¿Qué información presenta?</strong> Escenario de estrés activo, obligatoriedad del estado HITL y métricas de degradación impuestas por la simulación.</p>
-                    <p><strong>¿Cómo debe interpretarse?</strong> Muestra el tipo de anomalía sintética que está experimentando el sistema en tiempo real. Sirve para evaluar los mecanismos de autodefensa del software.</p>
-                    <p><strong>¿Qué decisiones apoya?</strong> Planificación de entrenamientos operacionales y pruebas de robustez del sistema bajo escenarios de desastre de red o datos falsificados.</p>
-                    <p><strong>Significado de indicadores:</strong> Latency Spike (pico de latencia), Data Loss (pérdida de paquetes), OSINT Overload (saturación de rumores), Conflicting Hydro (datos hidrológicos contradictorios).</p>
-                    <p><strong>Interacción:</strong> Modifica dinámicamente los valores mostrados en Provider Health, Telemetry y Event Stream para modelar la contingencia seleccionada.</p>
+        {systemMode !== "LIVE" && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-1">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🧪</span>
+                <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400">
+                  PANEL 7 — CENTRO DE CONTROL DEL PILOTO (PILOT CONTROL CENTER)
+                </h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] bg-amber-950/40 text-amber-500 px-1.5 py-0.5 rounded font-mono border border-amber-500/20 font-bold">
+                  SIM ACTIVA
+                </span>
+                <div className="relative group flex items-center">
+                  <span className="text-slate-500 hover:text-amber-500 cursor-help transition-colors select-none text-xs ml-2">❓</span>
+                  <div className="absolute right-0 top-7 z-50 w-80 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-2xl text-left text-xs text-slate-300 leading-relaxed font-normal normal-case opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none transition-opacity duration-200">
+                    <h4 className="font-bold text-slate-200 border-b border-slate-800 pb-1 mb-2 flex items-center gap-1.5 uppercase text-[10px] tracking-wider text-amber-500">
+                      ❓ Ayuda: Pilot Control
+                    </h4>
+                    <div className="space-y-2 text-[11px]">
+                      <p><strong>¿Qué hace el módulo?</strong> Consola de simulación que permite a los operadores e instructores inyectar fallas artificiales para evaluar la resiliencia operativa.</p>
+                      <p><strong>¿Qué información presenta?</strong> Escenario de estrés activo, obligatoriedad del estado HITL y métricas de degradación impuestas por la simulación.</p>
+                      <p><strong>¿Cómo debe interpretarse?</strong> Muestra el tipo de anomalía sintética que está experimentando el sistema en tiempo real. Sirve para evaluar los mecanismos de autodefensa del software.</p>
+                      <p><strong>¿Qué decisiones apoya?</strong> Planificación de entrenamientos operacionales y pruebas de robustez del sistema bajo escenarios de desastre de red o datos falsificados.</p>
+                      <p><strong>Significado de indicadores:</strong> Latency Spike (pico de latencia), Data Loss (pérdida de paquetes), OSINT Overload (saturación de rumores), Conflicting Hydro (datos hidrológicos contradictorios).</p>
+                      <p><strong>Interacción:</strong> Modifica dinámicamente los valores mostrados en Provider Health, Telemetry y Event Stream para modelar la contingencia seleccionada.</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs w-full">
-            <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
-              <div className="flex justify-between border-b border-slate-800/60 pb-2">
-                <span className="text-slate-400 font-semibold">Simulación Escenario</span>
-                <strong className="text-amber-500 font-bold">{currentScenario}</strong>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs w-full">
+              <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
+                <div className="flex justify-between border-b border-slate-800/60 pb-2">
+                  <span className="text-slate-400 font-semibold">Simulación Escenario</span>
+                  <strong className="text-amber-500 font-bold">{currentScenario}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-semibold">HITL State</span>
+                  <strong className="text-emerald-400 font-bold">OBLIGATORIO</strong>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">HITL State</span>
-                <strong className="text-emerald-400 font-bold">OBLIGATORIO</strong>
+
+              <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
+                <div className="flex justify-between border-b border-slate-800/60 pb-2">
+                  <span className="text-slate-400 font-semibold">Throttling Guard</span>
+                  <strong className="text-sky-400 font-bold">ACTIVO (CACHE-OVER)</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-semibold">OSINT Degradation Factor</span>
+                  <strong className="text-orange-400 font-bold">55% (PILOT LIMITS)</strong>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3 bg-slate-950 border border-slate-800/40 p-4 rounded-xl">
-              <div className="flex justify-between border-b border-slate-800/60 pb-2">
-                <span className="text-slate-400 font-semibold">Throttling Guard</span>
-                <strong className="text-sky-400 font-bold">ACTIVO (CACHE-OVER)</strong>
+            {/* Stress trigger buttons */}
+            <div className="flex flex-col gap-3.5 pt-1 w-full">
+              <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Inyectar Escenario de Contingencia:</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+                {["LATENCY_SPIKE", "DATA_LOSS", "OSINT_OVERLOAD", "CONFLICTING_HYDRO"].map((scen) => (
+                  <button
+                    key={scen}
+                    onClick={() => handleTriggerScenario(scen)}
+                    className={`p-3 rounded-lg text-[9px] font-black uppercase transition-all duration-300 border ${
+                      currentScenario === scen
+                        ? "bg-red-700 hover:bg-red-600 text-white shadow-md border-red-500/40"
+                        : "bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-850"
+                    }`}
+                  >
+                    {scen.replace("_", " ")}
+                  </button>
+                ))}
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">OSINT Degradation Factor</span>
-                <strong className="text-orange-400 font-bold">55% (PILOT LIMITS)</strong>
-              </div>
-            </div>
-          </div>
 
-          {/* Stress trigger buttons */}
-          <div className="flex flex-col gap-3.5 pt-1 w-full">
-            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Inyectar Escenario de Contingencia:</span>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
-              {["LATENCY_SPIKE", "DATA_LOSS", "OSINT_OVERLOAD", "CONFLICTING_HYDRO"].map((scen) => (
+              {currentScenario !== "NONE" && (
                 <button
-                  key={scen}
-                  onClick={() => handleTriggerScenario(scen)}
-                  className={`p-3 rounded-lg text-[9px] font-black uppercase transition-all duration-300 border ${
-                    currentScenario === scen
-                      ? "bg-red-700 hover:bg-red-600 text-white shadow-md border-red-500/40"
-                      : "bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-slate-850"
-                  }`}
+                  onClick={() => handleTriggerScenario("NONE")}
+                  className="bg-emerald-950/60 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/30 rounded-lg w-full p-2.5 text-[9.5px] font-black uppercase tracking-wider transition-all duration-300"
                 >
-                  {scen.replace("_", " ")}
+                  🛑 Detener Simulación de Estrés
                 </button>
-              ))}
+              )}
             </div>
-
-            {currentScenario !== "NONE" && (
-              <button
-                onClick={() => handleTriggerScenario("NONE")}
-                className="bg-emerald-950/60 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/30 rounded-lg w-full p-2.5 text-[9.5px] font-black uppercase tracking-wider transition-all duration-300"
-              >
-                🛑 Detener Simulación de Estrés
-              </button>
-            )}
           </div>
-        </div>
+        )}
 
         {/* 8. TELEMETRÍA DEL SISTEMA (System Telemetry & Logs) */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl w-full flex flex-col gap-4">

@@ -97,6 +97,16 @@ export class TomorrowIoProvider implements IProvider {
         ...provenance
       };
     } catch (err: any) {
+      const isSimulationDisabled = process.env.ENABLE_SIMULATION === "false" ||
+                                    process.env.ENABLE_MOCK_DATA === "false" ||
+                                    process.env.ENABLE_TEST_DATA === "false" ||
+                                    process.env.ENABLE_DEMO_MODE === "false" ||
+                                    process.env.ENABLE_PILOT_GENERATORS === "false" ||
+                                    process.env.NODE_ENV === "production";
+      if (isSimulationDisabled) {
+        console.error(`[LOG] Tomorrow.io error (simulation deactivated): ${err.message || String(err)}`);
+        throw err;
+      }
       console.warn(`[LOG] Tomorrow.io error, falling back to simulator: ${err.message || String(err)}`);
       errors.push(err.message || String(err));
 

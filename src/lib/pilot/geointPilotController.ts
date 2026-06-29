@@ -49,9 +49,19 @@ export class GeointPilotController {
   };
 
   private constructor() {
+    // Determine the default mode and seeding status based on environmental simulation flags.
+    const isSimulationDisabled = process.env.ENABLE_SIMULATION === "false" ||
+                                  process.env.ENABLE_MOCK_DATA === "false" ||
+                                  process.env.ENABLE_TEST_DATA === "false" ||
+                                  process.env.ENABLE_DEMO_MODE === "false" ||
+                                  process.env.ENABLE_PILOT_GENERATORS === "false" ||
+                                  process.env.NODE_ENV === "production";
+    
+    const defaultMode = isSimulationDisabled ? "LIVE" : "PILOT";
+
     // 🟡 Default PilotConfig on initialization
     this.config = {
-      mode: "PILOT",
+      mode: defaultMode,
       providers: {
         noaa: true,
         conagua: true,
@@ -75,7 +85,9 @@ export class GeointPilotController {
     };
 
     // Pre-populate with some mock events if in pilot mode so the command center has data
-    this.seedMockEvents();
+    if (defaultMode !== "LIVE") {
+      this.seedMockEvents();
+    }
   }
 
   public static getInstance(): GeointPilotController {
@@ -208,9 +220,19 @@ export class GeointPilotController {
     const lastQuery = this.lastProviderQuery.get(providerId) || 0;
     const window = this.throttleWindowsMs[providerId] || 3000;
 
+    const isSimulationDisabled = process.env.ENABLE_SIMULATION === "false" ||
+                                  process.env.ENABLE_MOCK_DATA === "false" ||
+                                  process.env.ENABLE_TEST_DATA === "false" ||
+                                  process.env.ENABLE_DEMO_MODE === "false" ||
+                                  process.env.ENABLE_PILOT_GENERATORS === "false" ||
+                                  process.env.NODE_ENV === "production";
+
     // 1. If provider is disabled in configuration, immediately fallback to simulation
     const isProviderEnabled = (this.config.providers as any)[providerId] !== false;
     if (!isProviderEnabled || this.config.mode === "SIMULATION") {
+      if (isSimulationDisabled) {
+        throw new Error(`Provider '${providerId}' is disabled and simulation fallbacks are deactivated.`);
+      }
       return {
         data: simulationFallbackFn(),
         source: "simulation_fallback"
@@ -219,6 +241,9 @@ export class GeointPilotController {
 
     // 2. Throttling guard: if queried too fast, protect backend resources
     if (now - lastQuery < window) {
+      if (isSimulationDisabled) {
+        throw new Error(`Throttling active for provider '${providerId}'. Request blocked, simulation fallback deactivated.`);
+      }
       console.log(`[PILOT_CONTROLLER] Throttling triggered for provider: ${providerId}. Serving simulated fallback.`);
       return {
         data: simulationFallbackFn(),
@@ -233,7 +258,11 @@ export class GeointPilotController {
         data,
         source: "live"
       };
-    } catch (err) {
+    } catch (err: any) {
+      if (isSimulationDisabled) {
+        console.error(`[PILOT_CONTROLLER] Error executing live provider ${providerId} (Simulation fallbacks are deactivated):`, err);
+        throw err;
+      }
       console.error(`[PILOT_CONTROLLER] Error executing live provider ${providerId}. Sliding into failover simulation.`);
       return {
         data: simulationFallbackFn(),
