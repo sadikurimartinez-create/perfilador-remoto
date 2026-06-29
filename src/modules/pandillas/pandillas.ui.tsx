@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useProject } from "@/context/ProjectContext";
 import {
   GangEntity,
   GangMember,
@@ -189,6 +190,7 @@ interface PandillasUIProps {
 
 export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIProps = {}) {
   const { user } = useAuth();
+  const { registerSweep } = useProject();
   const username = user?.username || "CEIPOL_Analista";
 
   // --- REGISTRY LIST STATES ---
@@ -1310,7 +1312,17 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
 
       const result = await PandillasEngine.executeFullSweep(inputGang, filterPrompt);
       setAnalysisResult(result);
-      alert("📡 ¡El barrido de geointeligencia multifuente ha concluido! Revise los informes técnicos generados.");
+      
+      const resultSummary = `[MESA DE INTELIGENCIA DE PANDILLAS (AI)]\nObjetivo: ${nombre}\nTipo de Barrido: ${filterPrompt}\nNivel de Peligrosidad Estimado: ${peligrosidad}\nIntegrantes Capturados: ${integrantes.length}\nModus Operandi Analizado: ${modusOperandi}\n\nResumen del Diagnóstico de Inteligencia: El barrido unificó la información de pandillas locales y generó modelos de red y distribución de riesgo territorial.`;
+
+      await registerSweep({
+        engine: "Mesa de Inteligencia de Pandillas (AI)",
+        source: "GEOINT",
+        type: "Contextualizada",
+        relevance: "Alto",
+        data: resultSummary,
+        initialContext: filterPrompt
+      });
     } catch (err: any) {
       console.error(err);
       alert("❌ Falló el motor de barrido Vertex AI: " + err.message);

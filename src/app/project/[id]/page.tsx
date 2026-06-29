@@ -13,6 +13,8 @@ import { useAuth } from "@/context/AuthContext";
 import { PandillasUI } from "@/modules/pandillas/pandillas.ui";
 import { PandillasService } from "@/modules/pandillas/pandillas.service";
 import { GangGeoSweepPanel } from "@/components/GangGeoSweepPanel";
+import { SweepIntegrationModal } from "@/components/SweepIntegrationModal";
+import { SweepSummaryTab } from "@/components/SweepSummaryTab";
 import {
   addDoc,
   collection,
@@ -48,7 +50,20 @@ export default function ProjectWorkspacePage() {
 
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas" | "summary">("environmental");
+
+  const handleExitWorkspace = (e: React.MouseEvent, targetUrl: string) => {
+    if (project && project.sweeps) {
+      const pending = project.sweeps.filter((s: any) => s.status === "Pendiente");
+      if (pending.length > 0) {
+        e.preventDefault();
+        alert(`⚠️ Bloqueo de Gobernanza Operativa:\n\nExisten ${pending.length} barridos de información pendientes de integrar o descartar en la Hipótesis Central.\n\nPor favor, resuélvalos en la pestaña "Resumen y Cierre" antes de salir.`);
+        setActiveWorkspaceTab("summary");
+        return;
+      }
+    }
+    router.push(targetUrl);
+  };
 
   const [geoInputId, setGeoInputId] = useState("");
   const [isLinking, setIsLinking] = useState(false);
@@ -249,12 +264,13 @@ export default function ProjectWorkspacePage() {
       <header className="w-full">
         <div className="flex flex-wrap items-center justify-between gap-3 w-full">
           <div>
-            <Link
+            <a
               href="/"
+              onClick={(e) => handleExitWorkspace(e, "/")}
               className="text-xs text-slate-500 hover:text-slate-400 mb-1 inline-block"
             >
               ← Volver a Mis Expedientes
-            </Link>
+            </a>
             <div className="flex items-center gap-2">
               <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
                 {project.nombre}
@@ -279,7 +295,7 @@ export default function ProjectWorkspacePage() {
           </div>
           <button
             type="button"
-            onClick={() => router.push("/")}
+            onClick={(e) => handleExitWorkspace(e, "/")}
             className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
           >
             Guardar y Salir a Inicio
@@ -288,7 +304,7 @@ export default function ProjectWorkspacePage() {
       </header>
 
       {/* PREMIUM TABS NAVIGATION HEADER */}
-      <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1.5 gap-1.5 shadow-lg max-w-lg w-full">
+      <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1.5 gap-1.5 shadow-lg max-w-2xl w-full">
         <button
           onClick={() => setActiveWorkspaceTab("environmental")}
           className={`flex-1 py-2.5 rounded-lg text-xs font-black tracking-wide uppercase transition-all whitespace-nowrap ${
@@ -309,10 +325,20 @@ export default function ProjectWorkspacePage() {
         >
           🕵️ Análisis de Pandillas
         </button>
+        <button
+          onClick={() => setActiveWorkspaceTab("summary")}
+          className={`flex-1 py-2.5 rounded-lg text-xs font-black tracking-wide uppercase transition-all whitespace-nowrap ${
+            activeWorkspaceTab === "summary"
+              ? "bg-sky-500 text-slate-950 shadow-md font-extrabold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          📊 Resumen y Cierre
+        </button>
       </div>
 
       <div className="w-full space-y-6 overflow-y-auto pb-20 lg:pb-0">
-        {activeWorkspaceTab === "environmental" ? (
+        {activeWorkspaceTab === "environmental" && (
           <>
             <CaptureAndAddPhoto />
             <PhotoAlbum
@@ -321,9 +347,15 @@ export default function ProjectWorkspacePage() {
               onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
             />
           </>
-        ) : (
+        )}
+        {activeWorkspaceTab === "pandillas" && (
           <div className="w-full bg-slate-950/20 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
             <PandillasUI projectId={project.id} onSaveAnalysisToCloud={handleSaveAnalysisToCloud} />
+          </div>
+        )}
+        {activeWorkspaceTab === "summary" && (
+          <div className="w-full bg-slate-950/20 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+            <SweepSummaryTab />
           </div>
         )}
       </div>
@@ -526,6 +558,7 @@ export default function ProjectWorkspacePage() {
         </div>
       )}
       <CopilotOverlay />
+      <SweepIntegrationModal />
     </div>
   );
 }

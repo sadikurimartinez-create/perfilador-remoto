@@ -6,6 +6,7 @@ import { GangGeoSweepEngine, GangSweepResult, getHaversineDistance } from "@/lib
 import { PandillasService } from "@/modules/pandillas/pandillas.service";
 import { getDb } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
+import { useProject } from "@/context/ProjectContext";
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
@@ -40,6 +41,7 @@ interface GangGeoSweepPanelProps {
 }
 
 export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangGeoSweepPanelProps) {
+  const { registerSweep } = useProject();
   // Input fields
   const [narrative, setNarrative] = useState("");
   const [softPrompt, setSoftPrompt] = useState("");
@@ -203,8 +205,20 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
         linkedGangReport: sweepResult,
       });
 
+      const gangsList = sweepResult.matched_gangs.map(mg => `${mg.name} (${Math.round(mg.match_strength * 100)}% match)`).join(", ");
+      const domicilesList = sweepResult.suspected_domiciles.map((d, idx) => `Domicilio ${idx + 1}: ${d.address}`).join("; ");
+      const sweepSummary = `[BARRIDO DE PANDILLAS (GIS)]\nID Reporte: ${generatedId}\nPandillas identificadas: ${gangsList || "Ninguna"}\nDomicilios sospechosos: ${domicilesList || "Ninguno"}\nNivel de riesgo: ${sweepResult.risk_classification}\nInstrucción de búsqueda: ${narrative}`;
+
+      await registerSweep({
+        engine: "Barrido de Pandillas (GIS)",
+        source: "GEOINT",
+        type: "Contextualizada",
+        relevance: "Alto",
+        data: sweepSummary,
+        initialContext: narrative
+      });
+
       await onUpdateProject();
-      alert("✅ ¡Resultados del barrido vinculados exitosamente al expediente actual!");
     } catch (err: any) {
       console.error("[GangGeoSweepPanel] Error linking sweep:", err);
       alert("❌ Error al guardar y vincular el barrido: " + err.message);

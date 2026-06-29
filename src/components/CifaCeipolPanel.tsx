@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { proposeIntelligencePlan, IntelligencePlan } from "../utils/moiOrchestrator";
 import { runUnifiedCifaScan } from "../utils/cifaEngine";
 import { getAuthorizedSources, ImfoSource } from "../utils/imfoService";
+import { useProject } from "@/context/ProjectContext";
 
 interface Props {
   project: any;
@@ -16,6 +17,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
   onAppendToAnalysis,
   onUpdateMapResults
 }) => {
+  const { registerSweep } = useProject();
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<IntelligencePlan | null>(null);
   const [results, setResults] = useState<any | null>(null);
@@ -79,11 +81,20 @@ export const CifaCeipolPanel: React.FC<Props> = ({
     }
   };
 
-  const handleAppendHypothesis = () => {
-    if (!results?.correlation?.updatedHypothesis || !onAppendToAnalysis) return;
+  const handleAppendHypothesis = async () => {
+    if (!results?.correlation?.updatedHypothesis) return;
     const text = `[HIPÓTESIS DE INTELIGENCIA FUSIÓN CIFA-CEIPOL v3.0]\nTipo de Investigación: ${editableInvestigationType}\nPrioridad: ${editablePriority}\n\n${results.correlation.updatedHypothesis}\n\n* Origen y Trazabilidad: Correlacionado automáticamente de ${selectedSources.length} fuentes OSINT autorizadas.`;
-    onAppendToAnalysis(text);
-    alert("✅ Hipótesis de inteligencia anexada al expediente con éxito.");
+    try {
+      await registerSweep({
+        engine: "Fusión CIFA-CEIPOL v3.0",
+        source: "OSINT",
+        type: "Directa",
+        relevance: "Alto",
+        data: text
+      });
+    } catch (err: any) {
+      alert("❌ Error al registrar el barrido: " + err.message);
+    }
   };
 
   const getPriorityColor = (lvl: string) => {

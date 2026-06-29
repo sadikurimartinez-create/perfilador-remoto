@@ -313,6 +313,7 @@ export function PhotoAlbum({
     updateProjectDetails,
     updatePhotoCoordinates,
     loadProject,
+    registerSweep,
   } = useProject();
 
   const svContainerRef = useRef<HTMLDivElement | null>(null);
@@ -455,11 +456,10 @@ export function PhotoAlbum({
     if (project && project.reportSummary && !reportSummary) {
       setReportSummary(project.reportSummary);
     }
-    if (project && project.hipotesis && !analysisContext) {
-      setAnalysisContext(project.hipotesis);
+    if (project && project.hipotesis !== undefined) {
+      setAnalysisContext(project.hipotesis || "");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project]);
+  }, [project?.hipotesis, project?.reportSummary]);
 
   // Estado para Consulta Vehicular OSINT
   const [plateQuery, setPlateQuery] = useState("");
@@ -1946,9 +1946,13 @@ const hasMinimumPhotos =
                 const data = await getDenueData(centerLat, centerLng, 500);
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
-                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setIsAnalysisContextAudited(false);
-                  alert(`Consulta DENUE finalizada. ${data.total} unidades económicas detectadas.`);
+                  await registerSweep({
+                    engine: "Giros Comerciales (DENUE)",
+                    source: "OSINT",
+                    type: "Directa",
+                    relevance: "Medio",
+                    data: newContext
+                  });
                 } else {
                   setError(data.error || "Error al consultar INEGI DENUE.");
                 }
@@ -2071,6 +2075,29 @@ const hasMinimumPhotos =
                   const data = await res.json();
                   if (data.success && data.data) {
                     setIncidents(data.data);
+                    
+                    const total = data.data.length;
+                    const crimeCounts: Record<string, number> = {};
+                    data.data.forEach((inc: any) => {
+                      const type = inc.INCIDENTE || "Delito No Especificado";
+                      crimeCounts[type] = (crimeCounts[type] || 0) + 1;
+                    });
+                    
+                    const topCrimes = Object.entries(crimeCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 4)
+                      .map(([type, count]) => `${type} (${count})`)
+                      .join(", ");
+
+                    const summaryContext = `[BARRIDO DE INCIDENCIA DELICTIVA - GEOINT] Se detectaron un total de ${total} incidentes delictivos registrados en un radio de 1 km del polígono. Principales ilícitos reportados: ${topCrimes || "Ninguno"}. Observaciones tácticas: Este acumulado indica la severidad delictiva del sector, destacando dinámicas de incidencia criminal que alimentan la hipótesis de movilidad y acecho.`;
+                    
+                    await registerSweep({
+                      engine: "Incidencia Delictiva",
+                      source: "GEOINT",
+                      type: "Directa",
+                      relevance: "Alto",
+                      data: summaryContext
+                    });
                   } else {
                     setError(data.error || "Error al obtener la incidencia delictiva.");
                   }
@@ -2227,11 +2254,16 @@ const hasMinimumPhotos =
                   const data = await getRepuveData(plateQuery.trim());
                   if (data.exito) {
                     const newContext = `[INTELIGENCIA VEHICULAR OSINT - Placa: ${data.placa}]\nInstrucción/Contexto del Analista: ${plateContext}\nEstatus general: ${data.estatus}\n\n${data.resumenTexto || ""}\n\nObservaciones tácticas: Este vehículo se detectó físicamente en el perímetro del análisis, lo cual podría representar una ventana de oportunidad criminal o un atractor de riesgo.`;
-                    setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                    await registerSweep({
+                      engine: "Consulta Vehicular (REPUVE)",
+                      source: "REPUVE",
+                      type: "Contextualizada",
+                      relevance: "Alto",
+                      data: newContext,
+                      initialContext: plateContext
+                    });
                     setPlateQuery("");
                     setPlateContext("");
-                    setIsAnalysisContextAudited(false);
-                    alert(`¡Búsqueda Vehicular Completada!\n\nEstatus: ${data.estatus}\n\n${data.resumenTexto || ""}\n\n* La información ha sido anexada a su Hipótesis Táctica.`);
                   } else {
                     setError(data.error || "Error al consultar la placa.");
                   }
@@ -2305,10 +2337,15 @@ const hasMinimumPhotos =
                   const data = await getRnpdnoData(rnpdnoEstado, rnpdnoMunicipio);
                   if (data.exito) {
                     const newContext = `[INTELIGENCIA DE PERSONAS DESAPARECIDAS - RNPDNO]\nInstrucción/Contexto del Analista: ${rnpdnoContext}\nResultados Oficiales: ${data.resumenTexto}\nObservaciones tácticas: Estas métricas deben cruzarse con los indicadores de violencia y marginación del polígono para evaluar la presencia delictiva de alto impacto.`;
-                    setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
+                    await registerSweep({
+                      engine: "Registro de Desaparecidos (RNPDNO)",
+                      source: "SEGOB",
+                      type: "Contextualizada",
+                      relevance: "Medio",
+                      data: newContext,
+                      initialContext: rnpdnoContext
+                    });
                     setRnpdnoContext("");
-                    setIsAnalysisContextAudited(false);
-                    alert(`Consulta RNPDNO Finalizada:\n\n${data.resumenTexto}`);
                   } else {
                     setError(data.error || "Error al extraer datos de SEGOB.");
                   }
@@ -2443,10 +2480,14 @@ const hasMinimumPhotos =
                   const data = JSON.parse(text);
                   if (res.ok && data.success) {
                     const newContext = `[BÚSQUEDA MULTIMODAL GEO-ESPACIAL (1km)]\nSe procesaron ${geoQueries.length} consultas tácticas.\n\nANÁLISIS DE PATRONES ENCONTRADOS:\n${data.data?.analysis || "Cruce multimodal ejecutado."}`;
-                    setAnalysisContext(prev => prev ? `${prev}\n\n${newContext}` : newContext);
-                    setIsAnalysisContextAudited(false);
+                    await registerSweep({
+                      engine: "Búsqueda Multimodal Geo-Espacial",
+                      source: "GEOINT",
+                      type: "Directa",
+                      relevance: "Alto",
+                      data: newContext
+                    });
                     setGeoQueries([]);
-                    alert("¡Barridos Geo-Espaciales completados con éxito!\nSe han inyectado los análisis en la hipótesis.");
                   }
                 } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
               }}

@@ -61,6 +61,19 @@ export type AlbumPhoto = {
   validado?: boolean;
 };
 
+export type SweepIntegrationItem = {
+  id: string;
+  engine: string;
+  source: string;
+  type: "Directa" | "Contextualizada";
+  status: "Integrado" | "Pendiente" | "Rechazado";
+  relevance: "Alto" | "Medio" | "Bajo";
+  data: string;
+  context?: string;
+  justification?: string;
+  timestamp: number;
+};
+
 export type Project = {
   id: string;
   nombre: string;
@@ -77,6 +90,7 @@ export type Project = {
   delitosSeleccionados?: string[];
   hipotesis?: string;
   reportSummary?: string;
+  sweeps?: SweepIntegrationItem[];
 };
 
 export type PerPhotoFinding = {
@@ -186,6 +200,10 @@ type ProjectContextValue = {
     details: string;
   }) => Promise<void>;
   updateProjectDetails: (details: Partial<Project>) => Promise<void>;
+  activeSweepForModal: SweepIntegrationItem | null;
+  setActiveSweepForModal: (sweep: SweepIntegrationItem | null) => void;
+  registerSweep: (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => Promise<string>;
+  updateSweep: (sweepId: string, updates: Partial<SweepIntegrationItem>) => Promise<void>;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -217,6 +235,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
+  const [activeSweepForModal, setActiveSweepForModal] = useState<SweepIntegrationItem | null>(null);
   const [album, setAlbum] = useState<AlbumPhoto[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysisResult, setAnalysisResultState] = useState<AnalysisResult | null>(null);
@@ -1095,6 +1114,142 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return evidenceId;
   }, [project, album, isReadOnly, user, logAuditAction]);
 
+  const registerSweep = useCallback(async (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    
+    const sweepId = `SWEEP-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const initialStatus = params.type === "Directa" ? "Integrado" : "Pendiente";
+    
+    const newSweep: SweepIntegrationItem = {
+      id: sweepId,
+      engine: params.engine,
+      source: params.source,
+      type: params.type,
+      status: initialStatus,
+      relevance: params.relevance,
+      data: params.data,
+      context: params.initialContext || "",
+      timestamp: Date.now()
+    };
+
+    const currentSweeps = project.sweeps || [];
+    const updatedSweeps = [...currentSweeps, newSweep];
+
+    let updatedHypothesis = project.hipotesis || "";
+
+    if (params.type === "Directa") {
+      const delimiterStart = `\n=== BARRIDO DIRECTO [ID: ${sweepId}] [Engine: ${params.engine}] ===\n`;
+      const delimiterEnd = `\n=========================================\n`;
+      const textToAppend = `${delimiterStart}Fecha: ${new Date(newSweep.timestamp).toLocaleString("es-MX")}\nFuente: ${params.source}\nRelevancia: ${params.relevance}\n${params.data}${delimiterEnd}`;
+      updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
+    }
+
+    try {
+      const firestore = getDb();
+      const projectRef = doc(firestore, "projects", project.id);
+      
+      const updateData: any = {
+        sweeps: updatedSweeps
+      };
+      if (params.type === "Directa") {
+        updateData.hipotesis = updatedHypothesis;
+      }
+      
+      await updateDoc(projectRef, updateData);
+
+      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
+      
+      await logAuditAction({
+        action: "REGISTRAR_BARRIDO",
+        module: "Expedientes",
+        projectId: project.id,
+        projectName: project.ceipolId || project.nombre,
+        details: `Registrado barrido ${params.engine} (${params.source}). Tipo: ${params.type}. Relevancia: ${params.relevance}. Estado inicial: ${initialStatus}.`
+      });
+
+      // Abre el diálogo modal de confirmación obligatoria
+      setActiveSweepForModal(newSweep);
+
+      return sweepId;
+    } catch (err) {
+      console.error("[ProjectContext] Error registering sweep:", err);
+      throw err;
+    }
+  }, [project, isReadOnly, logAuditAction]);
+
+  const updateSweep = useCallback(async (sweepId: string, updates: Partial<SweepIntegrationItem>) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+
+    const currentSweeps = project.sweeps || [];
+    let sweepToUpdate = currentSweeps.find(s => s.id === sweepId);
+    if (!sweepToUpdate) throw new Error("Barrido no encontrado.");
+
+    const updatedSweep = { ...sweepToUpdate, ...updates } as SweepIntegrationItem;
+    const updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
+
+    let updatedHypothesis = project.hipotesis || "";
+
+    const directHeader = `=== BARRIDO DIRECTO [ID: ${sweepId}]`;
+    const directFooter = `=========================================\n`;
+    const contextualizedHeader = `=== BARRIDO CONTEXTUALIZADO [ID: ${sweepId}]`;
+    const contextualizedFooter = `================================================\n`;
+
+    const cleanHypothesisBlock = (hyp: string, header: string, footer: string) => {
+      const startIndex = hyp.indexOf(header);
+      if (startIndex !== -1) {
+        const endIndex = hyp.indexOf(footer, startIndex);
+        if (endIndex !== -1) {
+          const fullMatchLength = (endIndex + footer.length) - startIndex;
+          let cleaned = hyp.substring(0, startIndex) + hyp.substring(startIndex + fullMatchLength);
+          return cleaned.replace(/\n\n\n+/g, "\n\n").trim();
+        }
+      }
+      return hyp;
+    };
+
+    updatedHypothesis = cleanHypothesisBlock(updatedHypothesis, directHeader, directFooter);
+    updatedHypothesis = cleanHypothesisBlock(updatedHypothesis, contextualizedHeader, contextualizedFooter);
+
+    if (updatedSweep.status === "Integrado") {
+      if (updatedSweep.type === "Directa") {
+        const delimiterStart = `\n=== BARRIDO DIRECTO [ID: ${sweepId}] [Engine: ${updatedSweep.engine}] ===\n`;
+        const textToAppend = `${delimiterStart}Fecha: ${new Date(updatedSweep.timestamp).toLocaleString("es-MX")}\nFuente: ${updatedSweep.source}\nRelevancia: ${updatedSweep.relevance}\nContexto/Ajuste: ${updatedSweep.context || "Sin contexto adicional"}\n${updatedSweep.data}${directFooter}`;
+        updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
+      } else {
+        const delimiterStart = `\n=== BARRIDO CONTEXTUALIZADO [ID: ${sweepId}] [Engine: ${updatedSweep.engine}] ===\n`;
+        const textToAppend = `${delimiterStart}Fecha: ${new Date().toLocaleString("es-MX")}\nFuente: ${updatedSweep.source}\nRelevancia: ${updatedSweep.relevance}\nContexto/Validación: ${updatedSweep.context || "Sin contexto adicional"}\nDetalles: ${updatedSweep.data}${contextualizedFooter}`;
+        updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
+      }
+    }
+
+    try {
+      const firestore = getDb();
+      const projectRef = doc(firestore, "projects", project.id);
+      
+      await updateDoc(projectRef, {
+        sweeps: updatedSweeps,
+        hipotesis: updatedHypothesis
+      });
+
+      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
+
+      await logAuditAction({
+        action: "ACTUALIZAR_BARRIDO",
+        module: "Expedientes",
+        projectId: project.id,
+        projectName: project.ceipolId || project.nombre,
+        details: `Actualizado barrido ${updatedSweep.engine} (${sweepId}). Nuevo estado: ${updatedSweep.status}.`
+      });
+
+      if (activeSweepForModal?.id === sweepId) {
+        setActiveSweepForModal(null);
+      }
+    } catch (err) {
+      console.error("[ProjectContext] Error updating sweep:", err);
+      throw err;
+    }
+  }, [project, isReadOnly, logAuditAction, activeSweepForModal]);
+
   const value = useMemo<ProjectContextValue>(
     () => ({
       project,
@@ -1131,7 +1286,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       reactivateProject,
       savePhotoContextualization,
       logAuditAction,
-      updateProjectDetails
+      updateProjectDetails,
+      activeSweepForModal,
+      setActiveSweepForModal,
+      registerSweep,
+      updateSweep
     }),
     [
       project,
@@ -1168,7 +1327,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       reactivateProject,
       savePhotoContextualization,
       logAuditAction,
-      updateProjectDetails
+      updateProjectDetails,
+      activeSweepForModal,
+      registerSweep,
+      updateSweep
     ]
   );
 
