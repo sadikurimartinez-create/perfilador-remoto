@@ -2871,27 +2871,32 @@ ${analysisResult.ficha.crossCheckJuridico}
                         {hoveredGisElement && (
                           <InfoWindow
                             position={hoveredGisElement.location}
-                            options={{ disableAutoPan: true }}
+                            options={{
+                              disableAutoPan: true,
+                              pixelOffset: new window.google.maps.Size(0, -35)
+                            }}
                           >
-                            <div className="bg-slate-950 text-slate-200 p-2 rounded-lg border border-slate-800 shadow-xl max-w-[240px] text-[11px] space-y-1">
+                            <div className="bg-slate-950/95 text-slate-200 p-3.5 rounded-xl border border-slate-850 shadow-2xl w-72 max-w-[320px] text-xs space-y-2 font-sans">
                               {hoveredGisElement.alias ? (
                                 <>
-                                  <p className="font-bold text-sky-400 text-xs">🏠 {hoveredGisElement.alias}</p>
-                                  <p><span className="text-slate-500 font-semibold">Rol:</span> {hoveredGisElement.rol || "Integrante"}</p>
-                                  <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
+                                  <p className="font-black text-sky-400 text-sm flex items-center gap-1">🏠 {hoveredGisElement.alias}</p>
+                                  <p className="leading-relaxed"><span className="text-slate-500 font-bold">Rol:</span> {hoveredGisElement.rol || "Integrante"}</p>
+                                  <p className="leading-relaxed"><span className="text-slate-500 font-bold">Pandilla:</span> {hoveredGisElement.gang}</p>
                                   {hoveredGisElement.domicilioExacto && (
-                                    <p className="truncate"><span className="text-slate-500 font-semibold">Dirección:</span> {hoveredGisElement.domicilioExacto}</p>
+                                    <p className="leading-relaxed whitespace-pre-wrap"><span className="text-slate-500 font-bold">Dirección:</span> {hoveredGisElement.domicilioExacto}</p>
                                   )}
                                 </>
                               ) : (
                                 <>
-                                  <p className="font-bold text-rose-400 text-xs">📍 {hoveredGisElement.text}</p>
-                                  <p><span className="text-slate-500 font-semibold">Pandilla:</span> {hoveredGisElement.gang}</p>
+                                  <p className="font-black text-rose-400 text-sm flex items-center gap-1">📍 {hoveredGisElement.text}</p>
+                                  <p className="leading-relaxed"><span className="text-slate-500 font-bold">Pandilla:</span> {hoveredGisElement.gang}</p>
                                   {hoveredGisElement.date && (
-                                    <p><span className="text-slate-500 font-semibold">Fecha:</span> {hoveredGisElement.date}</p>
+                                    <p className="leading-relaxed"><span className="text-slate-500 font-bold">Fecha:</span> {hoveredGisElement.date}</p>
                                   )}
                                   {hoveredGisElement.description && (
-                                    <p className="line-clamp-2 text-slate-300 italic">"{hoveredGisElement.description}"</p>
+                                    <p className="line-clamp-3 text-slate-300 italic leading-relaxed bg-slate-900/60 p-2 rounded border border-slate-850 mt-1">
+                                      "{hoveredGisElement.description}"
+                                    </p>
                                   )}
                                 </>
                               )}

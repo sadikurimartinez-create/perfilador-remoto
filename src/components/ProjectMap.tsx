@@ -234,21 +234,21 @@ export function ProjectMap({
           <InfoWindow
             position={{ lat: Number(hoveredPhoto.lat), lng: Number(hoveredPhoto.lng) }}
             options={{
-              pixelOffset: new window.google.maps.Size(0, -10),
+              pixelOffset: new window.google.maps.Size(0, -35),
             }}
           >
-            <div className="bg-slate-950/95 text-slate-200 p-2.5 rounded-lg border border-slate-700/80 shadow-2xl flex flex-col items-center gap-2 w-48 pointer-events-none font-sans">
+            <div className="bg-slate-950/95 text-slate-200 p-3.5 rounded-xl border border-slate-700/80 shadow-2xl flex flex-col items-center gap-2.5 w-64 pointer-events-none font-sans">
               <img
                 src={hoveredPhoto.previewUrl || "/no-image.png"}
                 alt={hoveredPhoto.tipo || "Evidencia"}
-                className="w-44 h-32 object-cover rounded border border-slate-700 bg-slate-900"
+                className="w-56 h-40 object-cover rounded-lg border border-slate-700 bg-slate-900"
               />
               <div className="w-full text-center">
-                <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wide">
+                <span className="text-xs font-black text-cyan-400 uppercase tracking-wide">
                   {hoveredPhoto.tipo || "Evidencia de Campo"}
                 </span>
                 {hoveredPhoto.comentario && (
-                  <p className="text-[9px] text-slate-400 mt-1 leading-normal line-clamp-3">
+                  <p className="text-[10px] text-slate-300 mt-1.5 leading-normal line-clamp-4">
                     {hoveredPhoto.comentario}
                   </p>
                 )}
