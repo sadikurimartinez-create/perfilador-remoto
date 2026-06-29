@@ -336,7 +336,7 @@ export function PhotoAlbum({
   useEffect(() => {
     let active = true;
     const initStreetView = () => {
-      if (typeof window === "undefined" || !window.google || !svContainerRef.current) {
+      if (typeof window === "undefined" || !window.google || !window.google.maps || !window.google.maps.StreetViewService || !svContainerRef.current) {
         if (active) {
           setTimeout(initStreetView, 1000);
         }
