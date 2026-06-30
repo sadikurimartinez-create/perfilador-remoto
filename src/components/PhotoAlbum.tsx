@@ -1849,6 +1849,81 @@ const hasMinimumPhotos =
                   ></div>
                 </div>
               </div>
+
+              {/* PowerUps y Resultados de Puente */}
+              {!isReadOnly && (
+                <div className="mt-2.5">
+                  <PowerUpsModule
+                    onApplyPowerUp={(text) => {
+                      setAnalysisContext((prev) => (prev ? prev.trim() + " " : "") + text);
+                      setIsAnalysisContextAudited(false);
+                    }}
+                    isReadOnly={isReadOnly}
+                    insumoText={analysisContext || ""}
+                    insumoType="hypothesis"
+                    insumoId="main_hypothesis"
+                    insumoName="Hipótesis de Análisis"
+                    isContextualized={isAnalysisContextAudited}
+                    locationCoords={(() => {
+                      const geo = album.find(p => p.lat != null && p.lng != null);
+                      return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
+                    })()}
+                    onApplyDetailedAnalysis={async (results) => {
+                      for (const res of results) {
+                        res.insumoId = "main_hypothesis";
+                        await saveCustomDocument(
+                          `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                          "powerup_execution",
+                          JSON.stringify(res)
+                        );
+                      }
+                    }}
+                  />
+                </div>
+              )}
+              {documents && documents
+                .filter((doc: any) => doc.type === "powerup_execution")
+                .map((doc: any) => {
+                  try {
+                    const parsed = JSON.parse(doc.context);
+                    if (parsed.insumoId === "main_hypothesis") {
+                      return (
+                        <div key={doc.id} className="mt-2 text-left">
+                          <VentanaResultadosPuente
+                            data={parsed}
+                            onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
+                          />
+                        </div>
+                      );
+                    }
+                  } catch (err) {
+                    console.error("Error parsing powerup_execution doc.context", err);
+                  }
+                  return null;
+                })
+              }
+
+              {/* Radio de búsqueda geoespacial */}
+              <div className="space-y-2 pt-3 border-t border-slate-800/60 mt-3">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  📏 Radio de búsqueda geoespacial
+                </label>
+                <input
+                  type="range"
+                  min={100}
+                  max={10000}
+                  step={100}
+                  value={analysisRadius}
+                  onChange={(e) => setAnalysisRadius(Number(e.target.value))}
+                  className="w-full accent-sky-500"
+                />
+                <p className="text-[10px] text-slate-400 font-bold">
+                  Radio de búsqueda:{" "}
+                  <span className="font-semibold text-slate-100">
+                    {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
+                  </span>
+                </p>
+              </div>
             </div>
 
             {/* 2. RESUMEN Y PRECISIONES DE BARRIDOS */}
@@ -2132,282 +2207,7 @@ const hasMinimumPhotos =
         )}
       </div>
 
-      {/* PASO 4: CONTEXTUALIZACIÓN GENERAL */}
-      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">🧠 Contextualización General e Hipótesis (Paso 4)</h4>
-          <p className="text-xs text-slate-400">
-            Escriba la hipótesis de análisis táctico y audítela con la IA para afinar el rigor técnico (Mínimo 80% requerido).
-          </p>
-        </header>
-        <div className="flex flex-col gap-4 items-start w-full">
-          <div className="space-y-4 w-full">
-            <div className="flex items-center justify-between gap-2">
-              <label className="block text-xs font-medium text-slate-300">
-                Hipótesis de la Persona Perfiladora (contexto del cruce de ubicaciones)
-              </label>
-              <div className="flex items-center gap-2">
-                {!isReadOnly && projectId && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const { getDb } = await import("@/lib/firebase");
-                        const { doc, updateDoc } = await import("firebase/firestore");
-                        const firestore = getDb();
-                        await updateDoc(doc(firestore, "projects", projectId || ""), {
-                          hipotesis: analysisContext
-                        });
-                        window.alert("Hipótesis guardada exitosamente en el expediente.");
-                      } catch (err) {
-                        console.error("Error al guardar hipótesis:", err);
-                        window.alert("Error al guardar la hipótesis.");
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border border-emerald-600 text-emerald-300 bg-emerald-900/40 hover:bg-emerald-800 transition-colors"
-                  >
-                    <span>💾</span> Guardar
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => toggleDictation('analysisContext', (text) => {
-                    setAnalysisContext(prev => (prev ? `${prev.trim()} ${text}` : text));
-                    setIsAnalysisContextAudited(false);
-                  })}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border transition-colors ${listeningField === 'analysisContext' ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"}`}
-                >
-                  <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
-                </button>
-              </div>
-            </div>
-            <textarea
-              spellCheck={true}
-              value={analysisContext}
-              onChange={(e) => {
-                setAnalysisContext(e.target.value);
-                setIsAnalysisContextAudited(false);
-              }}
-              rows={6}
-              className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-4 py-3 text-sm resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
-              placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin de vigilancia..."
-            />
-            {!isReadOnly && (
-              <div className="mt-1.5">
-                <PowerUpsModule
-                  onApplyPowerUp={(text) => {
-                    setAnalysisContext((prev) => (prev ? prev.trim() + " " : "") + text);
-                    setIsAnalysisContextAudited(false);
-                  }}
-                  isReadOnly={isReadOnly}
-                  insumoText={analysisContext || ""}
-                  insumoType="hypothesis"
-                  insumoId="main_hypothesis"
-                  insumoName="Hipótesis de Análisis"
-                  isContextualized={isAnalysisContextAudited}
-                  locationCoords={(() => {
-                    const geo = album.find(p => p.lat != null && p.lng != null);
-                    return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
-                  })()}
-                  onApplyDetailedAnalysis={async (results) => {
-                    for (const res of results) {
-                      res.insumoId = "main_hypothesis";
-                      await saveCustomDocument(
-                        `Resultados Puente Contextual: ${res.powerUpTitle}`,
-                        "powerup_execution",
-                        JSON.stringify(res)
-                      );
-                    }
-                  }}
-                />
-              </div>
-            )}
-            {documents && documents
-              .filter((doc: any) => doc.type === "powerup_execution")
-              .map((doc: any) => {
-                try {
-                  const parsed = JSON.parse(doc.context);
-                  if (parsed.insumoId === "main_hypothesis") {
-                    return (
-                      <div key={doc.id} className="mt-2 text-left">
-                        <VentanaResultadosPuente
-                          data={parsed}
-                          onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
-                        />
-                      </div>
-                    );
-                  }
-                } catch (err) {
-                  console.error("Error parsing powerup_execution doc.context", err);
-                }
-                return null;
-              })
-            }
-            <div className="mt-1 mb-2">
-              <div className="flex justify-between items-center text-[10px] mb-1">
-                <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-                <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
-                  {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
-                </span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-1.5">
-                <div 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
-                  style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-            <div className="space-y-4 pt-2 border-t border-slate-800">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setIsRefining(true);
-                    setAnalysisAuditScore(null);
-                    try {
-                      const selected = album.filter((p) => selectedIds.includes(p.id));
-                      const minimalPhotos = selected.map((p) => ({
-                        lat: p.lat,
-                        lng: p.lng,
-                        tipo: p.tipo || "",
-                        comentario: p.comentario || ""
-                      }));
-                      
-                      let focusContext = focusAreas.length > 0 ? `\nObjetivos prioritarios marcados: ${focusAreas.join(", ")}.` : "";
-                      if (analysisContextExtra) focusContext += ` Otros: ${analysisContextExtra}`;
-                      
-                      let answersString = Object.entries(userAnswersMap)
-                        .filter(([_, ans]) => ans.trim())
-                        .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
-                        .join("\n\n");
 
-                      const fullContext = analysisContext + focusContext + (answersString ? `\n\nRespuestas a preguntas previas:\n${answersString}` : "") + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la hipótesis. Endurece el criterio: debe dar dirección técnica a las APIs. Si es sólida, score >= 80; si es vaga, score < 80. OBLIGATORIO: SIEMPRE incorpora en tus 'questions' o 'suggestions' al menos 3 sugerencias técnicas que inviten a usar: "Consulta de Proximidad ST_DWithin", "Grounding Dinámico", "Extracción de Entidades Salientes", o "Búsqueda Semántica en Discovery Engine". Explica brevemente el porqué. DEVUELVE UN JSON VÁLIDO.)`;
-
-                      const res = await fetch("/api/refine-context", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          context: fullContext,
-                          photos: minimalPhotos,
-                          mode: "hypothesis-qa",
-                          geometryType: project?.geometryType || "individual",
-                          projectDescription: project?.descripcion || "",
-                          analysisRadius,
-                        }),
-                      });
-                      const textRes = await res.text();
-                      let data;
-                      try {
-                        data = JSON.parse(textRes);
-                      } catch (e) {
-                        throw new Error(`La ruta /api/refine-context no existe o devolvió HTML (Status: ${res.status}).`);
-                      }
-                      if (res.ok) {
-                        let scoreVal = data.score ?? 0;
-                        let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
-                        if (questionsVal.length === 0 && typeof data.suggestions === "string" && scoreVal < 80) {
-                            questionsVal = data.suggestions.split('\n').filter((l: string) => l.trim().length > 10).slice(0,5);
-                        }
-
-                        setAnalysisAuditScore(scoreVal);
-                        if (scoreVal >= 80) {
-                          setIsAnalysisContextAudited(true);
-                          if (answersString.trim()) {
-                             setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
-                          }
-                          setAiQuestionsList([]);
-                          setUserAnswersMap({});
-                        } else {
-                          setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
-                          "¿A qué hora del día percibe mayor vulnerabilidad en este punto?",
-                          "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",
-                          "¿Hacia dónde se dirigen las posibles rutas de escape físicas desde este nodo?",
-                          "¿Qué tipo de personas transitaban o frecuentan esta zona cuando observó?",
-                          "¿Observó algún obstáculo visual (bardas, maleza, autos) que facilite el acecho?"
-                          ]);
-                          setIsAnalysisContextAudited(false);
-                          if (answersString.trim()) {
-                              setAnalysisContext((prev) => prev + "\n\nContexto adicional aportado:\n" + answersString);
-                              setUserAnswersMap({});
-                          }
-                          setQaIteration((prev) => prev + 1);
-                        }
-                      } else {
-                        setError(data.error || "No se pudieron obtener sugerencias de IA.");
-                      }
-                    } catch (err) {
-                      setError("Error de comunicación con IA.");
-                    } finally {
-                      setIsRefining(false);
-                    }
-                  }}
-                  disabled={isRefining || !analysisContext.trim() || isAnalysisContextAudited || (qaIteration > 0 && Object.values(userAnswersMap).filter(a => a.trim().length > 0).length === 0)}
-                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
-                >
-                  {isRefining ? <span className="flex items-center justify-center">Validando... <ElapsedTime running={isRefining} /></span> : qaIteration === 0 ? "Validar Hipótesis con IA" : "Reevaluar Hipótesis"}
-                </button>
-                <div className="flex items-center gap-2">
-                  {!isAnalysisContextAudited && aiQuestionsList.length === 0 && (
-                    <p className="text-[10px] text-amber-400 font-medium">⚠️ Requiere validar hipótesis (80%+).</p>
-                  )}
-                  {isAnalysisContextAudited && (
-                    <p className="text-[10px] text-emerald-400 font-semibold">✅ Hipótesis validada ({analysisAuditScore}%).</p>
-                  )}
-                </div>
-              </div>
-              {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
-                <div className="mt-4 rounded-md border border-yellow-700 bg-yellow-900/30 px-4 py-4 text-xs text-yellow-200 space-y-4">
-                  <div className="flex flex-col border-b border-yellow-800 pb-2">
-                    <p className="font-bold text-yellow-400">💡 La IA sugiere ampliar el espectro para fortalecer el dictamen (Idoneidad actual: {analysisAuditScore}%)</p>
-                    <p className="text-xs text-yellow-200/80 mt-1">Responde al menos a una pregunta para sumar puntos de idoneidad y avanzar. No hay respuestas incorrectas, todo aporta al análisis.</p>
-                  </div>
-                  {aiQuestionsList.map((q, idx) => (
-                    <div key={idx} className="space-y-2">
-                      <p className="text-yellow-100 whitespace-pre-wrap leading-relaxed font-semibold">{idx + 1}. {q}</p>
-                      <div className="relative w-full">
-                        <button
-                          type="button"
-                          onClick={() => toggleDictation(`userAnswer-${idx}`, (text) => setUserAnswersMap(prev => ({ ...prev, [idx]: (prev[idx] ? `${prev[idx].trim()} ${text}` : text) })))}
-                          className={`absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold border ${listeningField === `userAnswer-${idx}` ? "border-red-500 text-red-300 bg-red-900/60 animate-pulse" : "border-yellow-700 text-yellow-300 bg-yellow-900/80 hover:bg-yellow-800"}`}
-                        >
-                          <span>🎙️</span>
-                        </button>
-                        <textarea
-                          spellCheck={true}
-                          value={userAnswersMap[idx] || ""}
-                          onChange={(e) => setUserAnswersMap(prev => ({ ...prev, [idx]: e.target.value }))}
-                          className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded-md p-3 pr-10 text-xs text-yellow-100 min-h-[60px] focus:outline-none focus:ring-1 focus:ring-yellow-500 resize-y"
-                          placeholder="Responde aquí para esclarecer la hipótesis..."
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="space-y-2 pt-2 border-t border-slate-800">
-                <label className="block text-xs font-medium text-slate-300">
-                  Radio de búsqueda geoespacial
-                </label>
-                <input
-                  type="range"
-                  min={100}
-                  max={10000}
-                  step={100}
-                  value={analysisRadius}
-                  onChange={(e) => setAnalysisRadius(Number(e.target.value))}
-                  className="w-full accent-sky-500"
-                />
-                <p className="text-xs text-slate-400">
-                  Radio de búsqueda:{" "}
-                  <span className="font-semibold text-slate-100">
-                    {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
-                  </span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) (Paso 5) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">

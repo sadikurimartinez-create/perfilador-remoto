@@ -122,6 +122,9 @@ ${JSON.stringify(safeBody, null, 2)}
 INSTRUCCIÓN MAESTRA DEL INFORME:
 ${promptEstructura}
 
+[INSTRUCCIÓN DE BREVEDAD CRÍTICA]:
+Genera un dictamen altamente sintetizado y conciso (MÁXIMO 350 PALABRAS EN TOTAL). Evita explicaciones retóricas, ve directamente al grano en cada sección y usa viñetas cortas. Si generas demasiado texto, la conexión del servidor se interrumpirá y fallará.
+
 Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido. Asegúrate de incluir la clave "markdown" con todo este contenido estructurado.
 MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea reales dentro de la cadena JSON. Ejemplo:
 {
@@ -134,7 +137,11 @@ MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea re
 
     const streamingResp = await model.generateContentStream({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
+      generationConfig: { 
+        responseMimeType: "application/json",
+        maxOutputTokens: 1000,
+        temperature: 0.1
+      }
     });
 
     const stream = new ReadableStream({
