@@ -548,8 +548,8 @@ export function PhotoAlbum({
 
   useEffect(() => {
     if (project) {
-      if (project.sweepsComments) {
-        setSweepsComments(project.sweepsComments);
+      if ((project as any).sweepsComments) {
+        setSweepsComments((project as any).sweepsComments);
       }
     }
   }, [project]);
@@ -561,7 +561,7 @@ export function PhotoAlbum({
     }
   }, [project]);
 
-  const sweepsSummaryText = useMemo(() => {
+  const sweepsSummaryText = React.useMemo(() => {
     if (!project?.sweeps || project.sweeps.length === 0) {
       return "No hay barridos de información registrados o integrados en la hipótesis de este expediente todavía.";
     }
@@ -1792,7 +1792,7 @@ const hasMinimumPhotos =
                           const { getDb } = await import("@/lib/firebase");
                           const { doc, updateDoc } = await import("firebase/firestore");
                           const firestore = getDb();
-                          await updateDoc(doc(firestore, "projects", projectId), {
+                          await updateDoc(doc(firestore, "projects", projectId || ""), {
                             hipotesis: analysisContext,
                             sweepsComments: sweepsComments
                           });
@@ -3563,6 +3563,8 @@ const hasMinimumPhotos =
               </button>
             </div>
           </div>
+        </div>
+      )}
     </section>
       {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
       <div className="absolute left-[-9999px] top-[-9999px]">
