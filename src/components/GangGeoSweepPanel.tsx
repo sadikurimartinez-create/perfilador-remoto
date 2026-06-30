@@ -247,12 +247,12 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   }, [sweepResult]);
 
   const heatmapData = useMemo(() => {
-    if (!sweepResult || !showHeatmap || typeof window === "undefined" || !(window as any).google) return [];
+    if (!isLoaded || !sweepResult || !showHeatmap || typeof window === "undefined" || !(window as any).google?.maps?.LatLng) return [];
     return sweepResult.geo_heatmap.map(pt => ({
       location: new (window as any).google.maps.LatLng(pt.lat, pt.lng),
       weight: pt.weight * 5,
     }));
-  }, [sweepResult, showHeatmap]);
+  }, [sweepResult, showHeatmap, isLoaded]);
 
   // Calculate Node Relationships polyline paths
   // Links activity clusters to suspected domiciles and centroids
