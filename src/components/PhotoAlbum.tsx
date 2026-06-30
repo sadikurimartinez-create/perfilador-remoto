@@ -1947,7 +1947,7 @@ const hasMinimumPhotos =
                           const { getDb } = await import("@/lib/firebase");
                           const { doc, updateDoc } = await import("firebase/firestore");
                           const firestore = getDb();
-                          await updateDoc(doc(firestore, "projects", projectId), {
+                          await updateDoc(doc(firestore, "projects", projectId || ""), {
                             hipotesis: analysisContext,
                             sweepsComments: sweepsComments
                           });
@@ -2098,7 +2098,7 @@ const hasMinimumPhotos =
                         const { getDb } = await import("@/lib/firebase");
                         const { doc, updateDoc } = await import("firebase/firestore");
                         const firestore = getDb();
-                        await updateDoc(doc(firestore, "projects", projectId), {
+                        await updateDoc(doc(firestore, "projects", projectId || ""), {
                           hipotesis: analysisContext
                         });
                         window.alert("Hipótesis guardada exitosamente en el expediente.");
