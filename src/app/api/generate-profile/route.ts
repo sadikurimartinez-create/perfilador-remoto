@@ -139,7 +139,7 @@ MUY IMPORTANTE: Escapa los saltos de línea con \\n. NO uses saltos de línea re
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { 
         responseMimeType: "application/json",
-        maxOutputTokens: 1000,
+        maxOutputTokens: 2500,
         temperature: 0.1
       }
     });
