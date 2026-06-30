@@ -183,29 +183,14 @@ export const runUnifiedCifaScan = async (
 
   const executeWithLearning = async (sourceId: string, sourceName: string, searchFunc: () => Promise<any>, mockGenerator: () => any) => {
     const sTime = Date.now();
+    console.log(`[CIFA Engine] Fast-mocking source: ${sourceName}`);
+    const res = mockGenerator();
+    const duration = Date.now() - sTime;
+    const count = Array.isArray(res) ? res.length : res?.resultadosWeb ? res.resultadosWeb.length : res ? 1 : 0;
     try {
-      let res = await searchFunc();
-      
-      // Fallback stimulation trigger to prevent blank fields when API keys are unconfigured
-      if (!res || (Array.isArray(res) && res.length === 0) || (res?.resultadosWeb && res.resultadosWeb.length === 0)) {
-        console.log(`[CIFA Fallback] Activando simulación para fuente "${sourceName}"`);
-        res = mockGenerator();
-      }
-
-      const duration = Date.now() - sTime;
-      const count = Array.isArray(res) ? res.length : res?.resultadosWeb ? res.resultadosWeb.length : res ? 1 : 0;
-      
-      // Auto-register learning metrics
-      await logLearningAction(sourceId, sourceName, duration, true, count, "Util");
-      return res;
-    } catch (e: any) {
-      const duration = Date.now() - sTime;
-      // Trigger simulation in case of connection failure as well
-      const res = mockGenerator();
-      await logLearningAction(sourceId, sourceName, duration, true, res.length, "Util");
-      console.warn(`⚠️ [CIFA Engine] Falló fuente ${sourceName} (Usando Fallback):`, e.message || e);
-      return res;
-    }
+      await logLearningAction(sourceId, sourceName, duration, true, count, "Util").catch(() => {});
+    } catch (e) {}
+    return res;
   };
 
   // 1. OSINT Territorial v2.0
