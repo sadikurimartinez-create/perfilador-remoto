@@ -1077,6 +1077,16 @@ const hasMinimumPhotos =
         setEditableProfile(finalMarkdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
 
+        // Guardar automáticamente en el expediente
+        if (onSaveAnalysisToCloud) {
+          try {
+            await onSaveAnalysisToCloud(finalMarkdown, [], data.meta?.summary || reportSummary || "Dictamen oficial autogenerado.");
+            setHasSavedAnalysis(true);
+          } catch (e) {
+            console.error("Error auto-saving analysis:", e);
+          }
+        }
+
         // Generar resumen automático para la carátula
         try {
           const sumRes = await fetch("/api/refine-context", {
@@ -3201,6 +3211,67 @@ const hasMinimumPhotos =
           <NetworkDashboard />
         </div>
       </div>
+    
+      {/* SECCIÓN PRINCIPAL: EDICIÓN Y EXPORTACIÓN DEL DICTAMEN OFICIAL */}
+      {editableProfile && (
+        <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-4 mt-6">
+          <header className="space-y-1">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h4 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                📄 Dictamen Criminológico Ambiental Generado
+              </h4>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${hasSavedAnalysis ? "bg-emerald-950/80 border border-emerald-800 text-emerald-400" : "bg-amber-950/80 border border-amber-900 text-amber-400"}`}>
+                  {hasSavedAnalysis ? "✓ Guardado" : "⚠ Cambios sin Guardar"}
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">
+              Revise y edite libremente el dictamen criminológico oficial en formato Markdown antes de guardarlo de forma permanente o exportarlo.
+            </p>
+          </header>
+
+          <textarea
+            spellCheck={true}
+            value={editableProfile}
+            onChange={(e) => {
+              setEditableProfile(e.target.value);
+              setHasSavedAnalysis(false);
+            }}
+            className="w-full min-h-[400px] rounded-xl border border-slate-700 bg-slate-950 text-slate-100 p-5 text-xs font-mono leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
+            placeholder="Escribe el cuerpo del dictamen aquí..."
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSaveAnalysis}
+                disabled={isSavingAnalysis}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-emerald-500 transition disabled:opacity-50 active:scale-95"
+              >
+                <span>💾</span> {isSavingAnalysis ? "Guardando..." : "Guardar en Expediente"}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportToWord}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-500 transition active:scale-95"
+              >
+                <span>📥</span> Exportar a Word (.docx)
+              </button>
+              <button
+                type="button"
+                onClick={handleExportToPDF}
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-xs font-bold text-slate-100 shadow hover:bg-slate-600 transition active:scale-95"
+              >
+                <span>📥</span> Exportar a PDF (.pdf)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
           {/* SELECCIÓN DE ANEXOS Y GENERAR INFORME */}
           <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-5 mt-6 print:hidden">
