@@ -46,74 +46,41 @@ export const runOSINTScan = async (
     crimen OR violencia OR droga OR homicidio OR robo OR cateo OR detención
   `;
 
-  const serp =
-    await searchSerpAPI(query);
-
-  const news =
-    await searchNewsAPI(query);
-
-  const gnews =
-    await searchGNews(query);
-
-  const newsdata =
-    await searchNewsData(query);
-
-  const thenews =
-    await searchTheNewsAPI(query);
-
-  const reddit =
-    await searchReddit(query);
-
-  const x =
-    await searchX(query);
-
-  const webOSINT =
-    await buscarEnWebOSINT(query);
-
-  const telegram =
-    await searchTelegram(query);
+  const [serp, news, gnews, newsdata, thenews, reddit, x, webOSINT, telegram] = await Promise.all([
+    searchSerpAPI(query).catch((e) => { console.warn("SerpAPI failed:", e); return []; }),
+    searchNewsAPI(query).catch((e) => { console.warn("NewsAPI failed:", e); return []; }),
+    searchGNews(query).catch((e) => { console.warn("GNews failed:", e); return []; }),
+    searchNewsData(query).catch((e) => { console.warn("NewsData failed:", e); return []; }),
+    searchTheNewsAPI(query).catch((e) => { console.warn("TheNewsAPI failed:", e); return []; }),
+    searchReddit(query).catch((e) => { console.warn("Reddit failed:", e); return []; }),
+    searchX(query).catch((e) => { console.warn("X failed:", e); return []; }),
+    buscarEnWebOSINT(query).catch((e) => { console.warn("WebOSINT failed:", e); return null; }),
+    searchTelegram(query).catch((e) => { console.warn("Telegram failed:", e); return []; })
+  ]);
 
   let denue: any[] = [];
-
   let overpass: any[] = [];
-
   let googlePlaces: any[] = [];
-  
   let streetViewAnalysis: any = null;
 
-  if (
-    project?.latitude &&
-    project?.longitude
-  ) {
-
-    denue =
-      await searchDENUE(
-        project.latitude,
-        project.longitude
-      );
-
-    overpass =
-      await searchOverpass(
-        project.latitude,
-        project.longitude
-      );
-
-    googlePlaces =
-      await searchGooglePlaces(
-        project.latitude,
-        project.longitude
-      );
-
-    streetViewAnalysis =
-      await analyzeStreetViewWithGemini(
-        project.latitude,
-        project.longitude
-      );
+  if (project?.latitude && project?.longitude) {
+    const [denueRes, overpassRes, googlePlacesRes, streetViewRes] = await Promise.all([
+      searchDENUE(project.latitude, project.longitude).catch((e) => { console.warn("DENUE failed:", e); return []; }),
+      searchOverpass(project.latitude, project.longitude).catch((e) => { console.warn("Overpass failed:", e); return []; }),
+      searchGooglePlaces(project.latitude, project.longitude).catch((e) => { console.warn("Google Places failed:", e); return []; }),
+      analyzeStreetViewWithGemini(project.latitude, project.longitude).catch((e) => { console.warn("StreetView Analysis failed:", e); return null; })
+    ]);
+    denue = denueRes;
+    overpass = overpassRes;
+    googlePlaces = googlePlacesRes;
+    streetViewAnalysis = streetViewRes;
   }
 
   // Procesamiento NLP Pro y Guardado en BigQuery (Histórico de Vínculos)
   // Esto se ejecuta en segundo plano para no demorar la respuesta principal a la interfaz
-  await analyzeAndLogToBigQuery(location, webOSINT?.resultadosWeb || [], webOSINT?.analisisInteligencia);
+  analyzeAndLogToBigQuery(location, webOSINT?.resultadosWeb || [], webOSINT?.analisisInteligencia).catch(e => {
+    console.error("Error logging to BigQuery in background:", e);
+  });
 
   // Procesamiento Multimodal de Evidencias (Vision API + Cloud Storage)
   const processedEvidences = await processEvidences(project?.photos || []);
