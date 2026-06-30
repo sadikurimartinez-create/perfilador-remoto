@@ -408,6 +408,7 @@ export function PhotoAlbum({
     loadProject,
     registerSweep,
     updateSweep,
+    setActiveSweepForModal,
   } = useProject();
 
   const svContainerRef = useRef<HTMLDivElement | null>(null);
@@ -882,7 +883,10 @@ const hasMinimumPhotos =
   };
 
   const confirmAndGenerateProfile = async () => {
-    const selected = album.filter((p) => selectedIds.includes(p.id));
+    let selected = album.filter((p) => selectedIds.includes(p.id));
+    if (selected.length === 0) {
+      selected = album;
+    }
     const withCoords = selected.filter(
       (p) =>
         p.lat != null &&
@@ -1937,8 +1941,13 @@ const hasMinimumPhotos =
                         setAnalysisAuditScore(scoreVal);
                         if (scoreVal >= 80) {
                           setIsAnalysisContextAudited(true);
+                          
+                          const updatedContext = answersString.trim()
+                            ? analysisContext + "\n\nContexto adicional:\n" + answersString
+                            : analysisContext;
+
                           if (answersString.trim()) {
-                            setAnalysisContext((prev) => prev + "\n\nContexto adicional:\n" + answersString);
+                            setAnalysisContext(updatedContext);
                           }
                           setAiQuestionsList([]);
                           setUserAnswersMap({});
@@ -1948,7 +1957,7 @@ const hasMinimumPhotos =
                           const { doc, updateDoc } = await import("firebase/firestore");
                           const firestore = getDb();
                           await updateDoc(doc(firestore, "projects", projectId || ""), {
-                            hipotesis: analysisContext,
+                            hipotesis: updatedContext,
                             sweepsComments: sweepsComments
                           });
 
@@ -1980,15 +1989,15 @@ const hasMinimumPhotos =
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-8 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
                 >
                   {isRefining ? (
-                    <>Validando con IA...</>
+                    <>Validando con IA y Procesando...</>
                   ) : (
-                    <>🧠 Validar Hipótesis y Habilitar Herramientas</>
+                    <>🧠 Validar Hipótesis y Generar Informe Oficial</>
                   )}
                 </button>
               </div>
 
               {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
-                <div className="mt-4 rounded-md border border-yellow-750 bg-yellow-950/20 px-4 py-4 text-xs text-yellow-200 space-y-4 max-w-2xl mx-auto">
+                <div className="mt-4 rounded-md border border-yellow-750 bg-yellow-950/20 px-4 py-4 text-xs text-yellow-200 space-y-4 max-w-2xl mx-auto shadow-xl">
                   <p className="font-bold text-yellow-400">💡 Preguntas de afinación de la IA (Idoneidad actual: {analysisAuditScore}%):</p>
                   {aiQuestionsList.map((q, idx) => (
                     <div key={idx} className="space-y-2">
@@ -2002,6 +2011,54 @@ const hasMinimumPhotos =
                       />
                     </div>
                   ))}
+                  
+                  <div className="flex justify-end gap-3 pt-2 border-t border-yellow-750/30">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsRefining(true);
+                        try {
+                          let answersString = Object.entries(userAnswersMap)
+                            .filter(([_, ans]) => ans.trim())
+                            .map(([idx, ans]) => `Pregunta: ${aiQuestionsList[Number(idx)]}\nRespuesta: ${ans}`)
+                            .join("\n\n");
+                          
+                          const updatedContext = answersString.trim()
+                            ? analysisContext + "\n\nContexto adicional:\n" + answersString
+                            : analysisContext;
+
+                          setAnalysisContext(updatedContext);
+
+                          // Guardar hipótesis y precisiones en la BDD
+                          const { getDb } = await import("@/lib/firebase");
+                          const { doc, updateDoc } = await import("firebase/firestore");
+                          const firestore = getDb();
+                          await updateDoc(doc(firestore, "projects", projectId || ""), {
+                            hipotesis: updatedContext,
+                            sweepsComments: sweepsComments
+                          });
+
+                          // Forzar aceptación (Gobernanza/ADR analista al mando)
+                          setIsAnalysisContextAudited(true);
+                          setIsHypothesisValidatedInWorkspace(true);
+                          void loadAnalysisData();
+
+                          // Generar informe de manera automática
+                          window.alert("¡Aceptación manual confirmada! Generando el dictamen oficial...");
+                          await confirmAndGenerateProfile();
+                        } catch (err: any) {
+                          console.error(err);
+                          alert("Error al procesar la aceptación: " + err.message);
+                        } finally {
+                          setIsRefining(false);
+                        }
+                      }}
+                      disabled={isRefining}
+                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-950 font-black px-4 py-2.5 rounded-lg text-[10px] uppercase tracking-wider transition active:scale-95 shadow-md flex items-center gap-1.5"
+                    >
+                      ⚠️ Aceptar Hipótesis y Generar Informe Oficial de Todas Formas
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -3523,27 +3580,232 @@ const hasMinimumPhotos =
               </div>
             </div>
 
-            {/* 3. RESUMEN Y AJUSTES DE BARRIDOS DE INTELIGENCIA */}
-            <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
-              <p className="font-bold text-amber-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1 flex items-center gap-1.5">
-                📡 Resumen de Barridos e Integraciones de Inteligencia (Ajustes del Analista)
-              </p>
-              
-              {!project?.sweeps || project.sweeps.length === 0 ? (
-                <p className="text-slate-400 text-xs italic py-2">
-                  No hay barridos de información registrados o integrados en la hipótesis de este expediente todavía.
-                </p>
-              ) : (
-                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
-                  {project.sweeps.map((sweep: any) => (
-                    <SweepSummaryItemRow 
-                      key={sweep.id} 
-                      sweep={sweep} 
-                      updateSweep={updateSweep} 
-                    />
-                  ))}
+            {/* 3. RESUMEN Y AJUSTES DE BARRIDOS DE INTELIGENCIA (REPLAZADO POR TODO EL CONTENIDO DE RESUMEN Y CIERRE) */}
+            <div className="space-y-6">
+              {/* Overview Dashboard Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Progress Gauge */}
+                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col items-center text-center justify-between min-h-[190px] relative overflow-hidden shadow-xl">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none"></div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Completitud del Análisis</h4>
+                  
+                  {(() => {
+                    const sweeps = project?.sweeps || [];
+                    const totalSweeps = sweeps.length;
+                    const completedSweeps = sweeps.filter((s: any) => s.status === "Integrado" || s.status === "Rechazado").length;
+                    const completenessPercentage = totalSweeps > 0 
+                      ? Math.round((completedSweeps / totalSweeps) * 100) 
+                      : 100;
+                    return (
+                      <>
+                        <div className="relative flex items-center justify-center h-24 w-24">
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="48" cy="48" r="40" className="stroke-slate-850 fill-none" strokeWidth="8" />
+                            <circle
+                              cx="48"
+                              cy="48"
+                              r="40"
+                              className="stroke-sky-500 fill-none transition-all duration-700 ease-out"
+                              strokeWidth="8"
+                              strokeDasharray="251.2"
+                              strokeDashoffset={251.2 - (251.2 * completenessPercentage) / 100}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <div className="absolute flex flex-col items-center">
+                            <span className="text-xl font-black text-white">{completenessPercentage}%</span>
+                            <span className="text-[8px] text-slate-500 font-bold uppercase">Resuelto</span>
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] text-slate-400 font-medium mt-2">
+                          {totalSweeps === 0 
+                            ? "No se han ejecutado barridos de información." 
+                            : `${completedSweeps} de ${totalSweeps} barridos completados.`}
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
-              )}
+
+                {/* Pending Summary */}
+                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between min-h-[190px] relative overflow-hidden shadow-xl">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-[40px] pointer-events-none"></div>
+                  {(() => {
+                    const sweeps = project?.sweeps || [];
+                    const pendingSweeps = sweeps.filter((s: any) => s.status === "Pendiente").length;
+                    return (
+                      <>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Elementos Pendientes</h4>
+                          {pendingSweeps > 0 ? (
+                            <div className="space-y-1">
+                              <span className="text-3xl font-black text-amber-400 font-mono leading-none">{pendingSweeps}</span>
+                              <p className="text-xs text-slate-300 font-semibold leading-relaxed">
+                                Barridos de información requieren ser integrados o descartados.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <span className="text-3xl font-black text-emerald-400 font-mono leading-none">0</span>
+                              <p className="text-xs text-slate-300 font-semibold leading-relaxed">
+                                Todos los barridos tácticos han sido integrados o descartados correctamente.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="border-t border-slate-800/80 pt-2.5">
+                          {pendingSweeps > 0 ? (
+                            <div className="flex items-center gap-1.5 text-[9px] font-black text-amber-500 uppercase tracking-wide">
+                              <span className="animate-ping w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                              <span>Bloqueo Activo - Resuelva para salir</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-[9px] font-black text-emerald-400 uppercase tracking-wide">
+                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                              <span>Expediente Listo para Cerrar</span>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Integration Rules Check */}
+                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between min-h-[190px] relative overflow-hidden shadow-xl">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none"></div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Gobernanza Criminológica</h4>
+                    <div className="space-y-1.5 text-xs text-slate-300 font-medium">
+                      <div className="flex items-start gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        <p className="leading-snug">Trazabilidad completa por timestamp</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        <p className="leading-snug">Identificador único por bloque inyectado</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-emerald-400">✓</span>
+                        <p className="leading-snug">Registro obligatorio de justificación de descarte</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                    Normativa Operativa CEIPOL v3.0
+                  </div>
+                </div>
+              </div>
+
+              {/* Sweeps List History Table */}
+              <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+                {(() => {
+                  const sweeps = project?.sweeps || [];
+                  const totalSweeps = sweeps.length;
+
+                  const getStatusBadgeLocal = (status: string) => {
+                    switch (status) {
+                      case "Integrado":
+                        return <span className="bg-emerald-950/80 border border-emerald-800 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1 w-fit">✔ Integrado</span>;
+                      case "Rechazado":
+                        return <span className="bg-red-950/80 border border-red-900/50 text-red-400 px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1 w-fit">❌ Descartado</span>;
+                      default:
+                        return <span className="bg-amber-950/80 border border-amber-900 text-amber-400 px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1 w-fit animate-pulse">⚠ Pendiente</span>;
+                    }
+                  };
+
+                  const getRelevanceBadgeLocal = (lvl: string) => {
+                    switch (lvl) {
+                      case "Alto":
+                        return <span className="bg-red-950/40 border border-red-900/40 text-red-400 px-2 py-0.5 rounded text-[9px] font-bold uppercase w-fit">Alta</span>;
+                      case "Medio":
+                        return <span className="bg-amber-950/40 border border-amber-900/40 text-amber-400 px-2 py-0.5 rounded text-[9px] font-bold uppercase w-fit">Media</span>;
+                      default:
+                        return <span className="bg-sky-950/40 border border-sky-900/40 text-sky-400 px-2 py-0.5 rounded text-[9px] font-bold uppercase w-fit">Baja</span>;
+                    }
+                  };
+
+                  return (
+                    <>
+                      <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider border-b border-slate-800 pb-3">
+                        Historial de Barridos Realizados ({totalSweeps})
+                      </h3>
+
+                      {totalSweeps === 0 ? (
+                        <div className="p-8 text-center text-xs text-slate-500 italic">
+                          No se han registrado barridos en este expediente. Utilice las herramientas del álbum, mapas o el panel de pandillas para realizar barridos.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 text-[9px]">
+                                <th className="p-3">Motor / Tipo</th>
+                                <th className="p-3">Fuente</th>
+                                <th className="p-3">Tipo de Int.</th>
+                                <th className="p-3">Relevancia</th>
+                                <th className="p-3">Fecha</th>
+                                <th className="p-3">Estado / Detalle</th>
+                                {!isReadOnly && <th className="p-3 text-right">Acciones</th>}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-850 text-slate-200">
+                              {sweeps.map((s: any) => (
+                                <tr key={s.id} className="hover:bg-slate-950/40 transition-colors">
+                                  <td className="p-3">
+                                    <div className="font-extrabold">{s.engine}</div>
+                                    <div className="text-[9px] text-slate-500 font-mono mt-0.5">ID: {s.id}</div>
+                                  </td>
+                                  <td className="p-3">
+                                    <span className="font-mono text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 px-2 py-0.5 rounded text-[10px]">{s.source}</span>
+                                  </td>
+                                  <td className="p-3 font-semibold text-slate-400">{s.type}</td>
+                                  <td className="p-3">{getRelevanceBadgeLocal(s.relevance)}</td>
+                                  <td className="p-3 font-mono text-[10px] text-slate-400">
+                                    {new Date(s.timestamp).toLocaleString("es-MX", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    })}
+                                  </td>
+                                  <td className="p-3 space-y-1">
+                                    {getStatusBadgeLocal(s.status)}
+                                    {s.status === "Rechazado" && s.justification && (
+                                      <div className="text-[10px] text-red-300 bg-red-950/30 border border-red-900/30 p-2 rounded-lg mt-1 max-w-xs whitespace-pre-wrap leading-relaxed">
+                                        <span className="font-black">Justificación:</span> {s.justification}
+                                      </div>
+                                    )}
+                                    {s.status === "Integrado" && s.context && (
+                                      <div className="text-[10px] text-slate-300 bg-slate-950 border border-slate-850 p-2 rounded-lg mt-1 max-w-xs whitespace-pre-wrap leading-relaxed">
+                                        <span className="font-bold text-slate-400">Contexto:</span> {s.context}
+                                      </div>
+                                    )}
+                                  </td>
+                                  {!isReadOnly && (
+                                    <td className="p-3 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveSweepForModal(s)}
+                                        className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition-all border border-slate-750"
+                                      >
+                                        ✏️ Modificar
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
             </div>
 
             <div className="flex justify-end pt-4 border-t border-slate-800">
@@ -3554,10 +3816,10 @@ const hasMinimumPhotos =
                 className="w-full md:w-auto bg-sky-500 hover:bg-sky-400 text-slate-950 font-black px-8 py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isGeneratingAI ? (
-                  <>Procesando Informe...</>
+                  <>Re-procesando Dictamen Criminológico...</>
                 ) : (
                   <>
-                    <span>📄</span> Generar Informe Oficial
+                    <span>📄</span> Regenerar / Actualizar Informe Oficial
                   </>
                 )}
               </button>
