@@ -8,7 +8,6 @@ import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
 import { CopilotOverlay } from "@/components/copilot/CopilotOverlay";
 import { db } from "@/lib/localDb";
-import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
 import { PandillasUI } from "@/modules/pandillas/pandillas.ui";
 import { PandillasService } from "@/modules/pandillas/pandillas.service";
@@ -34,6 +33,9 @@ type CloudAnalysis = {
   createdBy?: string;
   /** URLs públicas de las fotografías asociadas a este análisis. */
   attachedPhotos?: string[];
+  reportEngineOutput?: boolean;
+  source?: string;
+  summary?: string;
 };
 
 export default function ProjectWorkspacePage() {
@@ -170,8 +172,12 @@ export default function ProjectWorkspacePage() {
             createdAt: (data.createdAt as number) ?? 0,
             createdBy: data.createdBy as string | undefined,
             attachedPhotos: (data.attachedPhotos as CloudAnalysis["attachedPhotos"]) ?? [],
+            reportEngineOutput: data.reportEngineOutput === true,
+            source: data.source as string | undefined,
+            summary: data.summary as string | undefined,
           };
         })
+        .filter((analysis) => analysis.reportEngineOutput === true)
         .sort((a, b) => b.createdAt - a.createdAt);
       setAnalyses(list);
     });
@@ -228,14 +234,24 @@ export default function ProjectWorkspacePage() {
 
   const handleSaveAnalysisToCloud = async (
     content: string,
-    attachedPhotos?: CloudAnalysis["attachedPhotos"]
+    attachedPhotos?: CloudAnalysis["attachedPhotos"],
+    summary?: string,
+    metadata?: { reportEngineOutput?: boolean; source?: string }
   ) => {
     if (!projectId || !user) return;
+    if (metadata?.reportEngineOutput !== true || metadata?.source !== "ReportEngine.finalize") {
+      console.warn("[ProjectWorkspacePage] Persistencia omitida: solo se guardan salidas finales del Report Engine.");
+      return;
+    }
     const db = getDb();
     await addDoc(collection(db, "analyses"), {
       projectId,
       content,
       createdAt: Date.now(),
+      reportEngineOutput: true,
+      source: "ReportEngine.finalize",
+      title: "Dictamen Criminológico Ambiental Generado",
+      summary: summary ?? "",
 
       // Trazabilidad institucional
       createdBy: user.username,
@@ -348,7 +364,7 @@ export default function ProjectWorkspacePage() {
       {analyses && analyses.length > 0 && (
         <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-3 mt-2">
           <h3 className="text-sm font-semibold text-slate-100">
-            Análisis guardados en este expediente
+            Dictámenes oficiales guardados en este expediente
           </h3>
           <ul className="space-y-2">
             {analyses.map((a) => (
@@ -358,7 +374,7 @@ export default function ProjectWorkspacePage() {
               >
                 <div className="text-xs text-slate-300">
                   <p className="font-medium">
-                    Análisis criminológico ambiental del{" "}
+                    Dictamen Criminológico Ambiental Generado el{" "}
                     <span className="font-mono tracking-tight text-blue-300">
                       {new Date(a.createdAt).toLocaleString("es-MX", {
                         day: "2-digit",
@@ -377,19 +393,6 @@ export default function ProjectWorkspacePage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={async () =>
-                      await exportToWord(
-                        a.content,
-                        project.nombre || "Expediente_sin_nombre",
-                        (a.attachedPhotos || [])
-                      )
-                    }
-                    className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
-                  >
-                    Exportar a Word
-                  </button>
                   <button
                     type="button"
                     onClick={() => setPreviewAnalysis(a)}

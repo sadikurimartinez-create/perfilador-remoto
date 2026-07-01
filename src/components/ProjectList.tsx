@@ -17,7 +17,6 @@ import {
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
-import { exportToWord } from "@/lib/exportToWord";
 
 type ProjectWithCount = {
   id: string;
@@ -69,6 +68,7 @@ export function ProjectList() {
       createdAt: number;
       createdBy?: string;
       attachedPhotos?: string[];
+      reportEngineOutput?: boolean;
     }[]
   >([]);
 
@@ -129,23 +129,6 @@ export function ProjectList() {
     setPreviewModalOpen(true);
   };
 
-  const handleDownloadDictamen = async (project: ProjectWithCount, analysis: { content: string; attachedPhotos?: string[] }) => {
-    try {
-      window.alert("Generando el dictamen oficial en Word. Esto puede tardar unos segundos dependiendo de las imágenes...");
-      let photos = Array.isArray(analysis?.attachedPhotos) ? analysis.attachedPhotos : [];
-      if (!photos.length) {
-        const firestore = getDb();
-        const photosCol = collection(firestore, "projects", project.id, "photos");
-        const snap = await getDocs(photosCol);
-        photos = snap.docs.map((d) => d.data().url);
-      }
-      await exportToWord(analysis.content || "", project.name, photos);
-    } catch (err) {
-      console.error("Error exportando a Word:", err);
-      window.alert("Ocurrió un error al generar el documento Word.");
-    }
-  };
-
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/login");
@@ -197,8 +180,9 @@ export function ProjectList() {
           createdAt: (data.createdAt as number) ?? 0,
           createdBy: data.createdBy as string | undefined,
           attachedPhotos: (data.attachedPhotos as string[] | undefined) ?? [],
+          reportEngineOutput: data.reportEngineOutput === true,
         };
-      });
+      }).filter((analysis) => analysis.reportEngineOutput === true);
       setAllAnalyses(list);
     });
     return () => unsub();
@@ -843,13 +827,13 @@ export function ProjectList() {
                       </div>
                     </div>
                     <div className="bg-slate-900/80 p-4 border-t border-slate-800/80">
-                      {analysesForProject.length === 0 && !p.analysisContent ? (
+                      {analysesForProject.length === 0 ? (
                         <p className="text-sm text-slate-500 italic">
-                          Sin análisis generados aún.
+                          Sin dictamen oficial generado aún.
                         </p>
                       ) : (
                         <div className="space-y-2">
-                          {(p.analysisContent ? [{ id: p.id + '_inline', projectId: p.id, content: p.analysisContent, createdAt: p.createdAt, createdBy: p.createdBy }] : analysesForProject).slice(0, 3).map((a: any) => (
+                          {analysesForProject.slice(0, 3).map((a: any) => (
                             <div
                               key={a.id}
                               className="bg-slate-800/40 p-3 rounded-md border border-slate-700/50 flex flex-col gap-2"
@@ -889,15 +873,6 @@ export function ProjectList() {
                                 >
                                   👁️ Vista Previa y Evidencia
                                 </button>
-                                {p.estado === "CERRADO" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleDownloadDictamen(p, a)}
-                                    className="inline-flex items-center gap-1 rounded-md bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/50 border border-emerald-700/50 px-3 py-1 text-[11px] font-semibold transition-colors"
-                                  >
-                                    📄 Descargar Dictamen Oficial
-                                  </button>
-                                )}
                               </div>
                             </div>
                           ))}

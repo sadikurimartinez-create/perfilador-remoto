@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
-import { exportToWord } from "@/lib/exportToWord";
+import { ReportEngine } from "@/lib/reportEngine";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
@@ -268,7 +268,8 @@ type PhotoAlbumProps = {
   onSaveAnalysisToCloud?: (
     content: string,
     attachedPhotos?: string[],
-    summary?: string
+    summary?: string,
+    metadata?: { reportEngineOutput?: boolean; source?: string }
   ) => Promise<void>;
 };
 
@@ -283,6 +284,33 @@ const DELITOS_CATEGORIES = [
   { id: "Robo motocicleta 2025.csv", label: "Robo de Motocicleta" },
   { id: "Autopartes & Cristalazo 2025.csv", label: "Autopartes y Cristalazo" }
 ];
+
+const createSweepId = (sweep: any) => {
+  const raw = [
+    sweep?.engine || "unknown",
+    sweep?.timestamp || sweep?.createdAt || sweep?.updatedAt || "no-time",
+    sweep?.source || sweep?.type || "no-source",
+  ].join("|");
+  let hash = 0;
+  for (let i = 0; i < raw.length; i += 1) {
+    hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+  }
+  return `sweep-${hash.toString(16)}`;
+};
+
+const dedupeSweeps = (sweeps: any[] = []) => {
+  const seen = new Set<string>();
+  const seenType = new Set<string>();
+  return sweeps.filter((sweep) => {
+    const uniqueSweepId = sweep?.uniqueSweepId || createSweepId(sweep);
+    const sourceType = `${sweep?.engine || "unknown"}:${sweep?.source || sweep?.type || "unknown"}`;
+    if (seen.has(uniqueSweepId) || seenType.has(sourceType)) return false;
+    seen.add(uniqueSweepId);
+    seenType.add(sourceType);
+    sweep.uniqueSweepId = uniqueSweepId;
+    return true;
+  });
+};
 
 function SweepSummaryItemRow({ sweep, updateSweep }: { sweep: any; updateSweep: any }) {
   const [comments, setComments] = useState(sweep.comments || "");
@@ -566,7 +594,7 @@ export function PhotoAlbum({
     if (!project?.sweeps || project.sweeps.length === 0) {
       return "No hay barridos de información registrados o integrados en la hipótesis de este expediente todavía.";
     }
-    return project.sweeps
+    return dedupeSweeps(project.sweeps)
       .map((s: any) => `• [Barrido ${s.engine}] Tipo: ${s.type} | Relevancia: ${s.relevance}\n  Datos: ${s.extractedData || "Sin datos"}`)
       .join("\n\n");
   }, [project?.sweeps]);
@@ -788,7 +816,10 @@ const hasMinimumPhotos =
         // Versión robusta y rápida: se guarda siempre el texto del dictamen
         // y no se bloquea el UI intentando subir fotos pesadas.
         try {
-          await onSaveAnalysisToCloud(editableProfile, [], reportSummary);
+          await onSaveAnalysisToCloud(editableProfile, [], reportSummary, {
+            reportEngineOutput: true,
+            source: "ReportEngine.finalize",
+          });
           setHasSavedAnalysis(true);
         } catch (saveErr) {
           console.error(
@@ -1027,7 +1058,7 @@ const hasMinimumPhotos =
             streetViews: svData,
             datosGobMxData: datosGobMxResult, // <-- AÑADIR AQUÍ
             linkedGangReport: project?.linkedGangReport,
-            sweeps: (project as any)?.sweeps || [],
+            sweeps: dedupeSweeps((project as any)?.sweeps || []),
             sweepsComments: sweepsComments,
           }),
         });
@@ -1069,7 +1100,10 @@ const hasMinimumPhotos =
            }
         }
 
-        if (automaticOsintData?.streetViewAnalysis?.analisis) {
+        if (
+          automaticOsintData?.streetViewAnalysis?.analisis &&
+          !/BARRIDO MULTIMODAL DE STREET VIEW/i.test(finalMarkdown)
+        ) {
           finalMarkdown += `\n\n### BARRIDO MULTIMODAL DE STREET VIEW (IA)\n${automaticOsintData.streetViewAnalysis.analisis}`;
         }
 
@@ -1080,7 +1114,15 @@ const hasMinimumPhotos =
         // Guardar automáticamente en el expediente
         if (onSaveAnalysisToCloud) {
           try {
-            await onSaveAnalysisToCloud(finalMarkdown, [], data.meta?.summary || reportSummary || "Dictamen oficial autogenerado.");
+            await onSaveAnalysisToCloud(
+              finalMarkdown,
+              [],
+              data.meta?.summary || reportSummary || "Dictamen oficial autogenerado.",
+              {
+                reportEngineOutput: true,
+                source: "ReportEngine.finalize",
+              }
+            );
             setHasSavedAnalysis(true);
           } catch (e) {
             console.error("Error auto-saving analysis:", e);
@@ -1308,9 +1350,9 @@ const hasMinimumPhotos =
       return true;
     });
 
-    const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
+    const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps].slice(0, 8);
 
-    const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
+    const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
     const photosToExportData: { url: string; tipo: string; comentario: string }[] = [];
 
     for (const p of photosToExport) {
@@ -1322,18 +1364,26 @@ const hasMinimumPhotos =
     }
 
     try {
-      await exportToWord(
-        content,
-        "Dictamen_criminologico_ambiental",
-        photosToExportData.length > 0 ? photosToExportData : undefined,
-        profileRiskLevel ?? undefined,
-        sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined,
-        (analysisResult as any)?.scinceDemographics,
-        reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO",
-        reportSummary
-      );
+      const estimatedPages =
+        2 +
+        Math.ceil(sortedSnapshotsToExport.length / 2) +
+        Math.ceil(photosToExportData.length / 2) +
+        Math.ceil((content || "").length / 3200);
+      if (estimatedPages > 12) {
+        throw new Error("LAYOUT_OVERFLOW_DETECTED");
+      }
 
-      if (!isReadOnly) await markAsPrinted();
+      await ReportEngine.finalize({
+        content,
+        projectName: "Dictamen_criminologico_ambiental",
+        attachedPhotos: photosToExportData.length > 0 ? photosToExportData : undefined,
+        riskLevel: profileRiskLevel ?? undefined,
+        mapSnapshots: sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined,
+        scinceDemographics: (analysisResult as any)?.scinceDemographics,
+        reportNumber: reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO",
+        reportSummary,
+        markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
+      });
     } catch (err) {
       console.error("[PhotoAlbum] Error al exportar a Word:", err);
       setError(
@@ -1352,19 +1402,12 @@ const hasMinimumPhotos =
     }
 
     try {
-      const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = (html2pdfModule.default || html2pdfModule) as any;
       const safeName = project?.nombre?.replace(/\s+/g, "_") || "Dictamen";
-      const opt = {
-        margin: 0,
+      await ReportEngine.finalizePdf({
+        element,
         filename: `Dictamen_Criminologico_${safeName}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
-      html2pdf().set(opt).from(element).save().then(() => {
-        if (!isReadOnly) void markAsPrinted();
+        markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
+        maxPages: 12,
       });
     } catch (err) {
       console.error("Error al exportar a PDF:", err);
@@ -3259,7 +3302,7 @@ const hasMinimumPhotos =
                 onClick={handleExportToWord}
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-500 transition active:scale-95"
               >
-                <span>📥</span> Exportar a Word (.docx)
+                <span>📥</span> Finalizar y exportar Word
               </button>
               <button
                 type="button"

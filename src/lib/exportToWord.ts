@@ -145,6 +145,57 @@ async function fetchImageToBuffer(imageUrl: string): Promise<ArrayBuffer | null>
   }
 }
 
+function sanitizeReportContent(content: string): string {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const output: string[] = [];
+  const seenHeadings = new Set<string>();
+  const seenSweepBlocks = new Set<string>();
+  let skipDuplicateBlock = false;
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^#{2,4}\s+(.+)$/);
+    if (headingMatch) {
+      const normalizedHeading = headingMatch[1]
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+      const isSweepHeading =
+        normalizedHeading.includes("barrido") ||
+        normalizedHeading.includes("osint") ||
+        normalizedHeading.includes("street view");
+
+      if (isSweepHeading && seenHeadings.has(normalizedHeading)) {
+        skipDuplicateBlock = true;
+        continue;
+      }
+
+      seenHeadings.add(normalizedHeading);
+      skipDuplicateBlock = false;
+    }
+
+    if (skipDuplicateBlock) continue;
+
+    const sweepLine = line.match(/\[Barrido\s+([^\]]+)\].*?(Tipo:\s*[^|]+)/i);
+    if (sweepLine) {
+      const sweepKey = `${sweepLine[1]}|${sweepLine[2]}`.toLowerCase();
+      if (seenSweepBlocks.has(sweepKey)) continue;
+      seenSweepBlocks.add(sweepKey);
+    }
+
+    output.push(line);
+  }
+
+  return output.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 18000);
+}
+
+function assertDocxLayoutWithinLimit(pageEstimate: number) {
+  if (pageEstimate > 12) {
+    throw new Error("LAYOUT_OVERFLOW_DETECTED");
+  }
+}
+
 /**
  * Analiza el Markdown de Gemini y lo convierte en párrafos estructurados de Word.
  */
@@ -239,6 +290,11 @@ export async function exportToWord(
   reportSummary?: string
 ) {
   const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
+  const reportContent = sanitizeReportContent(content);
+  const visualCount = Math.min(mapSnapshots?.length || 0, 8);
+  const photoCount = Math.min(attachedPhotos?.length || 0, 8);
+  const estimatedPages = 2 + Math.ceil(reportContent.length / 3200) + Math.ceil(visualCount / 2) + Math.ceil(photoCount / 2);
+  assertDocxLayoutWithinLimit(estimatedPages);
 
   // 1. CARGA DE LOGOS
   const sspLogoBuffer = await fetchLocalImageBuffer("/logos/logo-ssp.png");
@@ -332,7 +388,7 @@ export async function exportToWord(
   coverPageParagraphs.push(new Paragraph({ pageBreakBefore: true })); // Salto de página después de portada
 
   // 3. CUERPO DEL DOCUMENTO (Parseado desde Markdown)
-  const bodyParagraphs = await parseMarkdownToParagraphs(content);
+  const bodyParagraphs = await parseMarkdownToParagraphs(reportContent);
 
   // 3.5 PERFIL SOCIODEMOGRÁFICO
   const scinceElements: any[] = [];
@@ -512,8 +568,9 @@ export async function exportToWord(
   // 4. MAPAS (ATLAS CARTOGRÁFICO)
   const mapElements: any[] = [];
   if (mapSnapshots && mapSnapshots.length > 0) {
-    const chartsSnaps = mapSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
-    const mapsSnaps = mapSnapshots.filter(s => !chartsSnaps.some((c) => c.title === s.title));
+    const boundedSnapshots = mapSnapshots.slice(0, 8);
+    const chartsSnaps = boundedSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
+    const mapsSnaps = boundedSnapshots.filter(s => !chartsSnaps.some((c) => c.title === s.title));
 
     const processVisuals = async (title: string, snaps: any[]) => {
       if (snaps.length === 0) return;
@@ -528,9 +585,9 @@ export async function exportToWord(
               tmpImg.onload = () => resolve();
               tmpImg.onerror = () => reject(new Error("[exportToWord] Error en visual"));
             });
-            const MAP_MAX_WIDTH = 450;
+            const MAP_MAX_WIDTH = 360;
             const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
-            const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
+            const proportionalHeight = Math.min(210, Math.floor(MAP_MAX_WIDTH * ratio));
 
             const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
             cellsData.push({snapshot, mapBuffer, width: MAP_MAX_WIDTH, height: proportionalHeight });
@@ -585,8 +642,9 @@ export async function exportToWord(
   const photoElements: any[] = [];
   if (attachedPhotos && attachedPhotos.length > 0) {
     const photoCellsData: any[] = [];
-    for (let i = 0; i < attachedPhotos.length; i++) {
-      const item = attachedPhotos[i];
+    const boundedPhotos = attachedPhotos.slice(0, 8);
+    for (let i = 0; i < boundedPhotos.length; i++) {
+      const item = boundedPhotos[i];
       const url = typeof item === "string" ? item : item.url;
       const tipo = typeof item === "string" ? "Evidencia Táctica" : (item.tipo || "Evidencia Táctica");
       const comentario = typeof item === "string" ? "" : (item.comentario || "Sin comentario.");
@@ -604,11 +662,11 @@ export async function exportToWord(
               )
             );
         });
-        const WORD_MAX_WIDTH = 450;
+        const WORD_MAX_WIDTH = 360;
         const originalWidth = img.width || img.naturalWidth || 640;
         const originalHeight = img.height || img.naturalHeight || 480;
         const ratio = originalHeight / originalWidth || 1;
-        const proportionalHeight = Math.floor(WORD_MAX_WIDTH * ratio);
+        const proportionalHeight = Math.min(230, Math.floor(WORD_MAX_WIDTH * ratio));
 
         photoCellsData.push({ stampedBuffer, tipo, comentario, width: WORD_MAX_WIDTH, height: proportionalHeight, index: i + 1 });
       } catch (err) {
@@ -779,16 +837,16 @@ export async function exportToWord(
               new Paragraph({
                 tabStops: headerFooterTabs,
                 border: { top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
-                spacing: { before: 200 },
+                spacing: { before: 80 },
                 children: [
-                  new TextRun({ text: new Date().toLocaleDateString("es-MX"), color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: `${new Date().toLocaleDateString("es-MX")} | `, color: "5B6573", size: 14, font: "Calibri" }),
                   new TextRun({ 
-                    children: ["\tPágina ", PageNumber.CURRENT || "1"], 
+                    children: ["Pagina ", PageNumber.CURRENT || "1", " | "],
                     color: "5B6573", 
-                    size: 18, 
+                    size: 14,
                     font: "Calibri" 
                   }),
-                  new TextRun({ text: `\tEXP: ${safeName}`, color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: `EXP: ${safeName.slice(0, 46)}`, color: "5B6573", size: 14, font: "Calibri" }),
                 ],
               }),
             ],

@@ -1,10 +1,7 @@
 import React from 'react';
 
 import { exportCSV } from '@/utils/exportAnalysis';
-import { exportPDF } from '../utils/exportPDF';
-import { exportWord } from '../utils/exportWord';
 
-import { buildReport } from '../utils/buildReport';
 import RoleGuard from './RoleGuard';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -19,8 +16,6 @@ const AnalysisPanel: React.FC<Props> = ({
 }) => {
 
   if (!iaAnalysis || iaAnalysis.length === 0) return null;
-
-  const report = buildReport(project);
 
   const userRole =
     project?.userRole || 'USER';
@@ -49,20 +44,6 @@ const AnalysisPanel: React.FC<Props> = ({
             className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors"
           >
             Exportar CSV
-          </button>
-
-          <button
-            onClick={() => exportPDF(report)}
-            className="inline-flex items-center justify-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
-          >
-            Exportar PDF
-          </button>
-
-          <button
-            onClick={() => exportWord(report)}
-            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
-          >
-            Exportar Word
           </button>
           </RoleGuard>
 
