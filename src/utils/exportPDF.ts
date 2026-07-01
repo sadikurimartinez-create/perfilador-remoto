@@ -1,209 +1,252 @@
 import { jsPDF } from 'jspdf';
-import { captureMapImage, generateStreetViewBase64 } from './captureMpas';
+import {
+  generateStaticMapBase64,
+  generateStreetViewBase64,
+  generateRiskChartBase64,
+} from './captureMpas';
 import { ConsolidatedReport } from '../types/Report';
 import { getPhotoDataURLs } from './capturePhotos';
-import { calculateRisk } from './scoring';
-import { generateNarrative } from './narrative';
-import { classifyCriminology } from './criminologyClassifier';
 import {
   createAuditLog,
   appendAuditLog,
 } from './auditLogger';
+import {
+  IntelligenceVisualProduct,
+  applyInstitutionalWatermark,
+  buildIntelligenceBriefing,
+  buildPhotoCaption,
+  loadPublicImageAsDataUrl,
+} from './intelligenceLayoutEngine';
+
+const PAGE = {
+  width: 297,
+  height: 210,
+  margin: 16,
+};
+
+const COLORS = {
+  navy: '#0b1f3a',
+  blue: '#1d4f91',
+  line: '#d7dee8',
+  text: '#172033',
+  muted: '#5d6b7c',
+};
+
+const addHeader = (doc: jsPDF, title: string) => {
+  doc.setFillColor(COLORS.navy);
+  doc.rect(0, 0, PAGE.width, 13, 'F');
+  doc.setTextColor('#ffffff');
+  doc.setFontSize(8);
+  doc.text('SSPE-CEIPOL | Intelligence Briefing', PAGE.margin, 8.5);
+  doc.text(title, PAGE.width - PAGE.margin, 8.5, { align: 'right' });
+  doc.setTextColor(COLORS.text);
+};
+
+const addSectionTitle = (doc: jsPDF, title: string, y: number) => {
+  doc.setFillColor(COLORS.blue);
+  doc.rect(PAGE.margin, y - 5, 3, 8, 'F');
+  doc.setFontSize(13);
+  doc.setTextColor(COLORS.navy);
+  doc.text(title, PAGE.margin + 6, y);
+  doc.setTextColor(COLORS.text);
+};
+
+const addBullets = (
+  doc: jsPDF,
+  bullets: string[],
+  x: number,
+  y: number,
+  width: number,
+  lineHeight = 5.2
+) => {
+  doc.setFontSize(8.8);
+  let cursor = y;
+  bullets.forEach((bullet) => {
+    const lines = doc.splitTextToSize(`- ${bullet}`, width);
+    lines.forEach((line: string) => {
+      doc.text(line, x, cursor);
+      cursor += lineHeight;
+    });
+  });
+  return cursor;
+};
+
+const addVisualFrame = (
+  doc: jsPDF,
+  visual: IntelligenceVisualProduct,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) => {
+  doc.setDrawColor(COLORS.line);
+  doc.setLineWidth(0.4);
+  doc.rect(x, y, width, height);
+  doc.addImage(visual.dataUrl, visual.dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG', x + 1, y + 1, width - 2, height - 16);
+  doc.setFillColor('#f4f7fb');
+  doc.rect(x, y + height - 15, width, 15, 'F');
+  doc.setFontSize(7.5);
+  doc.setTextColor(COLORS.text);
+  const caption = doc.splitTextToSize(visual.caption, width - 6).slice(0, 2);
+  doc.text(caption, x + 3, y + height - 10);
+};
+
+const buildVisualProducts = async (
+  report: ConsolidatedReport
+): Promise<IntelligenceVisualProduct[]> => {
+  const visuals: IntelligenceVisualProduct[] = [];
+  const mapImage = await generateStaticMapBase64(report);
+  const chartImage = await generateRiskChartBase64(report.findings);
+  const photoDataURLs = await getPhotoDataURLs(report.findings);
+
+  if (mapImage) {
+    visuals.push({
+      id: 'map-main',
+      type: 'map',
+      title: 'Mapa operativo',
+      dataUrl: await applyInstitutionalWatermark(mapImage),
+      caption: 'Producto cartografico existente con simbologia visible para ubicar hallazgos, rutas y zonas de riesgo.',
+    });
+  }
+
+  if (chartImage) {
+    visuals.push({
+      id: 'chart-risk',
+      type: 'chart',
+      title: 'Grafica de riesgo',
+      dataUrl: await applyInstitutionalWatermark(chartImage),
+      caption: 'Distribucion estadistica de hallazgos por nivel de riesgo para priorizacion operativa.',
+    });
+  }
+
+  for (let i = 0; i < photoDataURLs.length; i++) {
+    const dataUrl = photoDataURLs[i];
+    if (!dataUrl) continue;
+    const finding = report.findings[i] as any;
+    visuals.push({
+      id: `photo-${i + 1}`,
+      type: 'photo',
+      title: `Evidencia fotografica ${i + 1}`,
+      dataUrl: await applyInstitutionalWatermark(dataUrl),
+      caption: buildPhotoCaption(finding, i),
+      riskLevel: finding?.riskLevel,
+    });
+  }
+
+  const firstFinding = report.findings?.[0] as any;
+  const baseLat = firstFinding?.latitude ?? firstFinding?.lat;
+  const baseLng = firstFinding?.longitude ?? firstFinding?.lng;
+  if (baseLat && baseLng) {
+    const headings = [0, 90, 180, 270];
+    for (const heading of headings) {
+      const streetView = await generateStreetViewBase64(Number(baseLat), Number(baseLng), heading);
+      if (!streetView) continue;
+      visuals.push({
+        id: `street-view-${heading}`,
+        type: 'streetView',
+        title: `Street View ${heading} grados`,
+        dataUrl: await applyInstitutionalWatermark(streetView),
+        caption:
+          'Street View Intelligence: identifica lineas de vista, puntos de acecho, rutas de escape, vulnerabilidades y zonas ciegas.',
+      });
+    }
+  }
+
+  return visuals;
+};
 
 export const exportPDF = async (
   report: ConsolidatedReport
 ) => {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const visuals = await buildVisualProducts(report);
+  const briefing = buildIntelligenceBriefing(report, visuals);
+  const logoSsp = await loadPublicImageAsDataUrl('/logos/logo-ssp.png');
+  const logoCeipol = await loadPublicImageAsDataUrl('/logos/logo-ceipol.png');
 
-  const mapImage = await captureMapImage(
-    'project-map-capture'
-  );
+  doc.setFillColor('#f7f9fc');
+  doc.rect(0, 0, PAGE.width, PAGE.height, 'F');
+  doc.setFillColor(COLORS.navy);
+  doc.rect(0, 0, PAGE.width, 32, 'F');
 
-  let y = 20;
+  if (logoSsp) doc.addImage(logoSsp, 'PNG', PAGE.margin, 7, 22, 18);
+  if (logoCeipol) doc.addImage(logoCeipol, 'PNG', PAGE.width - PAGE.margin - 22, 7, 22, 18);
 
-  doc.setFontSize(18);
-  doc.text('CEIPOL - INFORME CRIMINOLÓGICO', 20, y);
+  doc.setTextColor('#ffffff');
+  doc.setFontSize(23);
+  doc.text(briefing.title, PAGE.width / 2, 18, { align: 'center' });
+  doc.setFontSize(9);
+  doc.text('INFORME DE GEOINTELIGENCIA OPERATIVA', PAGE.width / 2, 27, { align: 'center' });
 
-  y += 15;
+  doc.setTextColor(COLORS.text);
+  doc.setFontSize(10);
+  doc.text(`Expediente: ${briefing.fileNumber}`, PAGE.margin, 47);
+  doc.text(`Fecha de generacion: ${new Date(briefing.generatedAt).toLocaleString()}`, PAGE.margin, 54);
+  doc.text(`Clasificacion: ${briefing.classification}`, PAGE.margin, 61);
 
-  doc.setFontSize(12);
+  addSectionTitle(doc, 'Executive Summary', 78);
+  doc.setFillColor('#ffffff');
+  doc.roundedRect(PAGE.margin, 85, 128, 72, 2, 2, 'F');
+  doc.setDrawColor(COLORS.line);
+  doc.roundedRect(PAGE.margin, 85, 128, 72, 2, 2);
+  doc.setFontSize(21);
+  doc.setTextColor(briefing.globalRisk === 'ALTO' ? '#b91c1c' : COLORS.blue);
+  doc.text(`RIESGO ${briefing.globalRisk}`, PAGE.margin + 8, 102);
+  doc.setTextColor(COLORS.text);
+  addBullets(doc, briefing.executiveBullets, PAGE.margin + 8, 116, 112);
 
-  doc.text(`Proyecto: ${report.projectName}`, 20, y);
-  y += 10;
+  doc.setFillColor('#ffffff');
+  doc.roundedRect(158, 85, 123, 72, 2, 2, 'F');
+  doc.setDrawColor(COLORS.line);
+  doc.roundedRect(158, 85, 123, 72, 2, 2);
+  doc.setFontSize(10);
+  doc.setTextColor(COLORS.navy);
+  doc.text('Hallazgos criticos / zonas / actores', 166, 99);
+  doc.setTextColor(COLORS.text);
+  addBullets(doc, [...briefing.criticalFindings, ...briefing.riskZones.slice(0, 2), ...briefing.relevantActors.slice(0, 1)], 166, 111, 104, 5);
+  doc.setFontSize(8.8);
+  doc.setTextColor(COLORS.blue);
+  doc.text(doc.splitTextToSize(`Accion inmediata: ${briefing.immediateRecommendation}`, 104), 166, 145);
 
-  doc.text(`Tipo de geometría: ${report.geometryType}`, 20, y);
-  y += 10;
+  doc.addPage();
+  addHeader(doc, 'Hipotesis final');
+  addSectionTitle(doc, 'Hipotesis Final Unica', 29);
+  addBullets(doc, briefing.finalHypothesis, PAGE.margin, 43, 260, 7);
 
-  doc.text(`Fecha: ${report.createdAt}`, 20, y);
-  y += 15;
-
-  const risk = calculateRisk(report.findings);
-  const narrative = generateNarrative(report);
-  const classification =
-    classifyCriminology(
-      report.findings,
-      report.geometryType
-    );
-  y += 10;
-
-  doc.setFontSize(14);
-  doc.text('NARRATIVA CRIMINOLÓGICA', 20, y);
-  y += 10;
-
-  doc.setFontSize(12);
-  const lines = doc.splitTextToSize(narrative, 170);
-  lines.forEach((line: string) => {
-    // Salto de página automático si la narrativa es muy larga
-    if (y > 275) {
-      doc.addPage();
-      y = 20;
-    }
-    doc.text(line, 20, y);
-    y += 7;
-  });
-  
-  if (y > 270) {
+  briefing.pages.forEach((page) => {
     doc.addPage();
-    y = 20;
-  } else {
-    y += 10;
-  }
+    addHeader(doc, page.title);
+    addSectionTitle(doc, page.title, 29);
 
-  doc.text(`Nivel de riesgo global: ${risk.classification} (Promedio: ${risk.averageScore.toFixed(2)})`, 20, y);
-  
-  y += 10;
-
-  doc.setFontSize(14);
-  doc.text('CLASIFICACIÓN CRIMINOLÓGICA', 20, y);
-
-  y += 10;
-
-  doc.setFontSize(12);
-  const classificationLines = doc.splitTextToSize(
-    `${classification.category}: ${classification.interpretation}`,
-    170
-  );
-
-  classificationLines.forEach((line: string) => {
-    if (y > 275) {
-      doc.addPage();
-      y = 20;
-    }
-    doc.text(line, 20, y);
-    y += 7;
-  });
-
-  y += 15;
-
- if (mapImage) {
-  // Evitamos que el mapa quede cortado por la mitad en el borde inferior
-  if (y > 170) {
-    doc.addPage();
-    y = 20;
-  }
-  doc.setFontSize(14);
-
-  doc.text('MAPA DEL PROYECTO', 20, y);
-
-  y += 10;
-
-  doc.addImage(
-    mapImage,
-    'PNG',
-    20,
-    y,
-    170,
-    90
-  );
-
-  y += 100;
-} 
-
-  doc.text('HALLAZGOS', 20, y);
-
-  y += 10;
-
-const photoDataURLs = await getPhotoDataURLs(report.findings);
-
-for (let i = 0; i < photoDataURLs.length; i++) {
-  const dataURL = photoDataURLs[i];
-  if (dataURL) {
-    y += 5;
-    doc.setFontSize(12);
-    doc.text(`Evidencia Foto ${i + 1}`, 20, y);
-    y += 5;
-    doc.addImage(dataURL, 'PNG', 20, y, 60, 45);
-    y += 50;
-    if (y > 260) {
-      doc.addPage();
-      y = 20;
-    }
-  }
-}
-
-  report.findings.forEach((finding, index) => {
-    doc.setFontSize(11);
-
-    doc.text(
-      `${index + 1}. Riesgo: ${(finding.riskLevel || 'N/A').toUpperCase()}`,
-      20,
-      y
-    );
-
-    y += 8;
-
-    doc.text(`Observación: ${finding.note || 'Sin observación'}`, 25, y);
-
-    y += 12;
-
-    if (y > 260) {
-      doc.addPage();
-      y = 20;
+    if (page.mode === 'single') {
+      addVisualFrame(doc, page.visuals[0], 32, 40, 232, 126);
+      doc.setTextColor(COLORS.muted);
+      doc.setFontSize(9);
+      doc.text(doc.splitTextToSize(page.interpretation, 232), 32, 178);
+    } else {
+      addVisualFrame(doc, page.visuals[0], PAGE.margin, 42, 128, 112);
+      addVisualFrame(doc, page.visuals[1], 153, 42, 128, 112);
+      doc.setTextColor(COLORS.muted);
+      doc.setFontSize(8.8);
+      doc.text(doc.splitTextToSize(page.visuals[0].caption, 120).slice(0, 2), PAGE.margin, 166);
+      doc.text(doc.splitTextToSize(page.visuals[1].caption, 120).slice(0, 2), 153, 166);
     }
   });
 
-  // APARTADO NUEVO: STREET VIEW
-  const firstFinding = report.findings?.[0] as any;
-  const baseLat = firstFinding?.latitude ?? firstFinding?.lat;
-  const baseLng = firstFinding?.longitude ?? firstFinding?.lng;
-
-  if (baseLat && baseLng) {
-    doc.addPage();
-    y = 20;
-    doc.setFontSize(14);
-    doc.text('APARTADO NUEVO: BARRIDO Y HALLAZGOS DE STREET VIEW', 20, y);
-    y += 10;
-    
-    const headings = [0, 90, 180, 270];
-    for (let i = 0; i < headings.length; i++) {
-      const h = headings[i];
-      const svDataUrl = await generateStreetViewBase64(Number(baseLat), Number(baseLng), h);
-      if (svDataUrl) {
-         doc.setFontSize(12);
-         doc.text(`Hallazgo Visual (Ángulo ${h}°)`, 20, y);
-         y += 5;
-         doc.addImage(svDataUrl, 'JPEG', 20, y, 80, 60);
-         y += 70;
-         if (y > 240 && i !== headings.length - 1) {
-            doc.addPage();
-            y = 20;
-         }
-      }
-    }
-  }
+  doc.addPage();
+  addHeader(doc, 'Conclusiones operativas');
+  addSectionTitle(doc, 'Conclusiones Operativas', 29);
+  addBullets(doc, briefing.conclusions, PAGE.margin, 45, 250, 8);
 
   if ((report as any).projectRef) {
     const log = createAuditLog(
-      'Exportación PDF',
+      'Exportacion PDF',
       (report as any).userRole || 'USER',
       (report as any).username || 'Usuario',
-      `Se exportó el informe PDF del proyecto ${report.projectName}`
+      `Se exporto el informe de geointeligencia PDF del proyecto ${report.projectName}`
     );
-    appendAuditLog(
-      (report as any).projectRef,
-      log
-    );
+    appendAuditLog((report as any).projectRef, log);
   }
 
-  doc.save(`Dictamen_Ejecutivo_${report.projectName}.pdf`);
+  doc.save(`Informe_Geointeligencia_${report.projectName}.pdf`);
 };

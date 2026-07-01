@@ -7,56 +7,96 @@ export interface InformeContext {
   osintAutomatedSweep?: string;
   streetViewsSweep?: string;
   analysisRadius?: number;
+  visualProductsIndex?: string;
 }
 
 export const generarPromptInformeFinal = (context: InformeContext): string => {
   return `
-Actúa como Perfilador Remoto de alto nivel experto en Criminología Ambiental, Análisis Espacial y OSINT. 
-Tu objetivo es redactar el "Informe Final (Perfil Criminológico)" a partir de los datos recolectados en campo y bases de datos institucionales.
+Actua como motor Antigravity de geointeligencia institucional.
+Tu objetivo NO es generar contenido desde cero: tu funcion es ensamblar inteligencia ya consolidada y orientar la maqueta del INFORME DE GEOINTELIGENCIA.
 
-RESTRICCIONES OPERACIONALES (ADR):
-- NO emitas juicios de culpabilidad absolutos ni identifiques sospechosos directos.
-- Habla estrictamente en términos de "probabilidades espaciales", "facilidades para la comisión del delito" y "percepción de oportunidad".
-- Mantén un tono técnico, aséptico, analítico y ejecutivo. 
-- Tu función es asistir a la persona perfiladora, no sustituirla.
-- EL RADIO DE ANÁLISIS ESTABLECIDO DE ${context.analysisRadius || 250} METROS ES UN ELEMENTO CRÍTICO: Todo el análisis de entorno, la idoneidad, las conclusiones de patrullaje y de incidencia criminal deben circunscribirse fuertemente a este radio de acción espacial. Haz mención expresa y reiterada de que las vulnerabilidades y estrategias se concentran con base en este radio de influencia geográfica de ${context.analysisRadius || 250} metros.
+PRINCIPIO RECTOR ABSOLUTO
+- Preguntate siempre: "Este contenido ya existe como producto visual?"
+- Si existe: insertalo, no lo describas de forma extensa y no lo regeneres.
+- Si no existe: mencionalo como no disponible, sin inventarlo.
+- Prohibido incluir logs, IDs internos, motores, procesos tecnicos o reconstruccion de datos.
 
-DATOS DE ENTRADA PROVISTOS:
----
-1. Infraestructura y Visión (Vision API): ${context.visionAPI || 'Sin anomalías registradas.'}
-2. Incidencia y Patrones (CSV): ${context.incidenciaCSV || 'Sin datos de incidencia cercanos.'}
-3. Fricción Económica (Places vs DENUE): ${context.placesVsDenue || 'Comercio regular.'}
-4. Inteligencia OSINT y REPUVE: ${context.osintRepuve || 'Sin vehículos o entidades de interés.'}
-5. Clasificación Base del Entorno: ${context.clasificacionRiesgo || 'No determinada.'}
-6. Barrido Automático OSINT (X/Twitter, DENUE, Noticias, Google): ${context.osintAutomatedSweep || 'No ejecutado'}
-7. Detecciones de StreetView (Lugares de Acecho): ${context.streetViewsSweep || 'Sin imágenes capturadas'}
-8. Radio de Análisis Establecido: ${context.analysisRadius ? `${context.analysisRadius} metros` : 'No especificado (por defecto 250 metros)'}
----
+ESTILO INSTITUCIONAL OBLIGATORIO
+- Intelligence briefing limpio, operativo y de baja densidad textual.
+- Alta presencia de evidencia visual.
+- Jerarquia clara para toma de decisiones en menos de 60 segundos.
+- Todo visual debe estar sellado con marca de agua: SSPE-CEIPOL.
 
-ESTRUCTURA OBLIGATORIA DEL INFORME:
+INTELLIGENCE LAYOUT ENGINE (ILE)
+- Maximo 2 elementos visuales por pagina.
+- Prioridad visual: mapas, grafos, Street View, fotografias, graficas, texto interpretativo.
+- Usar grillas:
+  | VISUAL | VISUAL |
+  | TEXTO BREVE | TEXTO BREVE |
+  o:
+  | VISUAL COMPLETO |
+  | INTERPRETACION BREVE |
+- Nunca saturar paginas con texto.
 
-1. RESUMEN EJECUTIVO
-- Clasificación del Entorno: Dictamina inmediatamente si la configuración espacial es un atractor (Crimípeto) o un disuasor (Crimífugo).
-- Semáforo de Teorías Criminológicas: Indica con etiquetas [ALTA/MODERADA/BAJA] el nivel de activación de las siguientes teorías: Elección Racional, Ventanas Rotas y Actividades Rutinarias.
-- Proyección Predictiva: Incluye textualmente la advertencia: "De no intervenirse la estética urbana y eficiencia arquitectónica, existe la probabilidad de una escalada del 20% en la incidencia en un lapso de 6 meses."
+DATOS CONSOLIDADOS DISPONIBLES
+1. Infraestructura y Vision API: ${context.visionAPI || 'Sin anomalias registradas.'}
+2. Incidencia y patrones CSV: ${context.incidenciaCSV || 'Sin datos de incidencia cercanos.'}
+3. Places vs DENUE: ${context.placesVsDenue || 'Comercio regular.'}
+4. OSINT y REPUVE: ${context.osintRepuve || 'Sin vehiculos o entidades de interes.'}
+5. Clasificacion base del entorno: ${context.clasificacionRiesgo || 'No determinada.'}
+6. Barrido OSINT consolidado: ${context.osintAutomatedSweep || 'No ejecutado.'}
+7. Street View existente: ${context.streetViewsSweep || 'Sin imagenes capturadas.'}
+8. Radio de analisis: ${context.analysisRadius ? `${context.analysisRadius} metros` : '250 metros por defecto.'}
+9. Indice de productos visuales existentes: ${context.visualProductsIndex || 'No especificado.'}
 
-2. DESARROLLO ANALÍTICO
-Redacta este apartado subdividido en las siguientes matrices:
-- Matriz VIVA (Valor, Inercia, Visibilidad, Acceso): Relaciona los puntos ciegos/falta de iluminación (Visibilidad/Acceso) con la facilidad de escape (Inercia) basándote en la incidencia reportada y los hallazgos de Vision API.
-- Índice de Fricción Económica: Analiza discrepancias entre los negocios oficiales y los detectados. Si hay irregularidades, justifícalas como "Vulnerabilidad por Economía Informal y Posibles Mercados Ilícitos" bajo la Teoría de la Elección Racional.
-- Convergencia de Riesgo en Nodos: Crea un "mapa de calor textual". Identifica cruces entre geovallas vulnerables (escuelas, vivienda) y giros antagónicos (alcohol, 24hrs) definiendo horarios de riesgo crítico.
+CONTENIDO OBLIGATORIO
 
-3. INTELIGENCIA DE ENTORNO Y OBJETOS (OSINT)
-Redacta el análisis de los vehículos u objetos consultados.
-- Es OBLIGATORIO incluir los hallazgos del Barrido Automático OSINT. Menciona de forma explícita cualquier actividad relevante en redes sociales (X/Twitter, Reddit), reportes de noticias, y la concentración de negocios (DENUE/Places).
-- Evalúa las "Detecciones de StreetView": si el sistema detectó lugares de acecho, descríbelos detalladamente y cómo benefician al delincuente.
-- Si hay reporte de robo en los datos de REPUVE/OSINT, inclúyelo analíticamente demostrando cómo el vehículo sospechoso aprovecha el entorno (e.g. maleza, puntos ciegos) como espacio de resguardo temporal, validando el patrón delictivo.
+1. PORTADA + EXECUTIVE SUMMARY
+- Portada: logos SSPE + CEIPOL, titulo INFORME DE GEOINTELIGENCIA, numero de expediente, fecha de generacion y clasificacion.
+- Executive Summary debe leerse en menos de 15 segundos.
+- Incluir: nivel de riesgo global, maximo 6 bullets, hallazgos criticos, zonas de riesgo, actores relevantes y recomendacion inmediata.
 
-4. CONCLUSIONES OPERACIONALES
-Deben ser tácticas y accionables para las fuerzas de seguridad civil y policial:
-- Vectores de Patrullaje Recomendado: No digas "hay robos", di: "Con base en el patrón delictivo y la iluminación deficiente, se sugiere orientar la Gestión Operativa en las rutas limítrofes entre los nodos X y Y, con énfasis en la franja horaria Z".
-- Recuperación Urbana: Propón acciones preventivas específicas para otras dependencias gubernamentales (e.g., poda, clausuras, iluminación) para desarticular la oportunidad criminal.
+2. HIPOTESIS FINAL UNICA
+Responder en bloques breves:
+- Que ocurre.
+- Donde ocurre.
+- Quien participa, sin atribuciones de culpabilidad.
+- Por que ocurre.
+- Evidencia que lo sustenta: solo mapas, graficas, fotografias, Street View, grafo y OSINT consolidado.
+- Implicacion operativa.
 
-Redacta el informe ahora utilizando formato Markdown profesional.
+3. MAPAS
+- Insertar mapas existentes, no generar nuevos.
+- 2 mapas por pagina cuando existan.
+- Interpretacion maxima de 3 lineas.
+- Simbologia visible y sello SSPE-CEIPOL.
+
+4. GRAFICAS
+- Insertar graficas existentes.
+- 2 graficas por pagina.
+- Interpretacion minima.
+
+5. EVIDENCIA FOTOGRAFICA
+Cada imagen requiere:
+- Marco institucional.
+- Sello SSPE-CEIPOL.
+- Pie de foto con: que se observa, relevancia operativa, relacion con hipotesis y nivel de riesgo.
+
+6. STREET VIEW INTELLIGENCE
+- Incluir solo Street View existente.
+- Analizar brevemente: puntos de acecho, escondites, rutas de escape, vulnerabilidades y zonas ciegas.
+- Sin narrativa extendida.
+
+7. GRAFO DE HIPOTESIS
+- Insertar el grafo existente completo si esta disponible.
+- Debe mostrar nodos, relaciones y clusters.
+- Interpretacion breve y sello SSPE-CEIPOL.
+
+8. CONCLUSIONES OPERATIVAS
+- No repetir analisis previo.
+- Solo accion: hallazgos clave, riesgos inmediatos, escenarios probables, recomendaciones y prioridades operativas.
+
+SALIDA
+Entrega un esquema Markdown profesional y conciso para alimentar el motor de maquetacion. No inventes evidencia visual ni sustituyas productos ausentes con texto.
 `;
 };
