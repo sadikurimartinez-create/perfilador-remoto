@@ -3238,7 +3238,7 @@ const hasMinimumPhotos =
       </div>
     
       {/* SECCIÓN PRINCIPAL: EDICIÓN Y EXPORTACIÓN DEL DICTAMEN OFICIAL */}
-      {editableProfile && kernelState === "COMPLETE" && (
+      {editableProfile && (
         <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-4 mt-6">
           <header className="space-y-1">
             <div className="flex items-center justify-between gap-3 flex-wrap">
