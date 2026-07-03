@@ -1362,6 +1362,17 @@ const hasMinimumPhotos =
         comentario: p.comentario || "Sin comentario."
       }));
 
+      const selectedSweeps = (project?.sweeps || []).filter((s: any) => {
+        const engineLower = s.engine.toLowerCase();
+        if (engineLower.includes("denue") && !selectedAnnexes.sweepDenue) return false;
+        if (engineLower.includes("incidencia") && !selectedAnnexes.sweepIncidencia) return false;
+        if (engineLower.includes("vehicular") && !selectedAnnexes.sweepRepuve) return false;
+        if (engineLower.includes("desaparecidos") && !selectedAnnexes.sweepRnpdno) return false;
+        if (engineLower.includes("multimodal") && !selectedAnnexes.sweepMultimodal) return false;
+        if (engineLower.includes("cifa") && !selectedAnnexes.sweepCifa) return false;
+        return s.status === "Integrado";
+      });
+
       await ReportEngine.finalize({
         project,
         content,
@@ -1373,6 +1384,7 @@ const hasMinimumPhotos =
         reportSummary,
         user: { id: user?.id ? String(user.id) : "unknown", username: user?.username || "Usuario", role: user?.role || "USER" },
         markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
+        sweeps: selectedSweeps,
       });
 
       setHasSavedAnalysis(true);

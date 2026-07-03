@@ -15,6 +15,7 @@ type FinalizeOptions = {
   reportSummary?: string;
   user?: { id: string; username: string; role: string };
   markAsPrinted?: () => Promise<void> | void;
+  sweeps?: any[];
 };
 
 async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
@@ -310,7 +311,8 @@ export const ReportEngine = {
       reportSummary, 
       user, 
       markAsPrinted, 
-      scinceDemographics 
+      scinceDemographics,
+      sweeps
     } = options;
 
     // 1. RECOLECTAR Y NORMALIZAR VISUALES
@@ -360,7 +362,7 @@ export const ReportEngine = {
       } as any,
       visuals,
       {
-        sweeps: project.sweeps || [],
+        sweeps: sweeps || [],
         reportSummary
       }
     );
