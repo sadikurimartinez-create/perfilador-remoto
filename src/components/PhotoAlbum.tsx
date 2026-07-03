@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
-import { ReportEngine, ReportEngineKernel } from "@/lib/reportEngine";
+import { ReportEngine, ReportEngineKernel, KernelGuard } from "@/lib/reportEngine";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
@@ -518,7 +518,13 @@ export function PhotoAlbum({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
-  const [reportMachineState, setReportMachineState] = useState<"IDLE" | "TERMINATED">("IDLE");
+  const [kernelState, setKernelState] = useState(ReportEngineKernel.getState());
+
+  useEffect(() => {
+    return ReportEngineKernel.subscribe((s) => {
+      setKernelState(s);
+    });
+  }, []);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
@@ -1077,7 +1083,7 @@ const hasMinimumPhotos =
 
         setAiProfile(finalMarkdown);
         setEditableProfile(finalMarkdown);
-        setReportMachineState("IDLE");
+
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
 
 
@@ -1340,44 +1346,48 @@ const hasMinimumPhotos =
       const activeId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       // 1. INIT_KERNEL
-      ReportEngineKernel.dispatch("INIT_KERNEL", { executionId: activeId });
+      KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
 
       // 2. LOCK_INPUT
-      ReportEngineKernel.dispatch("LOCK_INPUT", {
-        executionId: activeId,
-        project,
-        content,
-        album: photosToExportData,
-        mapSnapshots: sortedSnapshotsToExport,
-        riskLevel: profileRiskLevel ?? undefined,
-        scinceDemographics: (analysisResult as any)?.scinceDemographics,
-        reportNumber: reportNumber || (project?.id ? String(project.id) : "") || "DICTAMEN_CRIMINOLOGICO",
-        reportSummary,
-        user: { id: user?.id ? String(user.id) : "unknown", username: user?.username || "Usuario", role: user?.role || "USER" },
-        markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
-        sweeps: selectedSweeps,
-        powerups: powerupsToExport,
+      KernelGuard({
+        type: "LOCK_INPUT",
+        payload: {
+          executionId: activeId,
+          project,
+          content,
+          album: photosToExportData,
+          mapSnapshots: sortedSnapshotsToExport,
+          riskLevel: profileRiskLevel ?? undefined,
+          scinceDemographics: (analysisResult as any)?.scinceDemographics,
+          reportNumber: reportNumber || (project?.id ? String(project.id) : "") || "DICTAMEN_CRIMINOLOGICO",
+          reportSummary,
+          user: { id: user?.id ? String(user.id) : "unknown", username: user?.username || "Usuario", role: user?.role || "USER" },
+          markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
+          sweeps: selectedSweeps,
+          powerups: powerupsToExport,
+        }
       });
 
       // 3. APPLY_POWERUPS
-      ReportEngineKernel.dispatch("APPLY_POWERUPS", { executionId: activeId });
+      KernelGuard({ type: "APPLY_POWERUPS", payload: { executionId: activeId } });
 
       // 4. DERIVE_LAYOUT
-      ReportEngineKernel.dispatch("DERIVE_LAYOUT", { executionId: activeId });
+      KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
 
       // 5. VALIDATE_KERNEL
-      ReportEngineKernel.dispatch("VALIDATE_KERNEL", { executionId: activeId });
+      KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
 
-      // 6. EXECUTE_EXPORT (WORD & PDF)
-      await ReportEngineKernel.finalizeExport("WORD", activeId);
-      await ReportEngineKernel.finalizeExport("PDF", activeId);
+      // 6. EXECUTE_EXPORT (WORD & PDF & Firestore - Sequential Auto-completing)
+      await KernelGuard({
+        type: "EXECUTE_EXPORT",
+        payload: { format: "ALL", activeId }
+      });
 
-      // Verify the final kernel state is TERMINATED
-      if (ReportEngineKernel.getState() !== "TERMINATED") {
+      // Verify the final kernel state is COMPLETE
+      if (ReportEngineKernel.getState() !== "COMPLETE") {
         throw new Error("STATE_MACHINE_INCOMPLETE");
       }
 
-      setReportMachineState("TERMINATED");
       setHasSavedAnalysis(true);
       window.alert("¡Dictamen Oficial generado, exportado y guardado con éxito!");
     } catch (err) {
@@ -3228,7 +3238,7 @@ const hasMinimumPhotos =
       </div>
     
       {/* SECCIÓN PRINCIPAL: EDICIÓN Y EXPORTACIÓN DEL DICTAMEN OFICIAL */}
-      {editableProfile && reportMachineState === "TERMINATED" && (
+      {editableProfile && kernelState === "COMPLETE" && (
         <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-4 mt-6">
           <header className="space-y-1">
             <div className="flex items-center justify-between gap-3 flex-wrap">

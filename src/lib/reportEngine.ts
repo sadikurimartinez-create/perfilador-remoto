@@ -287,7 +287,7 @@ export type KernelState =
   | "LAYOUT_DERIVED"
   | "VALIDATED"
   | "EXPORT_EXECUTED"
-  | "TERMINATED";
+  | "COMPLETE";
 
 export type KernelEvent =
   | "INIT_KERNEL"
@@ -321,6 +321,13 @@ export type ExecutionTrace = {
   validationResults: any;
 };
 
+export type TraceEntry = {
+  event: KernelEvent;
+  kernelState: KernelState;
+  executionId: string;
+  timestamp: number;
+};
+
 function simpleHash(str: string): string {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
@@ -343,6 +350,36 @@ function deepFreeze(obj: any): any {
   return obj;
 }
 
+function isValidTransition(state: KernelState, eventType: string): boolean {
+  switch (state) {
+    case "IDLE":
+      return eventType === "INIT_KERNEL";
+    case "INITIALIZED":
+      return eventType === "INIT_KERNEL" || eventType === "LOCK_INPUT";
+    case "INPUT_LOCKED":
+      return eventType === "INIT_KERNEL" || eventType === "APPLY_POWERUPS";
+    case "POWERUPS_DEDUPED":
+      return eventType === "INIT_KERNEL" || eventType === "DERIVE_LAYOUT";
+    case "LAYOUT_DERIVED":
+      return eventType === "INIT_KERNEL" || eventType === "VALIDATE_KERNEL";
+    case "VALIDATED":
+      return eventType === "INIT_KERNEL" || eventType === "EXECUTE_EXPORT";
+    case "EXPORT_EXECUTED":
+      return eventType === "INIT_KERNEL" || eventType === "TERMINATE_KERNEL";
+    case "COMPLETE":
+      return eventType === "INIT_KERNEL";
+  }
+  return false;
+}
+
+function gate(eventType: string, state: KernelState) {
+  if (!isValidTransition(state, eventType)) {
+    throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
+  }
+}
+
+export type KernelSubscriber = (state: KernelState) => void;
+
 export class ReportEngineKernelClass {
   private executionId: string | null = null;
   private locked: boolean = false;
@@ -352,9 +389,15 @@ export class ReportEngineKernelClass {
   private transitionsList: string[] = [];
   private exportStatus: string = "NOT_STARTED";
   private validationResults: any = null;
+  private subscribers: KernelSubscriber[] = [];
+  private traceLog: TraceEntry[] = [];
 
   getExecutionId() {
     return this.executionId;
+  }
+
+  isActive() {
+    return this.locked;
   }
 
   isLocked() {
@@ -379,6 +422,17 @@ export class ReportEngineKernelClass {
     return this.context;
   }
 
+  subscribe(sub: KernelSubscriber) {
+    this.subscribers.push(sub);
+    return () => {
+      this.subscribers = this.subscribers.filter(s => s !== sub);
+    };
+  }
+
+  private notify() {
+    this.subscribers.forEach(sub => sub(this.state));
+  }
+
   private takeSnapshot() {
     const payloadStr = this.context.content || "";
     const powerupsStr = JSON.stringify(this.context.powerups || []);
@@ -394,18 +448,26 @@ export class ReportEngineKernelClass {
     this.snapshots.push(deepFreeze(snap));
   }
 
-  dispatch(event: KernelEvent, payload?: any) {
+  async dispatch(event: KernelEvent, payload?: any): Promise<void> {
     // 🔒 1. SINGLE EXECUTION GUARANTEE
     if (this.locked && payload?.executionId && this.executionId !== payload.executionId) {
       throw new Error("MULTI_EXECUTION_BLOCKED");
     }
 
-    const valid = this.isValidTransition(event);
+    const valid = isValidTransition(this.state, event);
     if (!valid) {
       throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
     }
 
     this.transitionsList.push(`${this.state} -> ${event}`);
+
+    // UI event tracing log
+    this.traceLog.push({
+      event,
+      kernelState: this.state,
+      executionId: this.executionId || "",
+      timestamp: Date.now()
+    });
 
     switch (event) {
       case "INIT_KERNEL":
@@ -418,6 +480,7 @@ export class ReportEngineKernelClass {
         this.exportStatus = "NOT_STARTED";
         this.validationResults = null;
         this.takeSnapshot();
+        this.notify();
         break;
 
       case "LOCK_INPUT":
@@ -512,6 +575,7 @@ export class ReportEngineKernelClass {
 
         this.state = "INPUT_LOCKED";
         this.takeSnapshot();
+        this.notify();
         break;
 
       case "APPLY_POWERUPS":
@@ -548,6 +612,7 @@ export class ReportEngineKernelClass {
 
         this.state = "POWERUPS_DEDUPED";
         this.takeSnapshot();
+        this.notify();
         break;
 
       case "DERIVE_LAYOUT":
@@ -607,6 +672,7 @@ export class ReportEngineKernelClass {
 
         this.state = "LAYOUT_DERIVED";
         this.takeSnapshot();
+        this.notify();
         break;
 
       case "VALIDATE_KERNEL":
@@ -641,110 +707,109 @@ export class ReportEngineKernelClass {
 
         this.state = "VALIDATED";
         this.takeSnapshot();
+        this.notify();
         break;
 
       case "EXECUTE_EXPORT":
+        const activeId = payload?.activeId;
+        const format = payload?.format || "ALL";
+
+        // 🔒 Triple Lock checks inside dispatch for EXECUTE_EXPORT
+        if (this.state !== "VALIDATED") {
+          throw new Error("EXPORT_BLOCKED_INVALID_STATE");
+        }
+        if (!this.locked) {
+          throw new Error("EXPORT_BLOCKED_KERNEL_UNLOCKED");
+        }
+        if (this.executionId !== activeId) {
+          throw new Error("EXPORT_BLOCKED_EXECUTION_ID_MISMATCH");
+        }
+
         this.state = "EXPORT_EXECUTED";
+        this.exportStatus = `EXPORTING_${format}`;
         this.takeSnapshot();
+        this.notify();
+
+        try {
+          if (format === "WORD" || format === "ALL") {
+            await exportToWord(
+              this.context.content,
+              this.context.project.nombre || this.context.project.name || 'Expediente',
+              this.context.album ? this.context.album.map((p: any) => ({ url: p.previewUrl, tipo: p.tipo, comentario: p.comentario })) : [],
+              this.context.riskLevel,
+              this.context.mapSnapshots,
+              this.context.scinceDemographics,
+              this.context.project.id,
+              this.context.reportSummary
+            );
+          }
+          if (format === "PDF" || format === "ALL") {
+            await generatePdfProgrammatic(this.context.briefing);
+
+            if (this.context.user && this.context.project.id) {
+              const db = getDb();
+              await addDoc(collection(db, "analyses"), {
+                projectId: this.context.project.id,
+                content: this.context.content,
+                createdAt: Date.now(),
+                reportEngineOutput: true,
+                source: "ReportEngine.finalize",
+                title: "Dictamen Criminológico Ambiental Generado",
+                summary: this.context.reportSummary || "Dictamen oficial generado.",
+                createdBy: this.context.user.username,
+                createdById: this.context.user.id,
+                createdByRole: this.context.user.role,
+                attachedPhotos: this.context.album ? this.context.album.map((p: any) => p.previewUrl).filter(Boolean) : [],
+                powerups: this.context.powerups,
+              });
+
+              const projectRef = doc(db, "projects", this.context.project.id);
+              await updateDoc(projectRef, {
+                photoCount: this.context.album?.length || 0,
+              });
+            }
+          }
+
+          this.exportStatus = `COMPLETE_${format}`;
+          
+          // Auto-terminate kernel and set state to COMPLETE
+          this.locked = false;
+          this.state = "COMPLETE";
+          this.takeSnapshot();
+          this.notify();
+        } catch (err) {
+          this.exportStatus = "FAILED";
+          this.locked = false;
+          this.state = "IDLE";
+          this.takeSnapshot();
+          this.notify();
+          throw err;
+        }
         break;
 
       case "TERMINATE_KERNEL":
         this.locked = false;
-        this.state = "TERMINATED";
+        this.state = "COMPLETE";
         this.takeSnapshot();
+        this.notify();
         break;
     }
   }
 
-  private isValidTransition(event: KernelEvent): boolean {
-    switch (this.state) {
-      case "IDLE":
-        return event === "INIT_KERNEL";
-      case "INITIALIZED":
-        return event === "INIT_KERNEL" || event === "LOCK_INPUT";
-      case "INPUT_LOCKED":
-        return event === "INIT_KERNEL" || event === "APPLY_POWERUPS";
-      case "POWERUPS_DEDUPED":
-        return event === "INIT_KERNEL" || event === "DERIVE_LAYOUT";
-      case "LAYOUT_DERIVED":
-        return event === "INIT_KERNEL" || event === "VALIDATE_KERNEL";
-      case "VALIDATED":
-        return event === "INIT_KERNEL" || event === "EXECUTE_EXPORT";
-      case "EXPORT_EXECUTED":
-        return event === "INIT_KERNEL" || event === "TERMINATE_KERNEL";
-      case "TERMINATED":
-        return event === "INIT_KERNEL";
-    }
-    return false;
-  }
-
   async finalizeExport(format: "PDF" | "WORD", activeId: string) {
-    // 🔒 7. EXPORT GATE FINAL (TRIPLE LOCK)
-    if (this.state !== "VALIDATED") {
-      throw new Error("EXPORT_BLOCKED_INVALID_STATE");
-    }
-    if (!this.locked) {
-      throw new Error("EXPORT_BLOCKED_KERNEL_UNLOCKED");
-    }
-    if (this.executionId !== activeId) {
-      throw new Error("EXPORT_BLOCKED_EXECUTION_ID_MISMATCH");
-    }
-
-    this.dispatch("EXECUTE_EXPORT", { executionId: activeId });
-    this.exportStatus = `EXPORTING_${format}`;
-
-    try {
-      if (format === "PDF") {
-        await generatePdfProgrammatic(this.context.briefing);
-
-        if (this.context.user && this.context.project.id) {
-          const db = getDb();
-          await addDoc(collection(db, "analyses"), {
-            projectId: this.context.project.id,
-            content: this.context.content,
-            createdAt: Date.now(),
-            reportEngineOutput: true,
-            source: "ReportEngine.finalize",
-            title: "Dictamen Criminológico Ambiental Generado",
-            summary: this.context.reportSummary || "Dictamen oficial generado.",
-            createdBy: this.context.user.username,
-            createdById: this.context.user.id,
-            createdByRole: this.context.user.role,
-            attachedPhotos: this.context.album ? this.context.album.map((p: any) => p.previewUrl).filter(Boolean) : [],
-            powerups: this.context.powerups,
-          });
-
-          const projectRef = doc(db, "projects", this.context.project.id);
-          await updateDoc(projectRef, {
-            photoCount: this.context.album?.length || 0,
-          });
-        }
-      } else {
-        await exportToWord(
-          this.context.content,
-          this.context.project.nombre || this.context.project.name || 'Expediente',
-          this.context.album ? this.context.album.map((p: any) => ({ url: p.previewUrl, tipo: p.tipo, comentario: p.comentario })) : [],
-          this.context.riskLevel,
-          this.context.mapSnapshots,
-          this.context.scinceDemographics,
-          this.context.project.id,
-          this.context.reportSummary
-        );
-      }
-
-      this.exportStatus = `COMPLETE_${format}`;
-      this.dispatch("TERMINATE_KERNEL", { executionId: activeId });
-    } catch (err) {
-      this.exportStatus = "FAILED";
-      this.locked = false;
-      this.state = "IDLE";
-      this.takeSnapshot();
-      throw err;
-    }
+    await this.dispatch("EXECUTE_EXPORT", { format, activeId });
   }
 }
 
 export const ReportEngineKernel = new ReportEngineKernelClass();
+
+// 🧱 5. KERNEL BOUNDARY ENFORCEMENT
+export function KernelGuard(action: { type: KernelEvent; payload?: any }) {
+  if (action.type !== "INIT_KERNEL" && !ReportEngineKernel.isActive()) {
+    throw new Error("KERNEL_NOT_ACTIVE");
+  }
+  return ReportEngineKernel.dispatch(action.type, action.payload);
+}
 
 export const ReportEngine = {
   collect(
@@ -774,18 +839,18 @@ export const ReportEngine = {
     }
   ): string {
     const activeId = `legacy-norm-${Date.now()}`;
-    ReportEngineKernel.dispatch("INIT_KERNEL", { executionId: activeId });
-    ReportEngineKernel.dispatch("LOCK_INPUT", { content, executionId: activeId });
+    KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
+    KernelGuard({ type: "LOCK_INPUT", payload: { content, executionId: activeId } });
     return ReportEngineKernel.getContext().content;
   },
 
   async finalize(options: FinalizeOptions) {
     const activeId = `legacy-final-${Date.now()}`;
-    ReportEngineKernel.dispatch("INIT_KERNEL", { executionId: activeId });
-    ReportEngineKernel.dispatch("LOCK_INPUT", { ...options, executionId: activeId });
-    ReportEngineKernel.dispatch("APPLY_POWERUPS", { executionId: activeId });
-    ReportEngineKernel.dispatch("DERIVE_LAYOUT", { executionId: activeId });
-    ReportEngineKernel.dispatch("VALIDATE_KERNEL", { executionId: activeId });
+    KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
+    KernelGuard({ type: "LOCK_INPUT", payload: { ...options, executionId: activeId } });
+    KernelGuard({ type: "APPLY_POWERUPS", payload: { executionId: activeId } });
+    KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
+    KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
     
     await ReportEngineKernel.finalizeExport("WORD", activeId);
     await ReportEngineKernel.finalizeExport("PDF", activeId);
