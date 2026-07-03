@@ -518,6 +518,7 @@ export function PhotoAlbum({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
+  const [reportMachineState, setReportMachineState] = useState<"IDLE" | "COMPLETE">("IDLE");
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
@@ -1069,6 +1070,7 @@ const hasMinimumPhotos =
 
         setAiProfile(finalMarkdown);
         setEditableProfile(finalMarkdown);
+        setReportMachineState("IDLE");
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
 
 
@@ -1367,6 +1369,7 @@ const hasMinimumPhotos =
         throw new Error("STATE_MACHINE_INCOMPLETE");
       }
 
+      setReportMachineState("COMPLETE");
       setHasSavedAnalysis(true);
       window.alert("¡Dictamen Oficial generado, exportado y guardado con éxito!");
     } catch (err) {
@@ -3217,7 +3220,7 @@ const hasMinimumPhotos =
       </div>
     
       {/* SECCIÓN PRINCIPAL: EDICIÓN Y EXPORTACIÓN DEL DICTAMEN OFICIAL */}
-      {editableProfile && (
+      {editableProfile && reportMachineState === "COMPLETE" && (
         <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-4 mt-6">
           <header className="space-y-1">
             <div className="flex items-center justify-between gap-3 flex-wrap">

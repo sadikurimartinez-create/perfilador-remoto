@@ -297,7 +297,8 @@ export type ReportEvent =
   | "BUILD_LAYOUT"
   | "VALIDATE"
   | "EXPORT_PDF"
-  | "EXPORT_WORD";
+  | "EXPORT_WORD"
+  | "COMPLETE_PAYLOAD";
 
 export type PowerUp = {
   id: string;
@@ -305,6 +306,22 @@ export type PowerUp = {
   metadata: Record<string, any>;
   appliedAt: number;
 };
+
+export type StateSnapshot = {
+  state: ReportState;
+  payloadHash: string;
+  powerupsHash: string;
+  layoutHash: string;
+  timestamp: number;
+};
+
+function simpleHash(str: string): string {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 33) ^ str.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16);
+}
 
 function deepFreeze(obj: any): any {
   if (obj === null || typeof obj !== 'object') {
@@ -320,23 +337,84 @@ function deepFreeze(obj: any): any {
   return obj;
 }
 
+function isValidTransition(state: ReportState, eventType: string): boolean {
+  switch (state) {
+    case "IDLE":
+      return eventType === "INIT" || eventType === "COLLECT_DATA";
+    case "INPUT_COLLECTED":
+      return eventType === "INIT" || eventType === "LOCK_PAYLOAD";
+    case "PAYLOAD_LOCKED":
+      return eventType === "INIT" || eventType === "APPLY_POWERUPS";
+    case "POWERUPS_DEDUPED":
+      return eventType === "INIT" || eventType === "BUILD_LAYOUT";
+    case "LAYOUT_COMPUTED":
+      return eventType === "INIT" || eventType === "VALIDATE";
+    case "VALIDATED":
+      return eventType === "INIT" || eventType === "EXPORT_PDF" || eventType === "EXPORT_WORD";
+    case "EXPORTING":
+      return eventType === "INIT" || eventType === "EXPORT_PDF" || eventType === "EXPORT_WORD" || eventType === "COMPLETE_PAYLOAD";
+    case "COMPLETE":
+      return eventType === "INIT";
+  }
+  return false;
+}
+
+function gate(eventType: string, state: ReportState) {
+  if (!isValidTransition(state, eventType)) {
+    throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
+  }
+}
+
 export class ReportEngineStateMachine {
   private state: ReportState = "IDLE";
   private context: any = {};
+  private snapshots: StateSnapshot[] = [];
 
   getState(): ReportState {
     return this.state;
   }
 
+  private takeSnapshot() {
+    const payloadStr = this.context.content || "";
+    const powerupsStr = JSON.stringify(this.context.powerups || []);
+    const layoutStr = JSON.stringify(this.context.briefing || {});
+
+    this.snapshots.push({
+      state: this.state,
+      payloadHash: simpleHash(payloadStr),
+      powerupsHash: simpleHash(powerupsStr),
+      layoutHash: simpleHash(layoutStr),
+      timestamp: Date.now()
+    });
+  }
+
+  getSnapshots(): StateSnapshot[] {
+    return this.snapshots;
+  }
+
   transition(event: ReportEvent, payload?: any) {
+    // 🧱 Enforce state transitions through the Gatekeeper Firewall
+    gate(event, this.state);
+
+    if (event === "INIT") {
+      this.state = "IDLE";
+      this.context = {};
+      this.snapshots = [];
+      this.takeSnapshot();
+      return;
+    }
+
     switch (this.state) {
       case "IDLE":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         if (event === "COLLECT_DATA") {
+          if (payload.powerups) {
+            payload.powerups.forEach((pu: any) => {
+              if (typeof pu === "string") {
+                throw new Error("POWERUP_TYPE_VIOLATION");
+              }
+            });
+          }
+
           this.context.project = payload.project;
           this.context.content = payload.content;
           this.context.album = payload.album || [];
@@ -347,22 +425,19 @@ export class ReportEngineStateMachine {
           this.context.markAsPrinted = payload.markAsPrinted;
           this.context.sweeps = payload.sweeps || [];
           this.context.powerups = payload.powerups || [];
+          
           this.state = "INPUT_COLLECTED";
+          this.takeSnapshot();
           return;
         }
         break;
 
       case "INPUT_COLLECTED":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         if (event === "LOCK_PAYLOAD") {
           const content = this.context.content || "";
           
           // Limits check (max sections = 8, max chars = 14400)
-          const sectionsCount = (content.match(/^#+\s+/gm) || []).length;
+          const sectionsCount = (content.match(/^#+/gm) || []).length;
           if (sectionsCount > 8 || content.length > 14400) {
             throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
           }
@@ -435,27 +510,29 @@ export class ReportEngineStateMachine {
 
           this.context.content = cleanContent;
           
-          // Deep freeze to avoid UI mutations
+          // Deep freeze to avoid UI mutations (SINGLE SOURCE OF TRUTH)
           deepFreeze(this.context);
           
           this.state = "PAYLOAD_LOCKED";
+          this.takeSnapshot();
           return;
         }
         break;
 
       case "PAYLOAD_LOCKED":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         if (event === "APPLY_POWERUPS") {
           const rawPowerups = this.context.powerups || [];
+          
+          rawPowerups.forEach((pu: any) => {
+            if (typeof pu === "string") {
+              throw new Error("POWERUP_TYPE_VIOLATION");
+            }
+          });
+
           const deduplicated = rawPowerups.filter((item: any, index: number, self: any[]) =>
             self.findIndex((t: any) => (t.powerUpId || t.id) === (item.powerUpId || item.id)) === index
           );
           
-          // Map to structured PowerUp object
           this.context.powerups = deduplicated.map((p: any) => {
             let pType: "OCR" | "ST_DWITHIN" | "GROUNDING" | "SEMANTIC" = "SEMANTIC";
             const pid = p.powerUpId || p.id || "";
@@ -472,16 +549,12 @@ export class ReportEngineStateMachine {
           });
 
           this.state = "POWERUPS_DEDUPED";
+          this.takeSnapshot();
           return;
         }
         break;
 
       case "POWERUPS_DEDUPED":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         if (event === "BUILD_LAYOUT") {
           const visuals: any[] = [];
           if (this.context.mapSnapshots) {
@@ -534,18 +607,13 @@ export class ReportEngineStateMachine {
 
           this.context.briefing = briefing;
           this.state = "LAYOUT_COMPUTED";
+          this.takeSnapshot();
           return;
         }
         break;
 
       case "LAYOUT_COMPUTED":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         if (event === "VALIDATE") {
-          // Assertions validation gate
           const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
           if (previewLayer) {
             throw new Error("ASSERT_FAILED: Preview layer exists");
@@ -568,38 +636,28 @@ export class ReportEngineStateMachine {
           }
 
           this.state = "VALIDATED";
+          this.takeSnapshot();
           return;
         }
         break;
 
       case "VALIDATED":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         if (event === "EXPORT_PDF" || event === "EXPORT_WORD") {
           this.state = "EXPORTING";
+          this.takeSnapshot();
           return;
         }
         break;
 
       case "EXPORTING":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
+        if (event === "COMPLETE_PAYLOAD") {
+          this.state = "COMPLETE";
+          this.takeSnapshot();
           return;
         }
-        this.state = "COMPLETE";
-        return;
         break;
 
       case "COMPLETE":
-        if (event === "INIT") {
-          this.state = "IDLE";
-          this.context = {};
-          return;
-        }
         break;
     }
 
@@ -608,7 +666,7 @@ export class ReportEngineStateMachine {
 
   async finalizeExport(format: "PDF" | "WORD") {
     if (this.state !== "VALIDATED") {
-      throw new Error(`ASSERT_FAILED: Cannot export in state ${this.state}. Must be VALIDATED.`);
+      throw new Error("EXPORT_BLOCKED_INVALID_STATE");
     }
 
     this.transition(format === "PDF" ? "EXPORT_PDF" : "EXPORT_WORD");
@@ -652,9 +710,10 @@ export class ReportEngineStateMachine {
         );
       }
 
-      this.transition("EXPORT_PDF"); // Transitions EXPORTING -> COMPLETE
+      this.transition("COMPLETE_PAYLOAD");
     } catch (err) {
       this.state = "IDLE";
+      this.takeSnapshot();
       throw err;
     }
   }
