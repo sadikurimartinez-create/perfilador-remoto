@@ -192,7 +192,7 @@ function sanitizeReportContent(content: string): string {
 
 function assertDocxLayoutWithinLimit(pageEstimate: number) {
   if (pageEstimate > 12) {
-    throw new Error("REPORT_OVERFLOW_BLOCKED");
+    throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
   }
 }
 

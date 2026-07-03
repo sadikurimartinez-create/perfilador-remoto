@@ -279,6 +279,391 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
   doc.save(`Dictamen_Oficial_${briefing.fileNumber}.pdf`);
 }
 
+export type ReportState =
+  | "IDLE"
+  | "INPUT_COLLECTED"
+  | "PAYLOAD_LOCKED"
+  | "POWERUPS_DEDUPED"
+  | "LAYOUT_COMPUTED"
+  | "VALIDATED"
+  | "EXPORTING"
+  | "COMPLETE";
+
+export type ReportEvent =
+  | "INIT"
+  | "COLLECT_DATA"
+  | "LOCK_PAYLOAD"
+  | "APPLY_POWERUPS"
+  | "BUILD_LAYOUT"
+  | "VALIDATE"
+  | "EXPORT_PDF"
+  | "EXPORT_WORD";
+
+export type PowerUp = {
+  id: string;
+  type: "OCR" | "ST_DWITHIN" | "GROUNDING" | "SEMANTIC";
+  metadata: Record<string, any>;
+  appliedAt: number;
+};
+
+function deepFreeze(obj: any): any {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  Object.freeze(obj);
+  Object.getOwnPropertyNames(obj).forEach((prop) => {
+    const value = obj[prop];
+    if (value !== null && (typeof value === 'object' || typeof value === 'function') && !Object.isFrozen(value)) {
+      deepFreeze(value);
+    }
+  });
+  return obj;
+}
+
+export class ReportEngineStateMachine {
+  private state: ReportState = "IDLE";
+  private context: any = {};
+
+  getState(): ReportState {
+    return this.state;
+  }
+
+  transition(event: ReportEvent, payload?: any) {
+    switch (this.state) {
+      case "IDLE":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        if (event === "COLLECT_DATA") {
+          this.context.project = payload.project;
+          this.context.content = payload.content;
+          this.context.album = payload.album || [];
+          this.context.mapSnapshots = payload.mapSnapshots || [];
+          this.context.riskLevel = payload.riskLevel;
+          this.context.reportSummary = payload.reportSummary;
+          this.context.user = payload.user;
+          this.context.markAsPrinted = payload.markAsPrinted;
+          this.context.sweeps = payload.sweeps || [];
+          this.context.powerups = payload.powerups || [];
+          this.state = "INPUT_COLLECTED";
+          return;
+        }
+        break;
+
+      case "INPUT_COLLECTED":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        if (event === "LOCK_PAYLOAD") {
+          const content = this.context.content || "";
+          
+          // Limits check (max sections = 8, max chars = 14400)
+          const sectionsCount = (content.match(/^#+\s+/gm) || []).length;
+          if (sectionsCount > 8 || content.length > 14400) {
+            throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
+          }
+
+          // Sub-section character limit check (max 1800 per section)
+          const lines = content.split("\n");
+          let currentSectionTitle = "General";
+          const sectionsMap = new Map<string, string[]>();
+          sectionsMap.set(currentSectionTitle, []);
+          for (const line of lines) {
+            if (line.trim().startsWith("#")) {
+              currentSectionTitle = line.trim();
+              if (!sectionsMap.has(currentSectionTitle)) {
+                sectionsMap.set(currentSectionTitle, []);
+              }
+            }
+            sectionsMap.get(currentSectionTitle)!.push(line);
+          }
+          const activeSections = Array.from(sectionsMap.entries()).filter(([_, contentLines]) => {
+            return contentLines.join("").trim().length > 0;
+          });
+          for (const [title, contentLines] of activeSections) {
+            const sectionLength = contentLines.join("\n").length;
+            if (sectionLength > 1800) {
+              throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
+            }
+          }
+
+          // Normalize/sanitize duplicate lines
+          const cleanLines: string[] = [];
+          const seen = new Set<string>();
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed && (trimmed.startsWith("#") || trimmed.length > 20)) {
+              if (seen.has(trimmed)) {
+                continue;
+              }
+              seen.add(trimmed);
+            }
+            cleanLines.push(line);
+          }
+          let cleanContent = cleanLines.join("\n");
+
+          // Purgar texto técnico de PowerUps
+          const technicalTexts = [
+            "Ejecuta OCR Avanzado y Extracción de Atributos Visuales.",
+            "Aplica Análisis de Diarización y Sentimiento.",
+            "Consulta de Proximidad ST_DWithin y Grounding Dinámico.",
+            "Activa Extracción de Entidades Salientes.",
+            "Despliega Búsqueda Semántica en Discovery Engine.",
+            "Ejecuta OCR Avanzado y Extracción de Atributos Visuales",
+            "Aplica Análisis de Diarización y Sentimiento",
+            "Consulta de Proximidad ST_DWithin y Grounding Dinámico",
+            "Activa Extracción de Entidades Salientes",
+            "Despliega Búsqueda Semántica en Discovery Engine"
+          ];
+          for (const tech of technicalTexts) {
+            cleanContent = cleanContent.split(tech).join("");
+          }
+
+          // Clean up "Resultados Puente Contextual" or "POWERUP APLICADO"
+          const finalLines = cleanContent.split("\n").filter(line => {
+            const lower = line.toLowerCase();
+            if (lower.includes("resultados puente contextual")) return false;
+            if (lower.includes("powerup aplicado")) return false;
+            if (lower.includes("puente contextual combinado")) return false;
+            return true;
+          });
+          cleanContent = finalLines.join("\n");
+
+          this.context.content = cleanContent;
+          
+          // Deep freeze to avoid UI mutations
+          deepFreeze(this.context);
+          
+          this.state = "PAYLOAD_LOCKED";
+          return;
+        }
+        break;
+
+      case "PAYLOAD_LOCKED":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        if (event === "APPLY_POWERUPS") {
+          const rawPowerups = this.context.powerups || [];
+          const deduplicated = rawPowerups.filter((item: any, index: number, self: any[]) =>
+            self.findIndex((t: any) => (t.powerUpId || t.id) === (item.powerUpId || item.id)) === index
+          );
+          
+          // Map to structured PowerUp object
+          this.context.powerups = deduplicated.map((p: any) => {
+            let pType: "OCR" | "ST_DWITHIN" | "GROUNDING" | "SEMANTIC" = "SEMANTIC";
+            const pid = p.powerUpId || p.id || "";
+            if (pid.toLowerCase().includes("imagen") || pid.toLowerCase().includes("ocr")) pType = "OCR";
+            else if (pid.toLowerCase().includes("ubicacion") || pid.toLowerCase().includes("dwithin")) pType = "ST_DWITHIN";
+            else if (pid.toLowerCase().includes("entidades") || pid.toLowerCase().includes("grounding")) pType = "GROUNDING";
+            
+            return {
+              id: pid,
+              type: pType,
+              metadata: p.metadata || p,
+              appliedAt: p.appliedAt || Date.now()
+            };
+          });
+
+          this.state = "POWERUPS_DEDUPED";
+          return;
+        }
+        break;
+
+      case "POWERUPS_DEDUPED":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        if (event === "BUILD_LAYOUT") {
+          const visuals: any[] = [];
+          if (this.context.mapSnapshots) {
+            this.context.mapSnapshots.forEach((snap: any, idx: number) => {
+              const isChart = snap.title.toLowerCase().includes("gráfica") || snap.title.toLowerCase().includes("grafica");
+              visuals.push({
+                id: `map-${idx}`,
+                type: isChart ? 'chart' : 'map',
+                title: snap.title,
+                dataUrl: snap.dataUrl,
+                caption: isChart 
+                  ? 'Modelado analítico y frecuencia delictiva registrada.'
+                  : 'Simbología geoespacial operativa sobre el polígono delimitado.'
+              });
+            });
+          }
+
+          if (this.context.album) {
+            this.context.album.forEach((photo: any, idx: number) => {
+              visuals.push({
+                id: photo.id,
+                type: 'photo',
+                title: photo.tipo || `Evidencia fotográfica ${idx + 1}`,
+                dataUrl: photo.previewUrl,
+                caption: photo.comentario || 'Evidencia de inspección de campo.',
+                riskLevel: photo.riskLevel || 'medio'
+              });
+            });
+          }
+
+          const briefing = buildIntelligenceBriefing(
+            {
+              projectId: this.context.project.id,
+              projectName: this.context.project.nombre || this.context.project.name || 'Expediente',
+              createdAt: new Date().toISOString(),
+              geometryType: this.context.project.geometryType || 'polygon',
+              objectives: [],
+              textNotes: [],
+              voiceNotes: [],
+              findings: this.context.project.findings || [],
+              conclusions: [],
+              recommendations: []
+            } as any,
+            visuals,
+            {
+              sweeps: this.context.sweeps || [],
+              reportSummary: this.context.reportSummary
+            }
+          );
+
+          this.context.briefing = briefing;
+          this.state = "LAYOUT_COMPUTED";
+          return;
+        }
+        break;
+
+      case "LAYOUT_COMPUTED":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        if (event === "VALIDATE") {
+          // Assertions validation gate
+          const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
+          if (previewLayer) {
+            throw new Error("ASSERT_FAILED: Preview layer exists");
+          }
+
+          const allStructured = this.context.powerups.every((p: any) =>
+            p.id && ["OCR", "ST_DWITHIN", "GROUNDING", "SEMANTIC"].includes(p.type)
+          );
+          if (!allStructured) {
+            throw new Error("ASSERT_FAILED: PowerUps are not properly structured");
+          }
+
+          if (this.context.briefing.pages.length > 12) {
+            throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
+          }
+
+          const wordButton = typeof document !== 'undefined' && document.getElementById("export-word-btn-ui");
+          if (wordButton) {
+            throw new Error("ASSERT_FAILED: UI export layer exists");
+          }
+
+          this.state = "VALIDATED";
+          return;
+        }
+        break;
+
+      case "VALIDATED":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        if (event === "EXPORT_PDF" || event === "EXPORT_WORD") {
+          this.state = "EXPORTING";
+          return;
+        }
+        break;
+
+      case "EXPORTING":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        this.state = "COMPLETE";
+        return;
+        break;
+
+      case "COMPLETE":
+        if (event === "INIT") {
+          this.state = "IDLE";
+          this.context = {};
+          return;
+        }
+        break;
+    }
+
+    throw new Error(`INVALID_TRANSITION: Cannot transition from ${this.state} using event ${event}`);
+  }
+
+  async finalizeExport(format: "PDF" | "WORD") {
+    if (this.state !== "VALIDATED") {
+      throw new Error(`ASSERT_FAILED: Cannot export in state ${this.state}. Must be VALIDATED.`);
+    }
+
+    this.transition(format === "PDF" ? "EXPORT_PDF" : "EXPORT_WORD");
+
+    try {
+      if (format === "PDF") {
+        await generatePdfProgrammatic(this.context.briefing);
+
+        if (this.context.user && this.context.project.id) {
+          const db = getDb();
+          await addDoc(collection(db, "analyses"), {
+            projectId: this.context.project.id,
+            content: this.context.content,
+            createdAt: Date.now(),
+            reportEngineOutput: true,
+            source: "ReportEngine.finalize",
+            title: "Dictamen Criminológico Ambiental Generado",
+            summary: this.context.reportSummary || "Dictamen oficial generado.",
+            createdBy: this.context.user.username,
+            createdById: this.context.user.id,
+            createdByRole: this.context.user.role,
+            attachedPhotos: this.context.album ? this.context.album.map((p: any) => p.previewUrl).filter(Boolean) : [],
+            powerups: this.context.powerups,
+          });
+
+          const projectRef = doc(db, "projects", this.context.project.id);
+          await updateDoc(projectRef, {
+            photoCount: this.context.album?.length || 0,
+          });
+        }
+      } else {
+        await exportToWord(
+          this.context.content,
+          this.context.project.nombre || this.context.project.name || 'Expediente',
+          this.context.album ? this.context.album.map((p: any) => ({ url: p.previewUrl, tipo: p.tipo, comentario: p.comentario })) : [],
+          this.context.riskLevel,
+          this.context.mapSnapshots,
+          this.context.scinceDemographics,
+          this.context.project.id,
+          this.context.reportSummary
+        );
+      }
+
+      this.transition("EXPORT_PDF"); // Transitions EXPORTING -> COMPLETE
+    } catch (err) {
+      this.state = "IDLE";
+      throw err;
+    }
+  }
+
+  getContext() {
+    return this.context;
+  }
+}
+
 export const ReportEngine = {
   collect(
     project: any, 
@@ -306,248 +691,25 @@ export const ReportEngine = {
       enforceSectionLimits?: boolean;
     }
   ): string {
-    let clean = content || "";
-
-    // 1. Remove duplicate lines/paragraphs if requested
-    if (options.removeDuplicates) {
-      const lines = clean.split("\n");
-      const uniqueLines: string[] = [];
-      const seen = new Set<string>();
-      for (const line of lines) {
-        const trimmed = line.trim();
-        // Check for duplicate headers or long duplicate paragraphs
-        if (trimmed && (trimmed.startsWith("#") || trimmed.length > 20)) {
-          if (seen.has(trimmed)) {
-            continue;
-          }
-          seen.add(trimmed);
-        }
-        uniqueLines.push(line);
-      }
-      clean = uniqueLines.join("\n");
-    }
-
-    // 2. Remove raw PowerUp text snippets if requested
-    if (options.removeRawPowerUps) {
-      const technicalTexts = [
-        "Ejecuta OCR Avanzado y Extracción de Atributos Visuales.",
-        "Aplica Análisis de Diarización y Sentimiento.",
-        "Consulta de Proximidad ST_DWithin y Grounding Dinámico.",
-        "Activa Extracción de Entidades Salientes.",
-        "Despliega Búsqueda Semántica en Discovery Engine.",
-        "Ejecuta OCR Avanzado y Extracción de Atributos Visuales",
-        "Aplica Análisis de Diarización y Sentimiento",
-        "Consulta de Proximidad ST_DWithin y Grounding Dinámico",
-        "Activa Extracción de Entidades Salientes",
-        "Despliega Búsqueda Semántica en Discovery Engine"
-      ];
-      for (const tech of technicalTexts) {
-        clean = clean.split(tech).join("");
-      }
-      
-      const lines = clean.split("\n");
-      const filteredLines = lines.filter(line => {
-        const lower = line.toLowerCase();
-        if (lower.includes("resultados puente contextual")) return false;
-        if (lower.includes("powerup aplicado")) return false;
-        if (lower.includes("puente contextual combinado")) return false;
-        return true;
-      });
-      clean = filteredLines.join("\n");
-    }
-
-    // 3. Enforce section limits (Hard Stop)
-    if (options.enforceSectionLimits) {
-      const lines = clean.split("\n");
-      let currentSectionTitle = "General";
-      const sectionsMap = new Map<string, string[]>();
-      sectionsMap.set(currentSectionTitle, []);
-
-      for (const line of lines) {
-        if (line.trim().startsWith("#")) {
-          currentSectionTitle = line.trim();
-          if (!sectionsMap.has(currentSectionTitle)) {
-            sectionsMap.set(currentSectionTitle, []);
-          }
-        }
-        sectionsMap.get(currentSectionTitle)!.push(line);
-      }
-
-      // Filter out empty sections
-      const activeSections = Array.from(sectionsMap.entries()).filter(([_, contentLines]) => {
-        return contentLines.join("").trim().length > 0;
-      });
-
-      if (activeSections.length > 8) {
-        throw new Error("REPORT_OVERFLOW_BLOCKED");
-      }
-
-      for (const [title, contentLines] of activeSections) {
-        const sectionLength = contentLines.join("\n").length;
-        if (sectionLength > 1800) {
-          throw new Error("REPORT_OVERFLOW_BLOCKED");
-        }
-      }
-    }
-
-    return clean;
+    const machine = new ReportEngineStateMachine();
+    machine.transition("COLLECT_DATA", { content });
+    machine.transition("LOCK_PAYLOAD");
+    return machine.getContext().content;
   },
 
   async finalize(options: FinalizeOptions) {
-    if (!options.content?.trim()) {
-      throw new Error("REPORT_ENGINE_EMPTY_OUTPUT");
-    }
-
-    const { 
-      project, 
-      content, 
-      album, 
-      mapSnapshots, 
-      riskLevel, 
-      reportSummary, 
-      user, 
-      markAsPrinted, 
-      scinceDemographics,
-      sweeps,
-      powerups
-    } = options;
-
-    // Normalize and clean content
-    const cleanContent = ReportEngine.normalize(content, {
-      removeDuplicates: true,
-      removeRawPowerUps: true,
-      enforceSectionLimits: true
-    });
-
-    // Deduplicate powerups by type or powerUpId
-    const rawPowerups = powerups || [];
-    const deduplicatedPowerups = rawPowerups.filter((item: any, index: number, self: any[]) =>
-      self.findIndex((t: any) => (t.powerUpId || t.type) === (item.powerUpId || item.type)) === index
-    );
-
-    // 1. RECOLECTAR Y NORMALIZAR VISUALES
-    const visuals: any[] = [];
+    const machine = new ReportEngineStateMachine();
+    machine.transition("COLLECT_DATA", options);
+    machine.transition("LOCK_PAYLOAD");
+    machine.transition("APPLY_POWERUPS");
+    machine.transition("BUILD_LAYOUT");
+    machine.transition("VALIDATE");
     
-    if (mapSnapshots) {
-      mapSnapshots.forEach((snap: any, idx: number) => {
-        const isChart = snap.title.toLowerCase().includes("gráfica") || snap.title.toLowerCase().includes("grafica");
-        visuals.push({
-          id: `map-${idx}`,
-          type: isChart ? 'chart' : 'map',
-          title: snap.title,
-          dataUrl: snap.dataUrl,
-          caption: isChart 
-            ? 'Modelado analítico y frecuencia delictiva registrada.'
-            : 'Simbología geoespacial operativa sobre el polígono delimitado.'
-        });
-      });
-    }
+    await machine.finalizeExport("WORD");
+    await machine.finalizeExport("PDF");
 
-    if (album) {
-      album.forEach((photo: any, idx: number) => {
-        visuals.push({
-          id: photo.id,
-          type: 'photo',
-          title: photo.tipo || `Evidencia fotográfica ${idx + 1}`,
-          dataUrl: photo.previewUrl,
-          caption: photo.comentario || 'Evidencia de inspección de campo.',
-          riskLevel: photo.riskLevel || 'medio'
-        });
-      });
-    }
-
-    // 2. ENVIAR A LAYOUT ENGINE v2 (Strict locks & Deduplications)
-    const briefing = buildIntelligenceBriefing(
-      {
-        projectId: project.id,
-        projectName: project.nombre || project.name || 'Expediente',
-        createdAt: new Date().toISOString(),
-        geometryType: project.geometryType || 'polygon',
-        objectives: [],
-        textNotes: [],
-        voiceNotes: [],
-        findings: project.findings || [],
-        conclusions: [],
-        recommendations: []
-      } as any,
-      visuals,
-      {
-        sweeps: sweeps || [],
-        reportSummary
-      }
-    );
-
-    // 📊 CONTROL FINAL DE CONSISTENCIA (Asserts)
-    
-    // Assert 1: noDuplicatePowerups === true
-    const hasDuplicatePowerups = rawPowerups.length !== deduplicatedPowerups.length;
-    if (hasDuplicatePowerups) {
-      throw new Error("ASSERT_FAILED: Duplicate powerups detected");
-    }
-
-    // Assert 2: noPreviewLayerExists === true
-    const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
-    if (previewLayer) {
-      throw new Error("ASSERT_FAILED: Preview layer offscreen DOM container exists");
-    }
-
-    // Assert 3: totalPages <= 12 (throws REPORT_OVERFLOW_BLOCKED)
-    if (briefing.pages.length > 12) {
-      throw new Error("REPORT_OVERFLOW_BLOCKED");
-    }
-
-    // Assert 4: wordPayload.validStructure === true
-    const isValidWordStructure = cleanContent && typeof cleanContent === "string" && cleanContent.trim().length > 0;
-    if (!isValidWordStructure) {
-      throw new Error("ASSERT_FAILED: Word payload invalid structure");
-    }
-
-    // 3. PERSISTIR EN FIRESTORE (Solo dictamen final verificado)
-    if (user && project.id) {
-      try {
-        const db = getDb();
-        await addDoc(collection(db, "analyses"), {
-          projectId: project.id,
-          content: cleanContent,
-          createdAt: Date.now(),
-          reportEngineOutput: true,
-          source: "ReportEngine.finalize",
-          title: "Dictamen Criminológico Ambiental Generado",
-          summary: reportSummary || "Dictamen oficial generado.",
-          createdBy: user.username,
-          createdById: user.id,
-          createdByRole: user.role,
-          attachedPhotos: album ? album.map((p: any) => p.previewUrl).filter(Boolean) : [],
-          powerups: deduplicatedPowerups,
-        });
-        
-        const projectRef = doc(db, "projects", project.id);
-        await updateDoc(projectRef, {
-          photoCount: album?.length || 0,
-        });
-      } catch (dbErr) {
-        console.error("[ReportEngine] Error persisting to Firestore:", dbErr);
-      }
-    }
-
-    // 4. EXPORTAR WORD (.docx)
-    await exportToWord(
-      cleanContent,
-      project.nombre || project.name || 'Expediente',
-      album ? album.map((p: any) => ({ url: p.previewUrl, tipo: p.tipo, comentario: p.comentario })) : [],
-      riskLevel,
-      mapSnapshots,
-      scinceDemographics,
-      project.id,
-      reportSummary
-    );
-
-    // 5. EXPORTAR PDF PROGRAMÁTICO (jsPDF sin DOM)
-    await generatePdfProgrammatic(briefing);
-
-    // Ejecutar callback final
-    if (markAsPrinted) {
-      await markAsPrinted();
+    if (options.markAsPrinted) {
+      options.markAsPrinted();
     }
 
     return {

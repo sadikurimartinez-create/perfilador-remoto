@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
-import { ReportEngine } from "@/lib/reportEngine";
+import { ReportEngine, ReportEngineStateMachine } from "@/lib/reportEngine";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
@@ -1328,7 +1328,11 @@ const hasMinimumPhotos =
         })
         .filter(Boolean);
 
-      await ReportEngine.finalize({
+      // Instantiate and run State Machine v2
+      const machine = new ReportEngineStateMachine();
+
+      // INIT -> COLLECT_DATA
+      machine.transition("COLLECT_DATA", {
         project,
         content,
         album: photosToExportData,
@@ -1343,13 +1347,33 @@ const hasMinimumPhotos =
         powerups: powerupsToExport,
       });
 
+      // LOCK_PAYLOAD
+      machine.transition("LOCK_PAYLOAD");
+
+      // APPLY_POWERUPS
+      machine.transition("APPLY_POWERUPS");
+
+      // BUILD_LAYOUT
+      machine.transition("BUILD_LAYOUT");
+
+      // VALIDATE
+      machine.transition("VALIDATE");
+
+      // EXPORT WORD & PDF
+      await machine.finalizeExport("WORD");
+      await machine.finalizeExport("PDF");
+
+      if (machine.getState() !== "COMPLETE") {
+        throw new Error("STATE_MACHINE_INCOMPLETE");
+      }
+
       setHasSavedAnalysis(true);
       window.alert("¡Dictamen Oficial generado, exportado y guardado con éxito!");
     } catch (err) {
       console.error("[PhotoAlbum] Error al finalizar y exportar el dictamen:", err);
       setError(
-        err instanceof Error && err.message === "REPORT_OVERFLOW_BLOCKED"
-          ? "BLOQUEO DE OVERFLOW: El informe excede los límites estrictos (máx. 1800 caracteres por sección, 8 secciones o 12 páginas). Por favor, simplifique el dictamen o desmarque anexos."
+        err instanceof Error && err.message === "STATE_MACHINE_OVERFLOW_BLOCKED"
+          ? "BLOQUEO DE STATE MACHINE: El informe excede los límites máximos permitidos (máx. 1800 caracteres por sección, 8 secciones, 14400 caracteres totales o 12 páginas). Simplifique el dictamen."
           : (err instanceof Error ? err.message : "No se pudo generar y exportar el informe.")
       );
     } finally {
