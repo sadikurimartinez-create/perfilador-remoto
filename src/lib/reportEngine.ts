@@ -449,13 +449,19 @@ export class ReportEngineKernelClass {
   }
 
   async dispatch(event: KernelEvent, payload?: any): Promise<void> {
+    console.log("[REPORT ENGINE KERNEL] ENTER dispatch:", event);
+    console.log("[STATE BEFORE]", this.state);
+    console.log("[EXECUTION ID]", this.executionId);
+
     // 🔒 1. SINGLE EXECUTION GUARANTEE
     if (this.locked && payload?.executionId && this.executionId !== payload.executionId) {
+      console.error("[REPORT ENGINE KERNEL] MULTI_EXECUTION_BLOCKED. Current Active:", this.executionId, "Requested:", payload.executionId);
       throw new Error("MULTI_EXECUTION_BLOCKED");
     }
 
     const valid = isValidTransition(this.state, event);
     if (!valid) {
+      console.error("[REPORT ENGINE KERNEL] INVALID_STATE_TRANSITION_BLOCKED. Current:", this.state, "Event:", event);
       throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
     }
 
@@ -714,14 +720,19 @@ export class ReportEngineKernelClass {
         const activeId = payload?.activeId;
         const format = payload?.format || "ALL";
 
+        console.log("[REPORT ENGINE KERNEL] EXPORT TRIGGERED. Format:", format, "activeId:", activeId);
+
         // 🔒 Triple Lock checks inside dispatch for EXECUTE_EXPORT
         if (this.state !== "VALIDATED") {
+          console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_INVALID_STATE. Current State:", this.state);
           throw new Error("EXPORT_BLOCKED_INVALID_STATE");
         }
         if (!this.locked) {
+          console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_KERNEL_UNLOCKED");
           throw new Error("EXPORT_BLOCKED_KERNEL_UNLOCKED");
         }
         if (this.executionId !== activeId) {
+          console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_EXECUTION_ID_MISMATCH. Active:", this.executionId, "Requested:", activeId);
           throw new Error("EXPORT_BLOCKED_EXECUTION_ID_MISMATCH");
         }
 
@@ -778,6 +789,7 @@ export class ReportEngineKernelClass {
           this.takeSnapshot();
           this.notify();
         } catch (err) {
+          console.error("[REPORT ENGINE KERNEL] EXPORT PIPELINE FAILURE:", err);
           this.exportStatus = "FAILED";
           this.locked = false;
           this.state = "IDLE";

@@ -1346,10 +1346,10 @@ const hasMinimumPhotos =
       const activeId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       // 1. INIT_KERNEL
-      KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
+      await KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
 
       // 2. LOCK_INPUT
-      KernelGuard({
+      await KernelGuard({
         type: "LOCK_INPUT",
         payload: {
           executionId: activeId,
@@ -1369,13 +1369,13 @@ const hasMinimumPhotos =
       });
 
       // 3. APPLY_POWERUPS
-      KernelGuard({ type: "APPLY_POWERUPS", payload: { executionId: activeId } });
+      await KernelGuard({ type: "APPLY_POWERUPS", payload: { executionId: activeId } });
 
       // 4. DERIVE_LAYOUT
-      KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
+      await KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
 
       // 5. VALIDATE_KERNEL
-      KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
+      await KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
 
       // 6. EXECUTE_EXPORT (WORD & PDF & Firestore - Sequential Auto-completing)
       await KernelGuard({
@@ -3276,6 +3276,40 @@ const hasMinimumPhotos =
                 className="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 px-6 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
               >
                 <span>⚡</span> {isSavingAnalysis ? "Procesando Dictamen..." : "Finalizar y Exportar Dictamen Oficial (Word + PDF)"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    console.log("[DEBUG] FORCE_EXPORT_TEST TRIGGERED");
+                    const activeId = `debug-exec-${Date.now()}`;
+                    await KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
+                    await KernelGuard({
+                      type: "LOCK_INPUT",
+                      payload: {
+                        executionId: activeId,
+                        project,
+                        content: editableProfile || "Contenido de prueba del dictamen",
+                        album: [],
+                        mapSnapshots: [],
+                        riskLevel: "bajo",
+                        reportSummary: "Resumen de prueba",
+                        user: { id: "debug", username: "debugger", role: "admin" }
+                      }
+                    });
+                    await KernelGuard({ type: "APPLY_POWERUPS", payload: { executionId: activeId } });
+                    await KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
+                    await KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
+                    await KernelGuard({ type: "EXECUTE_EXPORT", payload: { format: "ALL", activeId } });
+                    window.alert("¡FORCE EXPORT TEST EXECUTED SUCCESSFULLY!");
+                  } catch (e) {
+                    console.error("DEBUG EXPORT FAILURE:", e);
+                    window.alert(`FORCE EXPORT FAILURE: ${e instanceof Error ? e.message : String(e)}`);
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-700 hover:bg-red-600 px-4 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition active:scale-95 ml-2"
+              >
+                Force Export Test (Debug)
               </button>
             </div>
           </div>

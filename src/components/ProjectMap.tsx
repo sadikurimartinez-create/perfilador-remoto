@@ -105,9 +105,12 @@ const darkMapStyles = [
   },
 ];
 
+const GOOGLE_MAPS_LIBRARIES: any = ["places", "visualization", "drawing"];
+
 export function ProjectMap({
   geometryType,
   coordinates,
+  onUpdateCoordinates,
   album,
   project,
 }: ProjectMapProps) {
@@ -115,7 +118,7 @@ export function ProjectMap({
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
-    libraries: ["places", "visualization", "drawing"] as any,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
