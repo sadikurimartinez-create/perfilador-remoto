@@ -199,7 +199,6 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
          <div className="mt-1.5 mb-1.5">
            <PowerUpsModule
              onApplyPowerUp={(text) => {
-               setContext((prev) => (prev ? prev.trim() + " " : "") + text);
                setIsAudited(false);
              }}
              isReadOnly={isReadOnly}
@@ -807,46 +806,7 @@ const hasMinimumPhotos =
     await confirmAndGenerateProfile();
   };
 
-  const handleSaveAnalysis = async () => {
-    if (!editableProfile.trim() || !projectId) return;
-    setIsSavingAnalysis(true);
-    setError(null);
-    try {
-      if (onSaveAnalysisToCloud) {
-        // Versión robusta y rápida: se guarda siempre el texto del dictamen
-        // y no se bloquea el UI intentando subir fotos pesadas.
-        try {
-          await onSaveAnalysisToCloud(editableProfile, [], reportSummary, {
-            reportEngineOutput: true,
-            source: "ReportEngine.finalize",
-          });
-          setHasSavedAnalysis(true);
-        } catch (saveErr) {
-          console.error(
-            "[PhotoAlbum] Error guardando análisis en Firestore (solo texto):",
-            saveErr
-          );
-          setError(
-            saveErr instanceof Error
-              ? saveErr.message
-              : "No se pudo guardar el análisis en el expediente."
-          );
-          setHasSavedAnalysis(false);
-          return;
-        }
-      }
-    } catch (err) {
-      console.error("[PhotoAlbum] Error al guardar análisis:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo guardar el análisis en el expediente."
-      );
-      setHasSavedAnalysis(false);
-    } finally {
-      setIsSavingAnalysis(false);
-    }
-  };
+;
 
   const [isRetrievingAnalysisData, setIsRetrievingAnalysisData] = useState(false);
 
@@ -1111,23 +1071,7 @@ const hasMinimumPhotos =
         setEditableProfile(finalMarkdown);
         setProfileRiskLevel(data.meta?.riskLevel ?? null);
 
-        // Guardar automáticamente en el expediente
-        if (onSaveAnalysisToCloud) {
-          try {
-            await onSaveAnalysisToCloud(
-              finalMarkdown,
-              [],
-              data.meta?.summary || reportSummary || "Dictamen oficial autogenerado.",
-              {
-                reportEngineOutput: true,
-                source: "ReportEngine.finalize",
-              }
-            );
-            setHasSavedAnalysis(true);
-          } catch (e) {
-            console.error("Error auto-saving analysis:", e);
-          }
-        }
+
 
         // Generar resumen automático para la carátula
         try {
@@ -1373,6 +1317,17 @@ const hasMinimumPhotos =
         return s.status === "Integrado";
       });
 
+      const powerupsToExport = (documents || [])
+        .filter((d: any) => d.type === "powerup_execution")
+        .map((d: any) => {
+          try {
+            return JSON.parse(d.context);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+
       await ReportEngine.finalize({
         project,
         content,
@@ -1385,6 +1340,7 @@ const hasMinimumPhotos =
         user: { id: user?.id ? String(user.id) : "unknown", username: user?.username || "Usuario", role: user?.role || "USER" },
         markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
         sweeps: selectedSweeps,
+        powerups: powerupsToExport,
       });
 
       setHasSavedAnalysis(true);
@@ -1392,8 +1348,8 @@ const hasMinimumPhotos =
     } catch (err) {
       console.error("[PhotoAlbum] Error al finalizar y exportar el dictamen:", err);
       setError(
-        err instanceof Error && err.message === "LAYOUT_ENGINE_OVERFLOW"
-          ? "ERROR DE LAYOUT: El informe consolidado excede el límite estricto de 12 páginas. Por favor, desmarque anexos o acorte el texto."
+        err instanceof Error && err.message === "REPORT_OVERFLOW_BLOCKED"
+          ? "BLOQUEO DE OVERFLOW: El informe excede los límites estrictos (máx. 1800 caracteres por sección, 8 secciones o 12 páginas). Por favor, simplifique el dictamen o desmarque anexos."
           : (err instanceof Error ? err.message : "No se pudo generar y exportar el informe.")
       );
     } finally {
@@ -1616,12 +1572,9 @@ const hasMinimumPhotos =
                   {!isReadOnly && (
                     <div className="mt-1.5 mb-1.5">
                       <PowerUpsModule
-                        onApplyPowerUp={(text) =>
-                          updatePhotoMeta(p.id, {
-                            tipo: p.tipo,
-                            comentario: ((p.comentario || "").trim() + " " + text).trim(),
-                          })
-                        }
+                        onApplyPowerUp={(text) => {
+                          // PowerUps exist ONLY as structured metadata, not inline text
+                        }}
                         isReadOnly={isReadOnly}
                         insumoText={p.comentario || ""}
                         insumoType="photo"
@@ -1894,7 +1847,6 @@ const hasMinimumPhotos =
                 <div className="mt-2.5">
                   <PowerUpsModule
                     onApplyPowerUp={(text) => {
-                      setAnalysisContext((prev) => (prev ? prev.trim() + " " : "") + text);
                       setIsAnalysisContextAudited(false);
                     }}
                     isReadOnly={isReadOnly}
@@ -2961,7 +2913,6 @@ const hasMinimumPhotos =
                 <div className="mt-1.5">
                   <PowerUpsModule
                     onApplyPowerUp={(text) => {
-                      setDocContext((prev) => (prev ? prev.trim() + " " : "") + text);
                       setIsDocContextAudited(false);
                     }}
                     isReadOnly={isReadOnly}

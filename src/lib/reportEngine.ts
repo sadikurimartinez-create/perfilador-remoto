@@ -16,6 +16,7 @@ type FinalizeOptions = {
   user?: { id: string; username: string; role: string };
   markAsPrinted?: () => Promise<void> | void;
   sweeps?: any[];
+  powerups?: any[];
 };
 
 async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
@@ -297,6 +298,101 @@ export const ReportEngine = {
     };
   },
 
+  normalize(
+    content: string,
+    options: {
+      removeDuplicates?: boolean;
+      removeRawPowerUps?: boolean;
+      enforceSectionLimits?: boolean;
+    }
+  ): string {
+    let clean = content || "";
+
+    // 1. Remove duplicate lines/paragraphs if requested
+    if (options.removeDuplicates) {
+      const lines = clean.split("\n");
+      const uniqueLines: string[] = [];
+      const seen = new Set<string>();
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // Check for duplicate headers or long duplicate paragraphs
+        if (trimmed && (trimmed.startsWith("#") || trimmed.length > 20)) {
+          if (seen.has(trimmed)) {
+            continue;
+          }
+          seen.add(trimmed);
+        }
+        uniqueLines.push(line);
+      }
+      clean = uniqueLines.join("\n");
+    }
+
+    // 2. Remove raw PowerUp text snippets if requested
+    if (options.removeRawPowerUps) {
+      const technicalTexts = [
+        "Ejecuta OCR Avanzado y Extracción de Atributos Visuales.",
+        "Aplica Análisis de Diarización y Sentimiento.",
+        "Consulta de Proximidad ST_DWithin y Grounding Dinámico.",
+        "Activa Extracción de Entidades Salientes.",
+        "Despliega Búsqueda Semántica en Discovery Engine.",
+        "Ejecuta OCR Avanzado y Extracción de Atributos Visuales",
+        "Aplica Análisis de Diarización y Sentimiento",
+        "Consulta de Proximidad ST_DWithin y Grounding Dinámico",
+        "Activa Extracción de Entidades Salientes",
+        "Despliega Búsqueda Semántica en Discovery Engine"
+      ];
+      for (const tech of technicalTexts) {
+        clean = clean.split(tech).join("");
+      }
+      
+      const lines = clean.split("\n");
+      const filteredLines = lines.filter(line => {
+        const lower = line.toLowerCase();
+        if (lower.includes("resultados puente contextual")) return false;
+        if (lower.includes("powerup aplicado")) return false;
+        if (lower.includes("puente contextual combinado")) return false;
+        return true;
+      });
+      clean = filteredLines.join("\n");
+    }
+
+    // 3. Enforce section limits (Hard Stop)
+    if (options.enforceSectionLimits) {
+      const lines = clean.split("\n");
+      let currentSectionTitle = "General";
+      const sectionsMap = new Map<string, string[]>();
+      sectionsMap.set(currentSectionTitle, []);
+
+      for (const line of lines) {
+        if (line.trim().startsWith("#")) {
+          currentSectionTitle = line.trim();
+          if (!sectionsMap.has(currentSectionTitle)) {
+            sectionsMap.set(currentSectionTitle, []);
+          }
+        }
+        sectionsMap.get(currentSectionTitle)!.push(line);
+      }
+
+      // Filter out empty sections
+      const activeSections = Array.from(sectionsMap.entries()).filter(([_, contentLines]) => {
+        return contentLines.join("").trim().length > 0;
+      });
+
+      if (activeSections.length > 8) {
+        throw new Error("REPORT_OVERFLOW_BLOCKED");
+      }
+
+      for (const [title, contentLines] of activeSections) {
+        const sectionLength = contentLines.join("\n").length;
+        if (sectionLength > 1800) {
+          throw new Error("REPORT_OVERFLOW_BLOCKED");
+        }
+      }
+    }
+
+    return clean;
+  },
+
   async finalize(options: FinalizeOptions) {
     if (!options.content?.trim()) {
       throw new Error("REPORT_ENGINE_EMPTY_OUTPUT");
@@ -312,8 +408,22 @@ export const ReportEngine = {
       user, 
       markAsPrinted, 
       scinceDemographics,
-      sweeps
+      sweeps,
+      powerups
     } = options;
+
+    // Normalize and clean content
+    const cleanContent = ReportEngine.normalize(content, {
+      removeDuplicates: true,
+      removeRawPowerUps: true,
+      enforceSectionLimits: true
+    });
+
+    // Deduplicate powerups by type or powerUpId
+    const rawPowerups = powerups || [];
+    const deduplicatedPowerups = rawPowerups.filter((item: any, index: number, self: any[]) =>
+      self.findIndex((t: any) => (t.powerUpId || t.type) === (item.powerUpId || item.type)) === index
+    );
 
     // 1. RECOLECTAR Y NORMALIZAR VISUALES
     const visuals: any[] = [];
@@ -367,13 +477,38 @@ export const ReportEngine = {
       }
     );
 
+    // 📊 CONTROL FINAL DE CONSISTENCIA (Asserts)
+    
+    // Assert 1: noDuplicatePowerups === true
+    const hasDuplicatePowerups = rawPowerups.length !== deduplicatedPowerups.length;
+    if (hasDuplicatePowerups) {
+      throw new Error("ASSERT_FAILED: Duplicate powerups detected");
+    }
+
+    // Assert 2: noPreviewLayerExists === true
+    const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
+    if (previewLayer) {
+      throw new Error("ASSERT_FAILED: Preview layer offscreen DOM container exists");
+    }
+
+    // Assert 3: totalPages <= 12 (throws REPORT_OVERFLOW_BLOCKED)
+    if (briefing.pages.length > 12) {
+      throw new Error("REPORT_OVERFLOW_BLOCKED");
+    }
+
+    // Assert 4: wordPayload.validStructure === true
+    const isValidWordStructure = cleanContent && typeof cleanContent === "string" && cleanContent.trim().length > 0;
+    if (!isValidWordStructure) {
+      throw new Error("ASSERT_FAILED: Word payload invalid structure");
+    }
+
     // 3. PERSISTIR EN FIRESTORE (Solo dictamen final verificado)
     if (user && project.id) {
       try {
         const db = getDb();
         await addDoc(collection(db, "analyses"), {
           projectId: project.id,
-          content,
+          content: cleanContent,
           createdAt: Date.now(),
           reportEngineOutput: true,
           source: "ReportEngine.finalize",
@@ -383,6 +518,7 @@ export const ReportEngine = {
           createdById: user.id,
           createdByRole: user.role,
           attachedPhotos: album ? album.map((p: any) => p.previewUrl).filter(Boolean) : [],
+          powerups: deduplicatedPowerups,
         });
         
         const projectRef = doc(db, "projects", project.id);
@@ -396,7 +532,7 @@ export const ReportEngine = {
 
     // 4. EXPORTAR WORD (.docx)
     await exportToWord(
-      content,
+      cleanContent,
       project.nombre || project.name || 'Expediente',
       album ? album.map((p: any) => ({ url: p.previewUrl, tipo: p.tipo, comentario: p.comentario })) : [],
       riskLevel,
