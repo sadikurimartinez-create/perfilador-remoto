@@ -1319,99 +1319,73 @@ const hasMinimumPhotos =
     alert("Mapas capturados exitosamente para el dictamen oficial.");
   };
 
-  const handleExportToWord = async () => {
+  const handleFinalizeAndExport = async () => {
     const rawContent = editableProfile || aiProfile || (project as any)?.analysisContent;
     if (!rawContent) {
       setError("No hay contenido para exportar. Genere o guarde el dictamen primero.");
       return;
     }
+    setIsSavingAnalysis(true);
     setError(null);
     
-    const snapshotsToExport = await autoCaptureSnapshots();
-    const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
+    try {
+      const snapshotsToExport = await autoCaptureSnapshots();
+      const content = rawContent.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]");
 
-    const chartsSnaps = snapshotsToExport.filter((s) => {
-      const isChart = s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica");
-      if (!isChart) return false;
-      if (s.title.includes("1") && !selectedAnnexes.chartTemporal) return false;
-      if (s.title.includes("2") && !selectedAnnexes.chartTopology) return false;
-      if (s.title.includes("3") && !selectedAnnexes.chartEnvironmental) return false;
-      if (s.title.includes("4") && !selectedAnnexes.chartPrediction) return false;
-      return true;
-    });
+      const chartsSnaps = snapshotsToExport.filter((s) => {
+        const isChart = s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica");
+        if (!isChart) return false;
+        if (s.title.includes("1") && !selectedAnnexes.chartTemporal) return false;
+        if (s.title.includes("2") && !selectedAnnexes.chartTopology) return false;
+        if (s.title.includes("3") && !selectedAnnexes.chartEnvironmental) return false;
+        if (s.title.includes("4") && !selectedAnnexes.chartPrediction) return false;
+        return true;
+      });
 
-    const mapsSnaps = snapshotsToExport.filter((s) => {
-      const isChart = s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica");
-      if (isChart) return false;
-      if (s.title.toLowerCase().includes("densidad") && !selectedAnnexes.mapDensity) return false;
-      if (s.title.toLowerCase().includes("corredores") && !selectedAnnexes.mapMobility) return false;
-      if (s.title.toLowerCase().includes("atracción") && !selectedAnnexes.mapAttractors) return false;
-      if (s.title.toLowerCase().includes("proyección") && !selectedAnnexes.mapPredictive) return false;
-      return true;
-    });
+      const mapsSnaps = snapshotsToExport.filter((s) => {
+        const isChart = s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica");
+        if (isChart) return false;
+        if (s.title.toLowerCase().includes("densidad") && !selectedAnnexes.mapDensity) return false;
+        if (s.title.toLowerCase().includes("corredores") && !selectedAnnexes.mapMobility) return false;
+        if (s.title.toLowerCase().includes("atracción") && !selectedAnnexes.mapAttractors) return false;
+        if (s.title.toLowerCase().includes("proyección") && !selectedAnnexes.mapPredictive) return false;
+        return true;
+      });
 
-    const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps].slice(0, 8);
+      const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps].slice(0, 8);
+      const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
 
-    const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
-    const photosToExportData: { url: string; tipo: string; comentario: string }[] = [];
-
-    for (const p of photosToExport) {
-      photosToExportData.push({
-        url: p.previewUrl as string,
+      const photosToExportData = photosToExport.map((p) => ({
+        id: p.id,
+        previewUrl: p.previewUrl,
         tipo: p.tipo || "Evidencia Táctica",
         comentario: p.comentario || "Sin comentario."
-      });
-    }
-
-    try {
-      const estimatedPages =
-        2 +
-        Math.ceil(sortedSnapshotsToExport.length / 2) +
-        Math.ceil(photosToExportData.length / 2) +
-        Math.ceil((content || "").length / 3200);
-      if (estimatedPages > 12) {
-        throw new Error("LAYOUT_OVERFLOW_DETECTED");
-      }
+      }));
 
       await ReportEngine.finalize({
+        project,
         content,
-        projectName: "Dictamen_criminologico_ambiental",
-        attachedPhotos: photosToExportData.length > 0 ? photosToExportData : undefined,
+        album: photosToExportData,
+        mapSnapshots: sortedSnapshotsToExport,
         riskLevel: profileRiskLevel ?? undefined,
-        mapSnapshots: sortedSnapshotsToExport.length > 0 ? sortedSnapshotsToExport : undefined,
         scinceDemographics: (analysisResult as any)?.scinceDemographics,
-        reportNumber: reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO",
+        reportNumber: reportNumber || (project?.id ? String(project.id) : "") || "DICTAMEN_CRIMINOLOGICO",
         reportSummary,
+        user: { id: user?.id ? String(user.id) : "unknown", username: user?.username || "Usuario", role: user?.role || "USER" },
         markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
       });
+
+      setHasSavedAnalysis(true);
+      window.alert("¡Dictamen Oficial generado, exportado y guardado con éxito!");
     } catch (err) {
-      console.error("[PhotoAlbum] Error al exportar a Word:", err);
+      console.error("[PhotoAlbum] Error al finalizar y exportar el dictamen:", err);
       setError(
-        err instanceof Error ? err.message : "No se pudo generar el documento Word."
+        err instanceof Error && err.message === "LAYOUT_ENGINE_OVERFLOW"
+          ? "ERROR DE LAYOUT: El informe consolidado excede el límite estricto de 12 páginas. Por favor, desmarque anexos o acorte el texto."
+          : (err instanceof Error ? err.message : "No se pudo generar y exportar el informe.")
       );
-    }
-  };
-
-  const handleExportToPDF = async () => {
-    await autoCaptureSnapshots();
-
-    const element = document.getElementById("official-pdf-content");
-    if (!element) {
-      setError("No se pudo encontrar el contenedor del PDF.");
-      return;
-    }
-
-    try {
-      const safeName = project?.nombre?.replace(/\s+/g, "_") || "Dictamen";
-      await ReportEngine.finalizePdf({
-        element,
-        filename: `Dictamen_Criminologico_${safeName}.pdf`,
-        markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
-        maxPages: 12,
-      });
-    } catch (err) {
-      console.error("Error al exportar a PDF:", err);
-      setError("Error al exportar. Compruebe la conexión o instale html2pdf.js");
+    } finally {
+      setIsSavingAnalysis(false);
     }
   };
 
@@ -3289,27 +3263,11 @@ const hasMinimumPhotos =
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleSaveAnalysis}
+                onClick={handleFinalizeAndExport}
                 disabled={isSavingAnalysis}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-emerald-500 transition disabled:opacity-50 active:scale-95"
+                className="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 px-6 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
               >
-                <span>💾</span> {isSavingAnalysis ? "Guardando..." : "Guardar en Expediente"}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleExportToWord}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-500 transition active:scale-95"
-              >
-                <span>📥</span> Finalizar y exportar Word
-              </button>
-              <button
-                type="button"
-                onClick={handleExportToPDF}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-700 px-4 py-2 text-xs font-bold text-slate-100 shadow hover:bg-slate-600 transition active:scale-95"
-              >
-                <span>📥</span> Exportar a PDF (.pdf)
+                <span>⚡</span> {isSavingAnalysis ? "Procesando Dictamen..." : "Finalizar y Exportar Dictamen Oficial (Word + PDF)"}
               </button>
             </div>
           </div>
@@ -3742,246 +3700,7 @@ const hasMinimumPhotos =
         </div>
       )}
     </section>
-      {/* CONTENEDOR OCULTO PARA EL PDF OFICIAL (A4 ~ 794px) */}
-      <div className="absolute left-[-9999px] top-[-9999px]">
-        <div id="official-pdf-content" className="w-[794px] bg-white text-[#222222] font-sans">
-          {/* PÁGINA 1: CARÁTULA */}
-          <div className="html2pdf__page-break w-[794px] h-[1123px] flex flex-col p-10 bg-white" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
-            <div className="flex justify-between items-center border-b-2 border-[#0D2B52] pb-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-24 object-contain" />
-              <div className="flex-1 text-center px-4">
-                <h1 className="text-2xl font-black text-[#0D2B52] tracking-widest uppercase">DICTAMEN TÁCTICO</h1>
-                <h2 className="text-base font-bold text-slate-700 mt-2">PERFIL CRIMINOLÓGICO AMBIENTAL</h2>
-                <h3 className="text-xs font-semibold text-slate-500 mt-1 uppercase">Centro de Estudios y Política Criminal</h3>
-              </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logos/logo-ssp.png" alt="SSP" className="h-24 object-contain" />
-            </div>
-
-            <div className="flex-1 flex flex-col justify-center items-center text-center px-8">
-              <div className="bg-[#0D2B52] text-white py-6 px-10 rounded-t-lg w-full shadow-md">
-                <h1 className="text-3xl font-black tracking-widest uppercase leading-tight">{project?.nombre || "Análisis de Polígono"}</h1>
-              </div>
-              <div className="bg-slate-50 border-x border-b border-slate-300 py-8 px-10 rounded-b-lg w-full shadow-md">
-                <div className="grid grid-cols-2 gap-6 text-left">
-                  <div className="flex flex-col border-b border-slate-300 pb-3">
-                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Número de Expediente</span>
-                    <span className="font-mono text-slate-800 text-sm mt-1">{reportNumber || project?.id || "DICTAMEN_CRIMINOLOGICO"}</span>
-                  </div>
-                  <div className="flex flex-col border-b border-slate-300 pb-3">
-                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Fecha de Emisión</span>
-                    <span className="font-mono text-slate-800 text-sm mt-1">{new Date().toLocaleDateString("es-MX", { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                  </div>
-                  <div className="flex flex-col border-b border-slate-300 pb-3">
-                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Geometría</span>
-                    <span className="font-mono text-slate-800 text-sm mt-1 uppercase">{project?.geometryType || "NO DEFINIDA"}</span>
-                  </div>
-                  <div className="flex flex-col border-b border-slate-300 pb-3">
-                    <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Radio de Cobertura</span>
-                    <span className="font-mono text-slate-800 text-sm mt-1">{analysisRadius} metros</span>
-                  </div>
-                </div>
-                
-                <div className="mt-8 flex flex-col border border-slate-400 bg-slate-100 rounded-lg p-5 text-left shadow-sm">
-                  <span className="font-bold text-[#0D2B52] uppercase text-[11px] tracking-wider mb-2 border-b border-slate-300 pb-1">Síntesis Ejecutiva del Dictamen</span>
-                  <span className="text-slate-800 text-[13px] leading-relaxed font-medium">
-                    {reportSummary || "Dictamen táctico del perfil criminológico ambiental enfocado en el análisis de vulnerabilidades, factores de riesgo y movilidad criminal."}
-                  </span>
-                </div>
-
-                <div className="mt-6 flex flex-col items-center justify-center p-4 border-2 border-slate-300 rounded-lg bg-white">
-                  <span className="font-bold text-slate-600 uppercase text-xs mb-2 tracking-widest">Nivel de Riesgo (IA)</span>
-                  <span className={`text-2xl font-black uppercase px-6 py-2 rounded shadow-sm ${profileRiskLevel === 'alto' ? 'bg-red-600 text-white' : profileRiskLevel === 'medio' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>{profileRiskLevel || "PENDIENTE"}</span>
-                </div>
-                </div>
-              </div>
-
-            <div className="text-center mt-auto border-t border-slate-300 pt-4">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documento Estratégico Generado por el Perfilador Remoto CEIPOL</p>
-              <p className="text-[10px] text-slate-400">Documento Confidencial - Uso Exclusivo</p>
-            </div>
-          </div>
-
-          {/* PÁGINAS DE DICTAMEN TEXTUAL */}
-          <div className="html2pdf__page-break w-[794px] min-h-[1123px] flex flex-col p-10 bg-white relative" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
-            <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6">
-               <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">DICTAMEN TÁCTICO</h2>
-               <span className="text-[10px] font-bold text-slate-400 uppercase">{project?.nombre}</span>
-            </div>
-            
-            <div className="text-[11.5px] text-[#333333] whitespace-pre-wrap leading-relaxed text-justify flex-1">
-              {(editableProfile || aiProfile || "").replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, "[$1]")}
-            </div>
-
-            <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2">
-              <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
-              <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
-              <span className="text-[9px] text-slate-400">Dictamen Estratégico</span>
-            </div>
-          </div>
-
-          {/* ANEXOS DE MAPAS Y GRÁFICAS */}
-          {(() => {
-            const chartsSnaps = mapSnapshots.filter(s => {
-              if (!s.title.toLowerCase().includes("gráfica") && !s.title.toLowerCase().includes("grafica")) return false;
-              if (s.title.includes("1") && !selectedAnnexes.chartTemporal) return false;
-              if (s.title.includes("2") && !selectedAnnexes.chartTopology) return false;
-              if (s.title.includes("3") && !selectedAnnexes.chartEnvironmental) return false;
-              if (s.title.includes("4") && !selectedAnnexes.chartPrediction) return false;
-              return true;
-            });
-            const mapsSnaps = mapSnapshots.filter(s => {
-              if (s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica")) return false;
-              if (s.title.toLowerCase().includes("densidad") && !selectedAnnexes.mapDensity) return false;
-              if (s.title.toLowerCase().includes("corredores") && !selectedAnnexes.mapMobility) return false;
-              if (s.title.toLowerCase().includes("atracción") && !selectedAnnexes.mapAttractors) return false;
-              if (s.title.toLowerCase().includes("proyección") && !selectedAnnexes.mapPredictive) return false;
-              return true;
-            });
-
-            const renderAnnexPage = (title: string, items: { title: string; dataUrl: string }[]) => {
-              if (items.length === 0) return null;
-              const chunks: Array<{ title: string; dataUrl: string }[]> = [];
-              for (let i = 0; i < items.length; i += 2) chunks.push(items.slice(i, i + 2));
-
-              return chunks.map((chunk: { title: string; dataUrl: string }[], cIdx: number) => (
-                <div key={`${title}-chunk-${cIdx}`} className="html2pdf__page-break w-[794px] h-[1123px] flex flex-col p-10 bg-white relative overflow-hidden" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
-                  <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
-                     <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">{title.toUpperCase()}</h2>
-                     <span className="text-[10px] font-bold text-slate-400 uppercase">CEIPOL GEOINT</span>
-                  </div>
-                  
-                  <div className="flex flex-col gap-8 flex-1">
-                    {chunk.map((snap: { title: string; dataUrl: string }, i: number) => (
-                      <div key={i} className="border border-slate-300 p-4 rounded-lg flex flex-col bg-slate-50 overflow-hidden h-[420px]">
-                        <h4 className="text-sm font-bold text-white bg-[#0D2B52] px-3 py-1.5 rounded-t-md text-left uppercase tracking-wide shrink-0">
-                          {snap.title}
-                        </h4>
-                        <div className="flex-1 relative bg-white border border-slate-200 flex items-center justify-center p-2 rounded-b-md">
-                          <img src={snap.dataUrl} className="max-w-full max-h-full object-contain" alt={snap.title} />
-                        </div>
-                        <div className="mt-2 pt-2 shrink-0">
-                          <p className="text-[9px] text-slate-500 font-bold uppercase">Fuente: Plataforma de Geointeligencia SAI | CEIPOL</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2 shrink-0">
-                    <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
-                    <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ));
-            };
-
-            const selectedSweeps = (project?.sweeps || []).filter(s => {
-              if (s.engine.toLowerCase().includes("denue") && !selectedAnnexes.sweepDenue) return false;
-              if (s.engine.toLowerCase().includes("incidencia") && !selectedAnnexes.sweepIncidencia) return false;
-              if (s.engine.toLowerCase().includes("vehicular") && !selectedAnnexes.sweepRepuve) return false;
-              if (s.engine.toLowerCase().includes("desaparecidos") && !selectedAnnexes.sweepRnpdno) return false;
-              if (s.engine.toLowerCase().includes("multimodal") && !selectedAnnexes.sweepMultimodal) return false;
-              if (s.engine.toLowerCase().includes("cifa") && !selectedAnnexes.sweepCifa) return false;
-              return s.status === "Integrado";
-            });
-
-            return (
-              <>
-                {renderAnnexPage("Atlas Cartográfico", mapsSnaps)}
-                {renderAnnexPage("Modelos Analíticos", chartsSnaps)}
-                {selectedSweeps.length > 0 && (
-                  <div className="html2pdf__page-break w-[794px] min-h-[1123px] flex flex-col p-10 bg-white relative text-left text-slate-900" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
-                    <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
-                       <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">ANEXO: BARRIDOS DE INTELIGENCIA</h2>
-                       <span className="text-[10px] font-bold text-slate-400 uppercase">SAI | CEIPOL</span>
-                    </div>
-                    
-                    <div className="space-y-6 flex-1 text-[11px] text-[#333333]">
-                      {selectedSweeps.map((sweep) => (
-                        <div key={sweep.id} className="border border-slate-350 p-4 rounded-lg bg-slate-50 space-y-2">
-                          <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                            <span className="font-extrabold text-[#0D2B52] text-xs uppercase">{sweep.engine}</span>
-                            <span className="text-[9px] text-slate-500 font-mono">ID: {sweep.id} | Relevancia: {sweep.relevance}</span>
-                          </div>
-                          <p className="leading-relaxed font-mono whitespace-pre-wrap text-[10px] bg-white p-2.5 rounded border border-slate-200 text-slate-800">
-                            {sweep.data}
-                          </p>
-                          {sweep.context && (
-                            <p className="leading-relaxed"><strong className="text-slate-600">Comentarios de Contexto:</strong> {sweep.context}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2 shrink-0">
-                      <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
-                      <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-
-          {/* ANEXO FOTOGRÁFICO */}
-          {(() => {
-            const selectedPhotos = album.filter(p => selectedIds.includes(p.id));
-            if (selectedPhotos.length === 0) return null;
-
-            const photoChunks: Array<typeof album> = [];
-            for (let i = 0; i < selectedPhotos.length; i += 2) {
-              photoChunks.push(selectedPhotos.slice(i, i + 2));
-            }
-
-            return photoChunks.map((chunk, idx) => (
-              <div key={`photo-chunk-${idx}`} className="html2pdf__page-break w-[794px] h-[1123px] flex flex-col p-10 bg-white relative overflow-hidden" style={{ pageBreakBefore: 'always', pageBreakInside: 'avoid', breakBefore: 'page' }}>
-                <div className="flex justify-between items-end border-b-2 border-[#0D2B52] pb-2 mb-6 shrink-0">
-                   <h2 className="text-xl font-black text-[#0D2B52] uppercase tracking-wider">ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO</h2>
-                   <span className="text-[10px] font-bold text-slate-400 uppercase">INSPECCIÓN IN-SITU</span>
-                </div>
-                
-                <div className="flex flex-col gap-8 flex-1">
-                  {chunk.map((p, i) => (
-                    <div key={p.id} className="border border-slate-300 rounded-lg flex flex-row bg-slate-50 h-[420px] overflow-hidden">
-                      {/* Fotografía izquierda */}
-                    <div className="w-1/2 bg-black relative flex items-center justify-center p-1 overflow-hidden">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.previewUrl || ""} alt={`Evidencia ${p.tipo || ""}`} className="max-w-full max-h-full object-contain z-0" />
-                      <div className="absolute bottom-3 right-3 flex items-center justify-center pointer-events-none z-10 bg-black/60 px-3 py-1.5 rounded border border-white/20">
-                        <span className="text-white/90 font-bold text-[10px] select-none tracking-widest drop-shadow-md">
-                          SSPE-CEIPOL
-                        </span>
-                      </div>
-                      </div>
-                      {/* Texto derecha */}
-                      <div className="w-1/2 flex flex-col p-5 bg-white border-l border-slate-300">
-                        <h4 className="text-sm font-black text-white bg-[#1F4E79] px-3 py-1.5 rounded uppercase mb-4 shrink-0 shadow-sm">
-                          Evidencia {idx * 2 + i + 1} - {p.tipo || "Registro Táctico"}
-                        </h4>
-                        <div className="bg-slate-50 p-4 rounded border border-slate-200 flex-1 overflow-hidden">
-                          <p className="text-[11px] text-slate-700 leading-relaxed text-justify">
-                            {p.comentario || "Sin comentario analítico registrado."}
-                          </p>
-                        </div>
-                        <div className="mt-4 pt-2 border-t border-slate-200 shrink-0">
-                           <p className="text-[9px] text-slate-500 font-bold uppercase">Fuente: Trabajo de Campo | {new Date().toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                ))}
-                </div>
-
-                <div className="absolute bottom-10 left-10 right-10 flex justify-between items-center border-t border-slate-300 pt-2 shrink-0">
-                  <span className="text-[9px] font-bold text-slate-400">CEIPOL</span>
-                  <span className="text-[9px] text-slate-400">{new Date().toLocaleDateString()}</span>
-                </div>
-              </div>
-            ));
-          })()}
-        </div>
-      </div>
-
+      
       {/* MODAL DE EDICIÓN DE VENTANA */}
       {editingPhoto && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm print:hidden">

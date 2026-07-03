@@ -192,7 +192,7 @@ function sanitizeReportContent(content: string): string {
 
 function assertDocxLayoutWithinLimit(pageEstimate: number) {
   if (pageEstimate > 12) {
-    throw new Error("LAYOUT_OVERFLOW_DETECTED");
+    throw new Error("LAYOUT_ENGINE_OVERFLOW");
   }
 }
 
