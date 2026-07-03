@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
-import { ReportEngine, ReportEngineStateMachine } from "@/lib/reportEngine";
+import { ReportEngine, ReportEngineKernel } from "@/lib/reportEngine";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
@@ -518,7 +518,7 @@ export function PhotoAlbum({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
-  const [reportMachineState, setReportMachineState] = useState<"IDLE" | "COMPLETE">("IDLE");
+  const [reportMachineState, setReportMachineState] = useState<"IDLE" | "TERMINATED">("IDLE");
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
@@ -574,6 +574,13 @@ export function PhotoAlbum({
   });
 
   const [sweepsComments, setSweepsComments] = useState("");
+
+  // 🔒 5. REACT RENDER ISOLATION LAYER
+  useEffect(() => {
+    if (ReportEngineKernel.isLocked()) {
+      console.warn("[ReportEngineKernel] Kernel is locked during render, isolating lifecycle.");
+    }
+  }, []);
 
   useEffect(() => {
     if (project) {
@@ -1330,11 +1337,14 @@ const hasMinimumPhotos =
         })
         .filter(Boolean);
 
-      // Instantiate and run State Machine v2
-      const machine = new ReportEngineStateMachine();
+      const activeId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // INIT -> COLLECT_DATA
-      machine.transition("COLLECT_DATA", {
+      // 1. INIT_KERNEL
+      ReportEngineKernel.dispatch("INIT_KERNEL", { executionId: activeId });
+
+      // 2. LOCK_INPUT
+      ReportEngineKernel.dispatch("LOCK_INPUT", {
+        executionId: activeId,
         project,
         content,
         album: photosToExportData,
@@ -1349,27 +1359,25 @@ const hasMinimumPhotos =
         powerups: powerupsToExport,
       });
 
-      // LOCK_PAYLOAD
-      machine.transition("LOCK_PAYLOAD");
+      // 3. APPLY_POWERUPS
+      ReportEngineKernel.dispatch("APPLY_POWERUPS", { executionId: activeId });
 
-      // APPLY_POWERUPS
-      machine.transition("APPLY_POWERUPS");
+      // 4. DERIVE_LAYOUT
+      ReportEngineKernel.dispatch("DERIVE_LAYOUT", { executionId: activeId });
 
-      // BUILD_LAYOUT
-      machine.transition("BUILD_LAYOUT");
+      // 5. VALIDATE_KERNEL
+      ReportEngineKernel.dispatch("VALIDATE_KERNEL", { executionId: activeId });
 
-      // VALIDATE
-      machine.transition("VALIDATE");
+      // 6. EXECUTE_EXPORT (WORD & PDF)
+      await ReportEngineKernel.finalizeExport("WORD", activeId);
+      await ReportEngineKernel.finalizeExport("PDF", activeId);
 
-      // EXPORT WORD & PDF
-      await machine.finalizeExport("WORD");
-      await machine.finalizeExport("PDF");
-
-      if (machine.getState() !== "COMPLETE") {
+      // Verify the final kernel state is TERMINATED
+      if (ReportEngineKernel.getState() !== "TERMINATED") {
         throw new Error("STATE_MACHINE_INCOMPLETE");
       }
 
-      setReportMachineState("COMPLETE");
+      setReportMachineState("TERMINATED");
       setHasSavedAnalysis(true);
       window.alert("¡Dictamen Oficial generado, exportado y guardado con éxito!");
     } catch (err) {
@@ -3220,7 +3228,7 @@ const hasMinimumPhotos =
       </div>
     
       {/* SECCIÓN PRINCIPAL: EDICIÓN Y EXPORTACIÓN DEL DICTAMEN OFICIAL */}
-      {editableProfile && reportMachineState === "COMPLETE" && (
+      {editableProfile && reportMachineState === "TERMINATED" && (
         <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-4 mt-6">
           <header className="space-y-1">
             <div className="flex items-center justify-between gap-3 flex-wrap">

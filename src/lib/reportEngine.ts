@@ -279,26 +279,24 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
   doc.save(`Dictamen_Oficial_${briefing.fileNumber}.pdf`);
 }
 
-export type ReportState =
+export type KernelState =
   | "IDLE"
-  | "INPUT_COLLECTED"
-  | "PAYLOAD_LOCKED"
+  | "INITIALIZED"
+  | "INPUT_LOCKED"
   | "POWERUPS_DEDUPED"
-  | "LAYOUT_COMPUTED"
+  | "LAYOUT_DERIVED"
   | "VALIDATED"
-  | "EXPORTING"
-  | "COMPLETE";
+  | "EXPORT_EXECUTED"
+  | "TERMINATED";
 
-export type ReportEvent =
-  | "INIT"
-  | "COLLECT_DATA"
-  | "LOCK_PAYLOAD"
+export type KernelEvent =
+  | "INIT_KERNEL"
+  | "LOCK_INPUT"
   | "APPLY_POWERUPS"
-  | "BUILD_LAYOUT"
-  | "VALIDATE"
-  | "EXPORT_PDF"
-  | "EXPORT_WORD"
-  | "COMPLETE_PAYLOAD";
+  | "DERIVE_LAYOUT"
+  | "VALIDATE_KERNEL"
+  | "EXECUTE_EXPORT"
+  | "TERMINATE_KERNEL";
 
 export type PowerUp = {
   id: string;
@@ -307,12 +305,20 @@ export type PowerUp = {
   appliedAt: number;
 };
 
-export type StateSnapshot = {
-  state: ReportState;
+export type ExecutionSnapshot = {
+  state: KernelState;
   payloadHash: string;
   powerupsHash: string;
   layoutHash: string;
   timestamp: number;
+};
+
+export type ExecutionTrace = {
+  executionId: string;
+  transitions: string[];
+  snapshots: ExecutionSnapshot[];
+  exportStatus: string;
+  validationResults: any;
 };
 
 function simpleHash(str: string): string {
@@ -337,41 +343,40 @@ function deepFreeze(obj: any): any {
   return obj;
 }
 
-function isValidTransition(state: ReportState, eventType: string): boolean {
-  switch (state) {
-    case "IDLE":
-      return eventType === "INIT" || eventType === "COLLECT_DATA";
-    case "INPUT_COLLECTED":
-      return eventType === "INIT" || eventType === "LOCK_PAYLOAD";
-    case "PAYLOAD_LOCKED":
-      return eventType === "INIT" || eventType === "APPLY_POWERUPS";
-    case "POWERUPS_DEDUPED":
-      return eventType === "INIT" || eventType === "BUILD_LAYOUT";
-    case "LAYOUT_COMPUTED":
-      return eventType === "INIT" || eventType === "VALIDATE";
-    case "VALIDATED":
-      return eventType === "INIT" || eventType === "EXPORT_PDF" || eventType === "EXPORT_WORD";
-    case "EXPORTING":
-      return eventType === "INIT" || eventType === "EXPORT_PDF" || eventType === "EXPORT_WORD" || eventType === "COMPLETE_PAYLOAD";
-    case "COMPLETE":
-      return eventType === "INIT";
-  }
-  return false;
-}
-
-function gate(eventType: string, state: ReportState) {
-  if (!isValidTransition(state, eventType)) {
-    throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
-  }
-}
-
-export class ReportEngineStateMachine {
-  private state: ReportState = "IDLE";
+export class ReportEngineKernelClass {
+  private executionId: string | null = null;
+  private locked: boolean = false;
+  private state: KernelState = "IDLE";
   private context: any = {};
-  private snapshots: StateSnapshot[] = [];
+  private snapshots: ExecutionSnapshot[] = [];
+  private transitionsList: string[] = [];
+  private exportStatus: string = "NOT_STARTED";
+  private validationResults: any = null;
 
-  getState(): ReportState {
+  getExecutionId() {
+    return this.executionId;
+  }
+
+  isLocked() {
+    return this.locked;
+  }
+
+  getState(): KernelState {
     return this.state;
+  }
+
+  getTrace(): ExecutionTrace {
+    return deepFreeze({
+      executionId: this.executionId || "",
+      transitions: [...this.transitionsList],
+      snapshots: [...this.snapshots],
+      exportStatus: this.exportStatus,
+      validationResults: this.validationResults
+    });
+  }
+
+  getContext() {
+    return this.context;
   }
 
   private takeSnapshot() {
@@ -379,297 +384,314 @@ export class ReportEngineStateMachine {
     const powerupsStr = JSON.stringify(this.context.powerups || []);
     const layoutStr = JSON.stringify(this.context.briefing || {});
 
-    this.snapshots.push({
+    const snap = {
       state: this.state,
       payloadHash: simpleHash(payloadStr),
       powerupsHash: simpleHash(powerupsStr),
       layoutHash: simpleHash(layoutStr),
       timestamp: Date.now()
-    });
+    };
+    this.snapshots.push(deepFreeze(snap));
   }
 
-  getSnapshots(): StateSnapshot[] {
-    return this.snapshots;
-  }
-
-  transition(event: ReportEvent, payload?: any) {
-    // 🧱 Enforce state transitions through the Gatekeeper Firewall
-    gate(event, this.state);
-
-    if (event === "INIT") {
-      this.state = "IDLE";
-      this.context = {};
-      this.snapshots = [];
-      this.takeSnapshot();
-      return;
+  dispatch(event: KernelEvent, payload?: any) {
+    // 🔒 1. SINGLE EXECUTION GUARANTEE
+    if (this.locked && payload?.executionId && this.executionId !== payload.executionId) {
+      throw new Error("MULTI_EXECUTION_BLOCKED");
     }
 
+    const valid = this.isValidTransition(event);
+    if (!valid) {
+      throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
+    }
+
+    this.transitionsList.push(`${this.state} -> ${event}`);
+
+    switch (event) {
+      case "INIT_KERNEL":
+        this.executionId = payload?.executionId || `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        this.locked = true;
+        this.state = "INITIALIZED";
+        this.context = {};
+        this.snapshots = [];
+        this.transitionsList = ["INIT_KERNEL"];
+        this.exportStatus = "NOT_STARTED";
+        this.validationResults = null;
+        this.takeSnapshot();
+        break;
+
+      case "LOCK_INPUT":
+        const content = payload.content || "";
+        
+        // Limits check (max sections = 8, max chars = 14400)
+        const sectionsCount = (content.match(/^#+/gm) || []).length;
+        if (sectionsCount > 8 || content.length > 14400) {
+          throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
+        }
+
+        // Sub-section character limit check (max 1800 per section)
+        const lines = content.split("\n");
+        let currentSectionTitle = "General";
+        const sectionsMap = new Map<string, string[]>();
+        sectionsMap.set(currentSectionTitle, []);
+        for (const line of lines) {
+          if (line.trim().startsWith("#")) {
+            currentSectionTitle = line.trim();
+            if (!sectionsMap.has(currentSectionTitle)) {
+              sectionsMap.set(currentSectionTitle, []);
+            }
+          }
+          sectionsMap.get(currentSectionTitle)!.push(line);
+        }
+        const activeSections = Array.from(sectionsMap.entries()).filter(([_, contentLines]) => {
+          return contentLines.join("").trim().length > 0;
+        });
+        for (const [title, contentLines] of activeSections) {
+          const sectionLength = contentLines.join("\n").length;
+          if (sectionLength > 1800) {
+            throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
+          }
+        }
+
+        // Normalize/sanitize duplicate lines
+        const cleanLines: string[] = [];
+        const seen = new Set<string>();
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && (trimmed.startsWith("#") || trimmed.length > 20)) {
+            if (seen.has(trimmed)) {
+              continue;
+            }
+            seen.add(trimmed);
+          }
+          cleanLines.push(line);
+        }
+        let cleanContent = cleanLines.join("\n");
+
+        // Purgar texto técnico de PowerUps
+        const technicalTexts = [
+          "Ejecuta OCR Avanzado y Extracción de Atributos Visuales.",
+          "Aplica Análisis de Diarización y Sentimiento.",
+          "Consulta de Proximidad ST_DWithin y Grounding Dinámico.",
+          "Activa Extracción de Entidades Salientes.",
+          "Despliega Búsqueda Semántica en Discovery Engine.",
+          "Ejecuta OCR Avanzado y Extracción de Atributos Visuales",
+          "Aplica Análisis de Diarización y Sentimiento",
+          "Consulta de Proximidad ST_DWithin y Grounding Dinámico",
+          "Activa Extracción de Entidades Salientes",
+          "Despliega Búsqueda Semántica en Discovery Engine"
+        ];
+        for (const tech of technicalTexts) {
+          cleanContent = cleanContent.split(tech).join("");
+        }
+
+        // Clean up "Resultados Puente Contextual" or "POWERUP APLICADO"
+        const finalLines = cleanContent.split("\n").filter(line => {
+          const lower = line.toLowerCase();
+          if (lower.includes("resultados puente contextual")) return false;
+          if (lower.includes("powerup aplicado")) return false;
+          if (lower.includes("puente contextual combinado")) return false;
+          return true;
+        });
+        cleanContent = finalLines.join("\n");
+
+        this.context.project = payload.project;
+        this.context.content = cleanContent;
+        this.context.album = payload.album || [];
+        this.context.mapSnapshots = payload.mapSnapshots || [];
+        this.context.riskLevel = payload.riskLevel;
+        this.context.reportSummary = payload.reportSummary;
+        this.context.user = payload.user;
+        this.context.markAsPrinted = payload.markAsPrinted;
+        this.context.sweeps = payload.sweeps || [];
+        this.context.powerups = payload.powerups || [];
+        this.context.scinceDemographics = payload.scinceDemographics;
+        this.context.reportNumber = payload.reportNumber;
+
+        deepFreeze(this.context);
+
+        this.state = "INPUT_LOCKED";
+        this.takeSnapshot();
+        break;
+
+      case "APPLY_POWERUPS":
+        const rawPowerups = this.context.powerups || [];
+        rawPowerups.forEach((pu: any) => {
+          if (typeof pu === "string") {
+            throw new Error("POWERUP_TYPE_VIOLATION");
+          }
+        });
+
+        const deduplicated = rawPowerups.filter((item: any, index: number, self: any[]) =>
+          self.findIndex((t: any) => (t.powerUpId || t.id) === (item.powerUpId || item.id)) === index
+        );
+
+        const structuredPowerups = deduplicated.map((p: any) => {
+          let pType: "OCR" | "ST_DWITHIN" | "GROUNDING" | "SEMANTIC" = "SEMANTIC";
+          const pid = p.powerUpId || p.id || "";
+          if (pid.toLowerCase().includes("imagen") || pid.toLowerCase().includes("ocr")) pType = "OCR";
+          else if (pid.toLowerCase().includes("ubicacion") || pid.toLowerCase().includes("dwithin")) pType = "ST_DWITHIN";
+          else if (pid.toLowerCase().includes("entidades") || pid.toLowerCase().includes("grounding")) pType = "GROUNDING";
+          
+          return {
+            id: pid,
+            type: pType,
+            metadata: p.metadata || p,
+            appliedAt: p.appliedAt || Date.now()
+          };
+        });
+
+        this.context = deepFreeze({
+          ...this.context,
+          powerups: structuredPowerups
+        });
+
+        this.state = "POWERUPS_DEDUPED";
+        this.takeSnapshot();
+        break;
+
+      case "DERIVE_LAYOUT":
+        const visuals: any[] = [];
+        if (this.context.mapSnapshots) {
+          this.context.mapSnapshots.forEach((snap: any, idx: number) => {
+            const isChart = snap.title.toLowerCase().includes("gráfica") || snap.title.toLowerCase().includes("grafica");
+            visuals.push({
+              id: `map-${idx}`,
+              type: isChart ? 'chart' : 'map',
+              title: snap.title,
+              dataUrl: snap.dataUrl,
+              caption: isChart 
+                ? 'Modelado analítico y frecuencia delictiva registrada.'
+                : 'Simbología geoespacial operativa sobre el polígono delimitado.'
+            });
+          });
+        }
+
+        if (this.context.album) {
+          this.context.album.forEach((photo: any, idx: number) => {
+            visuals.push({
+              id: photo.id,
+              type: 'photo',
+              title: photo.tipo || `Evidencia fotográfica ${idx + 1}`,
+              dataUrl: photo.previewUrl,
+              caption: photo.comentario || 'Evidencia de inspección de campo.',
+              riskLevel: photo.riskLevel || 'medio'
+            });
+          });
+        }
+
+        const briefing = buildIntelligenceBriefing(
+          {
+            projectId: this.context.project.id,
+            projectName: this.context.project.nombre || this.context.project.name || 'Expediente',
+            createdAt: new Date().toISOString(),
+            geometryType: this.context.project.geometryType || 'polygon',
+            objectives: [],
+            textNotes: [],
+            voiceNotes: [],
+            findings: this.context.project.findings || [],
+            conclusions: [],
+            recommendations: []
+          } as any,
+          visuals,
+          {
+            sweeps: this.context.sweeps || [],
+            reportSummary: this.context.reportSummary
+          }
+        );
+
+        this.context = deepFreeze({
+          ...this.context,
+          briefing
+        });
+
+        this.state = "LAYOUT_DERIVED";
+        this.takeSnapshot();
+        break;
+
+      case "VALIDATE_KERNEL":
+        const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
+        if (previewLayer) {
+          throw new Error("ASSERT_FAILED: Preview layer exists");
+        }
+
+        const allStructured = this.context.powerups.every((p: any) =>
+          p.id && ["OCR", "ST_DWITHIN", "GROUNDING", "SEMANTIC"].includes(p.type)
+        );
+        if (!allStructured) {
+          throw new Error("ASSERT_FAILED: PowerUps are not properly structured");
+        }
+
+        if (this.context.briefing.pages.length > 12) {
+          throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
+        }
+
+        const wordButton = typeof document !== 'undefined' && document.getElementById("export-word-btn-ui");
+        if (wordButton) {
+          throw new Error("ASSERT_FAILED: UI export layer exists");
+        }
+
+        this.validationResults = {
+          noPreviewLayer: true,
+          powerupsAreStructured: true,
+          totalPages: this.context.briefing.pages.length,
+          noUIExportLayer: true,
+          timestamp: Date.now()
+        };
+
+        this.state = "VALIDATED";
+        this.takeSnapshot();
+        break;
+
+      case "EXECUTE_EXPORT":
+        this.state = "EXPORT_EXECUTED";
+        this.takeSnapshot();
+        break;
+
+      case "TERMINATE_KERNEL":
+        this.locked = false;
+        this.state = "TERMINATED";
+        this.takeSnapshot();
+        break;
+    }
+  }
+
+  private isValidTransition(event: KernelEvent): boolean {
     switch (this.state) {
       case "IDLE":
-        if (event === "COLLECT_DATA") {
-          if (payload.powerups) {
-            payload.powerups.forEach((pu: any) => {
-              if (typeof pu === "string") {
-                throw new Error("POWERUP_TYPE_VIOLATION");
-              }
-            });
-          }
-
-          this.context.project = payload.project;
-          this.context.content = payload.content;
-          this.context.album = payload.album || [];
-          this.context.mapSnapshots = payload.mapSnapshots || [];
-          this.context.riskLevel = payload.riskLevel;
-          this.context.reportSummary = payload.reportSummary;
-          this.context.user = payload.user;
-          this.context.markAsPrinted = payload.markAsPrinted;
-          this.context.sweeps = payload.sweeps || [];
-          this.context.powerups = payload.powerups || [];
-          
-          this.state = "INPUT_COLLECTED";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
-      case "INPUT_COLLECTED":
-        if (event === "LOCK_PAYLOAD") {
-          const content = this.context.content || "";
-          
-          // Limits check (max sections = 8, max chars = 14400)
-          const sectionsCount = (content.match(/^#+/gm) || []).length;
-          if (sectionsCount > 8 || content.length > 14400) {
-            throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
-          }
-
-          // Sub-section character limit check (max 1800 per section)
-          const lines = content.split("\n");
-          let currentSectionTitle = "General";
-          const sectionsMap = new Map<string, string[]>();
-          sectionsMap.set(currentSectionTitle, []);
-          for (const line of lines) {
-            if (line.trim().startsWith("#")) {
-              currentSectionTitle = line.trim();
-              if (!sectionsMap.has(currentSectionTitle)) {
-                sectionsMap.set(currentSectionTitle, []);
-              }
-            }
-            sectionsMap.get(currentSectionTitle)!.push(line);
-          }
-          const activeSections = Array.from(sectionsMap.entries()).filter(([_, contentLines]) => {
-            return contentLines.join("").trim().length > 0;
-          });
-          for (const [title, contentLines] of activeSections) {
-            const sectionLength = contentLines.join("\n").length;
-            if (sectionLength > 1800) {
-              throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
-            }
-          }
-
-          // Normalize/sanitize duplicate lines
-          const cleanLines: string[] = [];
-          const seen = new Set<string>();
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed && (trimmed.startsWith("#") || trimmed.length > 20)) {
-              if (seen.has(trimmed)) {
-                continue;
-              }
-              seen.add(trimmed);
-            }
-            cleanLines.push(line);
-          }
-          let cleanContent = cleanLines.join("\n");
-
-          // Purgar texto técnico de PowerUps
-          const technicalTexts = [
-            "Ejecuta OCR Avanzado y Extracción de Atributos Visuales.",
-            "Aplica Análisis de Diarización y Sentimiento.",
-            "Consulta de Proximidad ST_DWithin y Grounding Dinámico.",
-            "Activa Extracción de Entidades Salientes.",
-            "Despliega Búsqueda Semántica en Discovery Engine.",
-            "Ejecuta OCR Avanzado y Extracción de Atributos Visuales",
-            "Aplica Análisis de Diarización y Sentimiento",
-            "Consulta de Proximidad ST_DWithin y Grounding Dinámico",
-            "Activa Extracción de Entidades Salientes",
-            "Despliega Búsqueda Semántica en Discovery Engine"
-          ];
-          for (const tech of technicalTexts) {
-            cleanContent = cleanContent.split(tech).join("");
-          }
-
-          // Clean up "Resultados Puente Contextual" or "POWERUP APLICADO"
-          const finalLines = cleanContent.split("\n").filter(line => {
-            const lower = line.toLowerCase();
-            if (lower.includes("resultados puente contextual")) return false;
-            if (lower.includes("powerup aplicado")) return false;
-            if (lower.includes("puente contextual combinado")) return false;
-            return true;
-          });
-          cleanContent = finalLines.join("\n");
-
-          this.context.content = cleanContent;
-          
-          // Deep freeze to avoid UI mutations (SINGLE SOURCE OF TRUTH)
-          deepFreeze(this.context);
-          
-          this.state = "PAYLOAD_LOCKED";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
-      case "PAYLOAD_LOCKED":
-        if (event === "APPLY_POWERUPS") {
-          const rawPowerups = this.context.powerups || [];
-          
-          rawPowerups.forEach((pu: any) => {
-            if (typeof pu === "string") {
-              throw new Error("POWERUP_TYPE_VIOLATION");
-            }
-          });
-
-          const deduplicated = rawPowerups.filter((item: any, index: number, self: any[]) =>
-            self.findIndex((t: any) => (t.powerUpId || t.id) === (item.powerUpId || item.id)) === index
-          );
-          
-          this.context.powerups = deduplicated.map((p: any) => {
-            let pType: "OCR" | "ST_DWITHIN" | "GROUNDING" | "SEMANTIC" = "SEMANTIC";
-            const pid = p.powerUpId || p.id || "";
-            if (pid.toLowerCase().includes("imagen") || pid.toLowerCase().includes("ocr")) pType = "OCR";
-            else if (pid.toLowerCase().includes("ubicacion") || pid.toLowerCase().includes("dwithin")) pType = "ST_DWITHIN";
-            else if (pid.toLowerCase().includes("entidades") || pid.toLowerCase().includes("grounding")) pType = "GROUNDING";
-            
-            return {
-              id: pid,
-              type: pType,
-              metadata: p.metadata || p,
-              appliedAt: p.appliedAt || Date.now()
-            };
-          });
-
-          this.state = "POWERUPS_DEDUPED";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
+        return event === "INIT_KERNEL";
+      case "INITIALIZED":
+        return event === "INIT_KERNEL" || event === "LOCK_INPUT";
+      case "INPUT_LOCKED":
+        return event === "INIT_KERNEL" || event === "APPLY_POWERUPS";
       case "POWERUPS_DEDUPED":
-        if (event === "BUILD_LAYOUT") {
-          const visuals: any[] = [];
-          if (this.context.mapSnapshots) {
-            this.context.mapSnapshots.forEach((snap: any, idx: number) => {
-              const isChart = snap.title.toLowerCase().includes("gráfica") || snap.title.toLowerCase().includes("grafica");
-              visuals.push({
-                id: `map-${idx}`,
-                type: isChart ? 'chart' : 'map',
-                title: snap.title,
-                dataUrl: snap.dataUrl,
-                caption: isChart 
-                  ? 'Modelado analítico y frecuencia delictiva registrada.'
-                  : 'Simbología geoespacial operativa sobre el polígono delimitado.'
-              });
-            });
-          }
-
-          if (this.context.album) {
-            this.context.album.forEach((photo: any, idx: number) => {
-              visuals.push({
-                id: photo.id,
-                type: 'photo',
-                title: photo.tipo || `Evidencia fotográfica ${idx + 1}`,
-                dataUrl: photo.previewUrl,
-                caption: photo.comentario || 'Evidencia de inspección de campo.',
-                riskLevel: photo.riskLevel || 'medio'
-              });
-            });
-          }
-
-          const briefing = buildIntelligenceBriefing(
-            {
-              projectId: this.context.project.id,
-              projectName: this.context.project.nombre || this.context.project.name || 'Expediente',
-              createdAt: new Date().toISOString(),
-              geometryType: this.context.project.geometryType || 'polygon',
-              objectives: [],
-              textNotes: [],
-              voiceNotes: [],
-              findings: this.context.project.findings || [],
-              conclusions: [],
-              recommendations: []
-            } as any,
-            visuals,
-            {
-              sweeps: this.context.sweeps || [],
-              reportSummary: this.context.reportSummary
-            }
-          );
-
-          this.context.briefing = briefing;
-          this.state = "LAYOUT_COMPUTED";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
-      case "LAYOUT_COMPUTED":
-        if (event === "VALIDATE") {
-          const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
-          if (previewLayer) {
-            throw new Error("ASSERT_FAILED: Preview layer exists");
-          }
-
-          const allStructured = this.context.powerups.every((p: any) =>
-            p.id && ["OCR", "ST_DWITHIN", "GROUNDING", "SEMANTIC"].includes(p.type)
-          );
-          if (!allStructured) {
-            throw new Error("ASSERT_FAILED: PowerUps are not properly structured");
-          }
-
-          if (this.context.briefing.pages.length > 12) {
-            throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
-          }
-
-          const wordButton = typeof document !== 'undefined' && document.getElementById("export-word-btn-ui");
-          if (wordButton) {
-            throw new Error("ASSERT_FAILED: UI export layer exists");
-          }
-
-          this.state = "VALIDATED";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
+        return event === "INIT_KERNEL" || event === "DERIVE_LAYOUT";
+      case "LAYOUT_DERIVED":
+        return event === "INIT_KERNEL" || event === "VALIDATE_KERNEL";
       case "VALIDATED":
-        if (event === "EXPORT_PDF" || event === "EXPORT_WORD") {
-          this.state = "EXPORTING";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
-      case "EXPORTING":
-        if (event === "COMPLETE_PAYLOAD") {
-          this.state = "COMPLETE";
-          this.takeSnapshot();
-          return;
-        }
-        break;
-
-      case "COMPLETE":
-        break;
+        return event === "INIT_KERNEL" || event === "EXECUTE_EXPORT";
+      case "EXPORT_EXECUTED":
+        return event === "INIT_KERNEL" || event === "TERMINATE_KERNEL";
+      case "TERMINATED":
+        return event === "INIT_KERNEL";
     }
-
-    throw new Error(`INVALID_TRANSITION: Cannot transition from ${this.state} using event ${event}`);
+    return false;
   }
 
-  async finalizeExport(format: "PDF" | "WORD") {
+  async finalizeExport(format: "PDF" | "WORD", activeId: string) {
+    // 🔒 7. EXPORT GATE FINAL (TRIPLE LOCK)
     if (this.state !== "VALIDATED") {
       throw new Error("EXPORT_BLOCKED_INVALID_STATE");
     }
+    if (!this.locked) {
+      throw new Error("EXPORT_BLOCKED_KERNEL_UNLOCKED");
+    }
+    if (this.executionId !== activeId) {
+      throw new Error("EXPORT_BLOCKED_EXECUTION_ID_MISMATCH");
+    }
 
-    this.transition(format === "PDF" ? "EXPORT_PDF" : "EXPORT_WORD");
+    this.dispatch("EXECUTE_EXPORT", { executionId: activeId });
+    this.exportStatus = `EXPORTING_${format}`;
 
     try {
       if (format === "PDF") {
@@ -710,18 +732,19 @@ export class ReportEngineStateMachine {
         );
       }
 
-      this.transition("COMPLETE_PAYLOAD");
+      this.exportStatus = `COMPLETE_${format}`;
+      this.dispatch("TERMINATE_KERNEL", { executionId: activeId });
     } catch (err) {
+      this.exportStatus = "FAILED";
+      this.locked = false;
       this.state = "IDLE";
       this.takeSnapshot();
       throw err;
     }
   }
-
-  getContext() {
-    return this.context;
-  }
 }
+
+export const ReportEngineKernel = new ReportEngineKernelClass();
 
 export const ReportEngine = {
   collect(
@@ -750,22 +773,22 @@ export const ReportEngine = {
       enforceSectionLimits?: boolean;
     }
   ): string {
-    const machine = new ReportEngineStateMachine();
-    machine.transition("COLLECT_DATA", { content });
-    machine.transition("LOCK_PAYLOAD");
-    return machine.getContext().content;
+    const activeId = `legacy-norm-${Date.now()}`;
+    ReportEngineKernel.dispatch("INIT_KERNEL", { executionId: activeId });
+    ReportEngineKernel.dispatch("LOCK_INPUT", { content, executionId: activeId });
+    return ReportEngineKernel.getContext().content;
   },
 
   async finalize(options: FinalizeOptions) {
-    const machine = new ReportEngineStateMachine();
-    machine.transition("COLLECT_DATA", options);
-    machine.transition("LOCK_PAYLOAD");
-    machine.transition("APPLY_POWERUPS");
-    machine.transition("BUILD_LAYOUT");
-    machine.transition("VALIDATE");
+    const activeId = `legacy-final-${Date.now()}`;
+    ReportEngineKernel.dispatch("INIT_KERNEL", { executionId: activeId });
+    ReportEngineKernel.dispatch("LOCK_INPUT", { ...options, executionId: activeId });
+    ReportEngineKernel.dispatch("APPLY_POWERUPS", { executionId: activeId });
+    ReportEngineKernel.dispatch("DERIVE_LAYOUT", { executionId: activeId });
+    ReportEngineKernel.dispatch("VALIDATE_KERNEL", { executionId: activeId });
     
-    await machine.finalizeExport("WORD");
-    await machine.finalizeExport("PDF");
+    await ReportEngineKernel.finalizeExport("WORD", activeId);
+    await ReportEngineKernel.finalizeExport("PDF", activeId);
 
     if (options.markAsPrinted) {
       options.markAsPrinted();
