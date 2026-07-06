@@ -263,8 +263,25 @@ export const buildIntelligenceBriefing = (
   if (options?.sweeps) {
     options.sweeps.forEach((sweep) => {
       if (sweep.status !== 'Integrado') return;
-      const ts = new Date(sweep.timestamp).getTime() || 0;
-      const hashKey = `${sweep.engine}_${ts}_${sweep.source}`.replace(/\s+/g, '_').toLowerCase();
+      
+      let ts = 0;
+      if (sweep.timestamp) {
+        if (typeof sweep.timestamp === 'number') {
+          ts = sweep.timestamp;
+        } else if (typeof sweep.timestamp === 'string') {
+          ts = new Date(sweep.timestamp).getTime() || 0;
+        } else if (typeof sweep.timestamp === 'object' && sweep.timestamp.seconds) {
+          ts = sweep.timestamp.seconds * 1000;
+        } else if (typeof sweep.timestamp.toDate === 'function') {
+          ts = sweep.timestamp.toDate().getTime();
+        } else {
+          ts = new Date(sweep.timestamp).getTime() || 0;
+        }
+      }
+
+      const hashKey = sweep.id 
+        ? sweep.id.toLowerCase()
+        : `${sweep.engine}_${ts}_${sweep.source}`.replace(/\s+/g, '_').toLowerCase();
       
       if (!seenSweepKeys.has(hashKey)) {
         seenSweepKeys.add(hashKey);

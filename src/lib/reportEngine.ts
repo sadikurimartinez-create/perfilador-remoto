@@ -751,7 +751,8 @@ export class ReportEngineKernelClass {
               this.context.mapSnapshots,
               this.context.scinceDemographics,
               this.context.project.id,
-              this.context.reportSummary
+              this.context.reportSummary,
+              this.context.sweeps
             );
           }
           if (format === "PDF" || format === "ALL") {

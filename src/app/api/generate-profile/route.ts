@@ -297,18 +297,36 @@ export async function POST(req: Request) {
 
 `;
 
-        if (svB) {
-          streetViewComposition += `#### Punto de Acecho B: ${svB.risk_points}
-- **Rutas de escape:** ${svB.escape_routes}
-- **Zonas ciegas / Escondites:** ${svB.blind_spots}
-- **Vulnerabilidad urbana:** Reducción de visibilidad perimetral por infraestructura deficiente.
-
-`;
-        }
         streetViewComposition += `🔒 *SSPE-CEIPOL | Perfilador Remoto - Sello de Agua Obligatorio*\n\n`;
       }
     } else {
       streetViewComposition = "_No se anexó información de Street View en este reporte._\n\n";
+    }
+
+    // Compilar Barridos de Inteligencia (2 por página)
+    let sweepsComposition = "";
+    const rawSweeps = safeBody.sweeps || [];
+    if (rawSweeps.length > 0) {
+      for (let i = 0; i < rawSweeps.length; i += 2) {
+        const pageNum = Math.floor(i / 2) + 1;
+        const sweepA = rawSweeps[i];
+        const sweepB = rawSweeps[i + 1];
+
+        sweepsComposition += `### 📡 BARRIDOS DE INTELIGENCIA - PÁGINA ${pageNum}\n\n`;
+
+        sweepsComposition += `* [Barrido ${sweepA.engine}] Tipo: ${sweepA.type} | Relevancia: ${sweepA.relevance} | Estado: ${sweepA.status}\n`;
+        sweepsComposition += `  * **Datos Extraídos:** ${sweepA.data || sweepA.extractedData || "Sin datos crudos."}\n`;
+        sweepsComposition += `  * **Ajuste del Analista:** ${sweepA.context || "Sin observaciones adicionales."}\n\n`;
+
+        if (sweepB) {
+          sweepsComposition += `* [Barrido ${sweepB.engine}] Tipo: ${sweepB.type} | Relevancia: ${sweepB.relevance} | Estado: ${sweepB.status}\n`;
+          sweepsComposition += `  * **Datos Extraídos:** ${sweepB.data || sweepB.extractedData || "Sin datos crudos."}\n`;
+          sweepsComposition += `  * **Ajuste del Analista:** ${sweepB.context || "Sin observaciones adicionales."}\n\n`;
+        }
+        sweepsComposition += `🔒 *SSPE-CEIPOL | Perfilador Remoto - Sello de Agua Obligatorio*\n\n`;
+      }
+    } else {
+      sweepsComposition = "_No se integraron barridos de inteligencia (OSINT/DENUE/REPUVE) en esta sesión._\n\n";
     }
 
     // 3. COMPOSITION ENGINE (Orden obligatorio)
@@ -344,8 +362,9 @@ export async function POST(req: Request) {
 4. Gráficas Analíticas
 5. Evidencia Fotográfica
 6. Evidencia Street View
-7. Grafo Analítico
-8. Conclusiones Operativas
+7. Barridos de Inteligencia
+8. Grafo de Hipótesis
+9. Conclusiones Operativas
 
 ---
 
@@ -377,7 +396,11 @@ ${photosComposition}
 ${streetViewComposition}
 ---
 
-## 8. GRAFO DE HIPÓTESIS
+## 8. BARRIDOS DE INTELIGENCIA
+${sweepsComposition}
+---
+
+## 9. GRAFO DE HIPÓTESIS
 *Capítulo Exclusivo - 1 Grafo por Página*
 
 ### ESTRUCTURA DEL GRAFO
@@ -404,7 +427,7 @@ ${streetViewComposition}
 
 ---
 
-## 9. CONCLUSIONES OPERATIVAS
+## 10. CONCLUSIONES OPERATIVAS
 * **Hallazgos Principales:** Concentración delictiva facilitada por debilidades ambientales y baja iluminación perimetral.
 * **Riesgos Inmediatos:** Escalada de incidentes violentos en zonas oscuras perimetrales.
 * **Escenarios Probables:** Incremento de robo patrimonial del 15% en los próximos 6 meses de no mediar intervención situacional.

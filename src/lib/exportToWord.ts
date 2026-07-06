@@ -287,7 +287,8 @@ export async function exportToWord(
   mapSnapshots?: { title: string; dataUrl: string }[],
   scinceDemographics?: any,
   reportNumber?: string,
-  reportSummary?: string
+  reportSummary?: string,
+  sweeps?: any[]
 ) {
   const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
   const reportContent = sanitizeReportContent(content);
@@ -734,6 +735,90 @@ export async function exportToWord(
     { type: TabStopType.RIGHT, position: 8567 },
   ];
 
+  // 5.5 BARRIDOS DE INTELIGENCIA (OSINT, DENUE, REPUVE, etc.)
+  const sweepElements: any[] = [];
+  if (sweeps && sweeps.length > 0) {
+    sweepElements.push(new Paragraph({ pageBreakBefore: true }));
+    sweepElements.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        children: [new TextRun({ text: "ANEXO: BARRIDOS DE INTELIGENCIA Y OSINT", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
+        spacing: { before: 360, after: 200 }
+      }),
+      new Paragraph({
+        children: [new TextRun({ text: "Registro de barridos tácticos integrados al expediente para el cruce de información criminológica y situacional.", size: 22, font: "Calibri", color: "5B6573", italic: true })],
+        spacing: { after: 360 }
+      })
+    );
+
+    sweeps.forEach((sweep) => {
+      const borders = {
+        top: { style: BorderStyle.SINGLE, size: 8, color: "D9DEE5" },
+        bottom: { style: BorderStyle.SINGLE, size: 8, color: "D9DEE5" },
+        left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+        right: { style: BorderStyle.SINGLE, size: 8, color: "D9DEE5" },
+      };
+
+      const table = new Table({
+        width: { size: 90, type: WidthType.PERCENTAGE },
+        alignment: AlignmentType.CENTER,
+        rows: [
+          // Header Row
+          new TableRow({
+            height: { value: 360, rule: HeightRule.ATLEAST },
+            children: [
+              new TableCell({
+                shading: { fill: "F2F4F7", type: ShadingType.CLEAR },
+                borders,
+                verticalAlign: VerticalAlign.CENTER,
+                margins: { top: 120, bottom: 120, left: 160, right: 160 },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: sweep.engine.toUpperCase(), bold: true, size: 22, color: "0D2B52", font: "Calibri" }),
+                      new TextRun({ text: `\tFuente: ${sweep.source} | Relevancia: ${sweep.relevance}`, size: 16, color: "5B6573", font: "Calibri" })
+                    ],
+                    tabStops: [
+                      { type: TabStopType.RIGHT, position: 7500 }
+                    ]
+                  })
+                ]
+              })
+            ]
+          }),
+          // Data / Content Row
+          new TableRow({
+            children: [
+              new TableCell({
+                borders,
+                margins: { top: 160, bottom: 160, left: 160, right: 160 },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.JUSTIFIED,
+                    children: [new TextRun({ text: sweep.data || sweep.extractedData || "Sin datos crudos.", size: 20, font: "Calibri", color: "222222" })],
+                    spacing: { after: 120 }
+                  }),
+                  ...(sweep.context ? [
+                    new Paragraph({
+                      alignment: AlignmentType.JUSTIFIED,
+                      children: [
+                        new TextRun({ text: "Contexto/Ajuste del Analista: ", bold: true, size: 20, font: "Calibri", color: "1d4f91" }),
+                        new TextRun({ text: sweep.context, size: 20, font: "Calibri", color: "222222" })
+                      ]
+                    })
+                  ] : [])
+                ]
+              })
+            ]
+          })
+        ]
+      });
+
+      sweepElements.push(table);
+      sweepElements.push(new Paragraph({ spacing: { after: 240 } }));
+    });
+  }
+
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD
   const doc = new Document({
     numbering: {
@@ -858,6 +943,7 @@ export async function exportToWord(
           ...bodyParagraphs,
           ...mapElements,
           ...photoElements,
+          ...sweepElements,
         ],
       },
     ],
