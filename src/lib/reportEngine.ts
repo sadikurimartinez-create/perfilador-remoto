@@ -492,13 +492,13 @@ export class ReportEngineKernelClass {
       case "LOCK_INPUT":
         const content = payload.content || "";
         
-        // Limits check (max sections = 8, max chars = 14400)
+        // Limits check (max headers = 36, max chars = 30000)
         const sectionsCount = (content.match(/^#+/gm) || []).length;
-        if (sectionsCount > 8 || content.length > 14400) {
+        if (sectionsCount > 36 || content.length > 30000) {
           throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
         }
 
-        // Sub-section character limit check (max 1800 per section)
+        // Sub-section character limit check (max 4500 per section)
         const lines = content.split("\n");
         let currentSectionTitle = "General";
         const sectionsMap = new Map<string, string[]>();
@@ -517,7 +517,7 @@ export class ReportEngineKernelClass {
         });
         for (const [title, contentLines] of activeSections) {
           const sectionLength = contentLines.join("\n").length;
-          if (sectionLength > 1800) {
+          if (sectionLength > 4500) {
             throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
           }
         }
