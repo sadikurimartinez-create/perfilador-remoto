@@ -184,6 +184,17 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
         addBullets(page.hypothesis, PAGE.margin, 43, 260, 7);
       }
 
+    } else if (page.mode === 'text') {
+      addHeader(page.title);
+      addSectionTitle(page.title, 29);
+      if (page.interpretation) {
+        doc.setTextColor(COLORS.text);
+        doc.setFontSize(10.5);
+        doc.setFont('helvetica', 'normal');
+        const textLines = doc.splitTextToSize(page.interpretation, 260);
+        doc.text(textLines, PAGE.margin, 45);
+      }
+
     } else if (page.mode === 'single') {
       addHeader(page.title);
       addSectionTitle(page.title, 29);
@@ -663,7 +674,6 @@ export class ReportEngineKernelClass {
         this.notify();
         break;
       }
-
       case "VALIDATE_KERNEL":
         const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
         if (previewLayer) {
@@ -675,25 +685,24 @@ export class ReportEngineKernelClass {
           throw new Error("VALIDATION_FAILED_CRITERIA: Missing editorial payload");
         }
 
-        // 1. Verificar comandos internos / jerga de IA prohibidos
+        // Rule 15 strict validations
+        const hasExecutiveSummary = !!payloadObj.executiveSummary && payloadObj.executiveSummary.trim().length > 10;
+        const hasFinalHypothesis = !!payloadObj.finalHypothesis && payloadObj.finalHypothesis.trim().length > 10;
+        const hasMaps = !!payloadObj.maps && payloadObj.maps.length > 0;
+        const hasGraphs = !!payloadObj.graphs && payloadObj.graphs.length > 0;
+        const hasEvidence = !!payloadObj.photoEvidence && payloadObj.photoEvidence.length > 0;
+        const hasHIGGraph = !!payloadObj.hypothesisGraph && !!payloadObj.hypothesisGraph.dataUrl;
+        
         const textToAudit = JSON.stringify(payloadObj).toLowerCase();
-        const forbidden = ["st_dwithin", "discovery engine", "grounding", "powerup", "instruction"];
+        const forbidden = ["st_dwithin", "discovery engine", "grounding", "powerup", "instruction", "ocr", "diarización", "sentiment"];
         const hasForbidden = forbidden.some(cmd => textToAudit.includes(cmd));
+        const noInternalMetadata = !hasForbidden;
 
-        // 2. Verificar existencia de mapas y gráficas
-        const hasMaps = payloadObj.maps && payloadObj.maps.length > 0;
-        const hasGraphs = payloadObj.graphs && payloadObj.graphs.length > 0;
-
-        // 3. Resumen Ejecutivo y Conclusiones Operativas
-        const hasExecutiveSummary = !!payloadObj.executiveSummary;
-        const hasOperationalConclusions = payloadObj.operationalConclusions && payloadObj.operationalConclusions.length > 0;
-
-        // 4. Límite de páginas
-        const pageCount = this.context.briefing.pages.length;
+        const pageCount = this.context.briefing?.pages?.length || 0;
         const isPageCountValid = pageCount <= 12;
 
-        if (hasForbidden || !hasMaps || !hasGraphs || !hasExecutiveSummary || !hasOperationalConclusions || !isPageCountValid) {
-          const errMsg = `VALIDATION_FAILED_CRITERIA: ForbiddenCommands=${hasForbidden}, HasMaps=${hasMaps}, HasGraphs=${hasGraphs}, HasExecSummary=${hasExecutiveSummary}, HasConclusions=${hasOperationalConclusions}, PageCount=${pageCount}`;
+        if (!hasExecutiveSummary || !hasFinalHypothesis || !hasMaps || !hasGraphs || !hasEvidence || !hasHIGGraph || !noInternalMetadata || !isPageCountValid) {
+          const errMsg = `VALIDATION_FAILED_CRITERIA: hasExecutiveSummary=${hasExecutiveSummary}, hasFinalHypothesis=${hasFinalHypothesis}, hasMaps=${hasMaps}, hasGraphs=${hasGraphs}, hasEvidence=${hasEvidence}, hasHIGGraph=${hasHIGGraph}, noInternalMetadata=${noInternalMetadata}, pageCount=${pageCount}`;
           console.error("[REPORT ENGINE KERNEL] VALIDATION ERROR:", errMsg);
           throw new Error(errMsg);
         }
@@ -703,9 +712,7 @@ export class ReportEngineKernelClass {
           powerupsAreStructured: true,
           totalPages: pageCount,
           noUIExportLayer: true,
-          timestamp: Date.now()
         };
-
         this.state = "VALIDATED";
         this.takeSnapshot();
         this.notify();

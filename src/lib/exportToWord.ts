@@ -156,12 +156,6 @@ export async function exportToWord(
     alignment: AlignmentType.JUSTIFIED
   });
 
-  const createBullet = (text: string) => new Paragraph({
-    numbering: { reference: "custom-bullets", level: 0 },
-    children: [new TextRun({ text, size: 22, font: "Calibri", color: "222222" })],
-    spacing: { after: 80 }
-  });
-
   const elements: any[] = [];
 
   // ================= PÁGINA 1: PORTADA & SÍNTESIS EJECUTIVA =================
@@ -314,7 +308,26 @@ export async function exportToWord(
           }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: buf, transformation: { width: 420, height: 180 } })],
+            children: [new ImageRun({ data: buf, transformation: { width: 400, height: 180 } })],
+            spacing: { after: 120 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Explicación: ", bold: true, size: 16 }),
+              new TextRun({ text: graph.explanation, size: 16 })
+            ]
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Hallazgo: ", bold: true, size: 16 }),
+              new TextRun({ text: graph.finding, size: 16 })
+            ]
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16 }),
+              new TextRun({ text: graph.relation, size: 16 })
+            ],
             spacing: { after: 240 }
           })
         );
@@ -348,7 +361,7 @@ export async function exportToWord(
                 children: [
                   new Paragraph({
                     alignment: AlignmentType.CENTER,
-                    children: [new ImageRun({ data: buffer, transformation: { width: 240, height: 140 } })]
+                    children: [new ImageRun({ data: buffer, transformation: { width: 440, height: 250 } })]
                   }),
                   new Paragraph({
                     spacing: { before: 80 },
@@ -362,8 +375,14 @@ export async function exportToWord(
                   }),
                   new Paragraph({
                     children: [
-                      new TextRun({ text: "Factor identificado: ", bold: true, size: 16 }),
+                      new TextRun({ text: "Factor ambiental identificado: ", bold: true, size: 16 }),
                       new TextRun({ text: photo.factor, size: 16 })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Interpretación criminológica: ", bold: true, size: 16 }),
+                      new TextRun({ text: photo.criminologicalInterpretation, size: 16 })
                     ]
                   }),
                   new Paragraph({
@@ -374,7 +393,7 @@ export async function exportToWord(
                   }),
                   new Paragraph({
                     children: [
-                      new TextRun({ text: "Riesgo: ", bold: true, size: 16 }),
+                      new TextRun({ text: "Nivel de riesgo: ", bold: true, size: 16 }),
                       new TextRun({ text: photo.riskLevel, bold: true, size: 16, color: photo.riskLevel === "ALTO" ? "B91C1C" : "1E3A8A" })
                     ]
                   })
@@ -422,24 +441,80 @@ export async function exportToWord(
       const buf = dataUrlToArrayBuffer(sv.dataUrl);
       if (buf) {
         elements.push(
-          new Paragraph({
-            children: [new TextRun({ text: sv.title.toUpperCase(), bold: true, size: 18, color: "1F4E79" })],
-            spacing: { before: 120, after: 60 }
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: buf, transformation: { width: 360, height: 180 } })],
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 8, color: "1F4E79" },
+              bottom: { style: BorderStyle.SINGLE, size: 8, color: "1F4E79" },
+              left: { style: BorderStyle.SINGLE, size: 8, color: "1F4E79" },
+              right: { style: BorderStyle.SINGLE, size: 8, color: "1F4E79" }
+            },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    shading: { fill: "F8FAFC", type: ShadingType.CLEAR },
+                    margins: { top: 100, bottom: 100, left: 100, right: 100 },
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new ImageRun({ data: buf, transformation: { width: 400, height: 200 } })]
+                      }),
+                      new Paragraph({
+                        spacing: { before: 80 },
+                        children: [new TextRun({ text: `Punto de Acecho 0${i + 1}: Inteligencia Visual Territorial`, bold: true, size: 18, color: "1F4E79" })]
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Ubicación: ", bold: true, size: 16 }),
+                          new TextRun({ text: sv.location, size: 16 })
+                        ]
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Elementos observados: ", bold: true, size: 16 }),
+                          new TextRun({ text: sv.observed, size: 16 })
+                        ]
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Análisis criminológico: ", bold: true, size: 16 }),
+                          new TextRun({ text: sv.criminologicalAnalysis, size: 16 })
+                        ]
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16 }),
+                          new TextRun({ text: sv.relation, size: 16 })
+                        ]
+                      })
+                    ]
+                  })
+                ]
+              })
+            ],
             spacing: { after: 120 }
-          }),
-          createBodyText(sv.caption)
+          })
         );
       }
     }
   }
 
-  // ================= PÁGINA 9: GRAFO DE HIPÓTESIS =================
+  // ================= PÁGINA 9: OSINT SINTETIZADO =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("6. GRAFO DE HIPÓTESIS Y CONEXIONES"));
+  elements.push(createTitle("6. ANÁLISIS DE INTELIGENCIA OSINT COMPLEMENTARIA"));
+  elements.push(createSubtitle("Evaluación del Entorno Socioeconómico y Flujos de Movilidad:"));
+  elements.push(createBodyText(payload.osintSynthesized));
+
+  // ================= PÁGINA 10: MOTOR DE PANDILLAS =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("7. ANÁLISIS DE VINCULACIÓN TERRITORIAL (PANDILLAS)"));
+  elements.push(createSubtitle("Contexto de Pandillas y Actores de Riesgo Locales:"));
+  elements.push(createBodyText(payload.pandillasAnalysis));
+
+  // ================= PÁGINA 11: GRAFO DE HIPÓTESIS HIG 2.0 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("8. HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)"));
 
   if (payload.hypothesisGraph) {
     const buf = dataUrlToArrayBuffer(payload.hypothesisGraph.dataUrl);
@@ -452,30 +527,31 @@ export async function exportToWord(
         })
       );
     }
-    elements.push(createSubtitle("Lectura Analítica del Grafo:"));
+    elements.push(createSubtitle("Lectura Operacional del Grafo HIG 2.0:"));
     elements.push(createBodyText(payload.hypothesisGraph.interpretation));
   }
 
-  // ================= PÁGINA 10: OSINT SINTETIZADO =================
+  // ================= PÁGINA 12: CONCLUSIONES OPERATIVAS =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("7. INTELIGENCIA COMPLEMENTARIA (OSINT)"));
-  elements.push(createSubtitle("Síntesis Comercial y de Movilidad Ambiental:"));
-  elements.push(createBodyText(payload.osintSynthesized));
+  elements.push(createTitle("9. CONCLUSIONES OPERATIVAS Y RECOMENDACIONES"));
 
-  // ================= PÁGINA 11: CONCLUSIONES PARTE 1 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("8. CONCLUSIONES Y RECOMENDACIONES OPERATIVAS - PARTE 1"));
-
-  const halfIndex = Math.ceil(payload.operationalConclusions.length / 2);
-  const part1Concs = payload.operationalConclusions.slice(0, halfIndex);
-  part1Concs.forEach(c => elements.push(createBullet(c)));
-
-  // ================= PÁGINA 12: CONCLUSIONES PARTE 2 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("8. CONCLUSIONES Y RECOMENDACIONES OPERATIVAS - PARTE 2"));
-
-  const part2Concs = payload.operationalConclusions.slice(halfIndex);
-  part2Concs.forEach(c => elements.push(createBullet(c)));
+  payload.operationalConclusions.forEach(c => {
+    elements.push(
+      new Paragraph({
+        numbering: { reference: "custom-bullets", level: 0 },
+        children: [
+          new TextRun({ text: `[Prioridad ${c.prioridad}] `, bold: true, color: c.prioridad === "Alta" ? "B91C1C" : "1E3A8A" }),
+          new TextRun({ text: `Hallazgo: `, bold: true }),
+          new TextRun({ text: `${c.hallazgo}. ` }),
+          new TextRun({ text: `Riesgo asociado: `, bold: true }),
+          new TextRun({ text: `${c.riesgo}. ` }),
+          new TextRun({ text: `Acción recomendada: `, bold: true }),
+          new TextRun({ text: `${c.accion}.` })
+        ],
+        spacing: { after: 120 }
+      })
+    );
+  });
 
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX
   const headerFooterTabs = [

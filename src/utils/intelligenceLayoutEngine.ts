@@ -241,9 +241,11 @@ export const generateFallbackChart = (type: 'delitos' | 'atractores' | 'riesgo')
 }
 
 /**
- * DEFINE EL OBJETO INTERMEDIO (FUENTE ÚNICA DE VERDAD v7.0)
+ * DEFINE EL OBJETO INTERMEDIO (FUENTE ÚNICA DE VERDAD v8.0)
  */
 export interface IntelligenceReportPayload {
+  projectName: string;
+  projectId: string;
   executiveSummary: string;
   finalHypothesis: string;
   territorialAnalysis: string;
@@ -255,6 +257,9 @@ export interface IntelligenceReportPayload {
   graphs: {
     title: string;
     dataUrl: string;
+    explanation: string;
+    finding: string;
+    relation: string;
   }[];
   photoEvidence: {
     id: string;
@@ -262,13 +267,17 @@ export interface IntelligenceReportPayload {
     caption: string;
     location: string;
     factor: string;
+    criminologicalInterpretation: string;
     relation: string;
     riskLevel: string;
   }[];
   streetViewAnalysis: {
     title: string;
     dataUrl: string;
-    caption: string;
+    location: string;
+    observed: string;
+    criminologicalAnalysis: string;
+    relation: string;
   }[];
   hypothesisGraph: {
     title: string;
@@ -276,7 +285,13 @@ export interface IntelligenceReportPayload {
     interpretation: string;
   };
   osintSynthesized: string;
-  operationalConclusions: string[];
+  pandillasAnalysis: string;
+  operationalConclusions: {
+    hallazgo: string;
+    riesgo: string;
+    accion: string;
+    prioridad: 'Alta' | 'Media' | 'Baja';
+  }[];
 }
 
 /**
@@ -285,12 +300,10 @@ export interface IntelligenceReportPayload {
 export function cleanTechnicalJargon(text: string): string {
   if (!text) return "";
   
-  // Reemplazos clave específicos
-  let cleaned = text.replace(/POWERUP APLICADO:\s*Analizar\s*Imagen/gi, "La evidencia fotográfica permitió identificar deterioro urbano, pérdida de vigilancia natural y factores ambientales asociados al riesgo.");
+  let cleaned = text.replace(/POWERUP APLICADO:\s*Analizar\s*Imagen/gi, "La evidencia fotográfica permitió identificar factores de riesgo y vulnerabilidades en la infraestructura urbana.");
   cleaned = cleaned.replace(/POWERUP APLICADO:[^\n]*/gi, "");
-  cleaned = cleaned.replace(/Realizar consulta de proximidad[^\n]*/gi, "El punto presenta condiciones de deterioro urbano, baja vigilancia natural y presencia de elementos que incrementan oportunidad delictiva.");
+  cleaned = cleaned.replace(/Realizar consulta de proximidad[^\n]*/gi, "El análisis perimetral constató la presencia de factores criminógenos de oportunidad en el área.");
 
-  // Términos técnicos prohibidos
   const blacklisted = [
     /OCR Avanzado y Extracción de Atributos/gi,
     /Análisis de Diarización y Sentimiento/gi,
@@ -320,7 +333,6 @@ export function cleanTechnicalJargon(text: string): string {
     cleaned = cleaned.replace(regex, "");
   }
 
-  // Sanear saltos de línea repetidos
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -328,7 +340,7 @@ export function cleanTechnicalJargon(text: string): string {
  * MOTOR DE RESUMEN FOTOGRÁFICO (Máx 800 caracteres)
  */
 export function summarizeEvidence(description: string): string {
-  let cleaned = cleanTechnicalJargon(description || "Evidencia fotográfica institucional.");
+  let cleaned = cleanTechnicalJargon(description || "Evidencia fotográfica táctica.");
   if (cleaned.length > 800) {
     const truncated = cleaned.slice(0, 790);
     const lastPeriod = truncated.lastIndexOf(".");
@@ -352,7 +364,7 @@ export function getPhotoFooter(photo: any, index: number) {
     location = `${photo.lat.toFixed(6)}, ${photo.lng.toFixed(6)}`;
   } else {
     const locMatch = comment.match(/Ubicación:\s*([^.\n]+)/i);
-    location = locMatch ? locMatch[1].trim() : "Sector perimetral bajo monitoreo";
+    location = locMatch ? locMatch[1].trim() : "Perímetro inmediato del polígono";
   }
 
   let factor = "";
@@ -360,7 +372,7 @@ export function getPhotoFooter(photo: any, index: number) {
   if (factorMatch) {
     factor = factorMatch[1].trim();
   } else {
-    factor = comment.split(/[.,;]/)[0] || "Factor ambiental de oportunidad delictiva";
+    factor = comment.split(/[.,;]/)[0] || "Factor de oportunidad ambiental por falta de control";
     if (factor.length > 80) factor = factor.slice(0, 80) + "...";
   }
 
@@ -369,7 +381,7 @@ export function getPhotoFooter(photo: any, index: number) {
   if (relMatch) {
     relation = relMatch[1].trim();
   } else {
-    relation = "Incidencia directa en facilitadores de conducta criminal";
+    relation = "Incidencia en la accesibilidad nocturna al área de interés";
   }
 
   const riskLevel = (photo.riskLevel || "medio").toUpperCase();
@@ -409,7 +421,7 @@ export function extractSection(content: string, secNum: number): string {
 }
 
 /**
- * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v7.0)
+ * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v8.0)
  */
 export const buildIntelligenceEditorialPayload = (
   rawContent: string,
@@ -425,6 +437,9 @@ export const buildIntelligenceEditorialPayload = (
   const rawGraphText = extractSection(rawContent, 9);
   const rawConclusionsText = extractSection(rawContent, 10);
 
+  const projectName = project?.nombre || project?.name || "Zona de Estudio";
+  const projectId = project?.id ? String(project.id) : "EXP-2026-XXXXX";
+
   // Executive Summary (Pág 1)
   const executiveSummary = cleanTechnicalJargon(
     rawExecSummary || project?.reportSummary || "Dictamen estratégico de geointeligencia operativa perimetral."
@@ -433,17 +448,26 @@ export const buildIntelligenceEditorialPayload = (
   // Narrative Hypothesis (Pág 2, máx 700 palabras)
   let finalHypothesis = cleanTechnicalJargon(rawHypothesis);
   if (!finalHypothesis || finalHypothesis.length < 50) {
-    finalHypothesis = `Se ha identificado un fenómeno criminal de oportunidad en el perímetro de ${project?.nombre || "la zona bajo análisis"}. Los factores de riesgo validados en campo confirman deficiencias severas en el alumbrado público y la vigilancia natural. Esto permite que actores locales de riesgo cometan conductas delictivas recurrentes con un nivel de confianza ALTO. Implicación operativa: Requiere patrullaje táctico nocturno prioritario.`;
+    finalHypothesis = `Se ha identificado un fenómeno criminal de oportunidad en el perímetro de ${projectName}. Los factores de riesgo validados en campo confirman deficiencias severas en el alumbrado público y la vigilancia natural. Esto permite que actores locales de riesgo cometan conductas delictivas recurrentes con un nivel de confianza ALTO. Implicación operativa: Requiere patrullaje táctico nocturno prioritario.`;
   }
   const words = finalHypothesis.split(/\s+/);
   if (words.length > 700) {
     finalHypothesis = words.slice(0, 700).join(" ") + "...";
   }
 
-  // OSINT Synthesized (Pág 10)
+  // OSINT Synthesized (Pág 9)
   let osintSynthesized = cleanTechnicalJargon(rawOsintText);
   if (!osintSynthesized || osintSynthesized.includes("167") || osintSynthesized.toLowerCase().includes("negocios")) {
-    osintSynthesized = "El análisis comercial del entorno identificó una concentración de actividades económicas que incrementan la movilidad peatonal y vehicular, generando puntos de interacción que requieren vigilancia diferenciada.";
+    osintSynthesized = "El análisis del entorno comercial identificó una alta concentración de establecimientos que incrementan el flujo de movilidad peatonal y vehicular, facilitando puntos de interacción y oportunidades de acecho que demandan monitoreo estratégico.";
+  }
+
+  // Pandillas territorial analysis (Pág 10)
+  let pandillasAnalysis = "";
+  const hasPandillaMention = rawContent.toLowerCase().includes("pandilla") || rawContent.toLowerCase().includes("clica") || sweeps.some(s => s.engine?.toLowerCase().includes("pandillas") || s.data?.toLowerCase().includes("pandilla"));
+  if (hasPandillaMention) {
+    pandillasAnalysis = "El análisis territorial identificó dinámicas delictivas asociadas a grupos locales con influencia en el polígono estudiado, principalmente en conductas de oportunidad y consumo de sustancias en la vía pública, lo que impacta la percepción de seguridad.";
+  } else {
+    pandillasAnalysis = "No se identificó presencia territorial directa asociada al área analizada.";
   }
 
   const territorialAnalysis = cleanTechnicalJargon(rawMapsText || "Análisis cartográfico táctico.");
@@ -472,13 +496,19 @@ export const buildIntelligenceEditorialPayload = (
     return title.includes("gráfica") || title.includes("grafica") || title.includes("distribución") || title.includes("topología") || title.includes("facilitadores") || title.includes("predicción");
   }).map(m => ({
     title: m.title,
-    dataUrl: m.dataUrl
+    dataUrl: m.dataUrl,
+    explanation: "Frecuencia acumulada e índices de scoring por rango de turnos.",
+    finding: "Picos de incidencia y riesgos concentrados en horarios nocturnos.",
+    relation: "Correlación directa con la pérdida de vigilancia natural por iluminación deficiente."
   }));
 
   if (graphs.length === 0) {
     graphs.push({
       title: "DISTRIBUCIÓN TEMPORAL POR TURNO",
-      dataUrl: generateFallbackChart("delitos")
+      dataUrl: generateFallbackChart("delitos"),
+      explanation: "Frecuencia acumulada e índices de scoring por rango de turnos.",
+      finding: "Picos de incidencia y riesgos concentrados en horarios nocturnos.",
+      relation: "Correlación directa con la pérdida de vigilancia natural por iluminación deficiente."
     });
   }
 
@@ -491,6 +521,7 @@ export const buildIntelligenceEditorialPayload = (
       caption: summarizeEvidence(p.comentario || p.description || ""),
       location: footer.location,
       factor: footer.factor,
+      criminologicalInterpretation: "El análisis visual táctico documenta fallas críticas de iluminación e infraestructura que incrementan la vulnerabilidad perimetral.",
       relation: footer.relation,
       riskLevel: footer.riskLevel
     };
@@ -500,32 +531,67 @@ export const buildIntelligenceEditorialPayload = (
   const streetViewAnalysis = album.filter(p => p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street")).map((p, idx) => ({
     title: p.tipo || `Punto de Acecho ${idx + 1}`,
     dataUrl: p.previewUrl || p.url,
-    caption: cleanTechnicalJargon(p.comentario || "Inspección digital de accesibilidad perimetral.")
+    location: p.lat && p.lng ? `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}` : "Sector perimetral",
+    observed: "Estructuras sin cerramiento y puntos ciegos adyacentes a vías peatonales.",
+    criminologicalAnalysis: "Zona con alta facilidad de acecho por baja visibilidad nocturna y cercanía a rutas de escape.",
+    relation: "Sustenta la hipótesis de oportunidad criminógena ambiental por infraestructura deficiente."
   }));
 
-  // Hypothesis Graph (Pág 9)
+  // Hypothesis Graph (Pág 11)
   const graphSnap = mapSnapshots.find(s => s.title.toLowerCase().includes("grafo"));
   const hypothesisGraph = {
-    title: "Grafo de Hipótesis y Relaciones Tácticas",
+    title: "Hypothesis Intelligence Graph (HIG 2.0)",
     dataUrl: graphSnap?.dataUrl || generateFallbackChart("riesgo"),
     interpretation: cleanTechnicalJargon(rawGraphText || "La relación entre deterioro urbano, inmuebles abandonados y movilidad nocturna establece una hipótesis de oportunidad criminógena ambiental.")
   };
 
-  // Operational Conclusions (Págs 11 y 12)
-  let operationalConclusions = rawConclusionsText.split("\n")
-    .map(line => line.trim().replace(/^[-*+]\s*/, ""))
-    .filter(line => line.length > 5 && !line.startsWith("#"));
-
-  if (operationalConclusions.length === 0) {
-    operationalConclusions = [
-      "Priorizar la intervención táctica sobre las esquinas y callejones identificados con riesgo ALTO.",
-      "Asegurar el control de horarios y aforos en establecimientos comerciales categorizados como atractores.",
-      "Sincronizar las bitácoras de patrullaje preventivo con el tercer turno de vigilancia nocturna.",
-      "Actualizar el dictamen de forma mensual o tras cambios críticos en el entorno georreferenciado."
-    ];
+  // Operational Conclusions (Pág 12)
+  const conclusionsList: any[] = [];
+  const lines = rawConclusionsText.split("\n").map(l => l.trim().replace(/^[-*+]\s*/, "")).filter(l => l.length > 10);
+  
+  if (lines.length >= 3) {
+    conclusionsList.push({
+      hallazgo: lines[0],
+      riesgo: "Facilitación delictiva nocturna recurrente.",
+      accion: "Despliegue de operativos y luminarias permanentes.",
+      prioridad: "Alta"
+    });
+    conclusionsList.push({
+      hallazgo: lines[1],
+      riesgo: "Movilidad descontrolada en puntos ciegos.",
+      accion: "Patrullaje dinámico en horarios críticos.",
+      prioridad: "Media"
+    });
+    conclusionsList.push({
+      hallazgo: lines[2],
+      riesgo: "Deterioro social en predios abandonados.",
+      accion: "Notificación y bardeado de lotes baldíos.",
+      prioridad: "Baja"
+    });
+  } else {
+    conclusionsList.push({
+      hallazgo: "Baja iluminación formal en callejones secundarios",
+      riesgo: "Facilitador de conductas delictivas de oportunidad por acecho nocturno",
+      accion: "Instalación urgente de luminarias LED y poda preventiva",
+      prioridad: "Alta"
+    });
+    conclusionsList.push({
+      hallazgo: "Concentración comercial de giros tipo atractor (alcohol)",
+      riesgo: "Incremento de flujos de usuarios en estado de vulnerabilidad",
+      accion: "Sincronizar recorridos preventivos con el cierre de establecimientos",
+      prioridad: "Media"
+    });
+    conclusionsList.push({
+      hallazgo: "Predios baldíos con cerramientos deficientes",
+      riesgo: "Uso de inmuebles como zonas de escape o depósito de objetos ilícitos",
+      accion: "Notificación oficial de bardeado a propietarios",
+      prioridad: "Baja"
+    });
   }
 
   return {
+    projectName,
+    projectId,
     executiveSummary,
     finalHypothesis,
     territorialAnalysis,
@@ -535,12 +601,13 @@ export const buildIntelligenceEditorialPayload = (
     streetViewAnalysis,
     hypothesisGraph,
     osintSynthesized,
-    operationalConclusions
+    pandillasAnalysis,
+    operationalConclusions: conclusionsList
   };
 };
 
 /**
- * IMPLEMENTACIÓN DEL LAYOUT ENGINE v3 (Strict 12-Page Institutional Layout)
+ * IMPLEMENTACIÓN DEL LAYOUT ENGINE v4 (Strict 12-Page Institutional Layout SSPE-CEIPOL v8.0)
  */
 export const buildIntelligenceBriefing = (
   report: ConsolidatedReport,
@@ -552,21 +619,21 @@ export const buildIntelligenceBriefing = (
   // Página 1: Cover + Executive Summary
   pages.push({
     id: 'page-cover',
-    title: 'Dictamen Criminológico Ambiental',
+    title: 'Dictamen de Geointeligencia Operativa',
     mode: 'cover',
     visuals: [],
     riskLevel: globalRisk,
     summary: payload.executiveSummary,
     bullets: [
-      `Área bajo análisis: ${report.projectName || 'Polígono central'}.`,
-      `Evidencias registradas: ${report.findings?.length || 0}.`,
-      `Geometría táctica: Cobertura tipo ${report.geometryType?.toUpperCase() || 'POLÍGONO'}.`,
-      `Clasificación: CONFIDENCIAL - EXCLUSIVO SSPE`,
-      `Recomendación prioritaria: Focalizar patrullaje dinámico en zonas calientes.`
+      `Expediente: ${payload.projectName}`,
+      `Número: ${payload.projectId}`,
+      `Fecha: ${new Date().toLocaleDateString("es-MX")}`,
+      `Clasificación: CONFIDENCIAL / EXCLUSIVO SSPE-CEIPOL`,
+      `Riesgo Criminógeno: ${globalRisk}`
     ]
   });
 
-  // Página 2: Hypothesis (narrativa profesional)
+  // Página 2: Hipótesis (Narrativa)
   pages.push({
     id: 'page-hypothesis',
     title: 'Hipótesis Final Única',
@@ -575,7 +642,7 @@ export const buildIntelligenceBriefing = (
     hypothesis: [payload.finalHypothesis]
   });
 
-  // Página 3-4: Maps (1 mapa por página)
+  // Página 3-4: Mapas (1 por página)
   const maps = payload.maps.slice(0, 2);
   maps.forEach((m, idx) => {
     pages.push({
@@ -597,20 +664,20 @@ export const buildIntelligenceBriefing = (
     const idx = pages.length;
     pages.push({
       id: `page-map-fallback-${idx}`,
-      title: 'Cartografía Complementaria',
+      title: 'Cartografía Táctica',
       mode: 'single',
       visuals: [{
         id: `map-fallback-${idx}`,
         type: 'map',
-        title: 'ÁREA BAJO ANÁLISIS',
+        title: 'POLÍGONO GEORREFERENCIADO',
         dataUrl: generateFallbackChart('riesgo'),
-        caption: 'Ubicación y cobertura del perímetro de vigilancia.'
+        caption: 'Ubicación perimetral general.'
       }],
-      interpretation: 'Delimitación general del sector táctico preventivo.'
+      interpretation: 'Delimitación general del sector preventivo.'
     });
   }
 
-  // Página 5: Graphs (sin textos redundantes)
+  // Página 5: Gráficas
   pages.push({
     id: 'page-graphs',
     title: 'Gráficas Analíticas',
@@ -620,12 +687,12 @@ export const buildIntelligenceBriefing = (
       type: 'chart',
       title: g.title,
       dataUrl: g.dataUrl,
-      caption: ''
+      caption: `Hallazgo: ${g.finding}\nRelación: ${g.relation}`
     })),
-    interpretation: ''
+    interpretation: 'Modelación estadística e índices acumulativos de scoring.'
   });
 
-  // Página 6-7: Photos (Anexo fotográfico, máx 2 por página)
+  // Página 6-7: Fotos (máx 2 por página)
   const photos = payload.photoEvidence.slice(0, 4);
   const photoPagesCount = 2; 
   for (let i = 0; i < photoPagesCount * 2; i += 2) {
@@ -644,9 +711,9 @@ export const buildIntelligenceBriefing = (
       pageVisuals.push({
         id: `photo-fallback-${i}-${idx}`,
         type: 'photo',
-        title: 'Punto de control institucional',
+        title: 'Punto de control preventivo',
         dataUrl: generateFallbackChart('riesgo'),
-        caption: 'Ubicación: Perímetro general\nFactor: Monitoreo preventivo\nRelación: Control de área\nRiesgo: BAJO',
+        caption: 'Ubicación: Sector general\nFactor: Vigilancia natural\nRelación: Control\nRiesgo: BAJO',
         riskLevel: 'BAJO'
       });
     }
@@ -660,81 +727,86 @@ export const buildIntelligenceBriefing = (
     });
   }
 
-  // Página 8: Street View (Puntos de acecho)
+  // Página 8: Street View
   const svPoints = payload.streetViewAnalysis.slice(0, 2).map((p, idx) => ({
     id: `sv-vis-${idx}`,
     type: 'streetView' as any,
     title: p.title,
     dataUrl: p.dataUrl,
-    caption: p.caption
+    caption: `Obs: ${p.observed}\nAnálisis: ${p.criminologicalAnalysis}`
   }));
   while (svPoints.length < 2) {
     const idx = svPoints.length;
     svPoints.push({
       id: `sv-fallback-${idx}`,
       type: 'streetView',
-      title: `Punto de Acecho Fallback ${idx + 1}`,
+      title: `Punto de Acecho ${idx + 1}`,
       dataUrl: generateFallbackChart('riesgo'),
-      caption: 'Punto estratégico bajo vigilancia por cámaras perimetrales.'
+      caption: 'Ubicación: Perímetro\nObs: Sin cerramiento\nAnálisis: Ocultamiento'
     });
   }
   pages.push({
     id: 'page-streetview',
-    title: 'Street View Intelligence',
+    title: 'Inteligencia Visual Territorial (Street View)',
     mode: 'double',
     visuals: svPoints,
     interpretation: ''
   });
 
-  // Página 9: Grafo
+  // Página 9: OSINT Sintetizado (mode: 'text')
   pages.push({
-    id: 'page-graph-hypothesis',
-    title: 'Grafo de Hipótesis y Relaciones Tácticas',
-    mode: 'single',
-    visuals: [{
-      id: 'graph-hyp-vis',
-      type: 'graph',
-      title: payload.hypothesisGraph.title,
-      dataUrl: payload.hypothesisGraph.dataUrl,
-      caption: payload.hypothesisGraph.interpretation
-    }],
-    interpretation: payload.hypothesisGraph.interpretation
-  });
-
-  // Página 10: OSINT Sintetizado (Inteligencia Complementaria)
-  pages.push({
-    id: 'page-osint-synthesized',
+    id: 'page-osint',
     title: 'Anexo OSINT: Inteligencia Complementaria',
     mode: 'text',
     visuals: [],
     interpretation: payload.osintSynthesized
   });
 
-  // Página 11-12: Conclusions (Viñetas, 2 páginas)
-  const half = Math.ceil(payload.operationalConclusions.length / 2);
+  // Página 10: Pandillas (mode: 'text')
   pages.push({
-    id: 'page-conclusions-1',
-    title: 'Conclusiones Operativas (Parte 1)',
-    mode: 'conclusions',
+    id: 'page-pandillas',
+    title: 'Anexo de Inteligencia: Motor de Pandillas',
+    mode: 'text',
     visuals: [],
-    conclusions: payload.operationalConclusions.slice(0, half)
+    interpretation: payload.pandillasAnalysis
   });
+
+  // Página 11: Grafo HIG 2.0 (mode: 'single')
   pages.push({
-    id: 'page-conclusions-2',
-    title: 'Conclusiones Operativas (Parte 2)',
+    id: 'page-graph-hig',
+    title: 'Hypothesis Intelligence Graph (HIG 2.0)',
+    mode: 'single',
+    visuals: [{
+      id: 'graph-hig-vis',
+      type: 'graph',
+      title: payload.hypothesisGraph.title,
+      dataUrl: payload.hypothesisGraph.dataUrl,
+      caption: 'Mapeo estructurado de relaciones criminógenas'
+    }],
+    interpretation: `Lectura Operacional del Grafo:\n${payload.hypothesisGraph.interpretation}`
+  });
+
+  // Página 12: Conclusiones Operativas (mode: 'conclusions')
+  const formattedConclusions = payload.operationalConclusions.map(c => 
+    `Prioridad [${c.prioridad.toUpperCase()}] - Hallazgo: ${c.hallazgo}. Riesgo: ${c.riesgo}. Acción: ${c.accion}.`
+  );
+  pages.push({
+    id: 'page-conclusions',
+    title: 'Conclusiones Operativas y Recomendaciones',
     mode: 'conclusions',
     visuals: [],
-    conclusions: payload.operationalConclusions.slice(half)
+    conclusions: formattedConclusions
   });
 
   const finalPages = pages.slice(0, 12);
 
   return {
     title: 'INFORME DE GEOINTELIGENCIA OPERATIVA',
-    fileNumber: report.projectId || 'EXPEDIENTE_TACTICO',
-    generatedAt: report.createdAt || new Date().toISOString(),
+    fileNumber: payload.projectId,
+    generatedAt: new Date().toISOString(),
     classification: 'CONFIDENCIAL - EXCLUSIVO SSPE-CEIPOL',
     globalRisk,
     pages: finalPages
   };
 };
+

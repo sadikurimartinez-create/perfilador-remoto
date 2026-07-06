@@ -3837,8 +3837,9 @@ const hasMinimumPhotos =
                     {previewPageIdx === 2 && (
                       <div className="space-y-3 text-center">
                         <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">2. CARTOGRAFÍA OPERATIVA - MAPA 1</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
                           [Mapa 1: Simulación de Densidad Criminológica]
+                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
                         <p className="text-[11px] text-slate-400 italic">Concentración de incidencias georreferenciadas en el polígono perimetral.</p>
                       </div>
@@ -3847,8 +3848,9 @@ const hasMinimumPhotos =
                     {previewPageIdx === 3 && (
                       <div className="space-y-3 text-center">
                         <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">2. CARTOGRAFÍA OPERATIVA - MAPA 2</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
                           [Mapa 2: Corredores de Movilidad Táctica]
+                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
                         <p className="text-[11px] text-slate-400 italic">Vías de tránsito principales y zonas de amortiguamiento identificadas.</p>
                       </div>
@@ -3857,8 +3859,9 @@ const hasMinimumPhotos =
                     {previewPageIdx === 4 && (
                       <div className="space-y-3 text-center">
                         <h4 className="text-sm font-extrabold text-indigo-400 uppercase tracking-wider">3. ANÁLISIS DE SCORING Y MODELADOS</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
                           [Gráficas de Distribución Temporal y Facilitadores Ambientales]
+                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
                         <p className="text-[11px] text-slate-400 italic">Estadísticas acumulativas de frecuencia por turno.</p>
                       </div>
@@ -3866,15 +3869,25 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 5 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 1</h4>
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 1 (Corte 45%)</h4>
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
-                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 1]</div>
-                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
+                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
+                              [Imagen 1 - 45% Altura]
+                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
+                            </div>
+                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
+                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Alumbrado público ausente</p>
+                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-red-400 font-bold">ALTO</span></p>
                           </div>
-                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
-                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 2]</div>
-                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
+                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
+                              [Imagen 2 - 45% Altura]
+                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
+                            </div>
+                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
+                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Obstrucción de visibilidad natural</p>
+                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-blue-400 font-bold">MEDIO</span></p>
                           </div>
                         </div>
                       </div>
@@ -3882,15 +3895,25 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 6 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 2</h4>
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 2 (Corte 45%)</h4>
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
-                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 3]</div>
-                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
+                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
+                              [Imagen 3 - 45% Altura]
+                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
+                            </div>
+                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
+                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Acumulación de residuos / predios baldíos</p>
+                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-red-400 font-bold">ALTO</span></p>
                           </div>
-                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
-                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 4]</div>
-                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
+                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
+                              [Imagen 4 - 45% Altura]
+                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
+                            </div>
+                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
+                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Falta de cerramiento perimetral</p>
+                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-blue-400 font-bold">MEDIO</span></p>
                           </div>
                         </div>
                       </div>
@@ -3899,46 +3922,50 @@ const hasMinimumPhotos =
                     {previewPageIdx === 7 && (
                       <div className="space-y-3 text-center">
                         <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">5. PUNTOS DE ACECHO Y VULNERABILIDAD FÍSICA (STREET VIEW)</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
                           [Simulación de Vista de Calle]
+                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
+                        <p className="text-[11px] text-slate-400 italic">Identificación visual de puntos ciegos y zonas de posible acecho.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 8 && (
-                      <div className="space-y-3 text-center">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">6. GRAFO DE HIPÓTESIS Y CONEXIONES</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
-                          [Visualizador de Grafo Relacional]
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">6. INTELIGENCIA COMPLEMENTARIA (OSINT)</h4>
+                        <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] text-slate-350">
+                          El análisis del entorno comercial identificó una alta concentración de establecimientos comerciales y de servicios que incrementan de forma considerable el flujo de movilidad peatonal y vehicular, facilitando puntos de interacción y oportunidades de acecho.
                         </div>
                       </div>
                     )}
 
                     {previewPageIdx === 9 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">7. INTELIGENCIA COMPLEMENTARIA (OSINT)</h4>
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">7. ANÁLISIS DE VINCULACIÓN TERRITORIAL (PANDILLAS)</h4>
                         <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] text-slate-350">
-                          El análisis comercial del entorno identificó concentración de actividades económicas que incrementan movilidad peatonal, generando puntos de interacción que requieren vigilancia.
+                          El análisis territorial identificó dinámicas delictivas asociadas a grupos locales con influencia en el polígono estudiado, principalmente en conductas de oportunidad y consumo de sustancias en la vía pública, lo que impacta la percepción de seguridad.
                         </div>
                       </div>
                     )}
 
                     {previewPageIdx === 10 && (
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">8. CONCLUSIONES Y RECOMENDACIONES - PARTE 1</h4>
-                        <ul className="list-disc list-inside space-y-2 text-[11px] text-slate-350">
-                          <li>Priorizar la intervención táctica sobre las esquinas y callejones identificados con riesgo ALTO.</li>
-                          <li>Asegurar el control de horarios y aforos en establecimientos comerciales categorizados como atractores.</li>
-                        </ul>
+                      <div className="space-y-3 text-center">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">8. HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)</h4>
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
+                          [Visualizador de Grafo Relacional HIG 2.0]
+                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 italic">Mapeo estructurado de relaciones, actores, lugares y evidencias del caso.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 11 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">8. CONCLUSIONES Y RECOMENDACIONES - PARTE 2</h4>
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">9. CONCLUSIONES OPERATIVAS Y RECOMENDACIONES</h4>
                         <ul className="list-disc list-inside space-y-2 text-[11px] text-slate-350">
-                          <li>Sincronizar las bitácoras de patrullaje preventivo con el tercer turno de vigilancia nocturna.</li>
-                          <li>Actualizar el dictamen de forma mensual o tras cambios críticos en el entorno georreferenciado.</li>
+                          <li><strong>Prioridad Alta:</strong> Baja iluminación formal en callejones secundarios. Acción: Instalación urgente de luminarias.</li>
+                          <li><strong>Prioridad Media:</strong> Concentración comercial de giros tipo atractor. Acción: Patrullajes tácticos enfocados.</li>
+                          <li><strong>Prioridad Baja:</strong> Predios baldíos con cerramientos deficientes. Acción: Notificación para bardeado.</li>
                         </ul>
                       </div>
                     )}
