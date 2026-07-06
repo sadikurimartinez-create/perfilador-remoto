@@ -1324,7 +1324,10 @@ const hasMinimumPhotos =
       });
 
       const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps].slice(0, 8);
-      const photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
+      let photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
+      if (photosToExport.length === 0) {
+        photosToExport = album.filter((p) => p.previewUrl).slice(0, 8);
+      }
 
       const photosToExportData = photosToExport.map((p) => ({
         id: p.id,

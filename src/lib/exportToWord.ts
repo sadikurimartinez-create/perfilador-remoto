@@ -36,7 +36,8 @@ async function fetchLocalImageBuffer(path: string): Promise<ArrayBuffer | null> 
   }
 }
 
-async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
+async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer | null> {
+  if (!imageUrl || typeof imageUrl !== "string") return null;
   let objectUrl: string | null = null;
   try {
     let imgSrc = imageUrl;
@@ -101,6 +102,9 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
     });
 
     return stampedBuffer;
+  } catch (err) {
+    console.error("Watermark failed for image:", imageUrl, err);
+    return null;
   } finally {
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
@@ -108,13 +112,20 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
   }
 }
 
-function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
-  const base64 = dataUrl.indexOf(",") >= 0 ? dataUrl.split(",")[1] : dataUrl;
-  if (!base64) throw new Error("Data URL inválida");
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
+  if (!dataUrl || typeof dataUrl !== "string") return null;
+  const base64Index = dataUrl.indexOf(",");
+  const base64 = base64Index >= 0 ? dataUrl.split(",")[1] : dataUrl;
+  if (!base64) return null;
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  } catch (e) {
+    console.error("Failed to convert dataUrl to ArrayBuffer:", e);
+    return null;
+  }
 }
 
 export async function exportToWord(
