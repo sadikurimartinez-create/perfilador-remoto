@@ -518,6 +518,8 @@ export function PhotoAlbum({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
+  const [activeReportTab, setActiveReportTab] = useState<"edit" | "preview">("edit");
+  const [previewPageIdx, setPreviewPageIdx] = useState<number>(0);
   const [kernelState, setKernelState] = useState(ReportEngineKernel.getState());
 
   useEffect(() => {
@@ -1402,11 +1404,17 @@ const hasMinimumPhotos =
       window.alert("¡Dictamen Oficial generado, exportado y guardado con éxito!");
     } catch (err) {
       console.error("[PhotoAlbum] Error al finalizar y exportar el dictamen:", err);
-      setError(
-        err instanceof Error && err.message === "STATE_MACHINE_OVERFLOW_BLOCKED"
-          ? "BLOQUEO DE STATE MACHINE: El informe excede los límites máximos permitidos (máx. 1800 caracteres por sección, 8 secciones, 14400 caracteres totales o 12 páginas). Simplifique el dictamen."
-          : (err instanceof Error ? err.message : "No se pudo generar y exportar el informe.")
-      );
+      let errMsg = "No se pudo generar y exportar el informe.";
+      if (err instanceof Error) {
+        if (err.message.includes("VALIDATION_FAILED_CRITERIA")) {
+          errMsg = "ERROR DE VALIDACIÓN INSTITUCIONAL: El informe excede las 12 páginas, contiene comandos internos prohibidos o carece de los anexos obligatorios (mapas, gráficas, resumen o conclusiones).";
+        } else if (err.message === "STATE_MACHINE_OVERFLOW_BLOCKED") {
+          errMsg = "BLOQUEO DE STATE MACHINE: El informe excede los límites máximos permitidos. Simplifique el dictamen.";
+        } else {
+          errMsg = err.message;
+        }
+      }
+      setError(errMsg);
     } finally {
       setIsSavingAnalysis(false);
     }
@@ -3537,209 +3545,411 @@ const hasMinimumPhotos =
               </button>
             </header>
 
-            {/* 1. EDICIÓN DEL CUERPO DEL DICTAMEN */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                📝 Editar Cuerpo del Dictamen
-              </label>
-              <textarea
-                spellCheck={true}
-                value={editableProfile}
-                onChange={(e) => {
-                  setEditableProfile(e.target.value);
-                  setHasSavedAnalysis(false);
-                }}
-                className="w-full min-h-[250px] rounded-xl border border-slate-700 bg-slate-900 text-slate-100 p-4 text-xs font-mono leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                placeholder="Escribe el cuerpo del dictamen aquí..."
-              />
+            {/* TABS DE MODO */}
+            <div className="flex border-b border-slate-800 gap-4 mb-4">
+              <button
+                type="button"
+                onClick={() => setActiveReportTab("edit")}
+                className={`pb-2 text-xs font-bold uppercase tracking-wider transition ${activeReportTab === "edit" ? "border-b-2 border-sky-500 text-sky-400" : "text-slate-400 hover:text-slate-200"}`}
+              >
+                📝 Editar Dictamen
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveReportTab("preview")}
+                className={`pb-2 text-xs font-bold uppercase tracking-wider transition ${activeReportTab === "preview" ? "border-b-2 border-sky-500 text-sky-400" : "text-slate-400 hover:text-slate-200"}`}
+              >
+                👁️ Vista Previa Institucional
+              </button>
             </div>
 
-            {/* 2. SELECCIÓN DE ANEXOS */}
-            <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-800 space-y-4">
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                📋 Configuración del Dictamen y Selección de Anexos
-              </h4>
-              <p className="text-[11px] text-slate-400">
-                Seleccione qué componentes y barridos de información desea adjuntar al documento oficial.
-              </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-350">
-                {/* Mapas */}
-                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
-                  <p className="font-extrabold text-sky-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
-                    🗺️ Atlas Cartográfico
-                  </p>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.mapInteractive}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapInteractive: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Mapa de Evidencias de Campo</span>
+            {activeReportTab === "edit" ? (
+              <>
+                {/* 1. EDICIÓN DEL CUERPO DEL DICTAMEN */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    📝 Editar Cuerpo del Dictamen
                   </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.mapDensity}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapDensity: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Mapa 1: Densidad Criminológica</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.mapMobility}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapMobility: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Mapa 2: Corredores y Movilidad</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.mapAttractors}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapAttractors: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Mapa 3: Atracción y Factores</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.mapPredictive}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapPredictive: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Mapa 4: Proyección Predictiva</span>
-                  </label>
+                  <textarea
+                    spellCheck={true}
+                    value={editableProfile}
+                    onChange={(e) => {
+                      setEditableProfile(e.target.value);
+                      setHasSavedAnalysis(false);
+                    }}
+                    className="w-full min-h-[250px] rounded-xl border border-slate-700 bg-slate-900 text-slate-100 p-4 text-xs font-mono leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                    placeholder="Escribe el cuerpo del dictamen aquí..."
+                  />
                 </div>
 
-                {/* Modelos Analíticos */}
-                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
-                  <p className="font-extrabold text-indigo-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
-                    📊 Modelos Analíticos
+                {/* 2. SELECCIÓN DE ANEXOS */}
+                <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-800 space-y-4">
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                    📋 Configuración del Dictamen y Selección de Anexos
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Seleccione qué componentes y barridos de información desea adjuntar al documento oficial.
                   </p>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.chartTemporal}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTemporal: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Gráfica 1: Distribución por Turno</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.chartTopology}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTopology: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Gráfica 2: Topología y Frecuencia</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.chartEnvironmental}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartEnvironmental: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Gráfica 3: Facilitadores Ambientales</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.chartPrediction}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartPrediction: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Gráfica 4: Predicción a 6 Meses</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.graphConnections}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, graphConnections: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Grafo 1: Relaciones y Redes</span>
-                  </label>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-350">
+                    {/* Mapas */}
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
+                      <p className="font-extrabold text-sky-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                        🗺️ Atlas Cartográfico
+                      </p>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.mapInteractive}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapInteractive: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Mapa de Evidencias de Campo</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.mapDensity}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapDensity: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Mapa 1: Densidad Criminológica</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.mapMobility}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapMobility: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Mapa 2: Corredores y Movilidad</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.mapAttractors}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapAttractors: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Mapa 3: Atracción y Factores</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.mapPredictive}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapPredictive: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Mapa 4: Proyección Predictiva</span>
+                      </label>
+                    </div>
+
+                    {/* Modelos Analíticos */}
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
+                      <p className="font-extrabold text-indigo-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                        📊 Modelos Analíticos
+                      </p>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.chartTemporal}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTemporal: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Gráfica 1: Distribución por Turno</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.chartTopology}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTopology: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Gráfica 2: Topología y Frecuencia</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.chartEnvironmental}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartEnvironmental: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Gráfica 3: Facilitadores Ambientales</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.chartPrediction}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartPrediction: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Gráfica 4: Predicción a 6 Meses</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.graphConnections}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, graphConnections: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Grafo 1: Relaciones y Redes</span>
+                      </label>
+                    </div>
+
+                    {/* Barridos */}
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
+                      <p className="font-extrabold text-emerald-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                        📡 Barridos e Inteligencia
+                      </p>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.sweepDenue}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepDenue: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Barrido DENUE (INEGI)</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.sweepIncidencia}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepIncidencia: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Barrido de Incidencia Delictiva</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.sweepRepuve}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRepuve: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Consulta Vehicular (REPUVE)</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.sweepRnpdno}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRnpdno: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Registro Desaparecidos (RNPDNO)</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.sweepMultimodal}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepMultimodal: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Búsqueda Multimodal Geo-Espacial</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.sweepCifa}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepCifa: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Fusión CIFA-CEIPOL</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Barridos */}
-                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
-                  <p className="font-extrabold text-emerald-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
-                    📡 Barridos e Inteligencia
-                  </p>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.sweepDenue}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepDenue: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Barrido DENUE (INEGI)</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.sweepIncidencia}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepIncidencia: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Barrido de Incidencia Delictiva</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.sweepRepuve}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRepuve: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Consulta Vehicular (REPUVE)</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.sweepRnpdno}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRnpdno: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Registro Desaparecidos (RNPDNO)</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.sweepMultimodal}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepMultimodal: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Búsqueda Multimodal Geo-Espacial</span>
-                  </label>
-                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={selectedAnnexes.sweepCifa}
-                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepCifa: e.target.checked }))}
-                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                    />
-                    <span>Fusión CIFA-CEIPOL</span>
-                  </label>
+                {/* 3. METADATOS DE EMISIÓN */}
+                {reportGenerationMeta && (
+                  <div className="bg-slate-950 border border-slate-900 rounded-xl p-4 space-y-1 text-xs text-slate-400">
+                    <p className="font-bold text-slate-300 uppercase tracking-widest text-[9px] mb-1">
+                      ⚙️ DETALLES DE GENERACIÓN
+                    </p>
+                    <p><strong>Fecha de Emisión:</strong> {reportGenerationMeta.date}</p>
+                    <p><strong>Hora de Emisión:</strong> {reportGenerationMeta.time}</p>
+                    <p><strong>Analista a Cargo:</strong> {reportGenerationMeta.user}</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+                  <span className="text-xs font-bold text-slate-300 uppercase">
+                    Paginación Rígida de Geointeligencia (Pág. {previewPageIdx + 1} de 12)
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={previewPageIdx === 0}
+                      onClick={() => setPreviewPageIdx(p => Math.max(0, p - 1))}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 rounded-lg text-xs font-bold transition"
+                    >
+                      ◀ Anterior
+                    </button>
+                    <button
+                      type="button"
+                      disabled={previewPageIdx === 11}
+                      onClick={() => setPreviewPageIdx(p => Math.min(11, p + 1))}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 rounded-lg text-xs font-bold transition"
+                    >
+                      Siguiente ▶
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* 3. METADATOS DE EMISIÓN */}
-            {reportGenerationMeta && (
-              <div className="bg-slate-950 border border-slate-900 rounded-xl p-4 space-y-1 text-xs text-slate-400">
-                <p className="font-bold text-slate-300 uppercase tracking-widest text-[9px] mb-1">
-                  ⚙️ DETALLES DE GENERACIÓN
-                </p>
-                <p><strong>Fecha de Emisión:</strong> {reportGenerationMeta.date}</p>
-                <p><strong>Hora de Emisión:</strong> {reportGenerationMeta.time}</p>
-                <p><strong>Analista a Cargo:</strong> {reportGenerationMeta.user}</p>
+                {/* Hoja de papel simulada */}
+                <div className="w-full aspect-[297/210] bg-slate-950 border border-slate-850 rounded-xl overflow-hidden shadow-2xl p-6 relative flex flex-col justify-between text-slate-200">
+                  {/* Encabezado Institucional */}
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] uppercase font-bold tracking-widest text-slate-400">
+                    <span>CEIPOL</span>
+                    <span>Dictamen de Geointeligencia Operativa</span>
+                    <span className="text-red-400 font-extrabold">CONFIDENCIAL</span>
+                  </div>
+
+                  {/* Cuerpo de la Página */}
+                  <div className="flex-1 py-4 flex flex-col justify-center text-xs overflow-y-auto">
+                    {previewPageIdx === 0 && (
+                      <div className="space-y-4 text-center">
+                        <h4 className="text-lg font-black text-slate-100 uppercase tracking-wide">INFORME DE GEOINTELIGENCIA OPERATIVA</h4>
+                        <p className="text-xs font-semibold text-slate-400">SECRETARÍA DE SEGURIDAD PÚBLICA - CEIPOL</p>
+                        <div className="grid grid-cols-2 gap-4 bg-slate-900/60 p-4 rounded-lg border border-slate-800 text-left text-[11px] text-slate-350">
+                          <p><strong>Expediente:</strong> {project?.nombre || "Polígono"}</p>
+                          <p><strong>Nivel de riesgo:</strong> <span className="text-red-400 font-extrabold uppercase">ALTO</span></p>
+                          <p><strong>Fecha:</strong> {new Date().toLocaleDateString("es-MX")}</p>
+                          <p><strong>Analista:</strong> {user?.username || "Institucional"}</p>
+                        </div>
+                        <div className="bg-slate-900/30 p-4 rounded-lg border border-slate-850 text-left leading-relaxed max-h-[120px] overflow-y-auto">
+                          <p className="font-semibold text-slate-300 text-[11px] uppercase mb-1">Síntesis Ejecutiva:</p>
+                          <p className="text-[11px] text-slate-350">{editableProfile.slice(0, 400)}...</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 1 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">1. HIPÓTESIS FINAL ÚNICA</h4>
+                        <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] max-h-[220px] overflow-y-auto text-slate-300">
+                          {editableProfile.slice(0, 1000)}
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 2 && (
+                      <div className="space-y-3 text-center">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">2. CARTOGRAFÍA OPERATIVA - MAPA 1</h4>
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                          [Mapa 1: Simulación de Densidad Criminológica]
+                        </div>
+                        <p className="text-[11px] text-slate-400 italic">Concentración de incidencias georreferenciadas en el polígono perimetral.</p>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 3 && (
+                      <div className="space-y-3 text-center">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">2. CARTOGRAFÍA OPERATIVA - MAPA 2</h4>
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                          [Mapa 2: Corredores de Movilidad Táctica]
+                        </div>
+                        <p className="text-[11px] text-slate-400 italic">Vías de tránsito principales y zonas de amortiguamiento identificadas.</p>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 4 && (
+                      <div className="space-y-3 text-center">
+                        <h4 className="text-sm font-extrabold text-indigo-400 uppercase tracking-wider">3. ANÁLISIS DE SCORING Y MODELADOS</h4>
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                          [Gráficas de Distribución Temporal y Facilitadores Ambientales]
+                        </div>
+                        <p className="text-[11px] text-slate-400 italic">Estadísticas acumulativas de frecuencia por turno.</p>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 5 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 1</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
+                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 1]</div>
+                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          </div>
+                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
+                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 2]</div>
+                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 6 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 2</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
+                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 3]</div>
+                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          </div>
+                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1">
+                            <div className="h-[80px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500">[Imagen 4]</div>
+                            <p className="text-[9px] text-slate-400"><strong>Ubicación:</strong> Sector general perimetral</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 7 && (
+                      <div className="space-y-3 text-center">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">5. PUNTOS DE ACECHO Y VULNERABILIDAD FÍSICA (STREET VIEW)</h4>
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                          [Simulación de Vista de Calle]
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 8 && (
+                      <div className="space-y-3 text-center">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">6. GRAFO DE HIPÓTESIS Y CONEXIONES</h4>
+                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px]">
+                          [Visualizador de Grafo Relacional]
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 9 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">7. INTELIGENCIA COMPLEMENTARIA (OSINT)</h4>
+                        <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] text-slate-350">
+                          El análisis comercial del entorno identificó concentración de actividades económicas que incrementan movilidad peatonal, generando puntos de interacción que requieren vigilancia.
+                        </div>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 10 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">8. CONCLUSIONES Y RECOMENDACIONES - PARTE 1</h4>
+                        <ul className="list-disc list-inside space-y-2 text-[11px] text-slate-350">
+                          <li>Priorizar la intervención táctica sobre las esquinas y callejones identificados con riesgo ALTO.</li>
+                          <li>Asegurar el control de horarios y aforos en establecimientos comerciales categorizados como atractores.</li>
+                        </ul>
+                      </div>
+                    )}
+
+                    {previewPageIdx === 11 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">8. CONCLUSIONES Y RECOMENDACIONES - PARTE 2</h4>
+                        <ul className="list-disc list-inside space-y-2 text-[11px] text-slate-350">
+                          <li>Sincronizar las bitácoras de patrullaje preventivo con el tercer turno de vigilancia nocturna.</li>
+                          <li>Actualizar el dictamen de forma mensual o tras cambios críticos en el entorno georreferenciado.</li>
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pie de Página */}
+                  <div className="flex justify-between items-center border-t border-slate-800 pt-2 text-[9px] text-slate-400">
+                    <span>Página {previewPageIdx + 1} de 12</span>
+                    <span>SSPE-CEIPOL - Perímetro de Vigilancia</span>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -3752,7 +3962,7 @@ const hasMinimumPhotos =
                   onClick={() => handleFinalizeAndExport("WORD")}
                   className="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 px-5 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95 animate-pulse-slow"
                 >
-                  <span>📥</span> Descargar Word (.docx)
+                  <span>📥</span> Exportar Word
                 </button>
                 <button
                   type="button"
@@ -3760,7 +3970,7 @@ const hasMinimumPhotos =
                   onClick={() => handleFinalizeAndExport("PDF")}
                   className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95 animate-pulse-slow"
                 >
-                  <span>📥</span> Descargar PDF (.pdf)
+                  <span>📥</span> Exportar PDF
                 </button>
               </div>
               <button

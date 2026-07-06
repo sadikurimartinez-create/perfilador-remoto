@@ -41,10 +41,10 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
   try {
     let imgSrc = imageUrl;
 
-    // Si es una URL HTTP/HTTPS, descargar vía fetch para evitar CORS/taint
-    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {      const response = await fetch(imageUrl, { mode: "cors", cache: "no-cache" });
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      const response = await fetch(imageUrl, { mode: "cors", cache: "no-cache" });
       if (!response.ok) {
-        throw new Error(`No se pudo descargar la imagen (${response.status}). Configure las reglas CORS en Firebase Storage.`);
+        throw new Error(`No se pudo descargar la imagen (${response.status}).`);
       }
       const blob = await response.blob();
       objectUrl = URL.createObjectURL(blob);
@@ -63,10 +63,9 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
         reject(new Error("Error cargando la imagen para el Word"));
     });
 
-    // 4. Lógica del canvas
     const canvas = document.createElement("canvas");
-    canvas.width = img.width || img.naturalWidth;
-    canvas.height = img.height || img.naturalHeight;
+    canvas.width = img.width || img.naturalWidth || 640;
+    canvas.height = img.height || img.naturalHeight || 480;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       throw new Error("No se pudo crear el contexto de canvas");
@@ -86,7 +85,6 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
     ctx.fillText("SSPE-CEIPOL", 0, 0);
     ctx.restore();
 
-    // 5. Devolver ArrayBuffer para docx
     const stampedBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
       canvas.toBlob(
         async (outBlob) => {
@@ -104,7 +102,6 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
 
     return stampedBuffer;
   } finally {
-    // Liberar memoria del URL temporal si se creó
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
     }
@@ -120,182 +117,13 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-async function fetchImageToBuffer(imageUrl: string): Promise<ArrayBuffer | null> {
-  try {
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.src = imageUrl;
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Error loading image"));
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width || img.naturalWidth || 640;
-    canvas.height = img.height || img.naturalHeight || 640;
-    const ctx = canvas.getContext("2d");
-    ctx?.drawImage(img, 0, 0);
-    return await new Promise((resolve) => {
-      canvas.toBlob(async (blob) => {
-        if (blob) resolve(await blob.arrayBuffer());
-        else resolve(null);
-      }, "image/jpeg", 0.85);
-    });
-  } catch (e) {
-    return null;
-  }
-}
-
-function sanitizeReportContent(content: string): string {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  const output: string[] = [];
-  const seenHeadings = new Set<string>();
-  const seenSweepBlocks = new Set<string>();
-  let skipDuplicateBlock = false;
-
-  for (const line of lines) {
-    const headingMatch = line.match(/^#{2,4}\s+(.+)$/);
-    if (headingMatch) {
-      const normalizedHeading = headingMatch[1]
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim();
-      const isSweepHeading =
-        normalizedHeading.includes("barrido") ||
-        normalizedHeading.includes("osint") ||
-        normalizedHeading.includes("street view");
-
-      if (isSweepHeading && seenHeadings.has(normalizedHeading)) {
-        skipDuplicateBlock = true;
-        continue;
-      }
-
-      seenHeadings.add(normalizedHeading);
-      skipDuplicateBlock = false;
-    }
-
-    if (skipDuplicateBlock) continue;
-
-    const sweepLine = line.match(/\[Barrido\s+([^\]]+)\].*?(Tipo:\s*[^|]+)/i);
-    if (sweepLine) {
-      const sweepKey = `${sweepLine[1]}|${sweepLine[2]}`.toLowerCase();
-      if (seenSweepBlocks.has(sweepKey)) continue;
-      seenSweepBlocks.add(sweepKey);
-    }
-
-    output.push(line);
-  }
-
-  return output.join("\n").replace(/\n{3,}/g, "\n\n").slice(0, 18000);
-}
-
-function assertDocxLayoutWithinLimit(pageEstimate: number) {
-  if (pageEstimate > 100) {
-    throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
-  }
-}
-
-/**
- * Analiza el Markdown de Gemini y lo convierte en párrafos estructurados de Word.
- */
-async function parseMarkdownToParagraphs(text: string): Promise<Paragraph[]> {
-  const lines = text.split(/\r?\n/);
-  const paragraphs: Paragraph[] = [];
-  const urlRegex = /(https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\s\)]+)/g;
-      let inInfoBox = false;
-
-  for (let line of lines) {
-    if (!line.trim()) {
-      paragraphs.push(new Paragraph({ text: "", spacing: { after: 120 } }));
-      continue;
-    }
-
-    let headingLevel: any = null;
-    let isBullet = false;
-
-    if (line.startsWith("# ")) { headingLevel = HeadingLevel.HEADING_1; line = line.replace(/^# /, ""); }
-    else if (line.startsWith("## ")) { headingLevel = HeadingLevel.HEADING_2; line = line.replace(/^## /, ""); }
-    else if (line.startsWith("### ")) { headingLevel = HeadingLevel.HEADING_3; line = line.replace(/^### /, ""); }
-    else if (line.startsWith("- ") || line.startsWith("* ")) { isBullet = true; line = line.replace(/^[-*]\s/, ""); }
-    else if (line.match(/^\d+\.\s/)) { isBullet = true; line = line.replace(/^\d+\.\s/, ""); }
-
-    // Limpiar sintaxis de links markdown por si Gemini arrojó la url de Street View así: [Street View](https://...)
-    let cleanLine = line.replace(/\[([^\]]*)\]\((https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\)]+)\)/g, "$2");
-    cleanLine = cleanLine.replace(/!\[([^\]]*)\]\((https:\/\/maps\.googleapis\.com\/maps\/api\/streetview[^\)]+)\)/g, "$2");
-
-    const parts = cleanLine.split(urlRegex);
-    const runs: any[] = [];
-    
-    for (const part of parts) {
-      if (part.startsWith("https://maps.googleapis.com/maps/api/streetview")) {
-        const imgBuf = await fetchImageToBuffer(part);
-        if (imgBuf) {
-          // Imagen cuadrada para la vista de Street View dentro del texto
-          runs.push(new ImageRun({ data: imgBuf, transformation: { width: 400, height: 400 } }));
-        } else {
-          runs.push(new TextRun({ text: "[Error al cargar imagen Street View automática]", color: "FF0000", size: 22 }));
-        }
-      } else if (part) {
-        const bParts = part.split(/(\*\*.*?\*\*)/g);
-        for (const bp of bParts) {
-          if (bp.startsWith("**") && bp.endsWith("**")) {
-                runs.push(new TextRun({ text: bp.slice(2, -2), bold: true, size: 22, font: "Calibri", color: "222222" }));
-          } else if (bp) {
-                runs.push(new TextRun({ text: bp, size: 22, font: "Calibri", color: "222222" }));
-          }
-        }
-      }
-    }
-
-    if (headingLevel) {
-          const upperLine = cleanLine.toUpperCase();
-          inInfoBox = upperLine.includes("CONCLUSIONES") || upperLine.includes("HALLAZGOS") || upperLine.includes("PREDICTIVA") || upperLine.includes("RECOMENDACION");
-          paragraphs.push(new Paragraph({ children: runs, heading: headingLevel }));
-    } else {
-          const paragraphOpts: any = {
-            children: runs,
-            alignment: AlignmentType.JUSTIFIED,
-            spacing: { before: 80, after: 80 }
-          };
-          
-          if (inInfoBox && !isBullet && !line.includes("https://maps")) {
-            paragraphOpts.shading = { type: ShadingType.CLEAR, fill: "F2F4F7" };
-            paragraphOpts.border = {
-              top: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
-              bottom: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
-              left: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
-              right: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
-            };
-          }
-          
-          if (isBullet) {
-            paragraphOpts.numbering = { reference: "custom-bullets", level: 0 };
-          }
-          
-          paragraphs.push(new Paragraph(paragraphOpts));
-    }
-  }
-  return paragraphs;
-}
-
 export async function exportToWord(
-  content: string,
+  payload: any,
   projectName: string,
-  attachedPhotos?: ({ url: string; tipo?: string; comentario?: string } | string)[],
-  riskLevel?: "bajo" | "medio" | "alto",
-  mapSnapshots?: { title: string; dataUrl: string }[],
-  scinceDemographics?: any,
   reportNumber?: string,
-  reportSummary?: string,
-  sweeps?: any[]
+  user?: any
 ) {
   const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
-  const reportContent = sanitizeReportContent(content);
-  const visualCount = Math.min(mapSnapshots?.length || 0, 8);
-  const photoCount = Math.min(attachedPhotos?.length || 0, 8);
-  const estimatedPages = 2 + Math.ceil(reportContent.length / 3200) + Math.ceil(visualCount / 2) + Math.ceil(photoCount / 2);
-  assertDocxLayoutWithinLimit(estimatedPages);
 
   // 1. CARGA DE LOGOS
   const sspLogoBuffer = await fetchLocalImageBuffer("/logos/logo-ssp.png");
@@ -303,523 +131,357 @@ export async function exportToWord(
   const logoChildren: any[] = [];
 
   if (sspLogoBuffer) {
-    logoChildren.push(new ImageRun({ data: sspLogoBuffer, transformation: { width: 100, height: 100 } } as any));
+    logoChildren.push(new ImageRun({ data: sspLogoBuffer, transformation: { width: 50, height: 50 } } as any));
     logoChildren.push(new TextRun({ text: "                " })); // espacio
   }
   if (ceipolLogoBuffer) {
-    logoChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 100, height: 100 } } as any));
+    logoChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 50, height: 50 } } as any));
   }
 
-  // 2. CONSTRUCCIÓN DE LA PORTADA
-  const coverPageParagraphs: Paragraph[] = [];
+  // HELPER PARAGRAPH CREATORS
+  const createTitle = (text: string) => new Paragraph({
+    children: [new TextRun({ text, size: 28, bold: true, color: "0D2B52", font: "Calibri" })],
+    spacing: { before: 240, after: 120 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" } }
+  });
+
+  const createSubtitle = (text: string) => new Paragraph({
+    children: [new TextRun({ text, size: 20, bold: true, color: "1F4E79", font: "Calibri" })],
+    spacing: { before: 120, after: 60 }
+  });
+
+  const createBodyText = (text: string) => new Paragraph({
+    children: [new TextRun({ text, size: 22, font: "Calibri", color: "222222" })],
+    spacing: { after: 120 },
+    alignment: AlignmentType.JUSTIFIED
+  });
+
+  const createBullet = (text: string) => new Paragraph({
+    numbering: { reference: "custom-bullets", level: 0 },
+    children: [new TextRun({ text, size: 22, font: "Calibri", color: "222222" })],
+    spacing: { after: 80 }
+  });
+
+  const elements: any[] = [];
+
+  // ================= PÁGINA 1: PORTADA & SÍNTESIS EJECUTIVA =================
   if (logoChildren.length > 0) {
-    coverPageParagraphs.push(
+    elements.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         children: logoChildren,
-        spacing: { before: 400, after: 1000 }
+        spacing: { before: 200, after: 400 }
       })
     );
-  } else {
-    coverPageParagraphs.push(new Paragraph({ spacing: { before: 1400 } }));
   }
 
-  coverPageParagraphs.push(
+  elements.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "DICTAMEN TÁCTICO", size: 28, color: "0D2B52", bold: true, font: "Calibri" })],
+      children: [new TextRun({ text: "INFORME DE GEOINTELIGENCIA OPERATIVA", size: 32, color: "0D2B52", bold: true, font: "Calibri" })],
+      spacing: { after: 60 }
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "PERFIL CRIMINOLÓGICO AMBIENTAL", size: 40, color: "0D2B52", bold: true, font: "Calibri" })],
-      spacing: { before: 120, after: 1000 }
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: `NÚMERO DE EXPEDIENTE: ${reportNumber || projectName.toUpperCase()}`, size: 24, font: "Calibri", color: "222222", bold: true })],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: `FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-MX")}`, size: 24, font: "Calibri", color: "222222" })],
-      spacing: { after: 600 }
+      children: [new TextRun({ text: "SECRETARÍA DE SEGURIDAD PÚBLICA - CEIPOL", size: 20, color: "5B6573", bold: true, font: "Calibri" })],
+      spacing: { after: 400 }
     })
   );
 
-  if (reportSummary) {
-    coverPageParagraphs.push(
-      new Paragraph({
-        spacing: { before: 200, after: 120 },
-        children: [new TextRun({ text: "SÍNTESIS EJECUTIVA DEL DICTAMEN", bold: true, size: 22, color: "0D2B52", font: "Calibri" })]
-      }),
-      new Paragraph({
-        alignment: AlignmentType.JUSTIFIED,
-        shading: { type: ShadingType.CLEAR, fill: "F5F7FA" },
-        border: {
-          top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
-          bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
-          left: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
-          right: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 },
-        },
-        children: [new TextRun({ text: reportSummary, size: 22, font: "Calibri", color: "222222" })],
-        spacing: { before: 120, after: 600 }
-      })
-    );
-  }
+  // Tabla de Metadatos
+  const metaBorders = {
+    top: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+    bottom: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+    left: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+    right: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
+  };
 
-  let riskColor = "B22222"; // CRÍTICO
-  if (riskLevel === "bajo") riskColor = "2E8B57";
-  else if (riskLevel === "medio") riskColor = "E6A700";
-  else if (riskLevel === "alto") riskColor = "D96A00";
-
-  if (riskLevel) {
-    coverPageParagraphs.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        children: [new TextRun({ text: `NIVEL DE RIESGO: ${riskLevel.toUpperCase()}`, bold: true, size: 32, font: "Calibri", color: riskColor })],
-        spacing: { after: 1000 }
-      })
-    );
-  }
-
-  coverPageParagraphs.push(
-    new Paragraph({
-        border: { top: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 24 } }
-    })
-  );
-  coverPageParagraphs.push(new Paragraph({ pageBreakBefore: true })); // Salto de página después de portada
-
-  // 3. CUERPO DEL DOCUMENTO (Parseado desde Markdown)
-  const bodyParagraphs = await parseMarkdownToParagraphs(reportContent);
-
-  // 3.5 PERFIL SOCIODEMOGRÁFICO
-  const scinceElements: any[] = [];
-  if (scinceDemographics) {
-    scinceElements.push(
-      new Paragraph({
-        children: [new TextRun({ text: "PERFIL SOCIODEMOGRÁFICO DEL ÁREA DE ANÁLISIS", bold: true, size: 28, font: "Aptos", color: "0D2B52" })],
-        spacing: { before: 360, after: 200 }
-      }),
-      new Paragraph({
-        children: [new TextRun({ text: "Caracterización sociodemográfica obtenida mediante integración de información censal INEGI correspondiente al área geográfica analizada.", size: 22, font: "Aptos", color: "222222" })],
-        spacing: { after: 360 }
-      })
-    );
-
-    const createRow = (icon: string, indicator: string, value: string, isGray: boolean, valueColor?: string) => {
-      const shading = isGray ? { fill: "F5F7FA", type: ShadingType.CLEAR } : undefined;
-      const borders = {
-        top: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
-        left: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
-        right: { style: BorderStyle.SINGLE, size: 4, color: "D9DEE5" },
-      };
-
-      return new TableRow({
-        height: { value: 400, rule: HeightRule.ATLEAST },
+  const metadataTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
         children: [
           new TableCell({
-            shading, borders, verticalAlign: VerticalAlign.CENTER, width: { size: 15, type: WidthType.PERCENTAGE },
-            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: icon, font: "Segoe UI Emoji", size: 22 })] })]
+            borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 18 }), new TextRun({ text: ` ${projectName.toUpperCase()}`, size: 18 })] })]
           }),
           new TableCell({
-            shading, borders, verticalAlign: VerticalAlign.CENTER, width: { size: 55, type: WidthType.PERCENTAGE },
-            margins: { left: 100 },
-            children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: indicator, font: "Aptos", size: 22, color: "222222", bold: true })] })]
-          }),
-          new TableCell({
-            shading, borders, verticalAlign: VerticalAlign.CENTER, width: { size: 30, type: WidthType.PERCENTAGE },
-            margins: { right: 100 },
-            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: value, font: "Aptos", size: 22, color: valueColor || "222222", bold: true })] })]
+            borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+            children: [new Paragraph({ children: [new TextRun({ text: "FECHA:", bold: true, size: 18 }), new TextRun({ text: ` ${new Date().toLocaleDateString("es-MX")}`, size: 18 })] })]
           })
         ]
-      });
-    };
-
-    const headerRow = new TableRow({
-      height: { value: 400, rule: HeightRule.ATLEAST },
-      children: [
-        new TableCell({
-          shading: { fill: "0D2B52", type: ShadingType.CLEAR },
-          verticalAlign: VerticalAlign.CENTER,
-          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "Ícono", font: "Aptos", size: 24, bold: true, color: "FFFFFF" })] })]
-        }),
-        new TableCell({
-          shading: { fill: "0D2B52", type: ShadingType.CLEAR },
-          verticalAlign: VerticalAlign.CENTER,
-          margins: { left: 100 },
-          children: [new Paragraph({ alignment: AlignmentType.LEFT, children: [new TextRun({ text: "Indicador", font: "Aptos", size: 24, bold: true, color: "FFFFFF" })] })]
-        }),
-        new TableCell({
-          shading: { fill: "0D2B52", type: ShadingType.CLEAR },
-          verticalAlign: VerticalAlign.CENTER,
-          margins: { right: 100 },
-          children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "Valor", font: "Aptos", size: 24, bold: true, color: "FFFFFF" })] })]
-        })
-      ]
-    });
-
-    const rows = [headerRow];
-    const indicators = [
-      { icon: "👥", name: "Población Total", val: scinceDemographics.poblacionTotal.toLocaleString("es-MX") },
-      { icon: "👨", name: "Hombres", val: `${scinceDemographics.hombres.toLocaleString("es-MX")} (${scinceDemographics.pctHombres.toFixed(1)}%)` },
-      { icon: "👩", name: "Mujeres", val: `${scinceDemographics.mujeres.toLocaleString("es-MX")} (${scinceDemographics.pctMujeres.toFixed(1)}%)` },
-      { icon: "🎂", name: "Edad Promedio", val: `${scinceDemographics.edadPromedio.toFixed(1)} años` },
-      { icon: "🧑", name: "Población de 15 a 29 años", val: `${scinceDemographics.pctJovenes.toFixed(1)}%` },
-      { icon: "🎓", name: "Escolaridad Promedio", val: `${scinceDemographics.escolaridad.toFixed(1)} años` },
-      { icon: "🏠", name: "Viviendas Habitadas", val: scinceDemographics.viviendas.toLocaleString("es-MX") },
-      { icon: "👩‍👧", name: "Hogares con Jefatura Femenina", val: `${scinceDemographics.jefaturaFem.toFixed(1)}%` },
-      { icon: "💼", name: "Población Económicamente Activa", val: `${scinceDemographics.pea.toFixed(1)}%` },
-      { icon: "🌐", name: "Acceso a Internet", val: `${scinceDemographics.internet.toFixed(1)}%` },
-      { icon: "📍", name: "Densidad Poblacional", val: `${scinceDemographics.densidad.toLocaleString("es-MX")} hab/km²` },
-      { icon: "📉", name: "Grado de Marginación", val: scinceDemographics.gradoMarginacion },
-      { icon: "🚨", name: "Índice Sociodemográfico de Vulnerabilidad", val: scinceDemographics.gradoVulnerabilidad, color: scinceDemographics.colorVulnerabilidad },
-    ];
-
-    indicators.forEach((ind, i) => {
-      rows.push(createRow(ind.icon, ind.name, ind.val, i % 2 !== 0, ind.color));
-    });
-
-    const table = new Table({
-      width: { size: 90, type: WidthType.PERCENTAGE },
-      alignment: AlignmentType.CENTER,
-      rows
-    });
-    
-    scinceElements.push(table);
-
-    const lecturaTable = new Table({
-      width: { size: 90, type: WidthType.PERCENTAGE },
-      alignment: AlignmentType.CENTER,
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-              borders: {
-                top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-                bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-                left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-                right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              },
-              margins: { top: 200, bottom: 200, left: 200, right: 200 },
-              children: [
-                new Paragraph({
-                  spacing: { after: 120 },
-                  children: [new TextRun({ text: "LECTURA SOCIODEMOGRÁFICA", bold: true, font: "Aptos", size: 24, color: "0D2B52" })]
-                }),
-                new Paragraph({
-                  alignment: AlignmentType.JUSTIFIED,
-                  children: [new TextRun({ text: scinceDemographics.lectura, font: "Aptos", size: 22, color: "222222" })]
-                })
-              ]
-            })
-          ]
-        })
-      ]
-    });
-
-    const censintTable = new Table({
-      width: { size: 90, type: WidthType.PERCENTAGE },
-      alignment: AlignmentType.CENTER,
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-              borders: {
-                top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-                bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-                left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-                right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              },
-              margins: { top: 200, bottom: 200, left: 200, right: 200 },
-              children: [
-                new Paragraph({
-                  spacing: { after: 120 },
-                  children: [new TextRun({ text: "EVALUACIÓN DE VULNERABILIDAD SOCIODEMOGRÁFICA (CENSINT)", bold: true, font: "Aptos", size: 24, color: "0D2B52" })]
-                }),
-                new Paragraph({
-                  spacing: { after: 120 },
-                  children: [
-                    new TextRun({ text: "SocioDemographic Vulnerability Score (SVS): ", bold: true, font: "Aptos", size: 22, color: "222222" }),
-                    new TextRun({ text: `${scinceDemographics.svs}/100`, bold: true, font: "Aptos", size: 22, color: scinceDemographics.svsColor }),
-                    new TextRun({ text: ` [${scinceDemographics.svsNivel.toUpperCase()}]`, bold: true, font: "Aptos", size: 22, color: scinceDemographics.svsColor })
-                  ]
-                }),
-                new Paragraph({
-                  alignment: AlignmentType.JUSTIFIED,
-                  children: [new TextRun({ text: scinceDemographics.lecturaCensint, font: "Aptos", size: 22, color: "222222" })]
-                })
-              ]
-            })
-          ]
-        })
-      ]
-    });
-
-    scinceElements.push(
-      new Paragraph({ spacing: { before: 240 } }),
-      lecturaTable,
-      new Paragraph({ spacing: { before: 240 } }),
-      censintTable,
-      new Paragraph({ spacing: { after: 360 } })
-    );
-  }
-
-  // 4. MAPAS (ATLAS CARTOGRÁFICO)
-  const mapElements: any[] = [];
-  if (mapSnapshots && mapSnapshots.length > 0) {
-    const boundedSnapshots = mapSnapshots.slice(0, 8);
-    const chartsSnaps = boundedSnapshots.filter(s => s.title.toLowerCase().includes("gráfica") || s.title.toLowerCase().includes("grafica"));
-    const mapsSnaps = boundedSnapshots.filter(s => !chartsSnaps.some((c) => c.title === s.title));
-
-    const processVisuals = async (title: string, snaps: any[]) => {
-      if (snaps.length === 0) return;
-
-      const cellsData: any[] = [];
-      for (const snapshot of snaps) {
-        if (snapshot.dataUrl && snapshot.dataUrl.startsWith("data:image")) {
-          try {
-            const tmpImg = new Image();
-            tmpImg.src = snapshot.dataUrl;
-            await new Promise<void>((resolve, reject) => {
-              tmpImg.onload = () => resolve();
-              tmpImg.onerror = () => reject(new Error("[exportToWord] Error en visual"));
-            });
-            const MAP_MAX_WIDTH = 360;
-            const ratio = (tmpImg.height || MAP_MAX_WIDTH) / (tmpImg.width || MAP_MAX_WIDTH) || 1;
-            const proportionalHeight = Math.min(210, Math.floor(MAP_MAX_WIDTH * ratio));
-
-            const mapBuffer = dataUrlToArrayBuffer(snapshot.dataUrl);
-            cellsData.push({snapshot, mapBuffer, width: MAP_MAX_WIDTH, height: proportionalHeight });
-          } catch (e) { console.warn("Error en visual:", e); }
-        }
-      }
-
-      for (let i = 0; i < cellsData.length; i += 2) {
-        mapElements.push(new Paragraph({ pageBreakBefore: true }));
-        if (i === 0) {
-          mapElements.push(
-            new Paragraph({
-              heading: HeadingLevel.HEADING_1,
-              children: [new TextRun({ text: title, bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
-              spacing: { after: 400 }
-            })
-          );
-        }
-
-        const renderMapItem = (m: any) => {
-          if (!m) return [];
-          return [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: m.snapshot.title.toUpperCase(), bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-              spacing: { before: 120, after: 60 }
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new ImageRun({ data: m.mapBuffer, transformation: { width: m.width, height: m.height } } as any)]
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [new TextRun({ text: `Plataforma de Geointeligencia SAI | ${new Date().toLocaleDateString("es-MX")}`, size: 12, color: "5B6573", font: "Calibri" })],
-              spacing: { before: 40, after: 240 }
-            })
-          ];
-        };
-
-        mapElements.push(...renderMapItem(cellsData[i]));
-        if (cellsData[i + 1]) {
-          mapElements.push(...renderMapItem(cellsData[i + 1]));
-        }
-      }
-    };
-
-    await processVisuals("ATLAS CARTOGRÁFICO Y GEOESPACIAL", mapsSnaps);
-    await processVisuals("MODELOS ANALÍTICOS Y GRÁFICAS", chartsSnaps);
-  }
-
-  // 5. FOTOGRAFÍAS TÁCTICAS
-  const photoElements: any[] = [];
-  if (attachedPhotos && attachedPhotos.length > 0) {
-    const photoCellsData: any[] = [];
-    const boundedPhotos = attachedPhotos.slice(0, 8);
-    for (let i = 0; i < boundedPhotos.length; i++) {
-      const item = boundedPhotos[i];
-      const url = typeof item === "string" ? item : item.url;
-      const tipo = typeof item === "string" ? "Evidencia Táctica" : (item.tipo || "Evidencia Táctica");
-      const comentario = typeof item === "string" ? "" : (item.comentario || "Sin comentario.");
-      try {
-        const stampedBuffer = await applyWatermarkForWord(url);
-        // Reconstruir un objeto Image para conocer el aspect ratio
-        const img = new Image();
-        img.src = url;
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () =>
-            reject(
-              new Error(
-                "[exportToWord] No se pudo calcular dimensiones originales de la imagen"
-              )
-            );
-        });
-        const WORD_MAX_WIDTH = 360;
-        const originalWidth = img.width || img.naturalWidth || 640;
-        const originalHeight = img.height || img.naturalHeight || 480;
-        const ratio = originalHeight / originalWidth || 1;
-        const proportionalHeight = Math.min(230, Math.floor(WORD_MAX_WIDTH * ratio));
-
-        photoCellsData.push({ stampedBuffer, tipo, comentario, width: WORD_MAX_WIDTH, height: proportionalHeight, index: i + 1 });
-      } catch (err) {
-        console.warn("Error procesando foto:", url, err);
-      }
-    }
-
-    for (let i = 0; i < photoCellsData.length; i += 2) {
-      photoElements.push(new Paragraph({ pageBreakBefore: true }));
-      if (i === 0) {
-        photoElements.push(
-          new Paragraph({
-            heading: HeadingLevel.HEADING_1,
-            children: [new TextRun({ text: "ANEXO FOTOGRÁFICO Y TRABAJO DE CAMPO", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
-            spacing: { after: 400 }
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+            children: [new Paragraph({ children: [new TextRun({ text: "ANALISTA:", bold: true, size: 18 }), new TextRun({ text: ` ${user?.username || "Institucional"}`, size: 18 })] })]
+          }),
+          new TableCell({
+            borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+            children: [new Paragraph({ children: [new TextRun({ text: "CLASIFICACIÓN:", bold: true, size: 18, color: "B22222" }), new TextRun({ text: " CONFIDENCIAL / EXCLUSIVO", size: 18, color: "B22222" })] })]
           })
-        );
-      }
+        ]
+      })
+    ],
+    spacing: { after: 400 }
+  });
 
-      const renderPhotoItem = (p: any) => {
-        if (!p) return [];
-        const items = [
+  elements.push(metadataTable);
+
+  // Caja de Síntesis Ejecutiva
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: "SÍNTESIS EJECUTIVA DEL DICTAMEN", bold: true, size: 22, color: "0D2B52", font: "Calibri" })],
+      spacing: { after: 120 }
+    }),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+              borders: {
+                left: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 24 },
+                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }
+              },
+              margins: { left: 180, right: 180, top: 120, bottom: 120 },
+              children: [new Paragraph({ children: [new TextRun({ text: payload.executiveSummary, size: 22, font: "Calibri" })], alignment: AlignmentType.JUSTIFIED })]
+            })
+          ]
+        })
+      ]
+    })
+  );
+
+  // ================= PÁGINA 2: HIPÓTESIS FINAL ÚNICA =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("1. HIPÓTESIS FINAL ÚNICA"));
+  elements.push(createBodyText(payload.finalHypothesis));
+
+  // ================= PÁGINA 3: MAPA 1 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  if (payload.maps?.[0]) {
+    const map = payload.maps[0];
+    elements.push(createTitle(`2. CARTOGRAFÍA OPERATIVA - ${map.title.toUpperCase()}`));
+    const buf = dataUrlToArrayBuffer(map.dataUrl);
+    if (buf) {
+      elements.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new ImageRun({ data: buf, transformation: { width: 440, height: 260 } })],
+          spacing: { after: 200 }
+        })
+      );
+    }
+    elements.push(createSubtitle("Interpretación Operacional:"));
+    elements.push(createBodyText(map.interpretation));
+  }
+
+  // ================= PÁGINA 4: MAPA 2 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  if (payload.maps?.[1]) {
+    const map = payload.maps[1];
+    elements.push(createTitle(`2. CARTOGRAFÍA OPERATIVA - ${map.title.toUpperCase()}`));
+    const buf = dataUrlToArrayBuffer(map.dataUrl);
+    if (buf) {
+      elements.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new ImageRun({ data: buf, transformation: { width: 440, height: 260 } })],
+          spacing: { after: 200 }
+        })
+      );
+    }
+    elements.push(createSubtitle("Interpretación Operacional:"));
+    elements.push(createBodyText(map.interpretation));
+  }
+
+  // ================= PÁGINA 5: GRÁFICAS ANALÍTICAS =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("3. ANÁLISIS DE SCORING Y MODELADOS"));
+  
+  if (payload.graphs) {
+    for (let i = 0; i < Math.min(payload.graphs.length, 2); i++) {
+      const graph = payload.graphs[i];
+      const buf = dataUrlToArrayBuffer(graph.dataUrl);
+      if (buf) {
+        elements.push(
           new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: p.stampedBuffer, transformation: { width: p.width, height: p.height } } as any)],
-            spacing: { before: 120 }
+            children: [new TextRun({ text: graph.title.toUpperCase(), bold: true, size: 18, color: "1F4E79" })],
+            spacing: { before: 120, after: 60 }
           }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: `Imagen ${p.index} - ${p.tipo}`, bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-            spacing: { before: 60 }
-          })
-        ];
-
-        if (p.comentario) {
-          items.push(
-            new Paragraph({
-              alignment: AlignmentType.JUSTIFIED,
-              children: [new TextRun({ text: p.comentario, size: 20, font: "Calibri", color: "222222" })],
-              spacing: { before: 60, after: 60 }
-            })
-          );
-        }
-
-        items.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: `Trabajo de Campo | ${new Date().toLocaleDateString("es-MX")}`, size: 12, color: "5B6573", font: "Calibri" })],
+            children: [new ImageRun({ data: buf, transformation: { width: 420, height: 180 } })],
             spacing: { after: 240 }
           })
         );
-
-        return items;
-      };
-
-      photoElements.push(...renderPhotoItem(photoCellsData[i]));
-      if (photoCellsData[i + 1]) {
-        photoElements.push(...renderPhotoItem(photoCellsData[i + 1]));
       }
     }
   }
 
-  const headerFooterTabs = [
-    { type: TabStopType.CENTER, position: 4283 },
-    { type: TabStopType.RIGHT, position: 8567 },
-  ];
+  // ================= PÁGINA 6: ANEXO FOTOGRÁFICO DE CAMPO - PARTE 1 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 1"));
 
-  // 5.5 BARRIDOS DE INTELIGENCIA (OSINT, DENUE, REPUVE, etc.)
-  const sweepElements: any[] = [];
-  if (sweeps && sweeps.length > 0) {
-    sweepElements.push(new Paragraph({ pageBreakBefore: true }));
-    sweepElements.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        children: [new TextRun({ text: "ANEXO: BARRIDOS DE INTELIGENCIA Y OSINT", bold: true, size: 32, font: "Calibri", color: "0D2B52" })],
-        spacing: { before: 360, after: 200 }
-      }),
-      new Paragraph({
-        children: [new TextRun({ text: "Registro de barridos tácticos integrados al expediente para el cruce de información criminológica y situacional.", size: 22, font: "Calibri", color: "5B6573", italic: true })],
-        spacing: { after: 360 }
-      })
-    );
+  const buildPhotoElement = async (photo: any, index: number) => {
+    try {
+      const buffer = await applyWatermarkForWord(photo.dataUrl);
+      if (!buffer) return null;
 
-    sweeps.forEach((sweep) => {
-      const borders = {
-        top: { style: BorderStyle.SINGLE, size: 8, color: "D9DEE5" },
-        bottom: { style: BorderStyle.SINGLE, size: 8, color: "D9DEE5" },
-        left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-        right: { style: BorderStyle.SINGLE, size: 8, color: "D9DEE5" },
-      };
-
-      const table = new Table({
-        width: { size: 90, type: WidthType.PERCENTAGE },
-        alignment: AlignmentType.CENTER,
+      return new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+          bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+          left: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+          right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
+        },
         rows: [
-          // Header Row
           new TableRow({
-            height: { value: 360, rule: HeightRule.ATLEAST },
             children: [
               new TableCell({
-                shading: { fill: "F2F4F7", type: ShadingType.CLEAR },
-                borders,
-                verticalAlign: VerticalAlign.CENTER,
-                margins: { top: 120, bottom: 120, left: 160, right: 160 },
+                shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
+                margins: { top: 100, bottom: 100, left: 100, right: 100 },
                 children: [
                   new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [new ImageRun({ data: buffer, transformation: { width: 240, height: 140 } })]
+                  }),
+                  new Paragraph({
+                    spacing: { before: 80 },
+                    children: [new TextRun({ text: `Imagen ${index + 1}.`, bold: true, size: 18, color: "0D2B52" })]
+                  }),
+                  new Paragraph({
                     children: [
-                      new TextRun({ text: sweep.engine.toUpperCase(), bold: true, size: 22, color: "0D2B52", font: "Calibri" }),
-                      new TextRun({ text: `\tFuente: ${sweep.source} | Relevancia: ${sweep.relevance}`, size: 16, color: "5B6573", font: "Calibri" })
-                    ],
-                    tabStops: [
-                      { type: TabStopType.RIGHT, position: 7500 }
+                      new TextRun({ text: "Ubicación: ", bold: true, size: 16 }),
+                      new TextRun({ text: photo.location, size: 16 })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Factor identificado: ", bold: true, size: 16 }),
+                      new TextRun({ text: photo.factor, size: 16 })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16 }),
+                      new TextRun({ text: photo.relation, size: 16 })
+                    ]
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Riesgo: ", bold: true, size: 16 }),
+                      new TextRun({ text: photo.riskLevel, bold: true, size: 16, color: photo.riskLevel === "ALTO" ? "B91C1C" : "1E3A8A" })
                     ]
                   })
                 ]
               })
             ]
-          }),
-          // Data / Content Row
-          new TableRow({
-            children: [
-              new TableCell({
-                borders,
-                margins: { top: 160, bottom: 160, left: 160, right: 160 },
-                children: [
-                  new Paragraph({
-                    alignment: AlignmentType.JUSTIFIED,
-                    children: [new TextRun({ text: sweep.data || sweep.extractedData || "Sin datos crudos.", size: 20, font: "Calibri", color: "222222" })],
-                    spacing: { after: 120 }
-                  }),
-                  ...(sweep.context ? [
-                    new Paragraph({
-                      alignment: AlignmentType.JUSTIFIED,
-                      children: [
-                        new TextRun({ text: "Contexto/Ajuste del Analista: ", bold: true, size: 20, font: "Calibri", color: "1d4f91" }),
-                        new TextRun({ text: sweep.context, size: 20, font: "Calibri", color: "222222" })
-                      ]
-                    })
-                  ] : [])
-                ]
-              })
-            ]
           })
-        ]
+        ],
+        spacing: { after: 120 }
       });
+    } catch {
+      return null;
+    }
+  };
 
-      sweepElements.push(table);
-      sweepElements.push(new Paragraph({ spacing: { after: 240 } }));
-    });
+  if (payload.photoEvidence?.[0]) {
+    const el = await buildPhotoElement(payload.photoEvidence[0], 0);
+    if (el) elements.push(el);
+  }
+  if (payload.photoEvidence?.[1]) {
+    const el = await buildPhotoElement(payload.photoEvidence[1], 1);
+    if (el) elements.push(el);
   }
 
-  // 6. ENSAMBLAJE DEL DOCUMENTO WORD
+  // ================= PÁGINA 7: ANEXO FOTOGRÁFICO DE CAMPO - PARTE 2 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 2"));
+
+  if (payload.photoEvidence?.[2]) {
+    const el = await buildPhotoElement(payload.photoEvidence[2], 2);
+    if (el) elements.push(el);
+  }
+  if (payload.photoEvidence?.[3]) {
+    const el = await buildPhotoElement(payload.photoEvidence[3], 3);
+    if (el) elements.push(el);
+  }
+
+  // ================= PÁGINA 8: STREET VIEW =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("5. PUNTOS DE ACECHO Y VULNERABILIDAD FÍSICA"));
+
+  if (payload.streetViewAnalysis) {
+    for (let i = 0; i < Math.min(payload.streetViewAnalysis.length, 2); i++) {
+      const sv = payload.streetViewAnalysis[i];
+      const buf = dataUrlToArrayBuffer(sv.dataUrl);
+      if (buf) {
+        elements.push(
+          new Paragraph({
+            children: [new TextRun({ text: sv.title.toUpperCase(), bold: true, size: 18, color: "1F4E79" })],
+            spacing: { before: 120, after: 60 }
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: buf, transformation: { width: 360, height: 180 } })],
+            spacing: { after: 120 }
+          }),
+          createBodyText(sv.caption)
+        );
+      }
+    }
+  }
+
+  // ================= PÁGINA 9: GRAFO DE HIPÓTESIS =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("6. GRAFO DE HIPÓTESIS Y CONEXIONES"));
+
+  if (payload.hypothesisGraph) {
+    const buf = dataUrlToArrayBuffer(payload.hypothesisGraph.dataUrl);
+    if (buf) {
+      elements.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new ImageRun({ data: buf, transformation: { width: 440, height: 260 } })],
+          spacing: { after: 200 }
+        })
+      );
+    }
+    elements.push(createSubtitle("Lectura Analítica del Grafo:"));
+    elements.push(createBodyText(payload.hypothesisGraph.interpretation));
+  }
+
+  // ================= PÁGINA 10: OSINT SINTETIZADO =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("7. INTELIGENCIA COMPLEMENTARIA (OSINT)"));
+  elements.push(createSubtitle("Síntesis Comercial y de Movilidad Ambiental:"));
+  elements.push(createBodyText(payload.osintSynthesized));
+
+  // ================= PÁGINA 11: CONCLUSIONES PARTE 1 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("8. CONCLUSIONES Y RECOMENDACIONES OPERATIVAS - PARTE 1"));
+
+  const halfIndex = Math.ceil(payload.operationalConclusions.length / 2);
+  const part1Concs = payload.operationalConclusions.slice(0, halfIndex);
+  part1Concs.forEach(c => elements.push(createBullet(c)));
+
+  // ================= PÁGINA 12: CONCLUSIONES PARTE 2 =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("8. CONCLUSIONES Y RECOMENDACIONES OPERATIVAS - PARTE 2"));
+
+  const part2Concs = payload.operationalConclusions.slice(halfIndex);
+  part2Concs.forEach(c => elements.push(createBullet(c)));
+
+  // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX
+  const headerFooterTabs = [
+    { type: TabStopType.RIGHT, position: 9350 }
+  ];
+
   const doc = new Document({
     numbering: {
       config: [
@@ -832,20 +494,6 @@ export async function exportToWord(
               text: "■",
               alignment: AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 720, hanging: 360 } } }
-            },
-            {
-              level: 1,
-              format: "bullet",
-              text: "•",
-              alignment: AlignmentType.LEFT,
-              style: { paragraph: { indent: { left: 1080, hanging: 360 } } }
-            },
-            {
-              level: 2,
-              format: "bullet",
-              text: "–",
-              alignment: AlignmentType.LEFT,
-              style: { paragraph: { indent: { left: 1440, hanging: 360 } } }
             }
           ]
         }
@@ -854,50 +502,17 @@ export async function exportToWord(
     styles: {
       default: {
         document: {
-          run: { font: "Calibri", size: 22, color: "222222" }, // 11pt
-          paragraph: { alignment: AlignmentType.JUSTIFIED, spacing: { line: 276, after: 120 }, widowControl: true },
+          run: { font: "Calibri", size: 22, color: "222222" },
+          paragraph: { alignment: AlignmentType.JUSTIFIED, spacing: { line: 240, after: 120 }, widowControl: true },
         },
-      },
-      paragraphStyles: [
-        {
-          id: "Heading1",
-          name: "Heading 1",
-          basedOn: "Normal",
-          next: "Normal",
-          run: { color: "0D2B52", size: 32, bold: true },
-          paragraph: {
-            spacing: { before: 360, after: 200 },
-            border: {
-              top: { color: "0D2B52", space: 1, style: BorderStyle.SINGLE, size: 12 },
-            },
-          },
-        },
-        {
-          id: "Heading2",
-          name: "Heading 2",
-          basedOn: "Normal",
-          next: "Normal",
-          run: { color: "1F4E79", size: 26, bold: true },
-          paragraph: { spacing: { before: 240, after: 120 } },
-        },
-        {
-          id: "Heading3",
-          name: "Heading 3",
-          basedOn: "Normal",
-          next: "Normal",
-          run: { color: "222222", size: 22, bold: true },
-          paragraph: { spacing: { before: 240, after: 120 } },
-        },
-      ],
+      }
     },
     sections: [
       {
         properties: {
           page: {
-            size: {
-              orientation: PageOrientation.PORTRAIT,
-            },
-            margin: { top: 1417, bottom: 1134, left: 1417, right: 1134 }, // 2.5cm sup/izq, 2.0cm inf/der
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 1417, bottom: 1134, left: 1417, right: 1134 },
           },
         },
         headers: {
@@ -907,7 +522,7 @@ export async function exportToWord(
                 tabStops: headerFooterTabs,
                 children: [
                   new TextRun({ text: "CEIPOL", bold: true, color: "5B6573", size: 18, font: "Calibri" }),
-                  new TextRun({ text: "\tPERFIL CRIMINOLÓGICO AMBIENTAL", color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: "\tINFORME DE GEOINTELIGENCIA OPERATIVA", color: "5B6573", size: 18, font: "Calibri" }),
                   new TextRun({ text: "\tCONFIDENCIAL | USO EXCLUSIVO", bold: true, color: "5B6573", size: 18, font: "Calibri" }),
                 ],
                 border: { bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
@@ -926,30 +541,22 @@ export async function exportToWord(
                 children: [
                   new TextRun({ text: `${new Date().toLocaleDateString("es-MX")} | `, color: "5B6573", size: 14, font: "Calibri" }),
                   new TextRun({ 
-                    children: ["Pagina ", PageNumber.CURRENT || "1", " | "],
+                    children: ["Página ", PageNumber.CURRENT || "1"],
                     color: "5B6573", 
                     size: 14,
                     font: "Calibri" 
                   }),
-                  new TextRun({ text: `EXP: ${safeName.slice(0, 46)}`, color: "5B6573", size: 14, font: "Calibri" }),
+                  new TextRun({ text: ` | EXP: ${safeName.slice(0, 40)}`, color: "5B6573", size: 14, font: "Calibri" }),
                 ],
               }),
             ],
           }),
         },
-        children: [
-          ...coverPageParagraphs,
-          ...scinceElements,
-          ...bodyParagraphs,
-          ...mapElements,
-          ...photoElements,
-          ...sweepElements,
-        ],
+        children: elements,
       },
     ],
   });
 
   const blob = await Packer.toBlob(doc);
-
-  saveAs(blob, `Dictamen_Oficial_${safeName}.docx`);
+  saveAs(blob, `Informe_Geointeligencia_${safeName}.docx`);
 }

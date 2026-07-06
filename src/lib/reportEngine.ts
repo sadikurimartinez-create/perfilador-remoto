@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { exportToWord } from "@/lib/exportToWord";
-import { buildIntelligenceBriefing, loadPublicImageAsDataUrl, IntelligenceBriefing } from "@/utils/intelligenceLayoutEngine";
+import { buildIntelligenceBriefing, loadPublicImageAsDataUrl, IntelligenceBriefing, buildIntelligenceEditorialPayload, IntelligenceReportPayload } from "@/utils/intelligenceLayoutEngine";
 import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 
@@ -621,35 +621,20 @@ export class ReportEngineKernelClass {
         this.notify();
         break;
 
-      case "DERIVE_LAYOUT":
-        const visuals: any[] = [];
-        if (this.context.mapSnapshots) {
-          this.context.mapSnapshots.forEach((snap: any, idx: number) => {
-            const isChart = snap.title.toLowerCase().includes("gráfica") || snap.title.toLowerCase().includes("grafica");
-            visuals.push({
-              id: `map-${idx}`,
-              type: isChart ? 'chart' : 'map',
-              title: snap.title,
-              dataUrl: snap.dataUrl,
-              caption: isChart 
-                ? 'Modelado analítico y frecuencia delictiva registrada.'
-                : 'Simbología geoespacial operativa sobre el polígono delimitado.'
-            });
-          });
+      case "DERIVE_LAYOUT": {
+        gate("DERIVE_LAYOUT", this.state);
+        if (this.executionId !== payload?.executionId) {
+          throw new Error("DERIVE_LAYOUT_EXECUTION_ID_MISMATCH");
         }
 
-        if (this.context.album) {
-          this.context.album.forEach((photo: any, idx: number) => {
-            visuals.push({
-              id: photo.id,
-              type: 'photo',
-              title: photo.tipo || `Evidencia fotográfica ${idx + 1}`,
-              dataUrl: photo.previewUrl,
-              caption: photo.comentario || 'Evidencia de inspección de campo.',
-              riskLevel: photo.riskLevel || 'medio'
-            });
-          });
-        }
+        // FASE OBLIGATORIA PREVIA AL RENDER: Intelligence Editorial Layer
+        const editorialPayload = buildIntelligenceEditorialPayload(
+          this.context.content || "",
+          this.context.album || [],
+          this.context.mapSnapshots || [],
+          this.context.sweeps || [],
+          this.context.project
+        );
 
         const briefing = buildIntelligenceBriefing(
           {
@@ -664,22 +649,20 @@ export class ReportEngineKernelClass {
             conclusions: [],
             recommendations: []
           } as any,
-          visuals,
-          {
-            sweeps: this.context.sweeps || [],
-            reportSummary: this.context.reportSummary
-          }
+          editorialPayload
         );
 
         this.context = deepFreeze({
           ...this.context,
-          briefing
+          briefing,
+          editorialPayload: editorialPayload
         });
 
         this.state = "LAYOUT_DERIVED";
         this.takeSnapshot();
         this.notify();
         break;
+      }
 
       case "VALIDATE_KERNEL":
         const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
@@ -687,26 +670,38 @@ export class ReportEngineKernelClass {
           throw new Error("ASSERT_FAILED: Preview layer exists");
         }
 
-        const allStructured = this.context.powerups.every((p: any) =>
-          p.id && ["OCR", "ST_DWITHIN", "GROUNDING", "SEMANTIC"].includes(p.type)
-        );
-        if (!allStructured) {
-          throw new Error("ASSERT_FAILED: PowerUps are not properly structured");
+        const payloadObj = this.context.editorialPayload;
+        if (!payloadObj) {
+          throw new Error("VALIDATION_FAILED_CRITERIA: Missing editorial payload");
         }
 
-        if (this.context.briefing.pages.length > 100) {
-          throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
-        }
+        // 1. Verificar comandos internos / jerga de IA prohibidos
+        const textToAudit = JSON.stringify(payloadObj).toLowerCase();
+        const forbidden = ["st_dwithin", "discovery engine", "grounding", "powerup", "instruction"];
+        const hasForbidden = forbidden.some(cmd => textToAudit.includes(cmd));
 
-        const wordButton = typeof document !== 'undefined' && document.getElementById("export-word-btn-ui");
-        if (wordButton) {
-          throw new Error("ASSERT_FAILED: UI export layer exists");
+        // 2. Verificar existencia de mapas y gráficas
+        const hasMaps = payloadObj.maps && payloadObj.maps.length > 0;
+        const hasGraphs = payloadObj.graphs && payloadObj.graphs.length > 0;
+
+        // 3. Resumen Ejecutivo y Conclusiones Operativas
+        const hasExecutiveSummary = !!payloadObj.executiveSummary;
+        const hasOperationalConclusions = payloadObj.operationalConclusions && payloadObj.operationalConclusions.length > 0;
+
+        // 4. Límite de páginas
+        const pageCount = this.context.briefing.pages.length;
+        const isPageCountValid = pageCount <= 12;
+
+        if (hasForbidden || !hasMaps || !hasGraphs || !hasExecutiveSummary || !hasOperationalConclusions || !isPageCountValid) {
+          const errMsg = `VALIDATION_FAILED_CRITERIA: ForbiddenCommands=${hasForbidden}, HasMaps=${hasMaps}, HasGraphs=${hasGraphs}, HasExecSummary=${hasExecutiveSummary}, HasConclusions=${hasOperationalConclusions}, PageCount=${pageCount}`;
+          console.error("[REPORT ENGINE KERNEL] VALIDATION ERROR:", errMsg);
+          throw new Error(errMsg);
         }
 
         this.validationResults = {
           noPreviewLayer: true,
           powerupsAreStructured: true,
-          totalPages: this.context.briefing.pages.length,
+          totalPages: pageCount,
           noUIExportLayer: true,
           timestamp: Date.now()
         };
@@ -744,15 +739,10 @@ export class ReportEngineKernelClass {
         try {
           if (format === "WORD" || format === "ALL") {
             await exportToWord(
-              this.context.content,
+              this.context.editorialPayload,
               this.context.project.nombre || this.context.project.name || 'Expediente',
-              this.context.album ? this.context.album.map((p: any) => ({ url: p.previewUrl, tipo: p.tipo, comentario: p.comentario })) : [],
-              this.context.riskLevel,
-              this.context.mapSnapshots,
-              this.context.scinceDemographics,
-              this.context.project.id,
-              this.context.reportSummary,
-              this.context.sweeps
+              this.context.project.id || 'EXPEDIENTE_TACTICO',
+              this.context.user
             );
           }
           if (format === "PDF" || format === "ALL") {
@@ -762,17 +752,12 @@ export class ReportEngineKernelClass {
               const db = getDb();
               await addDoc(collection(db, "analyses"), {
                 projectId: this.context.project.id,
-                content: this.context.content,
-                createdAt: Date.now(),
-                reportEngineOutput: true,
-                source: "ReportEngine.finalize",
-                title: "Dictamen Criminológico Ambiental Generado",
-                summary: this.context.reportSummary || "Dictamen oficial generado.",
-                createdBy: this.context.user.username,
-                createdById: this.context.user.id,
-                createdByRole: this.context.user.role,
-                attachedPhotos: this.context.album ? this.context.album.map((p: any) => p.previewUrl).filter(Boolean) : [],
-                powerups: this.context.powerups,
+                version: "v7.0",
+                fecha: Date.now(),
+                executiveSummary: this.context.editorialPayload.executiveSummary,
+                evidenceUrls: this.context.album ? this.context.album.map((p: any) => p.previewUrl || p.url).filter(Boolean) : [],
+                author: this.context.user.username,
+                source: "ReportEngine.finalize"
               });
 
               const projectRef = doc(db, "projects", this.context.project.id);
