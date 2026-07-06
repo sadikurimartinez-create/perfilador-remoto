@@ -415,9 +415,9 @@ export const buildIntelligenceBriefing = (
     ]
   });
 
-  // 4. VALIDACIÓN DE PÁGINAS (PAGINATION LOCK: MAX 12)
+  // 4. VALIDACIÓN DE PÁGINAS (PAGINATION LOCK: MAX 100)
   const totalPages = pages.length;
-  if (totalPages > 12) {
+  if (totalPages > 100) {
     throw new Error('STATE_MACHINE_OVERFLOW_BLOCKED');
   }
 

@@ -492,13 +492,13 @@ export class ReportEngineKernelClass {
       case "LOCK_INPUT":
         const content = payload.content || "";
         
-        // Limits check (max headers = 36, max chars = 30000)
+        // Limits check (max headers = 200, max chars = 250000)
         const sectionsCount = (content.match(/^#+/gm) || []).length;
-        if (sectionsCount > 36 || content.length > 30000) {
+        if (sectionsCount > 200 || content.length > 250000) {
           throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
         }
 
-        // Sub-section character limit check (max 4500 per section)
+        // Sub-section character limit check (max 50000 per section)
         const lines = content.split("\n");
         let currentSectionTitle = "General";
         const sectionsMap = new Map<string, string[]>();
@@ -517,7 +517,7 @@ export class ReportEngineKernelClass {
         });
         for (const [title, contentLines] of activeSections) {
           const sectionLength = contentLines.join("\n").length;
-          if (sectionLength > 4500) {
+          if (sectionLength > 50000) {
             throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
           }
         }
@@ -694,7 +694,7 @@ export class ReportEngineKernelClass {
           throw new Error("ASSERT_FAILED: PowerUps are not properly structured");
         }
 
-        if (this.context.briefing.pages.length > 12) {
+        if (this.context.briefing.pages.length > 100) {
           throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
         }
 
