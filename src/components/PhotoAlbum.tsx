@@ -526,6 +526,8 @@ export function PhotoAlbum({
     });
   }, []);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportGenerationMeta, setReportGenerationMeta] = useState<{ date: string; time: string; user: string } | null>(null);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
   const [qaIteration, setQaIteration] = useState(0);
@@ -1172,6 +1174,14 @@ const hasMinimumPhotos =
             }
           }
         }
+
+        const now = new Date();
+        setReportGenerationMeta({
+          date: now.toLocaleDateString("es-MX"),
+          time: now.toLocaleTimeString("es-MX"),
+          user: user ? `${user.username} (${(user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Administrador" : "Analista"})` : "Usuario"
+        });
+        setShowReportModal(true);
       } catch (err) {
           console.error("ERROR REAL PERFILADOR:", err);
         
@@ -1278,7 +1288,7 @@ const hasMinimumPhotos =
     alert("Mapas capturados exitosamente para el dictamen oficial.");
   };
 
-  const handleFinalizeAndExport = async () => {
+  const handleFinalizeAndExport = async (format: "WORD" | "PDF") => {
     const rawContent = editableProfile || aiProfile || (project as any)?.analysisContent;
     if (!rawContent) {
       setError("No hay contenido para exportar. Genere o guarde el dictamen primero.");
@@ -1377,10 +1387,10 @@ const hasMinimumPhotos =
       // 5. VALIDATE_KERNEL
       await KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
 
-      // 6. EXECUTE_EXPORT (WORD & PDF & Firestore - Sequential Auto-completing)
+      // 6. EXECUTE_EXPORT (WORD or PDF - Sequential Auto-completing)
       await KernelGuard({
         type: "EXECUTE_EXPORT",
-        payload: { format: "ALL", activeId }
+        payload: { format, activeId }
       });
 
       // Verify the final kernel state is COMPLETE
@@ -3236,262 +3246,7 @@ const hasMinimumPhotos =
         </div>
       </div>
     
-      {/* SECCIÓN PRINCIPAL: EDICIÓN Y EXPORTACIÓN DEL DICTAMEN OFICIAL */}
-      {editableProfile && (
-        <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-4 mt-6">
-          <header className="space-y-1">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h4 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
-                📄 Dictamen Criminológico Ambiental Generado
-              </h4>
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${hasSavedAnalysis ? "bg-emerald-950/80 border border-emerald-800 text-emerald-400" : "bg-amber-950/80 border border-amber-900 text-amber-400"}`}>
-                  {hasSavedAnalysis ? "✓ Guardado" : "⚠ Cambios sin Guardar"}
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-slate-400">
-              Revise y edite libremente el dictamen criminológico oficial en formato Markdown antes de guardarlo de forma permanente o exportarlo.
-            </p>
-          </header>
 
-          <textarea
-            spellCheck={true}
-            value={editableProfile}
-            onChange={(e) => {
-              setEditableProfile(e.target.value);
-              setHasSavedAnalysis(false);
-            }}
-            className="w-full min-h-[400px] rounded-xl border border-slate-700 bg-slate-950 text-slate-100 p-5 text-xs font-mono leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
-            placeholder="Escribe el cuerpo del dictamen aquí..."
-          />
-
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleFinalizeAndExport}
-                disabled={isSavingAnalysis}
-                className="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 px-6 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
-              >
-                <span>⚡</span> {isSavingAnalysis ? "Procesando Dictamen..." : "Finalizar y Exportar Dictamen Oficial (Word + PDF)"}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    console.log("[DEBUG] FORCE_EXPORT_TEST TRIGGERED");
-                    const activeId = `debug-exec-${Date.now()}`;
-                    await KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
-                    await KernelGuard({
-                      type: "LOCK_INPUT",
-                      payload: {
-                        executionId: activeId,
-                        project,
-                        content: editableProfile || "Contenido de prueba del dictamen",
-                        album: [],
-                        mapSnapshots: [],
-                        riskLevel: "bajo",
-                        reportSummary: "Resumen de prueba",
-                        user: { id: "debug", username: "debugger", role: "admin" }
-                      }
-                    });
-                    await KernelGuard({ type: "APPLY_POWERUPS", payload: { executionId: activeId } });
-                    await KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
-                    await KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
-                    await KernelGuard({ type: "EXECUTE_EXPORT", payload: { format: "ALL", activeId } });
-                    window.alert("¡FORCE EXPORT TEST EXECUTED SUCCESSFULLY!");
-                  } catch (e) {
-                    console.error("DEBUG EXPORT FAILURE:", e);
-                    window.alert(`FORCE EXPORT FAILURE: ${e instanceof Error ? e.message : String(e)}`);
-                  }
-                }}
-                className="inline-flex items-center gap-2 rounded-lg bg-red-700 hover:bg-red-600 px-4 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition active:scale-95 ml-2"
-              >
-                Force Export Test (Debug)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-          {/* SELECCIÓN DE ANEXOS Y GENERAR INFORME */}
-          <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 space-y-5 mt-6 print:hidden">
-            <header className="space-y-1">
-              <h4 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
-                📋 Configuración del Dictamen y Selección de Anexos
-              </h4>
-              <p className="text-xs text-slate-400">
-                Seleccione qué componentes y barridos de información desea adjuntar al documento oficial en formato PDF.
-              </p>
-            </header>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-300">
-              {/* Mapas (Atlas Cartográfico) */}
-              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
-                <p className="font-bold text-sky-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1">
-                  🗺️ Atlas Cartográfico
-                </p>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.mapInteractive}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapInteractive: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Mapa de Evidencias de Campo</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.mapDensity}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapDensity: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Mapa 1: Densidad Criminológica</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.mapMobility}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapMobility: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Mapa 2: Corredores y Movilidad</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.mapAttractors}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapAttractors: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Mapa 3: Atracción y Factores</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.mapPredictive}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapPredictive: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Mapa 4: Proyección Predictiva</span>
-                </label>
-              </div>
-
-              {/* Modelos Analíticos (Gráficas) */}
-              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
-                <p className="font-bold text-indigo-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1">
-                  📊 Modelos Analíticos
-                </p>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.chartTemporal}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTemporal: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Gráfica 1: Distribución por Turno</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.chartTopology}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTopology: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Gráfica 2: Topología y Frecuencia</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.chartEnvironmental}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartEnvironmental: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Gráfica 3: Facilitadores Ambientales</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.chartPrediction}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartPrediction: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Gráfica 4: Predicción a 6 Meses</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.graphConnections}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, graphConnections: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Grafo 1: Relaciones y Redes delictivas (Grafo)</span>
-                </label>
-              </div>
-
-              {/* Datos de Inteligencia (Barridos) */}
-              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
-                <p className="font-bold text-emerald-400 uppercase tracking-wider text-[10px] border-b border-slate-850 pb-1">
-                  📡 Barridos e Inteligencia
-                </p>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.sweepDenue}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepDenue: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Barrido DENUE (INEGI)</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.sweepIncidencia}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepIncidencia: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Barrido de Incidencia Delictiva</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.sweepRepuve}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRepuve: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Consulta Vehicular (REPUVE)</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.sweepRnpdno}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRnpdno: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Registro Desaparecidos (RNPDNO)</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.sweepMultimodal}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepMultimodal: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Búsqueda Multimodal Geo-Espacial</span>
-                </label>
-                <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selectedAnnexes.sweepCifa}
-                    onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepCifa: e.target.checked }))}
-                    className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
-                  />
-                  <span>Fusión CIFA-CEIPOL</span>
-                </label>
-              </div>
-            </div>
 
             {/* 3. RESUMEN Y AJUSTES DE BARRIDOS DE INTELIGENCIA (REPLAZADO POR TODO EL CONTENIDO DE RESUMEN Y CIERRE) */}
             <div className="space-y-6">
@@ -3738,7 +3493,6 @@ const hasMinimumPhotos =
               </button>
             </div>
           </div>
-        </div>
     </section>
       
       {/* MODAL DE EDICIÓN DE VENTANA */}
@@ -3760,6 +3514,261 @@ const hasMinimumPhotos =
             <div className="flex justify-end gap-2">
               <button onClick={() => setEditingPhoto(null)} className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition-colors shadow-md">
                 Aceptar y Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DICTAMEN OFICIAL (PREVISUALIZACIÓN, ANEXOS Y DESCARGA) */}
+      {showReportModal && editableProfile && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto print:hidden">
+          <div role="dialog" aria-modal="true" className="w-full max-w-5xl bg-slate-950 border border-slate-800 p-6 rounded-2xl shadow-2xl space-y-6 text-left max-h-[90vh] overflow-y-auto animate-fadeIn">
+            <header className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                📄 Dictamen Criminológico Ambiental Generado
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setShowReportModal(false)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                ✕
+              </button>
+            </header>
+
+            {/* 1. EDICIÓN DEL CUERPO DEL DICTAMEN */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                📝 Editar Cuerpo del Dictamen
+              </label>
+              <textarea
+                spellCheck={true}
+                value={editableProfile}
+                onChange={(e) => {
+                  setEditableProfile(e.target.value);
+                  setHasSavedAnalysis(false);
+                }}
+                className="w-full min-h-[250px] rounded-xl border border-slate-700 bg-slate-900 text-slate-100 p-4 text-xs font-mono leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                placeholder="Escribe el cuerpo del dictamen aquí..."
+              />
+            </div>
+
+            {/* 2. SELECCIÓN DE ANEXOS */}
+            <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-800 space-y-4">
+              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                📋 Configuración del Dictamen y Selección de Anexos
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Seleccione qué componentes y barridos de información desea adjuntar al documento oficial.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-350">
+                {/* Mapas */}
+                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
+                  <p className="font-extrabold text-sky-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                    🗺️ Atlas Cartográfico
+                  </p>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.mapInteractive}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapInteractive: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Mapa de Evidencias de Campo</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.mapDensity}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapDensity: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Mapa 1: Densidad Criminológica</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.mapMobility}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapMobility: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Mapa 2: Corredores y Movilidad</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.mapAttractors}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapAttractors: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Mapa 3: Atracción y Factores</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.mapPredictive}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapPredictive: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Mapa 4: Proyección Predictiva</span>
+                  </label>
+                </div>
+
+                {/* Modelos Analíticos */}
+                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
+                  <p className="font-extrabold text-indigo-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                    📊 Modelos Analíticos
+                  </p>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.chartTemporal}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTemporal: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Gráfica 1: Distribución por Turno</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.chartTopology}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTopology: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Gráfica 2: Topología y Frecuencia</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.chartEnvironmental}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartEnvironmental: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Gráfica 3: Facilitadores Ambientales</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.chartPrediction}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartPrediction: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Gráfica 4: Predicción a 6 Meses</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.graphConnections}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, graphConnections: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Grafo 1: Relaciones y Redes</span>
+                  </label>
+                </div>
+
+                {/* Barridos */}
+                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
+                  <p className="font-extrabold text-emerald-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                    📡 Barridos e Inteligencia
+                  </p>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.sweepDenue}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepDenue: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Barrido DENUE (INEGI)</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.sweepIncidencia}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepIncidencia: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Barrido de Incidencia Delictiva</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.sweepRepuve}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRepuve: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Consulta Vehicular (REPUVE)</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.sweepRnpdno}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRnpdno: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Registro Desaparecidos (RNPDNO)</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.sweepMultimodal}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepMultimodal: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Búsqueda Multimodal Geo-Espacial</span>
+                  </label>
+                  <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnexes.sweepCifa}
+                      onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepCifa: e.target.checked }))}
+                      className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                    />
+                    <span>Fusión CIFA-CEIPOL</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. METADATOS DE EMISIÓN */}
+            {reportGenerationMeta && (
+              <div className="bg-slate-950 border border-slate-900 rounded-xl p-4 space-y-1 text-xs text-slate-400">
+                <p className="font-bold text-slate-300 uppercase tracking-widest text-[9px] mb-1">
+                  ⚙️ DETALLES DE GENERACIÓN
+                </p>
+                <p><strong>Fecha de Emisión:</strong> {reportGenerationMeta.date}</p>
+                <p><strong>Hora de Emisión:</strong> {reportGenerationMeta.time}</p>
+                <p><strong>Analista a Cargo:</strong> {reportGenerationMeta.user}</p>
+              </div>
+            )}
+
+            {/* 4. BOTONES DE DESCARGA Y CONTROL */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingAnalysis}
+                  onClick={() => handleFinalizeAndExport("WORD")}
+                  className="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 px-5 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95 animate-pulse-slow"
+                >
+                  <span>📥</span> Descargar Word (.docx)
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingAnalysis}
+                  onClick={() => handleFinalizeAndExport("PDF")}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95 animate-pulse-slow"
+                >
+                  <span>📥</span> Descargar PDF (.pdf)
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+              >
+                Cerrar Ventana
               </button>
             </div>
           </div>

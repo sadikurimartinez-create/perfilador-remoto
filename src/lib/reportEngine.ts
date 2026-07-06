@@ -454,7 +454,7 @@ export class ReportEngineKernelClass {
     console.log("[EXECUTION ID]", this.executionId);
 
     // 🔒 1. SINGLE EXECUTION GUARANTEE
-    if (this.locked && payload?.executionId && this.executionId !== payload.executionId) {
+    if (this.locked && event !== "INIT_KERNEL" && payload?.executionId && this.executionId !== payload.executionId) {
       console.error("[REPORT ENGINE KERNEL] MULTI_EXECUTION_BLOCKED. Current Active:", this.executionId, "Requested:", payload.executionId);
       throw new Error("MULTI_EXECUTION_BLOCKED");
     }
