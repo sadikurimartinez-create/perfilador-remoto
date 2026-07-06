@@ -2188,8 +2188,7 @@ const hasMinimumPhotos =
         )}
       </div>
 
-      {isHypothesisValidatedInWorkspace && (
-        <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
+      <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
 
       {/* PASO 2: MAPA INTERACTIVO */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
@@ -3740,7 +3739,6 @@ const hasMinimumPhotos =
             </div>
           </div>
         </div>
-      )}
     </section>
       
       {/* MODAL DE EDICIÓN DE VENTANA */}
