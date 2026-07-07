@@ -230,7 +230,9 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
     return new Response(stream, {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        "Transfer-Encoding": "chunked"
+        "Transfer-Encoding": "chunked",
+        "X-Accel-Buffering": "no",
+        "Cache-Control": "no-cache, no-transform, must-revalidate"
       }
     });
   } catch (err: any) {
