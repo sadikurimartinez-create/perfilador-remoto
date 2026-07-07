@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import { exportToWord } from "@/lib/exportToWord";
 import { buildIntelligenceBriefing, loadPublicImageAsDataUrl, IntelligenceBriefing, buildIntelligenceEditorialPayload, IntelligenceReportPayload } from "@/utils/intelligenceLayoutEngine";
+import { ReportQualityGate } from "@/utils/reportQualityGate";
 import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 
@@ -646,39 +647,10 @@ export class ReportEngineKernelClass {
           throw new Error("VALIDATION_FAILED_CRITERIA: Missing editorial payload");
         }
 
-        // Rule 15 strict validations
-        const hasExecutiveSummary = !!payloadObj.executiveSummary && payloadObj.executiveSummary.trim().length > 10;
-        const hasFinalHypothesis = !!payloadObj.finalHypothesis && payloadObj.finalHypothesis.trim().length > 10;
-        const hasMaps = !!payloadObj.maps && payloadObj.maps.length > 0;
-        const hasGraphs = !!payloadObj.graphs && payloadObj.graphs.length > 0;
-        const hasEvidence = !!payloadObj.photoEvidence && payloadObj.photoEvidence.length > 0;
+        // Auditar mediante ReportQualityGate v6.0
+        ReportQualityGate.validate(payloadObj, this.context.briefing);
+
         const hasHIGGraph = !!payloadObj.hypothesisGraph && !!payloadObj.hypothesisGraph.dataUrl;
-        
-        const textToAudit = JSON.stringify(payloadObj);
-        const forbiddenPatterns = [
-          /\bst_dwithin\b/i,
-          /\bdiscovery\s+engine\b/i,
-          /\bgrounding\b/i,
-          /\bpowerup[s]?\b/i,
-          /\binstruction[s]?\b/i,
-          /\bocr\b/i,
-          /\bdiarización\b/i,
-          /\bsentiment\b/i
-        ];
-        const hasForbidden = forbiddenPatterns.some(pattern => pattern.test(textToAudit));
-        const noInternalMetadata = !hasForbidden;
-
-        // ANALYTICAL PAGES ONLY (max 12)
-        const analyticalPageCount = this.context.briefing?.pages?.filter((p: any) =>
-          p.mode === 'cover' || p.mode === 'hypothesis' || p.mode === 'executive' || p.mode === 'trazabilidad' || p.mode === 'text' || p.mode === 'conclusions'
-        ).length || 0;
-        const isPageCountValid = analyticalPageCount <= 12;
-
-        if (!hasExecutiveSummary || !hasFinalHypothesis || !hasMaps || !hasGraphs || !hasEvidence || !hasHIGGraph || !noInternalMetadata || !isPageCountValid) {
-          const errMsg = `VALIDATION_FAILED_CRITERIA: hasExecutiveSummary=${hasExecutiveSummary}, hasFinalHypothesis=${hasFinalHypothesis}, hasMaps=${hasMaps}, hasGraphs=${hasGraphs}, hasEvidence=${hasEvidence}, hasHIGGraph=${hasHIGGraph}, noInternalMetadata=${noInternalMetadata}, pageCount=${analyticalPageCount}`;
-          console.error("[REPORT ENGINE KERNEL] VALIDATION ERROR:", errMsg);
-          throw new Error(errMsg);
-        }
 
         // GOVERNANCE: Component integration checks based on UI selections
         const selectedAnnexes = this.context.selectedAnnexes;
@@ -736,6 +708,10 @@ export class ReportEngineKernelClass {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
         }
+
+        const analyticalPageCount = this.context.briefing?.pages?.filter((p: any) =>
+          p.mode === 'cover' || p.mode === 'hypothesis' || p.mode === 'executive' || p.mode === 'trazabilidad' || p.mode === 'text' || p.mode === 'conclusions'
+        ).length || 0;
 
         this.validationResults = {
           noPreviewLayer: true,

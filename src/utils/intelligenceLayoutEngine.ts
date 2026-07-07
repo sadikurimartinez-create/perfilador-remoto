@@ -1,4 +1,5 @@
 import { ConsolidatedReport } from '../types/Report';
+import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
 
 export type IntelligenceVisualType =
   | 'map'
@@ -330,42 +331,7 @@ export interface IntelligenceReportPayload {
  * DEPURACIÓN DE JERGA TÉCNICA Y COMANDOS IA
  */
 export function cleanTechnicalJargon(text: string): string {
-  if (!text) return "";
-  
-  let cleaned = text.replace(/POWERUP APLICADO:\s*Analizar\s*Imagen/gi, "La evidencia fotográfica permitió identificar factores de riesgo y vulnerabilidades en la infraestructura urbana.");
-  cleaned = cleaned.replace(/POWERUP APLICADO:[^\n]*/gi, "");
-  cleaned = cleaned.replace(/Realizar consulta de proximidad[^\n]*/gi, "El análisis perimetral constató la presencia de factores criminógenos de oportunidad en el área.");
-
-  const blacklisted = [
-    /OCR Avanzado y Extracción de Atributos/gi,
-    /Análisis de Diarización y Sentimiento/gi,
-    /Consulta de Proximidad ST_DWithin y Grounding Dinámico/gi,
-    /Activa Extracción de Entidades Salientes/gi,
-    /Despliega Búsqueda Semántica en Discovery Engine/gi,
-    /ST_DWithin/gi,
-    /Discovery Engine/gi,
-    /Grounding Dinámico/gi,
-    /Grounding/gi,
-    /OCR/gi,
-    /PowerUp[s]?/gi,
-    /APIs?/gi,
-    /hash(es)?/gi,
-    /IDs? internos/gi,
-    /SWEEP/gi,
-    /PROJECT/gi,
-    /prompts?/gi,
-    /instrucciones IA/gi,
-    /comandos técnicos/gi,
-    /funciones/gi,
-    /logs/gi,
-    /\[Logs omitidos por regla de consistencia ejecutiva\]/gi
-  ];
-
-  for (const regex of blacklisted) {
-    cleaned = cleaned.replace(regex, "");
-  }
-
-  return cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  return ReportIntelligenceNormalizer.normalize(text);
 }
 
 /**

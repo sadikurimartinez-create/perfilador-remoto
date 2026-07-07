@@ -24,19 +24,19 @@ export interface ReportContext {
 export const ExecutiveSummaryPrompt = (ctx: ReportContext): string => {
   return `
 --- INICIO MÓDULO: RESUMEN EJECUTIVO (PORTADA) ---
-Eres un Analista de Inteligencia del CEIPOL.
-Genera un Resumen Ejecutivo en un tono estrictamente institucional para el expediente "${ctx.projectName}" (Número: ${ctx.projectId}), con fecha ${new Date().toLocaleDateString('es-MX')}.
+Genera el Resumen Ejecutivo del "Informe de Geointeligencia Operativa" para el expediente "${ctx.projectName}" (Número de Expediente: ${ctx.projectId}).
 
-El resumen ejecutivo debe presentarse en formato de tabla o bloque estructurado y ser extremadamente conciso (máximo 150 palabras). Debe responder puntualmente a:
-1. Área geográfica: ${ctx.projectDescription}, Radio: ${ctx.analysisRadius} metros, Cobertura: ${ctx.geometryType}.
-2. Problema territorial principal detectado.
-3. Hipótesis central delictiva en una sola frase.
-4. Factores críticos ambientales identificados (máx. 3 bullets cortos).
-5. Acción prioritaria recomendada.
+El resumen ejecutivo debe ser sumamente analítico y formal, con un máximo de 350 palabras, y estructurarse bajo los siguientes apartados explícitos:
 
-Instrucciones de Estilo:
-- Prohibido utilizar jerga de desarrollo, mencionar APIs, prompts, motores o procesos técnicos internos.
-- Sé sumamente directo y ejecutivo.
+1. ¿Qué ocurre?: Descripción del fenómeno territorial delictivo o de desorden analizado.
+2. ¿Dónde ocurre?: Ubicación exacta y delimitación geoespacial del área (Radio: ${ctx.analysisRadius}m, Cobertura: ${ctx.geometryType}).
+3. ¿Qué evidencia lo sostiene?: Fuentes utilizadas para sostener el análisis (secciones de incidencia, mapas, fotografías, OSINT, Street View, pandillas, DENUE y SCINCE).
+4. ¿Cuál es el riesgo?: Clasificación formal de riesgo (BAJO, MEDIO, ALTO).
+5. ¿Qué debe hacerse?: Tres acciones prioritarias recomendadas en terreno.
+
+Reglas:
+- Evita lenguaje técnico informal o marcas internas de sistemas.
+- Sé ejecutivo y conciso.
 - Todo elemento visual o tabla debe llevar la marca de agua: SSPE-CEIPOL.
 --- FIN MÓDULO ---
 `.trim();
@@ -48,16 +48,20 @@ Instrucciones de Estilo:
 export const TerritorialAnalysisPrompt = (ctx: ReportContext): string => {
   return `
 --- INICIO MÓDULO: CONTEXTO DEL ANÁLISIS (CAPÍTULO 1) ---
-Genera el Capítulo 1 del Informe: "CONTEXTO DEL ANÁLISIS".
+Genera el Capítulo 1: "CONTEXTO DEL ANÁLISIS".
 Ubicación: ${ctx.projectDescription}
 Radio: ${ctx.analysisRadius} metros
 Polígono: ${ctx.geometryType}
 
 Instrucciones:
-- Explica de forma directa el área analizada, el objetivo táctico de la investigación y las fuentes empleadas (cartografía, fotos de campo, OSINT).
-- Sé muy conciso (máximo 80 palabras).
-- Prohibido mencionar APIs, lenguajes de programación, nombres de algoritmos o procesos internos de computación.
-- Tono puramente formal e institucional.
+- Explica claramente:
+  1. Motivo del análisis.
+  2. Alcance territorial.
+  3. Metodología utilizada.
+  4. Fuentes integradas.
+- Prohibido repetir explicaciones institucionales introductorias genéricas.
+- Sé directo y evita narrativas de relleno.
+- Tono estrictamente formal y depurado.
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -72,13 +76,19 @@ Genera el Capítulo 2: "HIPÓTESIS CRIMINOLÓGICA AMBIENTAL".
 Contexto de hipótesis: "${ctx.analysisContext || 'Sin hipótesis inicial.'}"
 
 Instrucciones:
-1. Plantea una única hipótesis delictiva central del cuadrante de forma directa y concisa.
-2. Detalla brevemente los elementos que la sustentan: factores territoriales, evidencia visual de campo, incidencia delictiva y datos OSINT.
-3. Separa el análisis obligatoriamente usando las etiquetas:
-   - HECHO: (Dato empírico verificado).
-   - INFERENCIA: (Deducción lógica del hecho).
-   - VALORACIÓN: (Evaluación de riesgo).
-4. Sé extremadamente breve y ve directo al grano (máximo 150 palabras). No uses narraciones de relleno.
+Establece obligatoriamente una única hipótesis criminológica central estructurada con el siguiente formato estricto:
+
+## Hipótesis:
+[Redacción completa, coherente y directa de la hipótesis en un párrafo analítico]
+
+## Evidencia que la soporta:
+[Listado estructurado de los elementos de soporte analizados: mapas, gráficas, fotos de campo, OSINT y Street View]
+
+## Nivel de confianza:
+[Indicar únicamente ALTO, MEDIO o BAJO basado en la cantidad y calidad de evidencia]
+
+## Factores que podrían modificarla:
+[Detallar factores pendientes de validar o elementos que podrían alterar la hipótesis planteada]
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -93,9 +103,11 @@ Genera el Capítulo 3: "ANÁLISIS TERRITORIAL CARTOGRÁFICO".
 
 Instrucciones:
 - Interpreta de manera espacial y criminológica los mapas tácticos del expediente (Densidad Criminológica, Atracción y Factores, Corredores y Movilidad, Proyección Predictiva a 6 Meses).
-- Regla Estricta: Prohibido describir el mapa. Debes INTERPRETAR la distribución espacial y qué significa operativamente (ej. "La concentración espacial observada en la intersección X evidencia un patrón de oportunidad asociado a...").
-- Para cada uno de los mapas, asóciale un título claro y una interpretación analítica muy concisa (máximo 2 líneas por mapa).
-- Sella la interpretación con el pie de imagen: "🔒 SSPE-CEIPOL | Marca de agua institucional".
+- Regla Estricta: Prohibido describir visualmente el mapa de forma pasiva. Cada mapa interpretado debe estructurarse obligatoriamente bajo los siguientes tres apartados analíticos de forma concisa:
+  - Hallazgo espacial: ¿Qué patrón o concentración muestra geoespacialmente el mapa?
+  - Interpretación criminológica: ¿Por qué es relevante este patrón ambiental para explicar la oportunidad delictiva?
+  - Impacto operativo: ¿Qué decisión táctica directa permite tomar a las unidades en campo?
+- Añade el sello de agua: "🔒 SSPE-CEIPOL".
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -111,10 +123,13 @@ Genera el Capítulo 4: "ANÁLISIS ESTADÍSTICO".
 Datos: ${incidentCount} incidentes delictivos en el radio analizado.
 
 Instrucciones:
-- Redacta una interpretación analítica sumamente breve para las gráficas estadísticas delictivas (máximo 4 gráficas).
-- Cada gráfica interpretada debe responder de forma resumida (máximo 2 líneas cada una): qué ocurre, dónde, cuándo y qué significa.
-- Sin textos decorativos ni introducciones redundantes.
-- Leyenda: "🔒 SSPE-CEIPOL".
+- Redacta la lectura analítica para las gráficas estadísticas delictivas (Temporal, Topología, Facilitadores Ambientales y Predicción).
+- Prohibido repetir la misma explicación general. Para cada gráfica interpretada, responde puntualmente:
+  1. ¿Qué variable representa?
+  2. ¿Qué patrón o anomalía aparece?
+  3. ¿Qué significa operativamente?
+  4. ¿Cómo modifica o fortalece la hipótesis central?
+- Sé sumamente formal, analítico y ve directo al grano.
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -127,16 +142,15 @@ export const EvidenceAnalysisPrompt = (ctx: ReportContext): string => {
   return `
 --- INICIO MÓDULO: EVIDENCIA FOTOGRÁFICA DE CAMPO (CAPÍTULO 5) ---
 Genera el Capítulo 5: "EVIDENCIA FOTOGRÁFICA".
-Evidencias disponibles: ${photoCount} fotografías de campo.
+Fotografías de campo en el expediente: ${photoCount}.
 
 Instrucciones:
-- Proporciona el análisis de la evidencia fotográfica de campo.
-- Para cada imagen del expediente, redacta un análisis sumamente corto (máximo 3 líneas) que contenga:
-  1. Observación objetiva: Qué elemento físico se observa.
-  2. Interpretación ambiental: Qué vulnerabilidad representa.
-  3. Relación con la hipótesis central: Por qué importa.
-- Prohibido mencionar nombres de herramientas IA, comandos OCR, PowerUps o procesos internos.
-- Todo pie de imagen debe ostentar el sello oficial: "🔒 SSPE-CEIPOL".
+- Estructura el análisis de cada una de las fotografías de campo agregadas al expediente.
+- El análisis de cada fotografía debe ser sintético (máximo 150 palabras) y contener obligatoriamente estos tres títulos:
+  - Observación: Qué elemento físico o anomalía del entorno aparece.
+  - Interpretación: Qué significa o qué vulnerabilidad física representa.
+  - Relación con hipótesis: Cómo influye o fortalece la hipótesis criminal central.
+- No incluyas nombres de herramientas de desarrollo ni procesos internos.
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -149,13 +163,17 @@ export const StreetViewIntelligencePrompt = (ctx: ReportContext): string => {
   return `
 --- INICIO MÓDULO: STREET VIEW INTELLIGENCE (CAPÍTULO 6) ---
 Genera el Capítulo 6: "STREET VIEW INTELLIGENCE".
-Puntos de Street View: ${svCount} registros.
+Evidencias Street View en el expediente: ${svCount}.
 
 Instrucciones:
-- Analiza de forma muy breve y puntual los puntos de ocultamiento, acecho, rutas de acceso/salida o baja vigilancia natural detectados.
-- No uses la frase "Street View detectó actividad criminal". Usa lenguaje analítico profesional: "El análisis visual identificó condiciones ambientales compatibles con la facilitación de..."
-- Sé extremadamente conciso (máximo 100 palabras en total).
-- Incluir en cada hallazgo la marca de agua: "🔒 SSPE-CEIPOL".
+- Analiza de forma exhaustiva y analítica los puntos críticos de vulnerabilidad física identificados en Street View.
+- Busca identificar factores como: puntos de ocultamiento, lugares de acecho, rutas de escape, espacios de baja visibilidad natural, inmuebles abandonados o barreras visuales.
+- Para cada hallazgo analizado, detalla obligatoriamente:
+  1. Ubicación.
+  2. Descripción física detallada.
+  3. Valoración operativa de vulnerabilidad.
+- Prohibido limitarse a decir "Se detectó mediante Street View". Se debe realizar una valoración criminológica real.
+- Incluir sello de agua institucional: "🔒 SSPE-CEIPOL".
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -167,12 +185,15 @@ export const OSINTAnalysisPrompt = (ctx: ReportContext): string => {
   return `
 --- INICIO MÓDULO: INTELIGENCIA OSINT (CAPÍTULO 7) ---
 Genera el Capítulo 7: "INTELIGENCIA OSINT".
-Datos OSINT: "${ctx.osintEngineData ? JSON.stringify(ctx.osintEngineData) : 'Sin barrido directo disponible.'}"
+Datos de entrada OSINT: "${ctx.osintEngineData ? JSON.stringify(ctx.osintEngineData) : 'Sin barrido directo disponible.'}"
 
 Instrucciones:
-- Transforma la información de fuentes abiertas y noticias locales en un análisis contextual de entorno muy conciso (máximo 80 palabras).
-- Responde directamente: ¿Qué información externa de prensa o incidentes locales fortalece la hipótesis operativa?
-- Prohibido mostrar un listado crudo de titulares o enlaces. La información debe integrarse de forma fluida.
+- Analiza la información de fuentes abiertas y noticias locales.
+- Para cada fuente integrada (ej. Telegram, RSS, redes sociales o noticias), indica explícitamente:
+  - Fuente: (Canal/Medio de procedencia).
+  - Resultado: (Qué información relevante se encontró).
+  - Valor: (Cómo afecta, complementa o refuta la hipótesis operativa).
+- Integra la información de forma fluida y formal.
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -187,9 +208,14 @@ Genera el Capítulo 8: "ACTORES TERRITORIALES Y PANDILLAS".
 Datos de pandilla vinculada: ${ctx.linkedGangReport ? JSON.stringify(ctx.linkedGangReport) : 'Ninguno.'}
 
 Instrucciones:
-- Analiza la vinculación territorial de grupos de riesgo únicamente si existe evidencia y zona de influencia activa en el polígono.
-- Si no existe una relación territorial comprobable, debes indicar textualmente: "No se identificó relación territorial comprobable de grupos de riesgo o pandillas con el área bajo análisis."
-- Sé directo y evita especulaciones.
+- Regla Crítica: Prohibido afirmar presencia territorial de grupos de riesgo por simple coincidencia nominal.
+- Audita y valida la vinculación respondiendo a:
+  1. ¿La pandilla tiene zona de influencia activa dentro del área analizada?
+  2. ¿Existe algún integrante plenamente identificado en el área?
+  3. ¿Existe algún líder del grupo relacionado con la zona?
+  4. ¿Existe evidencia OSINT que corrobore su presencia territorial activa?
+- Clasifica obligatoriamente la presencia como: CONFIRMADO, PROBABLE o NO CORROBORADO.
+- Si no hay elementos suficientes para confirmar la relación territorial, no especules y escribe textualmente: "Se realizó búsqueda sin elementos suficientes para confirmar presencia territorial."
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -203,9 +229,18 @@ export const HIGGraphPrompt = (ctx: ReportContext): string => {
 Genera el Capítulo 9: "GRAFO DE HIPÓTESIS HIG 2.0".
 
 Instrucciones:
-- Explica de manera concisa cómo se conecta la hipótesis con la evidencia y los factores ambientales en el Grafo HIG 2.0.
-- Redacta la sección "Lectura Operacional del Grafo HIG 2.0" con un máximo de 100 palabras de forma muy directa.
-- Todo pie de gráfica o grafo debe llevar la marca de agua: "🔒 SSPE-CEIPOL".
+- Analiza el flujo relacional del Grafo de Hipótesis (HIG 2.0).
+- Estructura la explicación detallando cómo se conecta:
+  1. Nodo Central: Hipótesis principal delictiva.
+  2. Nodos Secundarios:
+     - Evidencias: Fotografías, mapas, gráficas, OSINT, Street View.
+     - Factores ambientales: Iluminación, accesibilidad, vigilancia natural, infraestructura.
+     - Actores: Pandillas, establecimientos críticos, puntos de interés delictivo.
+  3. Tipo y peso de las conexiones:
+     - Tipo de conexión: fortalece, contradice o requiere validación.
+     - Peso de la conexión: Alto, Medio o Bajo.
+- Concluye el capítulo incluyendo la siguiente frase narrativa institucional obligatoria: "El grafo muestra cómo la evidencia disponible incrementa o disminuye la confianza de la hipótesis central."
+- Todo pie de grafo debe llevar la marca de agua: "🔒 SSPE-CEIPOL".
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -219,12 +254,24 @@ export const OperationalConclusionPrompt = (ctx: ReportContext): string => {
 Genera el Capítulo 10: "CONCLUSIONES OPERATIVAS".
 
 Instrucciones:
-- Define las acciones que la institución debe realizar en el territorio estudiado.
-- Estructura las recomendaciones obligatoriamente en tres plazos (máximo 2 bullets cortos por plazo):
-  1. Acción inmediata (0 a 30 días).
-  2. Acción preventiva (30 a 90 días).
-  3. Acción estratégica (más de 90 días).
-- Sé directo, imperativo y sumamente conciso.
+- Genera recomendaciones y conclusiones operativas específicas derivadas del análisis territorial.
+- Estructura las acciones de forma obligatoria en tres plazos:
+  
+  ## Acción inmediata (0 a 30 días)
+  [Recomendaciones inmediatas tácticas en campo]
+  
+  ## Acción preventiva (30 a 90 días)
+  [Recomendaciones de prevención y diseño ambiental]
+  
+  ## Acción estratégica (90 días o más)
+  [Recomendaciones a mediano y largo plazo]
+
+- Para cada recomendación o acción redactada, debes responder explícitamente:
+  - ¿Qué hacer?
+  - ¿Dónde?
+  - ¿Por qué?
+  - ¿Con qué evidencia?
+- Sé directo, imperativo y sumamente formal.
 --- FIN MÓDULO ---
 `.trim();
 };
