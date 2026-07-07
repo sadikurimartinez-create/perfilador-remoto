@@ -466,8 +466,8 @@ export const buildIntelligenceEditorialPayload = (
   const rawHypothesis = extractSection(rawContent, 3);
   const rawMapsText = extractSection(rawContent, 4);
   const rawOsintText = extractSection(rawContent, 8);
-  const rawGraphText = extractSection(rawContent, 9);
-  const rawConclusionsText = extractSection(rawContent, 10);
+  const rawGraphText = extractSection(rawContent, 10);
+  const rawConclusionsText = extractSection(rawContent, 11);
 
   const projectName = project?.nombre || project?.name || "Zona de Estudio";
   const projectId = project?.id ? String(project.id) : "EXP-2026-XXXXX";
@@ -477,7 +477,10 @@ export const buildIntelligenceEditorialPayload = (
   const areaGeografica = project?.areaGeografica || "Aguascalientes, Ags, México";
 
   // Bloque I.1: Contexto territorial
-  let contextoTerritorial = `El polígono bajo análisis ${projectName} se sitúa en un sector de alta movilidad urbana con una población flotante estimada en horarios comerciales de tercer turno. Se caracteriza por un diseño de infraestructura con cerramientos deficientes y predios baldíos. Los factores criminógenos de oportunidad identificados corresponden a la pérdida de vigilancia natural debido al abandono del espacio público.`;
+  let contextoTerritorial = cleanTechnicalJargon(extractSection(rawContent, 2));
+  if (!contextoTerritorial || contextoTerritorial.length < 10) {
+    contextoTerritorial = `El polígono bajo análisis ${projectName} se sitúa en un sector de alta movilidad urbana con una población flotante estimada en horarios comerciales de tercer turno. Se caracteriza por un diseño de infraestructura con cerramientos deficientes y predios baldíos. Los factores criminógenos de oportunidad identificados corresponden a la pérdida de vigilancia natural debido al abandono del espacio público.`;
+  }
 
   // Bloque I.2: Hipótesis principal
   const hipotesisPrincipal = {
@@ -547,11 +550,13 @@ export const buildIntelligenceEditorialPayload = (
   }
 
   // Pandillas territorial analysis
-  let pandillasAnalysis = "";
-  if (hasPandillaMention) {
-    pandillasAnalysis = "El análisis territorial identificó dinámicas delictivas asociadas a grupos locales con influencia en el polígono estudiado, principalmente en conductas de oportunidad y consumo de sustancias en la vía pública, lo que impacta la percepción de seguridad.";
-  } else {
-    pandillasAnalysis = "No se identificó presencia territorial directa asociada al área analizada.";
+  let pandillasAnalysis = cleanTechnicalJargon(extractSection(rawContent, 9));
+  if (!pandillasAnalysis || pandillasAnalysis.length < 10) {
+    if (hasPandillaMention) {
+      pandillasAnalysis = "El análisis territorial identificó dinámicas delictivas asociadas a grupos locales con influencia en el polígono estudiado, principalmente en conductas de oportunidad y consumo de sustancias en la vía pública, lo que impacta la percepción de seguridad.";
+    } else {
+      pandillasAnalysis = "No se identificó presencia territorial directa asociada al área analizada.";
+    }
   }
 
   // Maps
@@ -724,28 +729,71 @@ export const buildIntelligenceEditorialPayload = (
 
   // Bloque IX: Conclusiones
   const conclusiones = {
-    hallazgosCriticos: [
-      "Deficiencias severas en el alumbrado público (alumbrado ausente en más de un 60% perimetral).",
-      "Alta presencia de predios baldíos con cerramientos deficientes facilitando rutas de escape.",
-      "Concentración de comercios con venta de bebidas de alta graduación que eleva la población flotante nocturna."
-    ],
-    riesgosInmediatos: [
-      "Facilidad de acecho sobre vías peatonales de alta afluencia comercial.",
-      "Uso de baldíos como depósito de sustancias y objetos ilícitos."
-    ],
-    escenariosFuturos: [
-      "De persistir la ausencia de iluminación, se proyecta un incremento del 15% de delitos de oportunidad.",
-      "La consolidación de baldíos no bardeados incrementará el riesgo de asentamientos irregulares de riesgo."
-    ],
-    recomendacionesTacticas: [
-      "Sincronizar las bitácoras de patrullaje dinámico con el cierre comercial nocturno en Punto de Interés 1.",
-      "Establecer un puesto de vigilancia semifijo en el eje de movilidad norte."
-    ],
-    recomendacionesEstrategicas: [
-      "Gestionar el alumbrado LED táctico perimetral y desbroce urbano con el municipio.",
-      "Notificar obligatoriedad de bardeado a propietarios de lotes baldíos bajo sanción oficial."
-    ]
+    hallazgosCriticos: [] as string[],
+    riesgosInmediatos: [] as string[],
+    escenariosFuturos: [] as string[],
+    recomendacionesTacticas: [] as string[],
+    recomendacionesEstrategicas: [] as string[]
   };
+
+  if (rawConclusionsText && rawConclusionsText.trim().length > 10) {
+    const lines = rawConclusionsText.split("\n").map(l => l.trim()).filter(Boolean);
+    let currentCategory: 'inmediata' | 'preventiva' | 'estrategica' | 'other' = 'other';
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.includes("inmediata") || lower.includes("0-30") || lower.includes("0 a 30")) {
+        currentCategory = 'inmediata';
+        continue;
+      } else if (lower.includes("preventiva") || lower.includes("30-90") || lower.includes("30 a 90")) {
+        currentCategory = 'preventiva';
+        continue;
+      } else if (lower.includes("estratégica") || lower.includes("estrategica") || lower.includes("90 días") || lower.includes("90 dias")) {
+        currentCategory = 'estrategica';
+        continue;
+      }
+
+      if (line.startsWith("-") || line.startsWith("*") || line.match(/^\d+\./)) {
+        const cleanLine = line.replace(/^[-*\d.]+\s*/, "").trim();
+        if (cleanLine.length > 5) {
+          if (currentCategory === 'inmediata') {
+            conclusiones.recomendacionesTacticas.push(`[Acción Inmediata 0-30 días] ${cleanLine}`);
+          } else if (currentCategory === 'preventiva') {
+            conclusiones.recomendacionesEstrategicas.push(`[Acción Preventiva 30-90 días] ${cleanLine}`);
+          } else if (currentCategory === 'estrategica') {
+            conclusiones.escenariosFuturos.push(`[Acción Estratégica >90 días] ${cleanLine}`);
+          } else {
+            conclusiones.hallazgosCriticos.push(cleanLine);
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback default bullets if parsing results in empty lists
+  if (conclusiones.recomendacionesTacticas.length === 0) {
+    conclusiones.recomendacionesTacticas = [
+      "[Acción Inmediata 0-30 días] Sincronizar las bitácoras de patrullaje dinámico nocturno en las zonas de riesgo.",
+      "[Acción Inmediata 0-30 días] Desplegar presencia disuasiva en los nodos viales identificados."
+    ];
+  }
+  if (conclusiones.recomendacionesEstrategicas.length === 0) {
+    conclusiones.recomendacionesEstrategicas = [
+      "[Acción Preventiva 30-90 días] Gestionar la reparación del alumbrado público dañado en el cuadrante.",
+      "[Acción Preventiva 30-90 días] Promover la inspección de giros comerciales con venta de alcohol."
+    ];
+  }
+  if (conclusiones.escenariosFuturos.length === 0) {
+    conclusiones.escenariosFuturos = [
+      "[Acción Estratégica >90 días] Implementar políticas de diseño ambiental (CPTED) y recuperación de predios baldíos.",
+      "[Acción Estratégica >90 días] Fomentar la participación ciudadana y la vigilancia comunitaria formal."
+    ];
+  }
+  if (conclusiones.hallazgosCriticos.length === 0) {
+    conclusiones.hallazgosCriticos = [
+      "Deficiencias notables de alumbrado perimetral detectadas en el relevamiento territorial.",
+      "Predios baldíos sin cerramientos adecuados que incrementan la vulnerabilidad de escape."
+    ];
+  }
 
   const executiveSummary = cleanTechnicalJargon(
     rawExecSummary || project?.reportSummary || "Dictamen estratégico de geointeligencia operativa perimetral."

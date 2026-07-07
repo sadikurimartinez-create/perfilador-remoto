@@ -383,10 +383,10 @@ export async function exportToWord(
 
   // ================= PÁGINAS VISUALES INDEPENDIENTES (BLOQUE III: ATLAS CARTOGRÁFICO) =================
   if (payload.maps) {
-    payload.maps.forEach((map, idx) => {
+    for (const map of payload.maps) {
       elements.push(new Paragraph({ pageBreakBefore: true }));
       elements.push(createTitle(`BLOQUE III: ATLAS CARTOGRÁFICO - ${map.title.toUpperCase()}`));
-      const buf = dataUrlToArrayBuffer(map.dataUrl);
+      const buf = await applyWatermarkForWord(map.dataUrl);
       if (buf) {
         elements.push(
           new Paragraph({
@@ -398,15 +398,15 @@ export async function exportToWord(
       }
       elements.push(createSubtitle("Interpretación Operacional del Mapa:"));
       elements.push(createBodyText(map.interpretation));
-    });
+    }
   }
 
   // ================= BLOQUE V: MODELOS ANALÍTICOS (GRÁFICAS) =================
   if (payload.graphs) {
-    payload.graphs.forEach((graph, idx) => {
+    for (const graph of payload.graphs) {
       elements.push(new Paragraph({ pageBreakBefore: true }));
       elements.push(createTitle(`BLOQUE V: MODELO ANALÍTICO - ${graph.title.toUpperCase()}`));
-      const buf = dataUrlToArrayBuffer(graph.dataUrl);
+      const buf = await applyWatermarkForWord(graph.dataUrl);
       if (buf) {
         elements.push(
           new Paragraph({
@@ -420,7 +420,7 @@ export async function exportToWord(
       elements.push(createBullet("Explicación técnica: ", graph.explanation));
       elements.push(createBullet("Hallazgo relevante: ", graph.finding));
       elements.push(createBullet("Relación con hipótesis: ", graph.relation));
-    });
+    }
   }
 
   // ================= BLOQUE VII: EVIDENCIA FOTOGRÁFICA DE CAMPO =================
@@ -513,7 +513,7 @@ export async function exportToWord(
   if (payload.streetViewAnalysis) {
     for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
       const sv = payload.streetViewAnalysis[i];
-      const buf = dataUrlToArrayBuffer(sv.dataUrl);
+      const buf = await applyWatermarkForWord(sv.dataUrl);
       if (buf) {
         elements.push(new Paragraph({ pageBreakBefore: true }));
         elements.push(createTitle(`BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (ACECHO 0${i + 1})`));
@@ -615,7 +615,7 @@ export async function exportToWord(
   if (payload.hypothesisGraph) {
     elements.push(new Paragraph({ pageBreakBefore: true }));
     elements.push(createTitle("BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)"));
-    const buf = dataUrlToArrayBuffer(payload.hypothesisGraph.dataUrl);
+    const buf = await applyWatermarkForWord(payload.hypothesisGraph.dataUrl);
     if (buf) {
       elements.push(
         new Paragraph({

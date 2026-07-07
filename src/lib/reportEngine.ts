@@ -104,6 +104,14 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
       console.warn("No se pudo renderizar la imagen en PDF:", visual.title, e);
     }
 
+    // Marca de agua institucional (Badge discreto pero visible SSPE-CEIPOL sobre el recurso visual)
+    doc.setFillColor('#0b1f3a');
+    doc.rect(x + width - 35, y + height - 23, 33, 6, 'F');
+    doc.setTextColor('#ffffff');
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SSPE-CEIPOL', x + width - 18.5, y + height - 18.8, { align: 'center' });
+
     doc.setFillColor('#f4f7fb');
     doc.rect(x, y + height - 15, width, 15, 'F');
     doc.setFontSize(7.5);
