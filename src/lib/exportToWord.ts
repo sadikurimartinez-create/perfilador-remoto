@@ -189,7 +189,7 @@ export async function exportToWord(
   elements.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", size: 30, color: "0D2B52", bold: true, font: "Calibri" })],
+      children: [new TextRun({ text: "INFORME DE GEOINTELIGENCIA OPERATIVA", size: 30, color: "0D2B52", bold: true, font: "Calibri" })],
       spacing: { after: 60 }
     }),
     new Paragraph({
@@ -267,7 +267,7 @@ export async function exportToWord(
   // Caja de Síntesis Ejecutiva en Portada
   elements.push(
     new Paragraph({
-      children: [new TextRun({ text: "SÍNTESIS DEL DICTAMEN TÉCNICO", bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+      children: [new TextRun({ text: "RESUMEN EJECUTIVO (PORTADA)", bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
       spacing: { after: 100 }
     }),
     new Table({
@@ -290,96 +290,41 @@ export async function exportToWord(
     })
   );
 
-  // ================= PÁGINA 2: BLOQUE I.1 - CONTEXTO TERRITORIAL =================
+  // ================= PÁGINA 2: CAPÍTULO 1 - CONTEXTO DEL ANÁLISIS =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("BLOQUE I: ANÁLISIS EJECUTIVO - CONTEXTO TERRITORIAL"));
+  elements.push(createTitle("CAPÍTULO 1: CONTEXTO DEL ANÁLISIS"));
   elements.push(createBodyText(payload.contextoTerritorial));
 
-  // ================= PÁGINA 3: BLOQUE I.2 - HIPÓTESIS PRINCIPAL =================
+  // ================= PÁGINA 3: CAPÍTULO 2 - HIPÓTESIS CRIMINOLÓGICA AMBIENTAL =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("BLOQUE I: ANÁLISIS EJECUTIVO - HIPÓTESIS PRINCIPAL"));
-  elements.push(createSubtitle("Estructuración Metodológica de la Hipótesis delictiva:"));
-  
-  elements.push(createBullet("¿Qué ocurre?: ", payload.hipotesisPrincipal.queOcurre));
-  elements.push(createBullet("¿Dónde ocurre?: ", payload.hipotesisPrincipal.dondeOcurre));
-  elements.push(createBullet("¿Quién podría participar?: ", payload.hipotesisPrincipal.quienParticipa));
-  elements.push(createBullet("¿Por qué ocurre?: ", payload.hipotesisPrincipal.porQueOcurre));
-  elements.push(createBullet("¿Qué evidencia sustenta?: ", payload.hipotesisPrincipal.evidenciaSustento));
-  elements.push(createBullet("Nivel de confianza analítica: ", payload.hipotesisPrincipal.nivelConfianza, "B91C1C"));
+  elements.push(createTitle("CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL"));
+  elements.push(createBodyText(payload.finalHypothesis));
 
-  // ================= PÁGINA 4: BLOQUE I.3 - VALORACIÓN OPERACIONAL =================
+  // ================= PÁGINA 4: CAPÍTULO 7 - INTELIGENCIA OSINT =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("BLOQUE I: ANÁLISIS EJECUTIVO - VALORACIÓN OPERACIONAL"));
-  elements.push(createSubtitle("Evaluación de Amenazas, Oportunidades y Vulnerabilidades del Sector:"));
-  
-  elements.push(createBullet("Amenaza: ", payload.valoracionOperacional.amenaza));
-  elements.push(createBullet("Oportunidad criminal: ", payload.valoracionOperacional.oportunidadCriminal));
-  elements.push(createBullet("Vulnerabilidades urbanas: ", payload.valoracionOperacional.vulnerabilidades));
-  elements.push(createBullet("Capacidad institucional requerida: ", payload.valoracionOperacional.capacidadRequerida));
-
-  // ================= PÁGINA 5: BLOQUE II - MATRIZ DE TRAZABILIDAD =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("BLOQUE II: MATRIZ DE TRAZABILIDAD ANALÍTICA"));
-  elements.push(createSubtitle("Gobernanza Algorítmica y Explicabilidad de Fuentes:"));
-
-  const matrixRows = [
-    new TableRow({
-      children: [
-        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Componente", bold: true, color: "FFFFFF", size: 16 })] })] }),
-        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Fuente", bold: true, color: "FFFFFF", size: 16 })] })] }),
-        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Método", bold: true, color: "FFFFFF", size: 16 })] })] }),
-        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Hallazgo", bold: true, color: "FFFFFF", size: 16 })] })] }),
-        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Impacto Operativo", bold: true, color: "FFFFFF", size: 16 })] })] }),
-      ]
-    })
-  ];
-
-  payload.trazabilidadMatrix.forEach((r, idx) => {
-    matrixRows.push(
-      new TableRow({
-        children: [
-          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.componente, size: 14 })] })] }),
-          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.fuente, size: 14 })] })] }),
-          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.metodo, size: 14 })] })] }),
-          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.hallazgo, size: 14 })] })] }),
-          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.impacto, size: 14 })] })] }),
-        ]
-      })
-    );
-  });
-
-  elements.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: matrixRows, spacing: { after: 200 } }));
-
-  // ================= PÁGINA 6: OSINT SINTETIZADO =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("ANÁLISIS DE INTELIGENCIA OSINT COMPLEMENTARIA"));
-  elements.push(createSubtitle("Evaluación del Entorno Socioeconómico y Comercial:"));
+  elements.push(createTitle("CAPÍTULO 7: INTELIGENCIA OSINT"));
   elements.push(createBodyText(payload.osintSynthesized));
 
-  // ================= PÁGINA 7: MOTOR DE PANDILLAS =================
+  // ================= PÁGINA 5: CAPÍTULO 8 - ACTORES TERRITORIALES Y PANDILLAS =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("ANÁLISIS DE VINCULACIÓN TERRITORIAL (PANDILLAS)"));
-  elements.push(createSubtitle("Contexto de Pandillas y Actores de Riesgo Locales:"));
+  elements.push(createTitle("CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS"));
   elements.push(createBodyText(payload.pandillasAnalysis));
 
-  // ================= PÁGINA 8: BLOQUE IX - CONCLUSIONES OPERATIVAS =================
+  // ================= PÁGINA 6: CAPÍTULO 10 - CONCLUSIONES OPERATIVAS =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("BLOQUE IX: CONCLUSIONES OPERATIVAS Y RECOMENDACIONES"));
+  elements.push(createTitle("CAPÍTULO 10: CONCLUSIONES OPERATIVAS"));
 
-  elements.push(createSubtitle("Hallazgos Críticos:"));
-  payload.conclusiones.hallazgosCriticos.forEach(h => elements.push(createBullet("", h)));
-
-  elements.push(createSubtitle("Riesgos Inmediatos:"));
-  payload.conclusiones.riesgosInmediatos.forEach(r => elements.push(createBullet("", r)));
-
-  elements.push(createSubtitle("Escenarios Futuros:"));
-  payload.conclusiones.escenariosFuturos.forEach(e => elements.push(createBullet("", e)));
-
-  elements.push(createSubtitle("Recomendaciones Tácticas:"));
+  elements.push(createSubtitle("Recomendaciones de Acción Inmediata (0-30 días):"));
   payload.conclusiones.recomendacionesTacticas.forEach(t => elements.push(createBullet("", t, "B91C1C")));
 
-  elements.push(createSubtitle("Recomendaciones Estratégicas:"));
-  payload.conclusiones.recomendacionesEstrategicas.forEach(s => elements.push(createBullet("", s, "1E3A8A")));
+  elements.push(createSubtitle("Recomendaciones de Acción Preventiva (30-90 días):"));
+  payload.conclusiones.recomendacionesEstrategicas.forEach(s => elements.push(createBullet("", s, "1F4E79")));
+
+  elements.push(createSubtitle("Recomendaciones de Acción Estratégica (más de 90 días):"));
+  payload.conclusiones.escenariosFuturos.forEach(e => elements.push(createBullet("", e, "222222")));
+
+  elements.push(createSubtitle("Hallazgos Territoriales Críticos:"));
+  payload.conclusiones.hallazgosCriticos.forEach(h => elements.push(createBullet("", h)));
 
   // ================= PÁGINAS VISUALES INDEPENDIENTES (BLOQUE III: ATLAS CARTOGRÁFICO) =================
   if (payload.maps) {
@@ -503,20 +448,20 @@ export async function exportToWord(
 
     for (let i = 0; i < payload.photoEvidence.length; i++) {
       elements.push(new Paragraph({ pageBreakBefore: true }));
-      elements.push(createTitle(`BLOQUE VII: EVIDENCIA FOTOGRÁFICA (EVIDENCIA 0${i + 1})`));
+      elements.push(createTitle(`CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA (EVIDENCIA 0${i + 1})`));
       const el = await buildPhotoTableElement(payload.photoEvidence[i], i);
       if (el) elements.push(el);
     }
   }
 
-  // ================= BLOQUE IV: ANÁLISIS STREET VIEW =================
+  // ================= CAPÍTULO 6: STREET VIEW INTELLIGENCE =================
   if (payload.streetViewAnalysis) {
     for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
       const sv = payload.streetViewAnalysis[i];
       const buf = await applyWatermarkForWord(sv.dataUrl);
       if (buf) {
         elements.push(new Paragraph({ pageBreakBefore: true }));
-        elements.push(createTitle(`BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (ACECHO 0${i + 1})`));
+        elements.push(createTitle(`CAPÍTULO 6: STREET VIEW INTELLIGENCE (ACECHO 0${i + 1})`));
         elements.push(
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
@@ -577,44 +522,10 @@ export async function exportToWord(
     }
   }
 
-  // ================= BLOQUE VI: BARRIDOS DE INTELIGENCIA =================
-  if (payload.sweepsData && payload.sweepsData.length > 0) {
-    elements.push(new Paragraph({ pageBreakBefore: true }));
-    elements.push(createTitle("BLOQUE VI: BARRIDOS DE INTELIGENCIA DE FUENTES"));
-    
-    payload.sweepsData.forEach((s: any) => {
-      elements.push(
-        new Paragraph({
-          children: [new TextRun({ text: `Barrido: ${s.engine.toUpperCase()}`, bold: true, size: 18, color: "0D2B52" })],
-          spacing: { before: 120, after: 60 }
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: "Fuente consultada: ", bold: true, size: 16 }),
-            new TextRun({ text: s.source, size: 16 })
-          ]
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: "Datos integrados: ", bold: true, size: 16 }),
-            new TextRun({ text: s.data, size: 16 })
-          ]
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: "Contexto de movilidad: ", bold: true, size: 16 }),
-            new TextRun({ text: s.context, size: 16 })
-          ],
-          spacing: { after: 180 }
-        })
-      );
-    });
-  }
-
-  // ================= BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH HIG 2.0 =================
+  // ================= CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0 =================
   if (payload.hypothesisGraph) {
     elements.push(new Paragraph({ pageBreakBefore: true }));
-    elements.push(createTitle("BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)"));
+    elements.push(createTitle("CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0"));
     const buf = await applyWatermarkForWord(payload.hypothesisGraph.dataUrl);
     if (buf) {
       elements.push(

@@ -839,97 +839,66 @@ export const buildIntelligenceBriefing = (
   const globalRisk = getGlobalRiskLabel(report);
   const pages: IntelligenceLayoutPage[] = [];
 
-  // PÁGINAS ANALÍTICAS (Contabilizan dentro del límite de 12 páginas)
+  // PÁGINAS ANALÍTICAS (Límite de 12 páginas)
 
   // Página 1: Portada Institucional
   pages.push({
     id: 'page-cover',
-    title: 'Dictamen Técnico de Inteligencia Territorial',
+    title: 'Informe de Geointeligencia Operativa',
     mode: 'cover',
     visuals: [],
     riskLevel: globalRisk,
-    summary: `Expediente descriptivo del territorio estudiado en ${payload.projectName}.`,
+    summary: payload.executiveSummary,
     bullets: [
       `Expediente: ${payload.projectName}`,
-      `Número: ${payload.projectId}`,
+      `Número de Expediente: ${payload.projectId}`,
       `Fecha: ${payload.date}`,
       `Analista Responsable: ${payload.analyst}`,
-      `Geometría: Cobertura tipo ${payload.geometryType.toUpperCase()}`,
-      `Área Geográfica: ${payload.areaGeografica}`,
+      `Geometría de Cobertura: ${payload.geometryType.toUpperCase()}`,
       `Clasificación: CONFIDENCIAL / EXCLUSIVO SSPE-CEIPOL`
     ]
   });
 
-  // Página 2: Bloque I.1 - Contexto territorial
+  // Página 2: CAPÍTULO 1 - Contexto territorial
   pages.push({
     id: 'page-context',
-    title: 'BLOQUE I: ANÁLISIS EJECUTIVO - CONTEXTO TERRITORIAL',
+    title: 'CAPÍTULO 1: CONTEXTO DEL ANÁLISIS',
     mode: 'executive',
     visuals: [],
     interpretation: payload.contextoTerritorial
   });
 
-  // Página 3: Bloque I.2 - Hipótesis criminal principal
+  // Página 3: CAPÍTULO 2 - Hipótesis principal
   pages.push({
     id: 'page-hypothesis-principal',
-    title: 'BLOQUE I: ANÁLISIS EJECUTIVO - HIPÓTESIS PRINCIPAL',
+    title: 'CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL',
     mode: 'executive',
     visuals: [],
-    bullets: [
-      `¿Qué ocurre?: ${payload.hipotesisPrincipal.queOcurre}`,
-      `¿Dónde ocurre?: ${payload.hipotesisPrincipal.dondeOcurre}`,
-      `¿Quién podría participar?: ${payload.hipotesisPrincipal.quienParticipa}`,
-      `¿Por qué ocurre?: ${payload.hipotesisPrincipal.porQueOcurre}`,
-      `¿Qué evidencia sustenta?: ${payload.hipotesisPrincipal.evidenciaSustento}`,
-      `Nivel de confianza: ${payload.hipotesisPrincipal.nivelConfianza}`
-    ]
+    interpretation: payload.finalHypothesis
   });
 
-  // Página 4: Bloque I.3 - Valoración operacional
-  pages.push({
-    id: 'page-valuation-operacional',
-    title: 'BLOQUE I: ANÁLISIS EJECUTIVO - VALORACIÓN OPERACIONAL',
-    mode: 'executive',
-    visuals: [],
-    bullets: [
-      `Amenaza: ${payload.valoracionOperacional.amenaza}`,
-      `Oportunidad criminal: ${payload.valoracionOperacional.oportunidadCriminal}`,
-      `Vulnerabilidades identificadas: ${payload.valoracionOperacional.vulnerabilidades}`,
-      `Capacidad institucional requerida: ${payload.valoracionOperacional.capacidadRequerida}`
-    ]
-  });
-
-  // Página 5: Bloque II - Matriz de Trazabilidad Analítica
-  pages.push({
-    id: 'page-trazabilidad-matrix',
-    title: 'BLOQUE II: MATRIZ DE TRAZABILIDAD ANALÍTICA (GEOINT)',
-    mode: 'trazabilidad',
-    visuals: [],
-    sweeps: payload.trazabilidadMatrix
-  });
-
-  // Página 6: OSINT Sintetizado (Textual)
+  // Página 4: CAPÍTULO 7 - OSINT Sintetizado (Textual)
   pages.push({
     id: 'page-osint',
-    title: 'Anexo OSINT: Inteligencia Complementaria',
+    title: 'CAPÍTULO 7: INTELIGENCIA OSINT',
     mode: 'text',
     visuals: [],
     interpretation: payload.osintSynthesized
   });
 
-  // Página 7: Pandillas (Textual)
+  // Página 5: CAPÍTULO 8 - Pandillas (Textual)
   pages.push({
     id: 'page-pandillas',
-    title: 'Anexo de Inteligencia: Motor de Pandillas',
+    title: 'CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS',
     mode: 'text',
     visuals: [],
     interpretation: payload.pandillasAnalysis
   });
 
-  // Página 8: Bloque IX - Conclusiones Operativas
+  // Página 6: CAPÍTULO 10 - Conclusiones Operativas
   pages.push({
     id: 'page-conclusions',
-    title: 'BLOQUE IX: CONCLUSIONES OPERATIVAS Y RECOMENDACIONES',
+    title: 'CAPÍTULO 10: CONCLUSIONES OPERATIVAS',
     mode: 'conclusions',
     visuals: [],
     conclusions: [
@@ -941,13 +910,13 @@ export const buildIntelligenceBriefing = (
     ]
   });
 
-  // PÁGINAS VISUALES INDEPENDIENTES (NO contabilizan dentro del límite de 12 páginas analíticas)
+  // PÁGINAS VISUALES INDEPENDIENTES
 
-  // Bloque III: Atlas Cartográfico Operativo (1 mapa por página)
+  // CAPÍTULO 3: Atlas Cartográfico Operativo (1 mapa por página)
   payload.maps.forEach((m, idx) => {
     pages.push({
       id: `page-visual-map-${idx + 1}`,
-      title: `BLOQUE III: ATLAS CARTOGRÁFICO - ${m.title}`,
+      title: `CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO - ${m.title}`,
       mode: 'single',
       visuals: [{
         id: `map-product-${idx}`,
@@ -960,11 +929,11 @@ export const buildIntelligenceBriefing = (
     });
   });
 
-  // Bloque V: Modelos Analíticos (Gráficas)
+  // CAPÍTULO 4: Modelos Analíticos (Gráficas)
   payload.graphs.forEach((g, idx) => {
     pages.push({
       id: `page-visual-graph-${idx + 1}`,
-      title: `BLOQUE V: MODELOS ANALÍTICOS - ${g.title}`,
+      title: `CAPÍTULO 4: ANÁLISIS ESTADÍSTICO - ${g.title}`,
       mode: 'single',
       visuals: [{
         id: `graph-product-${idx}`,
@@ -977,7 +946,7 @@ export const buildIntelligenceBriefing = (
     });
   });
 
-  // Bloque VII: Evidencia Fotográfica (Anexo de campo)
+  // CAPÍTULO 5: Evidencia Fotográfica (Anexo de campo)
   const photos = payload.photoEvidence;
   for (let i = 0; i < photos.length; i += 2) {
     const chunk = photos.slice(i, i + 2);
@@ -990,13 +959,13 @@ export const buildIntelligenceBriefing = (
     }));
     pages.push({
       id: `page-visual-photo-${Math.floor(i / 2) + 1}`,
-      title: `BLOQUE VII: EVIDENCIA FOTOGRÁFICA DE CAMPO (PARTE ${Math.floor(i / 2) + 1})`,
+      title: `CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA (PARTE ${Math.floor(i / 2) + 1})`,
       mode: 'double',
       visuals
     });
   }
 
-  // Bloque IV: Análisis Street View (Evaluación Visual de Entorno)
+  // CAPÍTULO 6: Street View (Evaluación Visual de Entorno)
   const streetViews = payload.streetViewAnalysis;
   for (let i = 0; i < streetViews.length; i += 2) {
     const chunk = streetViews.slice(i, i + 2);
@@ -1009,16 +978,16 @@ export const buildIntelligenceBriefing = (
     }));
     pages.push({
       id: `page-visual-streetview-${Math.floor(i / 2) + 1}`,
-      title: `BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (PARTE ${Math.floor(i / 2) + 1})`,
+      title: `CAPÍTULO 6: STREET VIEW INTELLIGENCE (PARTE ${Math.floor(i / 2) + 1})`,
       mode: 'double',
       visuals
     });
   }
 
-  // Bloque VIII: Hypothesis Graph (HIG 2.0)
+  // CAPÍTULO 9: Hypothesis Graph (HIG 2.0)
   pages.push({
     id: 'page-visual-graph-hig',
-    title: 'BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)',
+    title: 'CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0',
     mode: 'single',
     visuals: [{
       id: 'graph-hig-vis-product',
@@ -1031,7 +1000,7 @@ export const buildIntelligenceBriefing = (
   });
 
   return {
-    title: 'DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL',
+    title: 'INFORME DE GEOINTELIGENCIA OPERATIVA',
     fileNumber: payload.projectId,
     generatedAt: new Date().toISOString(),
     classification: 'CONFIDENCIAL - EXCLUSIVO SSPE-CEIPOL',
