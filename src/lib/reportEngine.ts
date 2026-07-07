@@ -693,9 +693,18 @@ export class ReportEngineKernelClass {
         const hasEvidence = !!payloadObj.photoEvidence && payloadObj.photoEvidence.length > 0;
         const hasHIGGraph = !!payloadObj.hypothesisGraph && !!payloadObj.hypothesisGraph.dataUrl;
         
-        const textToAudit = JSON.stringify(payloadObj).toLowerCase();
-        const forbidden = ["st_dwithin", "discovery engine", "grounding", "powerup", "instruction", "ocr", "diarización", "sentiment"];
-        const hasForbidden = forbidden.some(cmd => textToAudit.includes(cmd));
+        const textToAudit = JSON.stringify(payloadObj);
+        const forbiddenPatterns = [
+          /\bst_dwithin\b/i,
+          /\bdiscovery\s+engine\b/i,
+          /\bgrounding\b/i,
+          /\bpowerup[s]?\b/i,
+          /\binstruction[s]?\b/i,
+          /\bocr\b/i,
+          /\bdiarización\b/i,
+          /\bsentiment\b/i
+        ];
+        const hasForbidden = forbiddenPatterns.some(pattern => pattern.test(textToAudit));
         const noInternalMetadata = !hasForbidden;
 
         const pageCount = this.context.briefing?.pages?.length || 0;
