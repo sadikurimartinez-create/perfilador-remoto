@@ -148,7 +148,7 @@ ${p11}
 Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE el documento en Markdown, sin agregar explicaciones previas ni encerrarlo en bloques de código triple comilla (\`\`\`).
 `.trim();
 
-    // 5. Llamada a VertexAI (Gemini)
+    // 5. Llamada a VertexAI (Gemini) con Streaming para evitar el Timeout de Vercel (10s en plan Hobby)
     if (!GCP_PROJECT_ID) {
       throw new Error("GCP_PROJECT_ID no está configurado en las variables de entorno.");
     }
@@ -160,33 +160,79 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
     const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
     const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-    const result = await model.generateContent({
+    const streamingResp = await model.generateContentStream({
       contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
       generationConfig: { temperature: 0.15 }
     });
 
-    let markdown = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-    
-    // Limpieza de formato markdown de la respuesta si es necesario
-    if (markdown.startsWith("```markdown")) {
-      markdown = markdown.replace(/^```markdown\s*/i, "").replace(/\s*```$/g, "").trim();
-    } else if (markdown.startsWith("```")) {
-      markdown = markdown.replace(/^```\s*/, "").replace(/\s*```$/g, "").trim();
-    }
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Enviar un pulso inicial rápido con metadatos para evitar timeout en Vercel
+        const initialJsonHeader = JSON.stringify({
+          meta: {
+            riskLevel: generalRisk.toLowerCase(),
+            summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
+            incidenciaDetalles: safeBody.incidenciaLocal || [],
+            pois: [],
+            inegiDemographics: null,
+            tacticalStreetViews: safeBody.streetViews || [],
+          },
+          markdown: ""
+        });
+        
+        // Abrir la propiedad markdown en el stream cortando el final del JSON
+        const choppedJson = initialJsonHeader.slice(0, -2) + ',"markdown":"';
+        controller.enqueue(encoder.encode(choppedJson));
 
-    const parsed = {
-      markdown,
-      meta: {
-        riskLevel: generalRisk.toLowerCase(),
-        summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
-        incidenciaDetalles: safeBody.incidenciaLocal || [],
-        pois: [],
-        inegiDemographics: null,
-        tacticalStreetViews: safeBody.streetViews || [],
+        // Enviar pulsos de vida (keep-alive) invisibles dentro de las comillas (como espacios) si hay demoras
+        const keepAlive = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(" "));
+          } catch {}
+        }, 3000);
+
+        try {
+          let hasCleanedMarkdownHeader = false;
+          for await (const item of streamingResp.stream) {
+            if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
+              let text = item.candidates[0].content.parts[0].text;
+              
+              // Limpiar de bloques de código si la IA los incluye al principio
+              if (!hasCleanedMarkdownHeader) {
+                if (text.startsWith("```markdown")) {
+                  text = text.replace(/^```markdown\s*/i, "");
+                  hasCleanedMarkdownHeader = true;
+                } else if (text.startsWith("```")) {
+                  text = text.replace(/^```\s*/, "");
+                  hasCleanedMarkdownHeader = true;
+                }
+              }
+
+              // Escapar comillas dobles y saltos de línea para que sea un string JSON válido
+              const escapedText = JSON.stringify(text).slice(1, -1);
+              controller.enqueue(encoder.encode(escapedText));
+            }
+          }
+        } catch (e: any) {
+          console.error("Error streaming VertexAI:", e);
+          const errorMsg = "\\n\\n[Error de generación: " + e.message + "]";
+          controller.enqueue(encoder.encode(errorMsg));
+        } finally {
+          clearInterval(keepAlive);
+          // Cerrar el string del markdown y el JSON
+          controller.enqueue(encoder.encode('"}'));
+          controller.close();
+        }
       }
-    };
+    });
 
-    return NextResponse.json(parsed);
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Transfer-Encoding": "chunked"
+      }
+    });
   } catch (err: any) {
     console.error("[api/generate-profile] Error:", err);
     return NextResponse.json(
