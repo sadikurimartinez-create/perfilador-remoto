@@ -361,90 +361,92 @@ export default function ProjectWorkspacePage() {
       </div>
 
       <div className="w-full" id="c4-right-column">
-      {analyses && analyses.length > 0 && (
         <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-3 mt-2">
           <h3 className="text-sm font-semibold text-slate-100">
             Dictámenes oficiales guardados en este expediente
           </h3>
-          <ul className="space-y-2">
-            {analyses.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-900/60 backdrop-blur-md px-3 py-2"
-              >
-                <div className="text-xs text-slate-300">
-                  <p className="font-medium">
-                    Dictamen Criminológico Ambiental Generado el{" "}
-                    <span className="font-mono tracking-tight text-blue-300">
-                      {new Date(a.createdAt).toLocaleString("es-MX", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Ordenado y guardado por:{" "}
-                    <span className="font-semibold text-slate-200 font-mono tracking-tight text-blue-300/90">
-                      {a.createdBy || "Usuario no identificado"}
-                    </span>
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewAnalysis(a)}
-                    className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm hover:bg-slate-600 transition-colors"
-                  >
-                    Vista previa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const db = getDb();
-                      await deleteDoc(doc(db, "analyses", a.id));
-                    }}
-                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
-                  >
-                    Borrar
-                  </button>
-                </div>
-                {a.attachedPhotos && a.attachedPhotos.length > 0 && (
-                  <div className="mt-3 w-full">
-                    <h4 className="text-slate-400 text-sm font-bold mt-1 mb-2 border-b border-slate-700 pb-1">
-                      Anexo Fotográfico
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {a.attachedPhotos.map((url, idx) => (
-                        <div
-                          key={idx}
-                          className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video bg-black"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt={`Foto ${idx + 1} del expediente`}
-                            className="object-cover w-full h-full"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-white/30 font-black text-2xl tracking-widest -rotate-45 select-none text-center leading-tight drop-shadow">
-                              SSP AGS
-                              <br />
-                              CEIPOL
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+          {analyses && analyses.length > 0 ? (
+            <ul className="space-y-2">
+              {analyses.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-900/60 backdrop-blur-md px-3 py-2"
+                >
+                  <div className="text-xs text-slate-300">
+                    <p className="font-medium">
+                      Dictamen Criminológico Ambiental Generado el{" "}
+                      <span className="font-mono tracking-tight text-blue-300">
+                        {new Date(a.createdAt).toLocaleString("es-MX", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Ordenado y guardado por:{" "}
+                      <span className="font-semibold text-slate-200 font-mono tracking-tight text-blue-300/90">
+                        {a.createdBy || "Usuario no identificado"}
+                      </span>
+                    </p>
                   </div>
-                )}
-              </li>
-            ))}
-          </ul>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewAnalysis(a)}
+                      className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm hover:bg-slate-600 transition-colors"
+                    >
+                      Vista previa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const db = getDb();
+                        await deleteDoc(doc(db, "analyses", a.id));
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
+                    >
+                      Borrar
+                    </button>
+                  </div>
+                  {a.attachedPhotos && a.attachedPhotos.length > 0 && (
+                    <div className="mt-3 w-full">
+                      <h4 className="text-slate-400 text-sm font-bold mt-1 mb-2 border-b border-slate-700 pb-1">
+                        Anexo Fotográfico
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {a.attachedPhotos.map((url, idx) => (
+                          <div
+                            key={idx}
+                            className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video bg-black"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt={`Foto ${idx + 1} del expediente`}
+                              className="object-cover w-full h-full"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="text-white/30 font-black text-2xl tracking-widest -rotate-45 select-none text-center leading-tight drop-shadow">
+                                SSP AGS
+                                <br />
+                                CEIPOL
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-slate-400 italic">No se han registrado dictámenes oficiales guardados en este expediente.</p>
+          )}
         </section>
-      )}
       </div>
 
       <a

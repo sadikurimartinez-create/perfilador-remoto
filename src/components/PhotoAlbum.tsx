@@ -4227,6 +4227,27 @@ const hasMinimumPhotos =
           </div>
         </div>
       )}
+
+      {/* Offscreen rendering for autoCaptureSnapshots */}
+      <div 
+        style={{ 
+          position: "absolute", 
+          top: "-9999px", 
+          left: "-9999px", 
+          width: "1200px", 
+          pointerEvents: "none" 
+        }}
+      >
+        <TacticalMaps
+          album={album}
+          analysisResult={analysisResult}
+          analysisRadius={analysisRadius}
+          analysisPolygon={analysisPolygon}
+          manualPois={manualPois}
+          geometryType={project?.geometryType || "individual"}
+        />
+        <TacticalCharts analysisResult={analysisResult} />
+      </div>
     </>
   );
 }
