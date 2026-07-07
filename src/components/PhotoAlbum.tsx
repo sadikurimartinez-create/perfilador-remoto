@@ -1067,66 +1067,66 @@ const hasMinimumPhotos =
         : `\n\n[INSTRUCCIÓN TÁCTICA OBLIGATORIA - BARRIDO DE ACECHO]\nPROHIBIDO mencionar la frase "no se dispone de un barrido de StreetView". El barrido de lugares de acecho se garantizó a través de la exploración in-situ del analista. Usa estrictamente las fotografías adjuntas por el investigador para extraer, enumerar y explicar con total claridad las evidencias de riesgo y vulnerabilidad física encontradas en terreno.`;
 
       try {
-        const res = await fetch("/api/generate-profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectName: project?.nombre || "",
-            projectId: project?.id || "",
-            photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
-            analysisContext: (analysisContext || "") + svInstruction,
-            analysisRadius,
-            focusAreas,
-            incidenciaLocal,
-            bibliografiaLocal,
-            multimodalContext,
-            geometryType: project?.geometryType || "individual",
-            projectDescription: project?.descripcion || "",
-            osintEngineData: automaticOsintData,
-            streetViews: svData,
-            datosGobMxData: datosGobMxResult, // <-- AÑADIR AQUÍ
-            linkedGangReport: project?.linkedGangReport,
-            sweeps: dedupeSweeps((project as any)?.sweeps || []),
-            sweepsComments: sweepsComments,
-          }),
-        });
+        let finalMarkdown = "";
+        let data: any = null;
+        const totalChapters = 11;
 
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          let msg = text || "Error al generar el perfil de IA";
-          try {
-            const json = JSON.parse(text) as { error?: string };
-            if (json.error) msg = json.error;
-          } catch {
-            /* usar text tal cual */
+        for (let ch = 1; ch <= totalChapters; ch++) {
+          const res = await fetch("/api/generate-profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectName: project?.nombre || "",
+              projectId: project?.id || "",
+              photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
+              analysisContext: (analysisContext || "") + svInstruction,
+              analysisRadius,
+              focusAreas,
+              incidenciaLocal,
+              bibliografiaLocal,
+              multimodalContext,
+              geometryType: project?.geometryType || "individual",
+              projectDescription: project?.descripcion || "",
+              osintEngineData: automaticOsintData,
+              streetViews: svData,
+              datosGobMxData: datosGobMxResult,
+              linkedGangReport: project?.linkedGangReport,
+              sweeps: dedupeSweeps((project as any)?.sweeps || []),
+              sweepsComments: sweepsComments,
+              chapter: ch
+            }),
+          });
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            let msg = `Error al generar el capítulo ${ch} de la IA`;
+            try {
+              const json = JSON.parse(text) as { error?: string };
+              if (json.error) msg = json.error;
+            } catch {}
+            throw new Error(msg);
           }
-          throw new Error(msg);
+
+          const resText = await res.text();
+          let chapterData: any;
+          try {
+            chapterData = JSON.parse(resText);
+          } catch (err) {
+            throw new Error(`El servidor devolvió una respuesta vacía o incompleta en el capítulo ${ch}.`);
+          }
+
+          data = chapterData; // Guardamos el último meta
+          let chunkMarkdown = chapterData.markdown || "";
+          if (chunkMarkdown.startsWith("```markdown")) {
+            chunkMarkdown = chunkMarkdown.replace(/^```markdown\s*/i, "").replace(/\s*```$/g, "").trim();
+          } else if (chunkMarkdown.startsWith("```")) {
+            chunkMarkdown = chunkMarkdown.replace(/^```\s*/, "").replace(/\s*```$/g, "").trim();
+          }
+
+          finalMarkdown += chunkMarkdown + "\n\n";
         }
 
-        const resText = await res.text();
-        let data: any;
-        try {
-          data = JSON.parse(resText);
-        } catch (err) {
-          throw new Error("El servidor devolvió una respuesta vacía o incompleta (Timeout). Intente generar el informe nuevamente.");
-        }
-        
-        let finalMarkdown: string = "";
-        if (data.markdown) finalMarkdown = data.markdown;
-        else if (data.unifiedProfile) finalMarkdown = data.unifiedProfile;
-        else finalMarkdown = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-        
-        // Corrección definitiva en caso de que el texto crudo en formato JSON haya logrado colarse a la UI
-        if (finalMarkdown.trim().startsWith('{') && finalMarkdown.includes('"markdown"')) {
-           try {
-              const obj = JSON.parse(finalMarkdown);
-              if (obj.markdown) finalMarkdown = String(obj.markdown);
-           } catch(e) {
-              const m = finalMarkdown.match(/"markdown"\s*:\s*"([\s\S]*?)"/);
-              if (m && m[1]) finalMarkdown = m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-              else finalMarkdown = finalMarkdown.replace(/^[\s\S]*?"markdown"\s*:\s*"/, '').replace(/"\s*}\s*$/, '').replace(/\\n/g, '\n');
-           }
-        }
+        finalMarkdown = finalMarkdown.trim();
 
         if (
           automaticOsintData?.streetViewAnalysis?.analisis &&

@@ -59,6 +59,7 @@ export async function POST(req: Request) {
     const projectDescription = safeBody.projectDescription || "Aguascalientes, Ags";
     const radius = safeBody.analysisRadius || 250;
     const geometry = safeBody.geometryType || "individual";
+    const chapter = safeBody.chapter || 1;
 
     // 1. Deducir riesgo general a nivel de código para el metadato
     let generalRisk = "MEDIO";
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
       generalRisk = "BAJO";
     }
 
-    // 2. Construir el contexto simplificado para los prompts modulares para evitar latencia
+    // 2. Construir el contexto simplificado para los prompts modulares
     const ctx: ReportContext = {
       projectName,
       projectId,
@@ -94,91 +95,62 @@ export async function POST(req: Request) {
       analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : ""
     };
 
-    // 3. Obtener cada uno de los prompts modulares
-    const p1 = ExecutiveSummaryPrompt(ctx);
-    const p2 = TerritorialAnalysisPrompt(ctx);
-    const p3 = HypothesisPrompt(ctx);
-    const p4 = MapsInterpretationPrompt(ctx);
-    const p5 = GraphAnalysisPrompt(ctx);
-    const p6 = EvidenceAnalysisPrompt(ctx);
-    const p7 = StreetViewIntelligencePrompt(ctx);
-    const p8 = OSINTAnalysisPrompt(ctx);
-    const p9 = GangAnalysisPrompt(ctx);
-    const p10 = HIGGraphPrompt(ctx);
-    const p11 = OperationalConclusionPrompt(ctx);
+    // 3. Obtener el prompt del capítulo específico
+    let sectionPrompt = "";
+    if (chapter === 1) {
+      sectionPrompt = ExecutiveSummaryPrompt(ctx);
+    } else if (chapter === 2) {
+      sectionPrompt = TerritorialAnalysisPrompt(ctx);
+    } else if (chapter === 3) {
+      sectionPrompt = HypothesisPrompt(ctx);
+    } else if (chapter === 4) {
+      sectionPrompt = MapsInterpretationPrompt(ctx);
+    } else if (chapter === 5) {
+      sectionPrompt = GraphAnalysisPrompt(ctx);
+    } else if (chapter === 6) {
+      sectionPrompt = EvidenceAnalysisPrompt(ctx);
+    } else if (chapter === 7) {
+      sectionPrompt = StreetViewIntelligencePrompt(ctx);
+    } else if (chapter === 8) {
+      sectionPrompt = OSINTAnalysisPrompt(ctx);
+    } else if (chapter === 9) {
+      sectionPrompt = GangAnalysisPrompt(ctx);
+    } else if (chapter === 10) {
+      sectionPrompt = HIGGraphPrompt(ctx);
+    } else {
+      sectionPrompt = OperationalConclusionPrompt(ctx);
+    }
 
-    // 4. Armar el System Prompt / Prompt Maestro
+    // 4. Armar el System Prompt / Prompt Maestro para el capítulo
     const systemPrompt = `
 Actúa como el motor Antigravity de geointeligencia institucional de la SSPE-CEIPOL.
-Tu objetivo es transformar los datos de campo, barridos y análisis del expediente en un INFORME EJECUTIVO DE GEOINTELIGENCIA integrado y depurado.
+Tu objetivo es generar el **Capítulo ${chapter}** (Sección ${chapter} de 11) del INFORME EJECUTIVO DE GEOINTELIGENCIA.
 
-REGLAS EDITORIALES GENERALES:
+REGLAS EDITORIALES:
 1. Divide claramente las afirmaciones entre: Hecho observado, Inferencia analítica y Recomendación operativa.
 2. Utiliza un lenguaje estrictamente formal e institucional. Queda terminantemente prohibido incluir nombres de procesos técnicos internos, APIs, PowerUps, logs, scripts o instrucciones de programación.
 3. Todas las conclusiones deben poder justificarse con las fuentes del expediente (mapas, fotos, incidencias, OSINT).
-4. El reporte debe estructurarse en 11 apartados utilizando títulos numerados con "##".
+4. El reporte debe estructurarse con títulos numerados con "##".
 
-Escribe el informe siguiendo exactamente esta estructura de secciones:
+Escribe el informe siguiendo exactamente esta sección:
+## ${chapter === 1 ? '1. PORTADA Y EXECUTIVE SUMMARY' :
+      chapter === 2 ? '2. CAPÍTULO 1: CONTEXTO DEL ANÁLISIS' :
+      chapter === 3 ? '3. CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL' :
+      chapter === 4 ? '4. CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO' :
+      chapter === 5 ? '5. CAPÍTULO 4: ANÁLISIS ESTADÍSTICO' :
+      chapter === 6 ? '6. CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA' :
+      chapter === 7 ? '7. CAPÍTULO 6: STREET VIEW INTELLIGENCE' :
+      chapter === 8 ? '8. CAPÍTULO 7: INTELIGENCIA OSINT' :
+      chapter === 9 ? '9. CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS' :
+      chapter === 10 ? '10. CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0' :
+      '11. CAPÍTULO 10: CONCLUSIONES OPERATIVAS'}
 
-## 1. PORTADA Y EXECUTIVE SUMMARY
-${p1}
+${sectionPrompt}
 
----
-
-## 2. CAPÍTULO 1: CONTEXTO DEL ANÁLISIS
-${p2}
-
----
-
-## 3. CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL
-${p3}
-
----
-
-## 4. CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO
-${p4}
-
----
-
-## 5. CAPÍTULO 4: ANÁLISIS ESTADÍSTICO
-${p5}
-
----
-
-## 6. CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA
-${p6}
-
----
-
-## 7. CAPÍTULO 6: STREET VIEW INTELLIGENCE
-${p7}
-
----
-
-## 8. CAPÍTULO 7: INTELIGENCIA OSINT
-${p8}
-
----
-
-## 9. CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS
-${p9}
-
----
-
-## 10. CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0
-${p10}
-
----
-
-## 11. CAPÍTULO 10: CONCLUSIONES OPERATIVAS
-${p11}
-
----
-
-Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE el documento en Markdown, sin agregar explicaciones previas ni encerrarlo en bloques de código triple comilla (\`\`\`).
+Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE esta sección en Markdown, sin agregar explicaciones previas ni encerrarlo en bloques de código triple comilla (\`\`\`).
 `.trim();
 
-    // 5. Llamada a VertexAI (Gemini) con Streaming para evitar el Timeout de Vercel (10s en plan Hobby)
+    // 5. Llamada a VertexAI (Gemini)
     if (!GCP_PROJECT_ID) {
       throw new Error("GCP_PROJECT_ID no está configurado en las variables de entorno.");
     }
@@ -190,69 +162,33 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
     const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
     const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-    const streamingResp = await model.generateContentStream({
+    const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
       generationConfig: { temperature: 0.15 }
     });
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        const metaPart = JSON.stringify({
-          riskLevel: generalRisk.toLowerCase(),
-          summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
-          incidenciaDetalles: safeBody.incidenciaLocal || [],
-          pois: [],
-          inegiDemographics: null,
-          tacticalStreetViews: safeBody.streetViews || [],
-        });
-        
-        // Construir de forma limpia y directa el encabezado del JSON abriendo la propiedad markdown
-        const jsonStart = `{"meta":${metaPart},"markdown":"`;
-        controller.enqueue(encoder.encode(jsonStart));
+    let markdown = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+    
+    // Limpieza de formato markdown de la respuesta
+    if (markdown.startsWith("```markdown")) {
+      markdown = markdown.replace(/^```markdown\s*/i, "").replace(/\s*```$/g, "").trim();
+    } else if (markdown.startsWith("```")) {
+      markdown = markdown.replace(/^```\s*/, "").replace(/\s*```$/g, "").trim();
+    }
 
-        try {
-          let hasCleanedMarkdownHeader = false;
-          for await (const item of streamingResp.stream) {
-            if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
-              let text = item.candidates[0].content.parts[0].text;
-              
-              // Limpiar de bloques de código si la IA los incluye al principio
-              if (!hasCleanedMarkdownHeader) {
-                if (text.startsWith("```markdown")) {
-                  text = text.replace(/^```markdown\s*/i, "");
-                  hasCleanedMarkdownHeader = true;
-                } else if (text.startsWith("```")) {
-                  text = text.replace(/^```\s*/, "");
-                  hasCleanedMarkdownHeader = true;
-                }
-              }
-
-              // Escapar comillas dobles y saltos de línea para que sea un string JSON válido
-              const escapedText = JSON.stringify(text).slice(1, -1);
-              controller.enqueue(encoder.encode(escapedText));
-            }
-          }
-        } catch (e: any) {
-          console.error("Error streaming VertexAI:", e);
-          const errorMsg = "\\n\\n[Error de generación: " + e.message + "]";
-          controller.enqueue(encoder.encode(errorMsg));
-        } finally {
-          // Cerrar el string del markdown y el JSON
-          controller.enqueue(encoder.encode('"}'));
-          controller.close();
-        }
+    const parsed = {
+      markdown,
+      meta: {
+        riskLevel: generalRisk.toLowerCase(),
+        summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
+        incidenciaDetalles: safeBody.incidenciaLocal || [],
+        pois: [],
+        inegiDemographics: null,
+        tacticalStreetViews: safeBody.streetViews || [],
       }
-    });
+    };
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Transfer-Encoding": "chunked",
-        "X-Accel-Buffering": "no",
-        "Cache-Control": "no-cache, no-transform, must-revalidate"
-      }
-    });
+    return NextResponse.json(parsed);
   } catch (err: any) {
     console.error("[api/generate-profile] Error:", err);
     return NextResponse.json(
