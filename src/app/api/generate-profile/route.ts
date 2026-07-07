@@ -168,29 +168,18 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        // Enviar un pulso inicial rápido con metadatos para evitar timeout en Vercel
-        const initialJsonHeader = JSON.stringify({
-          meta: {
-            riskLevel: generalRisk.toLowerCase(),
-            summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
-            incidenciaDetalles: safeBody.incidenciaLocal || [],
-            pois: [],
-            inegiDemographics: null,
-            tacticalStreetViews: safeBody.streetViews || [],
-          },
-          markdown: ""
+        const metaPart = JSON.stringify({
+          riskLevel: generalRisk.toLowerCase(),
+          summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
+          incidenciaDetalles: safeBody.incidenciaLocal || [],
+          pois: [],
+          inegiDemographics: null,
+          tacticalStreetViews: safeBody.streetViews || [],
         });
         
-        // Abrir la propiedad markdown en el stream cortando el final del JSON
-        const choppedJson = initialJsonHeader.slice(0, -2) + ',"markdown":"';
-        controller.enqueue(encoder.encode(choppedJson));
-
-        // Enviar pulsos de vida (keep-alive) invisibles dentro de las comillas (como espacios) si hay demoras
-        const keepAlive = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode(" "));
-          } catch {}
-        }, 3000);
+        // Construir de forma limpia y directa el encabezado del JSON abriendo la propiedad markdown
+        const jsonStart = `{"meta":${metaPart},"markdown":"`;
+        controller.enqueue(encoder.encode(jsonStart));
 
         try {
           let hasCleanedMarkdownHeader = false;
@@ -219,7 +208,6 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           const errorMsg = "\\n\\n[Error de generación: " + e.message + "]";
           controller.enqueue(encoder.encode(errorMsg));
         } finally {
-          clearInterval(keepAlive);
           // Cerrar el string del markdown y el JSON
           controller.enqueue(encoder.encode('"}'));
           controller.close();
