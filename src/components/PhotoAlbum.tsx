@@ -453,6 +453,50 @@ export function PhotoAlbum({
       if (project.delitosSeleccionados && project.delitosSeleccionados.length > 0) {
         setActiveDelitos(project.delitosSeleccionados);
       }
+
+      if (project.sweeps && Array.isArray(project.sweeps)) {
+        const sweeps = project.sweeps;
+        const hasSweep = (engineKeyword: string) => 
+          sweeps.some((s: any) => s.engine?.toLowerCase().includes(engineKeyword) && s.status === "Integrado");
+        
+        setSelectedAnnexes({
+          mapInteractive: true,
+          mapDensity: true,
+          mapMobility: true,
+          mapAttractors: true,
+          mapPredictive: true,
+          chartTemporal: true,
+          chartTopology: true,
+          chartEnvironmental: true,
+          chartPrediction: true,
+          sweepDenue: hasSweep("denue") || hasSweep("inegi"),
+          sweepIncidencia: hasSweep("incidencia") || hasSweep("delitos"),
+          sweepRepuve: hasSweep("vehicular") || hasSweep("repuve"),
+          sweepRnpdno: hasSweep("desaparecidos") || hasSweep("rnpdno"),
+          sweepMultimodal: hasSweep("multimodal"),
+          sweepCifa: hasSweep("cifa"),
+          graphConnections: true,
+        });
+      } else {
+        setSelectedAnnexes({
+          mapInteractive: true,
+          mapDensity: true,
+          mapMobility: true,
+          mapAttractors: true,
+          mapPredictive: true,
+          chartTemporal: true,
+          chartTopology: true,
+          chartEnvironmental: true,
+          chartPrediction: true,
+          sweepDenue: false,
+          sweepIncidencia: false,
+          sweepRepuve: false,
+          sweepRnpdno: false,
+          sweepMultimodal: false,
+          sweepCifa: false,
+          graphConnections: true,
+        });
+      }
     }
   }, [project]);
 
