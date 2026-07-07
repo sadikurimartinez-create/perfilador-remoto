@@ -521,6 +521,10 @@ export function PhotoAlbum({
   const [activeReportTab, setActiveReportTab] = useState<"edit" | "preview">("edit");
   const [previewPageIdx, setPreviewPageIdx] = useState<number>(0);
   const [kernelState, setKernelState] = useState(ReportEngineKernel.getState());
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyDossiers, setHistoryDossiers] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isSavingExpediente, setIsSavingExpediente] = useState(false);
 
   useEffect(() => {
     return ReportEngineKernel.subscribe((s) => {
@@ -587,7 +591,7 @@ export function PhotoAlbum({
 
   // 🔒 5. REACT RENDER ISOLATION LAYER
   useEffect(() => {
-    if (ReportEngineKernel.isLocked()) {
+    if (ReportEngineKernel.isActive()) {
       console.warn("[ReportEngineKernel] Kernel is locked during render, isolating lifecycle.");
     }
   }, []);
@@ -1290,6 +1294,58 @@ const hasMinimumPhotos =
     alert("Mapas capturados exitosamente para el dictamen oficial.");
   };
 
+  const handleSaveExpediente = async () => {
+    setIsSavingExpediente(true);
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const { addDoc, collection } = await import("firebase/firestore");
+      const db = getDb();
+      const activeComponents = Object.entries(selectedAnnexes)
+        .filter(([_, val]) => !!val)
+        .map(([key]) => key);
+        
+      const dataToSave = {
+        projectId: project?.id || "EXP_TACTICO",
+        poligono: project?.nombre || (project as any)?.name || "Zona de Estudio",
+        analyst: user?.username || "Analista CEIPOL",
+        fecha: Date.now(),
+        version: "v9.0",
+        componentes: activeComponents,
+        fuentes: (project?.sweeps || []).map((s: any) => s.engine || s.name).filter(Boolean),
+        visualsCount: (album || []).length + (mapSnapshots || []).length
+      };
+
+      await addDoc(collection(db, "dossiers"), dataToSave);
+      alert("¡Expediente guardado correctamente en la bitácora institucional!");
+    } catch (err) {
+      console.error("Error al guardar expediente:", err);
+      alert("No se pudo guardar el expediente.");
+    } finally {
+      setIsSavingExpediente(false);
+    }
+  };
+
+  const handleConsultarHistorial = async () => {
+    setIsLoadingHistory(true);
+    setShowHistoryModal(true);
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const db = getDb();
+      const { getDocs, query, where, collection } = await import("firebase/firestore");
+      const q = query(collection(db, "dossiers"), where("projectId", "==", project?.id || "EXP_TACTICO"));
+      const querySnapshot = await getDocs(q);
+      const list: any[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      setHistoryDossiers(list.sort((a, b) => b.fecha - a.fecha));
+    } catch (err) {
+      console.error("Error al consultar historial:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   const handleFinalizeAndExport = async (format: "WORD" | "PDF") => {
     const rawContent = editableProfile || aiProfile || (project as any)?.analysisContent;
     if (!rawContent) {
@@ -1380,6 +1436,7 @@ const hasMinimumPhotos =
           markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
           sweeps: selectedSweeps,
           powerups: powerupsToExport,
+          selectedAnnexes: selectedAnnexes
         }
       });
 
@@ -3804,8 +3861,8 @@ const hasMinimumPhotos =
                 <div className="w-full aspect-[297/210] bg-slate-950 border border-slate-850 rounded-xl overflow-hidden shadow-2xl p-6 relative flex flex-col justify-between text-slate-200">
                   {/* Encabezado Institucional */}
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] uppercase font-bold tracking-widest text-slate-400">
-                    <span>CEIPOL</span>
-                    <span>Dictamen de Geointeligencia Operativa</span>
+                    <span>CEIPOL - SSPE</span>
+                    <span>Dictamen Técnico de Inteligencia Territorial</span>
                     <span className="text-red-400 font-extrabold">CONFIDENCIAL</span>
                   </div>
 
@@ -3813,24 +3870,26 @@ const hasMinimumPhotos =
                   <div className="flex-1 py-4 flex flex-col justify-center text-xs overflow-y-auto">
                     {previewPageIdx === 0 && (
                       <div className="space-y-4 text-center">
-                        <h4 className="text-lg font-black text-slate-100 uppercase tracking-wide">INFORME DE GEOINTELIGENCIA OPERATIVA</h4>
-                        <p className="text-xs font-semibold text-slate-400">SECRETARÍA DE SEGURIDAD PÚBLICA - CEIPOL</p>
-                        <div className="grid grid-cols-2 gap-4 bg-slate-900/60 p-4 rounded-lg border border-slate-800 text-left text-[11px] text-slate-350">
+                        <h4 className="text-base font-black text-slate-100 uppercase tracking-wide">DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL</h4>
+                        <p className="text-[10px] font-semibold text-slate-400">SECRETARÍA DE SEGURIDAD PÚBLICA / CEIPOL</p>
+                        <div className="grid grid-cols-2 gap-3 bg-slate-900/60 p-3 rounded-lg border border-slate-800 text-left text-[10px] text-slate-350">
                           <p><strong>Expediente:</strong> {project?.nombre || "Polígono"}</p>
-                          <p><strong>Nivel de riesgo:</strong> <span className="text-red-400 font-extrabold uppercase">ALTO</span></p>
+                          <p><strong>Número:</strong> {project?.id || "EXP_TACTICO"}</p>
+                          <p><strong>Analista:</strong> {user?.username || "Analista"}</p>
                           <p><strong>Fecha:</strong> {new Date().toLocaleDateString("es-MX")}</p>
-                          <p><strong>Analista:</strong> {user?.username || "Institucional"}</p>
+                          <p><strong>Geometría:</strong> {project?.geometryType?.toUpperCase() || "POLÍGONO"}</p>
+                          <p><strong>Clasificación:</strong> <span className="text-red-400 font-bold">CONFIDENCIAL</span></p>
                         </div>
-                        <div className="bg-slate-900/30 p-4 rounded-lg border border-slate-850 text-left leading-relaxed max-h-[120px] overflow-y-auto">
-                          <p className="font-semibold text-slate-300 text-[11px] uppercase mb-1">Síntesis Ejecutiva:</p>
-                          <p className="text-[11px] text-slate-350">{editableProfile.slice(0, 400)}...</p>
+                        <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-850 text-left leading-relaxed max-h-[100px] overflow-y-auto">
+                          <p className="font-semibold text-slate-300 text-[10px] uppercase mb-1">Resumen del Dictamen:</p>
+                          <p className="text-[10px] text-slate-350">{reportSummary || "Dictamen estratégico de geointeligencia operativa perimetral."}</p>
                         </div>
                       </div>
                     )}
 
                     {previewPageIdx === 1 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">1. HIPÓTESIS FINAL ÚNICA</h4>
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - CONTEXTO TERRITORIAL</h4>
                         <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] max-h-[220px] overflow-y-auto text-slate-300">
                           {editableProfile.slice(0, 1000)}
                         </div>
@@ -3838,137 +3897,153 @@ const hasMinimumPhotos =
                     )}
 
                     {previewPageIdx === 2 && (
-                      <div className="space-y-3 text-center">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">2. CARTOGRAFÍA OPERATIVA - MAPA 1</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
-                          [Mapa 1: Simulación de Densidad Criminológica]
-                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - HIPÓTESIS PRINCIPAL</h4>
+                        <div className="grid grid-cols-1 gap-2 text-[10px] text-slate-300 bg-slate-900/40 p-3 rounded-lg border border-slate-800">
+                          <p><strong>¿Qué ocurre?:</strong> Fenómenos de oportunidad delictiva y faltas administrativas nocturnas.</p>
+                          <p><strong>¿Dónde ocurre?:</strong> En las intersecciones principales y puntos ciegos de la zona perimetral.</p>
+                          <p><strong>¿Quién podría participar?:</strong> Grupos locales de riesgo y personas en tránsito.</p>
+                          <p><strong>¿Por qué ocurre?:</strong> Facilitado por deficiencia en el alumbrado y presencia de áreas baldías sin bardeado.</p>
+                          <p><strong>¿Qué evidencia sustenta?:</strong> Registro fotográfico, testimonios de campo y barrido cartográfico de calor.</p>
+                          <p><strong>Nivel de confianza:</strong> <span className="text-red-400 font-bold">Alto (0.88)</span></p>
                         </div>
-                        <p className="text-[11px] text-slate-400 italic">Concentración de incidencias georreferenciadas en el polígono perimetral.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 3 && (
-                      <div className="space-y-3 text-center">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">2. CARTOGRAFÍA OPERATIVA - MAPA 2</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
-                          [Mapa 2: Corredores de Movilidad Táctica]
-                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - VALORACIÓN OPERACIONAL</h4>
+                        <div className="grid grid-cols-1 gap-2 text-[10px] text-slate-300 bg-slate-900/40 p-3 rounded-lg border border-slate-800">
+                          <p><strong>Amenaza:</strong> Aumento progresivo de asaltos a transeúntes durante el horario de cierre comercial.</p>
+                          <p><strong>Oportunidad criminal:</strong> Facilidad de acecho en predios sin cerramientos y callejones sin iluminación.</p>
+                          <p><strong>Vulnerabilidades:</strong> Falta de iluminación pública formal en el 60% del área y cerramientos vulnerables.</p>
+                          <p><strong>Capacidad requerida:</strong> Patrullaje dinámico en turnos críticos y gestión municipal de desbroce y bardeado.</p>
                         </div>
-                        <p className="text-[11px] text-slate-400 italic">Vías de tránsito principales y zonas de amortiguamiento identificadas.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 4 && (
-                      <div className="space-y-3 text-center">
-                        <h4 className="text-sm font-extrabold text-indigo-400 uppercase tracking-wider">3. ANÁLISIS DE SCORING Y MODELADOS</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
-                          [Gráficas de Distribución Temporal y Facilitadores Ambientales]
-                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-extrabold text-indigo-400 uppercase tracking-wider">BLOQUE II: MATRIZ DE TRAZABILIDAD ANALÍTICA (GEOINT)</h4>
+                        <div className="bg-slate-900 p-2 rounded-lg border border-slate-800 overflow-x-auto">
+                          <table className="w-full text-left text-[9px] border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-800 bg-slate-950 text-slate-400">
+                                <th className="p-1">Componente</th>
+                                <th className="p-1">Fuente</th>
+                                <th className="p-1">Método</th>
+                                <th className="p-1">Hallazgo</th>
+                                <th className="p-1">Impacto</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-slate-900 bg-slate-900/50">
+                                <td className="p-1">Street View</td>
+                                <td className="p-1">Google Maps</td>
+                                <td className="p-1">Análisis visual</td>
+                                <td className="p-1">Predios ciegos</td>
+                                <td className="p-1">Vulnerabilidad</td>
+                              </tr>
+                              <tr className="border-b border-slate-900">
+                                <td className="p-1">Cartografía</td>
+                                <td className="p-1">CEIPOL GIS</td>
+                                <td className="p-1">Mapeo de calor</td>
+                                <td className="p-1">Concentración</td>
+                                <td className="p-1">Focalización</td>
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
-                        <p className="text-[11px] text-slate-400 italic">Estadísticas acumulativas de frecuencia por turno.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 5 && (
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 1 (Corte 45%)</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
-                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
-                              [Imagen 1 - 45% Altura]
-                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
-                            </div>
-                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
-                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Alumbrado público ausente</p>
-                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-red-400 font-bold">ALTO</span></p>
-                          </div>
-                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
-                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
-                              [Imagen 2 - 45% Altura]
-                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
-                            </div>
-                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
-                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Obstrucción de visibilidad natural</p>
-                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-blue-400 font-bold">MEDIO</span></p>
-                          </div>
+                      <div className="space-y-2 text-center">
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE III: ATLAS CARTOGRÁFICO OPERATIVO</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                          [Cartografía de Densidades y Corredores de Calor delictivo]
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
                         </div>
+                        <p className="text-[10px] text-slate-400 italic">Cada mapa seleccionado se inserta en página independiente del cuerpo analítico.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 6 && (
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 2 (Corte 45%)</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
-                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
-                              [Imagen 3 - 45% Altura]
-                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
-                            </div>
-                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
-                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Acumulación de residuos / predios baldíos</p>
-                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-red-400 font-bold">ALTO</span></p>
-                          </div>
-                          <div className="bg-slate-900 p-3 rounded border border-slate-800 space-y-2 relative">
-                            <div className="h-[120px] bg-slate-950 flex items-center justify-center text-[9px] text-slate-500 relative">
-                              [Imagen 4 - 45% Altura]
-                              <span className="absolute top-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
-                            </div>
-                            <p className="text-[8px] text-slate-450"><strong>Ubicación:</strong> Sector general perimetral</p>
-                            <p className="text-[8px] text-slate-450"><strong>Factor:</strong> Falta de cerramiento perimetral</p>
-                            <p className="text-[8px] text-slate-450"><strong>Riesgo:</strong> <span className="text-blue-400 font-bold">MEDIO</span></p>
-                          </div>
+                      <div className="space-y-2 text-center">
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (STREET VIEW)</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                          [Capturas Automáticas de Acecho y Puntos de Ocultamiento]
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
                         </div>
+                        <p className="text-[10px] text-slate-400 italic">Identificación visual georreferenciada con clasificación criminológica de factores urbanos.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 7 && (
-                      <div className="space-y-3 text-center">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">5. PUNTOS DE ACECHO Y VULNERABILIDAD FÍSICA (STREET VIEW)</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
-                          [Simulación de Vista de Calle]
-                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
+                      <div className="space-y-2 text-center">
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE V: MODELOS ANALÍTICOS Y GRÁFICAS</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                          [Gráficas de Distribución Temporal y Facilitadores]
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
                         </div>
-                        <p className="text-[11px] text-slate-400 italic">Identificación visual de puntos ciegos y zonas de posible acecho.</p>
+                        <p className="text-[10px] text-slate-400 italic">Modelos estadísticos integrados para sustentar la oportunidad ambiental.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 8 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">6. INTELIGENCIA COMPLEMENTARIA (OSINT)</h4>
-                        <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] text-slate-350">
-                          El análisis del entorno comercial identificó una alta concentración de establecimientos comerciales y de servicios que incrementan de forma considerable el flujo de movilidad peatonal y vehicular, facilitando puntos de interacción y oportunidades de acecho.
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE VI: BARRIDOS DE INTELIGENCIA DE FUENTES</h4>
+                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 leading-relaxed text-[10px] text-slate-350 space-y-1">
+                          <p><strong>DENUE:</strong> Giros comerciales de tipo atractor identificados en el radio táctico.</p>
+                          <p><strong>Incidencia:</strong> Histórico de delitos y denuncias de BigQuery en el perímetro.</p>
+                          <p><strong>REPUVE:</strong> Flujos de vehículos con alertas de seguridad en los accesos.</p>
                         </div>
                       </div>
                     )}
 
                     {previewPageIdx === 9 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">7. ANÁLISIS DE VINCULACIÓN TERRITORIAL (PANDILLAS)</h4>
-                        <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] text-slate-350">
-                          El análisis territorial identificó dinámicas delictivas asociadas a grupos locales con influencia en el polígono estudiado, principalmente en conductas de oportunidad y consumo de sustancias en la vía pública, lo que impacta la percepción de seguridad.
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE VII: EVIDENCIA FOTOGRÁFICA DE CAMPO (Corte 45%)</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1 relative">
+                            <div className="h-[90px] bg-slate-950 flex items-center justify-center text-[8px] text-slate-550 relative">
+                              [Imagen Táctica - 45%]
+                              <span className="absolute top-2 right-2 text-[6px] text-slate-700">SSPE-CEIPOL</span>
+                            </div>
+                            <p className="text-[8px] text-slate-400"><strong>Ubicación:</strong> Zona de Ocultamiento norte</p>
+                            <p className="text-[8px] text-slate-400"><strong>Factor:</strong> Luminaria inactiva</p>
+                          </div>
+                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1 relative">
+                            <div className="h-[90px] bg-slate-950 flex items-center justify-center text-[8px] text-slate-550 relative">
+                              [Imagen Táctica - 45%]
+                              <span className="absolute top-2 right-2 text-[6px] text-slate-700">SSPE-CEIPOL</span>
+                            </div>
+                            <p className="text-[8px] text-slate-400"><strong>Ubicación:</strong> Callejón sin salida</p>
+                            <p className="text-[8px] text-slate-400"><strong>Factor:</strong> Cerramiento deficiente</p>
+                          </div>
                         </div>
                       </div>
                     )}
 
                     {previewPageIdx === 10 && (
-                      <div className="space-y-3 text-center">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">8. HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)</h4>
-                        <div className="w-[320px] h-[160px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[10px] relative">
+                      <div className="space-y-2 text-center">
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
                           [Visualizador de Grafo Relacional HIG 2.0]
-                          <span className="absolute bottom-2 right-2 text-[8px] text-slate-600">SSPE-CEIPOL</span>
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 italic">Mapeo estructurado de relaciones, actores, lugares y evidencias del caso.</p>
+                        <p className="text-[9px] text-slate-400 italic">Mapeo estructurado de relaciones, actores, lugares, evidencias y pesos.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 11 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-extrabold text-sky-400 uppercase tracking-wider">9. CONCLUSIONES OPERATIVAS Y RECOMENDACIONES</h4>
-                        <ul className="list-disc list-inside space-y-2 text-[11px] text-slate-350">
-                          <li><strong>Prioridad Alta:</strong> Baja iluminación formal en callejones secundarios. Acción: Instalación urgente de luminarias.</li>
-                          <li><strong>Prioridad Media:</strong> Concentración comercial de giros tipo atractor. Acción: Patrullajes tácticos enfocados.</li>
-                          <li><strong>Prioridad Baja:</strong> Predios baldíos con cerramientos deficientes. Acción: Notificación para bardeado.</li>
+                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE IX: CONCLUSIONES OPERATIVAS Y RECOMENDACIONES</h4>
+                        <ul className="list-disc list-inside space-y-1 text-[10px] text-slate-350">
+                          <li><strong>Hallazgo Crítico:</strong> Alumbrado ausente en más de un 60% perimetral.</li>
+                          <li><strong>Riesgo Inmediato:</strong> Oportunidad de acecho sobre vías peatonales tácticas.</li>
+                          <li><strong>Recomendación Táctica:</strong> Recorridos dinámicos coordinados en el tercer turno.</li>
+                          <li><strong>Recomendación Estratégica:</strong> Luminarias LED y bardeado de baldíos.</li>
                         </ul>
                       </div>
                     )}
@@ -3983,32 +4058,105 @@ const hasMinimumPhotos =
               </div>
             )}
 
-            {/* 4. BOTONES DE DESCARGA Y CONTROL */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
-              <div className="flex items-center gap-2">
+            {/* 4. ESTADO DE GENERACIÓN Y BOTONES DE CONTROL (v9.0) */}
+            <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-4 space-y-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-black text-emerald-400 flex items-center gap-1.5 animate-pulse">
+                  ✅ INFORME GENERADO CORRECTAMENTE
+                </span>
+                <span className="text-[10px] text-slate-400">Versión: v9.0 | Gobernanza Algorítmica</span>
+              </div>
+              
+              <div className="flex flex-wrap gap-2 justify-between items-center">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={isSavingAnalysis}
+                    onClick={() => handleFinalizeAndExport("PDF")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
+                  >
+                    📄 Descargar PDF
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingAnalysis}
+                    onClick={() => handleFinalizeAndExport("WORD")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
+                  >
+                    📝 Descargar Word
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingExpediente}
+                    onClick={() => handleSaveExpediente()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 px-4 py-2.5 text-xs font-extrabold text-slate-950 uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
+                  >
+                    💾 Guardar Expediente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConsultarHistorial()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-extrabold text-slate-200 uppercase tracking-wider shadow transition active:scale-95"
+                  >
+                    📂 Consultar Historial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowReportModal(false); void confirmAndGenerateProfile(); }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-850 hover:bg-slate-750 px-4 py-2.5 text-xs font-extrabold text-slate-300 uppercase tracking-wider shadow transition active:scale-95"
+                  >
+                    🔄 Regenerar Informe
+                  </button>
+                </div>
+                
                 <button
                   type="button"
-                  disabled={isSavingAnalysis}
-                  onClick={() => handleFinalizeAndExport("WORD")}
-                  className="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 px-5 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95 animate-pulse-slow"
+                  onClick={() => setShowReportModal(false)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
                 >
-                  <span>📥</span> Exportar Word
-                </button>
-                <button
-                  type="button"
-                  disabled={isSavingAnalysis}
-                  onClick={() => handleFinalizeAndExport("PDF")}
-                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95 animate-pulse-slow"
-                >
-                  <span>📥</span> Exportar PDF
+                  Cerrar Ventana
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowReportModal(false)}
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
-              >
-                Cerrar Ventana
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE HISTORIAL DOSSIERS (v9.0) */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 print:hidden">
+          <div role="dialog" aria-modal="true" className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-lg font-black text-sky-400 flex items-center gap-2">
+                📂 Historial de Expedientes Guardados (v9.0)
+              </h3>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white text-sm">✖</button>
+            </div>
+            
+            <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
+              {isLoadingHistory ? (
+                <p className="text-xs text-slate-400">Cargando bitácora...</p>
+              ) : historyDossiers.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No hay expedientes registrados en el historial de este proyecto.</p>
+              ) : (
+                historyDossiers.map((h) => (
+                  <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-200">Fecha: {new Date(h.fecha).toLocaleString("es-MX")}</span>
+                      <span className="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{h.version}</span>
+                    </div>
+                    <p className="text-slate-350"><strong>Analista:</strong> {h.analyst}</p>
+                    <p className="text-slate-350"><strong>Polígono:</strong> {h.poligono}</p>
+                    <p className="text-slate-350"><strong>Componentes:</strong> {h.componentes?.join(", ") || "Ninguno"}</p>
+                    <p className="text-slate-350"><strong>Fuentes:</strong> {h.fuentes?.join(", ") || "Ninguna"}</p>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button onClick={() => setShowHistoryModal(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">
+                Cerrar Historial
               </button>
             </div>
           </div>

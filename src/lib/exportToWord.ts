@@ -8,7 +8,6 @@ import {
   Paragraph,
   TextRun,
   AlignmentType,
-  HeadingLevel,
   Header,
   Footer,
   PageNumber,
@@ -20,8 +19,6 @@ import {
   TableRow,
   TableCell,
   WidthType,
-  VerticalAlign,
-  HeightRule,
 } from "docx";
 import { saveAs } from "file-saver";
 
@@ -151,31 +148,40 @@ export async function exportToWord(
 
   // HELPER PARAGRAPH CREATORS
   const createTitle = (text: string) => new Paragraph({
-    children: [new TextRun({ text, size: 28, bold: true, color: "0D2B52", font: "Calibri" })],
+    children: [new TextRun({ text, size: 26, bold: true, color: "0D2B52", font: "Calibri" })],
     spacing: { before: 240, after: 120 },
     border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" } }
   });
 
   const createSubtitle = (text: string) => new Paragraph({
-    children: [new TextRun({ text, size: 20, bold: true, color: "1F4E79", font: "Calibri" })],
+    children: [new TextRun({ text, size: 18, bold: true, color: "1F4E79", font: "Calibri" })],
     spacing: { before: 120, after: 60 }
   });
 
   const createBodyText = (text: string) => new Paragraph({
-    children: [new TextRun({ text, size: 22, font: "Calibri", color: "222222" })],
+    children: [new TextRun({ text, size: 20, font: "Calibri", color: "222222" })],
     spacing: { after: 120 },
     alignment: AlignmentType.JUSTIFIED
   });
 
+  const createBullet = (boldPrefix: string, text: string, color = "222222") => new Paragraph({
+    children: [
+      new TextRun({ text: "• ", bold: true, color: "0D2B52", size: 20 }),
+      new TextRun({ text: boldPrefix, bold: true, color: "0D2B52", size: 18 }),
+      new TextRun({ text, color, size: 18 })
+    ],
+    spacing: { after: 80 }
+  });
+
   const elements: any[] = [];
 
-  // ================= PÁGINA 1: PORTADA & SÍNTESIS EJECUTIVA =================
+  // ================= PÁGINA 1: PORTADA & DETALLES =================
   if (logoChildren.length > 0) {
     elements.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         children: logoChildren,
-        spacing: { before: 200, after: 400 }
+        spacing: { before: 200, after: 300 }
       })
     );
   }
@@ -183,13 +189,13 @@ export async function exportToWord(
   elements.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "INFORME DE GEOINTELIGENCIA OPERATIVA", size: 32, color: "0D2B52", bold: true, font: "Calibri" })],
+      children: [new TextRun({ text: "DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", size: 30, color: "0D2B52", bold: true, font: "Calibri" })],
       spacing: { after: 60 }
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "SECRETARÍA DE SEGURIDAD PÚBLICA - CEIPOL", size: 20, color: "5B6573", bold: true, font: "Calibri" })],
-      spacing: { after: 400 }
+      children: [new TextRun({ text: "SECRETARÍA DE SEGURIDAD PÚBLICA - CEIPOL", size: 18, color: "5B6573", bold: true, font: "Calibri" })],
+      spacing: { after: 300 }
     })
   );
 
@@ -208,11 +214,11 @@ export async function exportToWord(
         children: [
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 18 }), new TextRun({ text: ` ${projectName.toUpperCase()}`, size: 18 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.projectName.toUpperCase()}`, size: 16 })] })]
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "FECHA:", bold: true, size: 18 }), new TextRun({ text: ` ${new Date().toLocaleDateString("es-MX")}`, size: 18 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "NÚMERO EXP:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.projectId}`, size: 16 })] })]
           })
         ]
       }),
@@ -220,25 +226,49 @@ export async function exportToWord(
         children: [
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "ANALISTA:", bold: true, size: 18 }), new TextRun({ text: ` ${user?.username || "Institucional"}`, size: 18 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "FECHA:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.date}`, size: 16 })] })]
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "CLASIFICACIÓN:", bold: true, size: 18, color: "B22222" }), new TextRun({ text: " CONFIDENCIAL / EXCLUSIVO", size: 18, color: "B22222" })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "ANALISTA:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.analyst}`, size: 16 })] })]
+          })
+        ]
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+            children: [new Paragraph({ children: [new TextRun({ text: "GEOMETRÍA:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.geometryType.toUpperCase()}`, size: 16 })] })]
+          }),
+          new TableCell({
+            borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
+            children: [new Paragraph({ children: [new TextRun({ text: "ÁREA GEOGRÁFICA:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.areaGeografica}`, size: 16 })] })]
           })
         ]
       })
     ],
-    spacing: { after: 400 }
+    spacing: { after: 300 }
   });
 
   elements.push(metadataTable);
 
-  // Caja de Síntesis Ejecutiva
+  // Clasificación de Seguridad en la Portada
   elements.push(
     new Paragraph({
-      children: [new TextRun({ text: "SÍNTESIS EJECUTIVA DEL DICTAMEN", bold: true, size: 22, color: "0D2B52", font: "Calibri" })],
-      spacing: { after: 120 }
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({ text: "CLASIFICACIÓN: ", bold: true, size: 18, color: "B91C1C" }),
+        new TextRun({ text: "CONFIDENCIAL / EXCLUSIVO SSPE-CEIPOL", size: 18, bold: true, color: "B91C1C" })
+      ],
+      spacing: { before: 100, after: 200 }
+    })
+  );
+
+  // Caja de Síntesis Ejecutiva en Portada
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: "SÍNTESIS DEL DICTAMEN TÉCNICO", bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+      spacing: { after: 100 }
     }),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
@@ -252,7 +282,7 @@ export async function exportToWord(
                 top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }
               },
               margins: { left: 180, right: 180, top: 120, bottom: 120 },
-              children: [new Paragraph({ children: [new TextRun({ text: payload.executiveSummary, size: 22, font: "Calibri" })], alignment: AlignmentType.JUSTIFIED })]
+              children: [new Paragraph({ children: [new TextRun({ text: payload.executiveSummary, size: 18, font: "Calibri" })], alignment: AlignmentType.JUSTIFIED })]
             })
           ]
         })
@@ -260,197 +290,233 @@ export async function exportToWord(
     })
   );
 
-  // ================= PÁGINA 2: HIPÓTESIS FINAL ÚNICA =================
+  // ================= PÁGINA 2: BLOQUE I.1 - CONTEXTO TERRITORIAL =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("1. HIPÓTESIS FINAL ÚNICA"));
-  elements.push(createBodyText(payload.finalHypothesis));
+  elements.push(createTitle("BLOQUE I: ANÁLISIS EJECUTIVO - CONTEXTO TERRITORIAL"));
+  elements.push(createBodyText(payload.contextoTerritorial));
 
-  // ================= PÁGINA 3: MAPA 1 =================
+  // ================= PÁGINA 3: BLOQUE I.2 - HIPÓTESIS PRINCIPAL =================
   elements.push(new Paragraph({ pageBreakBefore: true }));
-  if (payload.maps?.[0]) {
-    const map = payload.maps[0];
-    elements.push(createTitle(`2. CARTOGRAFÍA OPERATIVA - ${map.title.toUpperCase()}`));
-    const buf = dataUrlToArrayBuffer(map.dataUrl);
-    if (buf) {
-      elements.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new ImageRun({ data: buf, transformation: { width: 440, height: 260 } })],
-          spacing: { after: 200 }
-        })
-      );
-    }
-    elements.push(createSubtitle("Interpretación Operacional:"));
-    elements.push(createBodyText(map.interpretation));
-  }
-
-  // ================= PÁGINA 4: MAPA 2 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  if (payload.maps?.[1]) {
-    const map = payload.maps[1];
-    elements.push(createTitle(`2. CARTOGRAFÍA OPERATIVA - ${map.title.toUpperCase()}`));
-    const buf = dataUrlToArrayBuffer(map.dataUrl);
-    if (buf) {
-      elements.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new ImageRun({ data: buf, transformation: { width: 440, height: 260 } })],
-          spacing: { after: 200 }
-        })
-      );
-    }
-    elements.push(createSubtitle("Interpretación Operacional:"));
-    elements.push(createBodyText(map.interpretation));
-  }
-
-  // ================= PÁGINA 5: GRÁFICAS ANALÍTICAS =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("3. ANÁLISIS DE SCORING Y MODELADOS"));
+  elements.push(createTitle("BLOQUE I: ANÁLISIS EJECUTIVO - HIPÓTESIS PRINCIPAL"));
+  elements.push(createSubtitle("Estructuración Metodológica de la Hipótesis delictiva:"));
   
+  elements.push(createBullet("¿Qué ocurre?: ", payload.hipotesisPrincipal.queOcurre));
+  elements.push(createBullet("¿Dónde ocurre?: ", payload.hipotesisPrincipal.dondeOcurre));
+  elements.push(createBullet("¿Quién podría participar?: ", payload.hipotesisPrincipal.quienParticipa));
+  elements.push(createBullet("¿Por qué ocurre?: ", payload.hipotesisPrincipal.porQueOcurre));
+  elements.push(createBullet("¿Qué evidencia sustenta?: ", payload.hipotesisPrincipal.evidenciaSustento));
+  elements.push(createBullet("Nivel de confianza analítica: ", payload.hipotesisPrincipal.nivelConfianza, "B91C1C"));
+
+  // ================= PÁGINA 4: BLOQUE I.3 - VALORACIÓN OPERACIONAL =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("BLOQUE I: ANÁLISIS EJECUTIVO - VALORACIÓN OPERACIONAL"));
+  elements.push(createSubtitle("Evaluación de Amenazas, Oportunidades y Vulnerabilidades del Sector:"));
+  
+  elements.push(createBullet("Amenaza: ", payload.valoracionOperacional.amenaza));
+  elements.push(createBullet("Oportunidad criminal: ", payload.valoracionOperacional.oportunidadCriminal));
+  elements.push(createBullet("Vulnerabilidades urbanas: ", payload.valoracionOperacional.vulnerabilidades));
+  elements.push(createBullet("Capacidad institucional requerida: ", payload.valoracionOperacional.capacidadRequerida));
+
+  // ================= PÁGINA 5: BLOQUE II - MATRIZ DE TRAZABILIDAD =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("BLOQUE II: MATRIZ DE TRAZABILIDAD ANALÍTICA"));
+  elements.push(createSubtitle("Gobernanza Algorítmica y Explicabilidad de Fuentes:"));
+
+  const matrixRows = [
+    new TableRow({
+      children: [
+        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Componente", bold: true, color: "FFFFFF", size: 16 })] })] }),
+        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Fuente", bold: true, color: "FFFFFF", size: 16 })] })] }),
+        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Método", bold: true, color: "FFFFFF", size: 16 })] })] }),
+        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Hallazgo", bold: true, color: "FFFFFF", size: 16 })] })] }),
+        new TableCell({ shading: { fill: "0D2B52", type: ShadingType.CLEAR }, margins: { top: 80, bottom: 80, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: "Impacto Operativo", bold: true, color: "FFFFFF", size: 16 })] })] }),
+      ]
+    })
+  ];
+
+  payload.trazabilidadMatrix.forEach((r, idx) => {
+    matrixRows.push(
+      new TableRow({
+        children: [
+          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.componente, size: 14 })] })] }),
+          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.fuente, size: 14 })] })] }),
+          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.metodo, size: 14 })] })] }),
+          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.hallazgo, size: 14 })] })] }),
+          new TableCell({ shading: { fill: idx % 2 === 0 ? "F8FAFC" : "FFFFFF", type: ShadingType.CLEAR }, borders: metaBorders, children: [new Paragraph({ children: [new TextRun({ text: r.impacto, size: 14 })] })] }),
+        ]
+      })
+    );
+  });
+
+  elements.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: matrixRows, spacing: { after: 200 } }));
+
+  // ================= PÁGINA 6: OSINT SINTETIZADO =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("ANÁLISIS DE INTELIGENCIA OSINT COMPLEMENTARIA"));
+  elements.push(createSubtitle("Evaluación del Entorno Socioeconómico y Comercial:"));
+  elements.push(createBodyText(payload.osintSynthesized));
+
+  // ================= PÁGINA 7: MOTOR DE PANDILLAS =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("ANÁLISIS DE VINCULACIÓN TERRITORIAL (PANDILLAS)"));
+  elements.push(createSubtitle("Contexto de Pandillas y Actores de Riesgo Locales:"));
+  elements.push(createBodyText(payload.pandillasAnalysis));
+
+  // ================= PÁGINA 8: BLOQUE IX - CONCLUSIONES OPERATIVAS =================
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("BLOQUE IX: CONCLUSIONES OPERATIVAS Y RECOMENDACIONES"));
+
+  elements.push(createSubtitle("Hallazgos Críticos:"));
+  payload.conclusiones.hallazgosCriticos.forEach(h => elements.push(createBullet("", h)));
+
+  elements.push(createSubtitle("Riesgos Inmediatos:"));
+  payload.conclusiones.riesgosInmediatos.forEach(r => elements.push(createBullet("", r)));
+
+  elements.push(createSubtitle("Escenarios Futuros:"));
+  payload.conclusiones.escenariosFuturos.forEach(e => elements.push(createBullet("", e)));
+
+  elements.push(createSubtitle("Recomendaciones Tácticas:"));
+  payload.conclusiones.recomendacionesTacticas.forEach(t => elements.push(createBullet("", t, "B91C1C")));
+
+  elements.push(createSubtitle("Recomendaciones Estratégicas:"));
+  payload.conclusiones.recomendacionesEstrategicas.forEach(s => elements.push(createBullet("", s, "1E3A8A")));
+
+  // ================= PÁGINAS VISUALES INDEPENDIENTES (BLOQUE III: ATLAS CARTOGRÁFICO) =================
+  if (payload.maps) {
+    payload.maps.forEach((map, idx) => {
+      elements.push(new Paragraph({ pageBreakBefore: true }));
+      elements.push(createTitle(`BLOQUE III: ATLAS CARTOGRÁFICO - ${map.title.toUpperCase()}`));
+      const buf = dataUrlToArrayBuffer(map.dataUrl);
+      if (buf) {
+        elements.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: buf, transformation: { width: 440, height: 260 } })],
+            spacing: { after: 200 }
+          })
+        );
+      }
+      elements.push(createSubtitle("Interpretación Operacional del Mapa:"));
+      elements.push(createBodyText(map.interpretation));
+    });
+  }
+
+  // ================= BLOQUE V: MODELOS ANALÍTICOS (GRÁFICAS) =================
   if (payload.graphs) {
-    for (let i = 0; i < Math.min(payload.graphs.length, 2); i++) {
-      const graph = payload.graphs[i];
+    payload.graphs.forEach((graph, idx) => {
+      elements.push(new Paragraph({ pageBreakBefore: true }));
+      elements.push(createTitle(`BLOQUE V: MODELO ANALÍTICO - ${graph.title.toUpperCase()}`));
       const buf = dataUrlToArrayBuffer(graph.dataUrl);
       if (buf) {
         elements.push(
           new Paragraph({
-            children: [new TextRun({ text: graph.title.toUpperCase(), bold: true, size: 18, color: "1F4E79" })],
-            spacing: { before: 120, after: 60 }
-          }),
-          new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: buf, transformation: { width: 400, height: 180 } })],
+            children: [new ImageRun({ data: buf, transformation: { width: 420, height: 200 } })],
             spacing: { after: 120 }
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Explicación: ", bold: true, size: 16 }),
-              new TextRun({ text: graph.explanation, size: 16 })
-            ]
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Hallazgo: ", bold: true, size: 16 }),
-              new TextRun({ text: graph.finding, size: 16 })
-            ]
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16 }),
-              new TextRun({ text: graph.relation, size: 16 })
-            ],
-            spacing: { after: 240 }
           })
         );
       }
+      elements.push(createSubtitle("Detalle Metodológico e Interpretación:"));
+      elements.push(createBullet("Explicación técnica: ", graph.explanation));
+      elements.push(createBullet("Hallazgo relevante: ", graph.finding));
+      elements.push(createBullet("Relación con hipótesis: ", graph.relation));
+    });
+  }
+
+  // ================= BLOQUE VII: EVIDENCIA FOTOGRÁFICA DE CAMPO =================
+  if (payload.photoEvidence) {
+    const buildPhotoTableElement = async (photo: any, index: number) => {
+      try {
+        const buffer = await applyWatermarkForWord(photo.dataUrl);
+        if (!buffer) return null;
+
+        return new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+            bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+            left: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+            right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
+          },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
+                  margins: { top: 100, bottom: 100, left: 100, right: 100 },
+                  children: [
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      children: [new ImageRun({ data: buffer, transformation: { width: 440, height: 250 } })]
+                    }),
+                    new Paragraph({
+                      spacing: { before: 80 },
+                      children: [new TextRun({ text: `Evidencia Fotográfica de Campo 0${index + 1}.`, bold: true, size: 18, color: "0D2B52" })]
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Ubicación: ", bold: true, size: 16 }),
+                        new TextRun({ text: photo.location, size: 16 })
+                      ]
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Factor ambiental identificado: ", bold: true, size: 16 }),
+                        new TextRun({ text: photo.factor, size: 16 })
+                      ]
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Análisis IA Táctico: ", bold: true, size: 16 }),
+                        new TextRun({ text: photo.caption, size: 16 })
+                      ]
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Interpretación criminológica: ", bold: true, size: 16 }),
+                        new TextRun({ text: photo.criminologicalInterpretation, size: 16 })
+                      ]
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16 }),
+                        new TextRun({ text: photo.relation, size: 16 })
+                      ]
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Nivel de riesgo: ", bold: true, size: 16 }),
+                        new TextRun({ text: photo.riskLevel, bold: true, size: 16, color: photo.riskLevel === "ALTO" ? "B91C1C" : "1E3A8A" })
+                      ]
+                    })
+                  ]
+                })
+              ]
+            })
+          ],
+          spacing: { after: 120 }
+        });
+      } catch {
+        return null;
+      }
+    };
+
+    for (let i = 0; i < payload.photoEvidence.length; i++) {
+      elements.push(new Paragraph({ pageBreakBefore: true }));
+      elements.push(createTitle(`BLOQUE VII: EVIDENCIA FOTOGRÁFICA (EVIDENCIA 0${i + 1})`));
+      const el = await buildPhotoTableElement(payload.photoEvidence[i], i);
+      if (el) elements.push(el);
     }
   }
 
-  // ================= PÁGINA 6: ANEXO FOTOGRÁFICO DE CAMPO - PARTE 1 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 1"));
-
-  const buildPhotoElement = async (photo: any, index: number) => {
-    try {
-      const buffer = await applyWatermarkForWord(photo.dataUrl);
-      if (!buffer) return null;
-
-      return new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: {
-          top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-          bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-          left: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-          right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
-        },
-        rows: [
-          new TableRow({
-            children: [
-              new TableCell({
-                shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
-                margins: { top: 100, bottom: 100, left: 100, right: 100 },
-                children: [
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [new ImageRun({ data: buffer, transformation: { width: 440, height: 250 } })]
-                  }),
-                  new Paragraph({
-                    spacing: { before: 80 },
-                    children: [new TextRun({ text: `Imagen ${index + 1}.`, bold: true, size: 18, color: "0D2B52" })]
-                  }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({ text: "Ubicación: ", bold: true, size: 16 }),
-                      new TextRun({ text: photo.location, size: 16 })
-                    ]
-                  }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({ text: "Factor ambiental identificado: ", bold: true, size: 16 }),
-                      new TextRun({ text: photo.factor, size: 16 })
-                    ]
-                  }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({ text: "Interpretación criminológica: ", bold: true, size: 16 }),
-                      new TextRun({ text: photo.criminologicalInterpretation, size: 16 })
-                    ]
-                  }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16 }),
-                      new TextRun({ text: photo.relation, size: 16 })
-                    ]
-                  }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({ text: "Nivel de riesgo: ", bold: true, size: 16 }),
-                      new TextRun({ text: photo.riskLevel, bold: true, size: 16, color: photo.riskLevel === "ALTO" ? "B91C1C" : "1E3A8A" })
-                    ]
-                  })
-                ]
-              })
-            ]
-          })
-        ],
-        spacing: { after: 120 }
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  if (payload.photoEvidence?.[0]) {
-    const el = await buildPhotoElement(payload.photoEvidence[0], 0);
-    if (el) elements.push(el);
-  }
-  if (payload.photoEvidence?.[1]) {
-    const el = await buildPhotoElement(payload.photoEvidence[1], 1);
-    if (el) elements.push(el);
-  }
-
-  // ================= PÁGINA 7: ANEXO FOTOGRÁFICO DE CAMPO - PARTE 2 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("4. REGISTRO FOTOGRÁFICO DE CAMPO - PARTE 2"));
-
-  if (payload.photoEvidence?.[2]) {
-    const el = await buildPhotoElement(payload.photoEvidence[2], 2);
-    if (el) elements.push(el);
-  }
-  if (payload.photoEvidence?.[3]) {
-    const el = await buildPhotoElement(payload.photoEvidence[3], 3);
-    if (el) elements.push(el);
-  }
-
-  // ================= PÁGINA 8: STREET VIEW =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("5. PUNTOS DE ACECHO Y VULNERABILIDAD FÍSICA"));
-
+  // ================= BLOQUE IV: ANÁLISIS STREET VIEW =================
   if (payload.streetViewAnalysis) {
-    for (let i = 0; i < Math.min(payload.streetViewAnalysis.length, 2); i++) {
+    for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
       const sv = payload.streetViewAnalysis[i];
       const buf = dataUrlToArrayBuffer(sv.dataUrl);
       if (buf) {
+        elements.push(new Paragraph({ pageBreakBefore: true }));
+        elements.push(createTitle(`BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (ACECHO 0${i + 1})`));
         elements.push(
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
@@ -511,23 +577,44 @@ export async function exportToWord(
     }
   }
 
-  // ================= PÁGINA 9: OSINT SINTETIZADO =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("6. ANÁLISIS DE INTELIGENCIA OSINT COMPLEMENTARIA"));
-  elements.push(createSubtitle("Evaluación del Entorno Socioeconómico y Flujos de Movilidad:"));
-  elements.push(createBodyText(payload.osintSynthesized));
+  // ================= BLOQUE VI: BARRIDOS DE INTELIGENCIA =================
+  if (payload.sweepsData && payload.sweepsData.length > 0) {
+    elements.push(new Paragraph({ pageBreakBefore: true }));
+    elements.push(createTitle("BLOQUE VI: BARRIDOS DE INTELIGENCIA DE FUENTES"));
+    
+    payload.sweepsData.forEach((s: any) => {
+      elements.push(
+        new Paragraph({
+          children: [new TextRun({ text: `Barrido: ${s.engine.toUpperCase()}`, bold: true, size: 18, color: "0D2B52" })],
+          spacing: { before: 120, after: 60 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Fuente consultada: ", bold: true, size: 16 }),
+            new TextRun({ text: s.source, size: 16 })
+          ]
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Datos integrados: ", bold: true, size: 16 }),
+            new TextRun({ text: s.data, size: 16 })
+          ]
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Contexto de movilidad: ", bold: true, size: 16 }),
+            new TextRun({ text: s.context, size: 16 })
+          ],
+          spacing: { after: 180 }
+        })
+      );
+    });
+  }
 
-  // ================= PÁGINA 10: MOTOR DE PANDILLAS =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("7. ANÁLISIS DE VINCULACIÓN TERRITORIAL (PANDILLAS)"));
-  elements.push(createSubtitle("Contexto de Pandillas y Actores de Riesgo Locales:"));
-  elements.push(createBodyText(payload.pandillasAnalysis));
-
-  // ================= PÁGINA 11: GRAFO DE HIPÓTESIS HIG 2.0 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("8. HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)"));
-
+  // ================= BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH HIG 2.0 =================
   if (payload.hypothesisGraph) {
+    elements.push(new Paragraph({ pageBreakBefore: true }));
+    elements.push(createTitle("BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)"));
     const buf = dataUrlToArrayBuffer(payload.hypothesisGraph.dataUrl);
     if (buf) {
       elements.push(
@@ -542,54 +629,16 @@ export async function exportToWord(
     elements.push(createBodyText(payload.hypothesisGraph.interpretation));
   }
 
-  // ================= PÁGINA 12: CONCLUSIONES OPERATIVAS =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("9. CONCLUSIONES OPERATIVAS Y RECOMENDACIONES"));
-
-  payload.operationalConclusions.forEach(c => {
-    elements.push(
-      new Paragraph({
-        numbering: { reference: "custom-bullets", level: 0 },
-        children: [
-          new TextRun({ text: `[Prioridad ${c.prioridad}] `, bold: true, color: c.prioridad === "Alta" ? "B91C1C" : "1E3A8A" }),
-          new TextRun({ text: `Hallazgo: `, bold: true }),
-          new TextRun({ text: `${c.hallazgo}. ` }),
-          new TextRun({ text: `Riesgo asociado: `, bold: true }),
-          new TextRun({ text: `${c.riesgo}. ` }),
-          new TextRun({ text: `Acción recomendada: `, bold: true }),
-          new TextRun({ text: `${c.accion}.` })
-        ],
-        spacing: { after: 120 }
-      })
-    );
-  });
-
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX
   const headerFooterTabs = [
     { type: TabStopType.RIGHT, position: 9350 }
   ];
 
   const doc = new Document({
-    numbering: {
-      config: [
-        {
-          reference: "custom-bullets",
-          levels: [
-            {
-              level: 0,
-              format: "bullet",
-              text: "■",
-              alignment: AlignmentType.LEFT,
-              style: { paragraph: { indent: { left: 720, hanging: 360 } } }
-            }
-          ]
-        }
-      ]
-    },
     styles: {
       default: {
         document: {
-          run: { font: "Calibri", size: 22, color: "222222" },
+          run: { font: "Calibri", size: 20, color: "222222" },
           paragraph: { alignment: AlignmentType.JUSTIFIED, spacing: { line: 240, after: 120 }, widowControl: true },
         },
       }
@@ -608,9 +657,9 @@ export async function exportToWord(
               new Paragraph({
                 tabStops: headerFooterTabs,
                 children: [
-                  new TextRun({ text: "CEIPOL", bold: true, color: "5B6573", size: 18, font: "Calibri" }),
-                  new TextRun({ text: "\tINFORME DE GEOINTELIGENCIA OPERATIVA", color: "5B6573", size: 18, font: "Calibri" }),
-                  new TextRun({ text: "\tCONFIDENCIAL | USO EXCLUSIVO", bold: true, color: "5B6573", size: 18, font: "Calibri" }),
+                  new TextRun({ text: "CEIPOL - SSPE", bold: true, color: "5B6573", size: 16, font: "Calibri" }),
+                  new TextRun({ text: "\tDICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", color: "5B6573", size: 16, font: "Calibri" }),
+                  new TextRun({ text: "\tCONFIDENCIAL | EXCLUSIVO", bold: true, color: "5B6573", size: 16, font: "Calibri" }),
                 ],
                 border: { bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
                 spacing: { after: 200 }
@@ -626,7 +675,7 @@ export async function exportToWord(
                 border: { top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
                 spacing: { before: 80 },
                 children: [
-                  new TextRun({ text: `${new Date().toLocaleDateString("es-MX")} | `, color: "5B6573", size: 14, font: "Calibri" }),
+                  new TextRun({ text: `${payload.date} | `, color: "5B6573", size: 14, font: "Calibri" }),
                   new TextRun({ 
                     children: ["Página ", PageNumber.CURRENT || "1"],
                     color: "5B6573", 
@@ -645,5 +694,5 @@ export async function exportToWord(
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `Informe_Geointeligencia_${safeName}.docx`);
+  saveAs(blob, `Dictamen_Inteligencia_Territorial_${safeName}.docx`);
 }

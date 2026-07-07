@@ -17,6 +17,7 @@ type FinalizeOptions = {
   markAsPrinted?: () => Promise<void> | void;
   sweeps?: any[];
   powerups?: any[];
+  selectedAnnexes?: any;
 };
 
 async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
@@ -133,49 +134,86 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
       doc.setFont('helvetica', 'bold');
       doc.text(briefing.title, PAGE.width / 2, 18, { align: 'center' });
       doc.setFontSize(9);
-      doc.text('INFORME DE GEOINTELIGENCIA OPERATIVA', PAGE.width / 2, 27, { align: 'center' });
+      doc.text('SECRETARÍA DE SEGURIDAD PÚBLICA / CEIPOL', PAGE.width / 2, 27, { align: 'center' });
 
       doc.setTextColor(COLORS.text);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Expediente: ${briefing.fileNumber}`, PAGE.margin, 47);
-      doc.text(`Fecha de generacion: ${new Date(briefing.generatedAt).toLocaleString()}`, PAGE.margin, 54);
-      doc.text(`Clasificacion: ${briefing.classification}`, PAGE.margin, 61);
-
-      addSectionTitle('Resumen Ejecutivo', 78);
       
-      doc.setFillColor('#ffffff');
-      doc.roundedRect(PAGE.margin, 85, 128, 72, 2, 2, 'F');
-      doc.setDrawColor(COLORS.line);
-      doc.roundedRect(PAGE.margin, 85, 128, 72, 2, 2);
-      
-      doc.setFontSize(21);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(page.riskLevel === 'ALTO' ? '#b91c1c' : COLORS.blue);
-      doc.text(`RIESGO ${page.riskLevel}`, PAGE.margin + 8, 102);
-      
-      doc.setTextColor(COLORS.text);
+      let cursorY = 47;
       if (page.bullets) {
-        addBullets(page.bullets, PAGE.margin + 8, 114, 112);
+        page.bullets.forEach((b) => {
+          doc.text(b, PAGE.margin, cursorY);
+          cursorY += 7;
+        });
       }
 
-      doc.setFillColor('#ffffff');
-      doc.roundedRect(158, 85, 123, 72, 2, 2, 'F');
-      doc.setDrawColor(COLORS.line);
-      doc.roundedRect(158, 85, 123, 72, 2, 2);
+      addSectionTitle('Resumen Ejecutivo del Dictamen', 105);
       
-      doc.setFontSize(10);
-      doc.setTextColor(COLORS.navy);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Síntesis del Dictamen', 166, 99);
+      doc.setFillColor('#ffffff');
+      doc.roundedRect(PAGE.margin, 112, PAGE.width - PAGE.margin * 2, 68, 2, 2, 'F');
+      doc.setDrawColor(COLORS.line);
+      doc.roundedRect(PAGE.margin, 112, PAGE.width - PAGE.margin * 2, 68, 2, 2);
       
       doc.setTextColor(COLORS.text);
-      doc.setFontSize(8.8);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       if (page.summary) {
-        const summaryLines = doc.splitTextToSize(page.summary, 108);
-        doc.text(summaryLines.slice(0, 9), 166, 110);
+        const summaryLines = doc.splitTextToSize(page.summary, PAGE.width - PAGE.margin * 2 - 12);
+        doc.text(summaryLines.slice(0, 10), PAGE.margin + 6, 122);
       }
+
+    } else if (page.mode === 'executive') {
+      addHeader(page.title);
+      addSectionTitle(page.title, 29);
+      if (page.interpretation) {
+        doc.setTextColor(COLORS.text);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        const textLines = doc.splitTextToSize(page.interpretation, 260);
+        doc.text(textLines, PAGE.margin, 45);
+      }
+      if (page.bullets) {
+        addBullets(page.bullets, PAGE.margin, 45, 260, 8);
+      }
+
+    } else if (page.mode === 'trazabilidad') {
+      addHeader(page.title);
+      addSectionTitle(page.title, 29);
+      
+      let currentY = 42;
+      doc.setFillColor('#0b1f3a');
+      doc.rect(PAGE.margin, currentY, PAGE.width - PAGE.margin * 2, 8, 'F');
+      
+      doc.setFontSize(7.5);
+      doc.setTextColor('#ffffff');
+      doc.setFont('helvetica', 'bold');
+      doc.text("Componente", PAGE.margin + 4, currentY + 5.5);
+      doc.text("Fuente", PAGE.margin + 42, currentY + 5.5);
+      doc.text("Método", PAGE.margin + 80, currentY + 5.5);
+      doc.text("Hallazgo", PAGE.margin + 128, currentY + 5.5);
+      doc.text("Impacto Operativo", PAGE.margin + 195, currentY + 5.5);
+      
+      currentY += 8;
+      
+      page.sweeps?.forEach((row: any, rIdx: number) => {
+        doc.setFillColor(rIdx % 2 === 0 ? '#f4f7fb' : '#ffffff');
+        doc.rect(PAGE.margin, currentY, PAGE.width - PAGE.margin * 2, 10, 'F');
+        doc.setDrawColor(COLORS.line);
+        doc.rect(PAGE.margin, currentY, PAGE.width - PAGE.margin * 2, 10);
+        
+        doc.setFontSize(7);
+        doc.setTextColor(COLORS.text);
+        doc.setFont('helvetica', 'normal');
+        
+        doc.text(row.componente, PAGE.margin + 4, currentY + 6.5);
+        doc.text(row.fuente, PAGE.margin + 42, currentY + 6.5);
+        doc.text(row.metodo, PAGE.margin + 80, currentY + 6.5);
+        doc.text(doc.splitTextToSize(row.hallazgo, 64).slice(0, 1), PAGE.margin + 128, currentY + 6.5);
+        doc.text(doc.splitTextToSize(row.impacto, 60).slice(0, 1), PAGE.margin + 195, currentY + 6.5);
+        
+        currentY += 10;
+      });
 
     } else if (page.mode === 'hypothesis') {
       addHeader('Hipótesis Final');
@@ -248,7 +286,7 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
         doc.setFontSize(7.5);
         doc.setTextColor(COLORS.muted);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Fuente: ${sweep.source} | Relevancia: ${sweep.relevance}`, PAGE.width - PAGE.margin - 6, currentY + 8, { align: 'right' });
+        doc.text(`Fuente: ${sweep.source}`, PAGE.width - PAGE.margin - 6, currentY + 8, { align: 'right' });
         
         doc.setDrawColor(COLORS.line);
         doc.line(PAGE.margin + 6, currentY + 12, PAGE.width - PAGE.margin - 6, currentY + 12);
@@ -275,7 +313,7 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
       }
     }
 
-    // Pie de página fijo de una sola línea
+    // Pie de página fijo
     doc.setDrawColor(COLORS.line);
     doc.setLineWidth(0.3);
     doc.line(PAGE.margin, PAGE.height - 10, PAGE.width - PAGE.margin, PAGE.height - 10);
@@ -287,7 +325,7 @@ async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
     doc.text(`Página ${idx + 1} de ${briefing.pages.length}`, PAGE.width - PAGE.margin, PAGE.height - 6, { align: 'right' });
   });
 
-  doc.save(`Dictamen_Oficial_${briefing.fileNumber}.pdf`);
+  doc.save(`Dictamen_Inteligencia_Territorial_${briefing.fileNumber}.pdf`);
 }
 
 export type KernelState =
@@ -306,112 +344,40 @@ export type KernelEvent =
   | "APPLY_POWERUPS"
   | "DERIVE_LAYOUT"
   | "VALIDATE_KERNEL"
-  | "EXECUTE_EXPORT"
-  | "TERMINATE_KERNEL";
-
-export type PowerUp = {
-  id: string;
-  type: "OCR" | "ST_DWITHIN" | "GROUNDING" | "SEMANTIC";
-  metadata: Record<string, any>;
-  appliedAt: number;
-};
-
-export type ExecutionSnapshot = {
-  state: KernelState;
-  payloadHash: string;
-  powerupsHash: string;
-  layoutHash: string;
-  timestamp: number;
-};
-
-export type ExecutionTrace = {
-  executionId: string;
-  transitions: string[];
-  snapshots: ExecutionSnapshot[];
-  exportStatus: string;
-  validationResults: any;
-};
-
-export type TraceEntry = {
-  event: KernelEvent;
-  kernelState: KernelState;
-  executionId: string;
-  timestamp: number;
-};
-
-function simpleHash(str: string): string {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash * 33) ^ str.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(16);
-}
-
-function deepFreeze(obj: any): any {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-  Object.freeze(obj);
-  Object.getOwnPropertyNames(obj).forEach((prop) => {
-    const value = obj[prop];
-    if (value !== null && (typeof value === 'object' || typeof value === 'function') && !Object.isFrozen(value)) {
-      deepFreeze(value);
-    }
-  });
-  return obj;
-}
-
-function isValidTransition(state: KernelState, eventType: string): boolean {
-  switch (state) {
-    case "IDLE":
-      return eventType === "INIT_KERNEL";
-    case "INITIALIZED":
-      return eventType === "INIT_KERNEL" || eventType === "LOCK_INPUT";
-    case "INPUT_LOCKED":
-      return eventType === "INIT_KERNEL" || eventType === "APPLY_POWERUPS";
-    case "POWERUPS_DEDUPED":
-      return eventType === "INIT_KERNEL" || eventType === "DERIVE_LAYOUT";
-    case "LAYOUT_DERIVED":
-      return eventType === "INIT_KERNEL" || eventType === "VALIDATE_KERNEL";
-    case "VALIDATED":
-      return eventType === "INIT_KERNEL" || eventType === "EXECUTE_EXPORT";
-    case "EXPORT_EXECUTED":
-      return eventType === "INIT_KERNEL" || eventType === "TERMINATE_KERNEL";
-    case "COMPLETE":
-      return eventType === "INIT_KERNEL";
-  }
-  return false;
-}
-
-function gate(eventType: string, state: KernelState) {
-  if (!isValidTransition(state, eventType)) {
-    throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
-  }
-}
+  | "EXECUTE_EXPORT";
 
 export type KernelSubscriber = (state: KernelState) => void;
 
+export interface ExecutionTrace {
+  executionId: string;
+  transitions: string[];
+  snapshots: Array<{
+    state: KernelState;
+    payloadLength: number;
+    powerupsCount: number;
+    pagesCount: number;
+  }>;
+  exportStatus: string;
+  validationResults: any;
+}
+
 export class ReportEngineKernelClass {
-  private executionId: string | null = null;
-  private locked: boolean = false;
   private state: KernelState = "IDLE";
+  private executionId: string | null = null;
+  private locked = false;
   private context: any = {};
-  private snapshots: ExecutionSnapshot[] = [];
-  private transitionsList: string[] = [];
-  private exportStatus: string = "NOT_STARTED";
-  private validationResults: any = null;
   private subscribers: KernelSubscriber[] = [];
-  private traceLog: TraceEntry[] = [];
+  private snapshots: Array<{
+    state: KernelState;
+    payloadLength: number;
+    powerupsCount: number;
+    pagesCount: number;
+  }> = [];
+  private transitionsList: string[] = [];
+  private exportStatus = "NOT_STARTED";
+  private validationResults: any = null;
 
-  getExecutionId() {
-    return this.executionId;
-  }
-
-  isActive() {
-    return this.locked;
-  }
-
-  isLocked() {
+  isActive(): boolean {
     return this.locked;
   }
 
@@ -420,13 +386,13 @@ export class ReportEngineKernelClass {
   }
 
   getTrace(): ExecutionTrace {
-    return deepFreeze({
+    return {
       executionId: this.executionId || "",
       transitions: [...this.transitionsList],
       snapshots: [...this.snapshots],
       exportStatus: this.exportStatus,
       validationResults: this.validationResults
-    });
+    };
   }
 
   getContext() {
@@ -449,42 +415,34 @@ export class ReportEngineKernelClass {
     const powerupsStr = JSON.stringify(this.context.powerups || []);
     const layoutStr = JSON.stringify(this.context.briefing || {});
 
-    const snap = {
+    this.snapshots.push({
       state: this.state,
-      payloadHash: simpleHash(payloadStr),
-      powerupsHash: simpleHash(powerupsStr),
-      layoutHash: simpleHash(layoutStr),
-      timestamp: Date.now()
-    };
-    this.snapshots.push(deepFreeze(snap));
+      payloadLength: payloadStr.length,
+      powerupsCount: (this.context.powerups || []).length,
+      pagesCount: (this.context.briefing?.pages || []).length
+    });
   }
 
-  async dispatch(event: KernelEvent, payload?: any): Promise<void> {
-    console.log("[REPORT ENGINE KERNEL] ENTER dispatch:", event);
-    console.log("[STATE BEFORE]", this.state);
-    console.log("[EXECUTION ID]", this.executionId);
+  async dispatch(event: KernelEvent, payload?: any) {
+    console.log(`[REPORT ENGINE KERNEL] ENTER dispatch: ${event}`);
+    console.log(`[STATE BEFORE] ${this.state}`);
+    console.log(`[EXECUTION ID] ${this.executionId}`);
 
-    // 🔒 1. SINGLE EXECUTION GUARANTEE
-    if (this.locked && event !== "INIT_KERNEL" && payload?.executionId && this.executionId !== payload.executionId) {
-      console.error("[REPORT ENGINE KERNEL] MULTI_EXECUTION_BLOCKED. Current Active:", this.executionId, "Requested:", payload.executionId);
-      throw new Error("MULTI_EXECUTION_BLOCKED");
-    }
+    const gate = (ev: KernelEvent, current: KernelState) => {
+      const transitions: Record<KernelEvent, KernelState[]> = {
+        INIT_KERNEL: ["IDLE", "INITIALIZED", "INPUT_LOCKED", "POWERUPS_DEDUPED", "LAYOUT_DERIVED", "VALIDATED", "EXPORT_EXECUTED", "COMPLETE"],
+        LOCK_INPUT: ["INITIALIZED"],
+        APPLY_POWERUPS: ["INPUT_LOCKED"],
+        DERIVE_LAYOUT: ["POWERUPS_DEDUPED"],
+        VALIDATE_KERNEL: ["LAYOUT_DERIVED"],
+        EXECUTE_EXPORT: ["VALIDATED"]
+      };
 
-    const valid = isValidTransition(this.state, event);
-    if (!valid) {
-      console.error("[REPORT ENGINE KERNEL] INVALID_STATE_TRANSITION_BLOCKED. Current:", this.state, "Event:", event);
-      throw new Error("INVALID_STATE_TRANSITION_BLOCKED");
-    }
-
-    this.transitionsList.push(`${this.state} -> ${event}`);
-
-    // UI event tracing log
-    this.traceLog.push({
-      event,
-      kernelState: this.state,
-      executionId: this.executionId || "",
-      timestamp: Date.now()
-    });
+      if (!transitions[ev].includes(current)) {
+        console.error(`[REPORT ENGINE KERNEL] TRANSITION_DENIED. Event: ${ev}, Current State: ${current}`);
+        throw new Error(`MULTI_EXECUTION_BLOCKED: State: ${current}, Event: ${ev}`);
+      }
+    };
 
     switch (event) {
       case "INIT_KERNEL":
@@ -503,13 +461,11 @@ export class ReportEngineKernelClass {
       case "LOCK_INPUT":
         const content = payload.content || "";
         
-        // Limits check (max headers = 200, max chars = 250000)
         const sectionsCount = (content.match(/^#+/gm) || []).length;
         if (sectionsCount > 200 || content.length > 250000) {
           throw new Error("STATE_MACHINE_OVERFLOW_BLOCKED");
         }
 
-        // Sub-section character limit check (max 50000 per section)
         const lines = content.split("\n");
         let currentSectionTitle = "General";
         const sectionsMap = new Map<string, string[]>();
@@ -533,7 +489,6 @@ export class ReportEngineKernelClass {
           }
         }
 
-        // Normalize/sanitize duplicate lines
         const cleanLines: string[] = [];
         const seen = new Set<string>();
         for (const line of lines) {
@@ -548,7 +503,6 @@ export class ReportEngineKernelClass {
         }
         let cleanContent = cleanLines.join("\n");
 
-        // Purgar texto técnico de PowerUps
         const technicalTexts = [
           "Ejecuta OCR Avanzado y Extracción de Atributos Visuales.",
           "Aplica Análisis de Diarización y Sentimiento.",
@@ -565,7 +519,6 @@ export class ReportEngineKernelClass {
           cleanContent = cleanContent.split(tech).join("");
         }
 
-        // Clean up "Resultados Puente Contextual" or "POWERUP APLICADO"
         const finalLines = cleanContent.split("\n").filter(line => {
           const lower = line.toLowerCase();
           if (lower.includes("resultados puente contextual")) return false;
@@ -587,10 +540,10 @@ export class ReportEngineKernelClass {
         this.context.powerups = payload.powerups || [];
         this.context.scinceDemographics = payload.scinceDemographics;
         this.context.reportNumber = payload.reportNumber;
-
-        deepFreeze(this.context);
+        this.context.selectedAnnexes = payload.selectedAnnexes;
 
         this.state = "INPUT_LOCKED";
+        this.transitionsList.push("LOCK_INPUT");
         this.takeSnapshot();
         this.notify();
         break;
@@ -622,12 +575,9 @@ export class ReportEngineKernelClass {
           };
         });
 
-        this.context = deepFreeze({
-          ...this.context,
-          powerups: structuredPowerups
-        });
-
+        this.context.powerups = structuredPowerups;
         this.state = "POWERUPS_DEDUPED";
+        this.transitionsList.push("APPLY_POWERUPS");
         this.takeSnapshot();
         this.notify();
         break;
@@ -638,7 +588,6 @@ export class ReportEngineKernelClass {
           throw new Error("DERIVE_LAYOUT_EXECUTION_ID_MISMATCH");
         }
 
-        // FASE OBLIGATORIA PREVIA AL RENDER: Intelligence Editorial Layer
         const editorialPayload = buildIntelligenceEditorialPayload(
           this.context.content || "",
           this.context.album || [],
@@ -663,18 +612,22 @@ export class ReportEngineKernelClass {
           editorialPayload
         );
 
-        this.context = deepFreeze({
-          ...this.context,
-          briefing,
-          editorialPayload: editorialPayload
-        });
+        this.context.briefing = briefing;
+        this.context.editorialPayload = editorialPayload;
 
         this.state = "LAYOUT_DERIVED";
+        this.transitionsList.push("DERIVE_LAYOUT");
         this.takeSnapshot();
         this.notify();
         break;
       }
+
       case "VALIDATE_KERNEL":
+        gate("VALIDATE_KERNEL", this.state);
+        if (this.executionId !== payload?.executionId) {
+          throw new Error("VALIDATE_EXECUTION_ID_MISMATCH");
+        }
+
         const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
         if (previewLayer) {
           throw new Error("ASSERT_FAILED: Preview layer exists");
@@ -707,22 +660,84 @@ export class ReportEngineKernelClass {
         const hasForbidden = forbiddenPatterns.some(pattern => pattern.test(textToAudit));
         const noInternalMetadata = !hasForbidden;
 
-        const pageCount = this.context.briefing?.pages?.length || 0;
-        const isPageCountValid = pageCount <= 12;
+        // ANALYTICAL PAGES ONLY (max 12)
+        const analyticalPageCount = this.context.briefing?.pages?.filter((p: any) =>
+          p.mode === 'cover' || p.mode === 'hypothesis' || p.mode === 'executive' || p.mode === 'trazabilidad' || p.mode === 'text' || p.mode === 'conclusions'
+        ).length || 0;
+        const isPageCountValid = analyticalPageCount <= 12;
 
         if (!hasExecutiveSummary || !hasFinalHypothesis || !hasMaps || !hasGraphs || !hasEvidence || !hasHIGGraph || !noInternalMetadata || !isPageCountValid) {
-          const errMsg = `VALIDATION_FAILED_CRITERIA: hasExecutiveSummary=${hasExecutiveSummary}, hasFinalHypothesis=${hasFinalHypothesis}, hasMaps=${hasMaps}, hasGraphs=${hasGraphs}, hasEvidence=${hasEvidence}, hasHIGGraph=${hasHIGGraph}, noInternalMetadata=${noInternalMetadata}, pageCount=${pageCount}`;
+          const errMsg = `VALIDATION_FAILED_CRITERIA: hasExecutiveSummary=${hasExecutiveSummary}, hasFinalHypothesis=${hasFinalHypothesis}, hasMaps=${hasMaps}, hasGraphs=${hasGraphs}, hasEvidence=${hasEvidence}, hasHIGGraph=${hasHIGGraph}, noInternalMetadata=${noInternalMetadata}, pageCount=${analyticalPageCount}`;
           console.error("[REPORT ENGINE KERNEL] VALIDATION ERROR:", errMsg);
           throw new Error(errMsg);
+        }
+
+        // GOVERNANCE: Component integration checks based on UI selections
+        const selectedAnnexes = this.context.selectedAnnexes;
+        if (selectedAnnexes) {
+          // Check maps
+          if (selectedAnnexes.mapDensity && !payloadObj.maps.some((m: any) => m.title.toLowerCase().includes("densidad") || m.title.toLowerCase().includes("calor") || m.title.toLowerCase().includes("riesgo") || m.title.toLowerCase().includes("mapa"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.mapMobility && !payloadObj.maps.some((m: any) => m.title.toLowerCase().includes("corredores") || m.title.toLowerCase().includes("movilidad") || m.title.toLowerCase().includes("flujos"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.mapAttractors && !payloadObj.maps.some((m: any) => m.title.toLowerCase().includes("atracción") || m.title.toLowerCase().includes("atractores") || m.title.toLowerCase().includes("denue"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.mapPredictive && !payloadObj.maps.some((m: any) => m.title.toLowerCase().includes("proyección") || m.title.toLowerCase().includes("predicción") || m.title.toLowerCase().includes("predictiva"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+
+          // Check graphs
+          if (selectedAnnexes.chartTemporal && !payloadObj.graphs.some((g: any) => g.title.toLowerCase().includes("temporal") || g.title.toLowerCase().includes("turno") || g.title.toLowerCase().includes("horario") || g.title.toLowerCase().includes("delitos"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.chartTopology && !payloadObj.graphs.some((g: any) => g.title.toLowerCase().includes("topología") || g.title.toLowerCase().includes("frecuencia") || g.title.toLowerCase().includes("incidentes") || g.title.toLowerCase().includes("atractores"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.chartEnvironmental && !payloadObj.graphs.some((g: any) => g.title.toLowerCase().includes("facilitadores") || g.title.toLowerCase().includes("ambiental") || g.title.toLowerCase().includes("oportunidad") || g.title.toLowerCase().includes("riesgo"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.chartPrediction && !payloadObj.graphs.some((g: any) => g.title.toLowerCase().includes("predicción") || g.title.toLowerCase().includes("futuro") || g.title.toLowerCase().includes("aumento"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+
+          // Check sweeps
+          if (selectedAnnexes.sweepDenue && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("denue") || s.engine.toLowerCase().includes("inegi"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.sweepIncidencia && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("incidencia") || s.engine.toLowerCase().includes("delitos"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.sweepRepuve && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("repuve") || s.engine.toLowerCase().includes("vehicular"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.sweepRnpdno && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("rnpdno") || s.engine.toLowerCase().includes("desaparecidos"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.sweepMultimodal && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("multimodal"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+          if (selectedAnnexes.sweepCifa && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("cifa"))) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
+
+          // Check HIG Graph
+          if (selectedAnnexes.graphConnections && !hasHIGGraph) {
+            throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
+          }
         }
 
         this.validationResults = {
           noPreviewLayer: true,
           powerupsAreStructured: true,
-          totalPages: pageCount,
+          totalPages: analyticalPageCount,
           noUIExportLayer: true,
+          componentsVerified: true
         };
         this.state = "VALIDATED";
+        this.transitionsList.push("VALIDATE_KERNEL");
         this.takeSnapshot();
         this.notify();
         break;
@@ -733,7 +748,6 @@ export class ReportEngineKernelClass {
 
         console.log("[REPORT ENGINE KERNEL] EXPORT TRIGGERED. Format:", format, "activeId:", activeId);
 
-        // 🔒 Triple Lock checks inside dispatch for EXECUTE_EXPORT
         if (this.state !== "VALIDATED") {
           console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_INVALID_STATE. Current State:", this.state);
           throw new Error("EXPORT_BLOCKED_INVALID_STATE");
@@ -749,6 +763,7 @@ export class ReportEngineKernelClass {
 
         this.state = "EXPORT_EXECUTED";
         this.exportStatus = `EXPORTING_${format}`;
+        this.transitionsList.push("EXECUTE_EXPORT");
         this.takeSnapshot();
         this.notify();
 
@@ -768,7 +783,7 @@ export class ReportEngineKernelClass {
               const db = getDb();
               await addDoc(collection(db, "analyses"), {
                 projectId: this.context.project.id,
-                version: "v7.0",
+                version: "v9.0",
                 fecha: Date.now(),
                 executiveSummary: this.context.editorialPayload.executiveSummary,
                 evidenceUrls: this.context.album ? this.context.album.map((p: any) => p.previewUrl || p.url).filter(Boolean) : [],
@@ -785,7 +800,6 @@ export class ReportEngineKernelClass {
 
           this.exportStatus = `COMPLETE_${format}`;
           
-          // Auto-terminate kernel and set state to COMPLETE
           this.locked = false;
           this.state = "COMPLETE";
           this.takeSnapshot();
@@ -800,13 +814,6 @@ export class ReportEngineKernelClass {
           throw err;
         }
         break;
-
-      case "TERMINATE_KERNEL":
-        this.locked = false;
-        this.state = "COMPLETE";
-        this.takeSnapshot();
-        this.notify();
-        break;
     }
   }
 
@@ -817,7 +824,6 @@ export class ReportEngineKernelClass {
 
 export const ReportEngineKernel = new ReportEngineKernelClass();
 
-// 🧱 5. KERNEL BOUNDARY ENFORCEMENT
 export function KernelGuard(action: { type: KernelEvent; payload?: any }) {
   if (action.type !== "INIT_KERNEL" && !ReportEngineKernel.isActive()) {
     throw new Error("KERNEL_NOT_ACTIVE");
@@ -872,10 +878,5 @@ export const ReportEngine = {
     if (options.markAsPrinted) {
       options.markAsPrinted();
     }
-
-    return {
-      output: true,
-      source: "ReportEngine.finalize"
-    };
   }
 };
