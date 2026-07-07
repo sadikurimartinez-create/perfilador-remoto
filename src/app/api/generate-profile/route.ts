@@ -19,6 +19,36 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function simplifyOsintData(data: any): any {
+  if (!data) return "Sin información OSINT.";
+  if (typeof data === "string") return data.slice(0, 1000);
+  if (Array.isArray(data)) {
+    return data.slice(0, 3).map((item: any) => ({
+      title: item.title || item.titulo || "",
+      snippet: item.snippet || item.resumen || item.description || ""
+    }));
+  }
+  if (typeof data === "object") {
+    const list = data.results || data.articles || data.news || data.items;
+    if (Array.isArray(list)) {
+      return list.slice(0, 3).map((item: any) => ({
+        title: item.title || item.titulo || "",
+        snippet: item.snippet || item.resumen || item.description || ""
+      }));
+    }
+  }
+  return JSON.stringify(data).slice(0, 1000);
+}
+
+function simplifySweeps(sweeps: any[]): any[] {
+  if (!Array.isArray(sweeps)) return [];
+  return sweeps.slice(0, 5).map(s => ({
+    engine: s.engine || "",
+    source: s.source || "",
+    data: typeof s.data === "string" ? s.data.slice(0, 300) : ""
+  }));
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -43,7 +73,7 @@ export async function POST(req: Request) {
       generalRisk = "BAJO";
     }
 
-    // 2. Construir el contexto para los prompts modulares
+    // 2. Construir el contexto simplificado para los prompts modulares para evitar latencia
     const ctx: ReportContext = {
       projectName,
       projectId,
@@ -51,17 +81,17 @@ export async function POST(req: Request) {
       analysisRadius: radius,
       geometryType: geometry,
       focusAreas: safeBody.focusAreas,
-      incidenciaLocal: safeBody.incidenciaLocal,
-      bibliografiaLocal: safeBody.bibliografiaLocal,
-      multimodalContext: safeBody.multimodalContext,
-      osintEngineData: safeBody.osintEngineData,
-      streetViews: safeBody.streetViews,
-      datosGobMxData: safeBody.datosGobMxData,
+      incidenciaLocal: safeBody.incidenciaLocal ? new Array(safeBody.incidenciaLocal.length).fill({}) : [],
+      bibliografiaLocal: typeof safeBody.bibliografiaLocal === "string" ? safeBody.bibliografiaLocal.slice(0, 500) : "",
+      multimodalContext: typeof safeBody.multimodalContext === "string" ? safeBody.multimodalContext.slice(0, 500) : "",
+      osintEngineData: simplifyOsintData(safeBody.osintEngineData),
+      streetViews: safeBody.streetViews ? safeBody.streetViews.slice(0, 5) : [],
+      datosGobMxData: null,
       linkedGangReport: safeBody.linkedGangReport,
-      sweeps: safeBody.sweeps,
-      sweepsComments: safeBody.sweepsComments,
-      photos: safeBody.photos,
-      analysisContext: safeBody.analysisContext
+      sweeps: simplifySweeps(safeBody.sweeps),
+      sweepsComments: typeof safeBody.sweepsComments === "string" ? safeBody.sweepsComments.slice(0, 500) : "",
+      photos: safeBody.photos ? safeBody.photos.slice(0, 5).map((p: any) => ({ ...p, dataUrl: "" })) : [],
+      analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : ""
     };
 
     // 3. Obtener cada uno de los prompts modulares
