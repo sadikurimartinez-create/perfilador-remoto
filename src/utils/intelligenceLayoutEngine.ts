@@ -336,6 +336,12 @@ export interface IntelligenceReportPayload {
   };
   executiveSummary: string;
   finalHypothesis: string;
+  mapsText?: string;
+  statsText?: string;
+  evidenceText?: string;
+  streetViewText?: string;
+  graphText?: string;
+  conclusionesText?: string;
 }
 
 /**
@@ -442,6 +448,9 @@ export const buildIntelligenceEditorialPayload = (
   const rawExecSummary = extractSection(rawContent, 1);
   const rawHypothesis = extractSection(rawContent, 3);
   const rawMapsText = extractSection(rawContent, 4);
+  const rawStatsText = extractSection(rawContent, 5);
+  const rawEvidenceText = extractSection(rawContent, 6);
+  const rawStreetViewText = extractSection(rawContent, 7);
   const rawOsintText = extractSection(rawContent, 8);
   const rawGraphText = extractSection(rawContent, 10);
   const rawConclusionsText = extractSection(rawContent, 11);
@@ -606,6 +615,17 @@ export const buildIntelligenceEditorialPayload = (
   // Photos
   const photoEvidence = album.filter(p => p.previewUrl || p.url).map((p, idx) => {
     const footer = getPhotoFooter(p, idx);
+    let photoDate = new Date().toLocaleDateString("es-MX");
+    if (p.createdAt) {
+      try {
+        photoDate = new Date(p.createdAt).toLocaleDateString("es-MX");
+      } catch (err) {
+        // Fallback standard
+      }
+    } else if (p.timestamp) {
+      photoDate = p.timestamp;
+    }
+
     return {
       id: p.id || `photo-${idx}`,
       dataUrl: p.previewUrl || p.url,
@@ -614,7 +634,10 @@ export const buildIntelligenceEditorialPayload = (
       factor: footer.factor,
       criminologicalInterpretation: "El análisis visual táctico documenta fallas críticas de iluminación e infraestructura que incrementan la vulnerabilidad perimetral.",
       relation: footer.relation,
-      riskLevel: footer.riskLevel
+      riskLevel: footer.riskLevel,
+      lat: p.lat || project?.latitude || 28.635300,
+      lng: p.lng || project?.longitude || -106.088900,
+      fecha: photoDate
     };
   });
 
@@ -820,7 +843,13 @@ export const buildIntelligenceEditorialPayload = (
     sweepsData,
     conclusiones,
     executiveSummary,
-    finalHypothesis
+    finalHypothesis,
+    mapsText: cleanTechnicalJargon(rawMapsText),
+    statsText: cleanTechnicalJargon(rawStatsText),
+    evidenceText: cleanTechnicalJargon(rawEvidenceText),
+    streetViewText: cleanTechnicalJargon(rawStreetViewText),
+    graphText: cleanTechnicalJargon(rawGraphText),
+    conclusionesText: cleanTechnicalJargon(rawConclusionsText)
   };
 };
 
