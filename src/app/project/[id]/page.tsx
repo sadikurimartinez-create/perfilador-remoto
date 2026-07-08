@@ -24,6 +24,8 @@ import {
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { exportToWord } from "@/lib/exportToWord";
+import { generatePdfProgrammatic } from "@/lib/reportEngine";
 
 type CloudAnalysis = {
   id: string;
@@ -36,6 +38,8 @@ type CloudAnalysis = {
   reportEngineOutput?: boolean;
   source?: string;
   summary?: string;
+  editorialPayload?: any;
+  briefing?: any;
 };
 
 export default function ProjectWorkspacePage() {
@@ -64,6 +68,63 @@ export default function ProjectWorkspacePage() {
       }
     }
     router.push(targetUrl);
+  };
+
+  const verifyAndPasswordCheck = async (): Promise<boolean> => {
+    if (!user || !user.username) {
+      alert("No hay ningún usuario autenticado en la sesión actual.");
+      return false;
+    }
+    const passwordEntered = window.prompt("Por favor, introduzca su contraseña de usuario para autorizar la eliminación:");
+    if (passwordEntered === null) return false;
+    if (!passwordEntered.trim()) {
+      alert("La contraseña no puede estar vacía.");
+      return false;
+    }
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const db = getDb();
+      const { getDocs, query, where, collection } = await import("firebase/firestore");
+      const q = query(
+        collection(db, "users"),
+        where("username", "==", user.username.trim())
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        alert("No se encontró el registro del usuario actual.");
+        return false;
+      }
+      const docSnap = snap.docs[0];
+      const data = docSnap.data() as { passwordHash?: string };
+      if (data.passwordHash !== passwordEntered) {
+        alert("Contraseña incorrecta. Autorización denegada.");
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error("Error al validar contraseña:", err);
+      alert("Error de comunicación al validar credenciales.");
+      return false;
+    }
+  };
+
+  const handleDeleteAnalysis = async (analysisId: string) => {
+    const verified = await verifyAndPasswordCheck();
+    if (!verified) return;
+
+    const confirm1 = window.confirm("⚠️ PRIMERA CONFIRMACIÓN: ¿Está totalmente seguro de eliminar definitivamente este dictamen oficial guardado de este expediente?");
+    if (!confirm1) return;
+
+    const confirm2 = window.confirm("🚨 SEGUNDA CONFIRMACIÓN DE SEGURIDAD: Esta acción es irreversible. ¿Confirmar eliminación definitiva?");
+    if (!confirm2) return;
+
+    try {
+      const db = getDb();
+      await deleteDoc(doc(db, "analyses", analysisId));
+      alert("El dictamen oficial ha sido eliminado correctamente.");
+    } catch (err: any) {
+      alert("Error al eliminar el dictamen: " + err.message);
+    }
   };
 
   const [geoInputId, setGeoInputId] = useState("");
@@ -370,76 +431,68 @@ export default function ProjectWorkspacePage() {
               {analyses.map((a) => (
                 <li
                   key={a.id}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-900/60 backdrop-blur-md px-3 py-2"
+                  className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-lg border border-slate-700/50 bg-slate-900/60 backdrop-blur-md p-4 text-xs"
                 >
-                  <div className="text-xs text-slate-300">
-                    <p className="font-medium">
-                      Dictamen Criminológico Ambiental Generado el{" "}
-                      <span className="font-mono tracking-tight text-blue-300">
-                        {new Date(a.createdAt).toLocaleString("es-MX", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                  <div className="space-y-1.5 text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-200">Fecha y Hora:</span>
+                      <span className="text-sky-400 font-mono">
+                        {new Date(a.createdAt).toLocaleString("es-MX")}
                       </span>
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Ordenado y guardado por:{" "}
-                      <span className="font-semibold text-slate-200 font-mono tracking-tight text-blue-300/90">
-                        {a.createdBy || "Usuario no identificado"}
-                      </span>
-                    </p>
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-200">Nombre del Autor:</span>
+                      <span className="text-slate-350 ml-1.5">{a.createdBy || "Desconocido"}</span>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setPreviewAnalysis(a)}
-                      className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm hover:bg-slate-600 transition-colors"
+                      onClick={async () => {
+                        try {
+                          if (!a.editorialPayload) {
+                            alert("Este expediente histórico no contiene el dictamen de Word para regenerar.");
+                            return;
+                          }
+                          await exportToWord(
+                            a.editorialPayload,
+                            project?.nombre || (project as any)?.name || 'Expediente',
+                            a.editorialPayload.projectId || project?.id || 'EXP',
+                            user
+                          );
+                        } catch (err: any) {
+                          alert("Error al generar Word: " + err.message);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-md transition active:scale-95"
                     >
-                      Vista previa
+                      📝 Generar Word
                     </button>
                     <button
                       type="button"
                       onClick={async () => {
-                        const db = getDb();
-                        await deleteDoc(doc(db, "analyses", a.id));
+                        try {
+                          if (!a.briefing) {
+                            alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
+                            return;
+                          }
+                          await generatePdfProgrammatic(a.briefing);
+                        } catch (err: any) {
+                          alert("Error al generar PDF: " + err.message);
+                        }
                       }}
-                      className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 px-3.5 py-2 text-xs font-bold text-white shadow-md transition active:scale-95"
                     >
-                      Borrar
+                      📄 Generar PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAnalysis(a.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-red-800 hover:bg-red-755 px-3.5 py-2 text-xs font-bold text-white shadow-md transition active:scale-95"
+                    >
+                      🗑️ Borrar
                     </button>
                   </div>
-                  {a.attachedPhotos && a.attachedPhotos.length > 0 && (
-                    <div className="mt-3 w-full">
-                      <h4 className="text-slate-400 text-sm font-bold mt-1 mb-2 border-b border-slate-700 pb-1">
-                        Anexo Fotográfico
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {a.attachedPhotos.map((url, idx) => (
-                          <div
-                            key={idx}
-                            className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video bg-black"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={url}
-                              alt={`Foto ${idx + 1} del expediente`}
-                              className="object-cover w-full h-full"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-white/30 font-black text-2xl tracking-widest -rotate-45 select-none text-center leading-tight drop-shadow">
-                                SSP AGS
-                                <br />
-                                CEIPOL
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </li>
               ))}
             </ul>
