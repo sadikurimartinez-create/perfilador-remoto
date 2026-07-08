@@ -274,6 +274,32 @@ export async function exportToWord(
   reportNumber?: string,
   user?: any
 ) {
+  // Pre-slicing / mutation to guarantee synthesis limits across the entire pipeline
+  if (payload.maps) {
+    payload.maps = payload.maps.map((m: any) => ({
+      ...m,
+      spatialFinding: m.spatialFinding ? m.spatialFinding.slice(0, 180) : "",
+      interpretation: m.interpretation ? m.interpretation.slice(0, 300) : "",
+      recommendation: m.recommendation ? m.recommendation.slice(0, 180) : ""
+    }));
+  }
+  if (payload.graphs) {
+    payload.graphs = payload.graphs.map((g: any) => ({
+      ...g,
+      finding: g.finding ? g.finding.slice(0, 180) : "",
+      relation: g.relation ? g.relation.slice(0, 120) : "",
+      interpretation: g.interpretation ? g.interpretation.slice(0, 240) : (g.explanation ? g.explanation.slice(0, 240) : "")
+    }));
+  }
+  if (payload.photoEvidence) {
+    payload.photoEvidence = payload.photoEvidence.map((p: any) => ({
+      ...p,
+      caption: p.caption ? p.caption.slice(0, 180) : "",
+      criminologicalInterpretation: p.criminologicalInterpretation ? p.criminologicalInterpretation.slice(0, 300) : "",
+      relation: p.relation ? p.relation.slice(0, 180) : ""
+    }));
+  }
+
   // CoverDataValidator, FinalReportConsistencyCheck & ExecutiveReportQualityGate
   try {
     const isFirestoreId = reportNumber ? (!reportNumber.includes("/") && reportNumber.length >= 15) : false;
