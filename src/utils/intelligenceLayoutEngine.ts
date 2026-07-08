@@ -354,7 +354,7 @@ export function summarizeEvidence(description: string): string {
     const truncated = cleaned.slice(0, 790);
     const lastPeriod = truncated.lastIndexOf(".");
     if (lastPeriod > 100) {
-      cleaned = truncated.slice(0, lastPeriod + 1) + " [Sintetizado]";
+      cleaned = truncated.slice(0, lastPeriod + 1) + "...";
     } else {
       cleaned = truncated + "...";
     }
