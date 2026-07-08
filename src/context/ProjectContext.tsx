@@ -523,35 +523,42 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (project.geometryType === "lineal") defaultTipo = "Corredor";
     else if (project.geometryType === "poligono") defaultTipo = "Interior";
 
-    // 3. Guardar metadatos en Firestore
-    const firestore = getDb();
-    const photosColRef = collection(firestore, "projects", project.id, "photos");
-    const photoDocData = {
-      url: downloadURL,
-      storagePath: snapshot.ref.fullPath,
-      lat,
-      lng,
-      projectId: project.id,
-      createdAt: Date.now(),
-      tipo: defaultTipo,
-      comentario: "",
-      gpsAccuracy: metadata?.gpsAccuracy ?? null,
-      gpsTimestamp: metadata?.gpsTimestamp ?? null,
-      gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",
-      exifLat: metadata?.exifLat ?? null,
-      exifLng: metadata?.exifLng ?? null,
-      gpsLat: metadata?.gpsLat ?? null,
-      gpsLng: metadata?.gpsLng ?? null,
-      diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
-      validado: metadata?.validado ?? false,
-    };
-    const photoDocRef = await addDoc(photosColRef, photoDocData);
+    let photoDocId = photoId;
 
-    // 4. Actualizar contador en el proyecto padre
-    const projectDocRef = doc(firestore, "projects", project.id);
-    await updateDoc(projectDocRef, {
-      photoCount: increment(1)
-    });
+    // 3. Guardar metadatos en Firestore (con fallback local ante cuotas agotadas)
+    try {
+      const firestore = getDb();
+      const photosColRef = collection(firestore, "projects", project.id, "photos");
+      const photoDocData = {
+        url: downloadURL,
+        storagePath: snapshot.ref.fullPath,
+        lat,
+        lng,
+        projectId: project.id,
+        createdAt: Date.now(),
+        tipo: defaultTipo,
+        comentario: "",
+        gpsAccuracy: metadata?.gpsAccuracy ?? null,
+        gpsTimestamp: metadata?.gpsTimestamp ?? null,
+        gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",
+        exifLat: metadata?.exifLat ?? null,
+        exifLng: metadata?.exifLng ?? null,
+        gpsLat: metadata?.gpsLat ?? null,
+        gpsLng: metadata?.gpsLng ?? null,
+        diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
+        validado: metadata?.validado ?? false,
+      };
+      const photoDocRef = await addDoc(photosColRef, photoDocData);
+      photoDocId = photoDocRef.id;
+
+      // 4. Actualizar contador en el proyecto padre
+      const projectDocRef = doc(firestore, "projects", project.id);
+      await updateDoc(projectDocRef, {
+        photoCount: increment(1)
+      });
+    } catch (err: any) {
+      console.warn("[ProjectContext] Falló la persistencia en Firestore (posible cuota agotada), agregando en memoria local:", err);
+    }
 
     // 5. Actualizar estado local para reflejar en UI
     addPhotoToAlbum({
@@ -570,9 +577,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng: metadata?.gpsLng ?? null,
       diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
       validado: metadata?.validado ?? false,
-    }, photoDocRef.id);
+    }, photoDocId);
 
-  }, [project, addPhotoToAlbum, isReadOnly]);
+    // Auto-seleccionar la foto en la lista activa para asegurar su exportación
+    setSelectedIds((prev) => {
+      if (prev.includes(photoDocId)) return prev;
+      return [...prev, photoDocId];
+    });
+
+  }, [project, addPhotoToAlbum, isReadOnly, setSelectedIds]);
 
   const uploadDocument = useCallback(async (file: File, context: string) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
