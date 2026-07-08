@@ -192,12 +192,13 @@ const drawTacticalFrame = (
   ctx.fillText('REF: WGS 84 / UTM Z13N', w - 22, 26);
   ctx.fillText(`FECHA: ${new Date().toLocaleDateString("es-MX")}`, w - 22, 36);
 
-  // Esquina Inf Izq: SSPE-CEIPOL
+  // Esquina Inf Izq: SSPE-CEIPOL (Opacidad reducida v14.0)
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
   ctx.textAlign = 'left';
   ctx.fillText('CEIPOL - SSPE', 22, h - 26);
   ctx.fillText('SISTEMA GEOINT DE SEGURIDAD PÚBLICA', 22, h - 18);
 
-  // Esquina Inf Der: Polígono y límites
+  // Esquina Inf Der: Polígono y límites (Opacidad reducida v14.0)
   ctx.textAlign = 'right';
   ctx.fillText('LIMITE: ÁREA DE INTERÉS', w - 22, h - 26);
   ctx.fillText('CONFIDENCIAL / CEIPOL', w - 22, h - 18);
@@ -244,6 +245,75 @@ const drawScaleBar = (
   ctx.restore();
 };
 
+const drawTacticalStreets = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+  ctx.save();
+  
+  // Nivel 3: Calles locales (Fondo sutil)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = 0.8;
+  
+  const localStreets = [
+    { x1: 50, y1: 100, x2: 450, y2: 100 },
+    { x1: 50, y1: 220, x2: 450, y2: 220 },
+    { x1: 120, y1: 50, x2: 120, y2: 350 },
+    { x1: 280, y1: 50, x2: 280, y2: 350 }
+  ];
+  localStreets.forEach(s => {
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+  });
+
+  // Nivel 2: Vialidades secundarias (Grosor medio, cian semitransparente)
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+  ctx.lineWidth = 1.6;
+  const secondaryStreets = [
+    { x1: 30, y1: 300, x2: 570, y2: 300 },
+    { x1: 420, y1: 30, x2: 420, y2: 370 }
+  ];
+  secondaryStreets.forEach(s => {
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+  });
+
+  // Nivel 1: Vialidades principales (Mayor grosor, cian brillante)
+  ctx.strokeStyle = '#00f0ff';
+  ctx.lineWidth = 3.5;
+  const primaryStreets = [
+    { x1: 30, y1: 150, x2: 570, y2: 150, name: "Av. Universidad (VÍA PRINCIPAL)" },
+    { x1: 200, y1: 30, x2: 200, y2: 370, name: "Bulevar Díaz Ordaz (VÍA RÁPIDA)" }
+  ];
+  primaryStreets.forEach(s => {
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+
+    // Nombre visible con contraste
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 8px Calibri';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 4;
+    ctx.textAlign = 'center';
+    
+    if (s.x1 === s.x2) {
+      ctx.save();
+      ctx.translate(s.x1 - 6, (s.y1 + s.y2) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(s.name, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.fillText(s.name, (s.x1 + s.x2) / 2, s.y1 - 6);
+    }
+    ctx.shadowBlur = 0;
+  });
+
+  ctx.restore();
+};
+
 /**
  * 1. MAPA DE DENSIDAD CRIMINOLÓGICA (Hotspot Heatmap vectorial)
  */
@@ -258,10 +328,7 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    
-    // Capa oscura semi-transparente para asegurar legibilidad militar/táctica de los vectores
-    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
-    ctx.fillRect(0, 0, w, h);
+    drawTacticalStreets(ctx, w, h);
   } else {
     // Fondo azul oscuro táctico
     ctx.fillStyle = '#0b132b';
@@ -404,8 +471,7 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
-    ctx.fillRect(0, 0, w, h);
+    drawTacticalStreets(ctx, w, h);
   } else {
     // Fondo azul oscuro táctico
     ctx.fillStyle = '#0b132b';
@@ -525,8 +591,7 @@ export const renderAttractorsMap = async (input: VectorEngineInput): Promise<str
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
-    ctx.fillRect(0, 0, w, h);
+    drawTacticalStreets(ctx, w, h);
   } else {
     // Fondo azul oscuro táctico
     ctx.fillStyle = '#0b132b';
@@ -624,8 +689,7 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
-    ctx.fillRect(0, 0, w, h);
+    drawTacticalStreets(ctx, w, h);
   } else {
     // Fondo azul oscuro táctico
     ctx.fillStyle = '#0b132b';

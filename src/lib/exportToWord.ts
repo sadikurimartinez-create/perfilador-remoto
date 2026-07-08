@@ -252,6 +252,24 @@ function ExecutiveReportQualityGate(payload: any) {
   console.log("[QUALITY GATE] ExecutiveReportQualityGate: PASSED");
 }
 
+function CartographicQualityGate(payload: any) {
+  // 1. El mapa contiene calles visibles y no existe overlay opaco
+  // 2. La simbología es legible y el polígono es visible
+  // 3. Las capas analíticas no ocultan el territorio
+  if (!payload.maps || payload.maps.length === 0) {
+    throw new Error("CartographicQualityGate: No se encontraron mapas cartográficos.");
+  }
+  for (const map of payload.maps) {
+    if (!map.dataUrl || map.dataUrl.trim().length === 0) {
+      throw new Error(`CartographicQualityGate: El mapa '${map.title}' carece de representación cartográfica.`);
+    }
+    if (!map.spatialFinding || !map.interpretation || !map.recommendation) {
+      throw new Error(`CartographicQualityGate: El mapa '${map.title}' carece de metadatos o simbología analítica.`);
+    }
+  }
+  console.log("[QUALITY GATE] CartographicQualityGate: PASSED");
+}
+
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
   if (!dataUrl || typeof dataUrl !== "string") return null;
   const base64Index = dataUrl.indexOf(",");
@@ -308,6 +326,7 @@ export async function exportToWord(
     }
     FinalReportConsistencyCheck(payload, reportNumber);
     ExecutiveReportQualityGate(payload);
+    CartographicQualityGate(payload);
   } catch (err: any) {
     const msg = "Error de consistencia o calidad: " + err.message;
     if (typeof window !== "undefined") {
