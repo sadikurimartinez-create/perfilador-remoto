@@ -1,4 +1,5 @@
 import { IntelligenceReportPayload, IntelligenceBriefing } from './intelligenceLayoutEngine';
+// Trigger Vercel deploy webhook manually via new commit
 
 /**
  * ReportQualityGate - Validador de consistencia y calidad institucional SSPE-CEIPOL
