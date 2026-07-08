@@ -30,8 +30,43 @@ export class ReportQualityGate {
       throw new Error("ReportQualityGate: El informe requiere obligatoriamente integrar Modelos Analíticos (Gráficas).");
     }
 
-    // Unir todo el texto del informe para auditoría profunda
-    const allText = JSON.stringify(payload);
+    // 3.5. Extraer únicamente los valores de texto de usuario (evitando claves JSON, URLs y base64)
+    const getAllTextValues = (obj: any): string[] => {
+      const values: string[] = [];
+      const recurse = (val: any) => {
+        if (typeof val === 'string') {
+          if (
+            !val.startsWith('data:image') && 
+            !val.startsWith('http') && 
+            !val.includes('firebasestorage') &&
+            !val.includes('google-analytics') &&
+            val.length < 10000 // Ignorar textos excesivamente largos que sean blobs/metadatos
+          ) {
+            values.push(val);
+          }
+        } else if (Array.isArray(val)) {
+          val.forEach(recurse);
+        } else if (val && typeof val === 'object') {
+          Object.keys(val).forEach(key => {
+            if (
+              key !== 'id' && 
+              key !== 'dataUrl' && 
+              key !== 'url' && 
+              key !== 'storagePath' &&
+              key !== 'projectId' &&
+              key !== 'evidenceId'
+            ) {
+              recurse(val[key]);
+            }
+          });
+        }
+      };
+      recurse(obj);
+      return values;
+    };
+
+    const textValues = getAllTextValues(payload);
+    const allText = textValues.join(" ");
 
     // 4. Hay Markdown residual (negritas, cursivas o backticks)
     const markdownPatterns = [
@@ -49,11 +84,11 @@ export class ReportQualityGate {
       /\[Hecho observado\]/i,
       /\[Inferencia analítica\]/i,
       /\[Sintetizado\]/i,
-      /PowerUp/i,
-      /OCR/i,
-      /st_dwithin/i,
-      /discovery\s+engine/i,
-      /grounding/i
+      /\bPowerUp\b/i,
+      /\bOCR\b/i,
+      /\bst_dwithin\b/i,
+      /\bdiscovery\s+engine\b/i,
+      /\bgrounding\b/i
     ];
     const hasForbidden = forbiddenPatterns.some(pattern => pattern.test(allText));
     if (hasForbidden) {
