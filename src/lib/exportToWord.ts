@@ -357,20 +357,52 @@ export async function exportToWord(
 
   if (payload.maps && payload.maps.length > 0) {
     for (const map of payload.maps) {
-      const dims = PageBalanceEngine.calculateDimensions(map.interpretation.length, 'map');
-      const imgRes = await getImageDimensionsAndBuffer(map.dataUrl, dims.width, dims.height);
+      const imgRes = await getImageDimensionsAndBuffer(map.dataUrl, 520, 340);
       if (imgRes) {
         elements.push(new Paragraph({ pageBreakBefore: true }));
+        
+        // Título del mapa centrado e institucional
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-            spacing: { before: 120, after: 120 }
+            children: [
+              new TextRun({
+                text: map.title.toUpperCase(),
+                bold: true,
+                size: 20,
+                color: "0D2B52",
+                font: "Calibri"
+              })
+            ],
+            spacing: { before: 100, after: 120 }
+          })
+        );
+        
+        // Mapa grande (75-80% de la página)
+        elements.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: imgRes.data, transformation: { width: 500, height: 320 } })],
+            spacing: { after: 140 }
+          })
+        );
+        
+        // Hallazgo operativo (máximo 3 líneas de texto)
+        const displayInterpretation = map.interpretation.length > 220
+          ? map.interpretation.slice(0, 217) + "..."
+          : map.interpretation;
+
+        elements.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: "HALLAZGO OPERATIVO: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: displayInterpretation, size: 18, color: "333333", font: "Calibri" })
+            ],
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 100 }
           })
         );
       }
-      elements.push(createSubtitle(`Interpretación Operacional del Mapa: ${map.title}`));
-      elements.push(createBodyText(map.interpretation));
     }
   }
 
@@ -381,22 +413,62 @@ export async function exportToWord(
 
   if (payload.graphs && payload.graphs.length > 0) {
     for (const graph of payload.graphs) {
-      const dims = PageBalanceEngine.calculateDimensions(graph.explanation.length + graph.finding.length, 'map');
-      const imgRes = await getImageDimensionsAndBuffer(graph.dataUrl, dims.width, dims.height);
+      // Dimensiones de las gráficas
+      const imgRes = await getImageDimensionsAndBuffer(graph.dataUrl, 420, 240);
       if (imgRes) {
         elements.push(new Paragraph({ pageBreakBefore: true }));
+        
+        // Título de la Gráfica
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-            spacing: { before: 120, after: 120 }
+            children: [
+              new TextRun({
+                text: graph.title.toUpperCase(),
+                bold: true,
+                size: 18,
+                color: "0D2B52",
+                font: "Calibri"
+              })
+            ],
+            spacing: { before: 100, after: 120 }
+          })
+        );
+        
+        // Gráfica
+        elements.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: imgRes.data, transformation: { width: 420, height: 240 } })],
+            spacing: { after: 140 }
+          })
+        );
+        
+        // Síntesis ejecutiva de la gráfica (HALLAZGO + IMPLICACIÓN, máximo 50 palabras en total)
+        const displayFinding = graph.finding.length > 130
+          ? graph.finding.slice(0, 127) + "..."
+          : graph.finding;
+        const displayImplication = graph.relation.length > 130
+          ? graph.relation.slice(0, 127) + "..."
+          : graph.relation;
+
+        elements.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: "HALLAZGO: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: displayFinding, size: 18, color: "333333", font: "Calibri" })
+            ],
+            spacing: { after: 80 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "IMPLICACIÓN OPERATIVA: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: displayImplication, size: 18, color: "333333", font: "Calibri" })
+            ],
+            spacing: { after: 100 }
           })
         );
       }
-      elements.push(createSubtitle(`Detalle Metodológico e Interpretación: ${graph.title}`));
-      elements.push(createBullet("Explicación técnica: ", graph.explanation));
-      elements.push(createBullet("Hallazgo relevante: ", graph.finding));
-      elements.push(createBullet("Relación con hipótesis: ", graph.relation));
     }
   }
 

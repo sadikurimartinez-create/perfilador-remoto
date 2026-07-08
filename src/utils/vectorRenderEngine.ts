@@ -28,6 +28,41 @@ const getHDCanvas = (width: number, height: number): { canvas: HTMLCanvasElement
   return { canvas, ctx };
 };
 
+const loadStaticMapImage = (
+  lat: number,
+  lng: number,
+  zoom: number,
+  w = 600,
+  h = 400
+): Promise<HTMLImageElement | null> => {
+  return new Promise((resolve) => {
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+    let url = "";
+    if (key) {
+      url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${w}x${h}&maptype=roadmap` +
+        `&style=element:geometry|color:0x1a2238` +
+        `&style=element:labels.text.fill|color:0x8a9ba8` +
+        `&style=element:labels.text.stroke|color:0x1a2238` +
+        `&style=feature:administrative|element:geometry|color:0x22335c` +
+        `&style=feature:road|element:geometry|color:0x2c3b59` +
+        `&style=feature:road|element:labels.text.fill|color:0xc4d1db` +
+        `&style=feature:water|element:geometry|color:0x0b132b` +
+        `&key=${key}`;
+    } else {
+      url = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=${w},${h}&z=${zoom}&l=map`;
+    }
+
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      console.warn("Failed to load static map image from:", url);
+      resolve(null);
+    };
+    img.src = url;
+  });
+};
+
 // Dibujar brújula táctica (Rosa de los Vientos) en mapas
 const drawTacticalCompass = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number) => {
   ctx.save();
@@ -181,31 +216,35 @@ const drawScaleBar = (
 /**
  * 1. MAPA DE DENSIDAD CRIMINOLÓGICA (Hotspot Heatmap vectorial)
  */
-export const renderDensityMap = (input: VectorEngineInput): string => {
+export const renderDensityMap = async (input: VectorEngineInput): Promise<string> => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
   const centerLat = input.latitude || 28.6353;
   const centerLng = input.longitude || -106.0889;
   
-  // Fondo azul oscuro táctico
-  ctx.fillStyle = '#0b132b';
-  ctx.fillRect(0, 0, w, h);
-  
-  // Rejilla cartográfica de fondo
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
-  for (let x = 40; x < w; x += 40) {
-    ctx.beginPath();
-    ctx.moveTo(x, 40);
-    ctx.lineTo(x, h - 40);
-    ctx.stroke();
-  }
-  for (let y = 40; y < h; y += 40) {
-    ctx.beginPath();
-    ctx.moveTo(40, y);
-    ctx.lineTo(w - 40, y);
-    ctx.stroke();
+  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
+  if (baseMapImg) {
+    ctx.drawImage(baseMapImg, 0, 0, w, h);
+    
+    // Capa oscura semi-transparente para asegurar legibilidad militar/táctica de los vectores
+    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    // Fondo azul oscuro táctico
+    ctx.fillStyle = '#0b132b';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Rejilla cartográfica de fondo
+    ctx.strokeStyle = '#1c2541';
+    ctx.lineWidth = 1;
+    for (let x = 40; x < w; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+    }
+    for (let y = 40; y < h; y += 40) {
+      ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
+    }
   }
   
   // Círculos concéntricos de radar de inteligencia
@@ -213,19 +252,6 @@ export const renderDensityMap = (input: VectorEngineInput): string => {
   ctx.beginPath();
   ctx.arc(w / 2, h / 2, 80, 0, Math.PI * 2);
   ctx.arc(w / 2, h / 2, 140, 0, Math.PI * 2);
-  ctx.stroke();
-  
-  // Trazado de calles ficticio del polígono
-  ctx.strokeStyle = '#22335c';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  // Calles principales
-  ctx.moveTo(100, 80); ctx.lineTo(500, 80);
-  ctx.moveTo(80, 200); ctx.lineTo(520, 200);
-  ctx.moveTo(120, 320); ctx.lineTo(480, 320);
-  ctx.moveTo(150, 60); ctx.lineTo(150, 340);
-  ctx.moveTo(300, 60); ctx.lineTo(300, 340);
-  ctx.moveTo(450, 60); ctx.lineTo(450, 340);
   ctx.stroke();
 
   // Dibujar zona de amortiguamiento (Buffer) del Perfil
@@ -282,18 +308,20 @@ export const renderDensityMap = (input: VectorEngineInput): string => {
   ctx.moveTo(w / 2, h / 2 - 15); ctx.lineTo(w / 2, h / 2 + 15);
   ctx.stroke();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico
-  ctx.fillStyle = '#64748b';
-  ctx.font = '8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText("Av. Rancho San Antonio", 160, 75);
-  ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-  ctx.fillText("Calle del Limite Norte", 160, 315);
-  
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-  ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
+  if (!baseMapImg) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText("Av. Rancho San Antonio", 160, 75);
+    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
+    ctx.fillText("Calle del Limite Norte", 160, 315);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
+    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  }
   
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 1: Densidad Criminológica Perimetral");
@@ -334,24 +362,33 @@ export const renderDensityMap = (input: VectorEngineInput): string => {
 /**
  * 2. MAPA DE CORREDORES Y MOVILIDAD TÁCTICA
  */
-export const renderMobilityMap = (input: VectorEngineInput): string => {
+export const renderMobilityMap = async (input: VectorEngineInput): Promise<string> => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
   const centerLat = input.latitude || 28.6353;
   const centerLng = input.longitude || -106.0889;
   
-  ctx.fillStyle = '#0b132b';
-  ctx.fillRect(0, 0, w, h);
-  
-  // Rejilla
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
-  for (let x = 40; x < w; x += 40) {
-    ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
-  }
-  for (let y = 40; y < h; y += 40) {
-    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
+  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
+  if (baseMapImg) {
+    ctx.drawImage(baseMapImg, 0, 0, w, h);
+    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    // Fondo azul oscuro táctico
+    ctx.fillStyle = '#0b132b';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Rejilla
+    ctx.strokeStyle = '#1c2541';
+    ctx.lineWidth = 1;
+    for (let x = 40; x < w; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+    }
+    for (let y = 40; y < h; y += 40) {
+      ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
+    }
   }
 
   // Corredores ficticios (Líneas vectoriales de colores con flechas)
@@ -367,18 +404,6 @@ export const renderMobilityMap = (input: VectorEngineInput): string => {
   ctx.moveTo(300, 60); ctx.lineTo(300, 340);
   ctx.stroke();
   ctx.restore();
-
-  // Calles de trazo fino
-  ctx.strokeStyle = '#22335c';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(100, 80); ctx.lineTo(500, 80);
-  ctx.moveTo(80, 200); ctx.lineTo(520, 200);
-  ctx.moveTo(120, 320); ctx.lineTo(480, 320);
-  ctx.moveTo(150, 60); ctx.lineTo(150, 340);
-  ctx.moveTo(300, 60); ctx.lineTo(300, 340);
-  ctx.moveTo(450, 60); ctx.lineTo(450, 340);
-  ctx.stroke();
 
   // Flechas de dirección delictiva
   const drawArrow = (fromx: number, fromy: number, tox: number, toy: number, color: string) => {
@@ -413,18 +438,20 @@ export const renderMobilityMap = (input: VectorEngineInput): string => {
   ctx.fillStyle = '#00f0ff';
   ctx.beginPath(); ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2); ctx.fill();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico
-  ctx.fillStyle = '#64748b';
-  ctx.font = '8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText("Av. Rancho San Antonio", 160, 75);
-  ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-  ctx.fillText("Calle del Limite Norte", 160, 315);
-  
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-  ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
+  if (!baseMapImg) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText("Av. Rancho San Antonio", 160, 75);
+    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
+    ctx.fillText("Calle del Limite Norte", 160, 315);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
+    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  }
 
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 2: Corredores de Movilidad y Escapes");
@@ -456,37 +483,34 @@ export const renderMobilityMap = (input: VectorEngineInput): string => {
 /**
  * 3. MAPA DE ATRACCIÓN Y FACTORES AMBIENTALES
  */
-export const renderAttractorsMap = (input: VectorEngineInput): string => {
+export const renderAttractorsMap = async (input: VectorEngineInput): Promise<string> => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
   const centerLat = input.latitude || 28.6353;
   const centerLng = input.longitude || -106.0889;
   
-  ctx.fillStyle = '#0b132b';
-  ctx.fillRect(0, 0, w, h);
-  
-  // Rejilla
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
-  for (let x = 40; x < w; x += 40) {
-    ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
+  if (baseMapImg) {
+    ctx.drawImage(baseMapImg, 0, 0, w, h);
+    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    // Fondo azul oscuro táctico
+    ctx.fillStyle = '#0b132b';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Rejilla
+    ctx.strokeStyle = '#1c2541';
+    ctx.lineWidth = 1;
+    for (let x = 40; x < w; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+    }
+    for (let y = 40; y < h; y += 40) {
+      ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
+    }
   }
-  for (let y = 40; y < h; y += 40) {
-    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
-  }
-
-  // Trazado de calles
-  ctx.strokeStyle = '#22335c';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(100, 80); ctx.lineTo(500, 80);
-  ctx.moveTo(80, 200); ctx.lineTo(520, 200);
-  ctx.moveTo(120, 320); ctx.lineTo(480, 320);
-  ctx.moveTo(150, 60); ctx.lineTo(150, 340);
-  ctx.moveTo(300, 60); ctx.lineTo(300, 340);
-  ctx.moveTo(450, 60); ctx.lineTo(450, 340);
-  ctx.stroke();
 
   // Zonas de atractores (Polígonos sombreados)
   ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
@@ -496,7 +520,7 @@ export const renderAttractorsMap = (input: VectorEngineInput): string => {
   ctx.rect(150, 80, 150, 120);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.6)';
   ctx.font = '8px monospace';
   ctx.fillText('ZONA A: ALTA CONCENTRACIÓN DE GIROS COMERCIALES', 158, 98);
 
@@ -506,25 +530,27 @@ export const renderAttractorsMap = (input: VectorEngineInput): string => {
   ctx.rect(300, 200, 150, 120);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = 'rgba(245, 158, 11, 0.4)';
+  ctx.fillStyle = 'rgba(245, 158, 11, 0.6)';
   ctx.fillText('ZONA B: LOTES BALDÍOS / FALTA ALUMBRADO', 308, 218);
 
   // Centro
   ctx.fillStyle = '#00f0ff';
   ctx.beginPath(); ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2); ctx.fill();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico
-  ctx.fillStyle = '#64748b';
-  ctx.font = '8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText("Av. Rancho San Antonio", 160, 75);
-  ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-  ctx.fillText("Calle del Limite Norte", 160, 315);
-  
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-  ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
+  if (!baseMapImg) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText("Av. Rancho San Antonio", 160, 75);
+    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
+    ctx.fillText("Calle del Limite Norte", 160, 315);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
+    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  }
 
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 3: Factores de Atracción y Censo Comercial");
@@ -556,37 +582,34 @@ export const renderAttractorsMap = (input: VectorEngineInput): string => {
 /**
  * 4. MAPA DE PROYECCIÓN PREDICTIVA A 6 MESES
  */
-export const renderPredictiveMap = (input: VectorEngineInput): string => {
+export const renderPredictiveMap = async (input: VectorEngineInput): Promise<string> => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
   const centerLat = input.latitude || 28.6353;
   const centerLng = input.longitude || -106.0889;
   
-  ctx.fillStyle = '#0b132b';
-  ctx.fillRect(0, 0, w, h);
-  
-  // Rejilla
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
-  for (let x = 40; x < w; x += 40) {
-    ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
+  if (baseMapImg) {
+    ctx.drawImage(baseMapImg, 0, 0, w, h);
+    ctx.fillStyle = 'rgba(11, 19, 43, 0.45)';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    // Fondo azul oscuro táctico
+    ctx.fillStyle = '#0b132b';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Rejilla
+    ctx.strokeStyle = '#1c2541';
+    ctx.lineWidth = 1;
+    for (let x = 40; x < w; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
+    }
+    for (let y = 40; y < h; y += 40) {
+      ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
+    }
   }
-  for (let y = 40; y < h; y += 40) {
-    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
-  }
-
-  // Trazado de calles
-  ctx.strokeStyle = '#22335c';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(100, 80); ctx.lineTo(500, 80);
-  ctx.moveTo(80, 200); ctx.lineTo(520, 200);
-  ctx.moveTo(120, 320); ctx.lineTo(480, 320);
-  ctx.moveTo(150, 60); ctx.lineTo(150, 340);
-  ctx.moveTo(300, 60); ctx.lineTo(300, 340);
-  ctx.moveTo(450, 60); ctx.lineTo(450, 340);
-  ctx.stroke();
 
   // Zona de expansión predictiva (Línea discontinua y degradado radial)
   const grad = ctx.createRadialGradient(w / 2 + 30, h / 2 - 20, 10, w / 2 + 30, h / 2 - 20, 130);
@@ -615,18 +638,20 @@ export const renderPredictiveMap = (input: VectorEngineInput): string => {
   ctx.fillStyle = '#00f0ff';
   ctx.beginPath(); ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2); ctx.fill();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico
-  ctx.fillStyle = '#64748b';
-  ctx.font = '8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText("Av. Rancho San Antonio", 160, 75);
-  ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-  ctx.fillText("Calle del Limite Norte", 160, 315);
-  
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-  ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
+  if (!baseMapImg) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText("Av. Rancho San Antonio", 160, 75);
+    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
+    ctx.fillText("Calle del Limite Norte", 160, 315);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
+    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
+  }
 
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 4: Proyección Predictiva de Incidencia");

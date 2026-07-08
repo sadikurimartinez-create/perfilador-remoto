@@ -597,7 +597,7 @@ export class ReportEngineKernelClass {
           throw new Error("DERIVE_LAYOUT_EXECUTION_ID_MISMATCH");
         }
 
-        const editorialPayload = buildIntelligenceEditorialPayload(
+        const editorialPayload = await buildIntelligenceEditorialPayload(
           this.context.content || "",
           this.context.album || [],
           this.context.mapSnapshots || [],

@@ -438,7 +438,7 @@ export function extractSection(content: string, secNum: number): string {
 /**
  * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v9.0)
  */
-export const buildIntelligenceEditorialPayload = (
+export const buildIntelligenceEditorialPayload = async (
   rawContent: string,
   album: any[],
   mapSnapshots: any[],
@@ -446,7 +446,7 @@ export const buildIntelligenceEditorialPayload = (
   project: any,
   reportNumber?: string,
   analystName?: string
-): IntelligenceReportPayload => {
+): Promise<IntelligenceReportPayload> => {
   const rawExecSummary = extractSection(rawContent, 1);
   const rawHypothesis = extractSection(rawContent, 3);
   const rawMapsText = extractSection(rawContent, 4);
@@ -559,25 +559,37 @@ export const buildIntelligenceEditorialPayload = (
   };
 
   // Maps (Generados vectorialmente a alta resolución de forma nativa)
+  const [
+    densityMapUrl,
+    mobilityMapUrl,
+    attractorsMapUrl,
+    predictiveMapUrl
+  ] = await Promise.all([
+    renderDensityMap(vectorInput),
+    renderMobilityMap(vectorInput),
+    renderAttractorsMap(vectorInput),
+    renderPredictiveMap(vectorInput)
+  ]);
+
   const maps = [
     {
       title: "1. DENSIDAD CRIMINOLÓGICA",
-      dataUrl: renderDensityMap(vectorInput),
+      dataUrl: densityMapUrl,
       interpretation: "Densidad de eventos delictivos georreferenciados en el área bajo análisis."
     },
     {
       title: "2. CORREDORES Y MOVILIDAD",
-      dataUrl: renderMobilityMap(vectorInput),
+      dataUrl: mobilityMapUrl,
       interpretation: "Análisis de corredores de movilidad y flujos delictivos detectados."
     },
     {
       title: "3. ATRACCIÓN Y FACTORES",
-      dataUrl: renderAttractorsMap(vectorInput),
+      dataUrl: attractorsMapUrl,
       interpretation: "Factores ambientales de atracción delictiva según censo comercial."
     },
     {
       title: "4. PROYECCIÓN A 6 MESES",
-      dataUrl: renderPredictiveMap(vectorInput),
+      dataUrl: predictiveMapUrl,
       interpretation: "Proyección predictiva de expansión de la actividad delictiva."
     }
   ];
