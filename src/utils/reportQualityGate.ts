@@ -13,6 +13,38 @@ export class ReportQualityGate {
     payload: IntelligenceReportPayload,
     briefing: IntelligenceBriefing
   ): void {
+    // SANITIZACIÓN ACTIVA: Limpiar programáticamente cualquier caracter de formato Markdown (*, _, `) en todos los textos del reporte
+    const sanitizeText = (text: string): string => {
+      if (!text) return "";
+      return text.replace(/[\*_`]/g, "").trim();
+    };
+
+    const cleanObjectMarkdown = (obj: any) => {
+      if (!obj) return;
+      if (Array.isArray(obj)) {
+        obj.forEach((item, idx) => {
+          if (typeof item === 'string') {
+            obj[idx] = sanitizeText(item);
+          } else if (item && typeof item === 'object') {
+            cleanObjectMarkdown(item);
+          }
+        });
+      } else if (typeof obj === 'object') {
+        Object.keys(obj).forEach(key => {
+          if (key !== 'id' && key !== 'dataUrl' && key !== 'url' && key !== 'storagePath' && key !== 'projectId') {
+            if (typeof obj[key] === 'string') {
+              obj[key] = sanitizeText(obj[key]);
+            } else if (obj[key] && typeof obj[key] === 'object') {
+              cleanObjectMarkdown(obj[key]);
+            }
+          }
+        });
+      }
+    };
+
+    cleanObjectMarkdown(payload);
+    cleanObjectMarkdown(briefing);
+
     // 1. Falta Street View
     const hasStreetView = !!payload.streetViewAnalysis && payload.streetViewAnalysis.length > 0;
     if (!hasStreetView) {
