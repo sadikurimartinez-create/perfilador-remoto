@@ -21,7 +21,7 @@ type FinalizeOptions = {
   selectedAnnexes?: any;
 };
 
-async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
+export async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const logoSsp = await loadPublicImageAsDataUrl('/logos/logo-ssp.png');
   const logoCeipol = await loadPublicImageAsDataUrl('/logos/logo-ceipol.png');
@@ -602,12 +602,14 @@ export class ReportEngineKernelClass {
           this.context.album || [],
           this.context.mapSnapshots || [],
           this.context.sweeps || [],
-          this.context.project
+          this.context.project,
+          this.context.reportNumber,
+          this.context.user?.name || this.context.user?.username
         );
 
         const briefing = buildIntelligenceBriefing(
           {
-            projectId: this.context.project.id,
+            projectId: this.context.reportNumber || this.context.project.id,
             projectName: this.context.project.nombre || this.context.project.name || 'Expediente',
             createdAt: new Date().toISOString(),
             geometryType: this.context.project.geometryType || 'polygon',

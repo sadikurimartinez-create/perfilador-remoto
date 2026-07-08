@@ -443,7 +443,9 @@ export const buildIntelligenceEditorialPayload = (
   album: any[],
   mapSnapshots: any[],
   sweeps: any[],
-  project: any
+  project: any,
+  reportNumber?: string,
+  analystName?: string
 ): IntelligenceReportPayload => {
   const rawExecSummary = extractSection(rawContent, 1);
   const rawHypothesis = extractSection(rawContent, 3);
@@ -456,9 +458,9 @@ export const buildIntelligenceEditorialPayload = (
   const rawConclusionsText = extractSection(rawContent, 11);
 
   const projectName = project?.nombre || project?.name || "Zona de Estudio";
-  const projectId = project?.id ? String(project.id) : "EXP-2026-XXXXX";
+  const projectId = reportNumber || (project?.id ? String(project.id) : "EXP-2026-XXXXX");
   const date = new Date().toLocaleDateString("es-MX");
-  const analyst = project?.analyst || "Analista CEIPOL Táctico";
+  const analyst = analystName || project?.analyst || "Analista CEIPOL Táctico";
   const geometryType = project?.geometryType || "polígono";
   const areaGeografica = project?.areaGeografica || "Aguascalientes, Ags, México";
 

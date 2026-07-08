@@ -8,7 +8,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
-import { ReportEngine, ReportEngineKernel, KernelGuard } from "@/lib/reportEngine";
+import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
+import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { runOSINTScan } from "../utils/osintEngine";
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
@@ -85,6 +86,23 @@ function readFileAsBase64(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+function getChapterLabel(ch: number): string {
+  const labels: Record<number, string> = {
+    1: "Executive Summary",
+    2: "Capítulo 1: Contexto del Análisis",
+    3: "Capítulo 2: Hipótesis Criminológica",
+    4: "Capítulo 3: Análisis Cartográfico",
+    5: "Capítulo 4: Análisis Estadístico",
+    6: "Capítulo 5: Evidencia Fotográfica",
+    7: "Capítulo 6: Street View Intelligence",
+    8: "Capítulo 7: Inteligencia OSINT",
+    9: "Capítulo 8: Actores y Pandillas",
+    10: "Capítulo 9: Grafo de Hipótesis",
+    11: "Capítulo 10: Conclusiones Operativas"
+  };
+  return labels[ch] || `Sección ${ch}`;
 }
 
 function ElapsedTime({ running }: { running: boolean }) {
@@ -436,6 +454,7 @@ export function PhotoAlbum({
     registerSweep,
     updateSweep,
     setActiveSweepForModal,
+    logAuditAction,
   } = useProject();
 
   const svContainerRef = useRef<HTMLDivElement | null>(null);
@@ -560,6 +579,8 @@ export function PhotoAlbum({
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [generationLogs, setGenerationLogs] = useState<string[]>([]);
+  const [generationChapter, setGenerationChapter] = useState<number>(0);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
   const [activeReportTab, setActiveReportTab] = useState<"edit" | "preview">("edit");
@@ -664,27 +685,46 @@ export function PhotoAlbum({
       .join("\n\n");
   }, [project?.sweeps]);
 
-  useEffect(() => {
-    if (user && !reportNumber) {
-      const u = user as any;
-      const n = u.nombre || "";
-      const ap = u.apellidoPaterno || "";
-      const am = u.apellidoMaterno || "";
-      let initials = "USR";
-      if (n || ap || am) {
-        initials = `${n.charAt(0) || ""}${ap.charAt(0) || ""}${am.charAt(0) || ""}`.toUpperCase();
-      } else if (u.username) {
-        initials = u.username.substring(0, 3).toUpperCase();
-      }
+  const getNextReportNumber = async (projId: string) => {
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const db = getDb();
+      const { getDocs, query, where, collection } = await import("firebase/firestore");
       
       const now = new Date();
       const dd = String(now.getDate()).padStart(2, '0');
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const yyyy = now.getFullYear();
+      const dateStr = `${dd}${mm}${yyyy}`;
       
-      setReportNumber(`${initials}/${dd}${mm}${yyyy}/01`);
+      const q = query(collection(db, "dossiers"), where("projectId", "==", projId));
+      const snap = await getDocs(q);
+      const count = snap.size;
+      
+      if (count === 0) {
+        return `${dateStr}/001`;
+      } else {
+        return `${dateStr}/001.${count}`;
+      }
+    } catch (err) {
+      console.error("Error calculating next report number:", err);
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      return `${dd}${mm}${yyyy}/001`;
     }
-  }, [user, reportNumber]);
+  };
+
+  useEffect(() => {
+    if (project?.id) {
+      const loadNextReportNum = async () => {
+        const num = await getNextReportNumber(project.id);
+        setReportNumber(num);
+      };
+      void loadNextReportNum();
+    }
+  }, [project?.id, historyDossiers.length]);
 
   useEffect(() => {
     if (project && project.reportSummary && !reportSummary) {
@@ -961,6 +1001,13 @@ const hasMinimumPhotos =
     setShowConfigModal(false);
     setError(null);
     setIsGeneratingAI(true);
+    const addLog = (msg: string) => {
+      setGenerationLogs((prev) => [...prev, `[${new Date().toLocaleTimeString("es-MX")}] ${msg}`]);
+    };
+    setGenerationLogs([]);
+    setGenerationChapter(0);
+    addLog("Iniciando procesamiento del Dictamen Técnico de Inteligencia...");
+    let hasError = false;
     try {
       const photosPayload = await Promise.all(
         selected.map(async (p) => {
@@ -1006,6 +1053,7 @@ const hasMinimumPhotos =
         }
       };
 
+      addLog("Llamando APIs de georreferenciación táctica y análisis territorial...");
       console.log("[confirmAndGenerateProfile] 1. Inicializando análisis y llamando APIs concurrentes...");
       setAiProfile("Inicializando análisis y consultando bases cartográficas...");
 
@@ -1044,6 +1092,7 @@ const hasMinimumPhotos =
         osintPromise
       ]);
 
+      addLog("APIs territoriales, de incidencia y OSINT resueltas correctamente.");
       console.log("[confirmAndGenerateProfile] 2. APIs iniciales resueltas.");
 
       let currentAnalysisResult = analysisResult;
@@ -1095,9 +1144,10 @@ const hasMinimumPhotos =
         let data: any = null;
         const totalChapters = 11;
 
-        console.log("[confirmAndGenerateProfile] 3. Iniciando bucle de generación de 11 capítulos con la IA...");
+        addLog("Iniciando bucle de generación de 11 capítulos con la IA...");
         for (let ch = 1; ch <= totalChapters; ch++) {
-          console.log(`[confirmAndGenerateProfile] Generando Capítulo ${ch} de ${totalChapters}...`);
+          setGenerationChapter(ch);
+          addLog(`Solicitando a la IA: ${getChapterLabel(ch)} (Sección ${ch} de 11)...`);
           setAiProfile(`Generando informe de geointeligencia... Capítulo ${ch} de ${totalChapters}`);
 
           let res: Response | null = null;
@@ -1135,8 +1185,10 @@ const hasMinimumPhotos =
                 break;
               }
 
+              addLog(`⚠️ Intento ${attempt} fallido con status ${res.status}.`);
               console.warn(`[confirmAndGenerateProfile] Intento ${attempt} fallido con status ${res.status}.`);
             } catch (err) {
+              addLog(`⚠️ Intento ${attempt} fallido por error de red/fetch.`);
               console.warn(`[confirmAndGenerateProfile] Intento ${attempt} arrojó error de red/fetch:`, err);
               if (attempt === retries) {
                 throw err;
@@ -1172,9 +1224,12 @@ const hasMinimumPhotos =
             chunkMarkdown = chunkMarkdown.replace(/^```\s*/, "").replace(/\s*```$/g, "").trim();
           }
 
+          addLog(`✓ ${getChapterLabel(ch)} generado con éxito.`);
           finalMarkdown += chunkMarkdown + "\n\n";
         }
 
+        addLog("Generación de capítulos completada con éxito.");
+        addLog("Procesando carátula e integraciones documentales...");
         console.log("[confirmAndGenerateProfile] 4. Generación con IA finalizada. Procesando carátula e integraciones...");
         finalMarkdown = finalMarkdown.trim();
 
@@ -1283,25 +1338,34 @@ const hasMinimumPhotos =
           time: now.toLocaleTimeString("es-MX"),
           user: user ? `${user.username} (${(user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Administrador" : "Analista"})` : "Usuario"
         });
+        addLog("Dictamen generado y archivado de forma exitosa.");
         setShowReportModal(true);
       } catch (err) {
-          console.error("ERROR REAL PERFILADOR:", err);
-        
-          const rawMessage =
-            err instanceof Error ? err.message : "Error al generar el perfil criminológico con IA.";
-          const lower = rawMessage.toLowerCase();
-          const isQuotaError =
-            lower.includes("429") ||
-            lower.includes("too many requests") ||
-            lower.includes("quota");
+        hasError = true;
+        console.error("ERROR REAL PERFILADOR:", err);
+      
+        const rawMessage =
+          err instanceof Error ? err.message : "Error al generar el perfil criminológico con IA.";
+        const lower = rawMessage.toLowerCase();
+        const isQuotaError =
+          lower.includes("429") ||
+          lower.includes("too many requests") ||
+          lower.includes("quota");
 
-          setError(
-            isQuotaError
-              ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
-              : `Error de Cuartel General: ${rawMessage}`
-          );
+        const finalErrMsg = isQuotaError
+          ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
+          : `Error de Cuartel General: ${rawMessage}`;
+
+        setError(finalErrMsg);
+        addLog(`🚨 ERROR CRÍTICO: ${finalErrMsg}`);
+      } finally {
+        if (!hasError) {
+          setIsGeneratingAI(false);
         }
-    } finally {
+      }
+    } catch (outerErr: any) {
+      console.error("Outer generation error:", outerErr);
+      setError(outerErr.message || "Error al inicializar la generación.");
       setIsGeneratingAI(false);
     }
   };
@@ -1319,6 +1383,11 @@ const hasMinimumPhotos =
   };
 
   const handleSaveExpediente = async () => {
+    const kernelContext = ReportEngineKernel.getContext();
+    if (!kernelContext || !kernelContext.editorialPayload) {
+      alert("⚠️ Por favor, genere el dictamen con la IA antes de guardarlo en la bitácora institucional.");
+      return;
+    }
     setIsSavingExpediente(true);
     try {
       const { getDb } = await import("@/lib/firebase");
@@ -1336,7 +1405,9 @@ const hasMinimumPhotos =
         version: "v9.0",
         componentes: activeComponents,
         fuentes: (project?.sweeps || []).map((s: any) => s.engine || s.name).filter(Boolean),
-        visualsCount: (album || []).length + (mapSnapshots || []).length
+        visualsCount: (album || []).length + (mapSnapshots || []).length,
+        editorialPayload: kernelContext.editorialPayload,
+        briefing: kernelContext.briefing || null
       };
 
       await addDoc(collection(db, "dossiers"), dataToSave);
@@ -1346,6 +1417,75 @@ const hasMinimumPhotos =
       alert("No se pudo guardar el expediente.");
     } finally {
       setIsSavingExpediente(false);
+    }
+  };
+
+  const verifyAndPasswordCheck = async (): Promise<boolean> => {
+    if (!user || !user.username) {
+      alert("No hay ningún usuario autenticado en la sesión actual.");
+      return false;
+    }
+    const passwordEntered = window.prompt("Por favor, introduzca su contraseña de usuario para autorizar la eliminación:");
+    if (passwordEntered === null) return false;
+    if (!passwordEntered.trim()) {
+      alert("La contraseña no puede estar vacía.");
+      return false;
+    }
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const db = getDb();
+      const { getDocs, query, where, collection } = await import("firebase/firestore");
+      const q = query(
+        collection(db, "users"),
+        where("username", "==", user.username.trim())
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        alert("No se encontró el registro del usuario actual.");
+        return false;
+      }
+      const docSnap = snap.docs[0];
+      const data = docSnap.data() as { passwordHash?: string };
+      if (data.passwordHash !== passwordEntered) {
+        alert("Contraseña incorrecta. Autorización denegada.");
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error("Error al validar contraseña:", err);
+      alert("Error de comunicación al validar credenciales.");
+      return false;
+    }
+  };
+
+  const handleDeleteDossier = async (dossierId: string) => {
+    const verified = await verifyAndPasswordCheck();
+    if (!verified) return;
+
+    const confirm1 = window.confirm("⚠️ PRIMERA CONFIRMACIÓN: ¿Está totalmente seguro de eliminar definitivamente este dictamen oficial de la bitácora institucional?");
+    if (!confirm1) return;
+
+    const confirm2 = window.confirm("🚨 SEGUNDA CONFIRMACIÓN DE SEGURIDAD: Esta acción es irreversible y se registrará en la bitácora de auditoría. ¿Confirmar eliminación definitiva?");
+    if (!confirm2) return;
+
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const db = getDb();
+      const { deleteDoc, doc } = await import("firebase/firestore");
+      await deleteDoc(doc(db, "dossiers", dossierId));
+      
+      await logAuditAction({
+        action: "ELIMINAR_DICTAMEN_HISTORIAL",
+        module: "Expedientes",
+        projectId: project?.id || "EXP",
+        projectName: project?.nombre || "EXP",
+        details: `Eliminado dictamen guardado ID ${dossierId} por el analista ${user?.username}.`
+      });
+
+      alert("El dictamen oficial ha sido eliminado correctamente.");
+      setHistoryDossiers(prev => prev.filter(h => h.id !== dossierId));
+    } catch (err: any) {
+      alert("Error al eliminar el dictamen: " + err.message);
     }
   };
 
@@ -2384,9 +2524,13 @@ const hasMinimumPhotos =
                 const data = await getScinceData(centerLat, centerLng);
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
-                  setAnalysisContext((prev) => prev ? `${prev}\n\n${newContext}` : newContext);
-                  setIsAnalysisContextAudited(false);
-                  alert(`Consulta SCINCE finalizada. ${data.viviendasDeshabitadas} casas deshabitadas detectadas en la cuadra.`);
+                  await registerSweep({
+                    engine: "Población de Cuadra (SCINCE)",
+                    source: "INEGI SCINCE",
+                    type: "Directa",
+                    relevance: "Medio",
+                    data: newContext
+                  });
                 } else {
                   setError(data.error || "Error al consultar INEGI SCINCE.");
                 }
@@ -4164,15 +4308,65 @@ const hasMinimumPhotos =
                 <p className="text-xs text-slate-400 italic">No hay expedientes registrados en el historial de este proyecto.</p>
               ) : (
                 historyDossiers.map((h) => (
-                  <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-200">Fecha: {new Date(h.fecha).toLocaleString("es-MX")}</span>
-                      <span className="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{h.version}</span>
+                  <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+                    <div className="space-y-1.5 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-200">Fecha y Hora:</span>
+                        <span className="text-sky-400 font-mono">{new Date(h.fecha).toLocaleString("es-MX")}</span>
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-200">Nombre del Autor:</span>
+                        <span className="text-slate-300 ml-1.5">{h.analyst || "Desconocido"}</span>
+                      </div>
                     </div>
-                    <p className="text-slate-350"><strong>Analista:</strong> {h.analyst}</p>
-                    <p className="text-slate-350"><strong>Polígono:</strong> {h.poligono}</p>
-                    <p className="text-slate-350"><strong>Componentes:</strong> {h.componentes?.join(", ") || "Ninguno"}</p>
-                    <p className="text-slate-350"><strong>Fuentes:</strong> {h.fuentes?.join(", ") || "Ninguna"}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            if (!h.editorialPayload) {
+                              alert("Este expediente histórico no contiene el dictamen de Word para regenerar.");
+                              return;
+                            }
+                            await exportToWord(
+                              h.editorialPayload,
+                              h.poligono || 'Expediente',
+                              h.projectId || 'EXP',
+                              user
+                            );
+                          } catch (err: any) {
+                            alert("Error al generar Word: " + err.message);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded text-[10px] font-bold transition shadow"
+                      >
+                        📝 Generar Word
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            if (!h.briefing) {
+                              alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
+                              return;
+                            }
+                            await generatePdfProgrammatic(h.briefing);
+                          } catch (err: any) {
+                            alert("Error al generar PDF: " + err.message);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded text-[10px] font-bold transition shadow"
+                      >
+                        📄 Generar PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDossier(h.id)}
+                        className="px-2.5 py-1.5 bg-red-850 hover:bg-red-750 text-white rounded text-[10px] font-bold transition shadow"
+                      >
+                        🗑️ Borrar
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -4248,6 +4442,73 @@ const hasMinimumPhotos =
                 Confirmar Eliminación
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* VENTANA DE PROCESAMIENTO DE DICTAMEN IA (CONSOLA DE CAPÍTULOS) */}
+      {isGeneratingAI && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 print:hidden">
+          <div role="dialog" aria-modal="true" className="w-full max-w-2xl bg-slate-950 border border-sky-900/50 rounded-xl p-6 shadow-2xl space-y-4 text-left">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-black text-sky-400 uppercase tracking-widest flex items-center gap-2">
+                ⚙️ PROCESAMIENTO DE DICTAMEN IA - GEOINT v8.0
+              </h3>
+              <div className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 bg-sky-500 rounded-full animate-ping"></span>
+                <span className="text-[10px] text-sky-400 font-bold uppercase">PROCESANDO</span>
+              </div>
+            </div>
+
+            {/* Medidor / Progress Bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px] text-slate-400 font-semibold">
+                <span>Avance de Capítulos: {generationChapter} / 11</span>
+                <span>{Math.round((generationChapter / 11) * 100)}%</span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
+                <div 
+                  className="bg-gradient-to-r from-sky-600 to-indigo-600 h-full transition-all duration-500"
+                  style={{ width: `${Math.round((generationChapter / 11) * 100)}%` }}
+                ></div>
+              </div>
+              <p className="text-[11px] text-sky-400/90 font-bold italic animate-pulse mt-1">
+                {generationChapter > 0 ? `Generando: ${getChapterLabel(generationChapter)}` : "Inicializando consulta cartográfica..."}
+              </p>
+            </div>
+
+            {/* Consola Terminal */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Bitácora en Tiempo Real (Consola)</label>
+              <div className="w-full h-64 bg-slate-900 border border-slate-800 rounded-lg p-3 overflow-y-auto font-mono text-[10px] text-emerald-400 space-y-1 leading-relaxed">
+                {generationLogs.map((log, index) => (
+                  <div key={index} className="whitespace-pre-wrap">
+                    {log}
+                  </div>
+                ))}
+                {/* Auto Scroll Anchor */}
+                <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })}></div>
+              </div>
+            </div>
+
+            {/* Footer / Botones */}
+            <div className="flex justify-end pt-2 border-t border-slate-850">
+              <p className="text-[9px] text-slate-500 mr-auto flex items-center">
+                * Por favor, no cierre esta ventana hasta finalizar.
+              </p>
+              {error && (
+                <button
+                  type="button"
+                  onClick={() => { setIsGeneratingAI(false); setError(null); }}
+                  className="px-4 py-2 bg-red-950/40 border border-red-900 text-red-300 text-xs font-bold rounded-lg hover:bg-red-900/40 transition active:scale-95"
+                >
+                  Cerrar por Error
+                </button>
+              )}
+            </div>
+
           </div>
         </div>
       )}
