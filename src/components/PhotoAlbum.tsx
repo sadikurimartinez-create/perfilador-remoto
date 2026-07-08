@@ -1123,7 +1123,7 @@ const hasMinimumPhotos =
               sweepsComments: sweepsComments,
               chapter: ch
             }),
-          }, 20000);
+          }, 55000);
 
           if (!res.ok) {
             const text = await res.text().catch(() => "");
