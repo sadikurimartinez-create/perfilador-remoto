@@ -581,6 +581,7 @@ export function PhotoAlbum({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [generationLogs, setGenerationLogs] = useState<string[]>([]);
   const [generationChapter, setGenerationChapter] = useState<number>(0);
+  const [isSweepsListExpanded, setIsSweepsListExpanded] = useState(true);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
   const [activeReportTab, setActiveReportTab] = useState<"edit" | "preview">("edit");
@@ -3633,78 +3634,86 @@ const hasMinimumPhotos =
 
                   return (
                     <>
-                      <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider border-b border-slate-800 pb-3">
-                        Historial de Barridos Realizados ({totalSweeps})
+                      <h3 
+                        onClick={() => setIsSweepsListExpanded(!isSweepsListExpanded)}
+                        className="text-sm font-black text-slate-200 uppercase tracking-wider border-b border-slate-800 pb-3 flex items-center justify-between cursor-pointer select-none"
+                      >
+                        <span>Historial de Barridos Realizados ({totalSweeps})</span>
+                        <span className="text-slate-400 text-sm hover:text-white transition-all transform duration-250">
+                          {isSweepsListExpanded ? "▲" : "▼"}
+                        </span>
                       </h3>
 
-                      {totalSweeps === 0 ? (
-                        <div className="p-8 text-center text-xs text-slate-500 italic">
-                          No se han registrado barridos en este expediente. Utilice las herramientas del álbum, mapas o el panel de pandillas para realizar barridos.
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 text-[9px]">
-                                <th className="p-3">Motor / Tipo</th>
-                                <th className="p-3">Fuente</th>
-                                <th className="p-3">Tipo de Int.</th>
-                                <th className="p-3">Relevancia</th>
-                                <th className="p-3">Fecha</th>
-                                <th className="p-3">Estado / Detalle</th>
-                                {!isReadOnly && <th className="p-3 text-right">Acciones</th>}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-850 text-slate-200">
-                              {sweeps.map((s: any) => (
-                                <tr key={s.id} className="hover:bg-slate-950/40 transition-colors">
-                                  <td className="p-3">
-                                    <div className="font-extrabold">{s.engine}</div>
-                                    <div className="text-[9px] text-slate-500 font-mono mt-0.5">ID: {s.id}</div>
-                                  </td>
-                                  <td className="p-3">
-                                    <span className="font-mono text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 px-2 py-0.5 rounded text-[10px]">{s.source}</span>
-                                  </td>
-                                  <td className="p-3 font-semibold text-slate-400">{s.type}</td>
-                                  <td className="p-3">{getRelevanceBadgeLocal(s.relevance)}</td>
-                                  <td className="p-3 font-mono text-[10px] text-slate-400">
-                                    {new Date(s.timestamp).toLocaleString("es-MX", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit"
-                                    })}
-                                  </td>
-                                  <td className="p-3 space-y-1">
-                                    {getStatusBadgeLocal(s.status)}
-                                    {s.status === "Rechazado" && s.justification && (
-                                      <div className="text-[10px] text-red-300 bg-red-950/30 border border-red-900/30 p-2 rounded-lg mt-1 max-w-xs whitespace-pre-wrap leading-relaxed">
-                                        <span className="font-black">Justificación:</span> {s.justification}
-                                      </div>
-                                    )}
-                                    {s.status === "Integrado" && s.context && (
-                                      <div className="text-[10px] text-slate-300 bg-slate-950 border border-slate-850 p-2 rounded-lg mt-1 max-w-xs whitespace-pre-wrap leading-relaxed">
-                                        <span className="font-bold text-slate-400">Contexto:</span> {s.context}
-                                      </div>
-                                    )}
-                                  </td>
-                                  {!isReadOnly && (
-                                    <td className="p-3 text-right">
-                                      <button
-                                        type="button"
-                                        onClick={() => setActiveSweepForModal(s)}
-                                        className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition-all border border-slate-750"
-                                      >
-                                        ✏️ Modificar
-                                      </button>
-                                    </td>
-                                  )}
+                      {isSweepsListExpanded && (
+                        totalSweeps === 0 ? (
+                          <div className="p-8 text-center text-xs text-slate-500 italic">
+                            No se han registrado barridos en este expediente. Utilice las herramientas del álbum, mapas o el panel de pandillas para realizar barridos.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 text-[9px]">
+                                  <th className="p-3">Motor / Tipo</th>
+                                  <th className="p-3">Fuente</th>
+                                  <th className="p-3">Tipo de Int.</th>
+                                  <th className="p-3">Relevancia</th>
+                                  <th className="p-3">Fecha</th>
+                                  <th className="p-3">Estado / Detalle</th>
+                                  {!isReadOnly && <th className="p-3 text-right">Acciones</th>}
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                              </thead>
+                              <tbody className="divide-y divide-slate-850 text-slate-200">
+                                {sweeps.map((s: any) => (
+                                  <tr key={s.id} className="hover:bg-slate-950/40 transition-colors">
+                                    <td className="p-3">
+                                      <div className="font-extrabold">{s.engine}</div>
+                                      <div className="text-[9px] text-slate-500 font-mono mt-0.5">ID: {s.id}</div>
+                                    </td>
+                                    <td className="p-3">
+                                      <span className="font-mono text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 px-2 py-0.5 rounded text-[10px]">{s.source}</span>
+                                    </td>
+                                    <td className="p-3 font-semibold text-slate-400">{s.type}</td>
+                                    <td className="p-3">{getRelevanceBadgeLocal(s.relevance)}</td>
+                                    <td className="p-3 font-mono text-[10px] text-slate-400">
+                                      {new Date(s.timestamp).toLocaleString("es-MX", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit"
+                                      })}
+                                    </td>
+                                    <td className="p-3 space-y-1">
+                                      {getStatusBadgeLocal(s.status)}
+                                      {s.status === "Rechazado" && s.justification && (
+                                        <div className="text-[10px] text-red-300 bg-red-950/30 border border-red-900/30 p-2 rounded-lg mt-1 max-w-xs whitespace-pre-wrap leading-relaxed">
+                                          <span className="font-black">Justificación:</span> {s.justification}
+                                        </div>
+                                      )}
+                                      {s.status === "Integrado" && s.context && (
+                                        <div className="text-[10px] text-slate-300 bg-slate-950 border border-slate-850 p-2 rounded-lg mt-1 max-w-xs whitespace-pre-wrap leading-relaxed">
+                                          <span className="font-bold text-slate-400">Contexto:</span> {s.context}
+                                        </div>
+                                      )}
+                                    </td>
+                                    {!isReadOnly && (
+                                      <td className="p-3 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveSweepForModal(s)}
+                                          className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition-all border border-slate-750"
+                                        >
+                                          ✏️ Modificar
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
                       )}
                     </>
                   );
