@@ -765,27 +765,31 @@ export class ReportEngineKernelClass {
           }
 
           if (this.context.user && this.context.project.id) {
-            const db = getDb();
-            await addDoc(collection(db, "analyses"), {
-              projectId: this.context.project.id,
-              version: "v9.0",
-              fecha: Date.now(),
-              createdAt: Date.now(),
-              executiveSummary: this.context.editorialPayload.executiveSummary,
-              content: this.context.content || "",
-              evidenceUrls: this.context.album ? this.context.album.map((p: any) => p.previewUrl || p.url).filter(Boolean) : [],
-              attachedPhotos: this.context.album ? this.context.album.map((p: any) => p.previewUrl || p.url).filter(Boolean) : [],
-              author: this.context.user.username,
-              createdBy: this.context.user.username,
-              source: "ReportEngine.finalize",
-              reportEngineOutput: true,
-              summary: this.context.reportSummary || ""
-            });
+            try {
+              const db = getDb();
+              await addDoc(collection(db, "analyses"), {
+                projectId: this.context.project.id,
+                version: "v9.0",
+                fecha: Date.now(),
+                createdAt: Date.now(),
+                executiveSummary: this.context.editorialPayload.executiveSummary,
+                content: this.context.content || "",
+                evidenceUrls: this.context.album ? this.context.album.map((p: any) => p.previewUrl || p.url).filter(Boolean) : [],
+                attachedPhotos: this.context.album ? this.context.album.map((p: any) => p.previewUrl || p.url).filter(Boolean) : [],
+                author: this.context.user.username,
+                createdBy: this.context.user.username,
+                source: "ReportEngine.finalize",
+                reportEngineOutput: true,
+                summary: this.context.reportSummary || ""
+              });
 
-            const projectRef = doc(db, "projects", this.context.project.id);
-            await updateDoc(projectRef, {
-              photoCount: this.context.album?.length || 0,
-            });
+              const projectRef = doc(db, "projects", this.context.project.id);
+              await updateDoc(projectRef, {
+                photoCount: this.context.album?.length || 0,
+              });
+            } catch (dbErr) {
+              console.warn("[REPORT ENGINE KERNEL] Fallo no crítico guardando reporte en Firestore (se continúa con la exportación):", dbErr);
+            }
           }
 
           this.exportStatus = `COMPLETE_${format}`;
