@@ -31,42 +31,57 @@ export class ReportQualityGate {
       throw new Error("ReportQualityGate: El informe requiere obligatoriamente integrar Modelos Analíticos (Gráficas).");
     }
 
-    // 3.5. Extraer únicamente los valores de texto de usuario (evitando claves JSON, URLs y base64)
-    const getAllTextValues = (obj: any): string[] => {
+    // 3.5. Extraer únicamente los campos de texto de contenido editorial (capítulos de IA) para la auditoría
+    const getEditorialTextValues = (obj: IntelligenceReportPayload): string[] => {
       const values: string[] = [];
-      const recurse = (val: any) => {
+      
+      const add = (val: any) => {
         if (typeof val === 'string') {
-          if (
-            !val.startsWith('data:image') && 
-            !val.startsWith('http') && 
-            !val.includes('firebasestorage') &&
-            !val.includes('google-analytics') &&
-            val.length < 10000 // Ignorar textos excesivamente largos que sean blobs/metadatos
-          ) {
-            values.push(val);
-          }
+          values.push(val);
         } else if (Array.isArray(val)) {
-          val.forEach(recurse);
+          val.forEach(add);
         } else if (val && typeof val === 'object') {
-          Object.keys(val).forEach(key => {
-            if (
-              key !== 'id' && 
-              key !== 'dataUrl' && 
-              key !== 'url' && 
-              key !== 'storagePath' &&
-              key !== 'projectId' &&
-              key !== 'evidenceId'
-            ) {
-              recurse(val[key]);
-            }
-          });
+          Object.values(val).forEach(add);
         }
       };
-      recurse(obj);
+
+      // Agregar solo los campos de contenido editorial generados por la IA
+      add(obj.contextoTerritorial);
+      add(obj.executiveSummary);
+      add(obj.finalHypothesis);
+      add(obj.osintSynthesized);
+      add(obj.pandillasAnalysis);
+      add(obj.conclusiones);
+      
+      if (obj.maps) {
+        obj.maps.forEach(m => add(m.interpretation));
+      }
+      if (obj.graphs) {
+        obj.graphs.forEach(g => {
+          add(g.explanation);
+          add(g.finding);
+          add(g.relation);
+        });
+      }
+      if (obj.streetViewAnalysis) {
+        obj.streetViewAnalysis.forEach(s => {
+          add(s.observed);
+          add(s.criminologicalAnalysis);
+          add(s.relation);
+        });
+      }
+      if (obj.photoEvidence) {
+        obj.photoEvidence.forEach(p => {
+          add(p.caption);
+          add(p.criminologicalInterpretation);
+          add(p.relation);
+        });
+      }
+
       return values;
     };
 
-    const textValues = getAllTextValues(payload);
+    const textValues = getEditorialTextValues(payload);
     const allText = textValues.join(" ");
 
     // 4. Hay Markdown residual (negritas, cursivas o backticks) - Evaluado por cada valor de texto de forma aislada

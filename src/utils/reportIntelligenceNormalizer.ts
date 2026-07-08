@@ -89,6 +89,9 @@ export class ReportIntelligenceNormalizer {
 
     cleaned = cleaned.replace(/deterioro social/gi, "debilitamiento del tejido social y del control informal");
 
+    // 4. Limpieza absoluta de cualquier caracter de formato Markdown residual (*, _, `)
+    cleaned = cleaned.replace(/[\*_`]/g, "");
+
     // Limpieza de espacios y saltos de línea repetidos
     return cleaned.replace(/\n{3,}/g, "\n\n").trim();
   }
