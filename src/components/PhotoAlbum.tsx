@@ -1100,37 +1100,58 @@ const hasMinimumPhotos =
           console.log(`[confirmAndGenerateProfile] Generando Capítulo ${ch} de ${totalChapters}...`);
           setAiProfile(`Generando informe de geointeligencia... Capítulo ${ch} de ${totalChapters}`);
 
-          const res = await fetchWithTimeout("/api/generate-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              projectName: project?.nombre || "",
-              projectId: project?.id || "",
-              photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
-              analysisContext: (analysisContext || "") + svInstruction,
-              analysisRadius,
-              focusAreas,
-              incidenciaLocal,
-              bibliografiaLocal,
-              multimodalContext,
-              geometryType: project?.geometryType || "individual",
-              projectDescription: project?.descripcion || "",
-              osintEngineData: automaticOsintData,
-              streetViews: svData,
-              datosGobMxData: datosGobMxResult,
-              linkedGangReport: project?.linkedGangReport,
-              sweeps: dedupeSweeps((project as any)?.sweeps || []),
-              sweepsComments: sweepsComments,
-              chapter: ch
-            }),
-          }, 55000);
+          let res: Response | null = null;
+          let retries = 3;
+          let delayMs = 2000;
 
-          if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            let msg = `Error al generar el capítulo ${ch} de la IA`;
+          for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+              res = await fetchWithTimeout("/api/generate-profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  projectName: project?.nombre || "",
+                  projectId: project?.id || "",
+                  photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
+                  analysisContext: (analysisContext || "") + svInstruction,
+                  analysisRadius,
+                  focusAreas,
+                  incidenciaLocal,
+                  bibliografiaLocal,
+                  multimodalContext,
+                  geometryType: project?.geometryType || "individual",
+                  projectDescription: project?.descripcion || "",
+                  osintEngineData: automaticOsintData,
+                  streetViews: svData,
+                  datosGobMxData: datosGobMxResult,
+                  linkedGangReport: project?.linkedGangReport,
+                  sweeps: dedupeSweeps((project as any)?.sweeps || []),
+                  sweepsComments: sweepsComments,
+                  chapter: ch
+                }),
+              }, 55000);
+
+              if (res.ok) {
+                break;
+              }
+
+              console.warn(`[confirmAndGenerateProfile] Intento ${attempt} fallido con status ${res.status}.`);
+            } catch (err) {
+              console.warn(`[confirmAndGenerateProfile] Intento ${attempt} arrojó error de red/fetch:`, err);
+              if (attempt === retries) {
+                throw err;
+              }
+            }
+            await new Promise(r => setTimeout(r, delayMs));
+            delayMs *= 1.5;
+          }
+
+          if (!res || !res.ok) {
+            const text = res ? await res.text().catch(() => "") : "";
+            let msg = `Error al generar el capítulo ${ch} de la IA tras varios reintentos`;
             try {
               const json = JSON.parse(text) as { error?: string };
-              if (json.error) msg = json.error;
+              if (json && json.error) msg = json.error;
             } catch {}
             throw new Error(msg);
           }
