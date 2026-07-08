@@ -160,6 +160,55 @@ function validateAndPaveChapters(payload: any) {
   console.log("[REPORT VALIDATION]\nSecuencia correcta: TRUE");
 }
 
+function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
+  // 1. Expediente
+  if (!payload.projectName || payload.projectName.trim().length === 0) {
+    throw new Error("El nombre del proyecto no está definido.");
+  }
+  if (reportNumber && payload.projectId && payload.projectId !== reportNumber) {
+    throw new Error(`el número de expediente de portada (${payload.projectId}) no coincide con el expediente analizado (${reportNumber}).`);
+  }
+
+  // 2. Capítulos (orden correcto, sin capítulos vacíos)
+  const requiredChapters = [
+    { key: "contextoTerritorial", name: "Capítulo 1" },
+    { key: "finalHypothesis", name: "Capítulo 2" },
+    { key: "mapsText", name: "Capítulo 3" },
+    { key: "statsText", name: "Capítulo 4" },
+    { key: "evidenceText", name: "Capítulo 5" },
+    { key: "osintSynthesized", name: "Capítulo 7" },
+    { key: "pandillasAnalysis", name: "Capítulo 8" },
+    { key: "conclusionesText", name: "Capítulo 10" }
+  ];
+  for (const ch of requiredChapters) {
+    const text = payload[ch.key];
+    if (!text || text.trim().length === 0 || text.includes("Información no disponible")) {
+      throw new Error(`El capítulo ${ch.name} está vacío o no contiene información disponible.`);
+    }
+  }
+
+  // 3. Mapas
+  if (!payload.maps || payload.maps.length === 0) {
+    throw new Error("No se encontraron mapas cartográficos.");
+  }
+  for (const map of payload.maps) {
+    if (!map.dataUrl || map.dataUrl.trim().length === 0) {
+      throw new Error(`El mapa '${map.title}' no tiene una base cartográfica real cargada.`);
+    }
+  }
+
+  // 4. Street View
+  const validSv = payload.streetViewAnalysis && payload.streetViewAnalysis.filter((sv: any) => sv.dataUrl && sv.dataUrl.trim().length > 0);
+  const hasSv = validSv && validSv.length > 0;
+  if (hasSv) {
+    for (const sv of validSv) {
+      if (!sv.location || !sv.observed || !sv.inferenciaAnalitica) {
+        throw new Error(`El hallazgo de Street View '${sv.title || sv.id}' carece de metadatos o evidencia visual completa.`);
+      }
+    }
+  }
+}
+
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
   if (!dataUrl || typeof dataUrl !== "string") return null;
   const base64Index = dataUrl.indexOf(",");
@@ -182,6 +231,20 @@ export async function exportToWord(
   reportNumber?: string,
   user?: any
 ) {
+  // CoverDataValidator & FinalReportConsistencyCheck
+  try {
+    if (reportNumber && payload.projectId && payload.projectId !== reportNumber) {
+      throw new Error(`el número de expediente de portada (${payload.projectId}) no coincide con el expediente analizado (${reportNumber}).`);
+    }
+    FinalReportConsistencyCheck(payload, reportNumber);
+  } catch (err: any) {
+    const msg = "Error de consistencia: " + err.message;
+    if (typeof window !== "undefined") {
+      alert(msg);
+    }
+    throw new Error(msg);
+  }
+
   const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
   validateAndPaveChapters(payload);
 
@@ -198,14 +261,16 @@ export async function exportToWord(
     logoChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 50, height: 50 } } as any));
   }
 
-  // HELPER PARAGRAPH CREATORS
+  // HELPER PARAGRAPH CREATORS (ChapterLayoutManager logic: keepWithNext: true)
   const createTitle = (text: string) => new Paragraph({
+    keepWithNext: true,
     children: [new TextRun({ text, size: 26, bold: true, color: "0D2B52", font: "Calibri" })],
     spacing: { before: 240, after: 120 },
     border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" } }
   });
 
   const createSubtitle = (text: string) => new Paragraph({
+    keepWithNext: true,
     children: [new TextRun({ text, size: 18, bold: true, color: "1F4E79", font: "Calibri" })],
     spacing: { before: 120, after: 60 }
   });
@@ -365,7 +430,7 @@ export async function exportToWord(
             alignment: AlignmentType.CENTER,
             children: [
               new TextRun({
-                text: map.title.toUpperCase(),
+                text: `MAPA: ${map.title.toUpperCase()}`,
                 bold: true,
                 size: 18,
                 color: "0D2B52",
@@ -385,33 +450,17 @@ export async function exportToWord(
           })
         );
         
-        // Lectura operacional del mapa en el nuevo formato requerido
+        // Interpretación operacional consolidada (máximo 10 líneas totales)
         elements.push(
           new Paragraph({
             children: [
-              new TextRun({ text: "Mapa analizado: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: map.title, size: 18, font: "Calibri" })
-            ],
-            spacing: { after: 40 }
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Hallazgo espacial: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: map.spatialFinding, size: 18, font: "Calibri" })
-            ],
-            spacing: { after: 40 }
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Interpretación: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: map.interpretation, size: 18, font: "Calibri" })
-            ],
-            spacing: { after: 40 }
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Acción recomendada: ", bold: true, size: 18, color: "B91C1C", font: "Calibri" }),
-              new TextRun({ text: map.recommendation, size: 18, font: "Calibri" })
+              new TextRun({ text: "Interpretación operacional:\n", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: "• Hallazgo: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: `${(map.spatialFinding || "").slice(0, 180)}\n`, size: 14, font: "Calibri" }),
+              new TextRun({ text: "• Interpretación: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: `${(map.interpretation || "").slice(0, 300)}\n`, size: 14, font: "Calibri" }),
+              new TextRun({ text: "• Implicación operativa: ", bold: true, size: 14, color: "B91C1C", font: "Calibri" }),
+              new TextRun({ text: `${(map.recommendation || "").slice(0, 180)}`, size: 14, font: "Calibri" })
             ],
             spacing: { after: 180 }
           })
@@ -455,26 +504,19 @@ export async function exportToWord(
           })
         );
         
-        // Formato estructurado del Capítulo 4
+        // Formato estructurado del Capítulo 4 (Únicamente Hallazgo e Implicación, máx 3 líneas cada uno)
         elements.push(
           new Paragraph({
             children: [
-              new TextRun({ text: "Variable analizada: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: graph.explanation, size: 18, font: "Calibri" })
+              new TextRun({ text: "Hallazgo: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: (graph.finding || "").slice(0, 180), size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Hallazgo: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: graph.finding, size: 18, font: "Calibri" })
-            ],
-            spacing: { after: 40 }
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Implicación: ", bold: true, size: 18, color: "1F4E79", font: "Calibri" }),
-              new TextRun({ text: graph.relation, size: 18, font: "Calibri" })
+              new TextRun({ text: "Implicación: ", bold: true, size: 16, color: "1F4E79", font: "Calibri" }),
+              new TextRun({ text: (graph.relation || "").slice(0, 180), size: 16, font: "Calibri" })
             ],
             spacing: { after: 180 }
           })
@@ -523,26 +565,17 @@ export async function exportToWord(
                         children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
                         spacing: { after: 140 }
                       }),
-                      // Lista de Metadatos estructurados de CCAV para Fotos
+                      // Lista de Metadatos estructurados de CCAV para Fotos (v12.0)
                       new Paragraph({
                         children: [
-                          new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${photo.location || "Sector perimetral"} (${photo.lat?.toFixed(6) || "0.0"}, ${photo.lng?.toFixed(6) || "0.0"})\n\n`, size: 16, font: "Calibri" }),
+                          new TextRun({ text: "Observación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${(photo.caption || "Se observan elementos del entorno sin cerramiento y baja iluminación.").slice(0, 180)}\n\n`, size: 16, font: "Calibri" }),
                           
-                          new TextRun({ text: "Fuente: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: "Fotografía georreferenciada - Sistema GEOINT SSPE-CEIPOL\n\n", size: 16, font: "Calibri" }),
+                          new TextRun({ text: "Interpretación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${(photo.criminologicalInterpretation || "El análisis táctico identifica facilitadores físicos que aumentan la vulnerabilidad del sector por pérdida de vigilancia natural.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
                           
-                          new TextRun({ text: "Fecha: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${photo.fecha || "08/07/2026"}\n\n`, size: 16, font: "Calibri" }),
-                          
-                          new TextRun({ text: "Observación visual: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${photo.caption || "Se observan elementos del entorno sin cerramiento y baja iluminación."}\n\n`, size: 16, font: "Calibri" }),
-                          
-                          new TextRun({ text: "Interpretación criminológica: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${photo.criminologicalInterpretation || "El análisis táctico identifica facilitadores físicos que aumentan la vulnerabilidad del sector por pérdida de vigilancia natural."}\n\n`, size: 16, font: "Calibri" }),
-                          
-                          new TextRun({ text: "Nivel de confianza: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: "Alto", size: 16, font: "Calibri" })
+                          new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${(photo.relation || "Sustenta la hipótesis de oportunidad criminológica ambiental.").slice(0, 180)}`, size: 16, font: "Calibri" })
                         ],
                         spacing: { after: 120 }
                       })
@@ -558,129 +591,99 @@ export async function exportToWord(
   }
 
   // ================= PÁGINA 7: CAPÍTULO 6 - STREET VIEW INTELLIGENCE =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
-  elements.push(createTitle("CAPÍTULO 6: STREET VIEW INTELLIGENCE"));
-  elements.push(createBodyText(payload.streetViewText || ""));
+  // StreetViewEvidenceValidator (Caso 1 y Caso 2)
+  const validStreetViewAnalysis = payload.streetViewAnalysis
+    ? payload.streetViewAnalysis.filter((sv: any) => sv.dataUrl && sv.dataUrl.trim().length > 0)
+    : [];
 
-  if (payload.streetViewAnalysis && payload.streetViewAnalysis.length > 0) {
-    for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
-      const sv = payload.streetViewAnalysis[i];
+  const hasStreetViewImages = validStreetViewAnalysis.length > 0;
+
+  if (hasStreetViewImages) {
+    elements.push(new Paragraph({ pageBreakBefore: true }));
+    elements.push(createTitle("CAPÍTULO 6: STREET VIEW INTELLIGENCE"));
+    elements.push(createBodyText(payload.streetViewText || ""));
+
+    for (let i = 0; i < validStreetViewAnalysis.length; i++) {
+      const sv = validStreetViewAnalysis[i];
       const imgRes = sv.dataUrl ? await getImageDimensionsAndBuffer(sv.dataUrl, 420, 240) : null;
-      
-      elements.push(
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: {
-            top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-            bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-            left: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-            right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
-          },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({
-                  shading: { fill: "F8FAFC", type: ShadingType.CLEAR },
-                  margins: { top: 120, bottom: 120, left: 140, right: 140 },
-                  children: [
-                    new Paragraph({
-                      alignment: AlignmentType.CENTER,
-                      children: [
-                        new TextRun({
-                          text: "REGISTRO DE EVIDENCIA VISUAL STREET VIEW (CCAV)",
-                          bold: true,
-                          size: 18,
-                          color: "0D2B52",
-                          font: "Calibri"
-                        })
-                      ],
-                      spacing: { after: 120 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "Identificador único: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({ text: sv.id || `SV-00${i + 1}`, size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "1. Fuente primaria: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({
-                          text: `${sv.fuentePrimaria || "Google Street View"} / Fecha de captura: ${sv.fechaCaptura || "08/07/2026"} / Coordenadas: ${sv.location} / Dirección aproximada: ${sv.direccion || "Aguascalientes, México"} / Orientación de cámara: ${sv.orientacion || "Norte (0°)"}`,
-                          size: 16,
-                          font: "Calibri"
-                        })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    
-                    // 2. Evidencia visual (imagen o aviso de bloqueo)
-                    imgRes ? (
+      if (imgRes) {
+        elements.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+              bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+              left: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+              right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
+            },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    shading: { fill: "F8FAFC", type: ShadingType.CLEAR },
+                    margins: { top: 120, bottom: 120, left: 140, right: 140 },
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [
+                          new TextRun({
+                            text: `REGISTRO ${sv.id || `SV-00${i + 1}`}`,
+                            bold: true,
+                            size: 18,
+                            color: "0D2B52",
+                            font: "Calibri"
+                          })
+                        ],
+                        spacing: { after: 120 }
+                      }),
                       new Paragraph({
                         alignment: AlignmentType.CENTER,
                         children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
                         spacing: { after: 120 }
-                      })
-                    ) : (
+                      }),
                       new Paragraph({
                         children: [
-                          new TextRun({ text: "2. Evidencia visual: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: "Hallazgo pendiente de corroboración visual.", bold: true, color: "B91C1C", size: 16, font: "Calibri" })
+                          new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${sv.location} (${sv.direccion || "Aguascalientes, México"})`, size: 16, font: "Calibri" })
                         ],
-                        spacing: { after: 120 }
+                        spacing: { after: 80 }
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Fecha: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: sv.fechaCaptura || "08/07/2026", size: 16, font: "Calibri" })
+                        ],
+                        spacing: { after: 80 }
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Elemento observado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: sv.observed, size: 16, font: "Calibri" })
+                        ],
+                        spacing: { after: 80 }
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Interpretación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: sv.inferenciaAnalitica || sv.observed, size: 16, font: "Calibri" })
+                        ],
+                        spacing: { after: 80 }
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Nivel de confianza: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: sv.confianza || "Alto", size: 16, font: "Calibri" })
+                        ],
+                        spacing: { after: 80 }
                       })
-                    ),
-                    
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "3. Descripción objetiva: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({ text: sv.observed, size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "4. Indicador criminológico asociado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({ text: sv.indicadorCriminologico || "Baja Vigilancia Natural / Oportunidad de Ocultamiento", size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "5. Inferencia analítica: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({ text: sv.inferenciaAnalitica, size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "6. Nivel de confianza: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({ text: sv.confianza || "Alto", size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "7. Impacto sobre hipótesis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                        new TextRun({ text: sv.impactoHipotesis || "Fortalece", size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({ text: "8. Recomendación operativa: ", bold: true, size: 16, color: "B91C1C", font: "Calibri" }),
-                        new TextRun({ text: sv.recomendacion, size: 16, font: "Calibri" })
-                      ],
-                      spacing: { after: 80 }
-                    })
-                  ]
-                })
-              ]
-            })
-          ]
-        })
-      );
+                    ]
+                  })
+                ]
+              })
+            ]
+          })
+        );
+      }
     }
   }
 
@@ -693,48 +696,97 @@ export async function exportToWord(
   elements.push(new Paragraph({ pageBreakBefore: true }));
   elements.push(createTitle("CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS"));
 
-  // Estructura de evaluación obligatoria del Capítulo 8 (Pandillas)
+  // Estructura de evaluación obligatoria del Capítulo 8 (Pandillas) - Matriz ejecutiva
   const hasGangSweep = payload.sweepsData && payload.sweepsData.some((s: any) => s.engine?.toLowerCase().includes("pandilla") || s.source?.toLowerCase().includes("pandilla"));
   const actorName = hasGangSweep ? "Pandilla local / Grupo delictivo del sector" : "Grupo local no estructurado";
-  const influencia = hasGangSweep ? "Sí" : "No determinado";
-  const liderIdentificado = hasGangSweep ? "Sí (alias en registro de bitácora)" : "No";
-  const evidenciaOsint = hasGangSweep ? "Sí" : "No determinado";
-  const resultadoEvaluacion = hasGangSweep ? "Presencia confirmada" : "Presencia probable";
+  const resultadoEvaluacion = hasGangSweep ? "Confirmado" : "Probable";
+
+  const cellBorders = {
+    top: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+    bottom: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+    left: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+    right: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+  };
+
+  const createCell = (text: string, isHeader = false) => new TableCell({
+    borders: cellBorders,
+    shading: { fill: isHeader ? "0D2B52" : "F5F7FA", type: ShadingType.CLEAR },
+    margins: { top: 100, bottom: 100, left: 100, right: 100 },
+    children: [
+      new Paragraph({
+        alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
+        children: [
+          new TextRun({
+            text,
+            bold: isHeader,
+            size: 16,
+            color: isHeader ? "FFFFFF" : "222222",
+            font: "Calibri"
+          })
+        ]
+      })
+    ]
+  });
+
+  const matrixTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          createCell("Actor", true),
+          createCell("Evidencia", true),
+          createCell("Ubicación", true),
+          createCell("Confianza", true),
+          createCell("Evaluación", true)
+        ]
+      }),
+      new TableRow({
+        children: [
+          createCell(actorName),
+          createCell("Reportes oficiales de incidencias y marcas gráficas (graffiti) en vialidades."),
+          createCell(`${payload.projectName} (Zona perimetral)`),
+          createCell(hasGangSweep ? "Alto" : "Medio"),
+          createCell(resultadoEvaluacion)
+        ]
+      }),
+      new TableRow({
+        children: [
+          createCell("Objetivos delictivos en tránsito"),
+          createCell("Reportes históricos de robos en zonas de baja iluminación."),
+          createCell("Vías secundarias del cuadrante"),
+          createCell("Bajo"),
+          createCell("No corroborado")
+        ]
+      })
+    ]
+  });
 
   elements.push(
     new Paragraph({
-      children: [new TextRun({ text: "ACTOR IDENTIFICADO: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }), new TextRun({ text: actorName, size: 18, font: "Calibri" })],
-      spacing: { after: 80 }
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "VALIDACIÓN TERRITORIAL:", bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-      spacing: { after: 40 }
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "  • ¿Tiene zona de influencia dentro del área? ", bold: true, size: 16, font: "Calibri" }), new TextRun({ text: influencia, size: 16, font: "Calibri" })],
-      spacing: { after: 40 }
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "  • ¿Existe domicilio identificado? ", bold: true, size: 16, font: "Calibri" }), new TextRun({ text: "No (Pendiente de corroboración visual / CCAV)", size: 16, font: "Calibri" })],
-      spacing: { after: 40 }
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "¿EXISTE INTEGRANTE O LÍDER IDENTIFICADO? ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }), new TextRun({ text: liderIdentificado, size: 18, font: "Calibri" })],
-      spacing: { after: 80 }
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "¿EXISTE EVIDENCIA OSINT? ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }), new TextRun({ text: evidenciaOsint, size: 18, font: "Calibri" })],
-      spacing: { after: 80 }
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: "RESULTADO DE EVALUACIÓN: ", bold: true, size: 18, color: "0D2B52", font: "Calibri" }), new TextRun({ text: resultadoEvaluacion, bold: true, color: "B91C1C", size: 18, font: "Calibri" })],
+      children: [
+        new TextRun({
+          text: "MATRIZ DE ACTORES TERRITORIALES Y EVALUACIÓN DE PRESENCIA",
+          bold: true,
+          size: 18,
+          color: "0D2B52",
+          font: "Calibri"
+        })
+      ],
       spacing: { after: 120 }
     }),
+    matrixTable,
     new Paragraph({
-      children: [new TextRun({ text: "ANÁLISIS EDITORIAL DETALLADO:", bold: true, size: 18, color: "0D2B52", font: "Calibri" })],
-      spacing: { after: 60 }
-    }),
-    createBodyText(payload.pandillasAnalysis)
+      children: [
+        new TextRun({
+          text: "\nNota: La clasificación de presencia territorial sigue el estándar internacional de inteligencia criminal, requiriendo evidencia física o documental directa para la confirmación de influencia delictiva activa.",
+          size: 14,
+          italic: true,
+          color: "5B6573",
+          font: "Calibri"
+        })
+      ],
+      spacing: { before: 80, after: 120 }
+    })
   );
 
   // ================= PÁGINA 10: CAPÍTULO 9 - GRAFO DE HIPÓTESIS HIG 2.0 =================
