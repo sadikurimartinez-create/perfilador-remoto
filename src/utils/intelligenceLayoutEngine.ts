@@ -1,5 +1,16 @@
 import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
+import {
+  renderDensityMap,
+  renderMobilityMap,
+  renderAttractorsMap,
+  renderPredictiveMap,
+  renderTemporalShiftChart,
+  renderCrimeTopologyChart,
+  renderEnvironmentalFactorsChart,
+  renderPredictiveLineChart,
+  renderHypothesisGraph
+} from "./vectorRenderEngine";
 
 export type IntelligenceVisualType =
   | 'map'
@@ -525,132 +536,72 @@ export const buildIntelligenceEditorialPayload = (
     }
   }
 
-  // Maps
-  const maps = mapSnapshots.filter(s => {
-    const title = s.title.toLowerCase();
-    return title.includes("densidad") || title.includes("corredores") || title.includes("atracción") || title.includes("proyección") || title.includes("mapa");
-  }).map((m, idx) => ({
-    title: m.title,
-    dataUrl: m.dataUrl,
-    interpretation: cleanTechnicalJargon(m.interpretation || `Simbología táctica operativa del Mapa ${idx + 1}.`).slice(0, 200)
-  }));
+  // Instanciar el motor de renderizado vectorial táctico para generar los mapas y gráficas HD directamente
+  const vectorInput = {
+    projectName: projectName || "Expediente",
+    latitude: project?.latitude || 28.6353,
+    longitude: project?.longitude || -106.0889,
+    geometryType: project?.geometryType || "individual",
+    incidents: project?.incidents || [],
+    sweeps: sweeps || [],
+    photoCount: album?.length || 0
+  };
 
-  // Ensure all four required map types are present (either captured or as fallbacks)
-  const hasDensityMap = maps.some(m => {
-    const t = m.title.toLowerCase();
-    return t.includes("densidad") || t.includes("calor") || t.includes("riesgo") || t.includes("mapa");
-  });
-  if (!hasDensityMap) {
-    maps.push({
+  // Maps (Generados vectorialmente a alta resolución de forma nativa)
+  const maps = [
+    {
       title: "1. DENSIDAD CRIMINOLÓGICA",
-      dataUrl: generateFallbackChart("riesgo"),
+      dataUrl: renderDensityMap(vectorInput),
       interpretation: "Densidad de eventos delictivos georreferenciados en el área bajo análisis."
-    });
-  }
-
-  const hasMobilityMap = maps.some(m => {
-    const t = m.title.toLowerCase();
-    return t.includes("corredores") || t.includes("movilidad") || t.includes("flujos");
-  });
-  if (!hasMobilityMap) {
-    maps.push({
+    },
+    {
       title: "2. CORREDORES Y MOVILIDAD",
-      dataUrl: generateFallbackChart("riesgo"),
+      dataUrl: renderMobilityMap(vectorInput),
       interpretation: "Análisis de corredores de movilidad y flujos delictivos detectados."
-    });
-  }
-
-  const hasAttractorsMap = maps.some(m => {
-    const t = m.title.toLowerCase();
-    return t.includes("atracción") || t.includes("atractores") || t.includes("denue");
-  });
-  if (!hasAttractorsMap) {
-    maps.push({
+    },
+    {
       title: "3. ATRACCIÓN Y FACTORES",
-      dataUrl: generateFallbackChart("atractores"),
+      dataUrl: renderAttractorsMap(vectorInput),
       interpretation: "Factores ambientales de atracción delictiva según censo comercial."
-    });
-  }
-
-  const hasPredictiveMap = maps.some(m => {
-    const t = m.title.toLowerCase();
-    return t.includes("proyección") || t.includes("predicción") || t.includes("predictiva");
-  });
-  if (!hasPredictiveMap) {
-    maps.push({
+    },
+    {
       title: "4. PROYECCIÓN A 6 MESES",
-      dataUrl: generateFallbackChart("riesgo"),
+      dataUrl: renderPredictiveMap(vectorInput),
       interpretation: "Proyección predictiva de expansión de la actividad delictiva."
-    });
-  }
+    }
+  ];
 
-  // Graphs
-  const graphs = mapSnapshots.filter(s => {
-    const title = s.title.toLowerCase();
-    return title.includes("gráfica") || title.includes("grafica") || title.includes("distribución") || title.includes("topología") || title.includes("facilitadores") || title.includes("predicción");
-  }).map(m => ({
-    title: m.title,
-    dataUrl: m.dataUrl,
-    explanation: "Frecuencia acumulada e índices de scoring por rango de turnos.",
-    finding: "Picos de incidencia y riesgos concentrados en horarios nocturnos.",
-    relation: "Correlación directa con la pérdida de vigilancia natural por iluminación deficiente."
-  }));
-
-  const hasTemporalChart = graphs.some(g => {
-    const t = g.title.toLowerCase();
-    return t.includes("temporal") || t.includes("turno") || t.includes("horario") || t.includes("delitos");
-  });
-  if (!hasTemporalChart) {
-    graphs.push({
+  // Graphs (Generados programáticamente en lienzo HD)
+  const graphs = [
+    {
       title: "GRÁFICA 1: DISTRIBUCIÓN TEMPORAL DEL DELITO POR TURNO",
-      dataUrl: generateFallbackChart("delitos"),
+      dataUrl: renderTemporalShiftChart(vectorInput),
       explanation: "Frecuencia acumulada e índices de scoring por rango de turnos.",
       finding: "Picos de incidencia y riesgos concentrados en horarios nocturnos.",
       relation: "Correlación directa con la pérdida de vigilancia natural por iluminación deficiente."
-    });
-  }
-
-  const hasTopologyChart = graphs.some(g => {
-    const t = g.title.toLowerCase();
-    return t.includes("topología") || t.includes("frecuencia") || t.includes("incidentes") || t.includes("atractores");
-  });
-  if (!hasTopologyChart) {
-    graphs.push({
+    },
+    {
       title: "GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES (TOP 5)",
-      dataUrl: generateFallbackChart("delitos"),
+      dataUrl: renderCrimeTopologyChart(vectorInput),
       explanation: "Frecuencia acumulada e índices de scoring por tipo de delito.",
       finding: "Tipologías delictivas dominantes concentradas en robo y asalto.",
       relation: "Correlación con la accesibilidad física del perímetro comercial."
-    });
-  }
-
-  const hasEnvironmentalChart = graphs.some(g => {
-    const t = g.title.toLowerCase();
-    return t.includes("facilitadores") || t.includes("ambiental") || t.includes("oportunidad") || t.includes("riesgo");
-  });
-  if (!hasEnvironmentalChart) {
-    graphs.push({
+    },
+    {
       title: "GRÁFICA 3: FACILITADORES AMBIENTALES DE OPORTUNIDAD",
-      dataUrl: generateFallbackChart("atractores"),
+      dataUrl: renderEnvironmentalFactorsChart(vectorInput),
       explanation: "Distribución de factores criminógenos de oportunidad.",
       finding: "Predominio de alumbrado público inactivo y terrenos baldíos sin cerramiento.",
       relation: "Correlación con la pérdida de vigilancia natural."
-    });
-  }
-
-  const hasPredictionChart = graphs.some(g => {
-    const t = g.title.toLowerCase();
-    return t.includes("predicción") || t.includes("futuro") || t.includes("aumento");
-  });
-  if (!hasPredictionChart) {
-    graphs.push({
+    },
+    {
       title: "GRÁFICA 4: PREDICCIÓN DE AUMENTO DE INCIDENCIA (6 MESES)",
-      dataUrl: generateFallbackChart("riesgo"),
+      dataUrl: renderPredictiveLineChart(vectorInput),
       explanation: "Proyección dinámica de tasa de criminalidad estimada.",
       finding: "Tendencia de incremento del 15% en delitos de oportunidad si no hay intervención.",
       relation: "Relación directa con la inercia espacial de la zona de oportunidad."
-    });
-  }
+    }
+  ];
 
   // Photos
   const photoEvidence = album.filter(p => p.previewUrl || p.url).map((p, idx) => {
@@ -703,11 +654,10 @@ export const buildIntelligenceEditorialPayload = (
     }
   }
 
-  // Hypothesis Graph
-  const graphSnap = mapSnapshots.find(s => s.title.toLowerCase().includes("grafo"));
+  // Hypothesis Graph (Generado programáticamente en lienzo HD)
   const hypothesisGraph = {
     title: "Hypothesis Intelligence Graph (HIG 2.0)",
-    dataUrl: graphSnap?.dataUrl || generateFallbackChart("riesgo"),
+    dataUrl: renderHypothesisGraph(vectorInput),
     interpretation: cleanTechnicalJargon(rawGraphText || "La relación entre deterioro urbano, inmuebles abandonados y movilidad nocturna establece una hipótesis de oportunidad criminógena ambiental.")
   };
 

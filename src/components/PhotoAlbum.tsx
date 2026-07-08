@@ -1286,90 +1286,10 @@ const hasMinimumPhotos =
   };
 
   const autoCaptureSnapshots = async (): Promise<{ title: string; dataUrl: string }[]> => {
-    const currentSnapshots = [...mapSnapshots];
-    let changed = false;
-
-    // Wrapper para evitar bloqueos/hangs infinitos de html2canvas al intentar capturar canvas de WebGL (Google Maps)
-    const html2canvasWithTimeout = (el: HTMLElement, options: any, timeoutMs = 2500): Promise<any> => {
-      return Promise.race([
-        html2canvas(el, options),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("html2canvas timeout")), timeoutMs))
-      ]);
-    };
-
-    // Capturar Gráficas Individuales
-    const chartIds = [
-      { id: "chart-export-1", title: "GRÁFICA 1: DISTRIBUCIÓN TEMPORAL DEL DELITO POR TURNO" },
-      { id: "chart-export-2", title: "GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES (TOP 5)" },
-      { id: "chart-export-3", title: "GRÁFICA 3: FACILITADORES AMBIENTALES DE OPORTUNIDAD" },
-      { id: "chart-export-4", title: "GRÁFICA 4: PREDICCIÓN DE AUMENTO DE INCIDENCIA (6 MESES)" }
-    ];
-
-    for (const c of chartIds) {
-      if (!currentSnapshots.some((s) => s.title === c.title) && analysisResult) {
-        const el = document.getElementById(c.id);
-        if (el) {
-          try {
-            const resultMap = await html2canvasWithTimeout(el, { useCORS: true, scale: 2.5, backgroundColor: "#ffffff" });
-            const canvasMap = resultMap as unknown as HTMLCanvasElement;
-            const dataUrlMap = String(canvasMap.toDataURL("image/png"));
-            currentSnapshots.push({ title: c.title, dataUrl: dataUrlMap });
-            changed = true;
-          } catch(err) {
-            console.warn("Ignorar error/timeout de renderizado en gráficas:", err);
-          }
-        }
-      }
-    }
-
-    // Capturar Mapas Tácticos Institucionales
-    const mapIds = [
-      { id: "map-density", title: "1. DENSIDAD CRIMINOLÓGICA" },
-      { id: "map-mobility", title: "2. CORREDORES Y MOVILIDAD" },
-      { id: "map-attractors", title: "3. ATRACCIÓN Y FACTORES" },
-      { id: "map-predictive", title: "4. PROYECCIÓN A 6 MESES" }
-    ];
-
-    for (const m of mapIds) {
-      if (!currentSnapshots.some((s) => s.title === m.title) && analysisResult) {
-        const el = document.getElementById(m.id);
-        if (el) {
-          try {
-            // Dejamos el mapa en su tamaño real responsivo para evitar que Google Maps pierda el centrado
-            // Solo aumentamos el 'scale' para obtener alta resolución sin afectar el renderizado interno.
-            const resultMap = await html2canvasWithTimeout(el, { useCORS: true, scale: 2.5 });
-            const canvasMap = resultMap as unknown as HTMLCanvasElement;
-            const dataUrlMap = String(canvasMap.toDataURL("image/png"));
-            currentSnapshots.push({ title: m.title, dataUrl: dataUrlMap });
-            changed = true;
-          } catch(err) {
-            console.warn("Ignorar error/timeout de renderizado en mapas:", err);
-          }
-        }
-      }
-    }
-
-    // Capturar Grafo de Conexiones
-    if (!currentSnapshots.some((s) => s.title.includes("GRAFO")) && analysisResult) {
-      const el = document.getElementById("network-graph-container");
-      if (el) {
-        try {
-          const resultMap = await html2canvasWithTimeout(el, { useCORS: true, scale: 2.0, backgroundColor: "#0f172a" });
-          const canvasMap = resultMap as unknown as HTMLCanvasElement;
-          const dataUrlMap = String(canvasMap.toDataURL("image/png"));
-          currentSnapshots.push({ title: "GRAFO 1: RELACIONES Y REDES DELICTIVAS (GRAFO)", dataUrl: dataUrlMap });
-          changed = true;
-        } catch(err) {
-          console.warn("Ignorar error/timeout de renderizado en grafo:", err);
-        }
-      }
-    }
-
-    if (changed) {
-      setMapSnapshots(currentSnapshots);
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    return currentSnapshots;
+    // Ya no se requiere captura en pantalla del DOM (html2canvas) ya que
+    // el motor de maquetación genera todos los mapas, gráficas y grafos vectoriales
+    // de forma nativa e independiente a nivel de kernel utilizando VectorRenderEngine.
+    return [];
   };
 
   const handleAttachMapSnapshot = async () => {
