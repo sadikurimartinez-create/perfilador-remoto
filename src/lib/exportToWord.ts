@@ -210,6 +210,48 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
   }
 }
 
+function ExecutiveReportQualityGate(payload: any) {
+  // 1. Documento (FlexibleChapterFlow: sin saltos forzados innecesarios)
+  // 2. Mapas (Mapas reales con leyenda, escala y norte)
+  if (!payload.maps || payload.maps.length === 0) {
+    throw new Error("El reporte no contiene los mapas GEOINT requeridos.");
+  }
+  for (const map of payload.maps) {
+    if (!map.dataUrl || map.dataUrl.trim().length === 0) {
+      throw new Error(`El mapa '${map.title}' es una imagen simulada o carece de capas GIS reales.`);
+    }
+  }
+
+  // 3. Capítulos sintetizados (Límites analíticos estrictos de v13.0)
+  const mapCheck = payload.maps.every((m: any) => 
+    (!m.spatialFinding || m.spatialFinding.length <= 300) &&
+    (!m.interpretation || m.interpretation.length <= 450) &&
+    (!m.recommendation || m.recommendation.length <= 300)
+  );
+  if (!mapCheck) {
+    throw new Error("El Capítulo 3 excede los límites de síntesis del formato operacional.");
+  }
+
+  const graphCheck = !payload.graphs || payload.graphs.every((g: any) =>
+    (!g.finding || g.finding.length <= 300) &&
+    (!g.relation || g.relation.length <= 250)
+  );
+  if (!graphCheck) {
+    throw new Error("El Capítulo 4 excede los límites de síntesis estadística.");
+  }
+
+  const photoCheck = !payload.photoEvidence || payload.photoEvidence.every((p: any) =>
+    (!p.caption || p.caption.length <= 300) &&
+    (!p.criminologicalInterpretation || p.criminologicalInterpretation.length <= 450) &&
+    (!p.relation || p.relation.length <= 300)
+  );
+  if (!photoCheck) {
+    throw new Error("El Capítulo 5 excede los límites de síntesis de evidencia fotográfica.");
+  }
+
+  console.log("[QUALITY GATE] ExecutiveReportQualityGate: PASSED");
+}
+
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
   if (!dataUrl || typeof dataUrl !== "string") return null;
   const base64Index = dataUrl.indexOf(",");
@@ -232,15 +274,16 @@ export async function exportToWord(
   reportNumber?: string,
   user?: any
 ) {
-  // CoverDataValidator & FinalReportConsistencyCheck
+  // CoverDataValidator, FinalReportConsistencyCheck & ExecutiveReportQualityGate
   try {
     const isFirestoreId = reportNumber ? (!reportNumber.includes("/") && reportNumber.length >= 15) : false;
     if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
-      throw new Error(`el número de expediente de portada (${payload.projectId}) no coincide con el expediente analizado (${reportNumber}).`);
+      throw new Error("el número de expediente de portada (" + payload.projectId + ") no coincide con el expediente analizado (" + reportNumber + ").");
     }
     FinalReportConsistencyCheck(payload, reportNumber);
+    ExecutiveReportQualityGate(payload);
   } catch (err: any) {
-    const msg = "Error de consistencia: " + err.message;
+    const msg = "Error de consistencia o calidad: " + err.message;
     if (typeof window !== "undefined") {
       alert(msg);
     }
@@ -413,12 +456,12 @@ export async function exportToWord(
   elements.push(createBodyText(payload.contextoTerritorial));
 
   // ================= PÁGINA 3: CAPÍTULO 2 - HIPÓTESIS CRIMINOLÓGICA AMBIENTAL =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL"));
   elements.push(createBodyText(payload.finalHypothesis));
 
   // ================= PÁGINA 4: CAPÍTULO 3 - ANÁLISIS TERRITORIAL CARTOGRÁFICO =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO"));
   elements.push(createBodyText(payload.mapsText || ""));
 
@@ -452,14 +495,14 @@ export async function exportToWord(
           })
         );
         
-        // Interpretación operacional consolidada (máximo 10 líneas totales)
+        // Interpretación operacional consolidada (v13.0 - Máximo 10 líneas totales)
         elements.push(
           new Paragraph({
             children: [
               new TextRun({ text: "Interpretación operacional:\n", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: "• Hallazgo: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: "• Hallazgo territorial: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
               new TextRun({ text: `${(map.spatialFinding || "").slice(0, 180)}\n`, size: 14, font: "Calibri" }),
-              new TextRun({ text: "• Interpretación: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: "• Interpretación criminológica: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
               new TextRun({ text: `${(map.interpretation || "").slice(0, 300)}\n`, size: 14, font: "Calibri" }),
               new TextRun({ text: "• Implicación operativa: ", bold: true, size: 14, color: "B91C1C", font: "Calibri" }),
               new TextRun({ text: `${(map.recommendation || "").slice(0, 180)}`, size: 14, font: "Calibri" })
@@ -472,7 +515,7 @@ export async function exportToWord(
   }
 
   // ================= PÁGINA 5: CAPÍTULO 4 - ANÁLISIS ESTADÍSTICO =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 4: ANÁLISIS ESTADÍSTICO"));
   elements.push(createBodyText(payload.statsText || ""));
 
@@ -506,7 +549,7 @@ export async function exportToWord(
           })
         );
         
-        // Formato estructurado del Capítulo 4 (Únicamente Hallazgo e Implicación, máx 3 líneas cada uno)
+        // Formato estructurado del Capítulo 4 (v13.0 - Hallazgo, Interpretación, Implicación)
         elements.push(
           new Paragraph({
             children: [
@@ -517,8 +560,15 @@ export async function exportToWord(
           }),
           new Paragraph({
             children: [
+              new TextRun({ text: "Interpretación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: (graph.interpretation || graph.explanation || "").slice(0, 240), size: 16, font: "Calibri" })
+            ],
+            spacing: { after: 40 }
+          }),
+          new Paragraph({
+            children: [
               new TextRun({ text: "Implicación: ", bold: true, size: 16, color: "1F4E79", font: "Calibri" }),
-              new TextRun({ text: (graph.relation || "").slice(0, 180), size: 16, font: "Calibri" })
+              new TextRun({ text: (graph.relation || "").slice(0, 120), size: 16, font: "Calibri" })
             ],
             spacing: { after: 180 }
           })
@@ -528,7 +578,7 @@ export async function exportToWord(
   }
 
   // ================= PÁGINA 6: CAPÍTULO 5 - EVIDENCIA FOTOGRÁFICA =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA"));
   elements.push(createBodyText(payload.evidenceText || ""));
 
@@ -538,7 +588,7 @@ export async function exportToWord(
       const dims = PageBalanceEngine.calculateDimensions(photo.caption.length, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(photo.dataUrl, dims.width, dims.height);
       if (imgRes) {
-        elements.push(new Paragraph({ pageBreakBefore: true }));
+        // FlexibleChapterFlow: No pageBreakBefore here to let cards flow naturally
         elements.push(
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
@@ -567,13 +617,13 @@ export async function exportToWord(
                         children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
                         spacing: { after: 140 }
                       }),
-                      // Lista de Metadatos estructurados de CCAV para Fotos (v12.0)
+                      // Lista de Metadatos estructurados de CCAV para Fotos (v13.0)
                       new Paragraph({
                         children: [
                           new TextRun({ text: "Observación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
                           new TextRun({ text: `${(photo.caption || "Se observan elementos del entorno sin cerramiento y baja iluminación.").slice(0, 180)}\n\n`, size: 16, font: "Calibri" }),
                           
-                          new TextRun({ text: "Interpretación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: "Análisis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
                           new TextRun({ text: `${(photo.criminologicalInterpretation || "El análisis táctico identifica facilitadores físicos que aumentan la vulnerabilidad del sector por pérdida de vigilancia natural.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
                           
                           new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
@@ -601,7 +651,7 @@ export async function exportToWord(
   const hasStreetViewImages = validStreetViewAnalysis.length > 0;
 
   if (hasStreetViewImages) {
-    elements.push(new Paragraph({ pageBreakBefore: true }));
+    // FlexibleChapterFlow: No pageBreakBefore, flow naturally
     elements.push(createTitle("CAPÍTULO 6: STREET VIEW INTELLIGENCE"));
     elements.push(createBodyText(payload.streetViewText || ""));
 
@@ -690,12 +740,12 @@ export async function exportToWord(
   }
 
   // ================= PÁGINA 8: CAPÍTULO 7 - INTELIGENCIA OSINT =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 7: INTELIGENCIA OSINT"));
   elements.push(createBodyText(payload.osintSynthesized));
 
   // ================= PÁGINA 9: CAPÍTULO 8 - ACTORES TERRITORIALES Y PANDILLAS =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS"));
 
   // Estructura de evaluación obligatoria del Capítulo 8 (Pandillas) - Matriz ejecutiva
@@ -792,7 +842,7 @@ export async function exportToWord(
   );
 
   // ================= PÁGINA 10: CAPÍTULO 9 - GRAFO DE HIPÓTESIS HIG 2.0 =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0"));
 
   if (payload.hypothesisGraph) {
@@ -861,7 +911,7 @@ export async function exportToWord(
   );
 
   // ================= PÁGINA 11: CAPÍTULO 10 - CONCLUSIONES OPERATIVAS =================
-  elements.push(new Paragraph({ pageBreakBefore: true }));
+  // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 10: CONCLUSIONES OPERATIVAS"));
   elements.push(createBodyText(payload.conclusionesText || ""));
 

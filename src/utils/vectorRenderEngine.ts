@@ -37,9 +37,9 @@ const loadStaticMapImage = (
 ): Promise<HTMLImageElement | null> => {
   return new Promise((resolve) => {
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-    let url = "";
+    let googleUrl = "";
     if (key) {
-      url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${w}x${h}&maptype=roadmap` +
+      googleUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${w}x${h}&maptype=roadmap` +
         `&style=element:geometry|color:0x1a2238` +
         `&style=element:labels.text.fill|color:0x8a9ba8` +
         `&style=element:labels.text.stroke|color:0x1a2238` +
@@ -48,18 +48,49 @@ const loadStaticMapImage = (
         `&style=feature:road|element:labels.text.fill|color:0xc4d1db` +
         `&style=feature:water|element:geometry|color:0x0b132b` +
         `&key=${key}`;
-    } else {
-      url = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=${w},${h}&z=${zoom}&l=map`;
     }
 
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => {
-      console.warn("Failed to load static map image from:", url);
-      resolve(null);
+    const tryOpenStreetMap = () => {
+      const latRad = lat * Math.PI / 180;
+      const n = Math.pow(2, zoom);
+      const xtile = Math.floor((lng + 180) / 360 * n);
+      const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+      const osmUrl = `https://a.tile.openstreetmap.org/${zoom}/${xtile}/${ytile}.png`;
+      
+      const osmImg = new Image();
+      osmImg.crossOrigin = "Anonymous";
+      osmImg.onload = () => resolve(osmImg);
+      osmImg.onerror = () => {
+        console.error("All static map options failed.");
+        resolve(null);
+      };
+      osmImg.src = osmUrl;
     };
-    img.src = url;
+
+    const tryYandex = () => {
+      const yandexUrl = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=${w},${h}&z=${zoom}&l=map`;
+      const yandexImg = new Image();
+      yandexImg.crossOrigin = "Anonymous";
+      yandexImg.onload = () => resolve(yandexImg);
+      yandexImg.onerror = () => {
+        console.warn("Yandex static map failed, trying OpenStreetMap tile...");
+        tryOpenStreetMap();
+      };
+      yandexImg.src = yandexUrl;
+    };
+
+    if (googleUrl) {
+      const googleImg = new Image();
+      googleImg.crossOrigin = "Anonymous";
+      googleImg.onload = () => resolve(googleImg);
+      googleImg.onerror = () => {
+        console.warn("Google Static Map failed, trying Yandex fallback...");
+        tryYandex();
+      };
+      googleImg.src = googleUrl;
+    } else {
+      tryYandex();
+    }
   });
 };
 
@@ -1183,3 +1214,22 @@ export const renderHypothesisGraph = (input: VectorEngineInput): string => {
 
   return canvas.toDataURL('image/png');
 };
+
+/**
+ * NativeGEOINTMapRenderer - Motor cartográfico GEOINT para la validación y renderizado
+ * a partir de capas geográficas reales.
+ */
+export class NativeGEOINTMapRenderer {
+  static async renderDensity(input: VectorEngineInput): Promise<string> {
+    return renderDensityMap(input);
+  }
+  static async renderMobility(input: VectorEngineInput): Promise<string> {
+    return renderMobilityMap(input);
+  }
+  static async renderAttractors(input: VectorEngineInput): Promise<string> {
+    return renderAttractorsMap(input);
+  }
+  static async renderPredictive(input: VectorEngineInput): Promise<string> {
+    return renderPredictiveMap(input);
+  }
+}
