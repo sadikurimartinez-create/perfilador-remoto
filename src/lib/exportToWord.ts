@@ -165,7 +165,8 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
   if (!payload.projectName || payload.projectName.trim().length === 0) {
     throw new Error("El nombre del proyecto no está definido.");
   }
-  if (reportNumber && payload.projectId && payload.projectId !== reportNumber) {
+  const isFirestoreId = reportNumber ? (!reportNumber.includes("/") && reportNumber.length >= 15) : false;
+  if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
     throw new Error(`el número de expediente de portada (${payload.projectId}) no coincide con el expediente analizado (${reportNumber}).`);
   }
 
@@ -233,7 +234,8 @@ export async function exportToWord(
 ) {
   // CoverDataValidator & FinalReportConsistencyCheck
   try {
-    if (reportNumber && payload.projectId && payload.projectId !== reportNumber) {
+    const isFirestoreId = reportNumber ? (!reportNumber.includes("/") && reportNumber.length >= 15) : false;
+    if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
       throw new Error(`el número de expediente de portada (${payload.projectId}) no coincide con el expediente analizado (${reportNumber}).`);
     }
     FinalReportConsistencyCheck(payload, reportNumber);
