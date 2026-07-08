@@ -69,13 +69,13 @@ export class ReportQualityGate {
     const textValues = getAllTextValues(payload);
     const allText = textValues.join(" ");
 
-    // 4. Hay Markdown residual (negritas, cursivas o backticks)
+    // 4. Hay Markdown residual (negritas, cursivas o backticks) - Evaluado por cada valor de texto de forma aislada
     const markdownPatterns = [
       /\*\*[^*]+\*\*/,
       /_[^_]+_/,
       /`[^`]+`/
     ];
-    const hasMarkdown = markdownPatterns.some(pattern => pattern.test(allText));
+    const hasMarkdown = textValues.some(val => markdownPatterns.some(pattern => pattern.test(val)));
     if (hasMarkdown) {
       throw new Error("ReportQualityGate: Se detectó formato Markdown residual. El informe debe presentarse en texto plano depurado.");
     }
@@ -91,7 +91,7 @@ export class ReportQualityGate {
       /\bdiscovery\s+engine\b/i,
       /\bgrounding\b/i
     ];
-    const hasForbidden = forbiddenPatterns.some(pattern => pattern.test(allText));
+    const hasForbidden = textValues.some(val => forbiddenPatterns.some(pattern => pattern.test(val)));
     if (hasForbidden) {
       throw new Error("ReportQualityGate: El informe contiene etiquetas técnicas de desarrollo o comandos internos prohibidos.");
     }
@@ -121,7 +121,7 @@ export class ReportQualityGate {
       /sin justificación/i,
       /se asume sin/i
     ];
-    const hasUnverified = unverifiedPatterns.some(pattern => pattern.test(allText));
+    const hasUnverified = textValues.some(val => unverifiedPatterns.some(pattern => pattern.test(val)));
     if (hasUnverified) {
       throw new Error("ReportQualityGate: El informe contiene afirmaciones no sustentadas o especulaciones sin respaldo de evidencias.");
     }
