@@ -989,9 +989,28 @@ const hasMinimumPhotos =
       const centerLng = withCoords.reduce((acc, p) => acc + p.lng!, 0) / withCoords.length;
       const lat = centerLat || 21.8818;
       const lng = centerLng || -102.2915;
+      // Helper local de fetch con timeout
+      const fetchWithTimeout = async (url: string, options: any, timeoutMs = 15000): Promise<Response> => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+          });
+          clearTimeout(id);
+          return response;
+        } catch (err) {
+          clearTimeout(id);
+          throw err;
+        }
+      };
+
+      console.log("[confirmAndGenerateProfile] 1. Inicializando análisis y llamando APIs concurrentes...");
+      setAiProfile("Inicializando análisis y consultando bases cartográficas...");
 
       // EJECUCIÓN PARALELA: Mapa, Incidencia y Barrido OSINT Automático (X/Twitter, Google, DENUE, News)
-      const mapResPromise = fetch("/api/analyze-selection", {
+      const mapResPromise = fetchWithTimeout("/api/analyze-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -1000,14 +1019,17 @@ const hasMinimumPhotos =
           analysisPolygon,
           manualPois
         }),
+      }, 15000).catch(e => {
+        console.warn("[PhotoAlbum] Error /api/analyze-selection (se continúa con datos por defecto):", e);
+        return null;
       });
 
-      const incidenciaResPromise = fetch("/api/incidencia", {
+      const incidenciaResPromise = fetchWithTimeout("/api/incidencia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat, lng, radius: analysisRadius }), // Forzamos a la BDD a respetar el radio
-      }).catch(e => {
-        console.error("[PhotoAlbum] Error /api/incidencia:", e);
+      }, 12000).catch(e => {
+        console.warn("[PhotoAlbum] Error /api/incidencia (se continúa sin incidencia local):", e);
         return null;
       });
 
@@ -1021,6 +1043,8 @@ const hasMinimumPhotos =
         incidenciaResPromise,
         osintPromise
       ]);
+
+      console.log("[confirmAndGenerateProfile] 2. APIs iniciales resueltas.");
 
       let currentAnalysisResult = analysisResult;
       let svData: any[] = [];
@@ -1071,8 +1095,12 @@ const hasMinimumPhotos =
         let data: any = null;
         const totalChapters = 11;
 
+        console.log("[confirmAndGenerateProfile] 3. Iniciando bucle de generación de 11 capítulos con la IA...");
         for (let ch = 1; ch <= totalChapters; ch++) {
-          const res = await fetch("/api/generate-profile", {
+          console.log(`[confirmAndGenerateProfile] Generando Capítulo ${ch} de ${totalChapters}...`);
+          setAiProfile(`Generando informe de geointeligencia... Capítulo ${ch} de ${totalChapters}`);
+
+          const res = await fetchWithTimeout("/api/generate-profile", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1095,7 +1123,7 @@ const hasMinimumPhotos =
               sweepsComments: sweepsComments,
               chapter: ch
             }),
-          });
+          }, 20000);
 
           if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -1126,6 +1154,7 @@ const hasMinimumPhotos =
           finalMarkdown += chunkMarkdown + "\n\n";
         }
 
+        console.log("[confirmAndGenerateProfile] 4. Generación con IA finalizada. Procesando carátula e integraciones...");
         finalMarkdown = finalMarkdown.trim();
 
         if (

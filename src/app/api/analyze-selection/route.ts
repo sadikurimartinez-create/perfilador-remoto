@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     // Incidencia histórica en el radio alrededor del clúster de fotos
     let delitosCercanos: any[] = [];
     try {
-      const { rows } = await getPool().query(
+      const dbQueryPromise = getPool().query(
         `
         SELECT
           incidente,
@@ -108,10 +108,16 @@ export async function POST(req: Request) {
       `,
         [centerLng, centerLat, radiusMeters]
       );
-      delitosCercanos = rows;
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout en la base de datos (5s)")), 5000)
+      );
+
+      const raceResult = await Promise.race([dbQueryPromise, timeoutPromise]) as any;
+      delitosCercanos = raceResult.rows || [];
     } catch (err) {
       console.error(
-        "[api/analyze-selection] Error en consulta histórica (se continúa sin capa de incidencia):",
+        "[api/analyze-selection] Error en consulta histórica o timeout de DB:",
         err
       );
       delitosCercanos = [];
