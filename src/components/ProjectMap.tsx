@@ -271,12 +271,34 @@ export function ProjectMap({
             <Marker
               key={photo.id}
               position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
-              onMouseOver={() => setHoveredPhoto(photo)}
-              onMouseOut={() => setHoveredPhoto(null)}
+              onClick={() => setHoveredPhoto(photo)}
               draggable={true}
               onDragEnd={async (e) => {
                 if (e.latLng && onMoveMarker) {
-                  await onMoveMarker(photo.id, e.latLng.lat(), e.latLng.lng());
+                  const lat = e.latLng.lat();
+                  const lng = e.latLng.lng();
+                  if (isPoi) {
+                    const confirmMove = window.confirm("¿Desea mover esta evidencia/POI a la nueva ubicación?");
+                    if (confirmMove) {
+                      await onMoveMarker(photo.id, lat, lng);
+                    }
+                  } else {
+                    const choice = window.prompt(
+                      "Ha desplazado un vértice del trazado. Seleccione una opción:\n" +
+                      "1 - Reemplazar la ubicación de la frontera/vértice existente (Mover punto)\n" +
+                      "2 - Agregar como nuevo punto al corredor/polígono (Conservar el original)",
+                      "1"
+                    );
+                    if (choice === "1") {
+                      await onMoveMarker(photo.id, lat, lng);
+                    } else if (choice === "2" && onAddPoint) {
+                      await onAddPoint(lat, lng, {
+                        name: "Nuevo vértice de trazado",
+                        isIndependentPoi: false,
+                        isVertex: true
+                      });
+                    }
+                  }
                 }
               }}
               icon={{
@@ -298,6 +320,7 @@ export function ProjectMap({
             options={{
               pixelOffset: new window.google.maps.Size(0, -35),
             }}
+            onCloseClick={() => setHoveredPhoto(null)}
           >
             <div className="bg-slate-950/95 text-slate-200 p-4 rounded-xl border border-slate-800 shadow-2xl flex flex-col gap-2.5 w-72 pointer-events-none font-sans text-xs">
               <img

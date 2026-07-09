@@ -685,14 +685,31 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!project) return;
     try {
       const firestore = getDb();
-      await updateDoc(doc(firestore, "projects", project.id, "photos", id), { lat, lng });
+      // Find the current photo to check if it's a map construct
+      const currentPhoto = album.find((p) => p.id === id);
+      const isMapUrl = currentPhoto && (
+        currentPhoto.previewUrl?.includes("api-maps.yandex.ru") ||
+        currentPhoto.gpsSource === "POI_MAPA" ||
+        currentPhoto.gpsSource === "VERTICE_MAPA" ||
+        currentPhoto.tipo?.startsWith("Barrido")
+      );
+
+      const updateData: any = { lat, lng };
+      let newMapUrl = "";
+      if (isMapUrl) {
+        newMapUrl = `https://api-maps.yandex.ru/2.1.79/services/constructor/1.0/static/?ll=${lng},${lat}&z=16&l=map&size=600,400`;
+        updateData.url = newMapUrl;
+        updateData.previewUrl = newMapUrl;
+      }
+
+      await updateDoc(doc(firestore, "projects", project.id, "photos", id), updateData);
       setAlbum((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, lat, lng } : p))
+        prev.map((p) => (p.id === id ? { ...p, lat, lng, ...(newMapUrl ? { previewUrl: newMapUrl } : {}) } : p))
       );
     } catch (err) {
       console.error("[ProjectContext] Error al actualizar coordenadas:", err);
     }
-  }, [project, isReadOnly]);
+  }, [project, isReadOnly, album]);
 
   const togglePhotoSelection = useCallback((id: string) => {
     setSelectedIds((prev) =>

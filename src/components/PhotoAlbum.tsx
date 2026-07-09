@@ -2796,17 +2796,21 @@ const hasMinimumPhotos =
           <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
             <p className="text-xs text-slate-300 flex-1">
               {selectedIds.length > 0
-                ? `El barrido buscará delitos a 1 km del centro de las ${selectedIds.length} fotos.`
-                : "⚠️ Seleccione al menos una fotografía para establecer las coordenadas de búsqueda."}
+                ? `El barrido buscará delitos a 1 km del centro de las ${selectedIds.length} fotos seleccionadas.`
+                : album.some(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")
+                ? "El barrido buscará delitos a 1 km del centro del polígono/corredor del proyecto."
+                : "⚠️ Seleccione al menos una fotografía o agregue vértices al mapa para establecer el centro de búsqueda."}
             </p>
             <button
               type="button"
-              disabled={selectedIds.length === 0 || isCheckingIncidencia || isReadOnly}
+              disabled={(selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")) || isCheckingIncidencia || isReadOnly}
               onClick={async () => {
                 const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
-                const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat && p.lng);
+                const vertices = album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI");
+                const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : vertices;
+
                 if (photosToUse.length === 0) {
-                  alert("⚠️ Debe seleccionar al menos una fotografía con coordenadas GPS.");
+                  alert("⚠️ Debe seleccionar al menos una fotografía con coordenadas GPS o trazar un polígono/corredor.");
                   return;
                 }
                 const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
