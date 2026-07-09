@@ -82,7 +82,13 @@ export async function POST(req: Request) {
       analysisRadius: radius,
       geometryType: geometry,
       focusAreas: safeBody.focusAreas,
-      incidenciaLocal: safeBody.incidenciaLocal ? new Array(safeBody.incidenciaLocal.length).fill({}) : [],
+      incidenciaLocal: safeBody.incidenciaLocal
+        ? safeBody.incidenciaLocal.slice(0, 45).map((c: any) => ({
+            delito: c.INCIDENTE || c.tipo || c.delito || "Delito",
+            distancia: c.distancia_m || c.distancia || 0,
+            fecha: c.FECHA || c.fecha || ""
+          }))
+        : [],
       bibliografiaLocal: typeof safeBody.bibliografiaLocal === "string" ? safeBody.bibliografiaLocal.slice(0, 500) : "",
       multimodalContext: typeof safeBody.multimodalContext === "string" ? safeBody.multimodalContext.slice(0, 500) : "",
       osintEngineData: simplifyOsintData(safeBody.osintEngineData),

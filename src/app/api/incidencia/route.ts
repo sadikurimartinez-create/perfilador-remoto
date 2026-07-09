@@ -84,8 +84,8 @@ export async function POST(req: Request) {
 
         const rows = (parsed.data ?? []) as any[];
         for (const row of rows) {
-          const latRow = toFiniteNumber(row.LAT ?? row.lat ?? row.Lat);
-          const lngRow = toFiniteNumber(row.LONG ?? row.lng ?? row.lng1 ?? row.Long);
+          const latRow = toFiniteNumber(row.LAT ?? row.lat ?? row.Lat ?? row.latitude ?? row.Latitude);
+          const lngRow = toFiniteNumber(row.LONG ?? row.lng ?? row.lng1 ?? row.Long ?? row.LON ?? row.lon ?? row.Lon ?? row.longitude ?? row.Longitude);
           if (latRow == null || lngRow == null) continue;
 
           const dist = haversineMeters(lat, lng, latRow, lngRow);

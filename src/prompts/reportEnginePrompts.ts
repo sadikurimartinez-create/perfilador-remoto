@@ -117,10 +117,15 @@ Instrucciones:
  */
 export const GraphAnalysisPrompt = (ctx: ReportContext): string => {
   const incidentCount = ctx.incidenciaLocal?.length || 0;
+  const incidentSummary = ctx.incidenciaLocal && ctx.incidenciaLocal.length > 0
+    ? ctx.incidenciaLocal.slice(0, 15).map(c => `- Delito: ${c.delito || "Indeterminado"}, Distancia: ${c.distancia ? c.distancia.toFixed(0) : "N/D"}m, Fecha: ${c.fecha || "N/D"}`).join('\n')
+    : "Sin incidentes detallados.";
   return `
 --- INICIO MÓDULO: ANÁLISIS ESTADÍSTICO (CAPÍTULO 4) ---
 Genera el Capítulo 4: "ANÁLISIS ESTADÍSTICO".
 Datos: ${incidentCount} incidentes delictivos en el radio analizado.
+Muestra de Incidencias Históricas Reales en el Sector:
+${incidentSummary}
 
 Instrucciones:
 - Redacta la lectura analítica para las gráficas estadísticas delictivas (Temporal, Topología, Facilitadores Ambientales y Predicción).
