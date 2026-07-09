@@ -981,8 +981,8 @@ const hasMinimumPhotos =
       (p) =>
         p.lat != null &&
         p.lng != null &&
-        !Number.isNaN(p.lat) &&
-        !Number.isNaN(p.lng)
+        Number.isFinite(Number(p.lat)) &&
+        Number.isFinite(Number(p.lng))
     );
     if (withCoords.length === 0) return;
 
@@ -1047,8 +1047,8 @@ const hasMinimumPhotos =
       (p) =>
         p.lat != null &&
         p.lng != null &&
-        !Number.isNaN(p.lat) &&
-        !Number.isNaN(p.lng)
+        Number.isFinite(Number(p.lat)) &&
+        Number.isFinite(Number(p.lng))
     );
     if (withCoords.length === 0) {
       setError(
@@ -2506,15 +2506,15 @@ const hasMinimumPhotos =
               project={project}
               album={album}
               geometryType={project.geometryType || "individual"}
-              coordinates={album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
-                lat: photo.lat as number,
-                lng: photo.lng as number,
+              coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
+                lat: Number(photo.lat),
+                lng: Number(photo.lng),
               }))}
               onAddPoint={handleAddMapPoint}
               onMoveMarker={updatePhotoCoordinates}
               onUpdateCoordinates={(newCoords) => {
                 newCoords.forEach((coord, idx) => {
-                  const photo = album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")[idx];
+                  const photo = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")[idx];
                   if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
                     void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
                   }
@@ -2797,24 +2797,24 @@ const hasMinimumPhotos =
             <p className="text-xs text-slate-300 flex-1">
               {selectedIds.length > 0
                 ? `El barrido buscará delitos a 1 km del centro de las ${selectedIds.length} fotos seleccionadas.`
-                : album.some(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")
+                : album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")
                 ? "El barrido buscará delitos a 1 km del centro del polígono/corredor del proyecto."
                 : "⚠️ Seleccione al menos una fotografía o agregue vértices al mapa para establecer el centro de búsqueda."}
             </p>
             <button
               type="button"
-              disabled={(selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")) || isCheckingIncidencia || isReadOnly}
+              disabled={(selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")) || isCheckingIncidencia || isReadOnly}
               onClick={async () => {
-                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
-                const vertices = album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI");
+                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
+                const vertices = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI");
                 const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : vertices;
 
                 if (photosToUse.length === 0) {
                   alert("⚠️ Debe seleccionar al menos una fotografía con coordenadas GPS o trazar un polígono/corredor.");
                   return;
                 }
-                const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
-                const centerLng = photosToUse.reduce((acc, p) => acc + p.lng!, 0) / photosToUse.length;
+                const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
+                const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
 
                 if (incidents.length > 0) {
                   alert("Los incidentes ya se encuentran cargados.");
