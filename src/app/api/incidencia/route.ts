@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     const lat = toFiniteNumber(body.lat);
     const lng = toFiniteNumber(body.lng);
 
+    console.log(`[api/incidencia] Querying with coordinates: lat=${lat}, lng=${lng}`);
+
     if (lat == null || lng == null) {
+      console.warn(`[api/incidencia] Invalid coordinates received: lat=${body.lat}, lng=${body.lng}`);
       return NextResponse.json(
         { success: false, error: "Se requieren lat y lng válidos." },
         { status: 400 }
@@ -74,6 +77,8 @@ export async function POST(req: Request) {
         .filter((f) => f.isFile() && f.name.toLowerCase().endsWith(".csv"))
         .map((f) => path.join(incidenciaDir, f.name));
 
+      console.log(`[api/incidencia] Scanning ${csvFiles.length} CSV files in ${incidenciaDir}...`);
+
       for (const filePath of csvFiles) {
         const fileName = path.basename(filePath);
         const csvText = fs.readFileSync(filePath, "utf8");
@@ -100,6 +105,7 @@ export async function POST(req: Request) {
           }
         }
       }
+      console.log(`[api/incidencia] Finished scanning. Found ${delitosCercanos.length} matching delitos within 1km.`);
     } catch (err) {
       console.error("[api/incidencia] Error procesando incidencia CSV:", err);
       delitosCercanos = [];

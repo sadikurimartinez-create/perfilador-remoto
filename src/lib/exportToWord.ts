@@ -832,7 +832,7 @@ export async function exportToWord(
         if (s.relevance === "Bajo") relacion = "Requiere validación";
         osintFindings.push({
           fuente: s.source,
-          referencia: `${s.engine || "Consulta directa"} [ID: ${s.id.slice(0,8)}]`,
+          referencia: `${s.engine || "Consulta directa"} [ID: ${(s.id || "").slice(0, 8)}]`,
           info: s.data || "Sin información descriptiva",
           valor: s.context || "Aporte analítico directo al expediente.",
           relacion
