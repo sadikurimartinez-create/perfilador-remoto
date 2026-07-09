@@ -2,7 +2,7 @@
 // @ts-nocheck
 /* eslint-disable */
 
-import React, { Fragment, useRef, useState, useEffect } from "react";
+import React, { Fragment, useRef, useState, useEffect, useCallback } from "react";
 import html2canvas from "html2canvas";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
@@ -637,25 +637,26 @@ export function PhotoAlbum({
   const [datasetReport, setDatasetReport] = useState<any | null>(null);
   const [isValidatingDataset, setIsValidatingDataset] = useState(false);
 
-  useEffect(() => {
-    const fetchReport = async () => {
-      setIsValidatingDataset(true);
-      try {
-        const res = await fetch("/api/validate-crime-dataset");
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.report) {
-            setDatasetReport(json.report);
-          }
+  const fetchReport = useCallback(async () => {
+    setIsValidatingDataset(true);
+    try {
+      const res = await fetch("/api/validate-crime-dataset");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.report) {
+          setDatasetReport(json.report);
         }
-      } catch (e) {
-        console.error("Error fetching crime dataset validation:", e);
-      } finally {
-        setIsValidatingDataset(false);
       }
-    };
-    fetchReport();
+    } catch (e) {
+      console.error("Error fetching crime dataset validation:", e);
+    } finally {
+      setIsValidatingDataset(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
 
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
@@ -2675,13 +2676,24 @@ const hasMinimumPhotos =
             <h5 className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
               📊 Incidencia Delictiva Data Check
             </h5>
-            {isValidatingDataset ? (
-              <span className="text-[10px] text-slate-500 animate-pulse">Analizando archivos...</span>
-            ) : (
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${datasetReport?.success ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-red-950 text-red-400 border border-red-800"}`}>
-                {datasetReport?.success ? "DATASET OK" : "WARNING: COLUMN MISMATCH"}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {isValidatingDataset ? (
+                <span className="text-[10px] text-slate-500 animate-pulse">Analizando archivos...</span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void fetchReport()}
+                    className="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white px-2 py-0.5 rounded border border-slate-800 transition active:scale-95 flex items-center gap-1"
+                  >
+                    🔄 Re-auditar
+                  </button>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${datasetReport?.success ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-red-950 text-red-400 border border-red-800"}`}>
+                    {datasetReport?.success ? "DATASET OK" : "WARNING: COLUMN MISMATCH"}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px] text-slate-300">
