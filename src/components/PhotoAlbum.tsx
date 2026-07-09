@@ -292,16 +292,31 @@ type PhotoAlbumProps = {
 };
 
 const DELITOS_CATEGORIES = [
-  { id: "Homicidios_2025.csv", label: "Homicidios" },
-  { id: "Feminicidios_2025.csv", label: "Feminicidios" },
-  { id: "Extorsion & Fraude 2025.csv", label: "Extorsión y Fraude" },
-  { id: "PERSONA 2025.csv", label: "Delitos contra las Personas" },
-  { id: "Robo casa 2025.csv", label: "Robo a Casa Habitación" },
-  { id: "Robo negocio 2025.csv", label: "Robo a Negocio" },
-  { id: "Robo vehicular 2025.csv", label: "Robo Vehicular" },
-  { id: "Robo motocicleta 2025.csv", label: "Robo de Motocicleta" },
-  { id: "Autopartes & Cristalazo 2025.csv", label: "Autopartes y Cristalazo" }
+  { id: "homicidios", label: "Homicidios y Feminicidios" },
+  { id: "fraude_extorsion", label: "Fraude y Extorsión" },
+  { id: "robo_persona", label: "Robo a Persona / Transeúnte" },
+  { id: "robo_casa", label: "Robo a Casa Habitación" },
+  { id: "robo_negocio", label: "Robo a Negocio" },
+  { id: "robo_vehicular", label: "Robo Vehicular" },
+  { id: "robo_motocicleta", label: "Robo de Motocicleta" },
+  { id: "robo_transporte", label: "Robo a Transporte Público" },
+  { id: "cristalazo_autopartes", label: "Cristalazo y Autopartes" },
+  { id: "otros", label: "Otros Delitos" }
 ];
+
+const getCategoryForFilename = (filename: string): string => {
+  const name = String(filename || "").toLowerCase();
+  if (name.includes("homicidio") || name.includes("feminicidio")) return "homicidios";
+  if (name.includes("cristalazo") || name.includes("autopartes")) return "cristalazo_autopartes";
+  if (name.includes("casa") || name.includes("rch")) return "robo_casa";
+  if (name.includes("negocio")) return "robo_negocio";
+  if (name.includes("motocicleta")) return "robo_motocicleta";
+  if (name.includes("vehicular") || name.includes("vehiculo")) return "robo_vehicular";
+  if (name.includes("persona") || name.includes("transeunte") || name.includes("transeúnte")) return "robo_persona";
+  if (name.includes("transporte")) return "robo_transporte";
+  if (name.includes("fraude") || name.includes("extorsion") || name.includes("extorsión")) return "fraude_extorsion";
+  return "otros";
+};
 
 const createSweepId = (sweep: any) => {
   const raw = [
@@ -2871,7 +2886,7 @@ const hasMinimumPhotos =
           </div>
 
           {(() => {
-            const filteredInc = incidents.filter(inc => activeDelitos.includes(inc.fuente));
+            const filteredInc = incidents.filter(inc => activeDelitos.includes(getCategoryForFilename(inc.fuente || "")));
             if (filteredInc.length > 0) {
               return (
                 <div className="space-y-4">
