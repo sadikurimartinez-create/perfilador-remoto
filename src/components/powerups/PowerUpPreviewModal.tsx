@@ -3,6 +3,7 @@
 import React from "react";
 import { PowerUpConfig } from "./powerups.types";
 import { PowerUpTooltip } from "./PowerUpTooltip";
+import { PopupPositionManager } from "../DynamicPopup";
 
 interface PowerUpPreviewModalProps {
   config: PowerUpConfig;
@@ -12,10 +13,35 @@ interface PowerUpPreviewModalProps {
   coords?: { x: number; y: number } | null;
 }
 
-export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm }: PowerUpPreviewModalProps) {
+export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm, coords }: PowerUpPreviewModalProps) {
   if (!isOpen) return null;
   const theme = config.colorTheme;
   const preview = config.preview;
+
+  const [styleCoords, setStyleCoords] = React.useState<{ top: string; left: string } | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isOpen || !coords) return;
+    const updatePosition = () => {
+      const winWidth = window.innerWidth;
+      const winHeight = window.innerHeight;
+      const w = containerRef.current ? containerRef.current.offsetWidth : 450;
+      const h = containerRef.current ? containerRef.current.offsetHeight : 400;
+      const pos = PopupPositionManager.calculate(coords.x, coords.y, w, h, winWidth, winHeight);
+      setStyleCoords({
+        top: `${pos.y}px`,
+        left: `${pos.x}px`
+      });
+    };
+    updatePosition();
+    const timer = setTimeout(updatePosition, 30);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [isOpen, coords]);
 
   return (
     <div 
@@ -23,9 +49,11 @@ export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm }: Powe
       onClick={onClose}
     >
       <div 
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
+        style={styleCoords ? { position: "fixed", top: styleCoords.top, left: styleCoords.left } : undefined}
         className="cursor-anchored-dialog bg-slate-950 border border-slate-800/80 rounded-xl w-full max-w-lg p-5 shadow-2xl relative overflow-hidden flex flex-col gap-4"
       >
         {/* Top visual accent bar */}

@@ -22,6 +22,7 @@ const NetworkDashboard = dynamic(() => import("./NetworkDashboard").then((mod) =
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
+import { DynamicPopup, PopupPositionManager } from "./DynamicPopup";
 
 type EvidencePhotoType = {
   id: string;
@@ -597,8 +598,22 @@ export function PhotoAlbum({
       setKernelState(s);
     });
   }, []);
+  const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [scinceDataConfirm, setScinceDataConfirm] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
+    if (!clickCoords) return {};
+    const winWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
+    const winHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+    const pos = PopupPositionManager.calculate(clickCoords.x, clickCoords.y, estimatedW, estimatedH, winWidth, winHeight);
+    return {
+      position: "fixed" as const,
+      top: `${pos.y}px`,
+      left: `${pos.x}px`,
+      margin: 0
+    };
+  };
   const [reportGenerationMeta, setReportGenerationMeta] = useState<{ date: string; time: string; user: string } | null>(null);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
@@ -1806,6 +1821,7 @@ const hasMinimumPhotos =
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
+                        setClickCoords({ x: e.clientX, y: e.clientY });
                         setDeleteModal({
                           isOpen: true,
                           type: "Fotografía",
@@ -1840,7 +1856,7 @@ const hasMinimumPhotos =
                       <>
                         <button
                           type="button"
-                          onClick={() => setEditingPhoto(p)}
+                          onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setEditingPhoto(p); }}
                           className="absolute right-8 top-2 text-slate-400 hover:text-sky-400"
                           title="Editar en ventana ampliada"
                         >
@@ -2509,7 +2525,8 @@ const hasMinimumPhotos =
           <button
             type="button"
             disabled={selectedIds.length === 0 || isCheckingScince || isReadOnly}
-            onClick={async () => {
+            onClick={async (e) => {
+              setClickCoords({ x: e.clientX, y: e.clientY });
               setIsCheckingScince(true);
               setError(null);
               try {
@@ -2525,13 +2542,7 @@ const hasMinimumPhotos =
                 const data = await getScinceData(centerLat, centerLng);
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
-                  await registerSweep({
-                    engine: "Población de Cuadra (SCINCE)",
-                    source: "INEGI SCINCE",
-                    type: "Directa",
-                    relevance: "Medio",
-                    data: newContext
-                  });
+                  setScinceDataConfirm(newContext);
                 } else {
                   setError(data.error || "Error al consultar INEGI SCINCE.");
                 }
@@ -3724,7 +3735,7 @@ const hasMinimumPhotos =
             <div className="flex justify-end pt-4 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => void confirmAndGenerateProfile()}
+                onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); void confirmAndGenerateProfile(); }}
                 disabled={isGeneratingAI}
                 className="w-full md:w-auto bg-sky-500 hover:bg-sky-400 text-slate-950 font-black px-8 py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
               >
@@ -3741,34 +3752,43 @@ const hasMinimumPhotos =
     </section>
       
       {/* MODAL DE EDICIÓN DE VENTANA */}
-      {editingPhoto && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm print:hidden">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-6xl bg-slate-900 border border-sky-600 rounded-xl p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-sky-200">Ventana de Edición de Contexto</h3>
-            <p className="text-xs text-slate-400">Edite la contextualización de la evidencia de manera cómoda.</p>
-            <textarea
-              spellCheck={true}
-              value={editingPhoto.comentario || ""}
-              onChange={(e) => {
-                updatePhotoMeta(editingPhoto.id, { tipo: editingPhoto.tipo, comentario: e.target.value });
-                setEditingPhoto({ ...editingPhoto, comentario: e.target.value });
-              }}
-              className="w-full min-h-[150px] bg-slate-800 text-slate-100 border border-slate-600 rounded-md p-4 text-sm focus:outline-none focus:border-sky-500 resize-y shadow-inner"
-              placeholder="Escribe el comentario detallado aquí..."
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setEditingPhoto(null)} className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition-colors shadow-md">
-                Aceptar y Cerrar
-              </button>
-            </div>
-          </div>
+      <DynamicPopup
+        open={!!editingPhoto}
+        anchorPosition={clickCoords}
+        onClose={() => setEditingPhoto(null)}
+        className="max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+      >
+        <h3 className="text-lg font-bold text-sky-200 mb-1">Ventana de Edición de Contexto</h3>
+        <p className="text-xs text-slate-400 mb-4">Edite la contextualización de la evidencia de manera cómoda.</p>
+        <textarea
+          spellCheck={true}
+          value={editingPhoto ? (editingPhoto.comentario || "") : ""}
+          onChange={(e) => {
+            if (editingPhoto) {
+              updatePhotoMeta(editingPhoto.id, { tipo: editingPhoto.tipo, comentario: e.target.value });
+              setEditingPhoto({ ...editingPhoto, comentario: e.target.value });
+            }
+          }}
+          className="w-full min-h-[150px] bg-slate-800 text-slate-100 border border-slate-600 rounded-md p-4 text-sm focus:outline-none focus:border-sky-500 resize-y shadow-inner mb-4"
+          placeholder="Escribe el comentario detallado aquí..."
+        />
+        <div className="flex justify-end pt-2 border-t border-slate-800">
+          <button onClick={() => setEditingPhoto(null)} className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition-colors shadow-md text-xs">
+            Aceptar y Cerrar
+          </button>
         </div>
-      )}
+      </DynamicPopup>
 
       {/* MODAL DE DICTAMEN OFICIAL (PREVISUALIZACIÓN, ANEXOS Y DESCARGA) */}
       {showReportModal && editableProfile && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto print:hidden">
-          <div role="dialog" aria-modal="true" className="w-full max-w-5xl bg-slate-950 border border-slate-800 p-6 rounded-2xl shadow-2xl space-y-6 text-left max-h-[90vh] overflow-y-auto animate-fadeIn">
+        <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm p-4 overflow-y-auto print:hidden" onClick={() => setShowReportModal(false)}>
+          <div 
+            role="dialog" 
+            aria-modal="true" 
+            onClick={(e) => e.stopPropagation()}
+            style={getDynamicModalStyle(950, 700)}
+            className="w-full max-w-5xl bg-slate-950 border border-slate-800 p-6 rounded-2xl shadow-2xl space-y-6 text-left max-h-[90vh] overflow-y-auto animate-fadeIn"
+          >
             <header className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
                 📄 Dictamen Criminológico Ambiental Generado
@@ -4272,14 +4292,14 @@ const hasMinimumPhotos =
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleConsultarHistorial()}
+                    onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); handleConsultarHistorial(); }}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-extrabold text-slate-200 uppercase tracking-wider shadow transition active:scale-95"
                   >
                     📂 Consultar Historial
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setShowReportModal(false); void confirmAndGenerateProfile(); }}
+                    onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-slate-850 hover:bg-slate-750 px-4 py-2.5 text-xs font-extrabold text-slate-300 uppercase tracking-wider shadow transition active:scale-95"
                   >
                     🔄 Regenerar Informe
@@ -4300,160 +4320,212 @@ const hasMinimumPhotos =
       )}
 
       {/* MODAL DE HISTORIAL DOSSIERS (v9.0) */}
-      {showHistoryModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 print:hidden">
-          <div role="dialog" aria-modal="true" className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-black text-sky-400 flex items-center gap-2">
-                📂 Historial de Expedientes Guardados (v9.0)
-              </h3>
-              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white text-sm">✖</button>
-            </div>
-            
-            <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
-              {isLoadingHistory ? (
-                <p className="text-xs text-slate-400">Cargando bitácora...</p>
-              ) : historyDossiers.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No hay expedientes registrados en el historial de este proyecto.</p>
-              ) : (
-                historyDossiers.map((h) => (
-                  <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
-                    <div className="space-y-1.5 text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-200">Fecha y Hora:</span>
-                        <span className="text-sky-400 font-mono">{new Date(h.fecha).toLocaleString("es-MX")}</span>
-                      </div>
-                      <div>
-                        <span className="font-bold text-slate-200">Nombre del Autor:</span>
-                        <span className="text-slate-300 ml-1.5">{h.analyst || "Desconocido"}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            if (!h.editorialPayload) {
-                              alert("Este expediente histórico no contiene el dictamen de Word para regenerar.");
-                              return;
-                            }
-                            await exportToWord(
-                              h.editorialPayload,
-                              h.poligono || 'Expediente',
-                              h.projectId || 'EXP',
-                              user
-                            );
-                          } catch (err: any) {
-                            alert("Error al generar Word: " + err.message);
-                          }
-                        }}
-                        className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded text-[10px] font-bold transition shadow"
-                      >
-                        📝 Generar Word
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            if (!h.briefing) {
-                              alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
-                              return;
-                            }
-                            await generatePdfProgrammatic(h.briefing);
-                          } catch (err: any) {
-                            alert("Error al generar PDF: " + err.message);
-                          }
-                        }}
-                        className="px-2.5 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded text-[10px] font-bold transition shadow"
-                      >
-                        📄 Generar PDF
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteDossier(h.id)}
-                        className="px-2.5 py-1.5 bg-red-850 hover:bg-red-750 text-white rounded text-[10px] font-bold transition shadow"
-                      >
-                        🗑️ Borrar
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            
-            <div className="flex justify-end pt-2 border-t border-slate-800">
-              <button onClick={() => setShowHistoryModal(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">
-                Cerrar Historial
-              </button>
-            </div>
-          </div>
+      <DynamicPopup
+        open={showHistoryModal}
+        anchorPosition={clickCoords}
+        onClose={() => setShowHistoryModal(false)}
+        className="max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+          <h3 className="text-lg font-black text-sky-400 flex items-center gap-2">
+            📂 Historial de Expedientes Guardados (v9.0)
+          </h3>
+          <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white text-sm">✖</button>
         </div>
-      )}
+        
+        <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
+          {isLoadingHistory ? (
+            <p className="text-xs text-slate-400">Cargando bitácora...</p>
+          ) : historyDossiers.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">No hay expedientes registrados en el historial de este proyecto.</p>
+          ) : (
+            historyDossiers.map((h) => (
+              <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+                <div className="space-y-1.5 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-200">Fecha y Hora:</span>
+                    <span className="text-sky-400 font-mono">{new Date(h.fecha).toLocaleString("es-MX")}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-200">Nombre del Autor:</span>
+                    <span className="text-slate-300 ml-1.5">{h.analyst || "Desconocido"}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        if (!h.editorialPayload) {
+                          alert("Este expediente histórico no contiene el dictamen de Word para regenerar.");
+                          return;
+                        }
+                        await exportToWord(
+                          h.editorialPayload,
+                          h.poligono || 'Expediente',
+                          h.projectId || 'EXP',
+                          user
+                        );
+                      } catch (err: any) {
+                        alert("Error al generar Word: " + err.message);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded text-[10px] font-bold transition shadow"
+                  >
+                    📝 Generar Word
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        if (!h.briefing) {
+                          alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
+                          return;
+                        }
+                        await generatePdfProgrammatic(h.briefing);
+                      } catch (err: any) {
+                        alert("Error al generar PDF: " + err.message);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded text-[10px] font-bold transition shadow"
+                  >
+                    📄 Generar PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDossier(h.id)}
+                    className="px-2.5 py-1.5 bg-red-850 hover:bg-red-750 text-white rounded text-[10px] font-bold transition shadow"
+                  >
+                    🗑️ Borrar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        
+        <div className="flex justify-end pt-4 mt-2 border-t border-slate-800">
+          <button onClick={() => setShowHistoryModal(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">
+            Cerrar Historial
+          </button>
+        </div>
+      </DynamicPopup>
 
       {/* MODAL DE ELIMINACIÓN CONTROLADA (JUSTIFICACIÓN OBLIGATORIA) */}
-      {deleteModal?.isOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 print:hidden">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog w-full max-w-md bg-slate-950 border border-red-700/50 p-6 rounded-2xl shadow-2xl space-y-4 text-left">
-            <h3 className="text-lg font-black text-red-400 flex items-center gap-2">
-              ⚠️ Confirmar Eliminación Controlada
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Está a punto de enviar este elemento ({deleteModal.type}) a la <span className="font-bold text-amber-400">Papelera de Reciclaje Institucional</span>. Permanecerá allí por 7 días naturales antes de su eliminación definitiva.
-            </p>
-            
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-slate-400 uppercase">Motivo de Eliminación (Obligatorio)</label>
-              <select
-                value={deleteReason}
-                onChange={(e) => setDeleteReason(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
-              >
-                <option value="">-- Seleccione un motivo --</option>
-                <option value="Registro duplicado">Registro duplicado</option>
-                <option value="Captura incorrecta">Captura incorrecta</option>
-                <option value="Evidencia errónea">Evidencia errónea</option>
-                <option value="Expediente cancelado">Expediente cancelado</option>
-                <option value="Corrección administrativa">Corrección administrativa</option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => {
-                  setDeleteModal(null);
-                  setDeleteReason("");
-                }}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={!deleteReason.trim()}
-                onClick={async () => {
-                  if (!deleteReason) return;
-                  try {
-                    await softDeleteDoc({
-                      type: deleteModal.type,
-                      id: deleteModal.id,
-                      projectId: deleteModal.projectId,
-                      reason: deleteReason
-                    });
-                    setDeleteModal(null);
-                    setDeleteReason("");
-                    alert(`El elemento (${deleteModal.type}) ha sido enviado a la Papelera de Reciclaje.`);
-                  } catch (err: any) {
-                    alert("Error al eliminar: " + err.message);
-                  }
-                }}
-                className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-red-900/30"
-              >
-                Confirmar Eliminación
-              </button>
-            </div>
-          </div>
+      <DynamicPopup
+        open={!!deleteModal?.isOpen}
+        anchorPosition={clickCoords}
+        onClose={() => {
+          setDeleteModal(null);
+          setDeleteReason("");
+        }}
+        className="max-w-md w-full border-red-700/50"
+      >
+        <h3 className="text-lg font-black text-red-400 flex items-center gap-2 mb-2">
+          ⚠️ Confirmar Eliminación Controlada
+        </h3>
+        <p className="text-xs text-slate-300 leading-relaxed mb-4">
+          Está a punto de enviar este elemento ({deleteModal?.type}) a la <span className="font-bold text-amber-400">Papelera de Reciclaje Institucional</span>. Permanecerá allí por 7 días naturales antes de su eliminación definitiva.
+        </p>
+        
+        <div className="space-y-1 mb-4">
+          <label className="block text-[11px] font-bold text-slate-400 uppercase">Motivo de Eliminación (Obligatorio)</label>
+          <select
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+          >
+            <option value="">-- Seleccione un motivo --</option>
+            <option value="Registro duplicado">Registro duplicado</option>
+            <option value="Captura incorrecta">Captura incorrecta</option>
+            <option value="Evidencia errónea">Evidencia errónea</option>
+            <option value="Expediente cancelado">Expediente cancelado</option>
+            <option value="Corrección administrativa">Corrección administrativa</option>
+            <option value="Otro">Otro</option>
+          </select>
         </div>
-      )}
+
+        <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
+          <button
+            onClick={() => {
+              setDeleteModal(null);
+              setDeleteReason("");
+            }}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            disabled={!deleteReason.trim()}
+            onClick={async () => {
+              if (!deleteReason || !deleteModal) return;
+              try {
+                await softDeleteDoc({
+                  type: deleteModal.type,
+                  id: deleteModal.id,
+                  projectId: deleteModal.projectId,
+                  reason: deleteReason
+                });
+                setDeleteModal(null);
+                setDeleteReason("");
+                alert(`El elemento (${deleteModal.type}) ha sido enviado a la Papelera de Reciclaje.`);
+              } catch (err: any) {
+                alert("Error al eliminar: " + err.message);
+              }
+            }}
+            className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-red-900/30"
+          >
+            Confirmar Eliminación
+          </button>
+        </div>
+      </DynamicPopup>
+
+      {/* CONFIRMACIÓN DE HIPÓTESIS DEMOGRÁFICA (SCINCE) */}
+      <DynamicPopup
+        open={!!scinceDataConfirm}
+        anchorPosition={clickCoords}
+        onClose={() => setScinceDataConfirm(null)}
+        className="max-w-md w-full"
+      >
+        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5">
+          📊 Confirmación de Inteligencia Demográfica (SCINCE)
+        </h3>
+        <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+          Se han obtenido los siguientes datos sociodemográficos de la cuadra. Confirme su incorporación al análisis de hipótesis:
+        </p>
+        <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs text-slate-200 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4">
+          {scinceDataConfirm}
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+          <button
+            onClick={() => setScinceDataConfirm(null)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={async () => {
+              if (!scinceDataConfirm) return;
+              try {
+                await registerSweep({
+                  engine: "Población de Cuadra (SCINCE)",
+                  source: "INEGI SCINCE",
+                  type: "Directa",
+                  relevance: "Medio",
+                  data: scinceDataConfirm
+                });
+                setScinceDataConfirm(null);
+                alert("Datos sociodemográficos agregados a la hipótesis correctamente.");
+              } catch (err: any) {
+                alert("Error al registrar barrido: " + err.message);
+              }
+            }}
+            className="px-4 py-2 bg-purple-700 hover:bg-purple-650 text-white text-xs font-semibold rounded-lg transition-all shadow-md"
+          >
+            Aceptar y Añadir
+          </button>
+        </div>
+      </DynamicPopup>
 
       {/* VENTANA DE PROCESAMIENTO DE DICTAMEN IA (CONSOLA DE CAPÍTULOS) */}
       {isGeneratingAI && (
