@@ -14,12 +14,16 @@ export interface VectorEngineInput {
   photoCount: number;
 }
 
-// Auxiliar para inicializar canvas con pixel ratio para mayor resolución (HD)
+// Auxiliar para inicializar canvas con pixel ratio para mayor resolución (HD - 300 DPI)
 const getHDCanvas = (width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } => {
+  const scale = 2.5; // High resolution scale factor (300 DPI equivalent)
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
   const ctx = canvas.getContext('2d')!;
+  
+  // Scale the coordinates so that all draw commands are automatically scaled
+  ctx.scale(scale, scale);
   
   // Suavizado de imágenes para trazados vectoriales
   ctx.imageSmoothingEnabled = true;
@@ -40,6 +44,7 @@ const loadStaticMapImage = (
     let googleUrl = "";
     if (key) {
       googleUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${w}x${h}&maptype=roadmap` +
+        `&scale=2` +
         `&style=element:geometry|color:0x1a2238` +
         `&style=element:labels.text.fill|color:0x8a9ba8` +
         `&style=element:labels.text.stroke|color:0x1a2238` +
@@ -1153,30 +1158,30 @@ export const renderHypothesisGraph = (input: VectorEngineInput): string => {
 
   // Título
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 15px monospace';
   ctx.textAlign = 'center';
   ctx.fillText('HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)', w / 2, 35);
   ctx.fillStyle = '#00f0ff';
-  ctx.font = '8px monospace';
+  ctx.font = '9px monospace';
   ctx.fillText('RELACIÓN ESTRUCTURAL DE RIESGOS Y ACCIONES OPERATIVAS', w / 2, 48);
 
-  // Nodos estructurales
+  // Nodos estructurales (DPI Alto / Tamaños incrementados para impresión)
   const nodes = [
-    { id: 'center', label: input.projectName.slice(0, 18), x: 300, y: 200, color: '#00f0ff', r: 35, fontColor: '#0f172a', bold: true },
+    { id: 'center', label: input.projectName.slice(0, 18), x: 300, y: 200, color: '#00f0ff', r: 45, fontColor: '#0f172a', bold: true },
     
     // Factores ambientales (Izquierda)
-    { id: 'f1', label: 'Baldíos/Oscuridad', x: 130, y: 120, color: '#f59e0b', r: 24, fontColor: '#ffffff' },
-    { id: 'f2', label: 'Sin Cámaras/C2', x: 110, y: 220, color: '#f59e0b', r: 24, fontColor: '#ffffff' },
-    { id: 'f3', label: 'Escape Rápido', x: 150, y: 310, color: '#d97706', r: 24, fontColor: '#ffffff' },
+    { id: 'f1', label: 'Baldíos/Oscuridad', x: 120, y: 120, color: '#f59e0b', r: 28, fontColor: '#ffffff', bold: true },
+    { id: 'f2', label: 'Sin Cámaras/C2', x: 100, y: 220, color: '#f59e0b', r: 28, fontColor: '#ffffff', bold: true },
+    { id: 'f3', label: 'Escape Rápido', x: 140, y: 310, color: '#d97706', r: 28, fontColor: '#ffffff', bold: true },
     
     // Amenazas / Delitos (Derecha)
-    { id: 'a1', label: 'Robo Peatón', x: 470, y: 110, color: '#e11d48', r: 24, fontColor: '#ffffff' },
-    { id: 'a2', label: 'Mercado Negro', x: 490, y: 200, color: '#be123c', r: 24, fontColor: '#ffffff' },
-    { id: 'a3', label: 'Consumo Vía Pública', x: 450, y: 300, color: '#e11d48', r: 24, fontColor: '#ffffff' },
+    { id: 'a1', label: 'Robo Peatón', x: 480, y: 110, color: '#e11d48', r: 28, fontColor: '#ffffff', bold: true },
+    { id: 'a2', label: 'Mercado Negro', x: 500, y: 200, color: '#be123c', r: 28, fontColor: '#ffffff', bold: true },
+    { id: 'a3', label: 'Consumo Vía Pública', x: 460, y: 300, color: '#e11d48', r: 28, fontColor: '#ffffff', bold: true },
     
     // Acciones Estratégicas (Arriba y Abajo)
-    { id: 'op1', label: 'Patrullaje Nocturno', x: 300, y: 95, color: '#10b981', r: 26, fontColor: '#ffffff' },
-    { id: 'op2', label: 'Recuperación Espacio', x: 300, y: 315, color: '#10b981', r: 26, fontColor: '#ffffff' }
+    { id: 'op1', label: 'Patrullaje Nocturno', x: 300, y: 95, color: '#10b981', r: 32, fontColor: '#ffffff', bold: true },
+    { id: 'op2', label: 'Recuperación Espacio', x: 300, y: 315, color: '#10b981', r: 32, fontColor: '#ffffff', bold: true }
   ];
 
   // Trazar enlaces entre nodos (Líneas vectoriales con estilo)

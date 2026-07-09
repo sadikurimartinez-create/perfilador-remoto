@@ -59,6 +59,7 @@ export type AlbumPhoto = {
   gpsLng?: number | null;
   diagnosticLogs?: string;
   validado?: boolean;
+  isIndependentPoi?: boolean;
 };
 
 export type SweepIntegrationItem = {
@@ -160,6 +161,9 @@ type ProjectContextValue = {
       gpsLng?: number | null;
       diagnosticLogs?: string;
       validado?: boolean;
+      tipo?: string;
+      comentario?: string;
+      isIndependentPoi?: boolean;
     }
   ) => Promise<void>;
   removePhotoFromAlbum: (id: string) => Promise<void>;
@@ -504,6 +508,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng?: number | null;
       diagnosticLogs?: string;
       validado?: boolean;
+      tipo?: string;
+      comentario?: string;
+      isIndependentPoi?: boolean;
     }
   ) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
@@ -519,9 +526,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const snapshot = await uploadBytes(storageRef, compressedFile);
     const downloadURL = await getDownloadURL(snapshot.ref);
 
-    let defaultTipo = "Nodo Principal";
-    if (project.geometryType === "lineal") defaultTipo = "Corredor";
-    else if (project.geometryType === "poligono") defaultTipo = "Interior";
+    let defaultTipo = metadata?.tipo || "Nodo Principal";
+    if (!metadata?.tipo) {
+      if (project.geometryType === "lineal") defaultTipo = "Corredor";
+      else if (project.geometryType === "poligono") defaultTipo = "Interior";
+    }
 
     let photoDocId = photoId;
 
@@ -537,7 +546,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         projectId: project.id,
         createdAt: Date.now(),
         tipo: defaultTipo,
-        comentario: "",
+        comentario: metadata?.comentario || "",
+        isIndependentPoi: metadata?.isIndependentPoi || false,
         gpsAccuracy: metadata?.gpsAccuracy ?? null,
         gpsTimestamp: metadata?.gpsTimestamp ?? null,
         gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",
@@ -566,7 +576,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       lat,
       lng,
       tipo: defaultTipo,
-      comentario: "",
+      comentario: metadata?.comentario || "",
+      isIndependentPoi: metadata?.isIndependentPoi || false,
       file: compressedFile,
       gpsAccuracy: metadata?.gpsAccuracy ?? null,
       gpsTimestamp: metadata?.gpsTimestamp ?? null,
@@ -1099,6 +1110,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       contextualizedAt,
       contextualizedBy,
       isContextualized: true,
+      isIndependentPoi: photo.isIndependentPoi || false,
       savedCoordinates: photo.lat && photo.lng ? { lat: photo.lat, lng: photo.lng } : null
     });
 
@@ -1111,6 +1123,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               contextualizedAt,
               contextualizedBy,
               isContextualized: true,
+              isIndependentPoi: photo.isIndependentPoi || false,
             }
           : p
       )
@@ -1169,6 +1182,60 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
       
       await updateDoc(projectRef, updateData);
+
+      // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
+      let latVal: number | null = null;
+      let lngVal: number | null = null;
+      
+      // Parse coordinates from sweep data text
+      const coordsMatch = params.data.match(/(?:lat|lng|coordenadas|coords|posicion)[:\s]+(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/i);
+      if (coordsMatch) {
+        latVal = parseFloat(coordsMatch[1]);
+        lngVal = parseFloat(coordsMatch[2]);
+      } else {
+        const selectedPhotos = album.filter(p => p.lat && p.lng);
+        if (selectedPhotos.length > 0) {
+          latVal = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
+          lngVal = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
+        } else {
+          latVal = (project as any).latitude || 21.8853;
+          lngVal = (project as any).longitude || -102.2916;
+        }
+      }
+
+      if (latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
+        try {
+          const photoId = `EVI-SWEEP-${Date.now()}`;
+          const previewUrl = `https://api-maps.yandex.ru/2.1.79/services/constructor/1.0/static/?ll=${lngVal},${latVal}&z=16&l=map&size=600,400`;
+          const photosColRef = collection(firestore, "projects", project.id, "photos");
+          const photoDocData = {
+            url: previewUrl,
+            storagePath: `sweeps/${photoId}.jpg`,
+            lat: latVal,
+            lng: lngVal,
+            projectId: project.id,
+            createdAt: Date.now(),
+            tipo: `Barrido ${params.engine}`,
+            comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
+            validado: true,
+            isIndependentPoi: true
+          };
+          await setDoc(doc(photosColRef, photoId), photoDocData);
+          
+          setAlbum(prev => [...prev, {
+            id: photoId,
+            previewUrl,
+            lat: latVal!,
+            lng: lngVal!,
+            tipo: `Barrido ${params.engine}`,
+            comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
+            validado: true,
+            isIndependentPoi: true
+          }]);
+        } catch (photoErr) {
+          console.error("[ProjectContext] Error creating sweep georeferenced photo:", photoErr);
+        }
+      }
 
       setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
       

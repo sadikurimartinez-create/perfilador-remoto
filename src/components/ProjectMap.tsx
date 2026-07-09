@@ -7,6 +7,7 @@ interface ProjectMapProps {
   geometryType: "individual" | "lineal" | "poligono" | string;
   coordinates: { lat: number; lng: number }[];
   onUpdateCoordinates?: (newCoords: { lat: number; lng: number }[]) => void;
+  onAddPoint?: (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => Promise<void>;
   album: any[];
   project: {
     id: string;
@@ -111,6 +112,7 @@ export function ProjectMap({
   geometryType,
   coordinates,
   onUpdateCoordinates,
+  onAddPoint,
   album,
   project,
 }: ProjectMapProps) {
@@ -122,6 +124,7 @@ export function ProjectMap({
   });
 
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
+  const [subMode, setSubMode] = useState<"vertex" | "poi">("poi");
 
   const center = useMemo(() => {
     if (project?.latitude && project?.longitude) {
@@ -149,10 +152,34 @@ export function ProjectMap({
     return album.filter((p) => p.lat != null && p.lng != null);
   }, [album]);
 
-  // Group coordinates of evidences for corridor polyline or polygon drawing
+  // Group coordinates of evidences for corridor polyline or polygon drawing (excl. independent POIs)
   const geoShapePath = useMemo(() => {
-    return georeferencedPhotos.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+    return georeferencedPhotos
+      .filter((p) => !p.isIndependentPoi && p.tipo !== "POI" && p.tipo !== "Punto Independiente" && !p.tipo?.startsWith("Barrido"))
+      .map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
   }, [georeferencedPhotos]);
+
+  const handleMapClick = async (e: google.maps.MapMouseEvent) => {
+    if (!e.latLng || !onAddPoint) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+
+    if (geometryType === "individual") {
+      const name = window.prompt("Ingrese el nombre o comentario para esta evidencia / POI:", "Evidencia de Campo");
+      if (name === null) return;
+      await onAddPoint(lat, lng, { name, isIndependentPoi: true, isVertex: false });
+    } else {
+      if (subMode === "vertex") {
+        // Modalidad 1: Ampliar / Modificar Trazado
+        await onAddPoint(lat, lng, { name: "Vértice de trazado", isIndependentPoi: false, isVertex: true });
+      } else {
+        // Modalidad 2: Evidencia / POI Independiente
+        const name = window.prompt("Ingrese el comentario para esta evidencia independiente:", "POI Independiente");
+        if (name === null) return;
+        await onAddPoint(lat, lng, { name, isIndependentPoi: true, isVertex: false });
+      }
+    }
+  };
 
   if (!isLoaded) {
     return (
@@ -167,11 +194,32 @@ export function ProjectMap({
 
   return (
     <div className="relative w-full">
+      {/* Floating Toolbar to toggle sub-modalities for corridors and polygons */}
+      {(geometryType === "lineal" || geometryType === "poligono" || geometryType === "corredor") && (
+        <div className="absolute top-3 left-3 z-[10] bg-slate-950/95 border border-slate-800 p-2.5 rounded-xl shadow-2xl flex gap-2 font-sans">
+          <button
+            type="button"
+            onClick={() => setSubMode("vertex")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition active:scale-95 ${subMode === "vertex" ? "bg-rose-650 text-white shadow-lg" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+          >
+            📏 Modalidad 1: Ampliar {geometryType === "lineal" || geometryType === "corredor" ? "Corredor" : "Polígono"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubMode("poi")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition active:scale-95 ${subMode === "poi" ? "bg-cyan-650 text-white shadow-lg" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+          >
+            📍 Modalidad 2: POI / Evidencia Independiente
+          </button>
+        </div>
+      )}
+
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
         zoom={15}
         options={mapOptions}
+        onClick={handleMapClick}
       >
         {/* Draw circle for individual type projects */}
         {geometryType === "individual" && project?.latitude && project?.longitude && (
@@ -215,24 +263,27 @@ export function ProjectMap({
         )}
 
         {/* Georeferenced Evidence markers */}
-        {georeferencedPhotos.map((photo) => (
-          <Marker
-            key={photo.id}
-            position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
-            onMouseOver={() => setHoveredPhoto(photo)}
-            onMouseOut={() => setHoveredPhoto(null)}
-            icon={{
-              path: 0, // circle
-              fillColor: "#38bdf8",
-              fillOpacity: 0.9,
-              strokeWeight: 2,
-              strokeColor: "#ffffff",
-              scale: 7,
-            }}
-          />
-        ))}
+        {georeferencedPhotos.map((photo) => {
+          const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente" || photo.tipo?.startsWith("Barrido");
+          return (
+            <Marker
+              key={photo.id}
+              position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
+              onMouseOver={() => setHoveredPhoto(photo)}
+              onMouseOut={() => setHoveredPhoto(null)}
+              icon={{
+                path: 0, // circle
+                fillColor: isPoi ? "#c084fc" : "#22d3ee",
+                fillOpacity: 0.9,
+                strokeWeight: 2,
+                strokeColor: "#ffffff",
+                scale: isPoi ? 8 : 6,
+              }}
+            />
+          );
+        })}
 
-        {/* Hover info window containing the preview of the georeferenced evidence */}
+        {/* Hover info window containing the preview and full metadata of the georeferenced evidence */}
         {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (
           <InfoWindow
             position={{ lat: Number(hoveredPhoto.lat), lng: Number(hoveredPhoto.lng) }}
@@ -240,19 +291,35 @@ export function ProjectMap({
               pixelOffset: new window.google.maps.Size(0, -35),
             }}
           >
-            <div className="bg-slate-950/95 text-slate-200 p-3.5 rounded-xl border border-slate-700/80 shadow-2xl flex flex-col items-center gap-2.5 w-64 pointer-events-none font-sans">
+            <div className="bg-slate-950/95 text-slate-200 p-4 rounded-xl border border-slate-800 shadow-2xl flex flex-col gap-2.5 w-72 pointer-events-none font-sans text-xs">
               <img
                 src={hoveredPhoto.previewUrl || "/no-image.png"}
                 alt={hoveredPhoto.tipo || "Evidencia"}
-                className="w-56 h-40 object-cover rounded-lg border border-slate-700 bg-slate-900"
+                className="w-full h-36 object-cover rounded-lg border border-slate-800 bg-slate-900"
               />
-              <div className="w-full text-center">
-                <span className="text-xs font-black text-cyan-400 uppercase tracking-wide">
-                  {hoveredPhoto.tipo || "Evidencia de Campo"}
-                </span>
+              <div className="w-full space-y-1.5">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-1">
+                  <span className="font-black text-cyan-400 uppercase tracking-wide">
+                    {hoveredPhoto.evidenceId || `EVI-${hoveredPhoto.id.slice(0, 6).toUpperCase()}`}
+                  </span>
+                  <span className={`px-2 py-0.5 text-[8px] font-bold rounded-full ${hoveredPhoto.validado ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
+                    {hoveredPhoto.validado ? "VALIDADA" : "PENDIENTE"}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-400">
+                  <div><span className="text-slate-500 font-bold">Tipo:</span> {hoveredPhoto.tipo || "Fotografía"}</div>
+                  <div><span className="text-slate-500 font-bold">Fuente:</span> {hoveredPhoto.gpsSource || "Analista"}</div>
+                  <div><span className="text-slate-500 font-bold">Fecha:</span> {hoveredPhoto.contextualizedAt ? new Date(hoveredPhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
+                  <div><span className="text-slate-500 font-bold">Usuario:</span> {hoveredPhoto.contextualizedBy || "Analista CEIPOL"}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(hoveredPhoto.lat).toFixed(5)}, {Number(hoveredPhoto.lng).toFixed(5)}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Confianza:</span> {hoveredPhoto.gpsAccuracy ? `${hoveredPhoto.gpsAccuracy}m` : "Alto"}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Relación Hipótesis:</span> Factor ambiental y delictivo</div>
+                </div>
+
                 {hoveredPhoto.comentario && (
-                  <p className="text-[10px] text-slate-300 mt-1.5 leading-normal line-clamp-4">
-                    {hoveredPhoto.comentario}
+                  <p className="text-[10px] text-slate-300 leading-normal border-t border-slate-900 pt-1.5 italic">
+                    "{hoveredPhoto.comentario}"
                   </p>
                 )}
               </div>

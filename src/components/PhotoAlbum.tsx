@@ -614,7 +614,49 @@ export function PhotoAlbum({
       margin: 0
     };
   };
+  const handleAddMapPoint = async (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => {
+    if (isReadOnly) return;
+    try {
+      const fileBlob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")).blob();
+      const file = new File([fileBlob], `${details.isIndependentPoi ? "POI" : "Vertex"}_${Date.now()}.jpg`, { type: "image/jpeg" });
+      
+      if (uploadAndAddPhoto) {
+        await uploadAndAddPhoto(file, lat, lng, {
+          gpsSource: details.isIndependentPoi ? "POI_MAPA" : "VERTICE_MAPA",
+          validado: true,
+          tipo: details.isIndependentPoi ? "POI" : (project?.geometryType === "lineal" ? "Corredor" : "Polígono"),
+          comentario: details.name || (details.isIndependentPoi ? "POI creado desde mapa." : "Vértice de trazado."),
+          isIndependentPoi: details.isIndependentPoi
+        });
+      }
+    } catch (err: any) {
+      alert("Error al agregar punto geográfico: " + err.message);
+    }
+  };
   const [reportGenerationMeta, setReportGenerationMeta] = useState<{ date: string; time: string; user: string } | null>(null);
+  const [datasetReport, setDatasetReport] = useState<any | null>(null);
+  const [isValidatingDataset, setIsValidatingDataset] = useState(false);
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      setIsValidatingDataset(true);
+      try {
+        const res = await fetch("/api/validate-crime-dataset");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.report) {
+            setDatasetReport(json.report);
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching crime dataset validation:", e);
+      } finally {
+        setIsValidatingDataset(false);
+      }
+    };
+    fetchReport();
+  }, []);
+
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
   const [qaIteration, setQaIteration] = useState(0);
@@ -2461,15 +2503,16 @@ const hasMinimumPhotos =
           {album.length > 0 && project && (
             <ProjectMap
               project={project}
-              album={album.filter(p => p.lat != null && p.lng != null)}
+              album={album}
               geometryType={project.geometryType || "individual"}
-              coordinates={album.filter(p => p.lat != null && p.lng != null).map((photo) => ({
+              coordinates={album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
                 lat: photo.lat as number,
                 lng: photo.lng as number,
               }))}
+              onAddPoint={handleAddMapPoint}
               onUpdateCoordinates={(newCoords) => {
                 newCoords.forEach((coord, idx) => {
-                  const photo = album.filter(p => p.lat != null && p.lng != null)[idx];
+                  const photo = album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")[idx];
                   if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
                     void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
                   }
@@ -2624,6 +2667,55 @@ const hasMinimumPhotos =
             Filtre los delitos y visualice gráficas de severidad basadas en la base local georreferenciada.
           </p>
         </header>
+
+        {/* INCIDENCIA DELICTIVA DATA CHECK */}
+        <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl space-y-3 font-sans">
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+            <h5 className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+              📊 Incidencia Delictiva Data Check
+            </h5>
+            {isValidatingDataset ? (
+              <span className="text-[10px] text-slate-500 animate-pulse">Analizando archivos...</span>
+            ) : (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${datasetReport?.success ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-red-950 text-red-400 border border-red-800"}`}>
+                {datasetReport?.success ? "DATASET OK" : "WARNING: COLUMN MISMATCH"}
+              </span>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px] text-slate-300">
+            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Archivo de Incidencia</span>
+              <span className="font-mono text-xs">{datasetReport?.folderFound ? "OK" : "NO ENCONTRADO"}</span>
+            </div>
+            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Total de Registros</span>
+              <span className="font-mono text-xs">{datasetReport ? datasetReport.totalRecords.toLocaleString("es-MX") : "..."}</span>
+            </div>
+            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Cobertura Temporal</span>
+              <span className="font-mono text-xs">{datasetReport ? `${datasetReport.yearMin} - ${datasetReport.yearMax}` : "..."}</span>
+            </div>
+            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Estructura Columnas</span>
+              <span className="font-mono text-xs">{datasetReport?.columnsStatus || "..."}</span>
+            </div>
+            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Georreferenciación GPS</span>
+              <span className="font-mono text-xs">{datasetReport?.georefStatus || "..."}</span>
+            </div>
+            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Registros Duplicados</span>
+              <span className="font-mono text-xs">{datasetReport ? datasetReport.duplicateCount : "..."}</span>
+            </div>
+          </div>
+          
+          {datasetReport?.missingColumns && datasetReport.missingColumns.length > 0 && (
+            <div className="text-[10px] text-amber-400 bg-amber-950/20 border border-amber-900/40 p-2 rounded-lg">
+              ⚠️ Columnas faltantes o no identificadas: {datasetReport.missingColumns.join(", ")}
+            </div>
+          )}
+        </div>
         
         <div className="space-y-4 w-full">
           <div className="space-y-2">
