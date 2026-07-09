@@ -8,6 +8,7 @@ interface ProjectMapProps {
   coordinates: { lat: number; lng: number }[];
   onUpdateCoordinates?: (newCoords: { lat: number; lng: number }[]) => void;
   onAddPoint?: (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => Promise<void>;
+  onMoveMarker?: (id: string, lat: number, lng: number) => Promise<void>;
   album: any[];
   project: {
     id: string;
@@ -113,6 +114,7 @@ export function ProjectMap({
   coordinates,
   onUpdateCoordinates,
   onAddPoint,
+  onMoveMarker,
   album,
   project,
 }: ProjectMapProps) {
@@ -271,6 +273,12 @@ export function ProjectMap({
               position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
               onMouseOver={() => setHoveredPhoto(photo)}
               onMouseOut={() => setHoveredPhoto(null)}
+              draggable={true}
+              onDragEnd={async (e) => {
+                if (e.latLng && onMoveMarker) {
+                  await onMoveMarker(photo.id, e.latLng.lat(), e.latLng.lng());
+                }
+              }}
               icon={{
                 path: 0, // circle
                 fillColor: isPoi ? "#c084fc" : "#22d3ee",

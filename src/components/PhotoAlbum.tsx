@@ -2510,6 +2510,7 @@ const hasMinimumPhotos =
                 lng: photo.lng as number,
               }))}
               onAddPoint={handleAddMapPoint}
+              onMoveMarker={updatePhotoCoordinates}
               onUpdateCoordinates={(newCoords) => {
                 newCoords.forEach((coord, idx) => {
                   const photo = album.filter(p => p.lat != null && p.lng != null && !p.isIndependentPoi && p.tipo !== "POI")[idx];
