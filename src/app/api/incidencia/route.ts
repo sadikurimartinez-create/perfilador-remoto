@@ -71,7 +71,8 @@ export async function POST(req: Request) {
     const projectRoot = process.cwd();
     const incidenciaDir =
       pickExistingDir(
-        path.join(projectRoot, "Incidencia criminal"),
+        "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Historial SHAPES\\SELECCION PERFILADOR - INCIDENCIA DELICTIVA",
+        path.join(projectRoot, "Historial SHAPES", "SELECCION PERFILADOR - INCIDENCIA DELICTIVA"),
         path.join(projectRoot, "Incidencia Delictiva")
       ) ?? "";
 

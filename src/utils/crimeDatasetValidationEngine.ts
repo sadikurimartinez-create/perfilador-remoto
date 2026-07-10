@@ -23,10 +23,9 @@ export class CrimeDatasetValidationEngine {
     const projectRoot = process.cwd();
     // Search folders in order
     const candidates = [
-      path.join(projectRoot, "Incidencia Delictiva"),
-      path.join(projectRoot, "Incidencia Delictiva 2025"),
-      path.join(projectRoot, "INCID DELICT"),
-      path.join(projectRoot, "incidencia_delictiva")
+      "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Historial SHAPES\\SELECCION PERFILADOR - INCIDENCIA DELICTIVA",
+      path.join(projectRoot, "Historial SHAPES", "SELECCION PERFILADOR - INCIDENCIA DELICTIVA"),
+      path.join(projectRoot, "Incidencia Delictiva")
     ];
 
     let activeDir = "";
