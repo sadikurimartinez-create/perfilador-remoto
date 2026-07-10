@@ -1037,6 +1037,7 @@ export async function exportToWord(
       })
     );
   }
+  elements.push(
     new Paragraph({
       children: [
         new TextRun({
