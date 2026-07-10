@@ -92,6 +92,9 @@ export type Project = {
   hipotesis?: string;
   reportSummary?: string;
   sweeps?: SweepIntegrationItem[];
+  latitude?: number;
+  longitude?: number;
+  analysisRadius?: number;
 };
 
 export type PerPhotoFinding = {
