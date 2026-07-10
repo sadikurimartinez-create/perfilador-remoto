@@ -171,7 +171,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
           <h3 className="text-[13px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Distribución Temporal del Delito</h3>
           <p className="text-[9px] text-[#5B6573] text-center mb-4 z-10 relative">Frecuencia por turnos operativos para focalización de patrullaje</p>
           <div className="w-full h-[250px] z-10 relative">
-            <ResponsiveContainer width="99%" height="100%" minHeight={250}>
+            <ResponsiveContainer width="99%" height={250}>
               <BarChart data={data.temporalData} margin={{ top: 20, right: 10, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 9, fill: COLORS.azulInstitucional, fontWeight: 600 }} />
@@ -196,7 +196,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
           <h3 className="text-[13px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Topología Delictiva con Mayor Impacto</h3>
           <p className="text-[9px] text-[#5B6573] text-center mb-4 z-10 relative">Frecuencia de incidentes (Top 5 Delitos de mayor incidencia)</p>
           <div className="w-full h-[250px] z-10 relative">
-            <ResponsiveContainer width="99%" height="100%" minHeight={250}>
+            <ResponsiveContainer width="99%" height={250}>
               <BarChart data={data.topCrimesData} layout="vertical" margin={{ top: 5, right: 30, left: 15, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                 <XAxis type="number" tick={{ fontSize: 9, fill: COLORS.grisCorporativo }} />
@@ -225,7 +225,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
           <h3 className="text-[13px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Facilitadores Ambientales de Oportunidad</h3>
           <p className="text-[9px] text-[#5B6573] text-center mb-4 z-10 relative">Concentración de atractores urbanos que propician riesgo de comisión</p>
           <div className="w-full h-[250px] z-10 relative">
-            <ResponsiveContainer width="99%" height="100%" minHeight={250}>
+            <ResponsiveContainer width="99%" height={250}>
               <BarChart data={data.atractoresData} margin={{ top: 20, right: 10, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 8.5, fill: COLORS.azulInstitucional, fontWeight: 600 }} />
@@ -250,7 +250,7 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
           <h3 className="text-[13px] font-bold text-[#0D2B52] mb-1 uppercase text-center tracking-wide z-10 relative">Predicción de Aumento de Incidencia (6 Meses)</h3>
           <p className="text-[9px] text-[#5B6573] text-center mb-4 z-10 relative">Proyección matemática de incremento estimado en nivel de amenaza</p>
           <div className="w-full h-[250px] z-10 relative">
-            <ResponsiveContainer width="99%" height="100%" minHeight={250}>
+            <ResponsiveContainer width="99%" height={250}>
               <AreaChart data={data.proyeccionData} margin={{ top: 20, right: 15, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="mes" tick={{ fontSize: 9.5, fill: COLORS.azulInstitucional, fontWeight: 600 }} />

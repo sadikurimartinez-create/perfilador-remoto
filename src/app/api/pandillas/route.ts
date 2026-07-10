@@ -55,10 +55,17 @@ export async function POST(req: Request) {
 
     // 1. CARGAR Y PARSEAR EL DATASET LOCAL (Domiclios Pandillas.csv)
     let csvRows: { Calle: string; No: string; Colonia: string; Municipio: string; Estado: string; Lat?: string; Lng?: string }[] = [];
-    const csvPath = "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Domiclios Pandillas.csv";
+    let csvPath = path.join(process.cwd(), "Domiclios Pandillas.csv");
     
     try {
-      const fileContent = await fs.readFile(csvPath, "utf8");
+      let fileContent = "";
+      try {
+        fileContent = await fs.readFile(csvPath, "utf8");
+      } catch (e) {
+        // Local Windows absolute path fallback
+        csvPath = "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Domiclios Pandillas.csv";
+        fileContent = await fs.readFile(csvPath, "utf8");
+      }
       csvRows = parse(fileContent, {
         columns: true,
         skip_empty_lines: true,

@@ -497,39 +497,34 @@ export class GeoIntAnalyticsEngine {
     );
   }
 
+  private static async callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.15 }
+      })
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gemini REST API returned ${response.status}: ${errText}`);
+    }
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("No text returned from Gemini REST API.");
+    return text;
+  }
+
   /**
    * Formulates the narrative report and handles the Vertex AI invocation or deterministic fallback
    */
   private static async generateReportText(context: GeoIntAnalysisContext, output: GeoIntStructuredOutput): Promise<{ report: string; isAiGenerated: boolean }> {
     const fallbackText = this.buildDeterministicReport(context, output);
+    const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
 
-    if (!GCP_PROJECT_ID) {
-      console.log("[GeoIntAnalyticsEngine] GCP credentials not set. Returning deterministic report.");
-      return { report: fallbackText, isAiGenerated: false };
-    }
-
-    try {
-      const authOptions = GCP_PRIVATE_KEY
-        ? {
-            credentials: {
-              client_email: GCP_CLIENT_EMAIL,
-              private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
-            },
-          }
-        : undefined;
-
-      const vertexAI = new VertexAI({
-        project: GCP_PROJECT_ID,
-        location: GCP_LOCATION,
-        googleAuthOptions: authOptions,
-      });
-
-      const model = vertexAI.getGenerativeModel({
-        model: GEMINI_MODEL,
-        tools: [{ googleSearch: {} } as any],
-      });
-
-      const systemPrompt = `
+    const systemPrompt = `
 Eres el **GEOINT Analytics Engine (Motor de Análisis Inteligente)** del Perfilador Remoto de Aguascalientes.
 Tu tarea es tomar un conjunto de datos geoespaciales normalizados, clasificatorios y ponderados por nuestro motor para generar un **Informe de Geointeligencia Táctica y Criminológica Operacional**.
 
@@ -551,7 +546,7 @@ REGLAS CRÍTICAS:
 - Justifica cada inferencia.
 `;
 
-      const userMessage = `
+    const userMessage = `
 --- DATOS GEOINT ESTRUCTURADOS ---
 Pandillas analizadas: ${JSON.stringify(output.pandillas_analizadas)}
 Zonas críticas: ${JSON.stringify(output.zonas_criticas)}
@@ -569,21 +564,55 @@ Confianza global: ${output.confianza_global}/10.0
 ${fallbackText}
 `;
 
-      const result = await model.generateContent({
-        contents: [
-          { role: "user", parts: [{ text: systemPrompt + "\n\n" + userMessage }] }
-        ],
-        generationConfig: {
-          temperature: 0.15,
-        }
-      });
+    const fullPrompt = systemPrompt + "\n\n" + userMessage;
 
-      const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      if (responseText.trim()) {
-        return { report: responseText, isAiGenerated: true };
+    if (useVertexAI) {
+      try {
+        const authOptions = {
+          credentials: {
+            client_email: GCP_CLIENT_EMAIL,
+            private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+          },
+        };
+        const vertexAI = new VertexAI({
+          project: GCP_PROJECT_ID,
+          location: GCP_LOCATION,
+          googleAuthOptions: authOptions,
+        });
+
+        const model = vertexAI.getGenerativeModel({
+          model: GEMINI_MODEL,
+          tools: [{ googleSearch: {} } as any],
+        });
+
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          generationConfig: {
+            temperature: 0.15,
+          }
+        });
+
+        const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (responseText.trim()) {
+          return { report: responseText, isAiGenerated: true };
+        }
+      } catch (err: any) {
+        console.error("[GeoIntAnalyticsEngine] Vertex AI error, will try REST API fallback:", err.message);
       }
-    } catch (err) {
-      console.error("[GeoIntAnalyticsEngine] Vertex AI error, using fallback report:", err);
+    }
+
+    // REST API fallback
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    if (apiKey) {
+      try {
+        console.log("[GeoIntAnalyticsEngine] Calling Gemini REST API...");
+        const responseText = await this.callGeminiRestApi(fullPrompt, GEMINI_MODEL, apiKey);
+        if (responseText.trim()) {
+          return { report: responseText, isAiGenerated: true };
+        }
+      } catch (restErr: any) {
+        console.error("[GeoIntAnalyticsEngine] Gemini REST API fallback failed:", restErr.message);
+      }
     }
 
     return { report: fallbackText, isAiGenerated: false };
