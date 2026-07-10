@@ -10,6 +10,26 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 import { fuseGangsAndBuildGraph } from "@/modules/pandillas/pandillas.fusion";
 import { GangEntity } from "@/modules/pandillas/pandillas.mapper";
 
+async function callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini REST API returned ${response.status}: ${errText}`);
+  }
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("No text returned from Gemini REST API.");
+  return text;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -71,39 +91,9 @@ export async function POST(req: Request) {
     // Limitar matches para no saturar contexto de IA (máximo 40 registros altamente representativos)
     const seedAddresses = matchesCsv.slice(0, 40);
 
-    // 3. DETECTAR SI LA IA ESTÁ DISPONIBLE
-    if (!GCP_PROJECT_ID) {
-      console.warn("[API Pandillas] Falta GCP_PROJECT_ID, usando motor determinista local.");
-      const deterministicResult = fuseGangsAndBuildGraph(manualGang, [], csvRows);
-      return NextResponse.json({ ...deterministicResult, isAiGenerated: false });
-    }
+    const todayStr = new Date().toLocaleDateString("es-MX");
 
-    // 4. LLAMAR A GEMINI CON BÚSQUEDA EN GOOGLE (OSINT GROUNDING)
-    try {
-      const authOptions = GCP_PRIVATE_KEY
-        ? {
-            credentials: {
-              client_email: GCP_CLIENT_EMAIL,
-              private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
-            },
-          }
-        : undefined;
-
-      const vertexAI = new VertexAI({
-        project: GCP_PROJECT_ID,
-        location: GCP_LOCATION,
-        googleAuthOptions: authOptions,
-      });
-
-      // Equipamos al modelo con la herramienta de búsqueda de Google para hacer OSINT real
-      const model = vertexAI.getGenerativeModel({
-        model: GEMINI_MODEL,
-        tools: [{ googleSearch: {} } as any],
-      });
-
-      const todayStr = new Date().toLocaleDateString("es-MX");
-
-      const systemPrompt = `
+    const systemPrompt = `
 Eres un Arquitecto de Inteligencia Criminal y Analista OSINT de élite adscrito al Centro de Estudios y Política Criminal (CEIPOL) de Aguascalientes.
 Tu tarea es analizar una pandilla o clica criminal mediante un barrido inteligente multifuente:
 1. Comparación con el Dataset Local (Domicilios Pandillas.csv) inyectado como semilla de conocimiento.
@@ -162,7 +152,7 @@ REGLAS DE GRAFO:
 NO agregues bloques de código Markdown como \`\`\`json. Devuelve solo la cadena JSON de texto plano que comienza con { y termina con }.
 `;
 
-      const userMessage = `
+    const userMessage = `
 --- SOLICITUD DE ANÁLISIS DE CAMPO ---
 Fecha de Operación: ${todayStr}
 
@@ -184,32 +174,67 @@ ${archivosAnexos.map((f: any) => `- Archivo: ${f.nombre} (${f.tipo}) | Contexto:
 Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "${nombre}" y las colonias/zonas "${zonaInfluencia}" en Aguascalientes. Correlaciona estos hallazgos con las direcciones semilla locales. Consolida todo en un objeto JSON unificado bajo la estructura solicitada. Sé riguroso y exhaustivo en tu análisis táctico.
 `;
 
-      const result = await model.generateContent({
-        contents: [
-          { role: "user", parts: [{ text: systemPrompt + "\n\n" + userMessage }] }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json"
+    const fullPrompt = systemPrompt + "\n\n" + userMessage;
+    const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
+    
+    let parsedResult: any = null;
+    let isAiGenerated = false;
+
+    if (useVertexAI) {
+      try {
+        const authOptions = {
+          credentials: {
+            client_email: GCP_CLIENT_EMAIL,
+            private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+          },
+        };
+        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+        const model = vertexAI.getGenerativeModel({
+          model: GEMINI_MODEL,
+          tools: [{ googleSearch: {} } as any],
+        });
+        
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json"
+          }
+        });
+        const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        console.log("[API Pandillas] Respuesta cruda de Vertex AI recibida.");
+        const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
+        parsedResult = JSON.parse(cleanJson);
+        isAiGenerated = true;
+      } catch (vertexErr: any) {
+        console.warn("[API Pandillas] Vertex AI generation failed, falling back to REST API:", vertexErr.message);
+      }
+    }
+
+    if (!isAiGenerated) {
+      const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+      if (apiKey) {
+        try {
+          console.log("[API Pandillas] Calling Gemini REST API...");
+          const responseText = await callGeminiRestApi(fullPrompt, GEMINI_MODEL, apiKey);
+          const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
+          parsedResult = JSON.parse(cleanJson);
+          isAiGenerated = true;
+        } catch (restErr: any) {
+          console.error("[API Pandillas] Gemini REST API fallback failed:", restErr.message);
         }
-      });
+      }
+    }
 
-      const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      console.log("[API Pandillas] Respuesta cruda de Gemini recibida.");
-      
-      const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
-      const parsedResult = JSON.parse(cleanJson);
-
+    if (isAiGenerated && parsedResult) {
       return NextResponse.json({ ...parsedResult, isAiGenerated: true });
-
-    } catch (aiErr: any) {
-      console.error("[API Pandillas] Error en la invocación de Gemini VertexAI:", aiErr);
-      // Fallback a motor determinista local en caso de error de API o cuota
+    } else {
+      console.warn("[API Pandillas] Both Vertex AI and REST API failed. Using local deterministic model fallback.");
       const deterministicResult = fuseGangsAndBuildGraph(manualGang, [], csvRows);
       return NextResponse.json({
         ...deterministicResult,
         isAiGenerated: false,
-        warning: "Fallo temporal de IA (usando motor de fusión local): " + aiErr.message
+        warning: "Fallo de servicios de IA. Usando fusión determinista local."
       });
     }
 

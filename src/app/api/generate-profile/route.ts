@@ -49,6 +49,26 @@ function simplifySweeps(sweeps: any[]): any[] {
   }));
 }
 
+async function callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.15 }
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini REST API returned ${response.status}: ${errText}`);
+  }
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("No text returned from Gemini REST API.");
+  return text;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -157,21 +177,27 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
 `.trim();
 
     // 5. Llamada a VertexAI (Gemini) en modo Streaming
-    if (!GCP_PROJECT_ID) {
-      throw new Error("GCP_PROJECT_ID no está configurado en las variables de entorno.");
+    const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
+    let streamingResp: any = null;
+    
+    if (useVertexAI) {
+      try {
+        const authOptions = {
+          credentials: {
+            client_email: GCP_CLIENT_EMAIL,
+            private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+          },
+        };
+        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+        const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
+        streamingResp = await model.generateContentStream({
+          contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+          generationConfig: { temperature: 0.15 }
+        });
+      } catch (vertexInitErr: any) {
+        console.warn("[api/generate-profile] Vertex AI initialization failed, falling back to REST API:", vertexInitErr.message);
+      }
     }
-
-    const authOptions = GCP_PRIVATE_KEY
-      ? { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } }
-      : undefined;
-
-    const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
-    const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-    const streamingResp = await model.generateContentStream({
-      contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
-      generationConfig: { temperature: 0.15 }
-    });
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -200,27 +226,48 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         }, 3000);
 
         try {
-          let hasCleanedMarkdownHeader = false;
-          for await (const item of streamingResp.stream) {
-            if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
-              let text = item.candidates[0].content.parts[0].text;
-              
-              if (!hasCleanedMarkdownHeader) {
-                if (text.startsWith("```markdown")) {
-                  text = text.replace(/^```markdown\s*/i, "");
-                  hasCleanedMarkdownHeader = true;
-                } else if (text.startsWith("```")) {
-                  text = text.replace(/^```\s*/, "");
-                  hasCleanedMarkdownHeader = true;
+          if (streamingResp) {
+            let hasCleanedMarkdownHeader = false;
+            for await (const item of streamingResp.stream) {
+              if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
+                let text = item.candidates[0].content.parts[0].text;
+                
+                if (!hasCleanedMarkdownHeader) {
+                  if (text.startsWith("```markdown")) {
+                    text = text.replace(/^```markdown\s*/i, "");
+                    hasCleanedMarkdownHeader = true;
+                  } else if (text.startsWith("```")) {
+                    text = text.replace(/^```\s*/, "");
+                    hasCleanedMarkdownHeader = true;
+                  }
                 }
-              }
 
-              const escapedText = JSON.stringify(text).slice(1, -1);
-              controller.enqueue(encoder.encode(escapedText));
+                const escapedText = JSON.stringify(text).slice(1, -1);
+                controller.enqueue(encoder.encode(escapedText));
+              }
             }
+          } else {
+            // Fallback to REST API
+            const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+            if (!apiKey) {
+              throw new Error("No se configuró la variable GEMINI_API_KEY ni credenciales válidas de Vertex AI.");
+            }
+            console.log("[api/generate-profile] Calling Gemini REST API...");
+            const textResult = await callGeminiRestApi(systemPrompt, GEMINI_MODEL, apiKey);
+            let cleanedText = textResult;
+            if (cleanedText.startsWith("```markdown")) {
+              cleanedText = cleanedText.replace(/^```markdown\s*/i, "");
+            } else if (cleanedText.startsWith("```")) {
+              cleanedText = cleanedText.replace(/^```\s*/, "");
+            }
+            if (cleanedText.endsWith("```")) {
+              cleanedText = cleanedText.slice(0, -3);
+            }
+            const escapedText = JSON.stringify(cleanedText).slice(1, -1);
+            controller.enqueue(encoder.encode(escapedText));
           }
         } catch (e: any) {
-          console.error("Error streaming VertexAI:", e);
+          console.error("Error generating AI content:", e);
           const errorMsg = "\\n\\n[Error de generación: " + e.message + "]";
           controller.enqueue(encoder.encode(errorMsg));
         } finally {
@@ -241,7 +288,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
       }
     });
   } catch (err: any) {
-    console.error("[api/generate-profile] Error:", err);
+    console.error("[api/generate-profile] General error:", err);
     return NextResponse.json(
       { error: "Error al generar el dictamen táctico con inteligencia artificial.", details: err.message },
       { status: 500 }
