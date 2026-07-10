@@ -186,9 +186,10 @@ const parseCoordinates = (str: string | undefined): { lat: number; lng: number }
 interface PandillasUIProps {
   projectId?: string;
   onSaveAnalysisToCloud?: (content: string) => Promise<void>;
+  project?: any;
 }
 
-export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIProps = {}) {
+export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: PandillasUIProps = {}) {
   const { user } = useAuth();
   const { registerSweep } = useProject();
   const username = user?.username || "CEIPOL_Analista";
@@ -807,10 +808,74 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud }: PandillasUIPro
   const loadSavedGangs = async () => {
     try {
       const list = await PandillasService.getAllGangs();
-      setStoredGangs(list);
-      if (list.length > 0) {
-        // Autoseleccionamos el primer expediente del listado para poblar inmediatamente la UI
-        loadGangIntoState(list[0]);
+      
+      const getHaversineDistance = (
+        pt1: { lat: number; lng: number },
+        pt2: { lat: number; lng: number }
+      ): number => {
+        const R = 6371000;
+        const phi1 = (pt1.lat * Math.PI) / 180;
+        const phi2 = (pt2.lat * Math.PI) / 180;
+        const deltaPhi = ((pt2.lat - pt1.lat) * Math.PI) / 180;
+        const deltaLambda = ((pt2.lng - pt1.lng) * Math.PI) / 180;
+        const a =
+          Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+          Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      };
+
+      const getGangFirstPoint = (g: GangEntity): { lat: number; lng: number } | null => {
+        if (g.geometrias && g.geometrias[0] && g.geometrias[0].puntos && g.geometrias[0].puntos[0]) {
+          return g.geometrias[0].puntos[0];
+        }
+        const memberWithGeo = g.integrantes?.find((m: any) => m.georreferencia && typeof m.georreferencia.lat === "number");
+        if (memberWithGeo && memberWithGeo.georreferencia) {
+          return memberWithGeo.georreferencia;
+        }
+        return null;
+      };
+
+      // Si tenemos las coordenadas del proyecto, filtramos y ordenamos por proximidad
+      let processedList = [...list];
+      const projectLat = project?.latitude;
+      const projectLng = project?.longitude;
+      
+      if (projectLat && projectLng) {
+        processedList = list
+          .map(gang => {
+            const pt = getGangFirstPoint(gang);
+            const distance = pt ? getHaversineDistance({ lat: projectLat, lng: projectLng }, pt) : Infinity;
+            return { gang, distance };
+          })
+          .sort((a, b) => a.distance - b.distance)
+          .map(item => item.gang);
+      }
+      
+      setStoredGangs(processedList);
+      
+      // Si hay pandillas y el proyecto ya tiene un reporte, lo cargará loadGangForProject.
+      // De lo contrario, si hay pandillas y la más cercana está a <= 2.5km, autoseleccionamos.
+      // Si no hay ninguna cercana, limpiamos o no autoseleccionamos para evitar duplicados repetitivos
+      if (processedList.length > 0) {
+        const firstGang = processedList[0];
+        const firstPt = getGangFirstPoint(firstGang);
+        const dist = (firstPt && projectLat && projectLng) 
+          ? getHaversineDistance({ lat: projectLat, lng: projectLng }, firstPt) 
+          : Infinity;
+          
+        if (dist <= 2500 || !projectLat) { // Radio de 2.5km o si no hay coordenadas del proyecto
+          loadGangIntoState(firstGang);
+        } else {
+          // Limpiar o no preseleccionar para no mostrar duplicados estáticos ajenos a la zona
+          setSelectedGangId("");
+          setNombre("");
+          setAliasConocidos("");
+          setZonaInfluencia("");
+          setIntegrantes([]);
+          setRelaciones([]);
+          setGeometrias([]);
+        }
       }
     } catch (e) {
       console.error("[Gangs UI] Error al cargar pandillas:", e);

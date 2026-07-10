@@ -84,8 +84,22 @@ const loadStaticMapImage = (
       yandexImg.src = yandexUrl;
     };
 
-    // Prioritize Yandex/OSM fallback directly to avoid Google Maps 'BillingNotEnabledMapError' grey warning screens in Word exports
-    tryYandex();
+    // Intentar primero Google Maps si hay API Key configurada
+    if (key) {
+      const googleImg = new Image();
+      googleImg.crossOrigin = "Anonymous";
+      googleImg.onload = () => {
+        console.log("[GEOINT Renderer] Mapa base de Google Maps cargado con éxito.");
+        resolve(googleImg);
+      };
+      googleImg.onerror = () => {
+        console.warn("[GEOINT Renderer] Falló Google Maps (posible error de facturación), intentando Yandex...");
+        tryYandex();
+      };
+      googleImg.src = googleUrl;
+    } else {
+      tryYandex();
+    }
   });
 };
 
@@ -187,13 +201,14 @@ const drawTacticalFrame = (
   ctx.fillText('REF: WGS 84 / UTM Z13N', w - 22, 26);
   ctx.fillText(`FECHA: ${new Date().toLocaleDateString("es-MX")}`, w - 22, 36);
 
-  // Esquina Inf Izq: SSPE-CEIPOL (Opacidad reducida v14.0)
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
+  // Esquina Inf Izq: SSPE-CEIPOL (Opacidad restaurada para mayor legibilidad)
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.85)';
   ctx.textAlign = 'left';
   ctx.fillText('CEIPOL - SSPE', 22, h - 26);
   ctx.fillText('SISTEMA GEOINT DE SEGURIDAD PÚBLICA', 22, h - 18);
 
-  // Esquina Inf Der: Polígono y límites (Opacidad reducida v14.0)
+  // Esquina Inf Der: Polígono y límites
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.85)';
   ctx.textAlign = 'right';
   ctx.fillText('LIMITE: ÁREA DE INTERÉS', w - 22, h - 26);
   ctx.fillText('CONFIDENCIAL / CEIPOL', w - 22, h - 18);

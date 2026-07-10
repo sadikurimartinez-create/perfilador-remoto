@@ -550,6 +550,7 @@ export class ReportEngineKernelClass {
         this.context.scinceDemographics = payload.scinceDemographics;
         this.context.reportNumber = payload.reportNumber;
         this.context.selectedAnnexes = payload.selectedAnnexes;
+        this.context.includeOsintAppendix = payload.includeOsintAppendix;
 
         this.state = "INPUT_LOCKED";
         this.transitionsList.push("LOCK_INPUT");
@@ -755,6 +756,9 @@ export class ReportEngineKernelClass {
 
         try {
           if (format === "WORD" || format === "ALL") {
+            if (this.context.editorialPayload) {
+              this.context.editorialPayload.includeOsintAppendix = this.context.includeOsintAppendix;
+            }
             await exportToWord(
               this.context.editorialPayload,
               this.context.project.nombre || this.context.project.name || 'Expediente',

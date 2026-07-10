@@ -1139,13 +1139,15 @@ export async function exportToWord(
   payload.conclusiones.hallazgosCriticos.forEach(h => elements.push(createBullet("", h)));
 
   // ================= ANEXO TÉCNICO B: DETALLE DE REGISTROS OSINT =================
-  elements.push(new Paragraph({ text: "", pageBreakBefore: true }));
-  elements.push(createTitle("ANEXO TÉCNICO B: DETALLE DE REGISTROS OSINT"));
-  elements.push(createBodyText("En cumplimiento con las directrices de auditoría institucional y trazabilidad, a continuación se detallan los registros crudos de las fuentes abiertas y consultas de bases de datos procesadas para la formulación del presente dictamen:"));
-  if (osintTable) {
-    elements.push(osintTable);
-  } else {
-    elements.push(createBodyText("No se registraron barridos OSINT integrados en este expediente."));
+  if (payload.includeOsintAppendix) {
+    elements.push(new Paragraph({ text: "", pageBreakBefore: true }));
+    elements.push(createTitle("ANEXO TÉCNICO B: DETALLE DE REGISTROS OSINT"));
+    elements.push(createBodyText("En cumplimiento con las directrices de auditoría institucional y trazabilidad, a continuación se detallan los registros crudos de las fuentes abiertas y consultas de bases de datos procesadas para la formulación del presente dictamen:"));
+    if (osintTable) {
+      elements.push(osintTable);
+    } else {
+      elements.push(createBodyText("No se registraron barridos OSINT integrados en este expediente."));
+    }
   }
 
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX

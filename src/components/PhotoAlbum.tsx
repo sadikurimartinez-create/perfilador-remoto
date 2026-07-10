@@ -724,6 +724,7 @@ export function PhotoAlbum({
     sweepMultimodal: true,
     sweepCifa: true,
     graphConnections: true,
+    includeOsintAppendix: false,
   });
 
   const [sweepsComments, setSweepsComments] = useState("");
@@ -1695,7 +1696,8 @@ const hasMinimumPhotos =
           markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
           sweeps: selectedSweeps,
           powerups: powerupsToExport,
-          selectedAnnexes: selectedAnnexes
+          selectedAnnexes: selectedAnnexes,
+          includeOsintAppendix: selectedAnnexes.includeOsintAppendix
         }
       });
 
@@ -2705,66 +2707,7 @@ const hasMinimumPhotos =
             Filtre los delitos y visualice gráficas de severidad basadas en la base local georreferenciada.
           </p>
         </header>
-
-        {/* INCIDENCIA DELICTIVA DATA CHECK */}
-        <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl space-y-3 font-sans">
-          <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-            <h5 className="text-xs font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-              📊 Incidencia Delictiva Data Check
-            </h5>
-            <div className="flex items-center gap-2">
-              {isValidatingDataset ? (
-                <span className="text-[10px] text-slate-500 animate-pulse">Analizando archivos...</span>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void fetchReport()}
-                    className="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white px-2 py-0.5 rounded border border-slate-800 transition active:scale-95 flex items-center gap-1"
-                  >
-                    🔄 Re-auditar
-                  </button>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${datasetReport?.success ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-red-950 text-red-400 border border-red-800"}`}>
-                    {datasetReport?.success ? "DATASET OK" : "WARNING: COLUMN MISMATCH"}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px] text-slate-300">
-            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold">Archivo de Incidencia</span>
-              <span className="font-mono text-xs">{datasetReport?.folderFound ? "OK" : "NO ENCONTRADO"}</span>
-            </div>
-            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold">Total de Registros</span>
-              <span className="font-mono text-xs">{datasetReport ? datasetReport.totalRecords.toLocaleString("es-MX") : "..."}</span>
-            </div>
-            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold">Cobertura Temporal</span>
-              <span className="font-mono text-xs">{datasetReport ? `${datasetReport.yearMin} - ${datasetReport.yearMax}` : "..."}</span>
-            </div>
-            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold">Estructura Columnas</span>
-              <span className="font-mono text-xs">{datasetReport?.columnsStatus || "..."}</span>
-            </div>
-            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold">Georreferenciación GPS</span>
-              <span className="font-mono text-xs">{datasetReport?.georefStatus || "..."}</span>
-            </div>
-            <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/40">
-              <span className="text-slate-500 block text-[9px] uppercase font-bold">Registros Duplicados</span>
-              <span className="font-mono text-xs">{datasetReport ? datasetReport.duplicateCount : "..."}</span>
-            </div>
-          </div>
-          
-          {datasetReport?.missingColumns && datasetReport.missingColumns.length > 0 && (
-            <div className="text-[10px] text-amber-400 bg-amber-950/20 border border-amber-900/40 p-2 rounded-lg">
-              ⚠️ Columnas faltantes o no identificadas: {datasetReport.missingColumns.join(", ")}
-            </div>
-          )}
-        </div>
+        {/* INCIDENCIA DELICTIVA DATA CHECK REMOVED */}
         
         <div className="space-y-4 w-full">
           <div className="space-y-2">
@@ -4168,6 +4111,15 @@ const hasMinimumPhotos =
                           className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
                         />
                         <span>Fusión CIFA-CEIPOL</span>
+                      </label>
+                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedAnnexes.includeOsintAppendix}
+                          onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, includeOsintAppendix: e.target.checked }))}
+                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                        />
+                        <span>Anexo Técnico B (Detalle OSINT Crudo)</span>
                       </label>
                     </div>
                   </div>
