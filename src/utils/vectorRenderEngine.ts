@@ -84,18 +84,8 @@ const loadStaticMapImage = (
       yandexImg.src = yandexUrl;
     };
 
-    if (googleUrl) {
-      const googleImg = new Image();
-      googleImg.crossOrigin = "Anonymous";
-      googleImg.onload = () => resolve(googleImg);
-      googleImg.onerror = () => {
-        console.warn("Google Static Map failed, trying Yandex fallback...");
-        tryYandex();
-      };
-      googleImg.src = googleUrl;
-    } else {
-      tryYandex();
-    }
+    // Prioritize Yandex/OSM fallback directly to avoid Google Maps 'BillingNotEnabledMapError' grey warning screens in Word exports
+    tryYandex();
   });
 };
 
@@ -326,8 +316,8 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 28.6353;
-  const centerLng = input.longitude || -106.0889;
+  const centerLat = input.latitude || 21.8853;
+  const centerLng = input.longitude || -102.2916;
   
   // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
@@ -469,8 +459,8 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 28.6353;
-  const centerLng = input.longitude || -106.0889;
+  const centerLat = input.latitude || 21.8853;
+  const centerLng = input.longitude || -102.2916;
   
   // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
@@ -589,8 +579,8 @@ export const renderAttractorsMap = async (input: VectorEngineInput): Promise<str
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 28.6353;
-  const centerLng = input.longitude || -106.0889;
+  const centerLat = input.latitude || 21.8853;
+  const centerLng = input.longitude || -102.2916;
   
   // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
@@ -687,8 +677,8 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 28.6353;
-  const centerLng = input.longitude || -106.0889;
+  const centerLat = input.latitude || 21.8853;
+  const centerLng = input.longitude || -102.2916;
   
   // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);

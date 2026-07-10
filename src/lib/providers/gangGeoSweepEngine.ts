@@ -1,4 +1,5 @@
 import exifr from "exifr";
+import { isGeocodingReliable, hasValidCoordinates } from "@/utils/geoActorValidation";
 
 export interface GangSweepResult {
   detected_locations: {
@@ -186,16 +187,17 @@ export class GangGeoSweepEngine {
 
         if (isMemberMatched) {
           isGangMatched = true;
-          // If the member has a georreferencia/location, use it!
-          if (m.georreferencia && typeof m.georreferencia.lat === "number" && typeof m.georreferencia.lng === "number") {
+          // Solo usar coordenadas de integrante si la geocodificación es fiable (no jitter por colonia/ciudad)
+          const geo = m.georreferencia;
+          if (geo && hasValidCoordinates(geo) && isGeocodingReliable(geo)) {
             databaseMatches.push({
-              lat: m.georreferencia.lat,
-              lng: m.georreferencia.lng,
+              lat: geo.lat,
+              lng: geo.lng,
               label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
               confidence: 0.90,
               source: "NARRATIVE_ESTIMATE"
             });
-          } else if (m.location && typeof m.location.lat === "number" && typeof m.location.lng === "number") {
+          } else if (m.location && hasValidCoordinates(m.location) && isGeocodingReliable(m.location as any)) {
             databaseMatches.push({
               lat: m.location.lat,
               lng: m.location.lng,
@@ -255,58 +257,27 @@ export class GangGeoSweepEngine {
       }
     });
 
-    for (const [key, geo] of Object.entries(KEYWORD_COORDINATE_MAP)) {
-      if (fullText.includes(key)) {
-        keywordsMatched++;
-        // Add coordinates based on semantic matching
-        const offsetLat = (Math.random() - 0.5) * 0.003; // Add small jitter (approx 200m) to simulate distinct visual locations
-        const offsetLng = (Math.random() - 0.5) * 0.003;
-        const targetLat = geo.lat + offsetLat;
-        const targetLng = geo.lng + offsetLng;
+    // PROHIBIDO: asignar coordenadas por palabra clave de colonia (KEYWORD_COORDINATE_MAP).
+    // Solo se usan coordenadas EXIF, integrantes geocodificados verificados y geometrías de pandilla.
 
-        if (isWithinAguascalientes(targetLat, targetLng)) {
-          console.log(`[GangGeoSweepEngine] Semantic Match Found for key "${key}" -> ${geo.label}`);
-          detectedLocations.push({
-            lat: targetLat,
-            lng: targetLng,
-            label: `Ubicación inferida de texto (${geo.label})`,
-            confidence: 0.75 - (keywordsMatched * 0.02), // Decreasing slightly for multiple points
-            source: "NARRATIVE_ESTIMATE",
-          });
-          pointsForClustering.push({
-            lat: targetLat,
-            lng: targetLng,
-            confidence: 0.70,
-            source: "NARRATIVE_ESTIMATE",
-          });
-        }
-      }
-    }
-
-    // Ultimate Fallback: if we still have absolutely zero locations, generate a realistic cluster in Palomino Dena
+    // Ultimate Fallback: si no hay coordenadas verificadas, no inventar ubicaciones por colonia
     if (pointsForClustering.length === 0) {
-      console.log("[GangGeoSweepEngine] No coordinates detected via EXIF or narrative. Using default Aguascalientes operational seed.");
-      const seed = KEYWORD_COORDINATE_MAP["dena"];
-      for (let i = 0; i < 2; i++) {
-        const targetLat = seed.lat + (Math.random() - 0.5) * 0.004;
-        const targetLng = seed.lng + (Math.random() - 0.5) * 0.004;
-        detectedLocations.push({
-          lat: targetLat,
-          lng: targetLng,
-          label: `Punto Táctico Estimado: Sector Benito Palomino (Fallback)`,
-          confidence: 0.50,
-          source: "FALLBACK_RANDOM",
-        });
-        pointsForClustering.push({
-          lat: targetLat,
-          lng: targetLng,
-          confidence: 0.50,
-          source: "FALLBACK_RANDOM",
-        });
-      }
+      console.log("[GangGeoSweepEngine] Sin coordenadas verificadas (EXIF o geocodificación fiable). No se asignan puntos por colonia.");
     }
 
     // --- STEP 3: SPATIAL CLUSTERING & CENTROID ---
+    if (pointsForClustering.length === 0) {
+      return {
+        detected_locations: detectedLocations,
+        suspected_domiciles: [],
+        influence_zones: [],
+        confidence_score: 0,
+        matched_gangs: [],
+        geo_heatmap: [],
+        risk_classification: "LOW" as const,
+      };
+    }
+
     let centroidLat = 0;
     let centroidLng = 0;
     let weightSum = 0;
@@ -426,21 +397,14 @@ export class GangGeoSweepEngine {
     const primaryGangName = matchedGangs[0].name;
 
     // --- STEP 5: SUSPECTED DOMICILES & INFLUENCE DETECTION ---
-    // Suspected domiciles in the area (using pre-mapped streets and centroids)
+    // Suspected domiciles: solo desde puntos con coordenadas verificadas (sin asignación por colonia)
     pointsForClustering.forEach((pt, idx) => {
-      // Find matching address in keyword dictionary or simulate a nearby address from Domiclios Pandillas.csv
-      const matchingAddress = Object.keys(KEYWORD_COORDINATE_MAP).find(key => 
-        getHaversineDistance(pt, KEYWORD_COORDINATE_MAP[key]) < 800
-      );
-
-      const addressLabel = matchingAddress 
-        ? `${KEYWORD_COORDINATE_MAP[matchingAddress].label}, Calle Loma del Cardenal #${100 + idx}, Aguascalientes`
-        : `Calle de la República #${200 + idx}, Sector Oriente, Aguascalientes`;
-
       suspectedDomiciles.push({
-        lat: pt.lat + (Math.random() - 0.5) * 0.0005, // very close to evidence points
-        lng: pt.lng + (Math.random() - 0.5) * 0.0005,
-        address: addressLabel,
+        lat: pt.lat,
+        lng: pt.lng,
+        address: pt.source === "EXIF_GPS"
+          ? `Evidencia fotográfica georreferenciada #${idx + 1}`
+          : `Punto verificado #${idx + 1} (coordenadas GPS)`,
         confidence: parseFloat((pt.confidence * 0.9).toFixed(2)),
         gangName: primaryGangName,
       });

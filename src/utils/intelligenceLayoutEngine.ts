@@ -1,5 +1,6 @@
 import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
+import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -374,6 +375,9 @@ export interface IntelligenceReportPayload {
   streetViewText?: string;
   graphText?: string;
   conclusionesText?: string;
+  latitude?: number;
+  longitude?: number;
+  analysisRadius?: number;
 }
 
 /**
@@ -563,12 +567,6 @@ export const buildIntelligenceEditorialPayload = async (
     });
   }
 
-  // OSINT Synthesized
-  let osintSynthesized = cleanTechnicalJargon(rawOsintText);
-  if (!osintSynthesized || osintSynthesized.includes("167") || osintSynthesized.toLowerCase().includes("negocios")) {
-    osintSynthesized = "El análisis del entorno comercial identificó una alta concentración de establecimientos que incrementan el flujo de movilidad peatonal y vehicular, facilitando puntos de interacción y oportunidades de acecho que demandan monitoreo estratégico.";
-  }
-
   // Pandillas territorial analysis
   let pandillasAnalysis = cleanTechnicalJargon(extractSection(rawContent, 9));
   if (!pandillasAnalysis || pandillasAnalysis.length < 10) {
@@ -582,8 +580,8 @@ export const buildIntelligenceEditorialPayload = async (
   // Instanciar el motor de renderizado vectorial táctico para generar los mapas y gráficas HD directamente
   const vectorInput = {
     projectName: projectName || "Expediente",
-    latitude: project?.latitude || 28.6353,
-    longitude: project?.longitude || -106.0889,
+    latitude: project?.latitude || 21.8853,
+    longitude: project?.longitude || -102.2916,
     geometryType: project?.geometryType || "individual",
     incidents: project?.incidents || [],
     sweeps: sweeps || [],
@@ -689,8 +687,8 @@ export const buildIntelligenceEditorialPayload = async (
       criminologicalInterpretation: "El análisis visual táctico documenta fallas críticas de iluminación e infraestructura que incrementan la vulnerabilidad perimetral.",
       relation: footer.relation,
       riskLevel: footer.riskLevel,
-      lat: p.lat || project?.latitude || 28.635300,
-      lng: p.lng || project?.longitude || -106.088900,
+      lat: p.lat || project?.latitude || 21.885300,
+      lng: p.lng || project?.longitude || -102.291600,
       fecha: photoDate
     };
   });
@@ -699,8 +697,8 @@ export const buildIntelligenceEditorialPayload = async (
   const streetViewAnalysis = album
     .filter(p => p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street"))
     .map((p, idx) => {
-      const latStr = p.lat ? p.lat.toFixed(6) : (project?.latitude ? project.latitude.toFixed(6) : "28.635300");
-      const lngStr = p.lng ? p.lng.toFixed(6) : (project?.longitude ? project.longitude.toFixed(6) : "-106.088900");
+      const latStr = p.lat ? p.lat.toFixed(6) : (project?.latitude ? project.latitude.toFixed(6) : "21.885300");
+      const lngStr = p.lng ? p.lng.toFixed(6) : (project?.longitude ? project.longitude.toFixed(6) : "-102.291600");
       const svObj = {
         id: `SV-00${idx + 1}`,
         title: p.tipo || `Punto de Acecho ${idx + 1}`,
@@ -740,8 +738,8 @@ export const buildIntelligenceEditorialPayload = async (
     const projectSvs = (project as any)?.streetViews || [];
     if (projectSvs.length > 0) {
       projectSvs.forEach((sv: any, idx: number) => {
-        const latStr = sv.lat ? sv.lat.toFixed(6) : (project?.latitude ? project.latitude.toFixed(6) : "28.635300");
-        const lngStr = sv.lng ? sv.lng.toFixed(6) : (project?.longitude ? project.longitude.toFixed(6) : "-106.088900");
+        const latStr = sv.lat ? sv.lat.toFixed(6) : (project?.latitude ? project.latitude.toFixed(6) : "21.885300");
+        const lngStr = sv.lng ? sv.lng.toFixed(6) : (project?.longitude ? project.longitude.toFixed(6) : "-102.291600");
         const svObj = {
           id: `SV-00${idx + 1}`,
           title: sv.name || `Punto de Acecho ${idx + 1}`,
@@ -776,8 +774,8 @@ export const buildIntelligenceEditorialPayload = async (
         streetViewAnalysis.push(svObj);
       });
     } else {
-      const latStr = project?.latitude ? project.latitude.toFixed(6) : "28.635300";
-      const lngStr = project?.longitude ? project.longitude.toFixed(6) : "-106.088900";
+      const latStr = project?.latitude ? project.latitude.toFixed(6) : "21.885300";
+      const lngStr = project?.longitude ? project.longitude.toFixed(6) : "-102.291600";
       const svObj = {
         id: "SV-001",
         title: "Punto de Acecho Perimetral 1",
@@ -820,61 +818,8 @@ export const buildIntelligenceEditorialPayload = async (
     interpretation: cleanTechnicalJargon(rawGraphText || "La relación entre deterioro urbano, inmuebles abandonados y movilidad nocturna establece una hipótesis de oportunidad criminógena ambiental.")
   };
 
-  // Asegurar que siempre existan los barridos requeridos con datos profesionales de fallback
-  const finalSweeps = [...sweeps];
-  const hasEngine = (name: string) => finalSweeps.some(s => s.engine?.toLowerCase().includes(name.toLowerCase()));
-
-  if (!hasEngine("DENUE") && !hasEngine("INEGI")) {
-    finalSweeps.push({
-      engine: "DENUE (INEGI)",
-      source: "Censo Comercial y Económico Nacional",
-      data: "Se identificaron establecimientos comerciales y de servicios de bajo impacto en el cuadrante de proximidad táctica.",
-      context: "Sirve para correlacionar flujos comerciales con actividades de oportunidad."
-    });
-  }
-  if (!hasEngine("Incidencia") && !hasEngine("delitos")) {
-    finalSweeps.push({
-      engine: "Incidencia Delictiva Regional",
-      source: "Secretariado Ejecutivo de Seguridad Pública",
-      data: "Registros históricos concentran principalmente reportes de faltas administrativas y conductas menores en el perímetro.",
-      context: "Sustenta la línea base de la tipología delictiva regional."
-    });
-  }
-  if (!hasEngine("REPUVE") && !hasEngine("vehicular")) {
-    finalSweeps.push({
-      engine: "Consulta Vehicular (REPUVE)",
-      source: "Registro Público Vehicular",
-      data: "No se identificaron vehículos activos con reporte de robo o alertas de seguridad vigentes en el perímetro inmediato.",
-      context: "Verificación de trazabilidad delictiva automotriz."
-    });
-  }
-  if (!hasEngine("RNPDNO") && !hasEngine("desaparecidos")) {
-    finalSweeps.push({
-      engine: "Registro RNPDNO",
-      source: "Comisión Nacional de Búsqueda",
-      data: "Sin reportes vigentes de localización de personas en el área delimitada.",
-      context: "Integración de variables de búsqueda y derechos humanos."
-    });
-  }
-  if (!hasEngine("multimodal")) {
-    finalSweeps.push({
-      engine: "Búsqueda Multimodal Geo-Espacial",
-      source: "Plataforma de Fusión de Datos",
-      data: "El análisis cartográfico cruzado identifica coincidencia espacial y proximidad táctica a vialidades de flujo continuo.",
-      context: "Trazabilidad de vías de comunicación."
-    });
-  }
-  if (!hasEngine("cifa")) {
-    finalSweeps.push({
-      engine: "Fusión CIFA-CEIPOL",
-      source: "Centro de Inteligencia y Filtro Analítico",
-      data: "Integración de alertas tempranas sobre puntos calientes de delincuencia de oportunidad en la zona perimetral.",
-      context: "Trazabilidad de alertas operativas."
-    });
-  }
-
-  // Sweeps Data
-  const sweepsData = finalSweeps.map((s) => ({
+  // Sweeps Data — solo barridos reales integrados al expediente (sin inyección ficticia)
+  const sweepsData = (sweeps || []).map((s) => ({
     engine: String(s.engine || "CIFA"),
     source: String(s.source || "Base de Datos"),
     data: cleanTechnicalJargon(s.data || "Sin información relevante."),
@@ -959,7 +904,22 @@ export const buildIntelligenceEditorialPayload = async (
   }
 
   // Estructurar obligatoriamente todos los capítulos narrativos clave en formato de 4 partes (HALLAZGO, EVIDENCIA, ANÁLISIS, IMPLICACIÓN)
-  const locationStr = `${project?.latitude?.toFixed(6) || "28.635300"}, ${project?.longitude?.toFixed(6) || "-106.088900"} (${projectName})`;
+  const analysisRadius = Number(project?.analysisRadius) > 0 ? Number(project.analysisRadius) : 500;
+  const epicenterLat = project?.latitude || 21.8853;
+  const epicenterLng = project?.longitude || -102.2916;
+  const locationStr = `${epicenterLat.toFixed(6)}, ${epicenterLng.toFixed(6)} (${projectName})`;
+
+  const rawOsintClean = cleanTechnicalJargon(rawOsintText);
+  const osintSynthesized = buildOperationalOsintChapter({
+    sweeps: sweepsData,
+    album: album || [],
+    projectName,
+    locationStr,
+    analysisRadius,
+    rawOsintText: rawOsintClean,
+    streetViewAnalysis,
+    incidents: project?.incidents || [],
+  });
 
   const formattedContextoTerritorial = formatToFourPartStructure(
     contextoTerritorial,
@@ -982,16 +942,9 @@ export const buildIntelligenceEditorialPayload = async (
     "Aumentar el despliegue policial táctico en los puntos ciegos identificados."
   );
 
-  const formattedOsintSynthesized = formatToFourPartStructure(
-    osintSynthesized,
-    projectName,
-    date,
-    locationStr,
-    "Menciones de conductas de riesgo y consumo de sustancias reportadas en redes sociales en este sector.",
-    "Publicaciones georreferenciadas y alertas OSINT recopiladas durante el periodo de monitoreo.",
-    "El análisis de redes sociales confirma la percepción de inseguridad asociada a la inacción en el alumbrado público del sector.",
-    "Coordinar recorridos de proximidad social con vecinos y comerciantes locales."
-  );
+  const formattedOsintSynthesized = osintSynthesized.includes("HALLAZGO")
+    ? osintSynthesized
+    : formatToFourPartStructure(osintSynthesized, projectName, date, locationStr);
 
   const formattedPandillasAnalysis = formatToFourPartStructure(
     pandillasAnalysis,
@@ -1022,6 +975,9 @@ export const buildIntelligenceEditorialPayload = async (
     analyst,
     geometryType,
     areaGeografica,
+    latitude: epicenterLat,
+    longitude: epicenterLng,
+    analysisRadius,
     contextoTerritorial: formattedContextoTerritorial,
     hipotesisPrincipal,
     valoracionOperacional,

@@ -6,6 +6,7 @@
 import { GangEntity, GangMember } from "@/modules/pandillas/pandillas.mapper";
 import { GISMemberNode, InfluenceZone, GangInfluenceEngine } from "./gangInfluenceEngine";
 import { getHaversineDistance } from "./gangGeoSweepEngine";
+import { isGeocodingReliable, hasValidCoordinates, hasValidatedAddress } from "@/utils/geoActorValidation";
 
 export interface GISRelationshipLine {
   id: string;
@@ -59,7 +60,12 @@ export class GangGISAnalysisLayer {
         if (anyM.georreferencia && anyM.georreferencia.lat !== undefined && anyM.georreferencia.lng !== undefined) {
           const lat = parseFloat(anyM.georreferencia.lat);
           const lng = parseFloat(anyM.georreferencia.lng);
-          if (!isNaN(lat) && !isNaN(lng)) {
+          if (
+            !isNaN(lat) && !isNaN(lng) &&
+            hasValidCoordinates(anyM.georreferencia) &&
+            isGeocodingReliable(anyM.georreferencia) &&
+            hasValidatedAddress(anyM.direccion || { calle: m.domicilioConocido })
+          ) {
             coords = { lat, lng };
             if (typeof anyM.georreferencia.confidence === "number") {
               confidence = Math.min(1.0, anyM.georreferencia.confidence <= 1 ? anyM.georreferencia.confidence : anyM.georreferencia.confidence / 10);
@@ -99,31 +105,9 @@ export class GangGISAnalysisLayer {
           }
         }
 
-        // Fallback: If no coordinates or coordinates outside Aguascalientes, generate a valid location close to gang's center/centroid
+        // Sin coordenadas verificadas: no generar ubicaciones ficticias por colonia o jitter
         if (!coords || !this.isWithinAguascalientes(coords)) {
-          let baseLat = 21.8853;
-          let baseLng = -102.2916;
-          if (gang.coordenadas && typeof gang.coordenadas.lat === "number" && typeof gang.coordenadas.lng === "number" && this.isWithinAguascalientes(gang.coordenadas)) {
-            baseLat = gang.coordenadas.lat;
-            baseLng = gang.coordenadas.lng;
-          } else if (gang.geometrias && gang.geometrias.length > 0 && gang.geometrias[0].puntos && gang.geometrias[0].puntos.length > 0) {
-            const firstPoint = gang.geometrias[0].puntos[0];
-            if (this.isWithinAguascalientes(firstPoint)) {
-              baseLat = firstPoint.lat;
-              baseLng = firstPoint.lng;
-            }
-          }
-          
-          // Generate a deterministic pseudo-random offset within a nice range (e.g. 200m to 800m)
-          const angle = (idx * 2 * Math.PI) / 8 + (idx * 0.1);
-          const radius = 0.002 + ((idx * 0.0008) % 0.006);
-          
-          coords = {
-            lat: baseLat + Math.sin(angle) * radius,
-            lng: baseLng + Math.cos(angle) * radius
-          };
-          confidence = 0.70;
-          source = "registry";
+          return;
         }
 
         // Only include if coordinates are valid and within Aguascalientes bounds

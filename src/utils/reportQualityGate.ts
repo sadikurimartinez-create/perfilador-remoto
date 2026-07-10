@@ -1,4 +1,5 @@
 import { IntelligenceReportPayload, IntelligenceBriefing } from './intelligenceLayoutEngine';
+import { hasGenericOsintContent } from './osintChapterBuilder';
 // Trigger Vercel deploy webhook manually via new commit
 
 /**
@@ -179,6 +180,14 @@ export class ReportQualityGate {
     const hasUnverified = textValues.some(val => unverifiedPatterns.some(pattern => pattern.test(val)));
     if (hasUnverified) {
       console.warn("ReportQualityGate [WARNING]: El informe contiene afirmaciones no sustentadas o especulaciones sin respaldo de evidencias.");
+    }
+
+    // 9. Capítulo 7 OSINT: prohibir contenido genérico
+    if (payload.osintSynthesized && hasGenericOsintContent(payload.osintSynthesized)) {
+      throw new Error("ReportQualityGate: El Capítulo 7 (OSINT) contiene afirmaciones genéricas prohibidas. Debe incluir fuentes nombradas, ubicaciones específicas y acciones operativas concretas.");
+    }
+    if (payload.osintSynthesized && !payload.osintSynthesized.includes("HALLAZGO")) {
+      throw new Error("ReportQualityGate: El Capítulo 7 (OSINT) debe estructurarse en bloques HALLAZGO, EVIDENCIA, ANÁLISIS e IMPLICACIÓN OPERATIVA.");
     }
   }
 }

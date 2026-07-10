@@ -1661,11 +1661,29 @@ const hasMinimumPhotos =
       await KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
 
       // 2. LOCK_INPUT
+      const centroidLat = (() => {
+        if (project?.latitude) return project.latitude;
+        const valid = (album || []).filter(p => p.lat != null);
+        if (valid.length === 0) return 21.8853;
+        return valid.reduce((sum, p) => sum + Number(p.lat), 0) / valid.length;
+      })();
+      const centroidLng = (() => {
+        if (project?.longitude) return project.longitude;
+        const valid = (album || []).filter(p => p.lng != null);
+        if (valid.length === 0) return -102.2916;
+        return valid.reduce((sum, p) => sum + Number(p.lng), 0) / valid.length;
+      })();
+
       await KernelGuard({
         type: "LOCK_INPUT",
         payload: {
           executionId: activeId,
-          project,
+          project: {
+            ...project,
+            latitude: centroidLat,
+            longitude: centroidLng,
+            analysisRadius
+          },
           content,
           album: photosToExportData,
           mapSnapshots: sortedSnapshotsToExport,

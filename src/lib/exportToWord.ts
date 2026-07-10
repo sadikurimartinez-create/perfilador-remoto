@@ -3,6 +3,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import dossierPandillas from "../modules/pandillas/dossier_pandillas.json";
 import {
+  validateTerritorialActor,
+  classifyActorProximity,
+  formatDomicilio,
+} from "@/utils/geoActorValidation";
+import { buildOsintFindingsFromSweeps } from "@/utils/osintChapterBuilder";
+import {
   Document,
   ImageRun,
   Packer,
@@ -823,47 +829,10 @@ export async function exportToWord(
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 7: INTELIGENCIA OSINT"));
 
-  const osintFindings: any[] = [];
-  if (payload.sweepsData) {
-    for (const s of payload.sweepsData) {
-      if (s && s.source) {
-        let relacion = "Fortalece";
-        if (s.relevance === "Bajo") relacion = "Requiere validación";
-        osintFindings.push({
-          fuente: s.source,
-          referencia: `${s.engine || "Consulta directa"} [ID: ${(s.id || "").slice(0, 8)}]`,
-          info: s.data || "Sin información descriptiva",
-          valor: s.context || "Aporte analítico directo al expediente.",
-          relacion
-        });
-      }
-    }
-  }
+  const osintFindings: any[] = buildOsintFindingsFromSweeps(payload.sweepsData || []);
 
-  // Fallbacks para asegurar que la estructura obligatoria de OSINT se cumpla siempre
-  if (osintFindings.length === 0) {
-    osintFindings.push({
-      fuente: "Telegram",
-      referencia: "Canal: ceipol_alertas_ags / Usuario: @ceipol_analyst / Fecha: 08/07/2026",
-      info: "Monitoreo de grupos vecinales reportando asaltos a transeúntes y robos en predios abandonados.",
-      valor: "Corrobora la frecuencia y el modus operandi nocturno de asaltos en la zona perimetral.",
-      relacion: "Fortalece"
-    });
-    osintFindings.push({
-      fuente: "X (Twitter)",
-      referencia: "Usuario: @AgsVigila / Publicación: #178491823 / Fecha: 05/07/2026",
-      info: "Reporte de robo de autopartes en lotes baldíos con cerramientos deficientes.",
-      valor: "Valida la falta de vigilancia natural en predios y vulnerabilidad del entorno urbano.",
-      relacion: "Fortalece"
-    });
-    osintFindings.push({
-      fuente: "Noticias RSS",
-      referencia: "Medio: El Heraldo de Aguascalientes / Fecha: 04/07/2026",
-      info: "Detención de sujeto por allanamiento y robo de cableado de cobre en predio en desuso.",
-      valor: "Confirma la presencia de perfiles antisociales que aprovechan la falta de iluminación.",
-      relacion: "Fortalece"
-    });
-  }
+  // Sin barridos reales: no inyectar datos ficticios
+  const hasOsintFindings = osintFindings.length > 0;
 
   const cellBorders = {
     top: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
@@ -892,7 +861,7 @@ export async function exportToWord(
     ]
   });
 
-  const osintTable = new Table({
+  const osintTable = hasOsintFindings ? new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
       new TableRow({
@@ -914,7 +883,7 @@ export async function exportToWord(
         ]
       }))
     ]
-  });
+  }) : null;
 
   // Render synthesized OSINT Analysis instead of raw lists or tables
   if (payload.osintSynthesized) {
@@ -965,7 +934,7 @@ export async function exportToWord(
       }
     }
   } else {
-    elements.push(createBodyText("El análisis consolidado del monitoreo OSINT para este polígono determina que la actividad de conversación digital de redes sociales y notas de prensa locales complementa los factores de vulnerabilidad física identificados en campo."));
+    elements.push(createBodyText("No se dispone de síntesis OSINT operativa para este expediente. Ejecute barridos DENUE, incidencia o fuentes abiertas antes de exportar."));
   }
   elements.push(new Paragraph({ text: "", spacing: { after: 120 } }));
 
@@ -976,96 +945,39 @@ export async function exportToWord(
   // Estructura de evaluación obligatoria del Capítulo 8 - Matriz inteligente de actores
   const projectLat = payload.latitude || (payload.maps && payload.maps[0]?.lat) || 21.8853;
   const projectLng = payload.longitude || (payload.maps && payload.maps[0]?.lng) || -102.2916;
+  const maxRadiusMeters = payload.analysisRadius ? Number(payload.analysisRadius) : 500;
   const activeActors: any[] = [];
-
-  const calculateDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371000;
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
 
   if (dossierPandillas && dossierPandillas.dossiers) {
     for (const d of dossierPandillas.dossiers) {
       for (const member of d.integrantes) {
-        if (member.georreferencia && member.georreferencia.lat && member.georreferencia.lng) {
-          const dist = calculateDistanceMeters(projectLat, projectLng, member.georreferencia.lat, member.georreferencia.lng);
-          if (dist <= 2500) {
-            let status: "Confirmado" | "Probable" | "No corroborado" = "No corroborado";
-            if (dist <= 700) status = "Confirmado";
-            else if (dist <= 1800) status = "Probable";
+        const validation = validateTerritorialActor(
+          member,
+          projectLat,
+          projectLng,
+          maxRadiusMeters
+        );
+        if (!validation.valid || validation.distancia === undefined) continue;
 
-            activeActors.push({
-              nombre: member.nombre_completo,
-              alias: member.alias || "Sin Alias",
-              grupo: d.pandilla,
-              rango: member.rol || "Integrante",
-              domicilio: `${member.direccion.calle} #${member.direccion.numero}, Col. ${member.direccion.colonia}`,
-              distancia: dist,
-              status,
-              evidencia: `Georreferencia a ${dist.toFixed(0)}m del epicentro, registrada en inventario oficial de pandillas.`
-            });
-          }
-        }
+        const dist = validation.distancia;
+        const status = classifyActorProximity(dist);
+
+        activeActors.push({
+          nombre: member.nombre_completo,
+          alias: member.alias || "Sin Alias",
+          grupo: d.pandilla,
+          rango: member.rol || "Integrante",
+          domicilio: formatDomicilio(member.direccion),
+          distancia: dist,
+          status,
+          evidencia: `Georreferencia validada a ${dist.toFixed(0)}m del epicentro (domicilio: ${formatDomicilio(member.direccion)}).`
+        });
       }
     }
   }
 
   // Ordenar por cercanía territorial
   activeActors.sort((a, b) => a.distancia - b.distancia);
-
-  // Fallbacks si no hay actores detectados cerca en el JSON para garantizar la regla crítica del Capítulo 8
-  if (activeActors.length === 0) {
-    activeActors.push({
-      nombre: "Luis Rolando Chagoya Rodríguez",
-      alias: "El Rolas",
-      grupo: "ZKL13",
-      rango: "Líder",
-      domicilio: "Loma del Cardenal #103, Col. Mirador de las Culturas II",
-      status: "No corroborado",
-      evidencia: "Sin evidencia de marcas físicas en el polígono analizado."
-    });
-    activeActors.push({
-      nombre: "Abraham Israel Guzmán de los Santos",
-      alias: "El Chueco",
-      grupo: "BPT18",
-      rango: "Líder",
-      domicilio: "Recinto Pachón #33, Col. Valle de los Cactus",
-      status: "No corroborado",
-      evidencia: "Sin evidencia de marcas físicas en el polígono analizado."
-    });
-  }
-
-  const matrixTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      new TableRow({
-        children: [
-          createCell("Actor / Alias", true),
-          createCell("Grupo", true),
-          createCell("Rango / Función", true),
-          createCell("Domicilio Identificado", true),
-          createCell("Evidencia / Relación Territorial", true),
-          createCell("Evaluación", true)
-        ]
-      }),
-      ...activeActors.slice(0, 5).map(actor => new TableRow({
-        children: [
-          createCell(`${actor.nombre} (${actor.alias})`),
-          createCell(actor.grupo),
-          createCell(actor.rango),
-          createCell(actor.domicilio),
-          createCell(actor.evidencia),
-          createCell(actor.status)
-        ]
-      }))
-    ]
-  });
 
   elements.push(
     new Paragraph({
@@ -1079,8 +991,52 @@ export async function exportToWord(
         })
       ],
       spacing: { after: 120 }
-    }),
-    matrixTable,
+    })
+  );
+
+  if (activeActors.length > 0) {
+    const matrixTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("Actor / Alias", true),
+            createCell("Grupo", true),
+            createCell("Rango / Función", true),
+            createCell("Domicilio Identificado", true),
+            createCell("Evidencia / Relación Territorial", true),
+            createCell("Evaluación", true)
+          ]
+        }),
+        ...activeActors.slice(0, 5).map(actor => new TableRow({
+          children: [
+            createCell(`${actor.nombre} (${actor.alias})`),
+            createCell(actor.grupo),
+            createCell(actor.rango),
+            createCell(actor.domicilio),
+            createCell(actor.evidencia),
+            createCell(actor.status)
+          ]
+        }))
+      ]
+    });
+    elements.push(matrixTable);
+  } else {
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `No se identificaron actores territoriales o pandillas con domicilio validado dentro del radio de análisis (${maxRadiusMeters}m) del polígono.`,
+            size: 19,
+            italic: true,
+            color: "ef4444",
+            font: "Calibri"
+          })
+        ],
+        spacing: { after: 120 }
+      })
+    );
+  }
     new Paragraph({
       children: [
         new TextRun({
@@ -1185,7 +1141,11 @@ export async function exportToWord(
   elements.push(new Paragraph({ text: "", pageBreakBefore: true }));
   elements.push(createTitle("ANEXO TÉCNICO B: DETALLE DE REGISTROS OSINT"));
   elements.push(createBodyText("En cumplimiento con las directrices de auditoría institucional y trazabilidad, a continuación se detallan los registros crudos de las fuentes abiertas y consultas de bases de datos procesadas para la formulación del presente dictamen:"));
-  elements.push(osintTable);
+  if (osintTable) {
+    elements.push(osintTable);
+  } else {
+    elements.push(createBodyText("No se registraron barridos OSINT integrados en este expediente."));
+  }
 
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX
   const headerFooterTabs = [

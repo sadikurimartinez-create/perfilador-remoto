@@ -187,18 +187,42 @@ Instrucciones:
  * 8. CAPÍTULO 7: INTELIGENCIA OSINT
  */
 export const OSINTAnalysisPrompt = (ctx: ReportContext): string => {
+  const sweepSummary = ctx.sweeps && ctx.sweeps.length > 0
+    ? ctx.sweeps.slice(0, 10).map(s => `- [${s.engine || s.source}]: ${(s.data || "").slice(0, 200)}`).join("\n")
+    : "Sin barridos OSINT integrados en el expediente.";
   return `
 --- INICIO MÓDULO: INTELIGENCIA OSINT (CAPÍTULO 7) ---
 Genera el Capítulo 7: "INTELIGENCIA OSINT".
+Radio de análisis: ${ctx.analysisRadius} metros.
 Datos de entrada OSINT: "${ctx.osintEngineData ? JSON.stringify(ctx.osintEngineData) : 'Sin barrido directo disponible.'}"
+Barridos integrados al expediente:
+${sweepSummary}
 
-Instrucciones:
-- Analiza la información de fuentes abiertas y noticias locales.
-- Para cada fuente integrada (ej. Telegram, RSS, redes sociales o noticias), indica explícitamente:
-  - Fuente: (Canal/Medio de procedencia).
-  - Resultado: (Qué información relevante se encontró).
-  - Valor: (Cómo afecta, complementa o refuta la hipótesis operativa).
-- Integra la información de forma fluida y formal.
+REGLA CRÍTICA: Prohibido redactar afirmaciones abstractas. Cada conclusión debe ser inteligencia operativa verificable.
+
+Estructura OBLIGATORIA (usar exactamente estos encabezados):
+
+HALLAZGO:
+- Indicar QUÉ se detectó, DÓNDE (calle, colonia, corredor), con nombres de establecimientos si existen (tiendas, farmacias, bares, escuelas, etc.).
+- Incluir horarios de mayor actividad cuando la evidencia lo permita.
+- Prohibido: "alta concentración comercial", "existe flujo" o "percepción de inseguridad" sin especificar.
+
+EVIDENCIA:
+- Enumerar explícitamente las fuentes utilizadas entre: Facebook, X, Reddit, DENUE, Google Maps, Google Reviews, Street View, Noticias, Datos Abiertos, Catastro, Incidencia delictiva, Reportes ciudadanos, Telegram.
+- Indicar cuáles fueron consultadas en ESTE expediente.
+- Prohibido: "Publicaciones georreferenciadas" sin nombrar fuentes.
+
+ANÁLISIS:
+- Explicar DÓNDE ocurre el fenómeno: calles, cruces, tramos y evidencia visual si existe.
+- Vincular el hallazgo con la hipótesis central del expediente.
+- Prohibido: "la falta de alumbrado genera percepción de inseguridad" sin ubicación exacta.
+
+IMPLICACIÓN OPERATIVA:
+- Indicar DÓNDE actuar, QUÉ calles/corredores, QUÉ horario (ej. 18:00–23:00) y POR QUÉ.
+- Prohibido: "realizar recorridos de proximidad" sin calles ni horario.
+
+Ejemplo de calidad mínima aceptable:
+"Se identificó un corredor comercial conformado por Abarrotes La Glorieta, Farmacia Guadalajara y Tortillería San Antonio sobre Avenida Paseos de San Antonio y calle Menorca, generando concentración de peatones en horarios de 07:00–09:00 y 17:00–21:00 horas."
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -210,10 +234,13 @@ export const GangAnalysisPrompt = (ctx: ReportContext): string => {
   return `
 --- INICIO MÓDULO: ACTORES TERRITORIALES Y PANDILLAS (CAPÍTULO 8) ---
 Genera el Capítulo 8: "ACTORES TERRITORIALES Y PANDILLAS".
+Radio de análisis: ${ctx.analysisRadius} metros.
 Datos de pandilla vinculada: ${ctx.linkedGangReport ? JSON.stringify(ctx.linkedGangReport) : 'Ninguno.'}
 
 Instrucciones:
 - Regla Crítica: Prohibido afirmar presencia territorial de grupos de riesgo por simple coincidencia nominal.
+- Regla Geoespacial: Prohibido incluir actores cuya distancia al epicentro no esté calculada con coordenadas geográficas reales (Haversine). No asignar distancia únicamente por colonia.
+- Solo incluir integrantes con domicilio geocodificado verificable dentro del radio de ${ctx.analysisRadius} metros.
 - Audita y valida la vinculación respondiendo a:
   1. ¿La pandilla tiene zona de influencia activa dentro del área analizada?
   2. ¿Existe algún integrante plenamente identificado en el área?
