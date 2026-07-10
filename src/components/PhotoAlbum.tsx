@@ -511,6 +511,7 @@ export function PhotoAlbum({
           sweepMultimodal: hasSweep("multimodal"),
           sweepCifa: hasSweep("cifa"),
           graphConnections: true,
+          includeOsintAppendix: false,
         });
       } else {
         setSelectedAnnexes({
@@ -530,6 +531,7 @@ export function PhotoAlbum({
           sweepMultimodal: false,
           sweepCifa: false,
           graphConnections: true,
+          includeOsintAppendix: false,
         });
       }
     }
