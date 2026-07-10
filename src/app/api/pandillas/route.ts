@@ -53,45 +53,77 @@ export async function POST(req: Request) {
       estatus: body.estatus || "Activa"
     };
 
-    // 1. CARGAR Y PARSEAR EL DATASET LOCAL (Domiclios Pandillas.csv)
-    let csvRows: { Calle: string; No: string; Colonia: string; Municipio: string; Estado: string; Lat?: string; Lng?: string }[] = [];
-    let csvPath = path.join(process.cwd(), "Domiclios Pandillas.csv");
+    // 1. CARGAR Y PARSEAR EL DATASET LOCAL DESDE EXCEL (INVENTARIO PANDILLAS.xlsx)
+    let csvRows: any[] = [];
+    let xlsxPath = path.join(process.cwd(), "INVENTARIO PANDILLAS.xlsx");
     
     try {
-      let fileContent = "";
+      let fileBuffer;
       try {
-        fileContent = await fs.readFile(csvPath, "utf8");
+        fileBuffer = await fs.readFile(xlsxPath);
       } catch (e) {
         // Local Windows absolute path fallback
-        csvPath = "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Domiclios Pandillas.csv";
-        fileContent = await fs.readFile(csvPath, "utf8");
+        xlsxPath = "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\INVENTARIO PANDILLAS.xlsx";
+        fileBuffer = await fs.readFile(xlsxPath);
       }
-      csvRows = parse(fileContent, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-      }) as any[];
-      console.log(`[API Pandillas] CSV cargado con éxito. Total registros: ${csvRows.length}`);
+      
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawAoA = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+      
+      // Data rows start from index 2 (row 0 is main headers, row 1 is sub-headers)
+      for (let i = 2; i < rawAoA.length; i++) {
+        const row = rawAoA[i];
+        if (!row || row.length === 0) continue;
+        
+        csvRows.push({
+          AreaInfluencia: String(row[1] || "").trim(),
+          Pandilla: String(row[2] || "").trim(),
+          Posicion: String(row[3] || "").trim(),
+          Nombre: `${String(row[4] || "").trim()} ${String(row[5] || "").trim()}`.trim(),
+          ApPaterno: String(row[6] || "").trim(),
+          ApMaterno: String(row[7] || "").trim(),
+          Alias: `${String(row[8] || "").trim()} ${String(row[9] || "").trim()}`.trim(),
+          Ingresos: String(row[10] || "").trim(),
+          Detenido: String(row[11] || "").trim(),
+          Delito: String(row[12] || "").trim(),
+          Observaciones: String(row[15] || "").trim(),
+          Calle: String(row[16] || "").trim(),
+          No: String(row[17] || "").trim(),
+          Colonia: String(row[18] || "").trim(),
+          Municipio: "Aguascalientes",
+          Estado: "Aguascalientes",
+          Lat: row[26] !== undefined ? String(row[26]).trim() : "",
+          Lng: row[27] !== undefined ? String(row[27]).trim() : ""
+        });
+      }
+      console.log(`[API Pandillas] XLSX cargado con éxito. Total registros: ${csvRows.length}`);
     } catch (err) {
-      console.warn("[API Pandillas] No se pudo leer el archivo CSV. Continuando con datos vacíos.", err);
+      console.warn("[API Pandillas] No se pudo leer el archivo XLSX. Continuando con datos vacíos.", err);
     }
 
     // 2. MATCH GEOGRÁFICO Y CORRELACIÓN DE DOMICILIOS
-    // Filtramos filas del CSV que coincidan léxicamente con la zona de influencia proporcionada
+    // Primero intentamos emparejar por el nombre de la pandilla
+    const normalizedGangName = (nombre || "").toLowerCase().trim();
+    let matchesCsv = csvRows.filter(row => {
+      const gangCol = (row.Pandilla || "").toLowerCase().trim();
+      return gangCol && (gangCol.includes(normalizedGangName) || normalizedGangName.includes(gangCol));
+    });
+
+    // Si no hay coincidencias de nombre, intentamos buscar por zona de influencia
     const normalizedZone = (zonaInfluencia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    let matchesCsv = csvRows;
-    if (normalizedZone) {
+    if (matchesCsv.length === 0 && normalizedZone) {
       matchesCsv = csvRows.filter(row => {
         const col = (row.Colonia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const calle = (row.Calle || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         return col.includes(normalizedZone) || normalizedZone.includes(col) || calle.includes(normalizedZone);
       });
-      // Si no hay coincidencias específicas de zona, mantenemos una selección representativa para el motor de IA
-      if (matchesCsv.length === 0) {
-        matchesCsv = csvRows.slice(0, 15);
-      }
-    } else {
-      // Si no se especificó zona, pasamos las primeras 20 como semilla general de direcciones delictivas
+    }
+
+    // Si sigue vacío, extraemos una muestra representativa general
+    if (matchesCsv.length === 0) {
       matchesCsv = csvRows.slice(0, 20);
     }
 
