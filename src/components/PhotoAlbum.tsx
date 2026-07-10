@@ -740,6 +740,9 @@ export function PhotoAlbum({
       if ((project as any).sweepsComments) {
         setSweepsComments((project as any).sweepsComments);
       }
+      if ((project as any).incidents) {
+        setIncidents((project as any).incidents);
+      }
     }
   }, [project]);
 
@@ -2832,8 +2835,8 @@ const hasMinimumPhotos =
                 const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
 
                 if (incidents.length > 0) {
-                  alert("Los incidentes ya se encuentran cargados.");
-                  return;
+                  const reAudit = confirm("Los incidentes ya se encuentran cargados en este expediente. ¿Desea ejecutar el barrido delictivo nuevamente para re-auditar la zona?");
+                  if (!reAudit) return;
                 }
 
                 setIsCheckingIncidencia(true);
@@ -2847,6 +2850,18 @@ const hasMinimumPhotos =
                   const data = await res.json();
                   if (data.success && data.data) {
                     setIncidents(data.data);
+                    if (projectId) {
+                      try {
+                        const { doc, updateDoc } = await import("firebase/firestore");
+                        const { getDb } = await import("@/lib/firebase");
+                        const firestore = getDb();
+                        await updateDoc(doc(firestore, "projects", projectId), {
+                          incidents: data.data
+                        });
+                      } catch (fsErr) {
+                        console.error("Error persisting incidents in Firestore:", fsErr);
+                      }
+                    }
                     
                     const total = data.data.length;
                     const crimeCounts: Record<string, number> = {};

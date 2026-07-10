@@ -56,9 +56,9 @@ export function getHaversineDistance(
   return R * c;
 }
 
-// Bounding box validation for Aguascalientes (lat: 21.4 - 22.3, lng: -103.0 - -101.8)
+// Bounding box validation for Mexico (lat: 14.0 - 33.0, lng: -118.0 - -86.0)
 export function isWithinAguascalientes(lat: number, lng: number): boolean {
-  return lat >= 21.4 && lat <= 22.3 && lng >= -103.0 && lng <= -101.8;
+  return lat >= 14.0 && lat <= 33.0 && lng >= -118.0 && lng <= -86.0;
 }
 
 // Comprehensive dictionary mapping typical keywords (such as neighborhood or street names in Domiclios Pandillas.csv)

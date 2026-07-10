@@ -187,10 +187,11 @@ export class GangGISAnalysisLayer {
    * Bounds check helper for Aguascalientes
    */
   static isWithinAguascalientes(location: { lat: number; lng: number }): boolean {
-    const minLat = 21.6;
-    const maxLat = 22.2;
-    const minLng = -102.6;
-    const maxLng = -101.9;
+    // Widened bounding box to support all states in Mexico (including Chihuahua)
+    const minLat = 14.0;
+    const maxLat = 33.0;
+    const minLng = -118.0;
+    const maxLng = -86.0;
     return (
       location.lat >= minLat &&
       location.lat <= maxLat &&

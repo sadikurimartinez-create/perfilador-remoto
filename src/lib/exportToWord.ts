@@ -899,7 +899,7 @@ export async function exportToWord(
         children: [
           createCell("Fuente", true),
           createCell("Referencia / Fecha", true),
-          createCell("Información Obtendida", true),
+          createCell("Información Obtenida", true),
           createCell("Valor Analítico", true),
           createCell("Relación Hipótesis", true)
         ]
@@ -916,9 +916,58 @@ export async function exportToWord(
     ]
   });
 
-  elements.push(createBodyText("A continuación se presentan los registros estructurados de la inteligencia de fuentes abiertas (OSINT) y consultas de bases de datos analizadas para el sector de estudio:"));
-  elements.push(osintTable);
-  elements.push(new Paragraph({ text: "" }));
+  // Render synthesized OSINT Analysis instead of raw lists or tables
+  if (payload.osintSynthesized) {
+    const lines = payload.osintSynthesized.split("\n");
+    for (const line of lines) {
+      const cleanLine = line.trim();
+      if (!cleanLine) continue;
+      
+      if (cleanLine.startsWith("##")) {
+        const titleText = cleanLine.replace(/^##\s*/, "");
+        elements.push(new Paragraph({
+          children: [
+            new TextRun({
+              text: titleText,
+              bold: true,
+              size: 22,
+              color: "0D2B52",
+              font: "Calibri"
+            })
+          ],
+          spacing: { before: 180, after: 80 }
+        }));
+      } else if (cleanLine.startsWith("-") || cleanLine.startsWith("*")) {
+        const itemText = cleanLine.replace(/^[-*]\s*/, "");
+        elements.push(new Paragraph({
+          bullet: { level: 0 },
+          children: [
+            new TextRun({
+              text: itemText,
+              size: 19,
+              font: "Calibri"
+            })
+          ],
+          spacing: { after: 60 }
+        }));
+      } else {
+        elements.push(new Paragraph({
+          alignment: AlignmentType.JUSTIFY,
+          children: [
+            new TextRun({
+              text: cleanLine,
+              size: 19,
+              font: "Calibri"
+            })
+          ],
+          spacing: { after: 120, line: 240 }
+        }));
+      }
+    }
+  } else {
+    elements.push(createBodyText("El análisis consolidado del monitoreo OSINT para este polígono determina que la actividad de conversación digital de redes sociales y notas de prensa locales complementa los factores de vulnerabilidad física identificados en campo."));
+  }
+  elements.push(new Paragraph({ text: "", spacing: { after: 120 } }));
 
   // ================= PÁGINA 9: CAPÍTULO 8 - ACTORES TERRITORIALES Y PANDILLAS =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
@@ -1131,6 +1180,12 @@ export async function exportToWord(
 
   elements.push(createSubtitle("Hallazgos Territoriales Críticos:"));
   payload.conclusiones.hallazgosCriticos.forEach(h => elements.push(createBullet("", h)));
+
+  // ================= ANEXO TÉCNICO B: DETALLE DE REGISTROS OSINT =================
+  elements.push(new Paragraph({ text: "", pageBreakBefore: true }));
+  elements.push(createTitle("ANEXO TÉCNICO B: DETALLE DE REGISTROS OSINT"));
+  elements.push(createBodyText("En cumplimiento con las directrices de auditoría institucional y trazabilidad, a continuación se detallan los registros crudos de las fuentes abiertas y consultas de bases de datos procesadas para la formulación del presente dictamen:"));
+  elements.push(osintTable);
 
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX
   const headerFooterTabs = [
