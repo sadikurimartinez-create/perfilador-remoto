@@ -544,11 +544,11 @@ export function PhotoAlbum({
         }
         return;
       }
-      const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
-      const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat && p.lng);
+      const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
+      const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
       if (photosToUse.length === 0) return;
-      const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
-      const centerLng = photosToUse.reduce((acc, p) => acc + p.lng!, 0) / photosToUse.length;
+      const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
+      const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
 
       try {
         const svService = new window.google.maps.StreetViewService();
@@ -1025,8 +1025,8 @@ const hasMinimumPhotos =
         })
       );
 
-      const centerLat = withCoords.reduce((acc, p) => acc + p.lat!, 0) / withCoords.length;
-      const centerLng = withCoords.reduce((acc, p) => acc + p.lng!, 0) / withCoords.length;
+      const centerLat = withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length;
+      const centerLng = withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length;
 
       const res = await fetch("/api/analyze-selection", {
         method: "POST",
@@ -1106,8 +1106,8 @@ const hasMinimumPhotos =
       );
 
       // Usar el centroide geográfico real de las evidencias seleccionadas, no la ciudad de Aguascalientes por defecto
-      const centerLat = withCoords.reduce((acc, p) => acc + p.lat!, 0) / withCoords.length;
-      const centerLng = withCoords.reduce((acc, p) => acc + p.lng!, 0) / withCoords.length;
+      const centerLat = withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length;
+      const centerLng = withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length;
       const lat = centerLat || 21.8818;
       const lng = centerLng || -102.2915;
       // Helper local de fetch con timeout
@@ -2590,14 +2590,14 @@ const hasMinimumPhotos =
               setIsCheckingScince(true);
               setError(null);
               try {
-                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+                const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
                 if (selectedPhotos.length === 0) {
                   setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
                   setIsCheckingScince(false);
                   return;
                 }
-                const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
-                const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
+                const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
+                const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
 
                 const data = await getScinceData(centerLat, centerLng);
                 if (data.exito) {
@@ -2642,14 +2642,14 @@ const hasMinimumPhotos =
               setIsCheckingDenue(true);
               setError(null);
               try {
-                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
+                const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
                 if (selectedPhotos.length === 0) {
                   setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
                   setIsCheckingDenue(false);
                   return;
                 }
-                const centerLat = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
-                const centerLng = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
+                const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
+                const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
 
                 const data = await getDenueData(centerLat, centerLng, 500);
                 if (data.exito) {
@@ -3232,10 +3232,10 @@ const hasMinimumPhotos =
                     return { subject: q.subject, action: q.action, environment: q.environment, imageBase64: base64 || undefined };
                   }));
 
-                  const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat && p.lng);
-                  const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat && p.lng);
-                  const centerLat = photosToUse.reduce((acc, p) => acc + p.lat!, 0) / photosToUse.length;
-                  const centerLng = photosToUse.reduce((acc, p) => acc + p.lng!, 0) / photosToUse.length;
+                  const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
+                  const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
+                  const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
+                  const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
 
                   const res = await fetch("/api/refine-context", {
                     method: "POST",
