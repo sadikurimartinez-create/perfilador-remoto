@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     };
 
     // 1. CARGAR Y PARSEAR EL DATASET LOCAL (Domiclios Pandillas.csv)
-    let csvRows: { Calle: string; No: string; Colonia: string; Municipio: string; Estado: string }[] = [];
+    let csvRows: { Calle: string; No: string; Colonia: string; Municipio: string; Estado: string; Lat?: string; Lng?: string }[] = [];
     const csvPath = "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Domiclios Pandillas.csv";
     
     try {

@@ -8,6 +8,15 @@ const nextConfig = {
     GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
   },
+  experimental: {
+    outputFileTracingIncludes: {
+      '/api/**/*': [
+        'Incidencia Delictiva/**/*',
+        'Bibliografía/**/*',
+        'Bibliografia/**/*'
+      ]
+    }
+  }
 };
 
 export default nextConfig;

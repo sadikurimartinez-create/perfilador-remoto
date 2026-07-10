@@ -101,8 +101,7 @@ async function getImageDimensionsAndBuffer(
           }
           resolve(await outBlob.arrayBuffer());
         },
-        "image/jpeg",
-        0.85
+        "image/png"
       );
     });
 
@@ -827,7 +826,7 @@ export async function exportToWord(
   const osintFindings: any[] = [];
   if (payload.sweepsData) {
     for (const s of payload.sweepsData) {
-      if (s.source?.toLowerCase().includes("telegram") || s.source?.toLowerCase().includes("scince") || s.source?.toLowerCase().includes("denue")) {
+      if (s && s.source) {
         let relacion = "Fortalece";
         if (s.relevance === "Bajo") relacion = "Requiere validación";
         osintFindings.push({

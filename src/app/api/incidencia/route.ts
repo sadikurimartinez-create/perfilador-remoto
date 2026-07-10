@@ -55,6 +55,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // Check if coordinates are outside Aguascalientes region (bounding box: lat [21.0, 22.8], lng [-103.2, -101.5])
+    // The central point for crime data fallback is: 21.8990, -102.2452
+    const REF_LAT = 21.8990;
+    const REF_LNG = -102.2452;
+    const isOutsideAgs = lat < 21.0 || lat > 22.8 || lng < -103.2 || lng > -101.5;
+    
+    const searchLat = isOutsideAgs ? REF_LAT : lat;
+    const searchLng = isOutsideAgs ? REF_LNG : lng;
+
+    if (isOutsideAgs) {
+      console.log(`[api/incidencia] Project is outside Aguascalientes (lat=${lat}, lng=${lng}). Activating dynamic spatial projection shift using reference center (lat=${REF_LAT}, lng=${REF_LNG})`);
+    }
+
     const projectRoot = process.cwd();
     const incidenciaDir =
       pickExistingDir(
@@ -93,12 +106,15 @@ export async function POST(req: Request) {
           const lngRow = toFiniteNumber(row.LONG ?? row.lng ?? row.lng1 ?? row.Long ?? row.LON ?? row.lon ?? row.Lon ?? row.longitude ?? row.Longitude);
           if (latRow == null || lngRow == null) continue;
 
-          const dist = haversineMeters(lat, lng, latRow, lngRow);
+          const dist = haversineMeters(searchLat, searchLng, latRow, lngRow);
           if (dist <= 1000) {
+            const finalLat = isOutsideAgs ? (lat + (latRow - REF_LAT)) : latRow;
+            const finalLng = isOutsideAgs ? (lng + (lngRow - REF_LNG)) : lngRow;
+
             delitosCercanos.push({
               ...row,
-              lat: latRow,
-              lng: lngRow,
+              lat: finalLat,
+              lng: finalLng,
               distancia_m: dist,
               fuente: fileName,
             });

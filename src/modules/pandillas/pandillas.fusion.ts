@@ -7,7 +7,7 @@ import { GangEntity, FusionResult, calculateSimilarity } from "./pandillas.mappe
 export function fuseGangsAndBuildGraph(
   manualGang: GangEntity,
   existingGangs: GangEntity[],
-  csvMatches: { Calle: string; No: string; Colonia: string; Municipio: string; Estado: string }[]
+  csvMatches: { Calle: string; No: string; Colonia: string; Municipio: string; Estado: string; Lat?: string | number; Lng?: string | number }[]
 ): FusionResult {
   const allGangs = [manualGang, ...existingGangs];
   const uniqueGangsMap = new Map<string, GangEntity>();
@@ -138,24 +138,29 @@ export function fuseGangsAndBuildGraph(
 
   if (csvMatches.length > 0) {
     csvMatches.forEach((match, idx) => {
-      // Simulate slight variation in coordinates centered around Aguascalientes to map multiple addresses
-      const seed = idx * 17.5 + match.Calle.length + match.Colonia.length;
-      const dLat = (Math.sin(seed) * 0.015);
-      const dLng = (Math.cos(seed) * 0.015);
-      const lat = defaultLat + dLat;
-      const lng = defaultLng + dLng;
+      let lat = Number(match.Lat);
+      let lng = Number(match.Lng);
+
+      // Fallback only if the CSV coordinates are missing or invalid
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        const seed = idx * 17.5 + (match.Calle || "").length + (match.Colonia || "").length;
+        const dLat = (Math.sin(seed) * 0.015);
+        const dLng = (Math.cos(seed) * 0.015);
+        lat = defaultLat + dLat;
+        lng = defaultLng + dLng;
+      }
 
       geolocalizacion.push({
         lat,
         lng,
-        descripcion: `${match.Calle} ${match.No || ""}, Col. ${match.Colonia}, Aguascalientes`,
+        descripcion: `${match.Calle || ""} ${match.No || ""}, Col. ${match.Colonia || ""}, Aguascalientes`,
       });
 
-      // Every 3rd match creates a high heat point, others medium/low
+      const seedForHeat = idx * 17.5 + (match.Calle || "").length + (match.Colonia || "").length;
       areasCalientes.push({
         lat,
         lng,
-        radioMetros: 150 + (seed % 150),
+        radioMetros: 150 + (seedForHeat % 150),
         intensidad: (idx % 3 === 0) ? 0.9 : 0.4,
       });
     });

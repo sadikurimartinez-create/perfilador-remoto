@@ -16,7 +16,7 @@ export interface VectorEngineInput {
 
 // Auxiliar para inicializar canvas con pixel ratio para mayor resolución (HD - 300 DPI)
 const getHDCanvas = (width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } => {
-  const scale = 2.5; // High resolution scale factor (300 DPI equivalent)
+  const scale = 3.5; // High resolution scale factor (300 DPI equivalent)
   const canvas = document.createElement('canvas');
   canvas.width = width * scale;
   canvas.height = height * scale;
@@ -73,7 +73,7 @@ const loadStaticMapImage = (
     };
 
     const tryYandex = () => {
-      const yandexUrl = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=${w},${h}&z=${zoom}&l=map`;
+      const yandexUrl = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=${w},${h}&z=${zoom}&l=map&scale=2.0`;
       const yandexImg = new Image();
       yandexImg.crossOrigin = "Anonymous";
       yandexImg.onload = () => resolve(yandexImg);
