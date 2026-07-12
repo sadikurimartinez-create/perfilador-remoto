@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         path.join(projectRoot, "Bibliografia")
       ) ?? "";
 
-    // Procesamiento de incidencia: parsea todos los CSV y filtra por radio 1km
+    // Procesamiento de incidencia: parsea todos los CSV y filtra por radio 2km
     let delitosCercanos: any[] = [];
     try {
       if (!incidenciaDir) throw new Error("Carpeta de incidencia no encontrada.");
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
           if (latRow == null || lngRow == null) continue;
 
           const dist = haversineMeters(searchLat, searchLng, latRow, lngRow);
-          if (dist <= 1000) {
+          if (dist <= 2000) {
             const finalLat = isOutsideAgs ? (lat + (latRow - REF_LAT)) : latRow;
             const finalLng = isOutsideAgs ? (lng + (lngRow - REF_LNG)) : lngRow;
 
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
           }
         }
       }
-      console.log(`[api/incidencia] Finished scanning. Found ${delitosCercanos.length} matching delitos within 1km.`);
+      console.log(`[api/incidencia] Finished scanning. Found ${delitosCercanos.length} matching delitos within 2km.`);
     } catch (err) {
       console.error("[api/incidencia] Error procesando incidencia CSV:", err);
       delitosCercanos = [];

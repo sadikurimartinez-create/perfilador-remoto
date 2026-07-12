@@ -85,7 +85,7 @@ export async function getDatosGobMxData(
   datasetUrl: string,
   lat: number,
   lng: number,
-  radio: number = 1000
+  radio: number = 2000
 ): Promise<{ exito: boolean; data?: DatosGobMxResult; error?: string }> {
   try {
     if (!datasetUrl || !lat || !lng) {

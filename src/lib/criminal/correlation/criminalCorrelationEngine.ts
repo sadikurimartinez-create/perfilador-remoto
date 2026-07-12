@@ -283,7 +283,7 @@ export class CriminalIntelligenceCorrelationEngine {
       } else if (dominantResult.providerId === "expedientes") {
         dominantReason = "Establecido como verdad operacional criminal debido a registros oficiales de domicilios y nexos operativos entre integrantes cargados en el expediente.";
       } else if (dominantResult.providerId === "incidencia_delictiva") {
-        dominantReason = "Establecido como verdad operacional dominante por el cruce delictivo local de carpetas de investigación georreferenciadas a menos de 1km.";
+        dominantReason = "Establecido como verdad operacional dominante por el cruce delictivo local de carpetas de investigación georreferenciadas a menos de 2km.";
       } else {
         dominantReason = `Establecido como verdad operacional por la solidez e integridad de la fuente ${dominantResult.name}.`;
       }
