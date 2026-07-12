@@ -168,18 +168,45 @@ export async function POST(req: Request) {
       contextoBibliografico = "";
     }
 
-    return NextResponse.json({
-      success: true,
-      data: delitosCercanos,
-      bibliografia: contextoBibliografico,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: delitosCercanos,
+        bibliografia: contextoBibliografico,
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      }
+    );
   } catch (err: any) {
     writeDebugLog(`CRITICAL UNEXPECTED ERROR: ${err.message || err}`);
     console.error("[api/incidencia] Error inesperado:", err);
     return NextResponse.json(
       { success: false, error: `Error interno: ${err.message || err}` },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      }
     );
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 }
 
