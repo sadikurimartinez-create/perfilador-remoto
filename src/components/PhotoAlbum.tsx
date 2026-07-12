@@ -1111,11 +1111,13 @@ const hasMinimumPhotos =
         })
       );
 
-      // Usar el centroide geográfico real de las evidencias seleccionadas, no la ciudad de Aguascalientes por defecto
-      const centerLat = withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length;
-      const centerLng = withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length;
-      const lat = centerLat || 21.8818;
-      const lng = centerLng || -102.2915;
+      // Usar el centroide geográfico real de las evidencias seleccionadas, priorizando las coordenadas del proyecto
+      const projLat = Number(project?.latitude);
+      const projLng = Number(project?.longitude);
+      const centerLat = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length) : NaN;
+      const centerLng = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length) : NaN;
+      const lat = (!isNaN(projLat) && projLat !== 0) ? projLat : (!isNaN(centerLat) ? centerLat : 21.8818);
+      const lng = (!isNaN(projLng) && projLng !== 0) ? projLng : (!isNaN(centerLng) ? centerLng : -102.2915);
       // Helper local de fetch con timeout
       const fetchWithTimeout = async (url: string, options: any, timeoutMs = 15000): Promise<Response> => {
         const controller = new AbortController();
@@ -2784,18 +2786,23 @@ const hasMinimumPhotos =
             </p>
             <button
               type="button"
-              disabled={(selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")) || isCheckingIncidencia || isReadOnly}
+              disabled={isCheckingIncidencia || isReadOnly || (!(project?.latitude && project?.longitude) && selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI"))}
               onClick={async () => {
-                const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
-                const vertices = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI");
-                const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : vertices;
+                let queryLat = Number(project?.latitude);
+                let queryLng = Number(project?.longitude);
 
-                if (photosToUse.length === 0) {
-                  alert("⚠️ Debe seleccionar al menos una fotografía con coordenadas GPS o trazar un polígono/corredor.");
-                  return;
+                if (isNaN(queryLat) || isNaN(queryLng) || queryLat === 0) {
+                  const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
+                  const vertices = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI");
+                  const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : vertices;
+
+                  if (photosToUse.length === 0) {
+                    alert("⚠️ Debe establecer las coordenadas del proyecto en el mapa, registrar vértices o seleccionar al menos una fotografía con coordenadas GPS.");
+                    return;
+                  }
+                  queryLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
+                  queryLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
                 }
-                const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
-                const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
 
                 if (incidents.length > 0) {
                   const reAudit = confirm("Los incidentes ya se encuentran cargados en este expediente. ¿Desea ejecutar el barrido delictivo nuevamente para re-auditar la zona?");
@@ -2808,7 +2815,7 @@ const hasMinimumPhotos =
                   const res = await fetch("/api/incidencia", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ lat: centerLat, lng: centerLng })
+                    body: JSON.stringify({ lat: queryLat, lng: queryLng })
                   });
                   const data = await res.json();
                   if (data.success && data.data) {
