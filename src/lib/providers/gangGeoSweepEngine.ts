@@ -367,9 +367,9 @@ export class GangGeoSweepEngine {
         });
       });
 
-      if (minDistance < 2000) {
-        // High correlation if within 2km of centroid
-        let strength = 0.5 + (0.4 * (2000 - minDistance) / 2000);
+      if (minDistance < 1000) {
+        // High correlation if within 1km of centroid
+        let strength = 0.5 + (0.4 * (1000 - minDistance) / 1000);
         if (nearbyPointsCount > 0) {
           strength += 0.1;
         }

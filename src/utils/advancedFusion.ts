@@ -27,7 +27,7 @@ export const runMultimodalFusionWithGrounding = async (imageBase64: string, user
   const prompt = `
 INSTRUCCIÓN DE SISTEMA: Valida la consistencia entre el contenido visual detectado en la imagen adjunta y la descripción del usuario ("${userDescription}"). Reporta discrepancias evidentes como posibles falsos positivos o intentos de desinformación.
 
-QUERY DINÁMICA DE GROUNDING: Busca noticias de seguridad, incidentes reportados y cambios urbanos en un radio de 2km de las coordenadas ${lat}, ${lng} en los últimos 30 días.
+QUERY DINÁMICA DE GROUNDING: Busca noticias de seguridad, incidentes reportados y cambios urbanos en un radio de 1km de las coordenadas ${lat}, ${lng} en los últimos 30 días.
 
 ESTRUCTURA JSON REQUERIDA: { "discrepancia_detectada": boolean, "reporte_ia": "Análisis de consistencia...", "contexto_externo": "Resumen del grounding de Google Search...", "categoria_entidad": "Ej: Grafiti, Abandono, etc." }
   `;

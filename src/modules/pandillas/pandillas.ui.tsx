@@ -864,7 +864,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
           ? getHaversineDistance({ lat: projectLat, lng: projectLng }, firstPt) 
           : Infinity;
           
-        if (dist <= 2500 || !projectLat) { // Radio de 2.5km o si no hay coordenadas del proyecto
+        if (dist <= 1000 || !projectLat) { // Radio de 1km o si no hay coordenadas del proyecto
           loadGangIntoState(firstGang);
         } else {
           // Limpiar o no preseleccionar para no mostrar duplicados estáticos ajenos a la zona

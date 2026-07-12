@@ -122,7 +122,7 @@ export async function POST(req: Request) {
             if (latRow == null || lngRow == null) continue;
 
             const dist = haversineMeters(searchLat, searchLng, latRow, lngRow);
-            if (dist <= 2000) {
+            if (dist <= 1000) {
               const finalLat = isOutsideAgs ? (lat + (latRow - REF_LAT)) : latRow;
               const finalLng = isOutsideAgs ? (lng + (lngRow - REF_LNG)) : lngRow;
 
