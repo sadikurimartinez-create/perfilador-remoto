@@ -40,23 +40,38 @@ function pickExistingDir(...candidates: string[]) {
 }
 
 export async function POST(req: Request) {
+  const projectRoot = process.cwd();
+  const debugLogPath = path.join(projectRoot, "scratch", "api_debug.log");
+  let latVal: number | null = null;
+  let lngVal: number | null = null;
+  
+  const writeDebugLog = (msg: string) => {
+    try {
+      const dir = path.dirname(debugLogPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.appendFileSync(debugLogPath, `[${new Date().toISOString()}] ${msg}\n`, "utf8");
+    } catch (e) {
+      console.error("[api/incidencia] Failed to write debug log:", e);
+    }
+  };
+
   try {
     const body = (await req.json()) as IncidenciaRequestBody;
     const lat = toFiniteNumber(body.lat);
     const lng = toFiniteNumber(body.lng);
+    latVal = lat;
+    lngVal = lng;
 
-    console.log(`[api/incidencia] Querying with coordinates: lat=${lat}, lng=${lng}`);
+    writeDebugLog(`POST Request: lat=${lat}, lng=${lng}`);
 
     if (lat == null || lng == null) {
-      console.warn(`[api/incidencia] Invalid coordinates received: lat=${body.lat}, lng=${body.lng}`);
+      writeDebugLog(`WARNING: Invalid coordinates: lat=${body.lat}, lng=${body.lng}`);
       return NextResponse.json(
         { success: false, error: "Se requieren lat y lng válidos." },
         { status: 400 }
       );
     }
 
-    // Check if coordinates are outside Aguascalientes region (bounding box: lat [21.0, 22.8], lng [-103.2, -101.5])
-    // The central point for crime data fallback is: 21.8990, -102.2452
     const REF_LAT = 21.8990;
     const REF_LNG = -102.2452;
     const isOutsideAgs = lat < 21.0 || lat > 22.8 || lng < -103.2 || lng > -101.5;
@@ -64,11 +79,6 @@ export async function POST(req: Request) {
     const searchLat = isOutsideAgs ? REF_LAT : lat;
     const searchLng = isOutsideAgs ? REF_LNG : lng;
 
-    if (isOutsideAgs) {
-      console.log(`[api/incidencia] Project is outside Aguascalientes (lat=${lat}, lng=${lng}). Activating dynamic spatial projection shift using reference center (lat=${REF_LAT}, lng=${REF_LNG})`);
-    }
-
-    const projectRoot = process.cwd();
     const incidenciaDir =
       pickExistingDir(
         "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\Historial SHAPES\\SELECCION PERFILADOR - INCIDENCIA DELICTIVA",
@@ -82,53 +92,60 @@ export async function POST(req: Request) {
         path.join(projectRoot, "Bibliografia")
       ) ?? "";
 
-    // Procesamiento de incidencia: parsea todos los CSV y filtra por radio 2km
+    writeDebugLog(`Paths identified:\n` +
+      `  incidenciaDir: "${incidenciaDir}" (Exists: ${incidenciaDir ? fs.existsSync(incidenciaDir) : false})\n` +
+      `  bibliografiaDir: "${bibliografiaDir}" (Exists: ${bibliografiaDir ? fs.existsSync(bibliografiaDir) : false})`);
+
     let delitosCercanos: any[] = [];
     try {
-      if (!incidenciaDir) throw new Error("Carpeta de incidencia no encontrada.");
+      if (!incidenciaDir) throw new Error("Carpeta de incidencia no encontrada en NextJS server.");
       const files = fs.readdirSync(incidenciaDir, { withFileTypes: true });
       const csvFiles = files
         .filter((f) => f.isFile() && f.name.toLowerCase().endsWith(".csv"))
         .map((f) => path.join(incidenciaDir, f.name));
 
-      console.log(`[api/incidencia] Scanning ${csvFiles.length} CSV files in ${incidenciaDir}...`);
+      writeDebugLog(`Found ${csvFiles.length} CSV files to scan.`);
 
       for (const filePath of csvFiles) {
         const fileName = path.basename(filePath);
-        const csvText = fs.readFileSync(filePath, "utf8");
-        const parsed = Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-        });
+        try {
+          const csvText = fs.readFileSync(filePath, "utf8");
+          const parsed = Papa.parse(csvText, {
+            header: true,
+            skipEmptyLines: true,
+          });
 
-        const rows = (parsed.data ?? []) as any[];
-        for (const row of rows) {
-          const latRow = toFiniteNumber(row.LAT ?? row.lat ?? row.Lat ?? row.latitude ?? row.Latitude);
-          const lngRow = toFiniteNumber(row.LONG ?? row.lng ?? row.lng1 ?? row.Long ?? row.LON ?? row.lon ?? row.Lon ?? row.longitude ?? row.Longitude);
-          if (latRow == null || lngRow == null) continue;
+          const rows = (parsed.data ?? []) as any[];
+          for (const row of rows) {
+            const latRow = toFiniteNumber(row.LAT ?? row.lat ?? row.Lat ?? row.latitude ?? row.Latitude);
+            const lngRow = toFiniteNumber(row.LONG ?? row.lng ?? row.lng1 ?? row.Long ?? row.LON ?? row.lon ?? row.Lon ?? row.longitude ?? row.Longitude);
+            if (latRow == null || lngRow == null) continue;
 
-          const dist = haversineMeters(searchLat, searchLng, latRow, lngRow);
-          if (dist <= 2000) {
-            const finalLat = isOutsideAgs ? (lat + (latRow - REF_LAT)) : latRow;
-            const finalLng = isOutsideAgs ? (lng + (lngRow - REF_LNG)) : lngRow;
+            const dist = haversineMeters(searchLat, searchLng, latRow, lngRow);
+            if (dist <= 2000) {
+              const finalLat = isOutsideAgs ? (lat + (latRow - REF_LAT)) : latRow;
+              const finalLng = isOutsideAgs ? (lng + (lngRow - REF_LNG)) : lngRow;
 
-            delitosCercanos.push({
-              ...row,
-              lat: finalLat,
-              lng: finalLng,
-              distancia_m: dist,
-              fuente: fileName,
-            });
+              delitosCercanos.push({
+                ...row,
+                lat: finalLat,
+                lng: finalLng,
+                distancia_m: dist,
+                fuente: fileName,
+              });
+            }
           }
+        } catch (fileErr: any) {
+          writeDebugLog(`ERROR reading file "${fileName}": ${fileErr.message || fileErr}`);
         }
       }
-      console.log(`[api/incidencia] Finished scanning. Found ${delitosCercanos.length} matching delitos within 2km.`);
-    } catch (err) {
+      writeDebugLog(`Scanning completed. Found ${delitosCercanos.length} total matches.`);
+    } catch (err: any) {
+      writeDebugLog(`CRITICAL ERROR inside CSV loop: ${err.message || err}`);
       console.error("[api/incidencia] Error procesando incidencia CSV:", err);
       delitosCercanos = [];
     }
 
-    // Procesamiento de bibliografía: concatena todo el texto de archivos .md/.txt
     let contextoBibliografico = "";
     try {
       if (!bibliografiaDir) throw new Error("Carpeta de bibliografía no encontrada.");
@@ -145,11 +162,9 @@ export async function POST(req: Request) {
       }
 
       contextoBibliografico = textos.join("\n\n");
-    } catch (err) {
-      console.warn(
-        "[api/incidencia] No se pudo leer la carpeta Bibliografía:",
-        err
-      );
+      writeDebugLog(`Read ${textos.length} bibliography files.`);
+    } catch (err: any) {
+      writeDebugLog(`WARNING reading bibliography: ${err.message || err}`);
       contextoBibliografico = "";
     }
 
@@ -158,10 +173,11 @@ export async function POST(req: Request) {
       data: delitosCercanos,
       bibliografia: contextoBibliografico,
     });
-  } catch (err) {
+  } catch (err: any) {
+    writeDebugLog(`CRITICAL UNEXPECTED ERROR: ${err.message || err}`);
     console.error("[api/incidencia] Error inesperado:", err);
     return NextResponse.json(
-      { success: false, error: "Error interno en /api/incidencia." },
+      { success: false, error: `Error interno: ${err.message || err}` },
       { status: 500 }
     );
   }
