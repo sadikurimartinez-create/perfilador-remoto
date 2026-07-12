@@ -3,61 +3,36 @@
     "total_pandillas": 29,
     "total_integrantes_registrados": 124,
     "colonias_involucradas": [
-      "Altavista",
-      "Barrio de Guadalupe",
-      "Barrio de San Marcos",
-      "Benito Palomino Dena",
-      "Buena Vista",
-      "Circunvalacion Norte",
-      "Cumbres  ",
-      "Cumbres III",
-      "Del Carmen",
-      "El Llanito",
-      "Emiliano Zapata",
-      "Guadalupe Peralta",
-      "IV Centenario",
-      "Infonavit Morelos",
-      "Insurgentes",
-      "Jose Guadalupe Peralta Gamez",
-      "Jose Lopez Portillo",
-      "La España",
-      "La Estrella",
-      "La Salud",
-      "La Soledad",
-      "Las Flores",
-      "Las Viñas",
-      "Lomas de Bellavista",
-      "Macias Arellano",
-      "Mirador de las Culturas",
-      "Mirador de las Culturas  ",
-      "Mirador de las Culturas II",
-      "Miravalle",
-      "Morelos I",
-      "México",
-      "Ojo de Agua",
-      "Olivares Santana",
-      "Paseos de Aguascalientes",
-      "Paseos de San Antonio",
-      "Periodistas",
-      "Pilar Blanco",
-      "Rodolfo Landeros",
-      "STEMA",
-      "San Marcos",
-      "San Pablo",
-      "VINSA",
-      "VINSA  ",
-      "VINSA Estacion",
-      "Valle de los Cactus",
-      "Villa Las Palmas Segunda Seccion",
-      "Villa Montaña",
-      "Villa de las Fuentes",
-      "Villas de las Fuentes",
-      "Zona Centro"
+      "ALTAVISTA",
+      "BARRIO LA SALUD",
+      "BENITO PALOMINO DENA",
+      "CENTRO",
+      "COLONIA DEL CARMEN",
+      "COLONIA INDECO",
+      "CUMBRES III",
+      "EMILIANO ZAPATA",
+      "GUADALUPE PERALTA",
+      "INSURGENTES",
+      "IV CENTENARIO",
+      "JOSE GUADALUPE POSADA",
+      "JOSE LOPEZ PORTILLO",
+      "LA SOLEDAD",
+      "MACIAS ARELLANO",
+      "MIRADOR DE LAS CULTURAS II",
+      "MIRAVALLE",
+      "MORELOS",
+      "PERIODISTAS",
+      "PILAR BLANCO",
+      "RODOLFO LANDEROS",
+      "SAN MARCOS",
+      "SAN PABLO",
+      "VALLE DE LOS CACTUS",
+      "VINSA ESTACION"
     ],
     "geocodificacion": {
       "exitosos": 124,
       "fallidos": 0,
-      "tasa_exito_porcentaje": 100.0
+      "tasa_exito_porcentaje": 100
     }
   },
   "dossiers": [
@@ -74,8 +49,7 @@
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -97,7 +71,7 @@
           }
         },
         {
-          "nombre_completo": "Niga Lisandro",
+          "nombre_completo": "Niga Lisandro N N",
           "alias": "",
           "rol": "De interes",
           "direccion": {
@@ -168,8 +142,7 @@
             "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "BPT18",
@@ -179,11 +152,12 @@
       "actividades_delictivas": [
         "Robo Autopartes"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -258,20 +232,22 @@
             "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "CHICANOS XIII",
       "integrantes_registrados": 5,
       "integrantes_estimados": 5,
       "area_influencia": "VALLE DE LOS CACTUS",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -364,8 +340,7 @@
             "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "CAERIO 16",
@@ -375,11 +350,12 @@
       "actividades_delictivas": [
         "Robo  Autopartes"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -468,29 +444,31 @@
           "georreferencia": {
             "lat": 21.88172295719844,
             "lng": -102.28936484321355,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "BANDA INDECO",
       "integrantes_registrados": 5,
       "integrantes_estimados": 5,
       "area_influencia": "COLONIA INDECO",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
           "nombre_completo": "Jose Arturo Dominguez Juarez",
-          "alias": "Yoco, Sangas",
+          "alias": "Yoco",
           "rol": "Lider",
           "direccion": {
             "calle": "Calvillo",
@@ -502,8 +480,8 @@
           "georreferencia": {
             "lat": 21.883348226138704,
             "lng": -102.29174644083315,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -520,8 +498,8 @@
           "georreferencia": {
             "lat": 21.882438269626917,
             "lng": -102.29457354085604,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -556,8 +534,8 @@
           "georreferencia": {
             "lat": 21.88223831540398,
             "lng": -102.29078567177844,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -574,30 +552,30 @@
           "georreferencia": {
             "lat": 21.880908766308078,
             "lng": -102.28985154497597,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "R4K",
       "integrantes_registrados": 5,
       "integrantes_estimados": 5,
       "area_influencia": "JOSE GUADALUPE POSADA",
-      "actividades_delictivas": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
       "narcoticos_asociados": [
         "Vernta"
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
-          "nombre_completo": "Luis Alfredo",
+          "nombre_completo": "Luis Alfredo N N",
           "alias": "El Gato",
           "rol": "Lider",
           "direccion": {
@@ -610,8 +588,8 @@
           "georreferencia": {
             "lat": 21.882336095216296,
             "lng": -102.29247447928589,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -628,8 +606,8 @@
           "georreferencia": {
             "lat": 21.884138338292512,
             "lng": -102.28946500343328,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -646,8 +624,8 @@
           "georreferencia": {
             "lat": 21.883346761272602,
             "lng": -102.28998319981689,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -664,8 +642,8 @@
           "georreferencia": {
             "lat": 21.883264545662623,
             "lng": -102.29040178530556,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -686,22 +664,22 @@
             "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "SOLEROS 35",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "LA SOLEDAD",
-      "actividades_delictivas": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
       "narcoticos_asociados": [
         "Venta"
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -718,8 +696,8 @@
           "georreferencia": {
             "lat": 21.880542915999083,
             "lng": -102.29285159075303,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -736,8 +714,8 @@
           "georreferencia": {
             "lat": 21.879082810711832,
             "lng": -102.29342838178073,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -754,8 +732,8 @@
           "georreferencia": {
             "lat": 21.884348180361638,
             "lng": -102.29305209430076,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -772,30 +750,30 @@
           "georreferencia": {
             "lat": 21.88111723506523,
             "lng": -102.29304330510415,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LA MIRA 20",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "MIRAVALLE",
-      "actividades_delictivas": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
       "narcoticos_asociados": [
         "Venta"
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
-          "nombre_completo": "Ricardo Lopez",
+          "nombre_completo": "Ricardo Lopez N",
           "alias": "El Core",
           "rol": "Lider",
           "direccion": {
@@ -808,8 +786,8 @@
           "georreferencia": {
             "lat": 21.88017248798352,
             "lng": -102.29417601281759,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -826,8 +804,8 @@
           "georreferencia": {
             "lat": 21.884637033646143,
             "lng": -102.29136621652552,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -844,8 +822,8 @@
           "georreferencia": {
             "lat": 21.883183154039823,
             "lng": -102.29406294346532,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -862,12 +840,11 @@
           "georreferencia": {
             "lat": 21.87930894941634,
             "lng": -102.29102133211262,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "REYES 18",
@@ -877,11 +854,12 @@
       "actividades_delictivas": [
         "Robo Personas"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -898,12 +876,12 @@
           "georreferencia": {
             "lat": 21.882985397116045,
             "lng": -102.2909068894484,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
-          "nombre_completo": "Jesus Daniel Reyes",
+          "nombre_completo": "Jesus Daniel Reyes N",
           "alias": "",
           "rol": "De interes",
           "direccion": {
@@ -916,8 +894,8 @@
           "georreferencia": {
             "lat": 21.882728313115127,
             "lng": -102.29078384069581,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -934,8 +912,8 @@
           "georreferencia": {
             "lat": 21.884544380865186,
             "lng": -102.29272295719845,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -952,24 +930,26 @@
           "georreferencia": {
             "lat": 21.884696818493932,
             "lng": -102.28909640650035,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "SANTA IRENE 10",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "ALTAVISTA",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -986,8 +966,8 @@
           "georreferencia": {
             "lat": 21.882895399404898,
             "lng": -102.29037752346075,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1004,8 +984,8 @@
           "georreferencia": {
             "lat": 21.882456855115585,
             "lng": -102.28862517738614,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1022,8 +1002,8 @@
           "georreferencia": {
             "lat": 21.880667978942547,
             "lng": -102.29119931334402,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1040,12 +1020,11 @@
           "georreferencia": {
             "lat": 21.88129475852598,
             "lng": -102.29271535820554,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LOS 90",
@@ -1060,8 +1039,7 @@
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1083,7 +1061,7 @@
           }
         },
         {
-          "nombre_completo": "Luis Enrique Vega",
+          "nombre_completo": "Luis Enrique Vega N",
           "alias": "",
           "rol": "De interes",
           "direccion": {
@@ -1154,20 +1132,22 @@
             "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "BARRIO 57",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "MACIAS ARELLANO",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1184,8 +1164,8 @@
           "georreferencia": {
             "lat": 21.883533531700618,
             "lng": -102.29161286335547,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1202,8 +1182,8 @@
           "georreferencia": {
             "lat": 21.88103025864042,
             "lng": -102.29399940489814,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1220,12 +1200,12 @@
           "georreferencia": {
             "lat": 21.879481803616386,
             "lng": -102.289349828336,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
-          "nombre_completo": "Rodrigo Israel Hernandez",
+          "nombre_completo": "Rodrigo Israel Hernandez N",
           "alias": "",
           "rol": "De interes",
           "direccion": {
@@ -1238,24 +1218,26 @@
           "georreferencia": {
             "lat": 21.881708857862208,
             "lng": -102.29077367818724,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "CACHONDOS 16",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "CUMBRES III",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1272,8 +1254,8 @@
           "georreferencia": {
             "lat": 21.879018814373996,
             "lng": -102.29206633096818,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1290,8 +1272,8 @@
           "georreferencia": {
             "lat": 21.884453467612726,
             "lng": -102.29039034103914,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1326,12 +1308,11 @@
           "georreferencia": {
             "lat": 21.879422018768594,
             "lng": -102.28903131151293,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "VILLA LOKOS",
@@ -1341,11 +1322,12 @@
       "actividades_delictivas": [
         "Robo Personas"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1362,8 +1344,8 @@
           "georreferencia": {
             "lat": 21.882302952620737,
             "lng": -102.29235692378118,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1380,8 +1362,8 @@
           "georreferencia": {
             "lat": 21.882839551384755,
             "lng": -102.28936429388877,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1398,8 +1380,8 @@
           "georreferencia": {
             "lat": 21.88266733806363,
             "lng": -102.29346500343328,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1416,24 +1398,26 @@
           "georreferencia": {
             "lat": 21.879576104371708,
             "lng": -102.29185548180362,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LOS LOGAN",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "RODOLFO LANDEROS",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1450,8 +1434,8 @@
           "georreferencia": {
             "lat": 21.884061524376285,
             "lng": -102.29452867933166,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1468,8 +1452,8 @@
           "georreferencia": {
             "lat": 21.881314076447698,
             "lng": -102.2906066834516,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1486,12 +1470,12 @@
           "georreferencia": {
             "lat": 21.879555413138018,
             "lng": -102.28860997940032,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
-          "nombre_completo": "Eduardo Ruben Villalpando",
+          "nombre_completo": "Eduardo Ruben Villalpando N",
           "alias": "",
           "rol": "De interes",
           "direccion": {
@@ -1504,26 +1488,26 @@
           "georreferencia": {
             "lat": 21.879894438086517,
             "lng": -102.29355042343786,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LA SAN FERNANDO",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "BARRIO LA SALUD",
-      "actividades_delictivas": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
       "narcoticos_asociados": [
         "Venta"
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1540,8 +1524,8 @@
           "georreferencia": {
             "lat": 21.880994735637444,
             "lng": -102.29275390249485,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1558,8 +1542,8 @@
           "georreferencia": {
             "lat": 21.88124238956283,
             "lng": -102.2937267566949,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1576,8 +1560,8 @@
           "georreferencia": {
             "lat": 21.882299473563744,
             "lng": -102.29332309452964,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1594,31 +1578,31 @@
           "georreferencia": {
             "lat": 21.880490180819407,
             "lng": -102.28999949645228,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "BANDA EL 300",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "CENTRO",
-      "actividades_delictivas": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
       "narcoticos_asociados": [
         "Venta"
       ],
       "rinas_frecuentes": false,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
           "nombre_completo": "Antonio de Jesus Chairez Lopez",
-          "alias": "El 300, El Arenero",
+          "alias": "El 300",
           "rol": "Lider",
           "direccion": {
             "calle": "Guadalupe",
@@ -1630,8 +1614,8 @@
           "georreferencia": {
             "lat": 21.88312712291142,
             "lng": -102.29403996337835,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1648,8 +1632,8 @@
           "georreferencia": {
             "lat": 21.881314351110092,
             "lng": -102.29201249713894,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1666,8 +1650,8 @@
           "georreferencia": {
             "lat": 21.881744472419317,
             "lng": -102.29111453421837,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1684,12 +1668,11 @@
           "georreferencia": {
             "lat": 21.882478736552986,
             "lng": -102.2904657816434,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LOS MANITAS",
@@ -1701,11 +1684,12 @@
         "Robo Casa habitacion",
         "Robo a Comercio"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": false,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1722,8 +1706,8 @@
           "georreferencia": {
             "lat": 21.882430121309223,
             "lng": -102.29366623941405,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1758,8 +1742,8 @@
           "georreferencia": {
             "lat": 21.884302952620736,
             "lng": -102.29121350423438,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1776,12 +1760,11 @@
           "georreferencia": {
             "lat": 21.881852140077818,
             "lng": -102.29336182192722,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LOS SAN MARQUEÑOS",
@@ -1793,11 +1776,12 @@
         "Robo Casa habitacion",
         "Robo a Comercio"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": false,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -1814,8 +1798,8 @@
           "georreferencia": {
             "lat": 21.8831483634699,
             "lng": -102.29159739070725,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1832,8 +1816,8 @@
           "georreferencia": {
             "lat": 21.883294666971846,
             "lng": -102.29066555275807,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1850,8 +1834,8 @@
           "georreferencia": {
             "lat": 21.881312520027464,
             "lng": -102.29263241016251,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1868,12 +1852,11 @@
           "georreferencia": {
             "lat": 21.879228198672465,
             "lng": -102.28974900434882,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "BBG XVII",
@@ -1889,12 +1872,11 @@
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
-          "nombre_completo": "Angel Alexis",
+          "nombre_completo": "Angel Alexis N N",
           "alias": "El Gatito",
           "rol": "Lider",
           "direccion": {
@@ -1907,8 +1889,8 @@
           "georreferencia": {
             "lat": 21.882073975738155,
             "lng": -102.29233467612727,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1925,8 +1907,8 @@
           "georreferencia": {
             "lat": 21.882848249027237,
             "lng": -102.29433632410162,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1943,8 +1925,8 @@
           "georreferencia": {
             "lat": 21.883885465781642,
             "lng": -102.28907901121538,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -1961,12 +1943,11 @@
           "georreferencia": {
             "lat": 21.88327910276951,
             "lng": -102.28927429617762,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "HOMMIES 13",
@@ -1981,12 +1962,11 @@
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
-          "nombre_completo": "Juan Carlos",
+          "nombre_completo": "Juan Carlos N N",
           "alias": "Aleman",
           "rol": "Lider",
           "direccion": {
@@ -1999,8 +1979,8 @@
           "georreferencia": {
             "lat": 21.88077875944152,
             "lng": -102.29441048294805,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2017,8 +1997,8 @@
           "georreferencia": {
             "lat": 21.88448834973678,
             "lng": -102.29342966353857,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2035,8 +2015,8 @@
           "georreferencia": {
             "lat": 21.880680888075073,
             "lng": -102.29118997482261,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2053,12 +2033,11 @@
           "georreferencia": {
             "lat": 21.882518287937742,
             "lng": -102.28880389105059,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "B4E",
@@ -2068,11 +2047,12 @@
       "actividades_delictivas": [
         "Robo Personas"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -2089,8 +2069,8 @@
           "georreferencia": {
             "lat": 21.88243524834058,
             "lng": -102.2903000686656,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2107,8 +2087,8 @@
           "georreferencia": {
             "lat": 21.880850171663994,
             "lng": -102.29080151064316,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2125,8 +2105,8 @@
           "georreferencia": {
             "lat": 21.88404174868391,
             "lng": -102.294562371252,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2143,8 +2123,8 @@
           "georreferencia": {
             "lat": 21.879828519111925,
             "lng": -102.29141638818952,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2161,24 +2141,26 @@
           "georreferencia": {
             "lat": 21.88336150148775,
             "lng": -102.29244078736554,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "PBG33",
       "integrantes_registrados": 5,
       "integrantes_estimados": 5,
       "area_influencia": "INSURGENTES",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -2195,8 +2177,8 @@
           "georreferencia": {
             "lat": 21.881459830624856,
             "lng": -102.28860100709545,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2213,8 +2195,8 @@
           "georreferencia": {
             "lat": 21.881385214007782,
             "lng": -102.29326385900664,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2231,8 +2213,8 @@
           "georreferencia": {
             "lat": 21.881165209430073,
             "lng": -102.29287869077592,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2249,8 +2231,8 @@
           "georreferencia": {
             "lat": 21.884364568551153,
             "lng": -102.29174937056536,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2267,24 +2249,26 @@
           "georreferencia": {
             "lat": 21.88335939574273,
             "lng": -102.29202412451362,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "SAN FRAN 13",
       "integrantes_registrados": 4,
       "integrantes_estimados": 4,
       "area_influencia": "INSURGENTES",
-      "actividades_delictivas": [],
-      "narcoticos_asociados": [],
+      "actividades_delictivas": [
+        "Vandalismo"
+      ],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -2301,8 +2285,8 @@
           "georreferencia": {
             "lat": 21.884481483176927,
             "lng": -102.29147699702449,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2319,8 +2303,8 @@
           "georreferencia": {
             "lat": 21.88469535362783,
             "lng": -102.29349018081942,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2355,12 +2339,11 @@
           "georreferencia": {
             "lat": 21.884634470130464,
             "lng": -102.29418113984894,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "RANAS 13",
@@ -2370,15 +2353,16 @@
       "actividades_delictivas": [
         "Robo Autopartes"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
-          "nombre_completo": "Cristian",
+          "nombre_completo": "Cristian N N",
           "alias": "",
           "rol": "Lider",
           "direccion": {
@@ -2391,8 +2375,8 @@
           "georreferencia": {
             "lat": 21.88137779812314,
             "lng": -102.2899925383383,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2409,8 +2393,8 @@
           "georreferencia": {
             "lat": 21.884673014419775,
             "lng": -102.29264687571526,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2427,8 +2411,8 @@
           "georreferencia": {
             "lat": 21.880111329823755,
             "lng": -102.29192689402609,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2445,12 +2429,11 @@
           "georreferencia": {
             "lat": 21.881248249027237,
             "lng": -102.29003575188831,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "369",
@@ -2466,12 +2449,11 @@
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
-          "nombre_completo": "Jonathan Jesus",
+          "nombre_completo": "Jonathan Jesus N N",
           "alias": "Pollo",
           "rol": "Lider",
           "direccion": {
@@ -2484,8 +2466,8 @@
           "georreferencia": {
             "lat": 21.883717738612955,
             "lng": -102.28917248798352,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2502,8 +2484,8 @@
           "georreferencia": {
             "lat": 21.88295728999771,
             "lng": -102.29044719615473,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2520,8 +2502,8 @@
           "georreferencia": {
             "lat": 21.883605859464407,
             "lng": -102.29010176241704,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2538,12 +2520,11 @@
           "georreferencia": {
             "lat": 21.87917619592584,
             "lng": -102.29457399862669,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LA COPA",
@@ -2558,8 +2539,7 @@
       ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -2576,8 +2556,8 @@
           "georreferencia": {
             "lat": 21.88459729915312,
             "lng": -102.29067013046463,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2594,8 +2574,8 @@
           "georreferencia": {
             "lat": 21.880276859693293,
             "lng": -102.28872286564432,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2612,13 +2592,13 @@
           "georreferencia": {
             "lat": 21.879801327534903,
             "lng": -102.29183891050585,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
           "nombre_completo": "Juan Pablo Guerrero Alvarez",
-          "alias": "",
+          "alias": "21.878955458915083",
           "rol": "De interes",
           "direccion": {
             "calle": "",
@@ -2630,12 +2610,11 @@
           "georreferencia": {
             "lat": 21.88129018081941,
             "lng": -102.28996150148775,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "PANCHOS",
@@ -2645,11 +2624,12 @@
       "actividades_delictivas": [
         "Robo Autopartes"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -2666,8 +2646,8 @@
           "georreferencia": {
             "lat": 21.878955458915083,
             "lng": -102.29089388876173,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2684,8 +2664,8 @@
           "georreferencia": {
             "lat": 21.88154177157244,
             "lng": -102.29379459830625,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2702,8 +2682,8 @@
           "georreferencia": {
             "lat": 21.88213293659876,
             "lng": -102.288987457084,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2720,12 +2700,11 @@
           "georreferencia": {
             "lat": 21.88037409018082,
             "lng": -102.28905639734494,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
+      ]
     },
     {
       "pandilla": "LOS JORDAN",
@@ -2736,11 +2715,12 @@
         "Robo Autopartes",
         "Robo Personas"
       ],
-      "narcoticos_asociados": [],
+      "narcoticos_asociados": [
+        "Consumo"
+      ],
       "rinas_frecuentes": true,
       "sustancias_consumidores": [
-        "Cristal",
-        "Cannabis"
+        "Cristal"
       ],
       "integrantes": [
         {
@@ -2757,8 +2737,8 @@
           "georreferencia": {
             "lat": 21.879914030670633,
             "lng": -102.29126239414053,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2775,8 +2755,8 @@
           "georreferencia": {
             "lat": 21.879973540856028,
             "lng": -102.29052584115358,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2793,8 +2773,8 @@
           "georreferencia": {
             "lat": 21.87982430762188,
             "lng": -102.28986894026093,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         },
         {
@@ -2811,1502 +2791,11 @@
           "georreferencia": {
             "lat": 21.884428931105514,
             "lng": -102.29209919890135,
-            "confidence": 3,
-            "status": "local_db_city_jitter"
+            "confidence": 7,
+            "status": "local_db_colonia_jitter"
           }
         }
-      ],
-      "fuente": "INVENTARIO PANDILLAS.xlsx"
-    }
-  ],
-  "geocoding_details": [
-    {
-      "nombre": "Luis Rolando Chagoya Rodríguez",
-      "pandilla": "ZKL13",
-      "direccion_original": "Loma del Cardenal 103, Mirador de las Culturas II",
-      "direccion_buscada": "Loma del Cardenal 103, Colonia Mirador de las Culturas II, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.899071709773402,
-        "lng": -102.2452576333257
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Niga Lisandro",
-      "pandilla": "ZKL13",
-      "direccion_original": "Cerezo Poniente 137, Lomas de Bellavista",
-      "direccion_buscada": "Cerezo Poniente 137, Colonia Lomas de Bellavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.90432316319524,
-        "lng": -102.24774074158847
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Kevin Alexis Lopez Vidauri",
-      "pandilla": "ZKL13",
-      "direccion_original": "Loma del Cardenal 106 18, Lomas de Bellavista",
-      "direccion_buscada": "Loma del Cardenal 106 18, Colonia Lomas de Bellavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.903388303959716,
-        "lng": -102.24704758525979
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Alan Alexis Gonzalez Baraba",
-      "pandilla": "ZKL13",
-      "direccion_original": "Hector del Villar 211, Benito Palomino Dena",
-      "direccion_buscada": "Hector del Villar 211, Colonia Benito Palomino Dena, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.90127427328908,
-        "lng": -102.24246566720073
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Jose Armando Cortes Rosas",
-      "pandilla": "ZKL13",
-      "direccion_original": "Cardenal 106 26, Lomas de Bellavista",
-      "direccion_buscada": "Cardenal 106 26, Colonia Lomas de Bellavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.900363447013046,
-        "lng": -102.24320011444267
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Abraham Israel Guzmán de los Santos",
-      "pandilla": "BPT18",
-      "direccion_original": "Recinto Pachón 33, Valle de los Cactus",
-      "direccion_buscada": "Recinto Pachón 33, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881251453421836,
-        "lng": -102.2266586175326
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Juan Carlos Guzman de los Santos",
-      "pandilla": "BPT18",
-      "direccion_original": "Recinto Pachón 33, Valle de los Cactus",
-      "direccion_buscada": "Recinto Pachón 33, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882026916914626,
-        "lng": -102.22796363012131
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Luis Enrique Saucedo Silva",
-      "pandilla": "BPT18",
-      "direccion_original": "Recinto Pitayo 1003, Valle de los Cactus",
-      "direccion_buscada": "Recinto Pitayo 1003, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884980086976423,
-        "lng": -102.2287388189517
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Bryan Daniel Leyva Delgadillo",
-      "pandilla": "BPT18",
-      "direccion_original": "Recinto Pitayo 33, Valle de los Cactus",
-      "direccion_buscada": "Recinto Pitayo 33, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88392089723049,
-        "lng": -102.22748562600137
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Rodrigo Imanol Marmolejo Medina",
-      "pandilla": "CHICANOS XIII",
-      "direccion_original": "Recinto Nopal 43, Valle de los Cactus",
-      "direccion_buscada": "Recinto Nopal 43, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88676887159533,
-        "lng": -102.22561783016708
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Luis Roberto Macias Salas",
-      "pandilla": "CHICANOS XIII",
-      "direccion_original": "Guerra Palos 303, Guadalupe Peralta",
-      "direccion_buscada": "Guerra Palos 303, Colonia Guadalupe Peralta, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.887725200274662,
-        "lng": -102.23467724879835
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Bernabe Mata Rojo",
-      "pandilla": "CHICANOS XIII",
-      "direccion_original": "Recinto Cactus 105, Valle de los Cactus",
-      "direccion_buscada": "Recinto Cactus 105, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88439414053559,
-        "lng": -102.22656459143968
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Juan Pedro Arellano Valle",
-      "pandilla": "CHICANOS XIII",
-      "direccion_original": "Recinto Nopal 109 107, Valle de los Cactus",
-      "direccion_buscada": "Recinto Nopal 109 107, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.886775097276264,
-        "lng": -102.22969006637675
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Garly Alexander Jaime Lopez",
-      "pandilla": "CHICANOS XIII",
-      "direccion_original": "Velas Salas 109, Valle de los Cactus",
-      "direccion_buscada": "Velas Salas 109, Colonia Valle de los Cactus, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882913069352256,
-        "lng": -102.22677608148318
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Angel Adrian Rodríguez Arellano",
-      "pandilla": "CAERIO 16",
-      "direccion_original": "Gerardo Marin Martinez 107, Jose Guadalupe Peralta Gamez",
-      "direccion_buscada": "Gerardo Marin Martinez 107, Colonia Jose Guadalupe Peralta Gamez, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.8867875944152,
-        "lng": -102.23562190432594
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Juan Carlos Carmona Rodriguez",
-      "pandilla": "CAERIO 16",
-      "direccion_original": "Salvador Aguilera Padilla 217, Jose Guadalupe Peralta Gamez",
-      "direccion_buscada": "Salvador Aguilera Padilla 217, Colonia Jose Guadalupe Peralta Gamez, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.886067795834286,
-        "lng": -102.23469171435111
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Luis Roberto Macias Salas",
-      "pandilla": "CAERIO 16",
-      "direccion_original": "Jose Guerra Palos 303, Jose Guadalupe Peralta Gamez",
-      "direccion_buscada": "Jose Guerra Palos 303, Colonia Jose Guadalupe Peralta Gamez, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.890831174181734,
-        "lng": -102.2374747768368
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Juan Carlos de Luna Casillas",
-      "pandilla": "CAERIO 16",
-      "direccion_original": "Eloisa Barbosa 106, Jose Guadalupe Peralta Gamez",
-      "direccion_buscada": "Eloisa Barbosa 106, Colonia Jose Guadalupe Peralta Gamez, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.887096864271,
-        "lng": -102.23757685969329
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Mario Alberto Sanchez Plasencia",
-      "pandilla": "CAERIO 16",
-      "direccion_original": "Villa Alejandra 178, Villa Las Palmas Segunda Seccion",
-      "direccion_buscada": "Villa Alejandra 178, Colonia Villa Las Palmas Segunda Seccion, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88172295719844,
-        "lng": -102.28936484321355
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Arturo Dominguez Juarez",
-      "pandilla": "BANDA INDECO",
-      "direccion_original": "Calvillo 105, STEMA",
-      "direccion_buscada": "Calvillo 105, Colonia STEMA, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883348226138704,
-        "lng": -102.29174644083315
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Erivan Ricardo Diaz Mosqueda",
-      "pandilla": "BANDA INDECO",
-      "direccion_original": "Villas de Nuevo Vallarta Modulo B4 , Villa de las Fuentes",
-      "direccion_buscada": "Villas de Nuevo Vallarta Modulo B4 , Colonia Villa de las Fuentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882438269626917,
-        "lng": -102.29457354085604
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Luis Enrique Ahumada Barron",
-      "pandilla": "BANDA INDECO",
-      "direccion_original": "Cultura Maya 205, Mirador de las Culturas II",
-      "direccion_buscada": "Cultura Maya 205, Colonia Mirador de las Culturas II, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.898144541084918,
-        "lng": -102.24428770885787
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Felipe de Jesus Gomez Hernandez",
-      "pandilla": "BANDA INDECO",
-      "direccion_original": "General Igancio Zaragoza 419, Zona Centro",
-      "direccion_buscada": "General Igancio Zaragoza 419, Colonia Zona Centro, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88223831540398,
-        "lng": -102.29078567177844
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Tabitha Ninel Laizola Cadena",
-      "pandilla": "BANDA INDECO",
-      "direccion_original": "Francisco de J. Herrera 3028, VINSA Estacion",
-      "direccion_buscada": "Francisco de J. Herrera 3028, Colonia VINSA Estacion, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880908766308078,
-        "lng": -102.28985154497597
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Luis Alfredo",
-      "pandilla": "R4K",
-      "direccion_original": "Rincon 134, Barrio de San Marcos",
-      "direccion_buscada": "Rincon 134, Colonia Barrio de San Marcos, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882336095216296,
-        "lng": -102.29247447928589
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jesus Omar Esparza Rodriguez",
-      "pandilla": "R4K",
-      "direccion_original": "Arroyo de los Arellano 227, Miravalle",
-      "direccion_buscada": "Arroyo de los Arellano 227, Colonia Miravalle, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884138338292512,
-        "lng": -102.28946500343328
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Fernando Ramon Reyes Barroso",
-      "pandilla": "R4K",
-      "direccion_original": "Rincon 137, Barrio de San Marcos",
-      "direccion_buscada": "Rincon 137, Colonia Barrio de San Marcos, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883346761272602,
-        "lng": -102.28998319981689
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Eduardo Said Covarrubias Ramirez",
-      "pandilla": "R4K",
-      "direccion_original": "Amaploas 205, Las Flores",
-      "direccion_buscada": "Amaploas 205, Colonia Las Flores, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883264545662623,
-        "lng": -102.29040178530556
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Ezequiel Ortiz Muñoz",
-      "pandilla": "R4K",
-      "direccion_original": "Saturnino Herran , Jose Guadalupe Peralta Gamez",
-      "direccion_buscada": "Saturnino Herran , Colonia Jose Guadalupe Peralta Gamez, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.888378805218586,
-        "lng": -102.23290457770658
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Kevin Leonel Gomez Ibarra",
-      "pandilla": "SOLEROS 35",
-      "direccion_original": "Jamai 502, La Soledad",
-      "direccion_buscada": "Jamai 502, Colonia La Soledad, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880542915999083,
-        "lng": -102.29285159075303
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Carlos Abraham Gomez Garcia",
-      "pandilla": "SOLEROS 35",
-      "direccion_original": "Aranda 510, La Soledad",
-      "direccion_buscada": "Aranda 510, Colonia La Soledad, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879082810711832,
-        "lng": -102.29342838178073
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Luis Adrian Martinez Luna",
-      "pandilla": "SOLEROS 35",
-      "direccion_original": "Aranda 433, La Soledad",
-      "direccion_buscada": "Aranda 433, Colonia La Soledad, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884348180361638,
-        "lng": -102.29305209430076
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Bernardo Mata Garcia",
-      "pandilla": "SOLEROS 35",
-      "direccion_original": "Ajijic 213, La Soledad",
-      "direccion_buscada": "Ajijic 213, Colonia La Soledad, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88111723506523,
-        "lng": -102.29304330510415
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Ricardo Lopez",
-      "pandilla": "LA MIRA 20",
-      "direccion_original": "Doctor Alberto del Valle 223, Miravalle",
-      "direccion_buscada": "Doctor Alberto del Valle 223, Colonia Miravalle, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88017248798352,
-        "lng": -102.29417601281759
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Manuel Octavio Vazquez Quiroz",
-      "pandilla": "LA MIRA 20",
-      "direccion_original": "Carlos Barron 605, Miravalle",
-      "direccion_buscada": "Carlos Barron 605, Colonia Miravalle, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884637033646143,
-        "lng": -102.29136621652552
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Aaron de Jesus Terrones Rodriguez",
-      "pandilla": "LA MIRA 20",
-      "direccion_original": "Alberto del Valle 715, Miravalle",
-      "direccion_buscada": "Alberto del Valle 715, Colonia Miravalle, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883183154039823,
-        "lng": -102.29406294346532
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Manuel Escobedo Vazquez",
-      "pandilla": "LA MIRA 20",
-      "direccion_original": "Edmundo Gamez Orozco 1902, Altavista",
-      "direccion_buscada": "Edmundo Gamez Orozco 1902, Colonia Altavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.87930894941634,
-        "lng": -102.29102133211262
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Byan Rolando Marmolejo Rosas",
-      "pandilla": "REYES 18",
-      "direccion_original": " , ",
-      "direccion_buscada": " , Colonia , Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882985397116045,
-        "lng": -102.2909068894484
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jesus Daniel Reyes",
-      "pandilla": "REYES 18",
-      "direccion_original": "Palma 613, Circunvalacion Norte",
-      "direccion_buscada": "Palma 613, Colonia Circunvalacion Norte, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882728313115127,
-        "lng": -102.29078384069581
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Miguel Alejandro Herrera Davila",
-      "pandilla": "REYES 18",
-      "direccion_original": "Jesus Maria 102, Buena Vista",
-      "direccion_buscada": "Jesus Maria 102, Colonia Buena Vista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884544380865186,
-        "lng": -102.29272295719845
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Edwin Alfredo Franco Muñoz",
-      "pandilla": "REYES 18",
-      "direccion_original": "Hombres Ilustres , Altavista",
-      "direccion_buscada": "Hombres Ilustres , Colonia Altavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884696818493932,
-        "lng": -102.28909640650035
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Carlos Calvo Reyes",
-      "pandilla": "SANTA IRENE 10",
-      "direccion_original": "San Felipe 513, Altavista",
-      "direccion_buscada": "San Felipe 513, Colonia Altavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882895399404898,
-        "lng": -102.29037752346075
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Manuel Escobedo Martinez",
-      "pandilla": "SANTA IRENE 10",
-      "direccion_original": "Edmundo Gamez Orozco 1902, Altavista",
-      "direccion_buscada": "Edmundo Gamez Orozco 1902, Colonia Altavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882456855115585,
-        "lng": -102.28862517738614
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Irving Guadalupe Baez Mireles",
-      "pandilla": "SANTA IRENE 10",
-      "direccion_original": "San Felipe 312, Altavista",
-      "direccion_buscada": "San Felipe 312, Colonia Altavista, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880667978942547,
-        "lng": -102.29119931334402
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Rebeca Sinahi Real Gomez",
-      "pandilla": "SANTA IRENE 10",
-      "direccion_original": "Miguel Ruelas 119, Olivares Santana",
-      "direccion_buscada": "Miguel Ruelas 119, Colonia Olivares Santana, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88129475852598,
-        "lng": -102.29271535820554
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Miguel Angel Barrientos Delgado",
-      "pandilla": "LOS 90",
-      "direccion_original": "Hector del Villar 121, Benito Palomino Dena",
-      "direccion_buscada": "Hector del Villar 121, Colonia Benito Palomino Dena, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.904289425497826,
-        "lng": -102.24226845960175
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Luis Enrique Vega",
-      "pandilla": "LOS 90",
-      "direccion_original": "Doctor Alfonso Rodriguez Franco 304, Benito Palomino Dena",
-      "direccion_buscada": "Doctor Alfonso Rodriguez Franco 304, Colonia Benito Palomino Dena, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.901034401464866,
-        "lng": -102.238356443122
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Ricardo Vargas Muñoz",
-      "pandilla": "LOS 90",
-      "direccion_original": "Doctor Alfonso Rodriguez Franco 1123, Benito Palomino Dena",
-      "direccion_buscada": "Doctor Alfonso Rodriguez Franco 1123, Colonia Benito Palomino Dena, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.89964113069352,
-        "lng": -102.24098093385214
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Ulises Osvaldo Armadillo Ramirez",
-      "pandilla": "LOS 90",
-      "direccion_original": "Doctor Alfonso Rodriguez Franco 102, Benito Palomino Dena",
-      "direccion_buscada": "Doctor Alfonso Rodriguez Franco 102, Colonia Benito Palomino Dena, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.89878784618906,
-        "lng": -102.24062213321126
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Erik Johan Vazquez Perez",
-      "pandilla": "LOS 90",
-      "direccion_original": "Licenciado Miguel Romo Medina 213, Benito Palomino Dena",
-      "direccion_buscada": "Licenciado Miguel Romo Medina 213, Colonia Benito Palomino Dena, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.901815083543145,
-        "lng": -102.2410659876402
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Jose de Jesus Perez Perez",
-      "pandilla": "BARRIO 57",
-      "direccion_original": "Calle I 223, Macias Arellano",
-      "direccion_buscada": "Calle I 223, Colonia Macias Arellano, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883533531700618,
-        "lng": -102.29161286335547
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Fabian Alfredo Velador Lopez",
-      "pandilla": "BARRIO 57",
-      "direccion_original": "Centauro 309, La Estrella",
-      "direccion_buscada": "Centauro 309, Colonia La Estrella, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88103025864042,
-        "lng": -102.29399940489814
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Alan Muñoz Castillo",
-      "pandilla": "BARRIO 57",
-      "direccion_original": "Sierra Micos 112, Cumbres",
-      "direccion_buscada": "Sierra Micos 112, Colonia Cumbres, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879481803616386,
-        "lng": -102.289349828336
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Rodrigo Israel Hernandez",
-      "pandilla": "BARRIO 57",
-      "direccion_original": "De la uva 201, Las Viñas",
-      "direccion_buscada": "De la uva 201, Colonia Las Viñas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881708857862208,
-        "lng": -102.29077367818724
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Angel Alfonso Flores Anguiano",
-      "pandilla": "CACHONDOS 16",
-      "direccion_original": "Durazno 115, Cumbres III",
-      "direccion_buscada": "Durazno 115, Colonia Cumbres III, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879018814373996,
-        "lng": -102.29206633096818
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Edwin Jesus Mandujano Cisneros",
-      "pandilla": "CACHONDOS 16",
-      "direccion_original": "Villas de Acapulco , Villas de las Fuentes",
-      "direccion_buscada": "Villas de Acapulco , Colonia Villas de las Fuentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884453467612726,
-        "lng": -102.29039034103914
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Cristin Yozimar Barrera Preciado",
-      "pandilla": "CACHONDOS 16",
-      "direccion_original": "Cultura Nazca 215, Mirador de las Culturas",
-      "direccion_buscada": "Cultura Nazca 215, Colonia Mirador de las Culturas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.89381375600824,
-        "lng": -102.2459957427329
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Francisco Javier Torres Gonzalez",
-      "pandilla": "CACHONDOS 16",
-      "direccion_original": "Cultura Pame 222, Villas de las Fuentes",
-      "direccion_buscada": "Cultura Pame 222, Colonia Villas de las Fuentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879422018768594,
-        "lng": -102.28903131151293
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Ubaldo Alejandro Cervantes Salas",
-      "pandilla": "VILLA LOKOS",
-      "direccion_original": "Porfirio Fernandez Soto 328, VINSA Estacion",
-      "direccion_buscada": "Porfirio Fernandez Soto 328, Colonia VINSA Estacion, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882302952620737,
-        "lng": -102.29235692378118
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Guadalupe Jaramillo Izquierdo",
-      "pandilla": "VILLA LOKOS",
-      "direccion_original": "Angel Venegas Ahumada , VINSA",
-      "direccion_buscada": "Angel Venegas Ahumada , Colonia VINSA, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882839551384755,
-        "lng": -102.28936429388877
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Carlos Duron Contreras",
-      "pandilla": "VILLA LOKOS",
-      "direccion_original": "Angel Venegas Ahumada 1021, VINSA",
-      "direccion_buscada": "Angel Venegas Ahumada 1021, Colonia VINSA, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88266733806363,
-        "lng": -102.29346500343328
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Victor Jesus Losoya Guzman",
-      "pandilla": "VILLA LOKOS",
-      "direccion_original": "Valle de los Romero 1509, VINSA",
-      "direccion_buscada": "Valle de los Romero 1509, Colonia VINSA, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879576104371708,
-        "lng": -102.29185548180362
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Saul Alexander Ramirez Hernandez",
-      "pandilla": "LOS LOGAN",
-      "direccion_original": "Rosalba Maldonado 215, Rodolfo Landeros",
-      "direccion_buscada": "Rosalba Maldonado 215, Colonia Rodolfo Landeros, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884061524376285,
-        "lng": -102.29452867933166
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Axel Yandel Sanchez Medrano",
-      "pandilla": "LOS LOGAN",
-      "direccion_original": "Elvia Alicia Medrano , Rodolfo Landeros",
-      "direccion_buscada": "Elvia Alicia Medrano , Colonia Rodolfo Landeros, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881314076447698,
-        "lng": -102.2906066834516
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Oscar Leopoldo Hernandez Rios",
-      "pandilla": "LOS LOGAN",
-      "direccion_original": "Alicia Diaz de Leon 127, Rodolfo Landeros",
-      "direccion_buscada": "Alicia Diaz de Leon 127, Colonia Rodolfo Landeros, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879555413138018,
-        "lng": -102.28860997940032
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Eduardo Ruben Villalpando",
-      "pandilla": "LOS LOGAN",
-      "direccion_original": "Expropiacipon Petrolera 322, Rodolfo Landeros",
-      "direccion_buscada": "Expropiacipon Petrolera 322, Colonia Rodolfo Landeros, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879894438086517,
-        "lng": -102.29355042343786
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Igancio Olague Barrera",
-      "pandilla": "LA SAN FERNANDO",
-      "direccion_original": "Delicias 213 A, La Salud",
-      "direccion_buscada": "Delicias 213 A, Colonia La Salud, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880994735637444,
-        "lng": -102.29275390249485
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Angel Moises Olague Barrera",
-      "pandilla": "LA SAN FERNANDO",
-      "direccion_original": "Delicias 213, La Salud",
-      "direccion_buscada": "Delicias 213, Colonia La Salud, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88124238956283,
-        "lng": -102.2937267566949
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Javier Alejandro Martinez Ortiz",
-      "pandilla": "LA SAN FERNANDO",
-      "direccion_original": "San Francisco 129, El Llanito",
-      "direccion_buscada": "San Francisco 129, Colonia El Llanito, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882299473563744,
-        "lng": -102.29332309452964
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Manuel Rivera Medina",
-      "pandilla": "LA SAN FERNANDO",
-      "direccion_original": "Acueducto 167, La Salud",
-      "direccion_buscada": "Acueducto 167, Colonia La Salud, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880490180819407,
-        "lng": -102.28999949645228
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Antonio de Jesus Chairez Lopez",
-      "pandilla": "BANDA EL 300",
-      "direccion_original": "Guadalupe 420, Barrio de Guadalupe",
-      "direccion_buscada": "Guadalupe 420, Colonia Barrio de Guadalupe, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88312712291142,
-        "lng": -102.29403996337835
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Luis Carrasco de la Cruz",
-      "pandilla": "BANDA EL 300",
-      "direccion_original": "Monte Gessi 315, Villa Montaña",
-      "direccion_buscada": "Monte Gessi 315, Colonia Villa Montaña, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881314351110092,
-        "lng": -102.29201249713894
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Joel Fermin Garcia Torres",
-      "pandilla": "BANDA EL 300",
-      "direccion_original": "Guadalupe 420, Barrio de Guadalupe",
-      "direccion_buscada": "Guadalupe 420, Colonia Barrio de Guadalupe, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881744472419317,
-        "lng": -102.29111453421837
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Israel Mena Lara",
-      "pandilla": "BANDA EL 300",
-      "direccion_original": "Pedro de Alba 205, Barrio de San Marcos",
-      "direccion_buscada": "Pedro de Alba 205, Colonia Barrio de San Marcos, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882478736552986,
-        "lng": -102.2904657816434
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jaime Humberto Mercado",
-      "pandilla": "LOS MANITAS",
-      "direccion_original": "Plan de Ayutla 426, Del Carmen",
-      "direccion_buscada": "Plan de Ayutla 426, Colonia Del Carmen, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882430121309223,
-        "lng": -102.29366623941405
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Ricardo Ivan Salas Aguilar",
-      "pandilla": "LOS MANITAS",
-      "direccion_original": "Cultura Nazca 412 29, Mirador de las Culturas",
-      "direccion_buscada": "Cultura Nazca 412 29, Colonia Mirador de las Culturas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.898328931105517,
-        "lng": -102.24450597390708
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Francisco Javier Quiroz García",
-      "pandilla": "LOS MANITAS",
-      "direccion_original": "Jesús Bernal 131, Zona Centro",
-      "direccion_buscada": "Jesús Bernal 131, Colonia Zona Centro, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884302952620736,
-        "lng": -102.29121350423438
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Montserrat Moreno Valadez",
-      "pandilla": "LOS MANITAS",
-      "direccion_original": " , Infonavit Morelos",
-      "direccion_buscada": " , Colonia Infonavit Morelos, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881852140077818,
-        "lng": -102.29336182192722
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Manuel Rivera Tiscareño",
-      "pandilla": "LOS SAN MARQUEÑOS",
-      "direccion_original": "Pedro de Alba 133, San Marcos",
-      "direccion_buscada": "Pedro de Alba 133, Colonia San Marcos, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.8831483634699,
-        "lng": -102.29159739070725
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Alexis Daniel de la Garza Lopez",
-      "pandilla": "LOS SAN MARQUEÑOS",
-      "direccion_original": "Asuncion 705, Barrio de Guadalupe",
-      "direccion_buscada": "Asuncion 705, Colonia Barrio de Guadalupe, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883294666971846,
-        "lng": -102.29066555275807
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jorge Alejandro Martinez Acosta",
-      "pandilla": "LOS SAN MARQUEÑOS",
-      "direccion_original": "Ejercito Nacional 526, San Pablo",
-      "direccion_buscada": "Ejercito Nacional 526, Colonia San Pablo, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881312520027464,
-        "lng": -102.29263241016251
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Gerardo Casillas Valenzuela",
-      "pandilla": "LOS SAN MARQUEÑOS",
-      "direccion_original": "Antonio Arias Bernal 117, Barrio de San Marcos",
-      "direccion_buscada": "Antonio Arias Bernal 117, Colonia Barrio de San Marcos, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879228198672465,
-        "lng": -102.28974900434882
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Angel Alexis",
-      "pandilla": "BBG XVII",
-      "direccion_original": " , Jose Lopez Portillo",
-      "direccion_buscada": " , Colonia Jose Lopez Portillo, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882073975738155,
-        "lng": -102.29233467612727
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Armando Perez Yañez",
-      "pandilla": "BBG XVII",
-      "direccion_original": "Jose Calvillo 407, Jose Lopez Portillo",
-      "direccion_buscada": "Jose Calvillo 407, Colonia Jose Lopez Portillo, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882848249027237,
-        "lng": -102.29433632410162
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Edgar Moises Vidal Cervantes",
-      "pandilla": "BBG XVII",
-      "direccion_original": "Jose Ferrero 205, Jose Lopez Portillo",
-      "direccion_buscada": "Jose Ferrero 205, Colonia Jose Lopez Portillo, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883885465781642,
-        "lng": -102.28907901121538
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Gustavo Ortega Flores",
-      "pandilla": "BBG XVII",
-      "direccion_original": "pascual Cornejo Brun 313, Jose Lopez Portillo",
-      "direccion_buscada": "pascual Cornejo Brun 313, Colonia Jose Lopez Portillo, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88327910276951,
-        "lng": -102.28927429617762
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Carlos",
-      "pandilla": "HOMMIES 13",
-      "direccion_original": "Andador del Cisne Edif 8TP 4, Pilar Blanco",
-      "direccion_buscada": "Andador del Cisne Edif 8TP 4, Colonia Pilar Blanco, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88077875944152,
-        "lng": -102.29441048294805
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Carlos Daniel de la Cruz Martinez",
-      "pandilla": "HOMMIES 13",
-      "direccion_original": "Paseo del Jilguero , Pilar Blanco",
-      "direccion_buscada": "Paseo del Jilguero , Colonia Pilar Blanco, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88448834973678,
-        "lng": -102.29342966353857
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Andres Emmanuel Banda Carranza",
-      "pandilla": "HOMMIES 13",
-      "direccion_original": "Canario 2439, Pilar Blanco",
-      "direccion_buscada": "Canario 2439, Colonia Pilar Blanco, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880680888075073,
-        "lng": -102.29118997482261
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Saul Oziel Garcia Ramos",
-      "pandilla": "HOMMIES 13",
-      "direccion_original": "Canario 7510, Pilar Blanco",
-      "direccion_buscada": "Canario 7510, Colonia Pilar Blanco, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.882518287937742,
-        "lng": -102.28880389105059
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Bryan Angel Dueñas Sanchez",
-      "pandilla": "B4E",
-      "direccion_original": "Carrera Torres 402, Insurgentes",
-      "direccion_buscada": "Carrera Torres 402, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88243524834058,
-        "lng": -102.2903000686656
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Yordi Alejandro Amezquita de la Cruz",
-      "pandilla": "B4E",
-      "direccion_original": "Cesario Castro 407, Insurgentes",
-      "direccion_buscada": "Cesario Castro 407, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880850171663994,
-        "lng": -102.29080151064316
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Dulio Emmanuel Hernandez Lopez",
-      "pandilla": "B4E",
-      "direccion_original": "Abraham Gonzalez 808, Insurgentes",
-      "direccion_buscada": "Abraham Gonzalez 808, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88404174868391,
-        "lng": -102.294562371252
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Pablo Muñoz Molina",
-      "pandilla": "B4E",
-      "direccion_original": "Canario Edif 2 , Pilar Blanco",
-      "direccion_buscada": "Canario Edif 2 , Colonia Pilar Blanco, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879828519111925,
-        "lng": -102.29141638818952
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Cesar Eduardo Feria Jimenez",
-      "pandilla": "B4E",
-      "direccion_original": "Belisario Dominguez 222, Insurgentes",
-      "direccion_buscada": "Belisario Dominguez 222, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88336150148775,
-        "lng": -102.29244078736554
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Alexis Ruelas Campos",
-      "pandilla": "PBG33",
-      "direccion_original": "General Luis Moya 407, Insurgentes",
-      "direccion_buscada": "General Luis Moya 407, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881459830624856,
-        "lng": -102.28860100709545
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Alexis Geovanny Martinez Reyes",
-      "pandilla": "PBG33",
-      "direccion_original": "Segovia 225, La España",
-      "direccion_buscada": "Segovia 225, Colonia La España, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881385214007782,
-        "lng": -102.29326385900664
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose de Jesus Castañeda Valtierra",
-      "pandilla": "PBG33",
-      "direccion_original": "Juan Medina 328, Insurgentes",
-      "direccion_buscada": "Juan Medina 328, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881165209430073,
-        "lng": -102.29287869077592
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jonathan Leobardo Reyes Carreon",
-      "pandilla": "PBG33",
-      "direccion_original": "Paseo del Tucan , Pilar Blanco",
-      "direccion_buscada": "Paseo del Tucan , Colonia Pilar Blanco, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884364568551153,
-        "lng": -102.29174937056536
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Alejandro Noe Calderon Aguilera",
-      "pandilla": "PBG33",
-      "direccion_original": "Coronel Jose Rincon 230, Jose Lopez Portillo",
-      "direccion_buscada": "Coronel Jose Rincon 230, Colonia Jose Lopez Portillo, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88335939574273,
-        "lng": -102.29202412451362
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Roberto Carlos Hernandez Ramirez",
-      "pandilla": "SAN FRAN 13",
-      "direccion_original": "General Luis Moya 407, Insurgentes",
-      "direccion_buscada": "General Luis Moya 407, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884481483176927,
-        "lng": -102.29147699702449
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Yurem Medina Leos",
-      "pandilla": "SAN FRAN 13",
-      "direccion_original": "Fortunato Maycote 309, Insurgentes",
-      "direccion_buscada": "Fortunato Maycote 309, Colonia Insurgentes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88469535362783,
-        "lng": -102.29349018081942
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Edgar Eduardo Saucedo Martinez",
-      "pandilla": "SAN FRAN 13",
-      "direccion_original": "Cultur Yumana 305, Mirador de las Culturas",
-      "direccion_buscada": "Cultur Yumana 305, Colonia Mirador de las Culturas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.89915429159991,
-        "lng": -102.24866491187916
-      },
-      "confidence": 7,
-      "status": "local_db_colonia_jitter"
-    },
-    {
-      "nombre": "Angel de Jesus Delgadillo",
-      "pandilla": "SAN FRAN 13",
-      "direccion_original": "Bonampak 104, Morelos I",
-      "direccion_buscada": "Bonampak 104, Colonia Morelos I, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884634470130464,
-        "lng": -102.29418113984894
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Cristian",
-      "pandilla": "RANAS 13",
-      "direccion_original": "Noticieros 107, Periodistas",
-      "direccion_buscada": "Noticieros 107, Colonia Periodistas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88137779812314,
-        "lng": -102.2899925383383
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Harrison Jose Perez Mendez",
-      "pandilla": "RANAS 13",
-      "direccion_original": "Editorialistas 110, Periodistas",
-      "direccion_buscada": "Editorialistas 110, Colonia Periodistas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884673014419775,
-        "lng": -102.29264687571526
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Daniel Arturo Palomino Carreon",
-      "pandilla": "RANAS 13",
-      "direccion_original": "Noticieros 153, Periodistas",
-      "direccion_buscada": "Noticieros 153, Colonia Periodistas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880111329823755,
-        "lng": -102.29192689402609
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Kevin Azael Santos Roman",
-      "pandilla": "RANAS 13",
-      "direccion_original": "Columnistas 121, Periodistas",
-      "direccion_buscada": "Columnistas 121, Colonia Periodistas, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.881248249027237,
-        "lng": -102.29003575188831
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jonathan Jesus",
-      "pandilla": "369",
-      "direccion_original": "Profesor Otilio Montaño 158, Emiliano Zapata",
-      "direccion_buscada": "Profesor Otilio Montaño 158, Colonia Emiliano Zapata, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883717738612955,
-        "lng": -102.28917248798352
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Victor Eduardo Valadez Avila",
-      "pandilla": "369",
-      "direccion_original": "Profesor Otilio Montaño 215, Emiliano Zapata",
-      "direccion_buscada": "Profesor Otilio Montaño 215, Colonia Emiliano Zapata, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88295728999771,
-        "lng": -102.29044719615473
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Hector Hugo Alonso Hernandez",
-      "pandilla": "369",
-      "direccion_original": "Profesor Otilio Montaño 207, Emiliano Zapata",
-      "direccion_buscada": "Profesor Otilio Montaño 207, Colonia Emiliano Zapata, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.883605859464407,
-        "lng": -102.29010176241704
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Andres Machuca Ramirez",
-      "pandilla": "369",
-      "direccion_original": "Sixto Verduzco 121, Emiliano Zapata",
-      "direccion_buscada": "Sixto Verduzco 121, Colonia Emiliano Zapata, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.87917619592584,
-        "lng": -102.29457399862669
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Angel de Jesus Guerrero Alvarez",
-      "pandilla": "LA COPA",
-      "direccion_original": "Pedro Parga 111, IV Centenario",
-      "direccion_buscada": "Pedro Parga 111, Colonia IV Centenario, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88459729915312,
-        "lng": -102.29067013046463
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Luis Fernando Guerrero Alvarez",
-      "pandilla": "LA COPA",
-      "direccion_original": "Cayetano Guerrero 111, IV Centenario",
-      "direccion_buscada": "Cayetano Guerrero 111, Colonia IV Centenario, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.880276859693293,
-        "lng": -102.28872286564432
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Jose Ricardo Silva Larios",
-      "pandilla": "LA COPA",
-      "direccion_original": "Pedro Parga 106, IV Centenario",
-      "direccion_buscada": "Pedro Parga 106, Colonia IV Centenario, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879801327534903,
-        "lng": -102.29183891050585
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan Pablo Guerrero Alvarez",
-      "pandilla": "LA COPA",
-      "direccion_original": " , ",
-      "direccion_buscada": " , Colonia , Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88129018081941,
-        "lng": -102.28996150148775
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Francisco Andres Rojas Caballero",
-      "pandilla": "PANCHOS",
-      "direccion_original": "Pedro Parga 111, IV Centenario",
-      "direccion_buscada": "Pedro Parga 111, Colonia IV Centenario, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.878955458915083,
-        "lng": -102.29089388876173
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Moises Alejandro Castro Delgado",
-      "pandilla": "PANCHOS",
-      "direccion_original": "Mesina 117, Paseos de San Antonio",
-      "direccion_buscada": "Mesina 117, Colonia Paseos de San Antonio, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88154177157244,
-        "lng": -102.29379459830625
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Juan David Jimenez Navarro",
-      "pandilla": "PANCHOS",
-      "direccion_original": "Mesina , Paseos de San Antonio",
-      "direccion_buscada": "Mesina , Colonia Paseos de San Antonio, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88213293659876,
-        "lng": -102.288987457084
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Victor Alfonso Dominguez Rodriguez",
-      "pandilla": "PANCHOS",
-      "direccion_original": "Calamaria , Paseos de Aguascalientes",
-      "direccion_buscada": "Calamaria , Colonia Paseos de Aguascalientes, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.88037409018082,
-        "lng": -102.28905639734494
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Luis Gerardo Martinez Requenes",
-      "pandilla": "LOS JORDAN",
-      "direccion_original": "Jesus Yurem 402 E, Ojo de Agua",
-      "direccion_buscada": "Jesus Yurem 402 E, Colonia Ojo de Agua, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879914030670633,
-        "lng": -102.29126239414053
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Cristian Josue Roque Morales",
-      "pandilla": "LOS JORDAN",
-      "direccion_original": "Tamaulipas 245, México",
-      "direccion_buscada": "Tamaulipas 245, Colonia México, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.879973540856028,
-        "lng": -102.29052584115358
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Irving Usiel Roque Morales",
-      "pandilla": "LOS JORDAN",
-      "direccion_original": "Tamaulipas 245, México",
-      "direccion_buscada": "Tamaulipas 245, Colonia México, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.87982430762188,
-        "lng": -102.28986894026093
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
-    },
-    {
-      "nombre": "Francisco Javier Esparza Barcenas",
-      "pandilla": "LOS JORDAN",
-      "direccion_original": "Francisco Perez Rios 206, Ojo de Agua",
-      "direccion_buscada": "Francisco Perez Rios 206, Colonia Ojo de Agua, Aguascalientes",
-      "georeferencia": {
-        "lat": 21.884428931105514,
-        "lng": -102.29209919890135
-      },
-      "confidence": 3,
-      "status": "local_db_city_jitter"
+      ]
     }
   ]
 }
