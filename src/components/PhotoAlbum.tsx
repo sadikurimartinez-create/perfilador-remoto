@@ -2837,8 +2837,17 @@ const hasMinimumPhotos =
                         const { doc, updateDoc } = await import("firebase/firestore");
                         const { getDb } = await import("@/lib/firebase");
                         const firestore = getDb();
+                        const optimizedIncidents = data.data.map((inc: any) => ({
+                          INCIDENTE: inc.INCIDENTE || inc.incidente || "",
+                          FECHA: inc.FECHA || inc.fecha || "",
+                          NOM_ASEN: inc.NOM_ASEN || inc.nom_asen || "",
+                          lat: inc.lat,
+                          lng: inc.lng,
+                          distancia_m: inc.distancia_m,
+                          fuente: inc.fuente || ""
+                        }));
                         await updateDoc(doc(firestore, "projects", projectId), {
-                          incidents: data.data
+                          incidents: optimizedIncidents
                         });
                       } catch (fsErr) {
                         console.error("Error persisting incidents in Firestore:", fsErr);
