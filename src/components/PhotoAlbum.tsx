@@ -2832,24 +2832,7 @@ const hasMinimumPhotos =
                 setIsCheckingIncidencia(true);
                 setError(null);
                 try {
-                  let endpointUrl = "/api/incidencia";
-                  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
-                    try {
-                      const testRes = await fetch("http://localhost:3000/api/incidencia", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ lat: queryLat, lng: queryLng }),
-                        signal: AbortSignal.timeout(3000)
-                      });
-                      if (testRes.ok) {
-                        endpointUrl = "http://localhost:3000/api/incidencia";
-                      }
-                    } catch (e) {
-                      console.warn("Servidor local no detectado o inactivo, usando endpoint de producción de Vercel.", e);
-                    }
-                  }
-
-                  const res = await fetch(endpointUrl, {
+                  const res = await fetch("/api/incidencia", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ lat: queryLat, lng: queryLng })
