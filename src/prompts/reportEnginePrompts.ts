@@ -19,6 +19,7 @@ export interface ReportContext {
   sieData?: any;
   tceData?: any;
   hieData?: any;
+  cieData?: any;
 }
 
 /**
@@ -138,17 +139,64 @@ REGLAS EDITORIALES:
  * 4. CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO
  */
 export const MapsInterpretationPrompt = (ctx: ReportContext): string => {
+  const cie = ctx.cieData || {};
+  const spatialPattern = cie.spatialPattern || {};
+  const density = cie.densityAnalysis || {};
+  const mobility = cie.mobilityAnalysis || {};
+  const attractors = cie.attractorAnalysis || {};
+  const confidence = cie.confidence || {};
+
+  // Construir el JSON simplificado oficial que Gemini recibirá estrictamente
+  const geminiInput = {
+    spatialPattern: {
+      geometryType: spatialPattern.geometryType || "individual",
+      center: spatialPattern.center || { lat: 21.8853, lng: -102.2916 },
+      radiusMetros: spatialPattern.radiusMetros || 250,
+      classification: spatialPattern.classification || "Distribución sectorizada"
+    },
+    densityMap: {
+      finding: `Se identificaron ${density.hotspotsCount || 0} hotspots criminológicos principales con un total de ${density.totalEvents || 0} incidentes históricos.`,
+      evidence: `Patrón clasificado como ${density.classification || "Baja densidad"} con una dispersión de ${density.dispersionMeters || 0} metros.`,
+      confidence: `Nivel de confianza geoespacial: ${confidence.level || "MEDIO"} (Score: ${confidence.score || 50}/100)`
+    },
+    mobilityMap: {
+      finding: `Presencia de ${mobility.corridors?.length || 0} corredores tácticos de movilidad delictiva radiales detectados.`,
+      evidence: (mobility.corridors || []).map((c: any) => c.description).join(" "),
+      confidence: `Nivel de accesibilidad territorial calculado en ${mobility.accessibilityScore || 100}%`
+    },
+    attractorsMap: {
+      finding: `Concentración delictiva ligada a la presencia de ${attractors.totalAttractors || 0} atractores comerciales del DENUE.`,
+      evidence: `Establecimientos críticos a corta distancia: ${(attractors.criticalEstablishments || []).map((e: any) => `${e.name} (${e.distanceMetros}m)`).join(", ")}.`,
+      confidence: `Score de proximidad: ${attractors.proximityScore || 100}/100`
+    },
+    predictiveMap: {
+      finding: `Proyección espacial del riesgo en el baricentro delictivo y celdas de inercia prioritarias.`,
+      evidence: `Baricentro calculado en lat ${cie.priorityZones?.baricenter?.lat || 0}, lng ${cie.priorityZones?.baricenter?.lng || 0}.`,
+      confidence: `Hotspots críticos prioritarios: ${(cie.priorityZones?.criticalHotspotsIds || []).join(", ")}.`
+    }
+  };
+
   return `
 --- INICIO MÓDULO: ANÁLISIS TERRITORIAL CARTOGRÁFICO (CAPÍTULO 3) ---
 Genera el Capítulo 3: "ANÁLISIS TERRITORIAL CARTOGRÁFICO".
 
-Instrucciones:
-- Interpreta de manera espacial y criminológica los mapas tácticos del expediente (Densidad Criminológica, Atracción y Factores, Corredores y Movilidad, Proyección Predictiva a 6 Meses).
-- Regla Estricta: Prohibido describir visualmente el mapa de forma pasiva. Cada mapa interpretado debe estructurarse obligatoriamente bajo los siguientes tres apartados analíticos de forma concisa:
-  - Hallazgo espacial: ¿Qué patrón o concentración muestra geoespacialmente el mapa?
-  - Interpretación criminológica: ¿Por qué es relevante este patrón ambiental para explicar la oportunidad delictiva?
-  - Impacto operativo: ¿Qué decisión táctica directa permite tomar a las unidades en campo?
-- Añade el sello de agua: "🔒 SSPE-CEIPOL".
+Insumos Analíticos Reales (CIEResult):
+${JSON.stringify(geminiInput, null, 2)}
+
+Instrucciones de Redacción:
+- Redacta el análisis del capítulo basándote ÚNICAMENTE en los insumos analíticos reales provistos arriba.
+- Queda estrictamente prohibido inventar cualquier coordenada, dirección, número de incidentes, tipo de delito, o atractor comercial que no figure en los datos.
+- Genera obligatoriamente la interpretación para cada uno de los siguientes 4 mapas tácticos del Atlas:
+  1. MAPA 1: CONTEXTO TERRITORIAL
+  2. MAPA 2: DISTRIBUCIÓN ESPACIAL DEL FENÓMENO (DENSIDAD CRIMINOLÓGICA)
+  3. MAPA 3: FACTORES TERRITORIALES DE OPORTUNIDAD (ATRACTORES Y VULNERABILIDADES)
+  4. MAPA 4: PROYECCIÓN ESPACIAL DEL RIESGO
+- Para cada uno de los 4 mapas, debes estructurar la redacción de forma concisa bajo estos tres apartados exactos:
+  - [Hallazgo espacial]
+  - [Interpretación criminológica]
+  - [Impacto operativo]
+- No utilices etiquetas Markdown adicionales (*, _, \`) en los apartados.
+- Añade el sello de agua: "🔒 SSPE-CEIPOL" al final del capítulo.
 --- FIN MÓDULO ---
 `.trim();
 };

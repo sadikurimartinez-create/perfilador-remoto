@@ -4,6 +4,7 @@ import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import { StatisticalIntelligenceEngine } from './statisticalIntelligenceEngine';
 import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialContextEngine';
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
+import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -382,6 +383,7 @@ export interface IntelligenceReportPayload {
   longitude?: number;
   analysisRadius?: number;
   hieData?: HIEResult;
+  cieData?: any;
 }
 
 /**
@@ -543,6 +545,13 @@ export const buildIntelligenceEditorialPayload = async (
     rawInput: project
   });
 
+  // Ejecutar el Cartographic Intelligence Engine (CIE)
+  const cieData = CartographicIntelligenceEngine.build({
+    tceData,
+    sieData: stats,
+    rawInput: project
+  });
+
   // Bloque I.2: Hipótesis principal
   const hipotesisPrincipal = {
     queOcurre: hieData.centralHypothesis.queOcurre,
@@ -596,6 +605,53 @@ export const buildIntelligenceEditorialPayload = async (
     }
   }
 
+  // Helper para extraer la interpretación de mapas generada por Gemini
+  const parseMapsInterpretation = (rawMapsText: string, mapIdx: number): string => {
+    if (!rawMapsText) return "";
+    const mapHeaders = [
+      /MAPA 1\b/i,
+      /MAPA 2\b/i,
+      /MAPA 3\b/i,
+      /MAPA 4\b/i,
+    ];
+    const indices: number[] = [];
+    mapHeaders.forEach((regex) => {
+      indices.push(rawMapsText.search(regex));
+    });
+    indices.push(rawMapsText.length);
+    const sections: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const start = indices[i];
+      const end = indices[i + 1];
+      if (start !== -1 && end !== -1 && start < end) {
+        sections.push(rawMapsText.substring(start, end).trim());
+      } else {
+        sections.push("");
+      }
+    }
+    const parsed = sections[mapIdx];
+    if (parsed && parsed.length > 20) {
+      return parsed;
+    }
+    return "";
+  };
+
+  const getMapInterpretation = (idx: number, cie: any): string => {
+    const parsed = parseMapsInterpretation(rawMapsText, idx);
+    if (parsed) return cleanTechnicalJargon(parsed);
+
+    if (idx === 0) {
+      return `MAPA 1: CONTEXTO TERRITORIAL Y ÁREA DE ANÁLISIS\n\nHallazgo espacial: Área de amortiguamiento táctico con un radio de ${cie.spatialPattern?.radiusMetros || 250} metros clasificado como ${cie.spatialPattern?.classification || "Distribución sectorizada"}.\n\nInterpretación criminológica: ${cie.confidence?.description || "Consistencia espacial media basada en atractores y vulnerabilidades locales."}\n\nImpacto operativo: Monitorear límites perimetrales y patrullar epicentro.`;
+    }
+    if (idx === 1) {
+      return `MAPA 2: DISTRIBUCIÓN ESPACIAL DEL FENÓMENO\n\nHallazgo espacial: Concentración táctica en ${cie.densityAnalysis?.hotspotsCount || 0} hotspots con un volumen de ${cie.densityAnalysis?.totalEvents || 0} delitos.\n\nInterpretación criminológica: Se detectaron ${cie.mobilityAnalysis?.corridors?.length || 0} corredores de escape radiales que facilitan la huida rápida de los infractores.\n\nImpacto operativo: Implementar filtros dinámicos en los corredores tácticos identificados.`;
+    }
+    if (idx === 2) {
+      return `MAPA 3: FACTORES TERRITORIALES DE OPORTUNIDAD\n\nHallazgo espacial: Coincidencia espacial delictiva con ${cie.attractorAnalysis?.totalAttractors || 0} atractores del DENUE.\n\nInterpretación criminológica: Vulnerabilidades físicas en el entorno urbano: ${(cie.environmentalRisk?.detectedFacilitators || []).join(", ") || "Falta de iluminación y maleza"}.\n\nImpacto operativo: Gestionar la remediación urbana del cuadrante y cerramientos preventivos.`;
+    }
+    return `MAPA 4: PROYECCIÓN ESPACIAL DEL RIESGO\n\nHallazgo espacial: Baricentro delictivo y celdas de inercia prioritarias para la proyección a 6 meses.\n\nInterpretación criminológica: Concentración de riesgo delictivo activo calculado mediante Poisson en sector prioritario (Confianza: ${cie.confidence?.level || "MEDIO"}).\n\nImpacto operativo: Focalizar patrullaje dinámico en el baricentro y sector de patrullaje del CIE.`;
+  };
+
   // Instanciar el motor de renderizado vectorial táctico para generar los mapas y gráficas HD directamente
   const vectorInput = {
     projectName: projectName || "Expediente",
@@ -604,7 +660,8 @@ export const buildIntelligenceEditorialPayload = async (
     geometryType: project?.geometryType || "individual",
     incidents: incidents,
     sweeps: sweeps || [],
-    photoCount: album?.length || 0
+    photoCount: album?.length || 0,
+    cieData: cieData
   };
 
   // Maps (Generados vectorialmente a alta resolución de forma nativa)
@@ -622,32 +679,32 @@ export const buildIntelligenceEditorialPayload = async (
 
   const maps = [
     {
-      title: "1. DENSIDAD CRIMINOLÓGICA",
+      title: "1. CONTEXTO TERRITORIAL Y ÁREA DE ANÁLISIS",
       dataUrl: densityMapUrl,
-      spatialFinding: "Focos de calor concentrados en el cuadrante central del área de análisis.",
-      interpretation: "Concentración de delitos facilitada por la baja vigilancia natural y nulo control de accesos.",
-      recommendation: "Establecer puntos fijos de vigilancia y realizar patrullaje focalizado en picos horarios."
+      spatialFinding: cieData.spatialPattern.classification || "Distribución sectorizada perimetral.",
+      interpretation: getMapInterpretation(0, cieData),
+      recommendation: "Verificar límites de amortiguamiento táctico y coordinar sectores de patrullaje."
     },
     {
-      title: "2. CORREDORES Y MOVILIDAD",
+      title: "2. DISTRIBUCIÓN ESPACIAL DEL FENÓMENO (DENSIDAD)",
       dataUrl: mobilityMapUrl,
-      spatialFinding: "Dos rutas de escape principales detectadas hacia el norte y oeste del polígono.",
-      interpretation: "Los agresores aprovechan vialidades secundarias interconectadas con baja iluminación.",
-      recommendation: "Implementar filtros de revisión itinerantes en los nodos críticos de entrada y salida."
+      spatialFinding: `Se identificaron ${cieData.densityAnalysis.hotspotsCount || 0} hotspots principales con ${cieData.densityAnalysis.totalEvents || 0} incidentes históricos.`,
+      interpretation: getMapInterpretation(1, cieData),
+      recommendation: "Desplegar patrullaje dinámico en horarios críticos en los corredores de huida."
     },
     {
-      title: "3. ATRACCIÓN Y FACTORES",
+      title: "3. FACTORES TERRITORIALES DE OPORTUNIDAD",
       dataUrl: attractorsMapUrl,
-      spatialFinding: "Alta densidad de comercios en el área este y acumulación de predios en abandono.",
-      interpretation: "El flujo comercial actúa como atractor mientras los baldíos sirven como zonas de ocultamiento.",
-      recommendation: "Notificar a los propietarios para cerramiento de predios y coordinar iluminación comercial."
+      spatialFinding: `Concentración delictiva asociada a ${cieData.attractorAnalysis.totalAttractors || 0} atractores comerciales del DENUE.`,
+      interpretation: getMapInterpretation(2, cieData),
+      recommendation: "Notificar a comercio establecido y coordinar cerramiento de baldíos."
     },
     {
-      title: "4. PROYECCIÓN A 6 MESES",
+      title: "4. PROYECCIÓN ESPACIAL DEL RIESGO",
       dataUrl: predictiveMapUrl,
-      spatialFinding: "Radio predictivo de expansión delictiva de 150m con sentido hacia el suroeste.",
-      interpretation: "Inercia delictiva impulsada por el desplazamiento del foco debido a la presión policial local.",
-      recommendation: "Desplegar dispositivos preventivos en las zonas limítrofes para contener el desplazamiento delictivo."
+      spatialFinding: `Baricentro delictivo calculado en lat ${cieData.priorityZones.baricenter?.lat.toFixed(4) || 0}, lng ${cieData.priorityZones.baricenter?.lng.toFixed(4) || 0}.`,
+      interpretation: getMapInterpretation(3, cieData),
+      recommendation: "Focalizar patrullaje dinámico disuasivo en el baricentro y sector de patrullaje del CIE."
     }
   ];
 
@@ -1032,7 +1089,8 @@ export const buildIntelligenceEditorialPayload = async (
     streetViewText: cleanTechnicalJargon(rawStreetViewText),
     graphText: cleanTechnicalJargon(rawGraphText),
     conclusionesText: formattedConclusionesText,
-    hieData
+    hieData,
+    cieData
   };
 };
 

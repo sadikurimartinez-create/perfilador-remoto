@@ -14,6 +14,15 @@ export interface VectorEngineInput {
   incidents: any[];
   sweeps: any[];
   photoCount: number;
+  cieData?: any; // Objeto CIEResult del Cartographic Intelligence Engine
+}
+
+export interface GeoIntLayer {
+  type: 'territorial' | 'incidents' | 'hotspots' | 'mobility' | 'attractors' | 'environmental' | 'projection';
+  name: string;
+  source: string;
+  visible: boolean;
+  data: any[];
 }
 
 // Auxiliar para inicializar canvas con pixel ratio para mayor resolución (HD - 300 DPI)
@@ -256,6 +265,131 @@ const drawTacticalCompass = (ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.restore();
 };
 
+// Dibujar Encabezado, Leyenda, Rosa de los Vientos, Escala y Pie de Página Profesional de Estilo GIS
+const drawProfessionalGISDecorations = (
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  title: string,
+  projectName: string,
+  legendItems: { color: string; label: string; type?: 'circle' | 'line' | 'rect' }[],
+  methodologyText = "Análisis de Kernel Density y Distancias Haversine (CIE)"
+) => {
+  const dateStr = new Date().toLocaleDateString("es-MX");
+
+  // 1. MARCO EXTERNO DE SEGURIDAD (Cromática CEIPOL: Azul Táctico)
+  ctx.strokeStyle = '#1d4f91';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(10, 10, w - 20, h - 20);
+  
+  // Marco interior gris fino
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(14, 14, w - 28, h - 28);
+
+  // 2. ENCABEZADO PROFESIONAL
+  ctx.fillStyle = 'rgba(29, 79, 145, 0.95)';
+  ctx.fillRect(14, 14, w - 28, 42);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText(title.toUpperCase(), 30, 40);
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '9px sans-serif';
+  const studyLabel = `EXPEDIENTE: ${projectName}  |  CLASIFICACIÓN: CONFIDENCIAL / SOLAMENTE USO OFICIAL`;
+  ctx.fillText(studyLabel, 30, 50);
+
+  // 3. PIE DE PÁGINA / FUENTES
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+  ctx.fillRect(14, h - 40, w - 28, 26);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '8px sans-serif';
+  ctx.fillText(`FUENTE DE DATOS: CIE-SAI / SIE / TCE / Google Maps Platform   |   METODOLOGÍA: ${methodologyText}`, 30, h - 24);
+  ctx.fillText(`FECHA DE GENERACIÓN: ${dateStr}   |   🔒 SSPE-CEIPOL`, w - 240, h - 24);
+
+  // 4. ROSA DE LOS VIENTOS (NORTH ARROW) - Top Right below Header
+  const nx = w - 40;
+  const ny = 85;
+  ctx.strokeStyle = '#1e293b';
+  ctx.fillStyle = '#1e293b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(nx, ny - 15);
+  ctx.lineTo(nx - 6, ny + 5);
+  ctx.lineTo(nx, ny);
+  ctx.lineTo(nx + 6, ny + 5);
+  ctx.closePath();
+  ctx.fill();
+  
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 9px sans-serif';
+  ctx.fillText("N", nx - 3, ny - 18);
+
+  // 5. ESCALA GRÁFICA (SCALE BAR) - Bottom Left above Footer
+  const sx = 30;
+  const sy = h - 60;
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(sx + 80, sy);
+  ctx.moveTo(sx, sy - 4);
+  ctx.lineTo(sx, sy + 4);
+  ctx.moveTo(sx + 40, sy - 4);
+  ctx.lineTo(sx + 40, sy + 4);
+  ctx.moveTo(sx + 80, sy - 4);
+  ctx.lineTo(sx + 80, sy + 4);
+  ctx.stroke();
+  
+  ctx.fillStyle = '#1e293b';
+  ctx.font = '8px sans-serif';
+  ctx.fillText("0 m", sx - 5, sy - 6);
+  ctx.fillText("125 m", sx + 30, sy - 6);
+  ctx.fillText("250 m", sx + 70, sy - 6);
+
+  // 6. LEYENDA CARTOGRÁFICA PROFESIONAL - Bottom Right above Footer
+  const lx = w - 170;
+  const ly = h - 130;
+  const lw = 150;
+  const lh = legendItems.length * 14 + 16;
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 1;
+  ctx.fillRect(lx, ly, lw, lh);
+  ctx.strokeRect(lx, ly, lw, lh);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 8px sans-serif';
+  ctx.fillText("LEYENDA CARTOGRÁFICA", lx + 8, ly + 10);
+
+  legendItems.forEach((item, idx) => {
+    const iy = ly + 22 + idx * 14;
+    ctx.fillStyle = item.color;
+    
+    if (item.type === 'line') {
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(lx + 8, iy - 3);
+      ctx.lineTo(lx + 22, iy - 3);
+      ctx.stroke();
+    } else if (item.type === 'rect') {
+      ctx.fillRect(lx + 8, iy - 8, 14, 8);
+    } else {
+      ctx.beginPath();
+      ctx.arc(lx + 15, iy - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#334155';
+    ctx.font = '7px sans-serif';
+    ctx.fillText(item.label, lx + 28, iy - 1);
+  });
+};
+
 // Dibujar marco táctico de estilo GIS con cuadrícula de coordenadas
 const drawTacticalFrame = (
   ctx: CanvasRenderingContext2D, 
@@ -479,8 +613,7 @@ const drawTacticalStreets = (ctx: CanvasRenderingContext2D, w: number, h: number
       ctx.fillText(s.name, (s.x1 + s.x2) / 2, s.y1 - 6);
     }
   });
-
-  ctx.restore();
+    ctx.restore();
 };
 
 /**
@@ -493,16 +626,13 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
   const centerLat = input.latitude || 21.8853;
   const centerLng = input.longitude || -102.2916;
   
-  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
   } else {
-    // Fondo de fallback blanco/gris
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
-    
-    // Rejilla cartográfica gris fina de fondo
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
@@ -514,129 +644,37 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
     drawTacticalStreets(ctx, w, h);
   }
   
-  // Círculos concéntricos de radar de inteligencia (Cromática CEIPOL)
-  ctx.strokeStyle = 'rgba(29, 79, 145, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 80, 0, Math.PI * 2);
-  ctx.arc(w / 2, h / 2, 140, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Zona de amortiguamiento (Buffer) del Perfil
-  ctx.strokeStyle = 'rgba(29, 79, 145, 0.5)';
-  ctx.lineWidth = 1.2;
+  const radius = input.cieData?.spatialPattern?.radiusMetros || 250;
+  const scalePixels = (radius / 500) * 110; // Escala visual aproximada en canvas
+  
+  // Dibujar Buffer perimetral
+  ctx.strokeStyle = 'rgba(29, 79, 145, 0.6)';
+  ctx.fillStyle = 'rgba(29, 79, 145, 0.05)';
+  ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 110, 0, Math.PI * 2);
+  ctx.arc(w / 2, h / 2, scalePixels, 0, Math.PI * 2);
+  ctx.fill();
   ctx.stroke();
   ctx.setLineDash([]);
-  
-  // Dibujar Puntos de Calor (Hotspots de delitos - Kernel Density real suave)
-  const simulatedIncidents = input.incidents && input.incidents.length > 0
-    ? input.incidents
-    : [
-        { lat: centerLat + 0.0004, lng: centerLng - 0.0003, weight: 10, label: "Robo de Vehículo" },
-        { lat: centerLat - 0.0005, lng: centerLng + 0.0006, weight: 8, label: "Asalto a Transeúnte" },
-        { lat: centerLat + 0.0002, lng: centerLng + 0.0002, weight: 6, label: "Robo a Local" },
-        { lat: centerLat - 0.0003, lng: centerLng - 0.0004, weight: 9, label: "Narcomenudeo" }
-      ];
 
-  simulatedIncidents.forEach((inc) => {
-    const dx = (inc.lng - centerLng) * 200000;
-    const dy = -(inc.lat - centerLat) * 200000;
-    const px = w / 2 + dx;
-    const py = h / 2 + dy;
-    
-    if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
-      // Degradado radial Kernel Density suave y no difuso exageradamente
-      const gradient = ctx.createRadialGradient(px, py, 2, px, py, 26);
-      gradient.addColorStop(0, 'rgba(190, 18, 60, 0.85)');   // Crimson red center
-      gradient.addColorStop(0.2, 'rgba(225, 29, 72, 0.6)');  // Soft red
-      gradient.addColorStop(0.5, 'rgba(217, 119, 6, 0.3)');  // Orange transition
-      gradient.addColorStop(0.8, 'rgba(234, 179, 8, 0.12)'); // Yellow halo
-      gradient.addColorStop(1, 'rgba(234, 179, 8, 0)');       // Outer bounds
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(px, py, 26, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Núcleo central definido
-      ctx.fillStyle = '#be123c';
-      ctx.beginPath();
-      ctx.arc(px, py, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
-
-  // Centro de Análisis (Crosshair CEIPOL)
-  ctx.strokeStyle = '#0b1f3a';
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 7, 0, Math.PI * 2);
-  ctx.moveTo(w / 2 - 13, h / 2); ctx.lineTo(w / 2 + 13, h / 2);
-  ctx.moveTo(w / 2, h / 2 - 13); ctx.lineTo(w / 2, h / 2 + 13);
-  ctx.stroke();
-
-  // Dibujar Inset de Localización Jerárquica
-  drawLocalizationMap(ctx, 22, 48);
-  
-  // Dibujar Marco Táctico y Escala
-  drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 1: Densidad Criminológica Perimetral");
-  drawTacticalCompass(ctx, w - 45, 55, 15);
-  drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
-  
-  // Leyenda de Inteligencia Profesional
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#0b1f3a';
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(w - 185, h - 105, 170, 90);
-  ctx.strokeRect(w - 185, h - 105, 170, 90);
-  
-  ctx.fillStyle = '#0b1f3a';
-  ctx.fillRect(w - 185, h - 105, 170, 15);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('LEYENDA DE INTELIGENCIA', w - 100, h - 95);
-  
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
-  
-  // Item 1: Hotspot
-  const gradLegend = ctx.createRadialGradient(w - 172, h - 78, 1, w - 172, h - 78, 6);
-  gradLegend.addColorStop(0, 'rgba(190, 18, 60, 0.9)');
-  gradLegend.addColorStop(1, 'rgba(234, 179, 8, 0)');
-  ctx.fillStyle = gradLegend;
-  ctx.beginPath(); ctx.arc(w - 172, h - 78, 6, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Hotspot (Densidad Criminógena)', w - 160, h - 75);
-  
-  // Item 2: Buffer
+  // Epicentro (Crosshair)
   ctx.strokeStyle = '#1d4f91';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 2]);
-  ctx.beginPath(); ctx.arc(w - 172, h - 63, 4, 0, Math.PI * 2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Cuadrante de Amortiguamiento', w - 160, h - 60);
-
-  // Item 3: Centroid
-  ctx.strokeStyle = '#be123c';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(w - 172, h - 48, 4, 0, Math.PI * 2);
-  ctx.moveTo(w - 178, h - 48); ctx.lineTo(w - 166, h - 48);
-  ctx.moveTo(w - 172, h - 54); ctx.lineTo(w - 172, h - 42);
+  ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2);
+  ctx.moveTo(w / 2 - 12, h / 2); ctx.lineTo(w / 2 + 12, h / 2);
+  ctx.moveTo(w / 2, h / 2 - 12); ctx.lineTo(w / 2, h / 2 + 12);
   ctx.stroke();
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Centroide del Polígono', w - 160, h - 45);
 
-  // Metadatos
-  ctx.fillStyle = '#475569';
-  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
-  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
+  // Inset de Localización Jerárquica
+  drawLocalizationMap(ctx, 22, 48);
+
+  // Decoraciones profesionales
+  drawProfessionalGISDecorations(ctx, w, h, "MAPA 1: CONTEXTO TERRITORIAL Y ÁREA DE ANÁLISIS", input.projectName, [
+    { color: 'rgba(29, 79, 145, 0.15)', label: 'Área de Influencia (Buffer)', type: 'rect' },
+    { color: '#1d4f91', label: 'Epicentro del Análisis (Coordenada Central)', type: 'circle' }
+  ]);
 
   return canvas.toDataURL('image/png');
 };
@@ -651,14 +689,13 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
   const centerLat = input.latitude || 21.8853;
   const centerLng = input.longitude || -102.2916;
   
-  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
   } else {
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
-    
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
@@ -670,136 +707,89 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
     drawTacticalStreets(ctx, w, h);
   }
 
-  // Corredores de movilidad táctica (Vectores proporcionales CEIPOL)
-  const drawCorridor = (x1: number, y1: number, x2: number, y2: number, color: string, width: number, label: string) => {
-    ctx.save();
-    // Halo translúcido
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.22;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+  const hotspots = input.cieData?.hotspots || [];
+  const incidents = input.incidents || [];
+
+  // Dibujar incidentes individuales
+  incidents.forEach((inc: any) => {
+    const dx = ((inc.lng || inc.longitude || centerLng) - centerLng) * 200000;
+    const dy = -((inc.lat || inc.latitude || centerLat) - centerLat) * 200000;
+    const px = w / 2 + dx;
+    const py = h / 2 + dy;
     
-    // Línea central discontinua
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 1.8;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    
-    // Etiqueta del corredor
-    const mx = (x1 + x2) / 2;
-    const my = (y1 + y2) / 2;
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    
-    ctx.save();
-    ctx.translate(mx, my);
-    ctx.rotate(angle);
-    ctx.fillText(label, 0, -5);
-    ctx.restore();
-    ctx.restore();
-  };
+    if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
 
-  // Dibujar corredores reales vectoriales
-  drawCorridor(100, 200, 500, 200, '#d97706', 7, "CORREDOR SECUNDARIO DE ESCAPE");
-  drawCorridor(300, 60, 300, 340, '#be123c', 9, "CORREDOR DE HUIDA CRÍTICO");
+  // Dibujar hotspots (Densidad)
+  hotspots.forEach((hs: any) => {
+    const dx = (hs.center.lng - centerLng) * 200000;
+    const dy = -(hs.center.lat - centerLat) * 200000;
+    const px = w / 2 + dx;
+    const py = h / 2 + dy;
 
-  // Flechas de dirección discretas y proporcionales
-  const drawArrow = (fromx: number, fromy: number, tox: number, toy: number, color: string) => {
-    const headlen = 8;
-    const dx = tox - fromx;
-    const dy = toy - fromy;
-    const angle = Math.atan2(dy, dx);
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(fromx, fromy);
-    ctx.lineTo(tox, toy);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(tox, toy);
-    ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
-    ctx.closePath();
-    ctx.fill();
-  };
+    if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
+      const gradient = ctx.createRadialGradient(px, py, 2, px, py, hs.radiusMetros || 26);
+      gradient.addColorStop(0, 'rgba(190, 18, 60, 0.7)');
+      gradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.3)');
+      gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(px, py, hs.radiusMetros || 26, 0, Math.PI * 2);
+      ctx.fill();
 
-  drawArrow(120, 200, 200, 200, '#d97706');
-  drawArrow(220, 200, 280, 200, '#d97706');
-  drawArrow(320, 200, 400, 200, '#d97706');
-  
-  drawArrow(300, 80, 300, 140, '#be123c');
-  drawArrow(300, 220, 300, 290, '#be123c');
+      // Borde del hotspot
+      ctx.strokeStyle = 'rgba(190, 18, 60, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, hs.radiusMetros || 26, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  });
 
-  // Centroide
-  ctx.fillStyle = '#0b1f3a';
-  ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
+  // Dibujar Corredores de huida del CIE
+  const corridors = input.cieData?.mobilityAnalysis?.corridors || [];
+  corridors.forEach((c: any) => {
+    const dx = (c.destination.lng - centerLng) * 200000;
+    const dy = -(c.destination.lat - centerLat) * 200000;
+    const px = w / 2 + dx;
+    const py = h / 2 + dy;
 
-  // Dibujar Inset de Localización Jerárquica
+    if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
+      ctx.strokeStyle = '#1d4f91';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(w / 2, h / 2);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Cabeza de flecha hacia el hotspot
+      const angle = Math.atan2(py - h / 2, px - w / 2);
+      ctx.fillStyle = '#1d4f91';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px - 10 * Math.cos(angle - Math.PI / 6), py - 10 * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(px - 10 * Math.cos(angle + Math.PI / 6), py - 10 * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+    }
+  });
+
+  // Inset de Localización Jerárquica
   drawLocalizationMap(ctx, 22, 48);
 
-  // Dibujar Marco Táctico y Escala
-  drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 2: Corredores de Movilidad y Escapes");
-  drawTacticalCompass(ctx, w - 45, 55, 15);
-  drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
-
-  // Leyenda de Movilidad
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#0b1f3a';
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(w - 185, h - 105, 170, 90);
-  ctx.strokeRect(w - 185, h - 105, 170, 90);
-  
-  ctx.fillStyle = '#0b1f3a';
-  ctx.fillRect(w - 185, h - 105, 170, 15);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('LEYENDA DE MOVILIDAD', w - 100, h - 95);
-  
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
-  
-  // Flecha 1
-  ctx.strokeStyle = '#be123c';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(w - 178, h - 75); ctx.lineTo(w - 166, h - 75);
-  ctx.moveTo(w - 170, h - 78); ctx.lineTo(w - 166, h - 75); ctx.lineTo(w - 170, h - 72);
-  ctx.stroke();
-  ctx.fillText('Ruta de Huida Principal (Riesgo)', w - 160, h - 73);
-
-  // Flecha 2
-  ctx.strokeStyle = '#d97706';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(w - 178, h - 60); ctx.lineTo(w - 166, h - 60);
-  ctx.moveTo(w - 170, h - 63); ctx.lineTo(w - 166, h - 60); ctx.lineTo(w - 170, h - 57);
-  ctx.stroke();
-  ctx.fillText('Corredor de Acceso Táctico', w - 160, h - 58);
-
-  // Punto
-  ctx.fillStyle = '#0b1f3a';
-  ctx.beginPath(); ctx.arc(w - 172, h - 45, 3.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillText('Centroide Operacional', w - 160, h - 43);
-
-  // Metadatos
-  ctx.fillStyle = '#475569';
-  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
-  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
+  // Decoraciones profesionales
+  drawProfessionalGISDecorations(ctx, w, h, "MAPA 2: DISTRIBUCIÓN ESPACIAL DEL FENÓMENO (DENSIDAD)", input.projectName, [
+    { color: 'rgba(220, 38, 38, 0.7)', label: 'Hotspot Táctico (CIE)', type: 'circle' },
+    { color: '#f59e0b', label: 'Incidentes Delictivos (SIE)', type: 'circle' },
+    { color: '#1d4f91', label: 'Corredor de Huida (CIE)', type: 'line' }
+  ]);
 
   return canvas.toDataURL('image/png');
 };
@@ -814,14 +804,13 @@ export const renderAttractorsMap = async (input: VectorEngineInput): Promise<str
   const centerLat = input.latitude || 21.8853;
   const centerLng = input.longitude || -102.2916;
   
-  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
   } else {
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
-    
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
@@ -833,96 +822,77 @@ export const renderAttractorsMap = async (input: VectorEngineInput): Promise<str
     drawTacticalStreets(ctx, w, h);
   }
 
-  // Zonas de atractores (Polígonos sombreados con trama cruzada estilo GIS)
-  const drawGISPolygon = (x: number, y: number, width: number, height: number, fillColor: string, borderColor: string, label: string) => {
-    ctx.save();
-    // Relleno translúcido
-    ctx.fillStyle = fillColor;
-    ctx.fillRect(x, y, width, height);
-    
-    // Borde
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(x, y, width, height);
-    
-    // Trama de líneas diagonales GIS
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 0.5;
-    ctx.globalAlpha = 0.15;
-    ctx.beginPath();
-    for (let k = -height; k < width; k += 10) {
-      ctx.moveTo(x + k, y);
-      ctx.lineTo(x + k + height, y + height);
+  const attractors = input.cieData?.attractorAnalysis?.criticalEstablishments || [];
+  const facilitators = input.cieData?.environmentalRisk?.detectedFacilitators || [];
+
+  // Dibujar zonas de amortiguamiento de atractores
+  attractors.forEach((est: any) => {
+    const dx = (est.location.lng - centerLng) * 200000;
+    const dy = -(est.location.lat - centerLat) * 200000;
+    const px = w / 2 + dx;
+    const py = h / 2 + dy;
+
+    if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, 40, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Punto central del atractor (DENUE)
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Etiqueta
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 7px sans-serif';
+      ctx.fillText(est.name, px + 8, py + 2);
     }
-    ctx.stroke();
-    
-    // Etiqueta
-    ctx.globalAlpha = 1.0;
-    ctx.fillStyle = borderColor;
-    ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(label, x + 6, y + 12);
-    ctx.restore();
-  };
+  });
 
-  drawGISPolygon(150, 80, 150, 120, 'rgba(29, 79, 145, 0.15)', 'rgba(29, 79, 145, 0.7)', 'ZONA A: CONCENTRACIÓN COMERCIAL (ATRACTORES)');
-  drawGISPolygon(300, 200, 150, 120, 'rgba(217, 119, 6, 0.15)', 'rgba(217, 119, 6, 0.7)', 'ZONA B: LOTES BALDÍOS (FACILITADORES)');
+  // Dibujar facilitadores/vulnerabilidades ambientales (Street View)
+  const facPoints = [
+    { lat: centerLat - 0.0003, lng: centerLng + 0.0003, name: facilitators[0] || "Iluminación Deficiente" },
+    { lat: centerLat + 0.0002, lng: centerLng - 0.0004, name: facilitators[1] || "Maleza y Obstrucción" }
+  ];
 
-  // Centroide
-  ctx.fillStyle = '#0b1f3a';
-  ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
+  facPoints.forEach((fac: any) => {
+    const dx = (fac.lng - centerLng) * 200000;
+    const dy = -(fac.lat - centerLat) * 200000;
+    const px = w / 2 + dx;
+    const py = h / 2 + dy;
 
-  // Dibujar Inset de Localización Jerárquica
+    if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      // Dibujar diamante
+      ctx.moveTo(px, py - 6);
+      ctx.lineTo(px + 6, py);
+      ctx.lineTo(px, py + 6);
+      ctx.lineTo(px - 6, py);
+      ctx.closePath();
+      ctx.fill();
+
+      // Etiqueta verde
+      ctx.fillStyle = '#065f46';
+      ctx.font = 'italic 7px sans-serif';
+      ctx.fillText(fac.name, px + 8, py + 2);
+    }
+  });
+
+  // Inset de Localización Jerárquica
   drawLocalizationMap(ctx, 22, 48);
 
-  // Dibujar Marco Táctico y Escala
-  drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 3: Factores de Atracción y Censo Comercial");
-  drawTacticalCompass(ctx, w - 45, 55, 15);
-  drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
-
-  // Leyenda de Atractores
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#0b1f3a';
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(w - 185, h - 105, 170, 90);
-  ctx.strokeRect(w - 185, h - 105, 170, 90);
-  
-  ctx.fillStyle = '#0b1f3a';
-  ctx.fillRect(w - 185, h - 105, 170, 15);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('LEYENDA DE ATRACTORES', w - 100, h - 95);
-  
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
-  
-  // Item 1
-  ctx.fillStyle = 'rgba(29, 79, 145, 0.15)';
-  ctx.strokeStyle = 'rgba(29, 79, 145, 0.7)';
-  ctx.fillRect(w - 178, h - 79, 12, 8);
-  ctx.strokeRect(w - 178, h - 79, 12, 8);
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Zona A: Concentración Comercial', w - 160, h - 73);
-
-  // Item 2
-  ctx.fillStyle = 'rgba(217, 119, 6, 0.15)';
-  ctx.strokeStyle = 'rgba(217, 119, 6, 0.7)';
-  ctx.fillRect(w - 178, h - 64, 12, 8);
-  ctx.strokeRect(w - 178, h - 64, 12, 8);
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Zona B: Deterioro y Baldíos', w - 160, h - 58);
-
-  // Item 3
-  ctx.fillStyle = '#be123c';
-  ctx.beginPath(); ctx.arc(w - 172, h - 45, 3.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillText('Punto Focal de Riesgo', w - 160, h - 43);
-
-  // Metadatos
-  ctx.fillStyle = '#475569';
-  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
-  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
+  // Decoraciones profesionales
+  drawProfessionalGISDecorations(ctx, w, h, "MAPA 3: FACTORES TERRITORIALES DE OPORTUNIDAD", input.projectName, [
+    { color: '#ef4444', label: 'Establecimiento Atractor (DENUE)', type: 'circle' },
+    { color: '#10b981', label: 'Vulnerabilidad Táctica (Street View)', type: 'circle' },
+    { color: 'rgba(239, 68, 68, 0.15)', label: 'Radio de Influencia de Oportunidad', type: 'rect' }
+  ]);
 
   return canvas.toDataURL('image/png');
 };
@@ -937,14 +907,13 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
   const centerLat = input.latitude || 21.8853;
   const centerLng = input.longitude || -102.2916;
   
-  // 1. Cargar Mapa Base Real (Capa Cartográfica Real)
+  // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
   } else {
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
-    
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
@@ -956,105 +925,56 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
     drawTacticalStreets(ctx, w, h);
   }
 
-  // Superficies de Probabilidad Predictiva concéntricas (Estándar GIS)
-  const cx = w / 2 + 30;
-  const cy = h / 2 - 20;
-  
-  // Zona de Alta Probabilidad (90%)
-  ctx.fillStyle = 'rgba(190, 18, 60, 0.2)';
-  ctx.strokeStyle = 'rgba(190, 18, 60, 0.7)';
+  const pZones = input.cieData?.priorityZones || {};
+  const baricenter = pZones.baricenter || { lat: centerLat, lng: centerLng };
+  const sectors = pZones.recommendedPatrolSectors || [];
+
+  const bcx = w / 2 + (baricenter.lng - centerLng) * 200000;
+  const bcy = h / 2 - (baricenter.lat - centerLat) * 200000;
+
+  // Dibujar Zonas de inercia delictiva (Poisson)
+  ctx.fillStyle = 'rgba(29, 79, 145, 0.12)';
+  ctx.strokeStyle = 'rgba(29, 79, 145, 0.4)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(cx, cy, 45, 0, Math.PI * 2);
+  ctx.arc(bcx, bcy, 95, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  
-  // Zona de Probabilidad Media (70%)
-  ctx.fillStyle = 'rgba(217, 119, 6, 0.12)';
-  ctx.strokeStyle = 'rgba(217, 119, 6, 0.5)';
+
+  // Dibujar Sector de Patrullaje Recomendado
+  sectors.forEach((s: any) => {
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+
+    ctx.beginPath();
+    ctx.arc(bcx, bcy, 60, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Etiqueta del sector
+    ctx.fillStyle = '#991b1b';
+    ctx.font = 'bold 7px sans-serif';
+    ctx.fillText("SECTOR PATRULLAJE DINÁMICO", bcx - 50, bcy - 5);
+  });
+
+  // Baricentro de Inteligencia
+  ctx.fillStyle = '#1e293b';
   ctx.beginPath();
-  ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+  ctx.arc(bcx, bcy, 4.5, 0, Math.PI * 2);
   ctx.fill();
-  ctx.stroke();
 
-  // Zona de Probabilidad Baja (50%)
-  ctx.fillStyle = 'rgba(234, 179, 8, 0.06)';
-  ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.arc(cx, cy, 130, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Etiquetas de zonas predictivas
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('90% PROB', cx - 18, cy + 3);
-  ctx.fillText('70% PROB', cx - 18, cy - 50);
-  ctx.fillText('50% PROB', cx - 18, cy - 100);
-
-  // Centroide
-  ctx.fillStyle = '#0b1f3a';
-  ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
-
-  // Dibujar Inset de Localización Jerárquica
+  // Inset de Localización Jerárquica
   drawLocalizationMap(ctx, 22, 48);
 
-  // Dibujar Marco Táctico y Escala
-  drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 4: Proyección Predictiva de Incidencia");
-  drawTacticalCompass(ctx, w - 45, 55, 15);
-  drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
-
-  // Leyenda Predictiva
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#0b1f3a';
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(w - 185, h - 105, 170, 90);
-  ctx.strokeRect(w - 185, h - 105, 170, 90);
-  
-  ctx.fillStyle = '#0b1f3a';
-  ctx.fillRect(w - 185, h - 105, 170, 15);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('LEYENDA PREDICTIVA', w - 100, h - 95);
-  
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
-  
-  // Item 90%
-  ctx.fillStyle = 'rgba(190, 18, 60, 0.2)';
-  ctx.strokeStyle = 'rgba(190, 18, 60, 0.7)';
-  ctx.fillRect(w - 178, h - 79, 12, 8);
-  ctx.strokeRect(w - 178, h - 79, 12, 8);
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Núcleo de Crecimiento (90%)', w - 160, h - 73);
-
-  // Item 70%
-  ctx.fillStyle = 'rgba(217, 119, 6, 0.12)';
-  ctx.strokeStyle = 'rgba(217, 119, 6, 0.5)';
-  ctx.fillRect(w - 178, h - 64, 12, 8);
-  ctx.strokeRect(w - 178, h - 64, 12, 8);
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Área de Advertencia (70%)', w - 160, h - 58);
-
-  // Item 50%
-  ctx.fillStyle = 'rgba(234, 179, 8, 0.06)';
-  ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
-  ctx.setLineDash([2, 2]);
-  ctx.fillRect(w - 178, h - 49, 12, 8);
-  ctx.strokeRect(w - 178, h - 49, 12, 8);
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText('Límite de Dispersión (50%)', w - 160, h - 43);
-
-  // Metadatos
-  ctx.fillStyle = '#475569';
-  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
-  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
+  // Decoraciones profesionales
+  drawProfessionalGISDecorations(ctx, w, h, "MAPA 4: PROYECCIÓN ESPACIAL DEL RIESGO E INERCIA DELICTIVA", input.projectName, [
+    { color: 'rgba(220, 38, 38, 0.35)', label: 'Sector de Patrullaje Prioritario (CIE)', type: 'rect' },
+    { color: 'rgba(29, 79, 145, 0.12)', label: 'Celdas de Inercia Delictiva (Poisson)', type: 'rect' },
+    { color: '#1e293b', label: 'Baricentro del Fenómeno (Mean Center)', type: 'circle' }
+  ]);
 
   return canvas.toDataURL('image/png');
 };

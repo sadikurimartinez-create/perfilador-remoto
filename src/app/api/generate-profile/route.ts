@@ -18,6 +18,7 @@ import {
 import { StatisticalIntelligenceEngine } from "@/utils/statisticalIntelligenceEngine";
 import { TerritorialContextEngine } from "@/utils/territorialContextEngine";
 import { HypothesisIntelligenceEngine } from "@/utils/hypothesisIntelligenceEngine";
+import { CartographicIntelligenceEngine } from "@/utils/cartographicIntelligenceEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -120,9 +121,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Instanciar TCE si se genera el Capítulo 1 o el Capítulo 2 (para alimentar al HIE)
+    // Instanciar TCE si se genera el Capítulo 1, Capítulo 2 o Capítulo 3 (para alimentar al HIE / CIE)
     let tceData: any = null;
-    if (chapter === 2 || chapter === 3) {
+    if (chapter === 2 || chapter === 3 || chapter === 4) {
       tceData = TerritorialContextEngine.generate({
         projectName,
         projectId,
@@ -143,6 +144,16 @@ export async function POST(req: Request) {
     let hieData: any = null;
     if (chapter === 3) {
       hieData = HypothesisIntelligenceEngine.build({
+        tceData,
+        sieData,
+        rawInput: safeBody
+      });
+    }
+
+    // Instanciar CIE únicamente para el Capítulo 3 (chapter === 4)
+    let cieData: any = null;
+    if (chapter === 4) {
+      cieData = CartographicIntelligenceEngine.build({
         tceData,
         sieData,
         rawInput: safeBody
@@ -176,7 +187,8 @@ export async function POST(req: Request) {
       analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : "",
       sieData,
       tceData,
-      hieData
+      hieData,
+      cieData
     };
 
     // 3. Obtener el prompt del capítulo específico
