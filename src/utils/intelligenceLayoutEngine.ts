@@ -468,7 +468,11 @@ export function extractSection(content: string, secNum: number): string {
       sectionLines.push(line);
     }
   }
-  return sectionLines.join("\n").trim();
+  
+  let result = sectionLines.join("\n").trim();
+  // Limpia cualquier encabezado duplicado que empiece con "## X" o "X. CAPÍTULO" o similar al principio del texto extraído
+  result = result.replace(/^\s*(?:#+\s*)?\d+\.?\s*(?:CAPÍTULO|PORTADA|EXECUTIVE|CONCLUSIONES|INTRODUCCIÓN|ANÁLISIS|EVIDENCIA|IMPLICACIÓN)[^\n]*\n?/i, "");
+  return result.trim();
 }
 
 /**
@@ -1050,41 +1054,6 @@ export const buildIntelligenceBriefing = (
     interpretation: payload.finalHypothesis
   });
 
-  // Página 4: CAPÍTULO 7 - OSINT Sintetizado (Textual)
-  pages.push({
-    id: 'page-osint',
-    title: 'CAPÍTULO 7: INTELIGENCIA OSINT',
-    mode: 'text',
-    visuals: [],
-    interpretation: payload.osintSynthesized
-  });
-
-  // Página 5: CAPÍTULO 8 - Pandillas (Textual)
-  pages.push({
-    id: 'page-pandillas',
-    title: 'CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS',
-    mode: 'text',
-    visuals: [],
-    interpretation: payload.pandillasAnalysis
-  });
-
-  // Página 6: CAPÍTULO 10 - Conclusiones Operativas
-  pages.push({
-    id: 'page-conclusions',
-    title: 'CAPÍTULO 10: CONCLUSIONES OPERATIVAS',
-    mode: 'conclusions',
-    visuals: [],
-    conclusions: [
-      ...payload.conclusiones.hallazgosCriticos.map(h => `Hallazgo Crítico: ${h}`),
-      ...payload.conclusiones.riesgosInmediatos.map(r => `Riesgo Inmediato: ${r}`),
-      ...payload.conclusiones.escenariosFuturos.map(e => `Escenario Futuro: ${e}`),
-      ...payload.conclusiones.recomendacionesTacticas.map(t => `Recomendación Táctica: ${t}`),
-      ...payload.conclusiones.recomendacionesEstrategicas.map(s => `Recomendación Estratégica: ${s}`)
-    ]
-  });
-
-  // PÁGINAS VISUALES INDEPENDIENTES
-
   // CAPÍTULO 3: Atlas Cartográfico Operativo (1 mapa por página)
   payload.maps.forEach((m, idx) => {
     pages.push({
@@ -1157,7 +1126,25 @@ export const buildIntelligenceBriefing = (
     });
   }
 
-  // CAPÍTULO 9: Hypothesis Graph (HIG 2.0)
+  // Página 8: CAPÍTULO 7 - OSINT Sintetizado (Textual)
+  pages.push({
+    id: 'page-osint',
+    title: 'CAPÍTULO 7: INTELIGENCIA OSINT',
+    mode: 'text',
+    visuals: [],
+    interpretation: payload.osintSynthesized
+  });
+
+  // Página 9: CAPÍTULO 8 - Pandillas (Textual)
+  pages.push({
+    id: 'page-pandillas',
+    title: 'CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS',
+    mode: 'text',
+    visuals: [],
+    interpretation: payload.pandillasAnalysis
+  });
+
+  // Página 10: CAPÍTULO 9: Hypothesis Graph (HIG 2.0)
   pages.push({
     id: 'page-visual-graph-hig',
     title: 'CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0',
@@ -1170,6 +1157,21 @@ export const buildIntelligenceBriefing = (
       caption: 'Mapeo interactivo de relaciones, actores, lugares y evidencias.'
     }],
     interpretation: `Lectura Operacional del Grafo HIG 2.0:\n${payload.hypothesisGraph.interpretation}`
+  });
+
+  // Página 11: CAPÍTULO 10 - Conclusiones Operativas
+  pages.push({
+    id: 'page-conclusions',
+    title: 'CAPÍTULO 10: CONCLUSIONES OPERATIVAS',
+    mode: 'conclusions',
+    visuals: [],
+    conclusions: [
+      ...payload.conclusiones.hallazgosCriticos.map(h => `Hallazgo Crítico: ${h}`),
+      ...payload.conclusiones.riesgosInmediatos.map(r => `Riesgo Inmediato: ${r}`),
+      ...payload.conclusiones.escenariosFuturos.map(e => `Escenario Futuro: ${e}`),
+      ...payload.conclusiones.recomendacionesTacticas.map(t => `Recomendación Táctica: ${t}`),
+      ...payload.conclusiones.recomendacionesEstrategicas.map(s => `Recomendación Estratégica: ${s}`)
+    ]
   });
 
   return {

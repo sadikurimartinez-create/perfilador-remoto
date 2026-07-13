@@ -190,6 +190,11 @@ export const OSINTAnalysisPrompt = (ctx: ReportContext): string => {
   const sweepSummary = ctx.sweeps && ctx.sweeps.length > 0
     ? ctx.sweeps.slice(0, 10).map(s => `- [${s.engine || s.source}]: ${(s.data || "").slice(0, 200)}`).join("\n")
     : "Sin barridos OSINT integrados en el expediente.";
+
+  const gangReportSummary = ctx.linkedGangReport
+    ? `Riesgo: ${ctx.linkedGangReport.risk_classification || "LOW"}, matched_gangs: ${JSON.stringify(ctx.linkedGangReport.matched_gangs || [])}, confidence: ${ctx.linkedGangReport.confidence_score ?? 0}`
+    : "Sin reporte de pandillas.";
+
   return `
 --- INICIO MÓDULO: INTELIGENCIA OSINT (CAPÍTULO 7) ---
 Genera el Capítulo 7: "INTELIGENCIA OSINT".
@@ -198,7 +203,14 @@ Datos de entrada OSINT: "${ctx.osintEngineData ? JSON.stringify(ctx.osintEngineD
 Barridos integrados al expediente:
 ${sweepSummary}
 
-REGLA CRÍTICA: Prohibido redactar afirmaciones abstractas. Cada conclusión debe ser inteligencia operativa verificable.
+Resultado del Barrido de Pandillas (Módulo GIS):
+${gangReportSummary}
+
+REGLA CRÍTICA DE COHERENCIA DE PANDILLAS (MÚLTIPLES BARRIDOS):
+Si el Resultado del Barrido de Pandillas indica que no hay presencia de pandillas (matched_gangs vacío, o confidencescore / confidence de 0, o riesgo LOW), queda TERMINANTEMENTE PROHIBIDO que el análisis OSINT invente, mencione o infiera la presencia, control territorial o actividad de pandillas específicas (tales como "ZKL13", "LOS 90", "La Clica Palomino Dena", "Benito Palomino Sur Gang" o cualquier otra) en el área de análisis.
+Si el barrido es negativo o de bajo riesgo, el dictamen OSINT debe ser consistente: debe limitarse a reportar la actividad de delincuencia común (robo a transeúnte, robo de vehículos, asalto peatonal) y flujos comerciales, pero SIN asociarla a pandillas u organizaciones delictivas locales. Prioriza siempre la coherencia del expediente.
+
+REGLA CRÍTICA GENERAL: Prohibido redactar afirmaciones abstractas. Cada conclusión debe ser inteligencia operativa verificable.
 
 Estructura OBLIGATORIA (usar exactamente estos encabezados):
 

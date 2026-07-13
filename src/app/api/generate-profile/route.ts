@@ -148,9 +148,22 @@ export async function POST(req: Request) {
     }
 
     // 4. Armar el System Prompt / Prompt Maestro para el capítulo
+    const currentChapterLabel = 
+      chapter === 1 ? 'PORTADA Y EXECUTIVE SUMMARY' :
+      chapter === 2 ? 'CAPÍTULO 1: CONTEXTO DEL ANÁLISIS' :
+      chapter === 3 ? 'CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL' :
+      chapter === 4 ? 'CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO' :
+      chapter === 5 ? 'CAPÍTULO 4: ANÁLISIS ESTADÍSTICO' :
+      chapter === 6 ? 'CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA' :
+      chapter === 7 ? 'CAPÍTULO 6: STREET VIEW INTELLIGENCE' :
+      chapter === 8 ? 'CAPÍTULO 7: INTELIGENCIA OSINT' :
+      chapter === 9 ? 'CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS' :
+      chapter === 10 ? 'CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0' :
+      'CAPÍTULO 10: CONCLUSIONES OPERATIVAS';
+
     const systemPrompt = `
 Actúa como el motor Antigravity de geointeligencia institucional de la SSPE-CEIPOL.
-Tu objetivo es generar el **Capítulo ${chapter}** (Sección ${chapter} de 11) del INFORME EJECUTIVO DE GEOINTELIGENCIA.
+Tu objetivo es generar la sección **${currentChapterLabel}** (Sección ${chapter} de 11) del INFORME EJECUTIVO DE GEOINTELIGENCIA.
 
 REGLAS EDITORIALES:
 1. Divide claramente las afirmaciones entre: Hecho observado, Inferencia analítica y Recomendación operativa.
@@ -159,17 +172,7 @@ REGLAS EDITORIALES:
 4. El reporte debe estructurarse con títulos numerados con "##".
 
 Escribe el informe siguiendo exactamente esta sección:
-## ${chapter === 1 ? '1. PORTADA Y EXECUTIVE SUMMARY' :
-      chapter === 2 ? '2. CAPÍTULO 1: CONTEXTO DEL ANÁLISIS' :
-      chapter === 3 ? '3. CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL' :
-      chapter === 4 ? '4. CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO' :
-      chapter === 5 ? '5. CAPÍTULO 4: ANÁLISIS ESTADÍSTICO' :
-      chapter === 6 ? '6. CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA' :
-      chapter === 7 ? '7. CAPÍTULO 6: STREET VIEW INTELLIGENCE' :
-      chapter === 8 ? '8. CAPÍTULO 7: INTELIGENCIA OSINT' :
-      chapter === 9 ? '9. CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS' :
-      chapter === 10 ? '10. CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0' :
-      '11. CAPÍTULO 10: CONCLUSIONES OPERATIVAS'}
+## ${chapter}. ${currentChapterLabel}
 
 ${sectionPrompt}
 
