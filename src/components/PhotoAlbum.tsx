@@ -1719,7 +1719,11 @@ const hasMinimumPhotos =
             ...project,
             latitude: centroidLat,
             longitude: centroidLng,
-            analysisRadius
+            analysisRadius,
+            historicalIncidents: (analysisResult as any)?.historicalCrimes || [],
+            incidents: (analysisResult as any)?.historicalCrimes || [],
+            incidenciaCompleta: (analysisResult as any)?.historicalCrimes || [],
+            incidenciaLocal: (analysisResult as any)?.historicalCrimes || []
           },
           content,
           album: photosToExportData,

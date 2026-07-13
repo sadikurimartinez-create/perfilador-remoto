@@ -189,5 +189,14 @@ export class ReportQualityGate {
     if (payload.osintSynthesized && !payload.osintSynthesized.includes("HALLAZGO")) {
       throw new Error("ReportQualityGate: El Capítulo 7 (OSINT) debe estructurarse en bloques HALLAZGO, EVIDENCIA, ANÁLISIS e IMPLICACIÓN OPERATIVA.");
     }
+
+    // 10. Cross Chapter Consistency Check (Calidad de consistencia intercapítulos)
+    const hieEvents = payload.hieData?.evidence ?? 0;
+    const cieEvents = payload.cieData?.totalEvents ?? 0;
+    const sieEvents = payload.sieData?.temporal?.totalEventos ?? 0;
+
+    if (hieEvents !== cieEvents || cieEvents !== sieEvents) {
+      throw new Error(`INCONSISTENCIA ANALÍTICA: Los capítulos utilizan diferentes bases criminales (HIE: ${hieEvents}, CIE: ${cieEvents}, SIE: ${sieEvents}).`);
+    }
   }
 }

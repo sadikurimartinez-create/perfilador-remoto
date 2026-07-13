@@ -15,6 +15,7 @@ export interface VectorEngineInput {
   sweeps: any[];
   photoCount: number;
   cieData?: any; // Objeto CIEResult del Cartographic Intelligence Engine
+  historicalIncidents?: any[];
 }
 
 export interface GeoIntLayer {
@@ -708,7 +709,7 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
   }
 
   const hotspots = input.cieData?.hotspots || [];
-  const incidents = input.incidents || [];
+  const incidents = input.historicalIncidents || input.incidents || [];
 
   // Dibujar incidentes individuales
   incidents.forEach((inc: any) => {
@@ -1002,8 +1003,9 @@ export const renderTemporalShiftChart = (input: VectorEngineInput): string => {
   ctx.font = '8px "Segoe UI", Arial, sans-serif';
   ctx.fillText('SERIE DE TIEMPO DIARIA, TENDENCIA LINEAL Y MEDIA MÓVIL (7 DÍAS)', w / 2, 48);
 
-  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
-  const recordsLength = input.incidents.length;
+  const incidents = input.historicalIncidents || input.incidents || [];
+  const stats = StatisticalIntelligenceEngine.analyze(incidents, input.latitude, input.longitude, 9999999);
+  const recordsLength = incidents.length;
 
   if (stats.temporal.totalEventos === 0) {
     ctx.fillStyle = '#be123c';
@@ -1015,7 +1017,7 @@ export const renderTemporalShiftChart = (input: VectorEngineInput): string => {
 
   // Agrupar incidentes por fecha para la serie de tiempo
   const dateCounts: Record<string, number> = {};
-  input.incidents.forEach((r: any) => {
+  incidents.forEach((r: any) => {
     const rawF = r.FECHA ?? r.fecha ?? r.Fecha ?? r.FECHA_HECHO ?? "";
     const fStr = String(rawF).split("T")[0].trim();
     if (fStr && fStr !== "undefined") {
@@ -1248,7 +1250,8 @@ export const renderCrimeTopologyChart = (input: VectorEngineInput): string => {
   ctx.font = '8px "Segoe UI", Arial, sans-serif';
   ctx.fillText('HEATMAP CRUZADO DE INCIDENCIA DELICTIVA POR DÍA DE LA SEMANA Y HORA DEL DÍA', w / 2, 48);
 
-  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
+  const incidents = input.historicalIncidents || input.incidents || [];
+  const stats = StatisticalIntelligenceEngine.analyze(incidents, input.latitude, input.longitude, 9999999);
 
   if (stats.temporal.totalEventos === 0) {
     ctx.fillStyle = '#be123c';
@@ -1261,7 +1264,7 @@ export const renderCrimeTopologyChart = (input: VectorEngineInput): string => {
   // Rejilla de 7x24
   const matrix = Array.from({ length: 7 }, () => new Array(24).fill(0));
   
-  input.incidents.forEach((r: any) => {
+  incidents.forEach((r: any) => {
     const rawFecha = r.FECHA ?? r.fecha ?? r.Fecha ?? r.FECHA_HECHO ?? "";
     const rawHora = r.HORA ?? r.hora ?? r.Hora ?? r.HORA_HECHO ?? "00:00";
     const date = new Date(String(rawFecha).split("T")[0]);
@@ -1398,7 +1401,8 @@ export const renderEnvironmentalFactorsChart = (input: VectorEngineInput): strin
   ctx.font = '8px "Segoe UI", Arial, sans-serif';
   ctx.fillText('ANÁLISIS MULTIVARIABLE DE INDICADORES CRIMINOLÓGICOS DEL FENÓMENO', w / 2, 48);
 
-  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
+  const incidents = input.historicalIncidents || input.incidents || [];
+  const stats = StatisticalIntelligenceEngine.analyze(incidents, input.latitude, input.longitude, 9999999);
 
   if (stats.temporal.totalEventos === 0) {
     ctx.fillStyle = '#be123c';
@@ -1530,7 +1534,8 @@ export const renderPredictiveLineChart = (input: VectorEngineInput): string => {
   ctx.font = '8px "Segoe UI", Arial, sans-serif';
   ctx.fillText('PROBABILIDADES MATEMÁTICAS DE REPETICIÓN E ÍNDICES DE CONFIANZA', w / 2, 48);
 
-  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
+  const incidents = input.historicalIncidents || input.incidents || [];
+  const stats = StatisticalIntelligenceEngine.analyze(incidents, input.latitude, input.longitude, 9999999);
 
   if (stats.temporal.totalEventos === 0) {
     ctx.fillStyle = '#be123c';

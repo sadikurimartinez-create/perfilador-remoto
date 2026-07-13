@@ -91,9 +91,9 @@ export async function POST(req: Request) {
     let sieData: any = null;
     let generalRisk = "MEDIO";
 
-    if (chapter === 5 || chapter === 3) {
+    if (chapter === 3 || chapter === 4 || chapter === 5) {
       sieData = StatisticalIntelligenceEngine.analyze(
-        safeBody.incidenciaCompleta || [],
+        safeBody.historicalIncidents || safeBody.incidenciaCompleta || [],
         lat,
         lng,
         radius

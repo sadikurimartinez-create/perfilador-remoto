@@ -384,6 +384,8 @@ export interface IntelligenceReportPayload {
   analysisRadius?: number;
   hieData?: HIEResult;
   cieData?: any;
+  historicalIncidents?: any[];
+  sieData?: any;
 }
 
 /**
@@ -514,7 +516,7 @@ export const buildIntelligenceEditorialPayload = async (
   const lat = project?.lat ?? project?.latitude ?? 0;
   const lng = project?.lng ?? project?.longitude ?? 0;
   const radius = project?.analysisRadius ?? project?.radius ?? 250;
-  const incidents = project?.incidents ?? project?.incidenciaCompleta ?? project?.incidenciaLocal ?? [];
+  const incidents = project?.historicalIncidents ?? project?.incidents ?? project?.incidenciaCompleta ?? project?.incidenciaLocal ?? project?.iaAnalysis?.historicalCrimes ?? [];
   const stats = StatisticalIntelligenceEngine.analyze(incidents, lat, lng, radius);
 
   let contextoTerritorial = cleanTechnicalJargon(extractSection(rawContent, 2));
@@ -549,7 +551,8 @@ export const buildIntelligenceEditorialPayload = async (
   const cieData = CartographicIntelligenceEngine.build({
     tceData,
     sieData: stats,
-    rawInput: project
+    rawInput: project,
+    historicalIncidents: incidents
   });
 
   // Bloque I.2: Hipótesis principal
@@ -1090,7 +1093,9 @@ export const buildIntelligenceEditorialPayload = async (
     graphText: cleanTechnicalJargon(rawGraphText),
     conclusionesText: formattedConclusionesText,
     hieData,
-    cieData
+    cieData,
+    historicalIncidents: incidents,
+    sieData: stats
   };
 };
 

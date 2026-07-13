@@ -2,9 +2,11 @@ export interface CIEInput {
   tceData?: any;
   sieData?: any;
   rawInput?: any;
+  historicalIncidents?: any[];
 }
 
 export interface CIEResult {
+  totalEvents: number; // Número canónico de eventos
   spatialPattern: {
     geometryType: string;
     center: { lat: number; lng: number };
@@ -123,6 +125,7 @@ export class CartographicIntelligenceEngine {
     const mapMetadata = engine.generateMapMetadata();
 
     const result: CIEResult = {
+      totalEvents: input.sieData?.temporal?.totalEventos || 0,
       spatialPattern,
       densityAnalysis,
       hotspots,
@@ -135,6 +138,12 @@ export class CartographicIntelligenceEngine {
       traceability,
       mapMetadata
     };
+
+    // FASE 5: CIE protection
+    const historicalIncidents = input.historicalIncidents || [];
+    if (historicalIncidents.length > 0 && result.densityAnalysis.totalEvents === 0) {
+      throw new Error("CIE contract violation: totalEvents is 0 but historicalIncidents has records");
+    }
 
     engine.validate(result);
     return engine.export(result);

@@ -5,6 +5,7 @@ export interface HIEInput {
 }
 
 export interface HIEResult {
+  evidence: number; // Número canónico de eventos analizados
   centralHypothesis: {
     queOcurre: string;
     dondeOcurre: string;
@@ -450,6 +451,7 @@ export class HypothesisIntelligenceEngine {
     };
 
     return {
+      evidence: sie?.temporal?.totalEventos || 0,
       centralHypothesis: {
         queOcurre,
         dondeOcurre,
