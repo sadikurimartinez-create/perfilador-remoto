@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
+import { Circle, GoogleMap, Marker, Polygon, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 export type MapViewMode = "HEATMAP" | "DENSITY" | "TOPOGRAPHY" | "MOBILITY" | "PREDICTIVE";
@@ -654,12 +654,10 @@ export function AnalysisMap({
     if (
       !isLoaded ||
       !crimesWithCoords.length ||
-      typeof window === "undefined" ||
-      !(window as any).google?.maps
+      typeof window === "undefined"
     ) {
       return [];
     }
-    const g = (window as any).google;
     
     // Construimos una cuadrícula ponderada por gravedad
     const cellSize = 0.0001;
@@ -677,7 +675,8 @@ export function AnalysisMap({
       }
     }
     return Array.from(grid.values()).map(({ lat, lng, weight }) => ({
-      location: new g.maps.LatLng(lat, lng),
+      lat,
+      lng,
       weight: Math.min(weight, 15), 
     }));
   }, [crimesWithCoords, isLoaded]);
@@ -1549,23 +1548,53 @@ export function AnalysisMap({
             );
           })}
 
-          {/* CAPA DE CALOR (Ocultable por toggle) */}
+          {/* CAPA DE CALOR (Simulada con Círculos Concavoconvexos de Kernel Density debido a la descontinuación de HeatmapLayer en la API de Google Maps) */}
           {viewMode === "DENSITY" && activeLayers.heatmap && heatmapCrimeData.length > 0 && (
-            <HeatmapLayer
-              data={heatmapCrimeData}
-              options={{
-                radius: 40,
-                dissipating: true,
-                opacity: heatmapOpacity,
-                gradient: [
-                  "rgba(16,185,129,0)",     // Verde Esmeralda (Bajo)
-                  "rgba(16,185,129,0.35)",
-                  "rgba(234,179,8,0.55)",   // Amarillo (Medio)
-                  "rgba(249,115,22,0.75)",  // Naranja (Alto)
-                  "rgba(220,38,38,1)",      // Rojo (Crítico)
-                ],
-              }}
-            />
+            <>
+              {heatmapCrimeData.map((pt, idx) => {
+                let color = "#10b981"; // Verde Esmeralda (Bajo)
+                if (pt.weight >= 12) {
+                  color = "#be123c"; // Rojo Carmesí (Crítico)
+                } else if (pt.weight >= 8) {
+                  color = "#f97316"; // Naranja (Alto)
+                } else if (pt.weight >= 4) {
+                  color = "#eab308"; // Amarillo (Medio)
+                }
+                
+                const baseOpacity = heatmapOpacity;
+                
+                return (
+                  <Fragment key={`heatmap-cluster-${idx}`}>
+                    {/* Halo de dispersión exterior */}
+                    <Circle
+                      center={{ lat: pt.lat, lng: pt.lng }}
+                      radius={60 + pt.weight * 14}
+                      options={{
+                        fillColor: color,
+                        fillOpacity: baseOpacity * 0.22,
+                        strokeColor: color,
+                        strokeOpacity: 0,
+                        strokeWeight: 0,
+                        clickable: false,
+                      }}
+                    />
+                    {/* Núcleo del hotspot */}
+                    <Circle
+                      center={{ lat: pt.lat, lng: pt.lng }}
+                      radius={20 + pt.weight * 6}
+                      options={{
+                        fillColor: color,
+                        fillOpacity: baseOpacity * 0.65,
+                        strokeColor: color,
+                        strokeOpacity: 0.1,
+                        strokeWeight: 0.5,
+                        clickable: false,
+                      }}
+                    />
+                  </Fragment>
+                );
+              })}
+            </>
           )}
         </GoogleMap>
       </div>

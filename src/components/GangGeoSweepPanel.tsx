@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { GoogleMap, Marker, Circle, Polyline, HeatmapLayer, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
+import { GoogleMap, Marker, Circle, Polyline, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
 import { GangGeoSweepEngine, GangSweepResult, getHaversineDistance } from "@/lib/providers/gangGeoSweepEngine";
 import { PandillasService } from "@/modules/pandillas/pandillas.service";
 import { getDb } from "@/lib/firebase";
