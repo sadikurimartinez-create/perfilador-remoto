@@ -2,6 +2,7 @@ import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
 import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import { StatisticalIntelligenceEngine } from './statisticalIntelligenceEngine';
+import { TCE_DEFAULT_FALLBACK } from './territorialContextEngine';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -514,7 +515,7 @@ export const buildIntelligenceEditorialPayload = async (
 
   let contextoTerritorial = cleanTechnicalJargon(extractSection(rawContent, 2));
   if (!contextoTerritorial || contextoTerritorial.length < 10) {
-    contextoTerritorial = `El polígono bajo análisis ${projectName} se sitúa en un sector de alta movilidad urbana con una población flotante estimada en horarios comerciales de tercer turno. Se caracteriza por un diseño de infraestructura con cerramientos deficientes y predios baldíos. Los factores criminógenos de oportunidad identificados corresponden a la pérdida de vigilancia natural debido al abandono del espacio público.`;
+    contextoTerritorial = TCE_DEFAULT_FALLBACK;
   }
 
   // Bloque I.2: Hipótesis principal

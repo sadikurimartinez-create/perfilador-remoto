@@ -16,6 +16,7 @@ import {
   OperationalConclusionPrompt
 } from "@/prompts/reportEnginePrompts";
 import { StatisticalIntelligenceEngine } from "@/utils/statisticalIntelligenceEngine";
+import { TerritorialContextEngine } from "@/utils/territorialContextEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -84,24 +85,57 @@ export async function POST(req: Request) {
     const lat = parseFloat(String(safeBody.lat ?? safeBody.latitude ?? "0"));
     const lng = parseFloat(String(safeBody.lng ?? safeBody.longitude ?? "0"));
 
-    // Calcular SIE
-    const sieData = StatisticalIntelligenceEngine.analyze(
-      safeBody.incidenciaCompleta || [],
-      lat,
-      lng,
-      radius
-    );
-
-    // 1. Deducir riesgo general a nivel de código basado en el riesgo territorial del SIE
+    // Optimización: Calcular SIE solo si se genera el Capítulo 4 (chapter === 5)
+    let sieData: any = null;
     let generalRisk = "MEDIO";
-    if (sieData.predictivo.indiceRiesgoTerritorial >= 75) {
-      generalRisk = "CRÍTICO";
-    } else if (sieData.predictivo.indiceRiesgoTerritorial >= 50) {
-      generalRisk = "ALTO";
-    } else if (sieData.predictivo.indiceRiesgoTerritorial >= 20) {
-      generalRisk = "MEDIO";
+
+    if (chapter === 5) {
+      sieData = StatisticalIntelligenceEngine.analyze(
+        safeBody.incidenciaCompleta || [],
+        lat,
+        lng,
+        radius
+      );
+      if (sieData.predictivo.indiceRiesgoTerritorial >= 75) {
+        generalRisk = "CRÍTICO";
+      } else if (sieData.predictivo.indiceRiesgoTerritorial >= 50) {
+        generalRisk = "ALTO";
+      } else if (sieData.predictivo.indiceRiesgoTerritorial >= 20) {
+        generalRisk = "MEDIO";
+      } else {
+        generalRisk = "BAJO";
+      }
     } else {
-      generalRisk = "BAJO";
+      // Estimación liviana basada en total de incidentes para otros capítulos
+      const incCount = safeBody.incidenciaCompleta?.length || 0;
+      if (incCount >= 20) {
+        generalRisk = "CRÍTICO";
+      } else if (incCount >= 10) {
+        generalRisk = "ALTO";
+      } else if (incCount >= 3) {
+        generalRisk = "MEDIO";
+      } else {
+        generalRisk = "BAJO";
+      }
+    }
+
+    // Instanciar TCE solo para el Capítulo 1 (chapter === 2)
+    let tceData: any = null;
+    if (chapter === 2) {
+      tceData = TerritorialContextEngine.generate({
+        projectName,
+        projectId,
+        projectDescription,
+        analysisRadius: radius,
+        geometryType: geometry,
+        lat,
+        lng,
+        incidenciaCompleta: safeBody.incidenciaCompleta,
+        streetViews: safeBody.streetViews,
+        datosGobMxData: safeBody.datosGobMxData,
+        sweeps: safeBody.sweeps,
+        analysisContext: safeBody.analysisContext
+      });
     }
 
     // 2. Construir el contexto simplificado para los prompts modulares
@@ -129,7 +163,8 @@ export async function POST(req: Request) {
       sweepsComments: typeof safeBody.sweepsComments === "string" ? safeBody.sweepsComments.slice(0, 500) : "",
       photos: safeBody.photos ? safeBody.photos.slice(0, 5).map((p: any) => ({ ...p, dataUrl: "" })) : [],
       analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : "",
-      sieData
+      sieData,
+      tceData
     };
 
     // 3. Obtener el prompt del capítulo específico
@@ -226,7 +261,8 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           pois: [],
           inegiDemographics: null,
           tacticalStreetViews: safeBody.streetViews || [],
-          sieData: sieData
+          sieData: sieData,
+          tceData: tceData
         });
         
         // Enviar el inicio del JSON (el navegador tolera el espacio en blanco inicial)

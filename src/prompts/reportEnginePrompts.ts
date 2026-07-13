@@ -17,6 +17,7 @@ export interface ReportContext {
   photos?: any[];
   analysisContext?: string;
   sieData?: any;
+  tceData?: any;
 }
 
 /**
@@ -47,22 +48,36 @@ Reglas:
  * 2. CAPÍTULO 1: CONTEXTO DEL ANÁLISIS
  */
 export const TerritorialAnalysisPrompt = (ctx: ReportContext): string => {
+  const tceJson = ctx.tceData ? JSON.stringify(ctx.tceData, null, 2) : "Sin datos procesados por el motor de contexto territorial TCE.";
   return `
 --- INICIO MÓDULO: CONTEXTO DEL ANÁLISIS (CAPÍTULO 1) ---
 Genera el Capítulo 1: "CONTEXTO DEL ANÁLISIS".
-Ubicación: ${ctx.projectDescription}
-Radio: ${ctx.analysisRadius} metros
-Polígono: ${ctx.geometryType}
 
-Instrucciones:
-- Explica claramente:
-  1. Motivo del análisis.
-  2. Alcance territorial.
-  3. Metodología utilizada.
-  4. Fuentes integradas.
-- Prohibido repetir explicaciones institucionales introductorias genéricas.
-- Sé directo y evita narrativas de relleno.
-- Tono estrictamente formal y depurado.
+JSON de Datos del Territorial Context Engine (TCE):
+\`\`\`json
+${tceJson}
+\`\`\`
+
+REGLAS DE GENERACIÓN DE TEXTO:
+1. Queda TERMINANTEMENTE PROHIBIDO inventar la motivación de la investigación, el alcance territorial, la metodología o las fuentes de información. Todo debe provenir de los datos del JSON.
+2. Si algún bloque o variable del JSON indica que un dato no está disponible o tiene baja disponibilidad, deberás escribir explícitamente "Información no disponible" en el subapartado correspondiente, sin rellenarlo con especulaciones.
+3. El dictamen debe estructurarse obligatoriamente con los siguientes 4 apartados numerados:
+
+2.1 Motivo del análisis.
+- Sintetizar la motivación real de la investigación a partir del campo "executiveSummary.motivoAnalisis".
+
+2.2 Alcance territorial.
+- Describir con precisión matemática los límites geográficos: latitud, longitud, radio del buffer en metros, tipo de geometría, superficie aproximada en metros cuadrados y perímetro en metros calculados en "territorialContext".
+- Mencionar los indicadores y vulnerabilidades físicas/urbanas descritas en "urbanContext" y "demographicContext" (si están disponibles).
+
+2.3 Metodología utilizada.
+- Detallar las fases metodológicas institucionales descritas en "methodologicalContext.stages".
+
+2.4 Fuentes integradas.
+- Listar y justificar formalmente cada una de las fuentes activas reportadas en "sources.list".
+
+REGLAS EDITORIALES:
+- Sé directo, formal e institucional. Evita narrativas genéricas introductorias y explicaciones de relleno.
 --- FIN MÓDULO ---
 `.trim();
 };

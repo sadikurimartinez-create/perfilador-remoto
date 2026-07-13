@@ -28,6 +28,7 @@ import {
   WidthType,
 } from "docx";
 import { saveAs } from "file-saver";
+import { TCE_DEFAULT_FALLBACK } from "../utils/territorialContextEngine";
 
 async function fetchLocalImageBuffer(path: string): Promise<ArrayBuffer | null> {
   try {
@@ -188,7 +189,7 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
     { key: "conclusionesText", name: "Capítulo 10" }
   ];
   const defaultChapterFallbacks: Record<string, string> = {
-    contextoTerritorial: "El polígono bajo análisis se sitúa en un sector de alta movilidad urbana con una población flotante estimada en horarios comerciales de tercer turno. Se caracteriza por un diseño de infraestructura con cerramientos deficientes y predios baldíos. Los factores criminógenos de oportunidad identificados corresponden a la pérdida de vigilancia natural debido al abandono del espacio público.",
+    contextoTerritorial: TCE_DEFAULT_FALLBACK,
     finalHypothesis: "Se hipotetiza un patrón delictivo recurrente facilitado por la vulnerabilidad física del entorno urbano (falta de luminarias y presencia de lotes baldíos), que favorece la oportunidad para conductas antisociales.",
     mapsText: "El análisis cartográfico vectorial revela puntos de interés crítico y zonas calientes con radios de influencia concéntricos donde convergen factores de riesgo físico y social.",
     statsText: "El análisis estadístico espacial muestra una concentración delictiva focalizada, registrando correlaciones significativas entre el desorden urbano y la incidencia delictiva perimetral.",
