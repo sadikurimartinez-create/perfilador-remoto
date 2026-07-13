@@ -12,8 +12,10 @@ const nextConfig = {
     outputFileTracingIncludes: {
       '/api/**/*': [
         'Incidencia Delictiva/**/*',
+        'Historial SHAPES/**/*',
         'Bibliografía/**/*',
-        'Bibliografia/**/*'
+        'Bibliografia/**/*',
+        'INVENTARIO PANDILLAS.xlsx'
       ]
     }
   }
