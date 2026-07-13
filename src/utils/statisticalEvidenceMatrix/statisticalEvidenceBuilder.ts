@@ -135,7 +135,9 @@ export class StatisticalEvidenceBuilder {
         sieVersion: sieResult.metadata.engineVersion,
         semVersion: "1.0", // Versión propia del componente (Ajuste 4)
         totalCanonicalIncidents: totalEvents,
-        analysisRadiusMeters: radius
+        analysisRadiusMeters: radius,
+        centerLat,
+        centerLng
       },
       
       criminalEvidence: {

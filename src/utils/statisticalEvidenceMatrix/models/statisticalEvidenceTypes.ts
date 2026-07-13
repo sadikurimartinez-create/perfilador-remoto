@@ -8,6 +8,8 @@ export interface StatisticalEvidenceMatrix {
     semVersion: string;
     totalCanonicalIncidents: number;
     analysisRadiusMeters: number;
+    centerLat: number;
+    centerLng: number;
   };
   
   criminalEvidence: {
