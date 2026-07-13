@@ -106,15 +106,27 @@ REGLAS DE GENERACIÓN DE TEXTO:
 ## Hipótesis:
 - Redactar de forma fluida y coherente la síntesis de la hipótesis del campo "centralHypothesis.summary". Debe ser un párrafo formal de tono técnico-institucional.
 
-## Evidencia que la soporta:
-- Listar los elementos de soporte y su peso técnico reportados en el arreglo "supportingEvidence".
-- Indicar las fuentes y motores indicados en "traceability".
+## Matriz de Evidencia:
+- Clasificar y listar ordenadamente los elementos de soporte con su peso técnico reportados en el JSON:
+  - **Evidencia Territorial**: Listar ítems de "territorialEvidence".
+  - **Evidencia Criminal**: Listar ítems de "criminalEvidence".
+  - **Evidencia Ambiental**: Listar ítems de "environmentalEvidence".
+  - **Evidencia Urbana**: Listar ítems de "urbanEvidence".
+  - **Evidencia OSINT**: Listar ítems de "osintEvidence".
+
+## Matriz de Trazabilidad:
+- Listar los orígenes de datos, motores, variables y fechas reportados en "traceability".
 
 ## Nivel de confianza:
 - Especificar el nivel de confianza cuantitativo y cualitativo según el campo "confidence" (ej: "Confianza: ALTO (Score: 75/100). Descripción: ...").
+- Detallar los factores cuantitativos: calidad de la evidencia (qualityScore), cantidad de la evidencia (quantityScore), convergencia (convergenceScore), y consistencia (consistencyScore) reportados en "confidenceFactors".
 
-## Factores que podrían modificarla:
-- Detallar las acciones de verificación recomendadas a partir de "recommendedVerificationActions" y listar cualquier evidencia ausente reportada en "missingEvidence".
+## Matriz de Evidencia Contradictoria y Faltante:
+- Listar los elementos que debilitan la hipótesis reportados en "contradictoryEvidence" (si existen).
+- Listar la información faltante reportada en "missingEvidence" que ayudaría a incrementar el nivel de confianza.
+
+## Recomendaciones de Verificación:
+- Detallar las acciones de verificación recomendadas a partir de "recommendedVerificationActions".
 
 REGLAS EDITORIALES:
 - Sé directo, depurado e institucional. Evita narrativas genéricas introductorias y explicaciones de relleno.

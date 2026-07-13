@@ -50,7 +50,6 @@ export interface HIEResult {
   };
 }
 
-
 export class HypothesisIntelligenceEngine {
   /**
    * Construye la hipótesis criminológica estructurada y calcula el índice de confianza (HIE)
@@ -58,6 +57,7 @@ export class HypothesisIntelligenceEngine {
   public static build(input: HIEInput): HIEResult {
     const tce = input.tceData || {};
     const sie = input.sieData || {};
+    const rawInput = input.rawInput || {};
 
     const supportingEvidence: { component: string; description: string; weight: number }[] = [];
     const territorialEvidence: { component: string; description: string; weight: number }[] = [];
@@ -70,197 +70,280 @@ export class HypothesisIntelligenceEngine {
     const recommendedVerificationActions: string[] = [];
     const dateStr = new Date().toLocaleDateString("es-MX");
 
-    // 1. Módulo 1: Territorial Evidence Engine (TCE)
+    // ==========================================
+    // MÓDULO 1: Territorial Evidence Engine (TCE)
+    // ==========================================
     const tContext = tce.territorialContext || {};
     const instContext = tce.institutionalContext || {};
     let territorialScore = 0;
+
     if (tContext.latitude && tContext.longitude && tContext.radiusMetros) {
-      supportingEvidence.push({
-      component: "Territorial",
-      description: `Delimitación perimetral de tipo ${tContext.geometryType} con un radio táctico de ${tContext.radiusMetros} metros.`,
-      weight: 10
-    });
-    territorialEvidence.push({
-      component: "Territorial",
-      description: `Delimitación perimetral de tipo ${tContext.geometryType} con un radio táctico de ${tContext.radiusMetros} metros.`,
-      weight: 10
-    });
-    territorialScore = 10;
+      const description = `Delimitación perimetral de tipo ${tContext.geometryType || "individual"} con un radio táctico de ${tContext.radiusMetros} metros con centro en (${tContext.latitude}, ${tContext.longitude}).`;
+      const item = {
+        component: "Territorial",
+        description,
+        weight: 10
+      };
+      supportingEvidence.push(item);
+      territorialEvidence.push(item);
+      territorialScore = 10;
     } else {
       missingEvidence.push("Falta delimitar las coordenadas geográficas de origen del buffer.");
+      territorialScore = 0;
     }
 
-    // 2. Módulo 2: Criminal Evidence Engine (SIE)
-    let criminalScore = 0;
+    // ==========================================
+    // MÓDULO 2: Criminal Evidence Engine (SIE)
+    // ==========================================
     const temporal = sie.temporal || {};
     const espacial = sie.espacial || {};
     const crimIndicadores = sie.criminologico?.indicadores || {};
-    
-    const hasSieData = temporal.totalEventos > 0;
+    const predictivo = sie.predictivo || {};
+    let criminalScore = 0;
+
+    const hasSieData = typeof temporal.totalEventos === "number" && temporal.totalEventos > 0;
     if (hasSieData) {
-      supportingEvidence.push({
-      component: "Incidencia Criminal (SIE)",
-      description: `Concentración delictiva de ${temporal.totalEventos} incidentes históricos en el área.`,
-      weight: 15
-    });
-    criminalEvidence.push({
-      component: "Incidencia Criminal (SIE)",
-      description: `Concentración delictiva de ${temporal.totalEventos} incidentes históricos en el área.`,
-      weight: 15
-    });
-    supportingEvidence.push({
-      component: "Concentración Espacial (SIE)",
-      description: `Identificación de ${espacial.hotspotsCount || 1} hotspot(s) activos de concentración espacial.`,
-      weight: 10
-    });
-    criminalEvidence.push({
-      component: "Concentración Espacial (SIE)",
-      description: `Identificación de ${espacial.hotspotsCount || 1} hotspot(s) activos de concentración espacial.`,
-      weight: 10
-    });
-    supportingEvidence.push({
-      component: "Especialización Criminológica (SIE)",
-      description: `Índice de persistencia delictiva evaluado en ${crimIndicadores.persistencia || 50}% y especialización de ${crimIndicadores.especializacion || 0}%.`,
-      weight: 10
-    });
-    criminalEvidence.push({
-      component: "Especialización Criminológica (SIE)",
-      description: `Índice de persistencia delictiva evaluado en ${crimIndicadores.persistencia || 50}% y especialización de ${crimIndicadores.especializacion || 0}%.`,
-      weight: 10
-    });
+      // 1. Volumen de Incidencia
+      const volItem = {
+        component: "Incidencia Criminal (SIE)",
+        description: `Volumen de incidencia criminal histórica de ${temporal.totalEventos} incidentes registrados en el radio táctico.`,
+        weight: 15
+      };
+      supportingEvidence.push(volItem);
+      criminalEvidence.push(volItem);
+
+      // 2. Concentración Espacial
+      const spaceItem = {
+        component: "Concentración Espacial (SIE)",
+        description: `Concentración espacial identificada en ${espacial.hotspotsCount || 1} hotspot(s) activos, con una desviación estándar espacial de ${Math.round(espacial.desviacionEstandarEspacialMetros || 0)} metros.`,
+        weight: 10
+      };
+      supportingEvidence.push(spaceItem);
+      criminalEvidence.push(spaceItem);
+
+      // 3. Persistencia y Especialización
+      const persistItem = {
+        component: "Especialización Criminológica (SIE)",
+        description: `Persistencia delictiva evaluada en ${crimIndicadores.persistencia || 50}% y especialización de tipo ${crimIndicadores.especializacion || 0}% de Shannon.`,
+        weight: 10
+      };
+      supportingEvidence.push(persistItem);
+      criminalEvidence.push(persistItem);
+
       criminalScore = 35;
     } else {
-      missingEvidence.push("Base de datos de incidencia delictiva local.");
-      contradictoryEvidence.push("Inexistencia de reportes policiales históricos cargados en el radio de interés.");
+      missingEvidence.push("Datos históricos de incidencia delictiva para el análisis espacio-temporal.");
+      contradictoryEvidence.push("No se registran eventos criminales históricos dentro del radio de análisis.");
+      criminalScore = 0;
     }
 
-    // 3. Módulo 3: Environmental Evidence Engine
+    // ==========================================
+    // MÓDULO 3: Environmental Evidence Engine
+    // ==========================================
     const urban = tce.urbanContext || {};
+    const photos = rawInput.photos || [];
+    const sweeps = rawInput.sweeps || [];
+    const rawStreetViews = rawInput.streetViews || [];
+    const vulnerabilities: string[] = [];
+
+    if (Array.isArray(urban.vulnerabilitiesDetected)) {
+      vulnerabilities.push(...urban.vulnerabilitiesDetected);
+    }
+    if (Array.isArray(photos)) {
+      photos.forEach((p: any) => {
+        if (p.comentario) vulnerabilities.push(p.comentario);
+      });
+    }
+    if (Array.isArray(rawStreetViews)) {
+      rawStreetViews.forEach((sv: any) => {
+        const desc = sv.observed || sv.comentario || sv.description || sv.observacion;
+        if (desc) vulnerabilities.push(desc);
+      });
+    }
+
     let environmentalScore = 0;
-    const totalVulnerabilities = Array.isArray(urban.vulnerabilitiesDetected) ? urban.vulnerabilitiesDetected.length : 0;
-    
-    if (urban.streetViewsCount > 0 && totalVulnerabilities > 0) {
-      supportingEvidence.push({
-      component: "Vulnerabilidades Urbanas (TCE/Street View)",
-      description: `Identificación de ${totalVulnerabilities} facilitadores físicos del entorno (baldíos, deficiencia de iluminación).`,
-      weight: 15
+    const detectedFactors: { category: string; description: string; weight: number }[] = [];
+
+    const hasPhotosOrStreetViews = rawStreetViews.length > 0 || photos.length > 0;
+    if (hasPhotosOrStreetViews) {
+      detectedFactors.push({
+        category: "Auditoría Visual",
+        description: `Presencia de ${rawStreetViews.length} capturas de Street View y ${photos.length} registros fotográficos de campo.`,
+        weight: 10
+      });
+      environmentalScore += 10;
+    }
+
+    // Clasificar factores específicos por palabras clave
+    const categoriesList = [
+      { key: "Iluminación", keywords: ["iluminación", "luz", "luminaria", "obscur", "oscur", "noche", "farol", "lámpara"], label: "Iluminación Deficiente", desc: "Presencia de zonas con baja iluminación pública o luminarias inactivas que facilitan el acecho." },
+      { key: "Vegetación", keywords: ["vegetación", "maleza", "hierba", "árbol", "arbusto", "limpieza", "poda", "ramas"], label: "Exceso de Vegetación", desc: "Malezas u obstáculos forestales que reducen la visibilidad y la vigilancia natural del entorno." },
+      { key: "Predios", keywords: ["baldío", "predio", "terreno", "abandonado", "desocupado", "inmueble", "finca", "casa abandonada"], label: "Predios de Riesgo", desc: "Presencia de lotes baldíos, fincas abandonadas o predios sin delimitación perimetral." },
+      { key: "Ocultamiento", keywords: ["ocultamiento", "acecho", "punto ciego", "escondite", "cámara", "esconder"], label: "Puntos de Ocultamiento", desc: "Zonas ciegas o barreras físicas que facilitan el ocultamiento de agresores y dificultan la vigilancia." },
+      { key: "Movilidad", keywords: ["movilidad", "huida", "escape", "callejón", "vía", "tránsito", "ruta", "peatonal"], label: "Vías de Escape", desc: "Corredores de escape rápido y callejones interconectados que facilitan la huida rápida de agresores." },
+      { key: "Infraestructura", keywords: ["infraestructura", "barda", "malla", "cerca", "reja", "deterioro", "pavimento", "grafiti", "banqueta"], label: "Deficiencias de Infraestructura", desc: "Falta de cercamientos adecuados, bardas caídas o deterioro severo del mobiliario urbano." }
+    ];
+
+    const matchedKeys = new Set<string>();
+    vulnerabilities.forEach(v => {
+      const vLower = v.toLowerCase();
+      categoriesList.forEach(cat => {
+        if (cat.keywords.some(kw => vLower.includes(kw))) {
+          matchedKeys.add(cat.key);
+        }
+      });
     });
-    environmentalEvidence.push({
-      component: "Vulnerabilidades Urbanas (TCE/Street View)",
-      description: `Identificación de ${totalVulnerabilities} facilitadores físicos del entorno (baldíos, deficiencia de iluminación).`,
-      weight: 15
+
+    const categoryWeight = matchedKeys.size > 0 ? Math.min(5, Math.floor(15 / matchedKeys.size)) : 0;
+    let factorPoints = 0;
+
+    categoriesList.forEach(cat => {
+      if (matchedKeys.has(cat.key) && factorPoints < 15) {
+        const pts = Math.min(5, 15 - factorPoints);
+        detectedFactors.push({
+          category: cat.label,
+          description: cat.desc,
+          weight: pts
+        });
+        factorPoints += pts;
+      }
     });
-    supportingEvidence.push({
-      component: "Indicadores de Oportunidad",
-      description: `Evidencia física de pérdida de vigilancia natural confirmada por Street View.`,
-      weight: 10
-    });
-    environmentalEvidence.push({
-      component: "Indicadores de Oportunidad",
-      description: `Evidencia física de pérdida de vigilancia natural confirmada por Street View.`,
-      weight: 10
-    });
-    environmentalScore = 25;
+
+    environmentalScore += factorPoints;
+
+    if (environmentalScore > 0) {
+      detectedFactors.forEach(f => {
+        const item = {
+          component: `Ambiental - ${f.category}`,
+          description: f.description,
+          weight: f.weight
+        };
+        supportingEvidence.push(item);
+        environmentalEvidence.push(item);
+      });
     } else {
       missingEvidence.push("Evidencia fotográfica in-situ o análisis de Street View del entorno.");
       contradictoryEvidence.push("No se registraron vulnerabilidades de infraestructura física en el cuadrante.");
+      environmentalScore = 0;
     }
 
-    // 4. Módulo 4: Urban Evidence Engine
+    // ==========================================
+    // MÓDULO 4: Urban Evidence Engine
+    // ==========================================
     const commercial = tce.commercialContext || {};
     const demographic = tce.demographicContext || {};
     let urbanScore = 0;
-    
+
     if (commercial.hasCommercialData && commercial.atractoresComercialesCount > 0) {
-      supportingEvidence.push({
-      component: "Atractores de Oportunidad (DENUE)",
-      description: `Presencia comercial activa con ${commercial.atractoresComercialesCount} establecimientos (ej: ${commercial.atractoresTipos.join(", ")}).`,
-      weight: 10
-    });
-    urbanEvidence.push({
-      component: "Atractores de Oportunidad (DENUE)",
-      description: `Presencia comercial activa con ${commercial.atractoresComercialesCount} establecimientos (ej: ${commercial.atractoresTipos.join(", ")}).`,
-      weight: 10
-    });
-    urbanScore += 10;
+      const item = {
+        component: "Atractores de Oportunidad (DENUE)",
+        description: `Presencia comercial activa de ${commercial.atractoresComercialesCount} establecimientos (ej: ${commercial.atractoresTipos.slice(0, 3).join(", ")}).`,
+        weight: 10
+      };
+      supportingEvidence.push(item);
+      urbanEvidence.push(item);
+      urbanScore += 10;
     } else {
       missingEvidence.push("Datos de actividad comercial municipal (DENUE).");
     }
 
     if (demographic.hasDemographics) {
-      supportingEvidence.push({
-      component: "Entorno Demográfico (SCINCE)",
-      description: `Dinámica de densidad habitacional: ${demographic.demographicsSummary}`,
-      weight: 5
-    });
-    urbanEvidence.push({
-      component: "Entorno Demográfico (SCINCE)",
-      description: `Dinámica de densidad habitacional: ${demographic.demographicsSummary}`,
-      weight: 5
-    });
-    urbanScore += 5;
+      const item = {
+        component: "Entorno Demográfico (SCINCE)",
+        description: `Dinámica de densidad habitacional y residencial en el radio de interés: ${demographic.demographicsSummary}`,
+        weight: 5
+      };
+      supportingEvidence.push(item);
+      urbanEvidence.push(item);
+      urbanScore += 5;
     } else {
       missingEvidence.push("Datos censales y demográficos locales (SCINCE).");
     }
 
-    // 5. Módulo 5: OSINT Evidence Engine
+    // ==========================================
+    // MÓDULO 5: OSINT Evidence Engine
+    // ==========================================
     let osintScore = 0;
-    const hasSweeps = Array.isArray(tce.sources?.list) && tce.sources.list.some((s: any) => s.name.includes("Barrido") || s.name.includes("OSINT"));
+    const hasSweeps = Array.isArray(sweeps) && sweeps.length > 0;
+    const linkedGangReport = rawInput.linkedGangReport || tce.linkedGangReport || null;
+
     if (hasSweeps) {
-      supportingEvidence.push({
-      component: "Inteligencia Social (OSINT/Sweeps)",
-      description: "Monitoreo social y barridos tácticos integrados al expediente.",
-      weight: 15
-    });
-    osintEvidence.push({
-      component: "Inteligencia Social (OSINT/Sweeps)",
-      description: "Monitoreo social y barridos tácticos integrados al expediente.",
-      weight: 15
-    });
-    osintScore = 15;
+      const item = {
+        component: "Inteligencia Social (OSINT/Sweeps)",
+        description: `Monitoreo social y barridos tácticos de conflictividad pública en fuentes abiertas (${sweeps.length} barridos).`,
+        weight: 10
+      };
+      supportingEvidence.push(item);
+      osintEvidence.push(item);
+      osintScore += 10;
     } else {
       missingEvidence.push("Censo social de pandillas, conflictividad u OSINT local.");
     }
 
-    // 6. Módulo 6: Evidence Weighting Engine & Matriz de Confianza
+    if (linkedGangReport && Array.isArray(linkedGangReport.matched_gangs) && linkedGangReport.matched_gangs.length > 0 && (linkedGangReport.confidence_score || linkedGangReport.confidence) > 0) {
+      const confidenceVal = linkedGangReport.confidence_score || linkedGangReport.confidence || 50;
+      const item = {
+        component: "Actores Territoriales (Pandillas)",
+        description: `Presencia territorial activa y vinculación delictiva confirmada de pandillas locales (${linkedGangReport.matched_gangs.join(", ")}) con confianza de ${confidenceVal}%.`,
+        weight: 5
+      };
+      supportingEvidence.push(item);
+      osintEvidence.push(item);
+      osintScore += 5;
+    } else if (linkedGangReport) {
+      contradictoryEvidence.push("El barrido de pandillas en el cuadrante no registró agrupaciones activas georreferenciadas.");
+    }
+
+    // ==========================================
+    // MÓDULO 6: Evidence Weighting Engine & Confianza
+    // ==========================================
     const confidenceScore = territorialScore + criminalScore + environmentalScore + urbanScore + osintScore; // Máximo 100
-    
+
     let confidenceLevel = "BAJO";
     let confidenceDescription = "Evidencia insuficiente o dispersa. La hipótesis no puede ser validada científicamente.";
-    
+
     if (confidenceScore >= 80) {
       confidenceLevel = "CRÍTICO";
       confidenceDescription = "Convergencia total de evidencia delictiva, ambiental, urbana y OSINT. Nivel de certeza científica muy alto.";
     } else if (confidenceScore >= 60) {
       confidenceLevel = "ALTO";
-      confidenceDescription = "Consistencia de evidencia delictiva y ambiental. Suficiente para sustentar patrullaje focalizado y medidas CPTED.";
+      confidenceDescription = "Consistencia de evidencia delictiva y ambiental. Suficiente para sustentar patrullaje focalizado y medidas de prevención situacional CPTED.";
     } else if (confidenceScore >= 35) {
       confidenceLevel = "MEDIO";
-      confidenceDescription = "Presencia de indicios delictivos básicos y descripción perimetral, pero con vacíos en la evidencia de campo o comercial.";
+      confidenceDescription = "Presencia de indicios delictivos básicos y delimitación perimetral, pero con vacíos en la evidencia de campo o comercial.";
     }
 
-    // Calcular sub-scores detallados para la visualización del radar o índices
-    const qualityScore = Math.round((environmentalScore / 25) * 100);
+    // Calcular factores de confianza cuantitativos
+    const qualityScore = Math.round(((environmentalScore + urbanScore) / 40) * 100);
     const quantityScore = Math.round((criminalScore / 35) * 100);
-    const convergenceScore = Math.round((urbanScore / 15) * 100);
+    
+    // Contar cuántos de los 5 motores/componentes aportaron evidencia
+    let activeComponentsCount = 0;
+    if (territorialScore > 0) activeComponentsCount++;
+    if (criminalScore > 0) activeComponentsCount++;
+    if (environmentalScore > 0) activeComponentsCount++;
+    if (urbanScore > 0) activeComponentsCount++;
+    if (osintScore > 0) activeComponentsCount++;
+    
+    const convergenceScore = activeComponentsCount * 20;
     const consistencyScore = Math.round((confidenceScore / 100) * 100);
 
-    // 7. Módulo 7: Hypothesis Builder
-    // Determinar si la evidencia es suficiente
-    const hasSufficientEvidence = confidenceScore >= 35; // Umbral de suficiencia metodológica
-    
+    // ==========================================
+    // MÓDULO 7: Hypothesis Builder
+    // ==========================================
+    const hasSufficientEvidence = confidenceScore >= 35;
     let queOcurre = "Información no disponible";
     let dondeOcurre = "Información no disponible";
     let porQueOcurre = "Información no disponible";
     let summary = "Evidencia insuficiente para construir una hipótesis criminológica ambiental con respaldo metodológico.";
 
     if (hasSufficientEvidence) {
-      const typeDelito = sie.criminologico?.indicadores?.especializacion > 50 
-        ? `conductas focalizadas de ${sie.temporal.primaryCrimeType || tce.criminalContext.primaryCrimeType}`
+      const typeDelito = (crimIndicadores.especializacion || 0) > 50 
+        ? `conductas focalizadas de ${temporal.primaryCrimeType || tContext.primaryCrimeType || "delitos de alto impacto"}`
         : "conductas delictivas de oportunidad multivariable";
 
-      const timePeak = sie.temporal?.ventanaOportunidad || tce.criminalContext.temporalPeak;
-      const countDelitos = sie.temporal?.totalEventos || tce.criminalContext.totalIncidents;
+      const timePeak = temporal.ventanaOportunidad || tContext.temporalPeak || "horarios nocturnos de oportunidad";
+      const countDelitos = temporal.totalEventos || 0;
 
       queOcurre = `Se hipotetiza un fenómeno recurrente de ${typeDelito} con un acumulado de ${countDelitos} eventos registrados en el cuadrante, operando bajo un patrón temporal principalmente en horarios de ${timePeak}.`;
       
@@ -268,12 +351,12 @@ export class HypothesisIntelligenceEngine {
         ? `concentrado en ${espacial.hotspotsCount} nodo(s) crítico(s) de calor` 
         : "disperso de forma uniforme";
       const centroText = espacial.centroGravedad 
-        ? `${espacial.centroGravedad.lat.toFixed(4)}, ${espacial.centroGravedad.lng.toFixed(4)}`
-        : `${tContext.latitude.toFixed(4)}, ${tContext.longitude.toFixed(4)}`;
+        ? `${espacial.centroGravedad.lat.toFixed(6)}, ${espacial.centroGravedad.lng.toFixed(6)}`
+        : `${tContext.latitude.toFixed(6)}, ${tContext.longitude.toFixed(6)}`;
 
       dondeOcurre = `El fenómeno se encuentra geográficamente ${hotspotsText} alrededor del centro de gravedad situado en las coordenadas ${centroText}, abarcando una dispersión de ${tContext.radiusMetros} metros.`;
       
-      const vDetected = urban.vulnerabilitiesDetected || [];
+      const vDetected = vulnerabilities || [];
       const vText = vDetected.length > 0 
         ? `por facilitadores urbanos detectados en campo: ${vDetected.slice(0, 2).join(" y ")}`
         : "por la pérdida general de vigilancia natural en el espacio público";
@@ -286,12 +369,16 @@ export class HypothesisIntelligenceEngine {
 
       summary = `${queOcurre} ${dondeOcurre} ${porQueOcurre}`;
       
-      // Acciones de verificación recomendadas
       recommendedVerificationActions.push(
         "Realizar patrullaje dinámico orientado en las horas pico identificadas.",
         "Coordinar con servicios municipales para mitigar los facilitadores físicos específicos (cerramientos/luminarias).",
         "Efectuar encuestas de percepción local en los nodos de calor mapeados."
       );
+      if (linkedGangReport && Array.isArray(linkedGangReport.matched_gangs) && linkedGangReport.matched_gangs.length > 0) {
+        recommendedVerificationActions.push(
+          `Monitorear puntos de reunión y grafitis de la pandilla ${linkedGangReport.matched_gangs.join(", ")}.`
+        );
+      }
     } else {
       recommendedVerificationActions.push(
         "Cargar la base de datos de incidencia delictiva del cuadrante para habilitar el análisis estadístico.",
@@ -315,14 +402,14 @@ export class HypothesisIntelligenceEngine {
         source: "TCE - Territorial Context",
         engine: "Territorial Context Engine",
         variable: "tceData.territorialContext",
-        availability: tContext.availability || "Completa",
+        availability: tContext.latitude ? "Completa" : "No disponible",
         date: dateStr
       },
       vulnerabilidadesFisicas: {
-        source: "TCE - Urban Context",
-        engine: "Territorial Context Engine / Street View",
+        source: "TCE - Urban Context / Street View / Fotos",
+        engine: "Territorial Context Engine & Fotografías de Campo",
         variable: "tceData.urbanContext.vulnerabilitiesDetected",
-        availability: urban.availability || "Parcial",
+        availability: vulnerabilities.length > 0 ? "Completa" : "No disponible",
         date: dateStr
       },
       incidenciaTemporal: {
@@ -337,6 +424,27 @@ export class HypothesisIntelligenceEngine {
         engine: "Statistical Intelligence Engine",
         variable: "sieData.espacial",
         availability: hasSieData ? "Completa" : "No disponible",
+        date: dateStr
+      },
+      atractoresComerciales: {
+        source: "TCE - Commercial Context / DENUE",
+        engine: "Territorial Context Engine & DENUE",
+        variable: "tceData.commercialContext",
+        availability: commercial.hasCommercialData ? "Completa" : "No disponible",
+        date: dateStr
+      },
+      entornoDemografico: {
+        source: "TCE - Demographic Context / SCINCE",
+        engine: "Territorial Context Engine & SCINCE",
+        variable: "tceData.demographicContext",
+        availability: demographic.hasDemographics ? "Completa" : "No disponible",
+        date: dateStr
+      },
+      barridosOsint: {
+        source: "TCE - Sources List / OSINT Sweeps",
+        engine: "OSINT Sweeps Engine",
+        variable: "rawInput.sweeps",
+        availability: hasSweeps ? "Completa" : "No disponible",
         date: dateStr
       }
     };
