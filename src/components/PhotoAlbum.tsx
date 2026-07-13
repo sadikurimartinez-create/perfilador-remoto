@@ -1201,6 +1201,7 @@ const hasMinimumPhotos =
       }
 
       let incidenciaLocal: any[] = [];
+      let incidenciaCompleta: any[] = [];
       let bibliografiaLocal = "";
       if (incidenciaRes && incidenciaRes.ok) {
         try {
@@ -1208,6 +1209,7 @@ const hasMinimumPhotos =
           if (incText) {
             const incidenciaJson = JSON.parse(incText) as any;
             incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
+            incidenciaCompleta = incidenciaJson.data ?? [];
             bibliografiaLocal = incidenciaJson.bibliografia ?? "";
             setDebugData((prev: any) => ({
               ...(prev ?? {}),
@@ -1256,6 +1258,9 @@ const hasMinimumPhotos =
                   analysisRadius,
                   focusAreas,
                   incidenciaLocal,
+                  incidenciaCompleta,
+                  lat,
+                  lng,
                   bibliografiaLocal,
                   multimodalContext,
                   geometryType: project?.geometryType || "individual",

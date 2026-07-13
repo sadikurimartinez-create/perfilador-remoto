@@ -4,6 +4,8 @@
  * 100% independiente de html2canvas, WebGL y del estado del DOM.
  */
 
+import { StatisticalIntelligenceEngine } from "./statisticalIntelligenceEngine";
+
 export interface VectorEngineInput {
   projectName: string;
   latitude: number;
@@ -1071,562 +1073,630 @@ export const renderTemporalShiftChart = (input: VectorEngineInput): string => {
 
   // Título Institucional
   ctx.fillStyle = '#0b1f3a';
-  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
+  ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('GRÁFICA 1: DISTRIBUCIÓN TEMPORAL DEL DELITO POR TURNO', w / 2, 40);
+  ctx.fillText('GRÁFICA 1: DINÁMICA TEMPORAL DEL FENÓMENO CRIMINAL', w / 2, 35);
 
   // Subtítulo
   ctx.fillStyle = '#475569';
-  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('ANÁLISIS ESTADÍSTICO DE FRECUENCIA POR RANGO HORARIO', w / 2, 54);
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('SERIE DE TIEMPO DIARIA, TENDENCIA LINEAL Y MEDIA MÓVIL (7 DÍAS)', w / 2, 48);
 
-  // Ejes y Gridlines de fondo
-  ctx.strokeStyle = '#e2e8f0'; // Gridlines muy discretas
-  ctx.lineWidth = 0.8;
-  const startY = 110;
-  const graphHeight = 200;
-  
-  for (let i = 0; i <= 4; i++) {
-    const y = startY + i * (graphHeight / 4);
-    
-    // Gridline horizontal (excepto el eje X final)
-    if (i < 4) {
-      ctx.beginPath();
-      ctx.moveTo(80, y);
-      ctx.lineTo(520, y);
-      ctx.stroke();
-    }
-    
-    // Eje Y Labels
-    ctx.fillStyle = '#475569';
-    ctx.font = 'bold 9.5px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${(100 - i * 25)}%`, 70, y + 3.5);
-    
-    // Ticks secundarios en el eje Y
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(76, y);
-    ctx.lineTo(80, y);
-    ctx.stroke();
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 0.8;
-  }
+  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
+  const recordsLength = input.incidents.length;
 
-  // Datos reales o representativos por turnos (CEIPOL Palette)
-  const shifts = ['Matutino (6-12)', 'Vespertino (12-18)', 'Nocturno (18-0)', 'Madrugada (0-6)'];
-  const values = [12, 23, 45, 20]; // En porcentaje
-  const colors = [
-    '#1d4f91', // CEIPOL azul principal
-    '#475569', // Slate
-    '#be123c', // Crimson (Riesgo alto nocturno)
-    '#d97706'  // Amber (Advertencia madrugada)
-  ];
-
-  // Barras
-  const barWidth = 52;
-  const spacing = 105;
-  const startX = 115;
-  const axisY = startY + graphHeight; // 310
-
-  for (let i = 0; i < 4; i++) {
-    const heightVal = (values[i] / 100) * graphHeight;
-    const x = startX + i * spacing;
-    const y = axisY - heightVal;
-
-    // Dibujar barra con degradado elegante
-    const grad = ctx.createLinearGradient(x, axisY, x, y);
-    grad.addColorStop(0, colors[i]);
-    grad.addColorStop(1, colors[i] + 'dd'); // Sutil transparencia arriba
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, y, barWidth, heightVal);
-
-    // Contorno fino de la barra
-    ctx.strokeStyle = colors[i];
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(x, y, barWidth, heightVal);
-
-    // Valor exacto dibujado en negro arriba de la barra
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 11px "Segoe UI", Arial, sans-serif';
+  if (stats.temporal.totalEventos === 0) {
+    ctx.fillStyle = '#be123c';
+    ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${values[i]}%`, x + barWidth / 2, y - 8);
-
-    // Ticks en el eje X para cada categoría
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + barWidth / 2, axisY);
-    ctx.lineTo(x + barWidth / 2, axisY + 4);
-    ctx.stroke();
-
-    // Texto de etiquetas en X
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(shifts[i], x + barWidth / 2, axisY + 16);
+    ctx.fillText('EVIDENCIA INSUFICIENTE PARA ESTABLECER UNA INFERENCIA ESTADÍSTICA', w / 2, h / 2);
+    return canvas.toDataURL('image/png');
   }
 
-  // Ejes X e Y sólidos (Slate)
+  // Agrupar incidentes por fecha para la serie de tiempo
+  const dateCounts: Record<string, number> = {};
+  input.incidents.forEach((r: any) => {
+    const rawF = r.FECHA ?? r.fecha ?? r.Fecha ?? r.FECHA_HECHO ?? "";
+    const fStr = String(rawF).split("T")[0].trim();
+    if (fStr && fStr !== "undefined") {
+      dateCounts[fStr] = (dateCounts[fStr] ?? 0) + 1;
+    }
+  });
+
+  const sortedDates = Object.keys(dateCounts).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const counts = sortedDates.map(d => dateCounts[d]);
+
+  let points: { x: number; y: number; val: number; date: string }[] = [];
+  const startX = 80;
+  const endX = 520;
+  const startY = 100;
+  const graphHeight = 220;
+  const axisY = startY + graphHeight;
+
+  const maxVal = Math.max(...counts, 3);
+
+  if (sortedDates.length > 1) {
+    const stepX = (endX - startX) / (sortedDates.length - 1);
+    sortedDates.forEach((date, i) => {
+      const val = dateCounts[date];
+      const x = startX + i * stepX;
+      const y = axisY - (val / maxVal) * graphHeight;
+      points.push({ x, y, val, date });
+    });
+  } else {
+    points = [{ x: w / 2, y: axisY - (recordsLength > 0 ? 30 : 0), val: recordsLength, date: "Fecha Única" }];
+  }
+
+  // 1. Dibujar cuadricula horizontal
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i <= 4; i++) {
+    const yGrid = startY + i * (graphHeight / 4);
+    ctx.beginPath();
+    ctx.moveTo(startX, yGrid);
+    ctx.lineTo(endX, yGrid);
+    ctx.stroke();
+
+    // Labels eje Y
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'right';
+    const valLabel = Math.round(maxVal - (i * maxVal) / 4);
+    ctx.fillText(String(valLabel), startX - 10, yGrid + 3);
+  }
+
+  // 2. Dibujar área rellena de frecuencia
+  if (points.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach(pt => ctx.lineTo(pt.x, pt.y));
+    ctx.lineTo(points[points.length - 1].x, axisY);
+    ctx.lineTo(points[0].x, axisY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(29, 79, 145, 0.08)';
+    ctx.fill();
+
+    // Línea de frecuencia principal
+    ctx.beginPath();
+    points.forEach((pt, idx) => {
+      if (idx === 0) ctx.moveTo(pt.x, pt.y);
+      else ctx.lineTo(pt.x, pt.y);
+    });
+    ctx.strokeStyle = '#1d4f91';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // 3. Dibujar Media Móvil
+  if (points.length > 3) {
+    ctx.beginPath();
+    const maSpan = Math.min(points.length, 5);
+    for (let i = 0; i < points.length; i++) {
+      let sumMA = 0;
+      let countMA = 0;
+      for (let j = Math.max(0, i - maSpan + 1); j <= i; j++) {
+        sumMA += points[j].val;
+        countMA++;
+      }
+      const avg = sumMA / countMA;
+      const maY = axisY - (avg / maxVal) * graphHeight;
+      if (i === 0) ctx.moveTo(points[i].x, maY);
+      else ctx.lineTo(points[i].x, maY);
+    }
+    ctx.strokeStyle = '#be123c';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 4. Dibujar Línea de Tendencia
+  if (points.length > 2) {
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+    const n = points.length;
+    points.forEach((pt, i) => {
+      sumX += i;
+      sumY += pt.val;
+      sumXY += i * pt.val;
+      sumXX += i * i;
+    });
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX || 1);
+    const intercept = (sumY - slope * sumX) / n;
+
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const trendVal = slope * i + intercept;
+      const trendY = axisY - (Math.max(trendVal, 0) / maxVal) * graphHeight;
+      if (i === 0) ctx.moveTo(points[i].x, trendY);
+      else ctx.lineTo(points[i].x, trendY);
+    }
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
+
+  // 5. Marcar Anomalías (Días > mean + 2*stdDev)
+  const mean = counts.reduce((a, b) => a + b, 0) / (counts.length || 1);
+  const variance = counts.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (counts.length || 1);
+  const stdDev = Math.sqrt(variance);
+  const threshold = mean + 2 * stdDev;
+
+  points.forEach(pt => {
+    if (pt.val > threshold && pt.val > 1) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
+      ctx.fillStyle = '#e11d48';
+      ctx.fill();
+      ctx.strokeStyle = '#be123c';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#9f1239';
+      ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Pico: ${pt.val}`, pt.x, pt.y - 8);
+    }
+  });
+
+  // Ejes X y Y
   ctx.strokeStyle = '#475569';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(80, startY - 10);
-  ctx.lineTo(80, axisY);
-  ctx.lineTo(520, axisY);
+  ctx.moveTo(startX, startY - 10);
+  ctx.lineTo(startX, axisY);
+  ctx.lineTo(endX, axisY);
   ctx.stroke();
+
+  // Eje X Labels
+  ctx.fillStyle = '#475569';
+  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  const labelCount = Math.min(points.length, 4);
+  if (points.length > 1) {
+    const step = Math.floor(points.length / labelCount) || 1;
+    for (let i = 0; i < points.length; i += step) {
+      const pt = points[i];
+      ctx.beginPath();
+      ctx.moveTo(pt.x, axisY);
+      ctx.lineTo(pt.x, axisY + 4);
+      ctx.stroke();
+
+      ctx.fillText(pt.date.substring(5), pt.x, axisY + 14);
+    }
+  }
+
+  // Leyenda
+  const legendX = 260;
+  const legendY = 65;
+  ctx.textAlign = 'left';
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+
+  ctx.fillStyle = '#1d4f91';
+  ctx.fillRect(legendX, legendY, 12, 6);
+  ctx.fillStyle = '#475569';
+  ctx.fillText('Frecuencia Diaria', legendX + 16, legendY + 6);
+
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(legendX + 95, legendY + 3);
+  ctx.lineTo(legendX + 107, legendY + 3);
+  ctx.stroke();
+  ctx.fillStyle = '#475569';
+  ctx.fillText('Tendencia', legendX + 111, legendY + 6);
+
+  ctx.strokeStyle = '#be123c';
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath();
+  ctx.moveTo(legendX + 165, legendY + 3);
+  ctx.lineTo(legendX + 177, legendY + 3);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#475569';
+  ctx.fillText('Media Móvil (7d)', legendX + 181, legendY + 6);
 
   // Pie de Gráfica / Fuente
   ctx.fillStyle = '#64748b';
-  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
+  ctx.font = 'italic 7.5px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('Fuente: Registro Estadístico de Incidencia Delictiva CEIPOL', 80, 360);
-  
-  // Marca de agua sutil en la esquina inferior derecha
+  ctx.fillText('Fuente: Motor Analítico SIE de Geointeligencia Criminal (Poisson / Regresión Lineal)', startX, 365);
+
   ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
-  ctx.font = 'bold 10px Arial';
+  ctx.font = 'bold 9px Arial';
   ctx.textAlign = 'right';
-  ctx.fillText('SSPE-CEIPOL', 520, 360);
+  ctx.fillText('SSPE-CEIPOL', endX, 365);
 
   return canvas.toDataURL('image/png');
 };
 
-/**
- * 6. GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES (TOP 5 DELITOS)
- */
 export const renderCrimeTopologyChart = (input: VectorEngineInput): string => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
 
-  // Fondo blanco editorial
+  // Fondo blanco
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título Institucional
+  // Título
   ctx.fillStyle = '#0b1f3a';
-  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
+  ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES', w / 2, 40);
+  ctx.fillText('GRÁFICA 2: MATRIZ DE DENSIDAD ESPACIO-TEMPORAL (HEATMAP)', w / 2, 35);
 
-  // Subtítulo
   ctx.fillStyle = '#475569';
-  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('DISTRIBUCIÓN POR TIPOLOGÍA DE DELITO REGISTRADA', w / 2, 54);
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('HEATMAP CRUZADO DE INCIDENCIA DELICTIVA POR DÍA DE LA SEMANA Y HORA DEL DÍA', w / 2, 48);
 
-  // Categorías de delitos (Top 5)
-  const crimes = [
-    'Robo a transeúnte con violencia',
-    'Robo de vehículo/autopartes',
-    'Narcomenudeo/Consumo vía pública',
-    'Lesiones y agresiones físicas',
-    'Vandalismo / Daños perimetrales'
-  ];
-  const percentages = [35, 25, 20, 12, 8];
-  
-  // CEIPOL Palette - con un rojo marcado para el primer tipo (violento) y neutrales/azules para los demás
-  const colors = [
-    '#be123c', // Crimson (Crimen violento)
-    '#1d4f91', // CEIPOL Standard Blue
-    '#475569', // Slate
-    '#5d6b7c', // Muted Blue-gray
-    '#d97706'  // Amber (Incivilidades/Vandalismo)
-  ];
+  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
 
-  // Dibujar barras horizontales
-  const startY = 95;
-  const spacingY = 46;
-  const barHeight = 20;
-  const maxBarWidth = 260;
-  const axisX = 220;
-
-  // Gridlines verticales sutiles para la escala de porcentajes
-  ctx.strokeStyle = '#f1f5f9';
-  ctx.lineWidth = 0.8;
-  for (let pct = 10; pct <= 50; pct += 10) {
-    const gx = axisX + (pct / 50) * maxBarWidth;
-    ctx.beginPath();
-    ctx.moveTo(gx, startY - 10);
-    ctx.lineTo(gx, startY + 5 * spacingY - 15);
-    ctx.stroke();
-  }
-
-  for (let i = 0; i < 5; i++) {
-    const y = startY + i * spacingY;
-    const barWidth = (percentages[i] / 50) * maxBarWidth; // Escalado a maxBarWidth (representa el 50% max)
-
-    // Etiqueta del Delito (Alineado a la derecha en el eje Y)
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(crimes[i], axisX - 12, y + 13);
-
-    // Barra de fondo sutil
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(axisX, y, maxBarWidth, barHeight);
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(axisX, y, maxBarWidth, barHeight);
-
-    // Barra de valor relleno con degradado sutil
-    const grad = ctx.createLinearGradient(axisX, y, axisX + barWidth, y);
-    grad.addColorStop(0, colors[i]);
-    grad.addColorStop(1, colors[i] + 'cc');
-    ctx.fillStyle = grad;
-    ctx.fillRect(axisX, y, barWidth, barHeight);
-
-    // Borde de la barra de valor
-    ctx.strokeStyle = colors[i];
-    ctx.lineWidth = 1;
-    ctx.strokeRect(axisX, y, barWidth, barHeight);
-
-    // Porcentaje explícito
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 9.5px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${percentages[i]}%`, axisX + barWidth + 8, y + 13.5);
-
-    // Ticks en el eje Y
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(axisX - 4, y + barHeight / 2);
-    ctx.lineTo(axisX, y + barHeight / 2);
-    ctx.stroke();
-  }
-
-  // Eje Y sólido
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(axisX, startY - 10);
-  ctx.lineTo(axisX, startY + 5 * spacingY - 15);
-  ctx.stroke();
-
-  // Eje X ticks e indicadores de escala al fondo
-  const bottomY = startY + 5 * spacingY - 15;
-  ctx.beginPath();
-  ctx.moveTo(axisX, bottomY);
-  ctx.lineTo(axisX + maxBarWidth, bottomY);
-  ctx.stroke();
-
-  for (let pct = 0; pct <= 50; pct += 10) {
-    const tickX = axisX + (pct / 50) * maxBarWidth;
-    ctx.beginPath();
-    ctx.moveTo(tickX, bottomY);
-    ctx.lineTo(tickX, bottomY + 4);
-    ctx.stroke();
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  if (stats.temporal.totalEventos === 0) {
+    ctx.fillStyle = '#be123c';
+    ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${pct}%`, tickX, bottomY + 13);
+    ctx.fillText('EVIDENCIA INSUFICIENTE PARA ESTABLECER UNA INFERENCIA ESTADÍSTICA', w / 2, h / 2);
+    return canvas.toDataURL('image/png');
   }
 
-  // Pie de Gráfica / Fuente
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Fuente: Censo Homologado de Llamadas de Emergencia y Denuncias', 50, 365);
+  // Rejilla de 7x24
+  const matrix = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  
+  input.incidents.forEach((r: any) => {
+    const rawFecha = r.FECHA ?? r.fecha ?? r.Fecha ?? r.FECHA_HECHO ?? "";
+    const rawHora = r.HORA ?? r.hora ?? r.Hora ?? r.HORA_HECHO ?? "00:00";
+    const date = new Date(String(rawFecha).split("T")[0]);
+    if (!isNaN(date.getTime())) {
+      const day = date.getDay();
+      const adjDay = day === 0 ? 6 : day - 1;
 
-  // Marca de agua sutil en la esquina inferior derecha
+      const timeParts = String(rawHora).split(":");
+      const hours = parseInt(timeParts[0] ?? "0", 10);
+      if (hours >= 0 && hours < 24 && adjDay >= 0 && adjDay < 7) {
+        matrix[adjDay][hours]++;
+      }
+    }
+  });
+
+  const daysLabel = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  
+  const startX = 85;
+  const startY = 85;
+  const cellW = 18;
+  const cellH = 22;
+
+  let maxVal = 0;
+  let maxCell = { d: 0, h: 0 };
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      if (matrix[d][h] > maxVal) {
+        maxVal = matrix[d][h];
+        maxCell = { d, h };
+      }
+    }
+  }
+
+  for (let d = 0; d < 7; d++) {
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(daysLabel[d], startX - 10, startY + d * cellH + cellH / 2 + 3);
+
+    for (let h = 0; h < 24; h++) {
+      const count = matrix[d][h];
+      const cx = startX + h * cellW;
+      const cy = startY + d * cellH;
+
+      let color = '#f8fafc';
+      if (count === 1) color = '#cbd5e1';
+      else if (count === 2) color = '#f97316';
+      else if (count === 3) color = '#ea580c';
+      else if (count > 3) color = '#be123c';
+
+      ctx.fillStyle = color;
+      ctx.fillRect(cx, cy, cellW - 1, cellH - 1);
+
+      if (count > 0) {
+        ctx.fillStyle = count >= 2 ? '#ffffff' : '#475569';
+        ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(count), cx + cellW / 2, cy + cellH / 2 + 2.5);
+      }
+    }
+  }
+
+  if (maxVal > 0) {
+    const borderX = startX + maxCell.h * cellW;
+    const borderY = startY + maxCell.d * cellH;
+    ctx.strokeStyle = '#0b1f3a';
+    ctx.lineWidth = 1.8;
+    ctx.strokeRect(borderX - 1, borderY - 1, cellW + 1, cellH + 1);
+
+    ctx.fillStyle = '#0b1f3a';
+    ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`* Ventana Crítica: ${daysLabel[maxCell.d]} a las ${maxCell.h}:00 hrs (${maxVal} eventos)`, startX, startY + 7 * cellH + 20);
+  }
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  for (let h = 0; h < 24; h += 2) {
+    ctx.fillText(`${h}h`, startX + h * cellW + cellW / 2, startY - 6);
+  }
+
+  const legendX = 350;
+  const legendY = startY + 7 * cellH + 14;
+  ctx.textAlign = 'left';
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillStyle = '#475569';
+  ctx.fillText('Densidad de Eventos:', legendX, legendY + 6);
+
+  const colorsLegend = ['#f8fafc', '#cbd5e1', '#f97316', '#be123c'];
+  const labelsLegend = ['0', '1', '2-3', '4+'];
+
+  colorsLegend.forEach((col, idx) => {
+    const lx = legendX + 90 + idx * 35;
+    ctx.fillStyle = col;
+    ctx.fillRect(lx, legendY, 12, 8);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(lx, legendY, 12, 8);
+
+    ctx.fillStyle = '#475569';
+    ctx.fillText(labelsLegend[idx], lx + 16, legendY + 7);
+  });
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 7.5px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Matriz de Calor de Oportunidad Criminológica CEIPOL', startX, 365);
+
   ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
-  ctx.font = 'bold 10px Arial';
+  ctx.font = 'bold 9px Arial';
   ctx.textAlign = 'right';
-  ctx.fillText('SSPE-CEIPOL', w - 50, 365);
+  ctx.fillText('SSPE-CEIPOL', startX + 24 * cellW, 365);
 
   return canvas.toDataURL('image/png');
 };
 
-/**
- * 7. GRÁFICA 3: FACILITADORES AMBIENTALES DE OPORTUNIDAD
- */
 export const renderEnvironmentalFactorsChart = (input: VectorEngineInput): string => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
 
-  // Fondo blanco editorial
+  // Fondo blanco
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título Institucional
+  // Título
   ctx.fillStyle = '#0b1f3a';
-  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
+  ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('GRÁFICA 3: FACILITADORES AMBIENTALES DE RIESGO', w / 2, 40);
+  ctx.fillText('GRÁFICA 3: PERFIL OPERATIVO Y CAPACIDAD CRIMINAL (RADAR)', w / 2, 35);
 
-  // Subtítulo
   ctx.fillStyle = '#475569';
-  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('EVALUACIÓN DE VULNERABILIDADES FÍSICAS Y DE DISEÑO URBANO (ESCALA 1-10)', w / 2, 54);
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('ANÁLISIS MULTIVARIABLE DE INDICADORES CRIMINOLÓGICOS DEL FENÓMENO', w / 2, 48);
 
-  // Datos
-  const factors = [
-    'Iluminación Inexistente/Falla',
-    'Terrenos Baldíos sin Cierre',
-    'Puntos Ciegos / Sin Cámara',
-    'Maleza Alta / Ocultamiento',
-    'Vías de Escape Rápido'
+  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
+
+  if (stats.temporal.totalEventos === 0) {
+    ctx.fillStyle = '#be123c';
+    ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('EVIDENCIA INSUFICIENTE PARA ESTABLECER UNA INFERENCIA ESTADÍSTICA', w / 2, h / 2);
+    return canvas.toDataURL('image/png');
+  }
+
+  const ind = stats.criminologico.indicadores;
+  const data = [
+    { name: "Especialización", val: ind.especializacion },
+    { name: "Movilidad", val: ind.movilidad },
+    { name: "Violencia", val: ind.violencia },
+    { name: "Planeación", val: ind.planeacion },
+    { name: "Persistencia", val: ind.persistencia },
+    { name: "Oportunidad", val: ind.oportunidad },
+    { name: "Capacidad Territorial", val: ind.capacidadTerritorial }
   ];
-  const ratings = [9.2, 8.5, 7.8, 6.5, 8.0]; // Escala 1-10
 
-  // Paleta de colores CEIPOL/SSPE para factores de riesgo
-  const colors = [
-    '#be123c', // Crimson (Iluminación - muy crítico)
-    '#d97706', // Amber (Terrenos - advertencia)
-    '#d97706', // Amber (Cámaras)
-    '#475569', // Slate (Maleza)
-    '#1d4f91'  // CEIPOL Blue (Vías de escape)
-  ];
+  const centerX = w / 2;
+  const centerY = h / 2 + 15;
+  const maxRadius = 100;
+  const numVertices = data.length;
 
-  const startX = 60;
-  const spacingX = 100;
-  const barWidth = 36;
-  const startY = 100;
-  const graphHeight = 200;
-  const axisY = startY + graphHeight; // 300
-
-  // Gridlines horizontales discretas (Escala de 10 puntos)
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 0.8;
-  for (let i = 0; i <= 5; i++) {
-    const y = startY + i * (graphHeight / 5);
+  const levels = [0.25, 0.5, 0.75, 1.0];
+  levels.forEach(lvl => {
     ctx.beginPath();
-    ctx.moveTo(60, y);
-    ctx.lineTo(540, y);
+    for (let i = 0; i < numVertices; i++) {
+      const angle = (i * 2 * Math.PI) / numVertices - Math.PI / 2;
+      const x = centerX + maxRadius * lvl * Math.cos(angle);
+      const y = centerY + maxRadius * lvl * Math.sin(angle);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
     ctx.stroke();
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${(10 - i * 2)} pts`, 50, y + 3);
-
-    // Ticks en el eje Y
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(56, y);
-    ctx.lineTo(60, y);
-    ctx.stroke();
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 0.8;
-  }
-
-  for (let i = 0; i < 5; i++) {
-    const x = startX + 28 + i * spacingX;
-    const heightVal = (ratings[i] / 10) * graphHeight; // Escalar a píxeles
-    const y = axisY - heightVal;
-
-    // Dibujar barra sólida con degradado sutil
-    const grad = ctx.createLinearGradient(x, axisY, x, y);
-    grad.addColorStop(0, colors[i]);
-    grad.addColorStop(1, colors[i] + 'dd');
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, y, barWidth, heightVal);
-
-    // Contorno
-    ctx.strokeStyle = colors[i];
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(x, y, barWidth, heightVal);
-
-    // Puntuación exacta encima de la barra
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 10px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(ratings[i].toFixed(1), x + barWidth / 2, y - 8);
-
-    // Tick en el eje X
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + barWidth / 2, axisY);
-    ctx.lineTo(x + barWidth / 2, axisY + 4);
-    ctx.stroke();
-
-    // Texto de factor en diagonal
-    ctx.save();
-    ctx.translate(x + barWidth / 2, axisY + 16);
-    ctx.rotate(Math.PI / 10);
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '7px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(factors[i], 0, 0);
-    ctx.restore();
+    ctx.fillText(`${lvl * 100}%`, centerX + 2, centerY - maxRadius * lvl + 8);
+  });
+
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < numVertices; i++) {
+    const angle = (i * 2 * Math.PI) / numVertices - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(centerX + maxRadius * Math.cos(angle), centerY + maxRadius * Math.sin(angle));
+    ctx.stroke();
   }
 
-  // Ejes
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(60, startY - 10);
-  ctx.lineTo(60, axisY);
-  ctx.lineTo(540, axisY);
+  const polyPoints: { x: number; y: number }[] = [];
+  data.forEach((d, i) => {
+    const angle = (i * 2 * Math.PI) / numVertices - Math.PI / 2;
+    const valRatio = Math.max(d.val, 5) / 100;
+    const x = centerX + maxRadius * valRatio * Math.cos(angle);
+    const y = centerY + maxRadius * valRatio * Math.sin(angle);
+    polyPoints.push({ x, y });
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(29, 79, 145, 0.18)';
+  ctx.fill();
+  ctx.strokeStyle = '#1d4f91';
+  ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Pie de Gráfica / Fuente
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Fuente: Auditoría de Campo y Matriz de Vulnerabilidad Ambiental CEIPOL', 50, 365);
+  data.forEach((d, i) => {
+    const pt = polyPoints[i];
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 3.5, 0, 2 * Math.PI);
+    ctx.fillStyle = '#be123c';
+    ctx.fill();
 
-  // Marca de agua sutil en la esquina inferior derecha
+    const angle = (i * 2 * Math.PI) / numVertices - Math.PI / 2;
+    const labelDist = maxRadius + 14;
+    const lx = centerX + labelDist * Math.cos(angle);
+    const ly = centerY + labelDist * Math.sin(angle);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
+
+    if (Math.abs(Math.cos(angle)) < 0.1) {
+      ctx.textAlign = 'center';
+    } else if (Math.cos(angle) > 0) {
+      ctx.textAlign = 'left';
+    } else {
+      ctx.textAlign = 'right';
+    }
+    ctx.fillText(`${d.name} (${d.val}%)`, lx, ly + 3);
+  });
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 7.5px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Indicadores de Inteligencia Cuantitativa Criminal SSPE-CEIPOL', 50, 365);
+
   ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
-  ctx.font = 'bold 10px Arial';
+  ctx.font = 'bold 9px Arial';
   ctx.textAlign = 'right';
-  ctx.fillText('SSPE-CEIPOL', 540, 365);
+  ctx.fillText('SSPE-CEIPOL', 520, 365);
 
   return canvas.toDataURL('image/png');
 };
 
-/**
- * 8. GRÁFICA 4: PREDICCIÓN DE AUMENTO DE INCIDENCIA A 6 MESES
- */
 export const renderPredictiveLineChart = (input: VectorEngineInput): string => {
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
 
-  // Fondo blanco editorial
+  // Fondo blanco
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título Institucional
+  // Título
   ctx.fillStyle = '#0b1f3a';
-  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
+  ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('GRÁFICA 4: PROYECCIÓN TENDENCIAL DE INCIDENCIA A 6 MESES', w / 2, 40);
+  ctx.fillText('GRÁFICA 4: MODELO PREDICTIVO E ÍNDICES DE RIESGO', w / 2, 35);
 
-  // Subtítulo
   ctx.fillStyle = '#475569';
-  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('PROYECCIÓN TÁCTICA MULTIVARIADA DE DELITOS ESTIMADOS EN EL ÁREA', w / 2, 54);
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('PROBABILIDADES MATEMÁTICAS DE REPETICIÓN E ÍNDICES DE CONFIANZA', w / 2, 48);
 
-  // Meses y valores delictivos proyectados
-  const months = ['Mes Actual', 'Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6 (Proy)'];
-  const values = [18, 20, 23, 22, 25, 28, 32]; // Delitos simulados
+  const stats = StatisticalIntelligenceEngine.analyze(input.incidents, input.latitude, input.longitude, 9999999);
 
-  // Gridlines horizontales discretas
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 0.8;
-  const startY = 100;
-  const graphHeight = 200;
-  const axisY = startY + graphHeight; // 300
-
-  for (let i = 0; i <= 4; i++) {
-    const y = startY + i * (graphHeight / 4);
-    ctx.beginPath();
-    ctx.moveTo(80, y);
-    ctx.lineTo(520, y);
-    ctx.stroke();
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${(40 - i * 10)} del`, 70, y + 3.5);
-
-    // Ticks en el eje Y
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(76, y);
-    ctx.lineTo(80, y);
-    ctx.stroke();
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 0.8;
-  }
-
-  // Trazar línea de tendencia (Azul a Naranja Proyectiva)
-  const startX = 100;
-  const spacingX = 65;
-  const points: { x: number; y: number }[] = [];
-
-  for (let i = 0; i < 7; i++) {
-    const x = startX + i * spacingX;
-    const y = axisY - (values[i] / 40) * graphHeight; // Escalar basado en 40 max
-    points.push({ x, y });
-  }
-
-  // Dibujar línea histórica (Mes Actual a Mes 4)
-  ctx.strokeStyle = '#1d4f91'; // CEIPOL azul principal
-  ctx.lineWidth = 3.5;
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i <= 4; i++) {
-    ctx.lineTo(points[i].x, points[i].y);
-  }
-  ctx.stroke();
-
-  // Línea predictiva discontinua naranja para los últimos meses
-  ctx.strokeStyle = '#d97706'; // Amber para advertencia
-  ctx.lineWidth = 3.5;
-  ctx.setLineDash([5, 4]);
-  ctx.beginPath();
-  ctx.moveTo(points[4].x, points[4].y);
-  for (let i = 5; i < 7; i++) {
-    ctx.lineTo(points[i].x, points[i].y);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Puntos con etiquetas y valores explícitos
-  for (let i = 0; i < 7; i++) {
-    const pt = points[i];
-    
-    // Punto de color relleno
-    ctx.fillStyle = i >= 5 ? '#d97706' : '#1d4f91';
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.8;
-    ctx.stroke();
-    
-    // Borde exterior fino del nodo
-    ctx.strokeStyle = i >= 5 ? '#d97706' : '#1d4f91';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 6.8, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Valor exacto dibujado arriba del punto (con fondo blanco sutil para contraste)
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 9.5px "Segoe UI", Arial, sans-serif';
+  if (stats.temporal.totalEventos === 0) {
+    ctx.fillStyle = '#be123c';
+    ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(values[i].toString() + ' del', pt.x, pt.y - 12);
-
-    // Tick en el eje X
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(pt.x, axisY);
-    ctx.lineTo(pt.x, axisY + 4);
-    ctx.stroke();
-
-    // Eje X Label
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
-    ctx.fillText(months[i], pt.x, axisY + 16);
+    ctx.fillText('EVIDENCIA INSUFICIENTE PARA ESTABLECER UNA INFERENCIA ESTADÍSTICA', w / 2, h / 2);
+    return canvas.toDataURL('image/png');
   }
 
-  // Ejes X e Y
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(80, startY - 10);
-  ctx.lineTo(80, axisY);
-  ctx.lineTo(520, axisY);
-  ctx.stroke();
+  const pred = stats.predictivo;
+  const data = [
+    { label: "Probabilidad Repetición Semanal", val: Math.round(pred.probabilidadRepeticionSemanal * 100), max: 100, suffix: "%" },
+    { label: "Índice de Riesgo Territorial", val: pred.indiceRiesgoTerritorial, max: 100, suffix: "/100" },
+    { label: "Índice de Vulnerabilidad Ambiental", val: pred.indiceVulnerabilidadAmbiental, max: 100, suffix: "/100" },
+    { label: "Confiabilidad del Modelo", val: pred.confiabilidadModeloPorcentaje, max: 100, suffix: "%" },
+    { label: "Concentración Predictiva (Hotspot)", val: Math.round(stats.criminologico.indicadores.oportunidad), max: 100, suffix: "%" }
+  ];
 
-  // Pie de Gráfica / Fuente
-  ctx.fillStyle = '#64748b';
-  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
+  const startX = 220;
+  const startY = 90;
+  const barMaxW = 260;
+  const rowHeight = 45;
+
+  data.forEach((d, i) => {
+    const ry = startY + i * rowHeight;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(d.label, startX - 15, ry + 12);
+
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(startX, ry, barMaxW, 16);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(startX, ry, barMaxW, 16);
+
+    let color = '#16a34a';
+    if (d.val >= 75) color = '#be123c';
+    else if (d.val >= 40) color = '#f97316';
+
+    const barW = (d.val / d.max) * barMaxW;
+    ctx.fillStyle = color;
+    ctx.fillRect(startX, ry, barW, 16);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 0.8;
+    const refs = [0.25, 0.5, 0.75];
+    refs.forEach(r => {
+      const rx = startX + r * barMaxW;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx, ry + 16);
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 10px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${d.val}${d.suffix}`, startX + barMaxW + 12, ry + 12);
+  });
+
+  const blockY = startY + data.length * rowHeight + 10;
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(50, blockY, w - 100, 48);
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(50, blockY, w - 100, 48);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('Fuente: Modelo Predictivo de Regresión Espacial CEIPOL', 50, 365);
+  ctx.fillText(`MODELO MATEMÁTICO: ${pred.modelo.toUpperCase()}`, 65, blockY + 16);
 
-  // Marca de agua sutil en la esquina inferior derecha
+  const varsUsed = pred.variablesPredictivasExplicativas.join(", ");
+  ctx.fillStyle = '#475569';
+  ctx.font = '7px "Segoe UI", Arial, sans-serif';
+  ctx.fillText(`VARIABLES DE CONTROL: ${varsUsed}`, 65, blockY + 34);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 7.5px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Modelo de Ocurrencia Poisson & Inferencia Frecuencial CEIPOL', 50, 365);
+
   ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
-  ctx.font = 'bold 10px Arial';
+  ctx.font = 'bold 9px Arial';
   ctx.textAlign = 'right';
   ctx.fillText('SSPE-CEIPOL', 520, 365);
 

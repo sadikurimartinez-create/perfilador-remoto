@@ -16,6 +16,7 @@ export interface ReportContext {
   sweepsComments?: string;
   photos?: any[];
   analysisContext?: string;
+  sieData?: any;
 }
 
 /**
@@ -116,25 +117,44 @@ Instrucciones:
  * 5. CAPÍTULO 4: ANÁLISIS ESTADÍSTICO
  */
 export const GraphAnalysisPrompt = (ctx: ReportContext): string => {
-  const incidentCount = ctx.incidenciaLocal?.length || 0;
-  const incidentSummary = ctx.incidenciaLocal && ctx.incidenciaLocal.length > 0
-    ? ctx.incidenciaLocal.slice(0, 15).map(c => `- Delito: ${c.delito || "Indeterminado"}, Distancia: ${c.distancia ? c.distancia.toFixed(0) : "N/D"}m, Fecha: ${c.fecha || "N/D"}`).join('\n')
-    : "Sin incidentes detallados.";
+  const sieJson = ctx.sieData ? JSON.stringify(ctx.sieData, null, 2) : "Sin datos procesados por el motor estadístico SIE.";
   return `
 --- INICIO MÓDULO: ANÁLISIS ESTADÍSTICO (CAPÍTULO 4) ---
 Genera el Capítulo 4: "ANÁLISIS ESTADÍSTICO".
-Datos: ${incidentCount} incidentes delictivos en el radio analizado.
-Muestra de Incidencias Históricas Reales en el Sector:
-${incidentSummary}
+Radio de análisis: ${ctx.analysisRadius} metros.
 
-Instrucciones:
-- Redacta la lectura analítica para las gráficas estadísticas delictivas (Temporal, Topología, Facilitadores Ambientales y Predicción).
-- Prohibido repetir la misma explicación general. Para cada gráfica interpretada, responde puntualmente:
-  1. ¿Qué variable representa?
-  2. ¿Qué patrón o anomalía aparece?
-  3. ¿Qué significa operativamente?
-  4. ¿Cómo modifica o fortalece la hipótesis central?
-- Sé sumamente formal, analítico y ve directo al grano.
+JSON de Resultados del Statistical Intelligence Engine (SIE):
+\`\`\`json
+${sieJson}
+\`\`\`
+
+REGLAS DE GENERACIÓN DE TEXTO:
+1. Queda TERMINANTEMENTE PROHIBIDO inventar estadísticas, estimar porcentajes arbitrarios, o interpretar información que no figure de forma explícita en el JSON del SIE.
+2. Tu rol es únicamente de redactor técnico-institucional de la información cuantitativa calculada.
+3. El dictamen debe estructurarse obligatoriamente con los siguientes 5 apartados y responder de forma analítica y formal a las preguntas metodológicas usando los datos provistos:
+
+4.1 Dinámica Temporal del Fenómeno Criminal
+- Describir cómo evoluciona la tendencia de crímenes en el sector según la variación mensual calculada y el índice de aceleración/desaceleración delictiva.
+- Mencionar de forma explícita si existen anomalías (picos de incidencia) en fechas específicas.
+
+4.2 Inteligencia Espacio Temporal
+- Describir el centro de gravedad (Mean Center), la desviación estándar espacial (en metros) y la dirección dominante de la elipse direccional.
+- Explicar la clasificación de la expansión territorial (ej. "Concentración Sectorizada con Rutas de Escape", "Focalización Táctica Aguda" o "Expansión Crítica") basándote en los datos espaciales.
+- Señalar la ubicación o magnitud de los hotspots principales detectados.
+
+4.3 Perfil Operativo del Fenómeno
+- Detallar el comportamiento operativo, especificando las variables predominantes: horarios críticos (ventana de oportunidad) y el día de la semana con mayor concentración de incidentes.
+- Vincular la estacionalidad delictiva o ventana crítica con la vulnerabilidad operativa en el área.
+
+4.4 Factores de Oportunidad
+- Analizar la correlación entre la incidencia concentrada en los hotspots y el nivel de oportunidad/vulnerabilidad ambiental provisto por el SIE (índice de oportunidad de atractores y vulnerabilidad ambiental).
+
+4.5 Inteligencia Predictiva
+- Explicar qué escenario predictivo puede ocurrir en el área basándose en la probabilidad de repetición semanal y mensual calculada por el modelo de Poisson.
+- Indicar explícitamente el nivel de confianza y error del modelo predictivo y las variables explicativas utilizadas.
+
+REGLA DE EVIDENCIA INSUFICIENTE:
+Si el JSON indica totalEventos de 0 o evidencia insuficiente, debes escribir textualmente la frase: "Evidencia insuficiente para establecer una inferencia estadísticamente sustentada", y omitir cualquier tipo de especulación analítica o porcentajes arbitrarios.
 --- FIN MÓDULO ---
 `.trim();
 };

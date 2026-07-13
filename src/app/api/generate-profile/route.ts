@@ -15,6 +15,7 @@ import {
   HIGGraphPrompt,
   OperationalConclusionPrompt
 } from "@/prompts/reportEnginePrompts";
+import { StatisticalIntelligenceEngine } from "@/utils/statisticalIntelligenceEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -80,15 +81,24 @@ export async function POST(req: Request) {
     const radius = safeBody.analysisRadius || 250;
     const geometry = safeBody.geometryType || "individual";
     const chapter = safeBody.chapter || 1;
+    const lat = parseFloat(String(safeBody.lat ?? safeBody.latitude ?? "0"));
+    const lng = parseFloat(String(safeBody.lng ?? safeBody.longitude ?? "0"));
 
-    // 1. Deducir riesgo general a nivel de código para el metadato
+    // Calcular SIE
+    const sieData = StatisticalIntelligenceEngine.analyze(
+      safeBody.incidenciaCompleta || [],
+      lat,
+      lng,
+      radius
+    );
+
+    // 1. Deducir riesgo general a nivel de código basado en el riesgo territorial del SIE
     let generalRisk = "MEDIO";
-    const contextText = safeBody.analysisContext || "";
-    if (contextText.toLowerCase().match(/(arma|homicidio|droga|violencia|disputa|cartel)/)) {
+    if (sieData.predictivo.indiceRiesgoTerritorial >= 75) {
       generalRisk = "CRÍTICO";
-    } else if (contextText.toLowerCase().match(/(lesiones|narcomenudeo|asalto)/)) {
+    } else if (sieData.predictivo.indiceRiesgoTerritorial >= 50) {
       generalRisk = "ALTO";
-    } else if (contextText.toLowerCase().match(/(robo|grafiti|pandilla)/)) {
+    } else if (sieData.predictivo.indiceRiesgoTerritorial >= 20) {
       generalRisk = "MEDIO";
     } else {
       generalRisk = "BAJO";
@@ -118,7 +128,8 @@ export async function POST(req: Request) {
       sweeps: simplifySweeps(safeBody.sweeps),
       sweepsComments: typeof safeBody.sweepsComments === "string" ? safeBody.sweepsComments.slice(0, 500) : "",
       photos: safeBody.photos ? safeBody.photos.slice(0, 5).map((p: any) => ({ ...p, dataUrl: "" })) : [],
-      analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : ""
+      analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : "",
+      sieData
     };
 
     // 3. Obtener el prompt del capítulo específico
@@ -215,6 +226,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           pois: [],
           inegiDemographics: null,
           tacticalStreetViews: safeBody.streetViews || [],
+          sieData: sieData
         });
         
         // Enviar el inicio del JSON (el navegador tolera el espacio en blanco inicial)

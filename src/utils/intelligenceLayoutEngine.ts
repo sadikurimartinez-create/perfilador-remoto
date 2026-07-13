@@ -1,6 +1,7 @@
 import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
 import { buildOperationalOsintChapter } from './osintChapterBuilder';
+import { StatisticalIntelligenceEngine } from './statisticalIntelligenceEngine';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -505,27 +506,37 @@ export const buildIntelligenceEditorialPayload = async (
   const areaGeografica = project?.areaGeografica || "Aguascalientes, Ags, México";
 
   // Bloque I.1: Contexto territorial
+  const lat = project?.lat ?? project?.latitude ?? 0;
+  const lng = project?.lng ?? project?.longitude ?? 0;
+  const radius = project?.analysisRadius ?? project?.radius ?? 250;
+  const incidents = project?.incidents ?? project?.incidenciaCompleta ?? project?.incidenciaLocal ?? [];
+  const stats = StatisticalIntelligenceEngine.analyze(incidents, lat, lng, radius);
+
   let contextoTerritorial = cleanTechnicalJargon(extractSection(rawContent, 2));
   if (!contextoTerritorial || contextoTerritorial.length < 10) {
     contextoTerritorial = `El polígono bajo análisis ${projectName} se sitúa en un sector de alta movilidad urbana con una población flotante estimada en horarios comerciales de tercer turno. Se caracteriza por un diseño de infraestructura con cerramientos deficientes y predios baldíos. Los factores criminógenos de oportunidad identificados corresponden a la pérdida de vigilancia natural debido al abandono del espacio público.`;
   }
 
   // Bloque I.2: Hipótesis principal
+  const confidenceScore = stats.predictivo.confiabilidadModeloPorcentaje / 100;
+  const confidenceDesc = confidenceScore >= 0.8 ? "Crítico/Muy Alto" : confidenceScore >= 0.6 ? "Alto" : confidenceScore >= 0.4 ? "Medio" : "Bajo";
+  const nivelConfianza = `${confidenceDesc} (${confidenceScore.toFixed(2)})`;
+
   const hipotesisPrincipal = {
-    queOcurre: "Frecuencia de asaltos a transeúntes y consumo de sustancias de forma nocturna.",
-    dondeOcurre: "Zonas oscuras perimetrales y callejones secundarios de baja vigilancia.",
-    quienParticipa: "Agrupaciones juveniles locales identificadas y personas en tránsito.",
-    porQueOcurre: "Facilitado por deficiencia en el alumbrado y presencia de áreas baldías sin bardeado.",
-    evidenciaSustento: "Inspecciones de campo con registro fotográfico y mapeo delictivo de BigQuery.",
-    nivelConfianza: "Alto (0.88)"
+    queOcurre: `Dinámica de ${stats.temporal.totalEventos} incidentes delictivos con variación mensual de ${stats.temporal.variacionMensualPorcentaje.toFixed(1)}%.`,
+    dondeOcurre: `Concentración en ${stats.espacial.hotspotsCount} hotspots en torno a ${stats.espacial.centroGravedad.lat.toFixed(4)}, ${stats.espacial.centroGravedad.lng.toFixed(4)} con dispersión de ${stats.espacial.desviacionEstandarEspacialMetros.toFixed(0)}m.`,
+    quienParticipa: "Actores de oportunidad delictiva local y transeúntes vulnerables.",
+    porQueOcurre: `Facilitado por una ventana de oportunidad horaria crítica a las ${stats.temporal.horarioCritico} (${stats.temporal.ventanaOportunidad}).`,
+    evidenciaSustento: `Cálculos y proyecciones matemáticas del motor SIE con confiabilidad del ${stats.predictivo.confiabilidadModeloPorcentaje}%.`,
+    nivelConfianza
   };
 
   // Bloque I.3: Valoración operacional
   const valoracionOperacional = {
-    amenaza: "Aumento progresivo de asaltos a transeúntes durante el horario de cierre comercial.",
-    oportunidadCriminal: "Facilidad de acecho en predios sin cerramientos y callejones sin iluminación.",
-    vulnerabilidades: "Falta de iluminación pública formal en el 60% del área y cerramientos vulnerables.",
-    capacidadRequerida: "Patrullaje dinámico en turnos críticos y gestión municipal de desbroce y bardeado."
+    amenaza: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de repetición delictiva semanal en el cuadrante.`,
+    oportunidadCriminal: `Facilitadores tácticos y diseño urbano deficiente con índice de vulnerabilidad de ${stats.predictivo.indiceVulnerabilidadAmbiental}/100.`,
+    vulnerabilidades: `Dispersión espacial direccional con clasificación: ${stats.espacial.expansionTerritorialClasificacion}.`,
+    capacidadRequerida: `Patrullaje preventivo focalizado en el baricentro criminal durante la ventana horaria crítica: ${stats.temporal.horarioCritico}.`
   };
 
   // Bloque II: Matriz de Trazabilidad Analítica
@@ -535,28 +546,28 @@ export const buildIntelligenceEditorialPayload = async (
       componente: "Street View",
       fuente: "Google Maps",
       metodo: "Análisis visual territorial",
-      hallazgo: "Predios abandonados y puntos ciegos detectados",
-      impacto: "Incremento de vulnerabilidad nocturna"
+      hallazgo: "Vulnerabilidades físicas detectadas en campo",
+      impacto: `Índice de Vulnerabilidad Ambiental: ${stats.predictivo.indiceVulnerabilidadAmbiental}/100`
     },
     {
-      componente: "Cartografía",
-      fuente: "CEIPOL GIS",
-      metodo: "Mapeo de Calor delictivo",
-      hallazgo: "Concentración espacial en sector norte",
-      impacto: "Focalización de patrullaje táctico"
+      componente: "Cartografía (SIE)",
+      fuente: "CEIPOL GIS / SIE",
+      metodo: `Mean Center & Elipse (${stats.espacial.expansionTerritorialClasificacion})`,
+      hallazgo: `Elipse direccional a ${stats.espacial.elipseDireccional.anguloRotacionGrados.toFixed(1)}° y semi-ejes de ${stats.espacial.elipseDireccional.semiEjeMayorMetros.toFixed(0)}m x ${stats.espacial.elipseDireccional.semiEjeMenorMetros.toFixed(0)}m`,
+      impacto: `Focalización en coordenadas ${stats.espacial.centroGravedad.lat.toFixed(4)}, ${stats.espacial.centroGravedad.lng.toFixed(4)}`
     },
     {
-      componente: "OSINT",
-      fuente: "Barrido OSINT",
-      metodo: "Análisis socioeconómico",
-      hallazgo: "Alta concentración de giros atractores comerciales",
-      impacto: "Incremento de población flotante"
+      componente: "Análisis Predictivo (Poisson)",
+      fuente: "Registro Histórico SIE",
+      metodo: "Inferencia Poisson de Repetición",
+      hallazgo: `Modelo de Poisson (${stats.predictivo.modelo}) con confianza del ${stats.predictivo.confiabilidadModeloPorcentaje}%`,
+      impacto: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de reincidencia`
     },
     {
       componente: "Registro de Campo",
       fuente: "Evidencia Fotográfica",
       metodo: "Inspección física in-situ",
-      hallazgo: "Deficiencias de alumbrado público (80%)",
+      hallazgo: "Deficiencias del espacio público y accesos",
       impacto: "Facilitador de conductas de oportunidad"
     }
   ];
@@ -584,10 +595,10 @@ export const buildIntelligenceEditorialPayload = async (
   // Instanciar el motor de renderizado vectorial táctico para generar los mapas y gráficas HD directamente
   const vectorInput = {
     projectName: projectName || "Expediente",
-    latitude: project?.latitude || 21.8853,
-    longitude: project?.longitude || -102.2916,
+    latitude: lat,
+    longitude: lng,
     geometryType: project?.geometryType || "individual",
-    incidents: project?.incidents || [],
+    incidents: incidents,
     sweeps: sweeps || [],
     photoCount: album?.length || 0
   };
@@ -639,32 +650,32 @@ export const buildIntelligenceEditorialPayload = async (
   // Graphs (Generados programáticamente en lienzo HD)
   const graphs = [
     {
-      title: "GRÁFICA 1: DISTRIBUCIÓN TEMPORAL DEL DELITO POR TURNO",
+      title: "GRÁFICA 1: DINÁMICA TEMPORAL DEL FENÓMENO CRIMINAL",
       dataUrl: renderTemporalShiftChart(vectorInput),
-      explanation: "Frecuencia acumulada e índices de scoring por rango de turnos.",
-      finding: "Picos de incidencia y riesgos concentrados en horarios nocturnos.",
-      relation: "Correlación directa con la pérdida de vigilancia natural por iluminación deficiente."
+      explanation: `Serie de tiempo de ${stats.temporal.totalEventos} incidentes. Variación mensual del ${stats.temporal.variacionMensualPorcentaje.toFixed(1)}%.`,
+      finding: `Índice de aceleración delictiva: ${stats.temporal.indiceAceleracionDelictiva.toFixed(2)}. Media móvil de 7 días calculada.`,
+      relation: `Anomalías tácticas detectadas en las fechas pico registradas en la bitácora.`
     },
     {
-      title: "GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES (TOP 5)",
+      title: "GRÁFICA 2: MATRIZ DE DENSIDAD ESPACIO-TEMPORAL (HEATMAP)",
       dataUrl: renderCrimeTopologyChart(vectorInput),
-      explanation: "Frecuencia acumulada e índices de scoring por tipo de delito.",
-      finding: "Tipologías delictivas dominantes concentradas en robo y asalto.",
-      relation: "Correlación con la accesibilidad física del perímetro comercial."
+      explanation: "Tabulación cruzada de 7x24 de delitos por día de la semana y hora.",
+      finding: `Ventana de oportunidad táctica crítica en el horario: ${stats.temporal.horarioCritico} (${stats.temporal.ventanaOportunidad}).`,
+      relation: `Concentración delictiva del ${stats.criminologico.indicadores.oportunidad.toFixed(0)}% en horarios de oportunidad.`
     },
     {
-      title: "GRÁFICA 3: FACILITADORES AMBIENTALES DE OPORTUNIDAD",
+      title: "GRÁFICA 3: PERFIL OPERATIVO Y CAPACIDAD CRIMINAL (RADAR)",
       dataUrl: renderEnvironmentalFactorsChart(vectorInput),
-      explanation: "Distribución de factores criminógenos de oportunidad.",
-      finding: "Predominio de alumbrado público inactivo y terrenos baldíos sin cerramiento.",
-      relation: "Correlación con la pérdida de vigilancia natural."
+      explanation: "Análisis multivariable de 7 indicadores táctico-criminológicos.",
+      finding: `Especialización delictiva del ${stats.criminologico.indicadores.especializacion}% (Shannon-Entropy) y Movilidad del ${stats.criminologico.indicadores.movilidad}%.`,
+      relation: `Persistencia delictiva en hotspots del ${stats.criminologico.indicadores.persistencia}% con capacidad territorial de ${stats.criminologico.indicadores.capacidadTerritorial}%.`
     },
     {
-      title: "GRÁFICA 4: PREDICCIÓN DE AUMENTO DE INCIDENCIA (6 MESES)",
+      title: "GRÁFICA 4: MODELO PREDICTIVO E ÍNDICES DE RIESGO",
       dataUrl: renderPredictiveLineChart(vectorInput),
-      explanation: "Proyección dinámica de tasa de criminalidad estimada.",
-      finding: "Tendencia de incremento del 15% en delitos de oportunidad si no hay intervención.",
-      relation: "Relación directa con la inercia espacial de la zona de oportunidad."
+      explanation: `Estimación de repetición Poisson. Modelo de ajuste: ${stats.predictivo.modelo}.`,
+      finding: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de repetición semanal. Riesgo territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100.`,
+      relation: `Confiabilidad del modelo al ${stats.predictivo.confiabilidadModeloPorcentaje}% basado en variables explicativas: ${stats.predictivo.variablesPredictivasExplicativas.join(", ")}.`
     }
   ];
 
@@ -819,7 +830,7 @@ export const buildIntelligenceEditorialPayload = async (
   const hypothesisGraph = {
     title: "Hypothesis Intelligence Graph (HIG 2.0)",
     dataUrl: renderHypothesisGraph(vectorInput),
-    interpretation: cleanTechnicalJargon(rawGraphText || "La relación entre deterioro urbano, inmuebles abandonados y movilidad nocturna establece una hipótesis de oportunidad criminógena ambiental.")
+    interpretation: `Calibrado con un Índice de Riesgo Territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100 y persistencia delictiva del ${stats.criminologico.indicadores.persistencia}%. \n\n${cleanTechnicalJargon(rawGraphText || "La relación entre factores de oportunidad y delitos en el área sustenta el grafo.")}`
   };
 
   // Sweeps Data — solo barridos reales integrados al expediente (sin inyección ficticia)
@@ -838,6 +849,20 @@ export const buildIntelligenceEditorialPayload = async (
     recomendacionesTacticas: [] as string[],
     recomendacionesEstrategicas: [] as string[]
   };
+
+  // Precalentamiento de conclusiones cuantitativas basadas en SIE
+  conclusiones.hallazgosCriticos.push(
+    `Concentración criminal crítica de ${stats.temporal.totalEventos} eventos identificados en el sector, con un Índice de Riesgo Territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100.`
+  );
+  conclusiones.riesgosInmediatos.push(
+    `Probabilidad de repetición delictiva semanal estimada en ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% bajo el modelo Poisson (Confiabilidad: ${stats.predictivo.confiabilidadModeloPorcentaje}%).`
+  );
+  conclusiones.recomendacionesTacticas.push(
+    `[Acción Inmediata 0-30 días] Focalizar presencia y patrullaje dinámico en el centro de gravedad (${stats.espacial.centroGravedad.lat.toFixed(4)}, ${stats.espacial.centroGravedad.lng.toFixed(4)}) durante la ventana de oportunidad crítica: ${stats.temporal.horarioCritico}.`
+  );
+  conclusiones.recomendacionesTacticas.push(
+    `[Acción Inmediata 0-30 días] Desplegar patrullajes preventivos para contener la migración espacial estimada en ${stats.espacial.migraciónEspacialMetros.toFixed(0)} metros.`
+  );
 
   if (rawConclusionsText && rawConclusionsText.trim().length > 10) {
     const lines = rawConclusionsText.split("\n").map(l => l.trim()).filter(Boolean);
@@ -873,11 +898,11 @@ export const buildIntelligenceEditorialPayload = async (
   }
 
   // Fallback default bullets if parsing results in empty lists
-  if (conclusiones.recomendacionesTacticas.length === 0) {
-    conclusiones.recomendacionesTacticas = [
+  if (conclusiones.recomendacionesTacticas.length <= 2) {
+    conclusiones.recomendacionesTacticas.push(
       "[Acción Inmediata 0-30 días] Sincronizar las bitácoras de patrullaje dinámico nocturno en las zonas de riesgo.",
       "[Acción Inmediata 0-30 días] Desplegar presencia disuasiva en los nodos viales identificados."
-    ];
+    );
   }
   if (conclusiones.recomendacionesEstrategicas.length === 0) {
     conclusiones.recomendacionesEstrategicas = [
@@ -891,11 +916,11 @@ export const buildIntelligenceEditorialPayload = async (
       "[Acción Estratégica >90 días] Fomentar la participación ciudadana y la vigilancia comunitaria formal."
     ];
   }
-  if (conclusiones.hallazgosCriticos.length === 0) {
-    conclusiones.hallazgosCriticos = [
-      "Deficiencias notables de alumbrado perimetral detectadas en el relevamiento territorial.",
+  if (conclusiones.hallazgosCriticos.length <= 1) {
+    conclusiones.hallazgosCriticos.push(
+      "Deficiencias notables de alumbrado perimetral detectadas en el relevamiento de campo.",
       "Predios baldíos sin cerramientos adecuados que incrementan la vulnerabilidad de escape."
-    ];
+    );
   }
 
   const executiveSummary = cleanTechnicalJargon(
