@@ -1310,7 +1310,16 @@ const hasMinimumPhotos =
             throw new Error(`El servidor devolvió una respuesta vacía o incompleta en el capítulo ${ch}.`);
           }
 
-          data = chapterData; // Guardamos el último meta
+          if (!data) {
+            data = { meta: {} };
+          }
+          if (chapterData.meta) {
+            data.meta = {
+              ...data.meta,
+              ...chapterData.meta
+            };
+          }
+          data.markdown = chapterData.markdown;
           let chunkMarkdown = chapterData.markdown || "";
           if (chunkMarkdown.startsWith("```markdown")) {
             chunkMarkdown = chunkMarkdown.replace(/^```markdown\s*/i, "").replace(/\s*```$/g, "").trim();
@@ -1409,6 +1418,9 @@ const hasMinimumPhotos =
           scinceDemographics: data.meta?.scinceDemographics || (currentAnalysisResult as any)?.scinceDemographics,
           riskLevel: data.meta?.riskLevel || (currentAnalysisResult as any)?.riskLevel,
           mlFeatures: data.meta?.mlFeatures || (currentAnalysisResult as any)?.mlFeatures,
+          sieData: data.meta?.sieData || (currentAnalysisResult as any)?.sieData,
+          tceData: data.meta?.tceData || (currentAnalysisResult as any)?.tceData,
+          hieData: data.meta?.hieData || (currentAnalysisResult as any)?.hieData,
         } as any);
 
         // Integrar automáticamente los lugares de acecho (StreetView) al Álbum

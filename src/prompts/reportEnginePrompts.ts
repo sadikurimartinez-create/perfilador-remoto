@@ -18,6 +18,7 @@ export interface ReportContext {
   analysisContext?: string;
   sieData?: any;
   tceData?: any;
+  hieData?: any;
 }
 
 /**
@@ -86,25 +87,37 @@ REGLAS EDITORIALES:
  * 3. CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL
  */
 export const HypothesisPrompt = (ctx: ReportContext): string => {
+  const hieJson = ctx.hieData ? JSON.stringify(ctx.hieData, null, 2) : "Sin datos procesados por el motor de hipótesis HIE.";
   return `
 --- INICIO MÓDULO: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL (CAPÍTULO 2) ---
 Genera el Capítulo 2: "HIPÓTESIS CRIMINOLÓGICA AMBIENTAL".
-Contexto de hipótesis: "${ctx.analysisContext || 'Sin hipótesis inicial.'}"
 
-Instrucciones:
-Establece obligatoriamente una única hipótesis criminológica central estructurada con el siguiente formato estricto:
+JSON de Datos del Hypothesis Intelligence Engine (HIE):
+\`\`\`json
+${hieJson}
+\`\`\`
+
+REGLAS DE GENERACIÓN DE TEXTO:
+1. Queda estrictamente PROHIBIDO inventar la hipótesis, la evidencia que la soporta, el nivel de confianza, los facilitadores físicos o las dinámicas delictivas. Todo debe provenir de los datos del JSON del HIE.
+2. Si el flag "validationMatrix.isValidated" es falso o "validationMatrix.hasSufficientEvidence" es falso, deberás escribir UNICAMENTE y sin añadir ningún otro texto lo siguiente:
+"Evidencia insuficiente para construir una hipótesis criminológica ambiental con respaldo metodológico."
+3. Si la evidencia es suficiente, deberás estructurar el capítulo obligatoriamente con los siguientes apartados y subtítulos exactos:
 
 ## Hipótesis:
-[Redacción completa, coherente y directa de la hipótesis en un párrafo analítico]
+- Redactar de forma fluida y coherente la síntesis de la hipótesis del campo "centralHypothesis.summary". Debe ser un párrafo formal de tono técnico-institucional.
 
 ## Evidencia que la soporta:
-[Listado estructurado de los elementos de soporte analizados: mapas, gráficas, fotos de campo, OSINT y Street View]
+- Listar los elementos de soporte y su peso técnico reportados en el arreglo "supportingEvidence".
+- Indicar las fuentes y motores indicados en "traceability".
 
 ## Nivel de confianza:
-[Indicar únicamente ALTO, MEDIO o BAJO basado en la cantidad y calidad de evidencia]
+- Especificar el nivel de confianza cuantitativo y cualitativo según el campo "confidence" (ej: "Confianza: ALTO (Score: 75/100). Descripción: ...").
 
 ## Factores que podrían modificarla:
-[Detallar factores pendientes de validar o elementos que podrían alterar la hipótesis planteada]
+- Detallar las acciones de verificación recomendadas a partir de "recommendedVerificationActions" y listar cualquier evidencia ausente reportada en "missingEvidence".
+
+REGLAS EDITORIALES:
+- Sé directo, depurado e institucional. Evita narrativas genéricas introductorias y explicaciones de relleno.
 --- FIN MÓDULO ---
 `.trim();
 };

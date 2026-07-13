@@ -17,6 +17,7 @@ import {
 } from "@/prompts/reportEnginePrompts";
 import { StatisticalIntelligenceEngine } from "@/utils/statisticalIntelligenceEngine";
 import { TerritorialContextEngine } from "@/utils/territorialContextEngine";
+import { HypothesisIntelligenceEngine } from "@/utils/hypothesisIntelligenceEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -85,11 +86,11 @@ export async function POST(req: Request) {
     const lat = parseFloat(String(safeBody.lat ?? safeBody.latitude ?? "0"));
     const lng = parseFloat(String(safeBody.lng ?? safeBody.longitude ?? "0"));
 
-    // Optimización: Calcular SIE solo si se genera el Capítulo 4 (chapter === 5)
+    // Optimización: Calcular SIE solo si es necesario (Capítulo 2 o Capítulo 4)
     let sieData: any = null;
     let generalRisk = "MEDIO";
 
-    if (chapter === 5) {
+    if (chapter === 5 || chapter === 3) {
       sieData = StatisticalIntelligenceEngine.analyze(
         safeBody.incidenciaCompleta || [],
         lat,
@@ -119,9 +120,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Instanciar TCE solo para el Capítulo 1 (chapter === 2)
+    // Instanciar TCE si se genera el Capítulo 1 o el Capítulo 2 (para alimentar al HIE)
     let tceData: any = null;
-    if (chapter === 2) {
+    if (chapter === 2 || chapter === 3) {
       tceData = TerritorialContextEngine.generate({
         projectName,
         projectId,
@@ -135,6 +136,16 @@ export async function POST(req: Request) {
         datosGobMxData: safeBody.datosGobMxData,
         sweeps: safeBody.sweeps,
         analysisContext: safeBody.analysisContext
+      });
+    }
+
+    // Instanciar HIE únicamente para el Capítulo 2 (chapter === 3)
+    let hieData: any = null;
+    if (chapter === 3) {
+      hieData = HypothesisIntelligenceEngine.build({
+        tceData,
+        sieData,
+        rawInput: safeBody
       });
     }
 
@@ -164,7 +175,8 @@ export async function POST(req: Request) {
       photos: safeBody.photos ? safeBody.photos.slice(0, 5).map((p: any) => ({ ...p, dataUrl: "" })) : [],
       analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : "",
       sieData,
-      tceData
+      tceData,
+      hieData
     };
 
     // 3. Obtener el prompt del capítulo específico
@@ -262,7 +274,8 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           inegiDemographics: null,
           tacticalStreetViews: safeBody.streetViews || [],
           sieData: sieData,
-          tceData: tceData
+          tceData: tceData,
+          hieData: hieData
         });
         
         // Enviar el inicio del JSON (el navegador tolera el espacio en blanco inicial)

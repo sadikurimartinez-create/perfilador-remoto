@@ -2,7 +2,8 @@ import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
 import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import { StatisticalIntelligenceEngine } from './statisticalIntelligenceEngine';
-import { TCE_DEFAULT_FALLBACK } from './territorialContextEngine';
+import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialContextEngine';
+import { HypothesisIntelligenceEngine } from './hypothesisIntelligenceEngine';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -518,18 +519,37 @@ export const buildIntelligenceEditorialPayload = async (
     contextoTerritorial = TCE_DEFAULT_FALLBACK;
   }
 
-  // Bloque I.2: Hipótesis principal
-  const confidenceScore = stats.predictivo.confiabilidadModeloPorcentaje / 100;
-  const confidenceDesc = confidenceScore >= 0.8 ? "Crítico/Muy Alto" : confidenceScore >= 0.6 ? "Alto" : confidenceScore >= 0.4 ? "Medio" : "Bajo";
-  const nivelConfianza = `${confidenceDesc} (${confidenceScore.toFixed(2)})`;
+  // Ejecutar el motor de contexto territorial TCE localmente para asegurar consistencia
+  const tceData = TerritorialContextEngine.generate({
+    projectName,
+    projectId,
+    projectDescription: project?.descripcion || project?.description || "",
+    analysisRadius: radius,
+    geometryType: project?.geometryType || "individual",
+    lat,
+    lng,
+    incidenciaCompleta: incidents,
+    streetViews: project?.streetViews || project?.tacticalStreetViews || [],
+    datosGobMxData: project?.datosGobMxData || null,
+    sweeps: sweeps || [],
+    analysisContext: project?.analysisContext || ""
+  });
 
+  // Ejecutar el Hypothesis Intelligence Engine (HIE)
+  const hieData = HypothesisIntelligenceEngine.build({
+    tceData,
+    sieData: stats,
+    rawInput: project
+  });
+
+  // Bloque I.2: Hipótesis principal
   const hipotesisPrincipal = {
-    queOcurre: `Dinámica de ${stats.temporal.totalEventos} incidentes delictivos con variación mensual de ${stats.temporal.variacionMensualPorcentaje.toFixed(1)}%.`,
-    dondeOcurre: `Concentración en ${stats.espacial.hotspotsCount} hotspots en torno a ${stats.espacial.centroGravedad.lat.toFixed(4)}, ${stats.espacial.centroGravedad.lng.toFixed(4)} con dispersión de ${stats.espacial.desviacionEstandarEspacialMetros.toFixed(0)}m.`,
-    quienParticipa: "Actores de oportunidad delictiva local y transeúntes vulnerables.",
-    porQueOcurre: `Facilitado por una ventana de oportunidad horaria crítica a las ${stats.temporal.horarioCritico} (${stats.temporal.ventanaOportunidad}).`,
-    evidenciaSustento: `Cálculos y proyecciones matemáticas del motor SIE con confiabilidad del ${stats.predictivo.confiabilidadModeloPorcentaje}%.`,
-    nivelConfianza
+    queOcurre: hieData.centralHypothesis.queOcurre,
+    dondeOcurre: hieData.centralHypothesis.dondeOcurre,
+    quienParticipa: hieData.validationMatrix.isValidated ? "Actores de oportunidad locales" : "No determinado (evidencia insuficiente)",
+    porQueOcurre: hieData.centralHypothesis.porQueOcurre,
+    evidenciaSustento: hieData.supportingEvidence.map(e => e.description).join(". "),
+    nivelConfianza: `Confianza: ${hieData.confidence.level} (Score: ${hieData.confidence.score}/100)`
   };
 
   // Bloque I.3: Valoración operacional
@@ -542,36 +562,16 @@ export const buildIntelligenceEditorialPayload = async (
 
   // Bloque II: Matriz de Trazabilidad Analítica
   const hasPandillaMention = rawContent.toLowerCase().includes("pandilla") || rawContent.toLowerCase().includes("clica") || sweeps.some(s => s.engine?.toLowerCase().includes("pandillas"));
-  const trazabilidadMatrix = [
-    {
-      componente: "Street View",
-      fuente: "Google Maps",
-      metodo: "Análisis visual territorial",
-      hallazgo: "Vulnerabilidades físicas detectadas en campo",
-      impacto: `Índice de Vulnerabilidad Ambiental: ${stats.predictivo.indiceVulnerabilidadAmbiental}/100`
-    },
-    {
-      componente: "Cartografía (SIE)",
-      fuente: "CEIPOL GIS / SIE",
-      metodo: `Mean Center & Elipse (${stats.espacial.expansionTerritorialClasificacion})`,
-      hallazgo: `Elipse direccional a ${stats.espacial.elipseDireccional.anguloRotacionGrados.toFixed(1)}° y semi-ejes de ${stats.espacial.elipseDireccional.semiEjeMayorMetros.toFixed(0)}m x ${stats.espacial.elipseDireccional.semiEjeMenorMetros.toFixed(0)}m`,
-      impacto: `Focalización en coordenadas ${stats.espacial.centroGravedad.lat.toFixed(4)}, ${stats.espacial.centroGravedad.lng.toFixed(4)}`
-    },
-    {
-      componente: "Análisis Predictivo (Poisson)",
-      fuente: "Registro Histórico SIE",
-      metodo: "Inferencia Poisson de Repetición",
-      hallazgo: `Modelo de Poisson (${stats.predictivo.modelo}) con confianza del ${stats.predictivo.confiabilidadModeloPorcentaje}%`,
-      impacto: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de reincidencia`
-    },
-    {
-      componente: "Registro de Campo",
-      fuente: "Evidencia Fotográfica",
-      metodo: "Inspección física in-situ",
-      hallazgo: "Deficiencias del espacio público y accesos",
-      impacto: "Facilitador de conductas de oportunidad"
-    }
-  ];
+  const trazabilidadMatrix = Object.keys(hieData.traceability).map(key => {
+    const item = hieData.traceability[key];
+    return {
+      componente: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+      fuente: item.source,
+      metodo: item.engine,
+      hallazgo: item.variable,
+      impacto: `Disponibilidad: ${item.availability}`
+    };
+  });
 
   if (hasPandillaMention) {
     trazabilidadMatrix.push({
@@ -579,9 +579,11 @@ export const buildIntelligenceEditorialPayload = async (
       fuente: "Censo Local Pandillas",
       metodo: "Análisis de territorialidad",
       hallazgo: "Zona de influencia activa identificada",
-      impacto: "Riesgo medio de conflictividad social"
+      impacto: "Disponibilidad: Media"
     });
   }
+
+
 
   // Pandillas territorial analysis
   let pandillasAnalysis = cleanTechnicalJargon(extractSection(rawContent, 9));
@@ -930,7 +932,7 @@ export const buildIntelligenceEditorialPayload = async (
 
   let finalHypothesis = cleanTechnicalJargon(rawHypothesis);
   if (!finalHypothesis || finalHypothesis.length < 50) {
-    finalHypothesis = `Se ha identificado un fenómeno criminal de oportunidad en el perímetro de ${projectName}. Los factores de riesgo validados en campo confirman deficiencias severas en el alumbrado público y la vigilancia natural. Esto permite que actores locales de riesgo cometan conductas delictivas recurrentes con un nivel de confianza ALTO. Implicación operativa: Requiere patrullaje táctico nocturno prioritario.`;
+    finalHypothesis = hieData.centralHypothesis.summary;
   }
 
   // Estructurar obligatoriamente todos los capítulos narrativos clave en formato de 4 partes (HALLAZGO, EVIDENCIA, ANÁLISIS, IMPLICACIÓN)
