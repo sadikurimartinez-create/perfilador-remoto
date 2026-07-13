@@ -11,11 +11,12 @@ export interface HIEResult {
     porQueOcurre: string;
     summary: string;
   };
-  supportingEvidence: {
-    component: string;
-    description: string;
-    weight: number;
-  }[];
+  supportingEvidence: { component: string; description: string; weight: number }[];
+  territorialEvidence: { component: string; description: string; weight: number }[];
+  criminalEvidence: { component: string; description: string; weight: number }[];
+  environmentalEvidence: { component: string; description: string; weight: number }[];
+  urbanEvidence: { component: string; description: string; weight: number }[];
+  osintEvidence: { component: string; description: string; weight: number }[];
   contradictoryEvidence: string[];
   missingEvidence: string[];
   confidence: {
@@ -49,6 +50,7 @@ export interface HIEResult {
   };
 }
 
+
 export class HypothesisIntelligenceEngine {
   /**
    * Construye la hipótesis criminológica estructurada y calcula el índice de confianza (HIE)
@@ -58,6 +60,11 @@ export class HypothesisIntelligenceEngine {
     const sie = input.sieData || {};
 
     const supportingEvidence: { component: string; description: string; weight: number }[] = [];
+    const territorialEvidence: { component: string; description: string; weight: number }[] = [];
+    const criminalEvidence: { component: string; description: string; weight: number }[] = [];
+    const environmentalEvidence: { component: string; description: string; weight: number }[] = [];
+    const urbanEvidence: { component: string; description: string; weight: number }[] = [];
+    const osintEvidence: { component: string; description: string; weight: number }[] = [];
     const contradictoryEvidence: string[] = [];
     const missingEvidence: string[] = [];
     const recommendedVerificationActions: string[] = [];
@@ -69,11 +76,16 @@ export class HypothesisIntelligenceEngine {
     let territorialScore = 0;
     if (tContext.latitude && tContext.longitude && tContext.radiusMetros) {
       supportingEvidence.push({
-        component: "Territorial",
-        description: `Delimitación perimetral de tipo ${tContext.geometryType} con un radio táctico de ${tContext.radiusMetros} metros.`,
-        weight: 10
-      });
-      territorialScore = 10;
+      component: "Territorial",
+      description: `Delimitación perimetral de tipo ${tContext.geometryType} con un radio táctico de ${tContext.radiusMetros} metros.`,
+      weight: 10
+    });
+    territorialEvidence.push({
+      component: "Territorial",
+      description: `Delimitación perimetral de tipo ${tContext.geometryType} con un radio táctico de ${tContext.radiusMetros} metros.`,
+      weight: 10
+    });
+    territorialScore = 10;
     } else {
       missingEvidence.push("Falta delimitar las coordenadas geográficas de origen del buffer.");
     }
@@ -87,20 +99,35 @@ export class HypothesisIntelligenceEngine {
     const hasSieData = temporal.totalEventos > 0;
     if (hasSieData) {
       supportingEvidence.push({
-        component: "Incidencia Criminal (SIE)",
-        description: `Concentración delictiva de ${temporal.totalEventos} incidentes históricos en el área.`,
-        weight: 15
-      });
-      supportingEvidence.push({
-        component: "Concentración Espacial (SIE)",
-        description: `Identificación de ${espacial.hotspotsCount || 1} hotspot(s) activos de concentración espacial.`,
-        weight: 10
-      });
-      supportingEvidence.push({
-        component: "Especialización Criminológica (SIE)",
-        description: `Índice de persistencia delictiva evaluado en ${crimIndicadores.persistencia || 50}% y especialización de ${crimIndicadores.especializacion || 0}%.`,
-        weight: 10
-      });
+      component: "Incidencia Criminal (SIE)",
+      description: `Concentración delictiva de ${temporal.totalEventos} incidentes históricos en el área.`,
+      weight: 15
+    });
+    criminalEvidence.push({
+      component: "Incidencia Criminal (SIE)",
+      description: `Concentración delictiva de ${temporal.totalEventos} incidentes históricos en el área.`,
+      weight: 15
+    });
+    supportingEvidence.push({
+      component: "Concentración Espacial (SIE)",
+      description: `Identificación de ${espacial.hotspotsCount || 1} hotspot(s) activos de concentración espacial.`,
+      weight: 10
+    });
+    criminalEvidence.push({
+      component: "Concentración Espacial (SIE)",
+      description: `Identificación de ${espacial.hotspotsCount || 1} hotspot(s) activos de concentración espacial.`,
+      weight: 10
+    });
+    supportingEvidence.push({
+      component: "Especialización Criminológica (SIE)",
+      description: `Índice de persistencia delictiva evaluado en ${crimIndicadores.persistencia || 50}% y especialización de ${crimIndicadores.especializacion || 0}%.`,
+      weight: 10
+    });
+    criminalEvidence.push({
+      component: "Especialización Criminológica (SIE)",
+      description: `Índice de persistencia delictiva evaluado en ${crimIndicadores.persistencia || 50}% y especialización de ${crimIndicadores.especializacion || 0}%.`,
+      weight: 10
+    });
       criminalScore = 35;
     } else {
       missingEvidence.push("Base de datos de incidencia delictiva local.");
@@ -114,16 +141,26 @@ export class HypothesisIntelligenceEngine {
     
     if (urban.streetViewsCount > 0 && totalVulnerabilities > 0) {
       supportingEvidence.push({
-        component: "Vulnerabilidades Urbanas (TCE/Street View)",
-        description: `Identificación de ${totalVulnerabilities} facilitadores físicos del entorno (baldíos, deficiencia de iluminación).`,
-        weight: 15
-      });
-      supportingEvidence.push({
-        component: "Indicadores de Oportunidad",
-        description: `Evidencia física de pérdida de vigilancia natural confirmada por Street View.`,
-        weight: 10
-      });
-      environmentalScore = 25;
+      component: "Vulnerabilidades Urbanas (TCE/Street View)",
+      description: `Identificación de ${totalVulnerabilities} facilitadores físicos del entorno (baldíos, deficiencia de iluminación).`,
+      weight: 15
+    });
+    environmentalEvidence.push({
+      component: "Vulnerabilidades Urbanas (TCE/Street View)",
+      description: `Identificación de ${totalVulnerabilities} facilitadores físicos del entorno (baldíos, deficiencia de iluminación).`,
+      weight: 15
+    });
+    supportingEvidence.push({
+      component: "Indicadores de Oportunidad",
+      description: `Evidencia física de pérdida de vigilancia natural confirmada por Street View.`,
+      weight: 10
+    });
+    environmentalEvidence.push({
+      component: "Indicadores de Oportunidad",
+      description: `Evidencia física de pérdida de vigilancia natural confirmada por Street View.`,
+      weight: 10
+    });
+    environmentalScore = 25;
     } else {
       missingEvidence.push("Evidencia fotográfica in-situ o análisis de Street View del entorno.");
       contradictoryEvidence.push("No se registraron vulnerabilidades de infraestructura física en el cuadrante.");
@@ -136,22 +173,32 @@ export class HypothesisIntelligenceEngine {
     
     if (commercial.hasCommercialData && commercial.atractoresComercialesCount > 0) {
       supportingEvidence.push({
-        component: "Atractores de Oportunidad (DENUE)",
-        description: `Presencia comercial activa con ${commercial.atractoresComercialesCount} establecimientos (ej: ${commercial.atractoresTipos.join(", ")}).`,
-        weight: 10
-      });
-      urbanScore += 10;
+      component: "Atractores de Oportunidad (DENUE)",
+      description: `Presencia comercial activa con ${commercial.atractoresComercialesCount} establecimientos (ej: ${commercial.atractoresTipos.join(", ")}).`,
+      weight: 10
+    });
+    urbanEvidence.push({
+      component: "Atractores de Oportunidad (DENUE)",
+      description: `Presencia comercial activa con ${commercial.atractoresComercialesCount} establecimientos (ej: ${commercial.atractoresTipos.join(", ")}).`,
+      weight: 10
+    });
+    urbanScore += 10;
     } else {
       missingEvidence.push("Datos de actividad comercial municipal (DENUE).");
     }
 
     if (demographic.hasDemographics) {
       supportingEvidence.push({
-        component: "Entorno Demográfico (SCINCE)",
-        description: `Dinámica de densidad habitacional: ${demographic.demographicsSummary}`,
-        weight: 5
-      });
-      urbanScore += 5;
+      component: "Entorno Demográfico (SCINCE)",
+      description: `Dinámica de densidad habitacional: ${demographic.demographicsSummary}`,
+      weight: 5
+    });
+    urbanEvidence.push({
+      component: "Entorno Demográfico (SCINCE)",
+      description: `Dinámica de densidad habitacional: ${demographic.demographicsSummary}`,
+      weight: 5
+    });
+    urbanScore += 5;
     } else {
       missingEvidence.push("Datos censales y demográficos locales (SCINCE).");
     }
@@ -161,11 +208,16 @@ export class HypothesisIntelligenceEngine {
     const hasSweeps = Array.isArray(tce.sources?.list) && tce.sources.list.some((s: any) => s.name.includes("Barrido") || s.name.includes("OSINT"));
     if (hasSweeps) {
       supportingEvidence.push({
-        component: "Inteligencia Social (OSINT/Sweeps)",
-        description: "Monitoreo social y barridos tácticos integrados al expediente.",
-        weight: 15
-      });
-      osintScore = 15;
+      component: "Inteligencia Social (OSINT/Sweeps)",
+      description: "Monitoreo social y barridos tácticos integrados al expediente.",
+      weight: 15
+    });
+    osintEvidence.push({
+      component: "Inteligencia Social (OSINT/Sweeps)",
+      description: "Monitoreo social y barridos tácticos integrados al expediente.",
+      weight: 15
+    });
+    osintScore = 15;
     } else {
       missingEvidence.push("Censo social de pandillas, conflictividad u OSINT local.");
     }
@@ -297,6 +349,11 @@ export class HypothesisIntelligenceEngine {
         summary
       },
       supportingEvidence,
+      territorialEvidence,
+      criminalEvidence,
+      environmentalEvidence,
+      urbanEvidence,
+      osintEvidence,
       contradictoryEvidence,
       missingEvidence,
       confidence: {
