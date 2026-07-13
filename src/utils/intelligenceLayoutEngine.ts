@@ -3,7 +3,7 @@ import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
 import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import { StatisticalIntelligenceEngine } from './statisticalIntelligenceEngine';
 import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialContextEngine';
-import { HypothesisIntelligenceEngine } from './hypothesisIntelligenceEngine';
+import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -381,6 +381,7 @@ export interface IntelligenceReportPayload {
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;
+  hieData?: HIEResult;
 }
 
 /**
@@ -660,21 +661,21 @@ export const buildIntelligenceEditorialPayload = async (
       relation: `Anomalías tácticas detectadas en las fechas pico registradas en la bitácora.`
     },
     {
-      title: "GRÁFICA 2: MATRIZ DE DENSIDAD ESPACIO-TEMPORAL (HEATMAP)",
+      title: "GRÁFICA 2: ANÁLISIS TOPOLÓGICO DE FRECUENCIA DE INCIDENTES (MATRIZ DE DENSIDAD ESPACIO-TEMPORAL)",
       dataUrl: renderCrimeTopologyChart(vectorInput),
       explanation: "Tabulación cruzada de 7x24 de delitos por día de la semana y hora.",
       finding: `Ventana de oportunidad táctica crítica en el horario: ${stats.temporal.horarioCritico} (${stats.temporal.ventanaOportunidad}).`,
       relation: `Concentración delictiva del ${stats.criminologico.indicadores.oportunidad.toFixed(0)}% en horarios de oportunidad.`
     },
     {
-      title: "GRÁFICA 3: PERFIL OPERATIVO Y CAPACIDAD CRIMINAL (RADAR)",
+      title: "GRÁFICA 3: ANÁLISIS DE FACILITADORES AMBIENTALES Y FACTORES DE OPORTUNIDAD DELICTIVA",
       dataUrl: renderEnvironmentalFactorsChart(vectorInput),
       explanation: "Análisis multivariable de 7 indicadores táctico-criminológicos.",
       finding: `Especialización delictiva del ${stats.criminologico.indicadores.especializacion}% (Shannon-Entropy) y Movilidad del ${stats.criminologico.indicadores.movilidad}%.`,
       relation: `Persistencia delictiva en hotspots del ${stats.criminologico.indicadores.persistencia}% con capacidad territorial de ${stats.criminologico.indicadores.capacidadTerritorial}%.`
     },
     {
-      title: "GRÁFICA 4: MODELO PREDICTIVO E ÍNDICES DE RIESGO",
+      title: "GRÁFICA 4: MODELO DE PREDICCIÓN FUTURA Y AUMENTO DE ÍNDICES DE RIESGO",
       dataUrl: renderPredictiveLineChart(vectorInput),
       explanation: `Estimación de repetición Poisson. Modelo de ajuste: ${stats.predictivo.modelo}.`,
       finding: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de repetición semanal. Riesgo territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100.`,
@@ -1030,7 +1031,8 @@ export const buildIntelligenceEditorialPayload = async (
     evidenceText: cleanTechnicalJargon(rawEvidenceText),
     streetViewText: cleanTechnicalJargon(rawStreetViewText),
     graphText: cleanTechnicalJargon(rawGraphText),
-    conclusionesText: formattedConclusionesText
+    conclusionesText: formattedConclusionesText,
+    hieData
   };
 };
 

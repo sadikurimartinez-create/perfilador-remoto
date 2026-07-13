@@ -690,22 +690,29 @@ export class ReportEngineKernelClass {
           }
 
           // Check sweeps
-          if (selectedAnnexes.sweepDenue && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("denue") || s.engine.toLowerCase().includes("inegi"))) {
+          const isSweepRequired = (val: any): boolean => {
+            if (val && typeof val === 'object') {
+              return !!(val.selected && val.available);
+            }
+            return !!val;
+          };
+
+          if (isSweepRequired(selectedAnnexes.sweepDenue) && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("denue") || s.engine.toLowerCase().includes("inegi"))) {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
-          if (selectedAnnexes.sweepIncidencia && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("incidencia") || s.engine.toLowerCase().includes("delitos"))) {
+          if (isSweepRequired(selectedAnnexes.sweepIncidencia) && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("incidencia") || s.engine.toLowerCase().includes("delitos"))) {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
-          if (selectedAnnexes.sweepRepuve && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("repuve") || s.engine.toLowerCase().includes("vehicular"))) {
+          if (isSweepRequired(selectedAnnexes.sweepRepuve) && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("repuve") || s.engine.toLowerCase().includes("vehicular"))) {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
-          if (selectedAnnexes.sweepRnpdno && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("rnpdno") || s.engine.toLowerCase().includes("desaparecidos"))) {
+          if (isSweepRequired(selectedAnnexes.sweepRnpdno) && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("rnpdno") || s.engine.toLowerCase().includes("desaparecidos"))) {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
-          if (selectedAnnexes.sweepMultimodal && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("multimodal"))) {
+          if (isSweepRequired(selectedAnnexes.sweepMultimodal) && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("multimodal"))) {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
-          if (selectedAnnexes.sweepCifa && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("cifa"))) {
+          if (isSweepRequired(selectedAnnexes.sweepCifa) && !payloadObj.sweepsData.some((s: any) => s.engine.toLowerCase().includes("cifa"))) {
             throw new Error("Informe incompleto: existen componentes seleccionados sin integración documental.");
           }
 

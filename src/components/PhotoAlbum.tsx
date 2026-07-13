@@ -1732,7 +1732,15 @@ const hasMinimumPhotos =
           markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
           sweeps: selectedSweeps,
           powerups: powerupsToExport,
-          selectedAnnexes: selectedAnnexes,
+          selectedAnnexes: {
+            ...selectedAnnexes,
+            sweepDenue: { selected: selectedAnnexes.sweepDenue, available: (project?.sweeps || []).some((s: any) => s.engine.toLowerCase().includes("denue") && s.status === "Integrado") },
+            sweepIncidencia: { selected: selectedAnnexes.sweepIncidencia, available: (project?.sweeps || []).some((s: any) => s.engine.toLowerCase().includes("incidencia") && s.status === "Integrado") },
+            sweepRepuve: { selected: selectedAnnexes.sweepRepuve, available: (project?.sweeps || []).some((s: any) => s.engine.toLowerCase().includes("vehicular") && s.status === "Integrado") },
+            sweepRnpdno: { selected: selectedAnnexes.sweepRnpdno, available: (project?.sweeps || []).some((s: any) => s.engine.toLowerCase().includes("desaparecidos") && s.status === "Integrado") },
+            sweepMultimodal: { selected: selectedAnnexes.sweepMultimodal, available: (project?.sweeps || []).some((s: any) => s.engine.toLowerCase().includes("multimodal") && s.status === "Integrado") },
+            sweepCifa: { selected: selectedAnnexes.sweepCifa, available: (project?.sweeps || []).some((s: any) => s.engine.toLowerCase().includes("cifa") && s.status === "Integrado") },
+          },
           includeOsintAppendix: selectedAnnexes.includeOsintAppendix
         }
       });
