@@ -67,33 +67,113 @@ const loadStaticMapImage = (
         `&key=${key}`;
     }
 
-    const tryOpenStreetMap = () => {
-      const latRad = lat * Math.PI / 180;
+    const tryOSMTileStitcher = () => {
+      // 1. Calcular coordenadas decimales de mosaicos (OSM)
       const n = Math.pow(2, zoom);
-      const xtile = Math.floor((lng + 180) / 360 * n);
-      const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-      const osmUrl = `https://a.tile.openstreetmap.org/${zoom}/${xtile}/${ytile}.png`;
-      
-      const osmImg = new Image();
-      osmImg.crossOrigin = "Anonymous";
-      osmImg.onload = () => resolve(osmImg);
-      osmImg.onerror = () => {
-        console.error("All static map options failed.");
-        resolve(null);
-      };
-      osmImg.src = osmUrl;
-    };
+      const xDecimal = ((lng + 180) / 360) * n;
+      const latRad = (lat * Math.PI) / 180;
+      const yDecimal = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
 
-    const tryYandex = () => {
-      const yandexUrl = `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&size=${w},${h}&z=${zoom}&l=map&scale=2.0`;
-      const yandexImg = new Image();
-      yandexImg.crossOrigin = "Anonymous";
-      yandexImg.onload = () => resolve(yandexImg);
-      yandexImg.onerror = () => {
-        console.warn("Yandex static map failed, trying OpenStreetMap tile...");
-        tryOpenStreetMap();
-      };
-      yandexImg.src = yandexUrl;
+      const xCenter = Math.floor(xDecimal);
+      const yCenter = Math.floor(yDecimal);
+
+      const xOffset = (xDecimal - xCenter) * 256;
+      const yOffset = (yDecimal - yCenter) * 256;
+
+      // Cargar un rango de 4x3 mosaicos para centrar perfectamente (2 columnas a la izquierda si el offset es bajo)
+      const colStart = xOffset < 128 ? xCenter - 2 : xCenter - 1;
+      const rowStart = yCenter - 1; // 3 filas en vertical son siempre suficientes (cobertura 768px para alto de 400px)
+
+      const colCount = 4;
+      const rowCount = 3;
+
+      // Crear lienzo temporal para coser los mosaicos
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = colCount * 256;
+      tempCanvas.height = rowCount * 256;
+      const tempCtx = tempCanvas.getContext("2d");
+      if (!tempCtx) {
+        resolve(null);
+        return;
+      }
+
+      // Cargar todas las imágenes de los mosaicos en paralelo
+      const tilePromises: Promise<boolean>[] = [];
+      const tiles: { col: number; row: number; img: HTMLImageElement }[] = [];
+
+      for (let c = 0; c < colCount; c++) {
+        for (let r = 0; r < rowCount; r++) {
+          const tileX = colStart + c;
+          const tileY = rowStart + r;
+          
+          // Servidor público de mosaicos de OpenStreetMap (Claro y detallado)
+          const url = `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
+          
+          const img = new Image();
+          img.crossOrigin = "Anonymous";
+          const p = new Promise<boolean>((resolveTile) => {
+            img.onload = () => {
+              tiles.push({ col: c, row: r, img });
+              resolveTile(true);
+            };
+            img.onerror = () => {
+              resolveTile(false);
+            };
+          });
+          img.src = url;
+          tilePromises.push(p);
+        }
+      }
+
+      Promise.all(tilePromises).then(() => {
+        // Dibujar los mosaicos cargados
+        tiles.forEach(({ col, row, img }) => {
+          tempCtx.drawImage(img, col * 256, row * 256);
+        });
+
+        // Calcular posición del centro en el lienzo temporal
+        const centerXInTemp = (xCenter - colStart) * 256 + xOffset;
+        const centerYInTemp = (yCenter - rowStart) * 256 + yOffset;
+
+        // Recortar a 600x400 centrado
+        const finalCanvas = document.createElement("canvas");
+        finalCanvas.width = w;
+        finalCanvas.height = h;
+        const finalCtx = finalCanvas.getContext("2d");
+        if (!finalCtx) {
+          resolve(null);
+          return;
+        }
+
+        // Color de fondo por si falta algún tile
+        finalCtx.fillStyle = "#f8fafc";
+        finalCtx.fillRect(0, 0, w, h);
+
+        const cropX = centerXInTemp - w / 2;
+        const cropY = centerYInTemp - h / 2;
+
+        try {
+          finalCtx.drawImage(
+            tempCanvas,
+            cropX,
+            cropY,
+            w,
+            h,
+            0,
+            0,
+            w,
+            h
+          );
+        } catch (err) {
+          console.error("Error drawing stitched OSM map crop:", err);
+        }
+
+        // Crear una nueva imagen a partir del lienzo final recortado
+        const resultImg = new Image();
+        resultImg.onload = () => resolve(resultImg);
+        resultImg.onerror = () => resolve(null);
+        resultImg.src = finalCanvas.toDataURL("image/png");
+      });
     };
 
     // Intentar primero Google Maps si hay API Key configurada
@@ -101,16 +181,16 @@ const loadStaticMapImage = (
       const googleImg = new Image();
       googleImg.crossOrigin = "Anonymous";
       googleImg.onload = () => {
-        console.log("[GEOINT Renderer] Mapa base de Google Maps cargado con éxito.");
+        console.log("[GEOINT Renderer] Base map Google Maps loaded successfully.");
         resolve(googleImg);
       };
       googleImg.onerror = () => {
-        console.warn("[GEOINT Renderer] Falló Google Maps (posible error de facturación), intentando Yandex...");
-        tryYandex();
+        console.warn("[GEOINT Renderer] Google Maps Static API failed, trying OpenStreetMap tile-stitcher...");
+        tryOSMTileStitcher();
       };
       googleImg.src = googleUrl;
     } else {
-      tryYandex();
+      tryOSMTileStitcher();
     }
   });
 };
