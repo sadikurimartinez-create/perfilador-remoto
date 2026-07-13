@@ -85,10 +85,10 @@ async function getImageDimensionsAndBuffer(
 
     ctx.drawImage(img, 0, 0, origWidth, origHeight);
 
-    // Marca de agua
+    // Marca de agua sutil
     const fontSize = Math.floor(origWidth / 15) || 48;
     ctx.save();
-    ctx.globalAlpha = 0.4;
+    ctx.globalAlpha = 0.05;
     ctx.font = `bold ${fontSize}px Arial`;
     ctx.fillStyle = "white";
     ctx.textAlign = "center";

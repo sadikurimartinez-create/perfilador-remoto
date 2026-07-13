@@ -45,13 +45,25 @@ const loadStaticMapImage = (
     if (key) {
       googleUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${w}x${h}&maptype=roadmap` +
         `&scale=2` +
-        `&style=element:geometry|color:0x1a2238` +
-        `&style=element:labels.text.fill|color:0x8a9ba8` +
-        `&style=element:labels.text.stroke|color:0x1a2238` +
-        `&style=feature:administrative|element:geometry|color:0x22335c` +
-        `&style=feature:road|element:geometry|color:0x2c3b59` +
-        `&style=feature:road|element:labels.text.fill|color:0xc4d1db` +
-        `&style=feature:water|element:geometry|color:0x0b132b` +
+        // Estilo GIS Light Canvas Profesional de Alta Resolución
+        `&style=feature:all|element:geometry|color:0xf1f5f9` +
+        `&style=feature:water|element:geometry|color:0xc2e2ff` +
+        `&style=feature:water|element:labels.text.fill|color:0x1d4f91` +
+        `&style=feature:landscape.natural|element:geometry|color:0xe2e8f0` +
+        `&style=feature:poi.park|element:geometry|color:0xdcfce7` +
+        `&style=feature:poi.park|element:labels.text.fill|color:0x15803d` +
+        `&style=feature:road|element:geometry|color:0xffffff` +
+        `&style=feature:road.local|element:geometry|color:0xf8fafc` +
+        `&style=feature:road.arterial|element:geometry|color:0xffffff` +
+        `&style=feature:road|element:labels.text.fill|color:0x334155` +
+        `&style=feature:road|element:labels.text.stroke|color:0xffffff` +
+        `&style=feature:poi|element:geometry|color:0xf1f5f9` +
+        `&style=feature:poi.school|element:geometry|color:0xfee2e2` +
+        `&style=feature:poi.school|element:labels.text.fill|color:0x991b1b` +
+        `&style=feature:poi.medical|element:geometry|color:0xfee2e2` +
+        `&style=feature:poi.medical|element:labels.text.fill|color:0x991b1b` +
+        `&style=feature:poi.business|element:labels|visibility:on` +
+        `&style=feature:administrative.neighborhood|element:labels.text.fill|color:0x0f172a` +
         `&key=${key}`;
     }
 
@@ -106,40 +118,63 @@ const loadStaticMapImage = (
 // Dibujar brújula táctica (Rosa de los Vientos) en mapas
 const drawTacticalCompass = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number) => {
   ctx.save();
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#1d4f91'; // CEIPOL standard blue
+  ctx.lineWidth = 1.2;
   
   // Círculo exterior
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.stroke();
   
+  // Ticks exteriores
+  for (let i = 0; i < 360; i += 30) {
+    const rad = i * Math.PI / 180;
+    const x1 = x + (r - 2) * Math.cos(rad);
+    const y1 = y + (r - 2) * Math.sin(rad);
+    const x2 = x + r * Math.cos(rad);
+    const y2 = y + r * Math.sin(rad);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  
   // Cruz central
+  ctx.strokeStyle = 'rgba(29, 79, 145, 0.4)';
   ctx.beginPath();
-  ctx.moveTo(x - r - 5, y);
-  ctx.lineTo(x + r + 5, y);
-  ctx.moveTo(x, y - r - 5);
-  ctx.lineTo(x, y + r + 5);
+  ctx.moveTo(x - r + 3, y);
+  ctx.lineTo(x + r - 3, y);
+  ctx.moveTo(x, y - r + 3);
+  ctx.lineTo(x, y + r - 3);
   ctx.stroke();
   
-  // Norte
-  ctx.fillStyle = '#00f0ff';
-  ctx.font = 'bold 9px monospace';
+  // Norte letra
+  ctx.fillStyle = '#0b1f3a'; // Navy
+  ctx.font = 'bold 10px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('N', x, y - r - 8);
+  ctx.fillText('N', x, y - r - 5);
   
-  // Puntero Norte (Triángulo)
+  // Puntero Norte (Estilo aguja bicolor GIS)
+  ctx.fillStyle = '#0b1f3a'; // Mitad izquierda oscura
   ctx.beginPath();
-  ctx.moveTo(x, y - r);
-  ctx.lineTo(x - 4, y - r + 8);
-  ctx.lineTo(x + 4, y - r + 8);
+  ctx.moveTo(x, y - r + 2);
+  ctx.lineTo(x - 4, y);
+  ctx.lineTo(x, y);
+  ctx.closePath();
+  ctx.fill();
+  
+  ctx.fillStyle = '#94a3b8'; // Mitad derecha clara
+  ctx.beginPath();
+  ctx.moveTo(x, y - r + 2);
+  ctx.lineTo(x + 4, y);
+  ctx.lineTo(x, y);
   ctx.closePath();
   ctx.fill();
   
   ctx.restore();
 };
 
-// Dibujar marco táctico militar con coordenadas
+// Dibujar marco táctico de estilo GIS con cuadrícula de coordenadas
 const drawTacticalFrame = (
   ctx: CanvasRenderingContext2D, 
   w: number, 
@@ -150,78 +185,83 @@ const drawTacticalFrame = (
 ) => {
   ctx.save();
   
-  // Línea exterior táctica de color cian
-  ctx.strokeStyle = '#1e3a8a';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(10, 10, w - 20, h - 20);
+  // Neatline exterior gruesa (Navy)
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(12, 12, w - 24, h - 24);
   
-  ctx.strokeStyle = '#00f0ff';
+  // Neatline interior delgada (Slate)
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(16, 16, w - 32, h - 32);
+  
+  // Ticks de coordenadas en el marco
+  ctx.strokeStyle = '#0b1f3a';
   ctx.lineWidth = 1;
-  ctx.strokeRect(15, 15, w - 30, h - 30);
+  // Ticks Horizontales
+  for (let offset = 40; offset < w - 40; offset += 80) {
+    ctx.beginPath();
+    ctx.moveTo(offset, 12);
+    ctx.lineTo(offset, 16);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(offset, h - 12);
+    ctx.lineTo(offset, h - 16);
+    ctx.stroke();
+  }
+  // Ticks Verticales
+  for (let offset = 40; offset < h - 40; offset += 60) {
+    ctx.beginPath();
+    ctx.moveTo(12, offset);
+    ctx.lineTo(16, offset);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w - 12, offset);
+    ctx.lineTo(w - 16, offset);
+    ctx.stroke();
+  }
   
-  // Esquinas militares
-  const len = 15;
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 3;
-  // Sup Izq
-  ctx.beginPath();
-  ctx.moveTo(15, 15 + len);
-  ctx.lineTo(15, 15);
-  ctx.lineTo(15 + len, 15);
-  ctx.stroke();
-  // Sup Der
-  ctx.beginPath();
-  ctx.moveTo(w - 15, 15 + len);
-  ctx.lineTo(w - 15, 15);
-  ctx.lineTo(w - 15 - len, 15);
-  ctx.stroke();
-  // Inf Izq
-  ctx.beginPath();
-  ctx.moveTo(15, h - 15 - len);
-  ctx.lineTo(15, h - 15);
-  ctx.lineTo(15 + len, h - 15);
-  ctx.stroke();
-  // Inf Der
-  ctx.beginPath();
-  ctx.moveTo(w - 15, h - 15 - len);
-  ctx.lineTo(w - 15, h - 15);
-  ctx.lineTo(w - 15 - len, h - 15);
-  ctx.stroke();
-  
-  // Coordenadas en las esquinas
-  ctx.fillStyle = '#00f0ff';
-  ctx.font = '8px monospace';
-  // Esquina Sup Izq
+  // Coordenadas en las esquinas superiores (Calidad editorial)
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 8.5px "Courier New", monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`LAT: ${lat.toFixed(5)}`, 22, 26);
-  ctx.fillText(`LNG: ${lng.toFixed(5)}`, 22, 36);
+  ctx.fillText(`LAT: ${lat.toFixed(5)}°N`, 24, 28);
+  ctx.fillText(`LNG: ${lng.toFixed(5)}°W`, 24, 38);
 
-  // Esquina Sup Der: Sistema de referencia y Fecha
   ctx.textAlign = 'right';
-  ctx.fillText('REF: WGS 84 / UTM Z13N', w - 22, 26);
-  ctx.fillText(`FECHA: ${new Date().toLocaleDateString("es-MX")}`, w - 22, 36);
+  ctx.fillText('REF: WGS 84 / UTM Z13N', w - 24, 28);
+  ctx.fillText(`FECHA: ${new Date().toLocaleDateString("es-MX")}`, w - 24, 38);
 
-  // Esquina Inf Izq: SSPE-CEIPOL (Opacidad restaurada para mayor legibilidad)
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.85)';
+  // Metadatos y firma en las esquinas inferiores
+  ctx.fillStyle = '#0b1f3a';
   ctx.textAlign = 'left';
-  ctx.fillText('CEIPOL - SSPE', 22, h - 26);
-  ctx.fillText('SISTEMA GEOINT DE SEGURIDAD PÚBLICA', 22, h - 18);
+  ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('SSPE - CEIPOL TÁCTICO', 24, h - 28);
+  ctx.fillStyle = '#475569';
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('SISTEMA GEOINT DE SEGURIDAD PÚBLICA', 24, h - 18);
 
-  // Esquina Inf Der: Polígono y límites
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.85)';
+  ctx.fillStyle = '#0b1f3a';
   ctx.textAlign = 'right';
-  ctx.fillText('LIMITE: ÁREA DE INTERÉS', w - 22, h - 26);
-  ctx.fillText('CONFIDENCIAL / CEIPOL', w - 22, h - 18);
+  ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('ÁREA DE INTERÉS PERIMETRAL', w - 24, h - 28);
+  ctx.fillStyle = '#475569';
+  ctx.font = '8px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('CONFIDENCIAL / CEIPOL / FUENTE: GOOGLE MAPS', w - 24, h - 18);
   
-  // Título del Mapa
+  // Banner de Título
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(w / 2 - 170, 12, 340, 24);
+  
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 12px monospace';
+  ctx.font = 'bold 11px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(mapTitle.toUpperCase(), w / 2, 32);
+  ctx.fillText(mapTitle.toUpperCase(), w / 2, 28);
   
   ctx.restore();
 };
 
+// Barra de escala cartográfica clásica segmentada
 const drawScaleBar = (
   ctx: CanvasRenderingContext2D, 
   x: number, 
@@ -230,38 +270,99 @@ const drawScaleBar = (
   text: string
 ) => {
   ctx.save();
-  ctx.strokeStyle = '#00f0ff';
+  ctx.strokeStyle = '#0b1f3a';
   ctx.lineWidth = 1.5;
-  ctx.fillStyle = '#00f0ff';
-  ctx.font = '7px monospace';
+  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
 
-  // Barra de escala
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + length, y);
+  const segmentWidth = length / 2;
   
-  // Marcas verticales
-  ctx.moveTo(x, y - 3);
-  ctx.lineTo(x, y + 3);
-  ctx.moveTo(x + length / 2, y - 2);
-  ctx.lineTo(x + length / 2, y + 2);
-  ctx.moveTo(x + length, y - 3);
-  ctx.lineTo(x + length, y + 3);
+  // Primer segmento (Blanco)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, y, segmentWidth, 4);
+  ctx.strokeRect(x, y, segmentWidth, 4);
+  
+  // Segundo segmento (Azul marino)
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(x + segmentWidth, y, segmentWidth, 4);
+  ctx.strokeRect(x + segmentWidth, y, segmentWidth, 4);
+
+  // Marcas divisorias verticales
+  ctx.beginPath();
+  ctx.moveTo(x, y - 2);
+  ctx.lineTo(x, y);
+  ctx.moveTo(x + segmentWidth, y - 2);
+  ctx.lineTo(x + segmentWidth, y);
+  ctx.moveTo(x + length, y - 2);
+  ctx.lineTo(x + length, y);
   ctx.stroke();
 
-  // Texto
-  ctx.fillText(text, x + length / 2, y - 5);
+  // Texto de escala
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText(text, x + length / 2, y - 4);
   ctx.restore();
 };
 
+// Mapa de localización vectorial inset (México -> Aguascalientes -> Municipio -> Colonia -> Polígono)
+const drawLocalizationMap = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
+  ctx.save();
+  
+  // Fondo de la tarjeta del mapa de localización
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1;
+  ctx.fillRect(x, y, 120, 68);
+  ctx.strokeRect(x, y, 120, 68);
+  
+  // Encabezado
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(x, y, 120, 12);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('CONTEXTO TERRITORIAL', x + 60, y + 8.5);
+  
+  // Niveles jerárquicos
+  const levels = [
+    'MÉXICO (Nacional)',
+    '➔ AGUASCALIENTES (Estatal)',
+    '  ➔ AGS. MUNICIPIO (Local)',
+    '    ➔ COL. BAJO ESTUDIO',
+    '      ➔ POLÍGONO DE INTERÉS'
+  ];
+  
+  ctx.textAlign = 'left';
+  ctx.font = '6.5px monospace';
+  
+  levels.forEach((lvl, idx) => {
+    const ly = y + 21 + idx * 9;
+    if (idx === 4) {
+      ctx.fillStyle = '#be123c'; // Rojo de riesgo
+      ctx.font = 'bold 6.5px monospace';
+      
+      // Dibujar un mini target dot parpadeante/operativo
+      ctx.beginPath();
+      ctx.arc(x + 8, ly - 2, 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillText(lvl, x + 14, ly);
+    } else {
+      ctx.fillStyle = '#475569';
+      ctx.font = '6.5px monospace';
+      ctx.fillText(lvl, x + 8, ly);
+    }
+  });
+  
+  ctx.restore();
+};
+
+// Dibujar calles simplificadas (Solo como fallback de emergencia si falla la API de mapas)
 const drawTacticalStreets = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
   ctx.save();
   
-  // Nivel 3: Calles locales (Fondo sutil)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 0.8;
-  
+  // Calles secundarias
+  ctx.strokeStyle = 'rgba(71, 85, 105, 0.2)';
+  ctx.lineWidth = 1.2;
   const localStreets = [
     { x1: 50, y1: 100, x2: 450, y2: 100 },
     { x1: 50, y1: 220, x2: 450, y2: 220 },
@@ -269,44 +370,21 @@ const drawTacticalStreets = (ctx: CanvasRenderingContext2D, w: number, h: number
     { x1: 280, y1: 50, x2: 280, y2: 350 }
   ];
   localStreets.forEach(s => {
-    ctx.beginPath();
-    ctx.moveTo(s.x1, s.y1);
-    ctx.lineTo(s.x2, s.y2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
   });
 
-  // Nivel 2: Vialidades secundarias (Grosor medio, cian semitransparente)
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
-  ctx.lineWidth = 1.6;
-  const secondaryStreets = [
-    { x1: 30, y1: 300, x2: 570, y2: 300 },
-    { x1: 420, y1: 30, x2: 420, y2: 370 }
-  ];
-  secondaryStreets.forEach(s => {
-    ctx.beginPath();
-    ctx.moveTo(s.x1, s.y1);
-    ctx.lineTo(s.x2, s.y2);
-    ctx.stroke();
-  });
-
-  // Nivel 1: Vialidades principales (Mayor grosor, cian brillante)
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 3.5;
+  // Avenidas Principales
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 3;
   const primaryStreets = [
-    { x1: 30, y1: 150, x2: 570, y2: 150, name: "Av. Universidad (VÍA PRINCIPAL)" },
-    { x1: 200, y1: 30, x2: 200, y2: 370, name: "Bulevar Díaz Ordaz (VÍA RÁPIDA)" }
+    { x1: 30, y1: 150, x2: 570, y2: 150, name: "Av. Rancho San Antonio" },
+    { x1: 200, y1: 30, x2: 200, y2: 370, name: "Av. Paseos de La Habana" }
   ];
   primaryStreets.forEach(s => {
-    ctx.beginPath();
-    ctx.moveTo(s.x1, s.y1);
-    ctx.lineTo(s.x2, s.y2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
 
-    // Nombre visible con contraste
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 8px Calibri';
-    ctx.shadowColor = '#000000';
-    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
     
     if (s.x1 === s.x2) {
@@ -318,7 +396,6 @@ const drawTacticalStreets = (ctx: CanvasRenderingContext2D, w: number, h: number
     } else {
       ctx.fillText(s.name, (s.x1 + s.x2) / 2, s.y1 - 6);
     }
-    ctx.shadowBlur = 0;
   });
 
   ctx.restore();
@@ -338,40 +415,41 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    drawTacticalStreets(ctx, w, h);
   } else {
-    // Fondo azul oscuro táctico
-    ctx.fillStyle = '#0b132b';
+    // Fondo de fallback blanco/gris
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
     
-    // Rejilla cartográfica de fondo
-    ctx.strokeStyle = '#1c2541';
-    ctx.lineWidth = 1;
+    // Rejilla cartográfica gris fina de fondo
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
       ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
     }
     for (let y = 40; y < h; y += 40) {
       ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
     }
+    drawTacticalStreets(ctx, w, h);
   }
   
-  // Círculos concéntricos de radar de inteligencia
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+  // Círculos concéntricos de radar de inteligencia (Cromática CEIPOL)
+  ctx.strokeStyle = 'rgba(29, 79, 145, 0.15)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(w / 2, h / 2, 80, 0, Math.PI * 2);
   ctx.arc(w / 2, h / 2, 140, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Dibujar zona de amortiguamiento (Buffer) del Perfil
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([5, 5]);
+  // Zona de amortiguamiento (Buffer) del Perfil
+  ctx.strokeStyle = 'rgba(29, 79, 145, 0.5)';
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.arc(w / 2, h / 2, 110, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
   
-  // Dibujar Puntos de Calor (Hotspots de delitos)
+  // Dibujar Puntos de Calor (Hotspots de delitos - Kernel Density real suave)
   const simulatedIncidents = input.incidents && input.incidents.length > 0
     ? input.incidents
     : [
@@ -382,87 +460,101 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
       ];
 
   simulatedIncidents.forEach((inc) => {
-    // Convertir coordenadas relativas a píxeles
     const dx = (inc.lng - centerLng) * 200000;
     const dy = -(inc.lat - centerLat) * 200000;
     const px = w / 2 + dx;
     const py = h / 2 + dy;
     
     if (px > 40 && px < w - 40 && py > 40 && py < h - 40) {
-      // Glow exterior
-      const gradient = ctx.createRadialGradient(px, py, 2, px, py, 25);
-      gradient.addColorStop(0, 'rgba(239, 68, 68, 0.7)');
-      gradient.addColorStop(0.3, 'rgba(239, 68, 68, 0.3)');
-      gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      // Degradado radial Kernel Density suave y no difuso exageradamente
+      const gradient = ctx.createRadialGradient(px, py, 2, px, py, 26);
+      gradient.addColorStop(0, 'rgba(190, 18, 60, 0.85)');   // Crimson red center
+      gradient.addColorStop(0.2, 'rgba(225, 29, 72, 0.6)');  // Soft red
+      gradient.addColorStop(0.5, 'rgba(217, 119, 6, 0.3)');  // Orange transition
+      gradient.addColorStop(0.8, 'rgba(234, 179, 8, 0.12)'); // Yellow halo
+      gradient.addColorStop(1, 'rgba(234, 179, 8, 0)');       // Outer bounds
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(px, py, 25, 0, Math.PI * 2);
+      ctx.arc(px, py, 26, 0, Math.PI * 2);
       ctx.fill();
       
-      // Núcleo
-      ctx.fillStyle = '#ef4444';
+      // Núcleo central definido
+      ctx.fillStyle = '#be123c';
       ctx.beginPath();
-      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.arc(px, py, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
   });
 
-  // Centro de Análisis (Crosshair de la Geointeligencia)
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 1.5;
+  // Centro de Análisis (Crosshair CEIPOL)
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 8, 0, Math.PI * 2);
-  ctx.moveTo(w / 2 - 15, h / 2); ctx.lineTo(w / 2 + 15, h / 2);
-  ctx.moveTo(w / 2, h / 2 - 15); ctx.lineTo(w / 2, h / 2 + 15);
+  ctx.arc(w / 2, h / 2, 7, 0, Math.PI * 2);
+  ctx.moveTo(w / 2 - 13, h / 2); ctx.lineTo(w / 2 + 13, h / 2);
+  ctx.moveTo(w / 2, h / 2 - 13); ctx.lineTo(w / 2, h / 2 + 13);
   ctx.stroke();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
-  if (!baseMapImg) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText("Av. Rancho San Antonio", 160, 75);
-    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-    ctx.fillText("Calle del Limite Norte", 160, 315);
-    
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
-  }
+  // Dibujar Inset de Localización Jerárquica
+  drawLocalizationMap(ctx, 22, 48);
   
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 1: Densidad Criminológica Perimetral");
   drawTacticalCompass(ctx, w - 45, 55, 15);
   drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
   
-  // Leyenda de Inteligencia
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  // Leyenda de Inteligencia Profesional
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(w - 185, h - 105, 170, 90);
+  ctx.strokeRect(w - 185, h - 105, 170, 90);
+  
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(w - 185, h - 105, 170, 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEYENDA DE INTELIGENCIA', w - 100, h - 95);
+  
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
+  
+  // Item 1: Hotspot
+  const gradLegend = ctx.createRadialGradient(w - 172, h - 78, 1, w - 172, h - 78, 6);
+  gradLegend.addColorStop(0, 'rgba(190, 18, 60, 0.9)');
+  gradLegend.addColorStop(1, 'rgba(234, 179, 8, 0)');
+  ctx.fillStyle = gradLegend;
+  ctx.beginPath(); ctx.arc(w - 172, h - 78, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Hotspot (Densidad Criminógena)', w - 160, h - 75);
+  
+  // Item 2: Buffer
   ctx.strokeStyle = '#1d4f91';
   ctx.lineWidth = 1;
-  ctx.fillRect(w - 180, h - 90, 165, 75);
-  ctx.strokeRect(w - 180, h - 90, 165, 75);
-  
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText('SIMBOLOGÍA DE GEOINTEL', w - 172, h - 78);
-  
-  ctx.fillStyle = '#ef4444';
-  ctx.beginPath(); ctx.arc(w - 168, h - 64, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('Hotspot / Foco Delictivo', w - 158, h - 62);
-  
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.6)';
-  ctx.beginPath(); ctx.arc(w - 168, h - 50, 4, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('Cuadrante Buffer (Radio)', w - 158, h - 48);
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath(); ctx.arc(w - 172, h - 63, 4, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Cuadrante de Amortiguamiento', w - 160, h - 60);
 
-  ctx.strokeStyle = '#00f0ff';
-  ctx.beginPath(); ctx.arc(w - 168, h - 36, 4, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(w - 173, h - 36); ctx.lineTo(w - 163, h - 36); ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('Objetivo / Centroid', w - 158, h - 34);
+  // Item 3: Centroid
+  ctx.strokeStyle = '#be123c';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(w - 172, h - 48, 4, 0, Math.PI * 2);
+  ctx.moveTo(w - 178, h - 48); ctx.lineTo(w - 166, h - 48);
+  ctx.moveTo(w - 172, h - 54); ctx.lineTo(w - 172, h - 42);
+  ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Centroide del Polígono', w - 160, h - 45);
+
+  // Metadatos
+  ctx.fillStyle = '#475569';
+  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
+  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
 
   return canvas.toDataURL('image/png');
 };
@@ -481,46 +573,73 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    drawTacticalStreets(ctx, w, h);
   } else {
-    // Fondo azul oscuro táctico
-    ctx.fillStyle = '#0b132b';
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
     
-    // Rejilla
-    ctx.strokeStyle = '#1c2541';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
       ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
     }
     for (let y = 40; y < h; y += 40) {
       ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
     }
+    drawTacticalStreets(ctx, w, h);
   }
 
-  // Corredores ficticios (Líneas vectoriales de colores con flechas)
-  ctx.save();
-  ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(100, 200); ctx.lineTo(500, 200);
-  ctx.stroke();
-  
-  ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
-  ctx.beginPath();
-  ctx.moveTo(300, 60); ctx.lineTo(300, 340);
-  ctx.stroke();
-  ctx.restore();
+  // Corredores de movilidad táctica (Vectores proporcionales CEIPOL)
+  const drawCorridor = (x1: number, y1: number, x2: number, y2: number, color: string, width: number, label: string) => {
+    ctx.save();
+    // Halo translúcido
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.22;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    
+    // Línea central discontinua
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Etiqueta del corredor
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(angle);
+    ctx.fillText(label, 0, -5);
+    ctx.restore();
+    ctx.restore();
+  };
 
-  // Flechas de dirección delictiva
+  // Dibujar corredores reales vectoriales
+  drawCorridor(100, 200, 500, 200, '#d97706', 7, "CORREDOR SECUNDARIO DE ESCAPE");
+  drawCorridor(300, 60, 300, 340, '#be123c', 9, "CORREDOR DE HUIDA CRÍTICO");
+
+  // Flechas de dirección discretas y proporcionales
   const drawArrow = (fromx: number, fromy: number, tox: number, toy: number, color: string) => {
-    const headlen = 10;
+    const headlen = 8;
     const dx = tox - fromx;
     const dy = toy - fromy;
     const angle = Math.atan2(dy, dx);
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(fromx, fromy);
     ctx.lineTo(tox, toy);
@@ -534,55 +653,71 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
     ctx.fill();
   };
 
-  drawArrow(120, 200, 240, 200, '#f59e0b');
-  drawArrow(240, 200, 360, 200, '#f59e0b');
-  drawArrow(360, 200, 480, 200, '#f59e0b');
+  drawArrow(120, 200, 200, 200, '#d97706');
+  drawArrow(220, 200, 280, 200, '#d97706');
+  drawArrow(320, 200, 400, 200, '#d97706');
   
-  drawArrow(300, 80, 300, 160, '#10b981');
-  drawArrow(300, 240, 300, 310, '#10b981');
+  drawArrow(300, 80, 300, 140, '#be123c');
+  drawArrow(300, 220, 300, 290, '#be123c');
 
-  // Centro
-  ctx.fillStyle = '#00f0ff';
-  ctx.beginPath(); ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2); ctx.fill();
+  // Centroide
+  ctx.fillStyle = '#0b1f3a';
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
-  if (!baseMapImg) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText("Av. Rancho San Antonio", 160, 75);
-    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-    ctx.fillText("Calle del Limite Norte", 160, 315);
-    
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
-  }
+  // Dibujar Inset de Localización Jerárquica
+  drawLocalizationMap(ctx, 22, 48);
 
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 2: Corredores de Movilidad y Escapes");
   drawTacticalCompass(ctx, w - 45, 55, 15);
   drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
 
-  // Leyenda
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.strokeStyle = '#1d4f91';
-  ctx.lineWidth = 1;
-  ctx.fillRect(w - 180, h - 90, 165, 75);
-  ctx.strokeRect(w - 180, h - 90, 165, 75);
-  
+  // Leyenda de Movilidad
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText('MOVILIDAD Y ESCAPE', w - 172, h - 78);
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(w - 185, h - 105, 170, 90);
+  ctx.strokeRect(w - 185, h - 105, 170, 90);
   
-  ctx.fillStyle = '#f59e0b';
-  ctx.fillText('→ Corredor de Huida Principal', w - 168, h - 62);
-  ctx.fillStyle = '#10b981';
-  ctx.fillText('↓ Ruta de Acceso Criminógena', w - 168, h - 48);
-  ctx.fillStyle = '#00f0ff';
-  ctx.fillText('• Centro de Operaciones/Objetivo', w - 168, h - 34);
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(w - 185, h - 105, 170, 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEYENDA DE MOVILIDAD', w - 100, h - 95);
+  
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
+  
+  // Flecha 1
+  ctx.strokeStyle = '#be123c';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(w - 178, h - 75); ctx.lineTo(w - 166, h - 75);
+  ctx.moveTo(w - 170, h - 78); ctx.lineTo(w - 166, h - 75); ctx.lineTo(w - 170, h - 72);
+  ctx.stroke();
+  ctx.fillText('Ruta de Huida Principal (Riesgo)', w - 160, h - 73);
+
+  // Flecha 2
+  ctx.strokeStyle = '#d97706';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(w - 178, h - 60); ctx.lineTo(w - 166, h - 60);
+  ctx.moveTo(w - 170, h - 63); ctx.lineTo(w - 166, h - 60); ctx.lineTo(w - 170, h - 57);
+  ctx.stroke();
+  ctx.fillText('Corredor de Acceso Táctico', w - 160, h - 58);
+
+  // Punto
+  ctx.fillStyle = '#0b1f3a';
+  ctx.beginPath(); ctx.arc(w - 172, h - 45, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillText('Centroide Operacional', w - 160, h - 43);
+
+  // Metadatos
+  ctx.fillStyle = '#475569';
+  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
+  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
 
   return canvas.toDataURL('image/png');
 };
@@ -601,86 +736,111 @@ export const renderAttractorsMap = async (input: VectorEngineInput): Promise<str
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    drawTacticalStreets(ctx, w, h);
   } else {
-    // Fondo azul oscuro táctico
-    ctx.fillStyle = '#0b132b';
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
     
-    // Rejilla
-    ctx.strokeStyle = '#1c2541';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
       ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
     }
     for (let y = 40; y < h; y += 40) {
       ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
     }
+    drawTacticalStreets(ctx, w, h);
   }
 
-  // Zonas de atractores (Polígonos sombreados)
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
-  ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.rect(150, 80, 150, 120);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.6)';
-  ctx.font = '8px monospace';
-  ctx.fillText('ZONA A: ALTA CONCENTRACIÓN DE GIROS COMERCIALES', 158, 98);
-
-  ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
-  ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
-  ctx.beginPath();
-  ctx.rect(300, 200, 150, 120);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(245, 158, 11, 0.6)';
-  ctx.fillText('ZONA B: LOTES BALDÍOS / FALTA ALUMBRADO', 308, 218);
-
-  // Centro
-  ctx.fillStyle = '#00f0ff';
-  ctx.beginPath(); ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2); ctx.fill();
-
-  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
-  if (!baseMapImg) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText("Av. Rancho San Antonio", 160, 75);
-    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-    ctx.fillText("Calle del Limite Norte", 160, 315);
+  // Zonas de atractores (Polígonos sombreados con trama cruzada estilo GIS)
+  const drawGISPolygon = (x: number, y: number, width: number, height: number, fillColor: string, borderColor: string, label: string) => {
+    ctx.save();
+    // Relleno translúcido
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(x, y, width, height);
     
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
-  }
+    // Borde
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x, y, width, height);
+    
+    // Trama de líneas diagonales GIS
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 0.5;
+    ctx.globalAlpha = 0.15;
+    ctx.beginPath();
+    for (let k = -height; k < width; k += 10) {
+      ctx.moveTo(x + k, y);
+      ctx.lineTo(x + k + height, y + height);
+    }
+    ctx.stroke();
+    
+    // Etiqueta
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = borderColor;
+    ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(label, x + 6, y + 12);
+    ctx.restore();
+  };
+
+  drawGISPolygon(150, 80, 150, 120, 'rgba(29, 79, 145, 0.15)', 'rgba(29, 79, 145, 0.7)', 'ZONA A: CONCENTRACIÓN COMERCIAL (ATRACTORES)');
+  drawGISPolygon(300, 200, 150, 120, 'rgba(217, 119, 6, 0.15)', 'rgba(217, 119, 6, 0.7)', 'ZONA B: LOTES BALDÍOS (FACILITADORES)');
+
+  // Centroide
+  ctx.fillStyle = '#0b1f3a';
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
+
+  // Dibujar Inset de Localización Jerárquica
+  drawLocalizationMap(ctx, 22, 48);
 
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 3: Factores de Atracción y Censo Comercial");
   drawTacticalCompass(ctx, w - 45, 55, 15);
   drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
 
-  // Leyenda
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.strokeStyle = '#1d4f91';
-  ctx.lineWidth = 1;
-  ctx.fillRect(w - 180, h - 90, 165, 75);
-  ctx.strokeRect(w - 180, h - 90, 165, 75);
-  
+  // Leyenda de Atractores
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText('CENSO DE ATRACCIÓN', w - 172, h - 78);
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(w - 185, h - 105, 170, 90);
+  ctx.strokeRect(w - 185, h - 105, 170, 90);
   
-  ctx.fillStyle = '#ef4444';
-  ctx.fillText('■ Zona A: Atracción Económica', w - 168, h - 62);
-  ctx.fillStyle = '#f59e0b';
-  ctx.fillText('■ Zona B: Deterioro Físico/Baldíos', w - 168, h - 48);
-  ctx.fillStyle = '#00f0ff';
-  ctx.fillText('• Punto Focal de Vigilancia', w - 168, h - 34);
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(w - 185, h - 105, 170, 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEYENDA DE ATRACTORES', w - 100, h - 95);
+  
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
+  
+  // Item 1
+  ctx.fillStyle = 'rgba(29, 79, 145, 0.15)';
+  ctx.strokeStyle = 'rgba(29, 79, 145, 0.7)';
+  ctx.fillRect(w - 178, h - 79, 12, 8);
+  ctx.strokeRect(w - 178, h - 79, 12, 8);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Zona A: Concentración Comercial', w - 160, h - 73);
+
+  // Item 2
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.15)';
+  ctx.strokeStyle = 'rgba(217, 119, 6, 0.7)';
+  ctx.fillRect(w - 178, h - 64, 12, 8);
+  ctx.strokeRect(w - 178, h - 64, 12, 8);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Zona B: Deterioro y Baldíos', w - 160, h - 58);
+
+  // Item 3
+  ctx.fillStyle = '#be123c';
+  ctx.beginPath(); ctx.arc(w - 172, h - 45, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillText('Punto Focal de Riesgo', w - 160, h - 43);
+
+  // Metadatos
+  ctx.fillStyle = '#475569';
+  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
+  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
 
   return canvas.toDataURL('image/png');
 };
@@ -699,88 +859,120 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
   if (baseMapImg) {
     ctx.drawImage(baseMapImg, 0, 0, w, h);
-    drawTacticalStreets(ctx, w, h);
   } else {
-    // Fondo azul oscuro táctico
-    ctx.fillStyle = '#0b132b';
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, w, h);
     
-    // Rejilla
-    ctx.strokeStyle = '#1c2541';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
     for (let x = 40; x < w; x += 40) {
       ctx.beginPath(); ctx.moveTo(x, 40); ctx.lineTo(x, h - 40); ctx.stroke();
     }
     for (let y = 40; y < h; y += 40) {
       ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 40, y); ctx.stroke();
     }
+    drawTacticalStreets(ctx, w, h);
   }
 
-  // Zona de expansión predictiva (Línea discontinua y degradado radial)
-  const grad = ctx.createRadialGradient(w / 2 + 30, h / 2 - 20, 10, w / 2 + 30, h / 2 - 20, 130);
-  grad.addColorStop(0, 'rgba(225, 29, 72, 0.35)');
-  grad.addColorStop(0.6, 'rgba(225, 29, 72, 0.1)');
-  grad.addColorStop(1, 'rgba(225, 29, 72, 0)');
-  ctx.fillStyle = grad;
+  // Superficies de Probabilidad Predictiva concéntricas (Estándar GIS)
+  const cx = w / 2 + 30;
+  const cy = h / 2 - 20;
+  
+  // Zona de Alta Probabilidad (90%)
+  ctx.fillStyle = 'rgba(190, 18, 60, 0.2)';
+  ctx.strokeStyle = 'rgba(190, 18, 60, 0.7)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(w / 2 + 30, h / 2 - 20, 130, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 45, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.strokeStyle = '#e11d48';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
+  ctx.stroke();
+  
+  // Zona de Probabilidad Media (70%)
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.12)';
+  ctx.strokeStyle = 'rgba(217, 119, 6, 0.5)';
   ctx.beginPath();
-  ctx.arc(w / 2 + 30, h / 2 - 20, 130, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Zona de Probabilidad Baja (50%)
+  ctx.fillStyle = 'rgba(234, 179, 8, 0.06)';
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 130, 0, Math.PI * 2);
+  ctx.fill();
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Icono del delito futuro proyectado
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText('ÁREA DE DISPERSIÓN PREDICTIVA (6 MESES)', w / 2 - 70, h / 2 - 20);
+  // Etiquetas de zonas predictivas
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('90% PROB', cx - 18, cy + 3);
+  ctx.fillText('70% PROB', cx - 18, cy - 50);
+  ctx.fillText('50% PROB', cx - 18, cy - 100);
 
-  // Centro
-  ctx.fillStyle = '#00f0ff';
-  ctx.beginPath(); ctx.arc(w / 2, h / 2, 6, 0, Math.PI * 2); ctx.fill();
+  // Centroide
+  ctx.fillStyle = '#0b1f3a';
+  ctx.beginPath(); ctx.arc(w / 2, h / 2, 5, 0, Math.PI * 2); ctx.fill();
 
-  // Dibujar nombres de calles y colonias para el realismo cartográfico en caso de que no haya cargado la imagen
-  if (!baseMapImg) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText("Av. Rancho San Antonio", 160, 75);
-    ctx.fillText("Calle Paseos de Chihuahua", 160, 195);
-    ctx.fillText("Calle del Limite Norte", 160, 315);
-    
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText("COL. PASEOS DE CHIHUAHUA", 310, 110);
-    ctx.fillText("SECTOR DE INTERÉS TÁCTICO", 120, 280);
-  }
+  // Dibujar Inset de Localización Jerárquica
+  drawLocalizationMap(ctx, 22, 48);
 
   // Dibujar Marco Táctico y Escala
   drawTacticalFrame(ctx, w, h, centerLat, centerLng, "Mapa 4: Proyección Predictiva de Incidencia");
   drawTacticalCompass(ctx, w - 45, 55, 15);
   drawScaleBar(ctx, 35, h - 35, 60, "ESCALA: 1:5,000 (50m)");
 
-  // Leyenda
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.strokeStyle = '#1d4f91';
-  ctx.lineWidth = 1;
-  ctx.fillRect(w - 180, h - 90, 165, 75);
-  ctx.strokeRect(w - 180, h - 90, 165, 75);
-  
+  // Leyenda Predictiva
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText('ANÁLISIS PREDICTIVO', w - 172, h - 78);
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(w - 185, h - 105, 170, 90);
+  ctx.strokeRect(w - 185, h - 105, 170, 90);
   
-  ctx.fillStyle = '#e11d48';
-  ctx.fillText('--- Límite de Expansión 6M', w - 168, h - 62);
-  ctx.fillStyle = 'rgba(225, 29, 72, 0.35)';
-  ctx.fillText('■ Núcleo de Crecimiento delictivo', w - 168, h - 48);
-  ctx.fillStyle = '#00f0ff';
-  ctx.fillText('• Centro Geográfico de Incidencia', w - 168, h - 34);
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillRect(w - 185, h - 105, 170, 15);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEYENDA PREDICTIVA', w - 100, h - 95);
+  
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '7.5px "Segoe UI", Arial, sans-serif';
+  
+  // Item 90%
+  ctx.fillStyle = 'rgba(190, 18, 60, 0.2)';
+  ctx.strokeStyle = 'rgba(190, 18, 60, 0.7)';
+  ctx.fillRect(w - 178, h - 79, 12, 8);
+  ctx.strokeRect(w - 178, h - 79, 12, 8);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Núcleo de Crecimiento (90%)', w - 160, h - 73);
+
+  // Item 70%
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.12)';
+  ctx.strokeStyle = 'rgba(217, 119, 6, 0.5)';
+  ctx.fillRect(w - 178, h - 64, 12, 8);
+  ctx.strokeRect(w - 178, h - 64, 12, 8);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Área de Advertencia (70%)', w - 160, h - 58);
+
+  // Item 50%
+  ctx.fillStyle = 'rgba(234, 179, 8, 0.06)';
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
+  ctx.setLineDash([2, 2]);
+  ctx.fillRect(w - 178, h - 49, 12, 8);
+  ctx.strokeRect(w - 178, h - 49, 12, 8);
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText('Límite de Dispersión (50%)', w - 160, h - 43);
+
+  // Metadatos
+  ctx.fillStyle = '#475569';
+  ctx.font = 'italic 7px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('Radio analizado: 500 metros', w - 172, h - 30);
+  ctx.fillText('Fuente: CEIPOL Táctico / WGS 84', w - 172, h - 21);
 
   return canvas.toDataURL('image/png');
 };
@@ -793,79 +985,128 @@ export const renderTemporalShiftChart = (input: VectorEngineInput): string => {
   const w = 600;
   const h = 400;
 
-  ctx.fillStyle = '#0b132b';
+  // Fondo blanco editorial
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px monospace';
+  // Título Institucional
+  ctx.fillStyle = '#0b1f3a';
+  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('GRÁFICA 1: DISTRIBUCIÓN TEMPORAL DEL DELITO POR TURNO', w / 2, 40);
 
-  // Gridlines de fondo
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
+  // Subtítulo
+  ctx.fillStyle = '#475569';
+  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('ANÁLISIS ESTADÍSTICO DE FRECUENCIA POR RANGO HORARIO', w / 2, 54);
+
+  // Ejes y Gridlines de fondo
+  ctx.strokeStyle = '#e2e8f0'; // Gridlines muy discretas
+  ctx.lineWidth = 0.8;
+  const startY = 110;
+  const graphHeight = 200;
+  
   for (let i = 0; i <= 4; i++) {
-    const y = 100 + i * 50;
-    ctx.beginPath();
-    ctx.moveTo(80, y);
-    ctx.lineTo(520, y);
-    ctx.stroke();
+    const y = startY + i * (graphHeight / 4);
+    
+    // Gridline horizontal (excepto el eje X final)
+    if (i < 4) {
+      ctx.beginPath();
+      ctx.moveTo(80, y);
+      ctx.lineTo(520, y);
+      ctx.stroke();
+    }
     
     // Eje Y Labels
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '10px monospace';
+    ctx.fillStyle = '#475569';
+    ctx.font = 'bold 9.5px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`${(100 - i * 25)}%`, 70, y + 4);
+    ctx.fillText(`${(100 - i * 25)}%`, 70, y + 3.5);
+    
+    // Ticks secundarios en el eje Y
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(76, y);
+    ctx.lineTo(80, y);
+    ctx.stroke();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.8;
   }
 
-  // Datos reales o representativos por turnos
+  // Datos reales o representativos por turnos (CEIPOL Palette)
   const shifts = ['Matutino (6-12)', 'Vespertino (12-18)', 'Nocturno (18-0)', 'Madrugada (0-6)'];
   const values = [12, 23, 45, 20]; // En porcentaje
-  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#e11d48'];
+  const colors = [
+    '#1d4f91', // CEIPOL azul principal
+    '#475569', // Slate
+    '#be123c', // Crimson (Riesgo alto nocturno)
+    '#d97706'  // Amber (Advertencia madrugada)
+  ];
 
   // Barras
-  const barWidth = 60;
-  const spacing = 100;
-  const startX = 120;
+  const barWidth = 52;
+  const spacing = 105;
+  const startX = 115;
+  const axisY = startY + graphHeight; // 310
 
   for (let i = 0; i < 4; i++) {
-    const heightVal = values[i] * 2;
+    const heightVal = (values[i] / 100) * graphHeight;
     const x = startX + i * spacing;
-    const y = 300 - heightVal;
+    const y = axisY - heightVal;
 
-    // Dibujar barra con degradado cian/azul/naranja
-    const grad = ctx.createLinearGradient(x, 300, x, y);
+    // Dibujar barra con degradado elegante
+    const grad = ctx.createLinearGradient(x, axisY, x, y);
     grad.addColorStop(0, colors[i]);
-    grad.addColorStop(1, '#00f0ff');
+    grad.addColorStop(1, colors[i] + 'dd'); // Sutil transparencia arriba
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, barWidth, heightVal);
 
-    // Borde de barra
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
+    // Contorno fino de la barra
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(x, y, barWidth, heightVal);
 
-    // Texto de valor
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 10px monospace';
+    // Valor exacto dibujado en negro arriba de la barra
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 11px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${values[i]}%`, x + barWidth / 2, y - 8);
 
+    // Ticks en el eje X para cada categoría
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + barWidth / 2, axisY);
+    ctx.lineTo(x + barWidth / 2, axisY + 4);
+    ctx.stroke();
+
     // Texto de etiquetas en X
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px monospace';
-    ctx.fillText(shifts[i], x + barWidth / 2, 320);
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(shifts[i], x + barWidth / 2, axisY + 16);
   }
 
-  // Eje X e Y
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 2;
+  // Ejes X e Y sólidos (Slate)
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(80, 100);
-  ctx.lineTo(80, 300);
-  ctx.lineTo(520, 300);
+  ctx.moveTo(80, startY - 10);
+  ctx.lineTo(80, axisY);
+  ctx.lineTo(520, axisY);
   ctx.stroke();
+
+  // Pie de Gráfica / Fuente
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Registro Estadístico de Incidencia Delictiva CEIPOL', 80, 360);
+  
+  // Marca de agua sutil en la esquina inferior derecha
+  ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('SSPE-CEIPOL', 520, 360);
 
   return canvas.toDataURL('image/png');
 };
@@ -878,14 +1119,20 @@ export const renderCrimeTopologyChart = (input: VectorEngineInput): string => {
   const w = 600;
   const h = 400;
 
-  ctx.fillStyle = '#0b132b';
+  // Fondo blanco editorial
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px monospace';
+  // Título Institucional
+  ctx.fillStyle = '#0b1f3a';
+  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('GRÁFICA 2: TOPOLOGÍA Y FRECUENCIA DE INCIDENTES', w / 2, 40);
+
+  // Subtítulo
+  ctx.fillStyle = '#475569';
+  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('DISTRIBUCIÓN POR TIPOLOGÍA DE DELITO REGISTRADA', w / 2, 54);
 
   // Categorías de delitos (Top 5)
   const crimes = [
@@ -896,54 +1143,117 @@ export const renderCrimeTopologyChart = (input: VectorEngineInput): string => {
     'Vandalismo / Daños perimetrales'
   ];
   const percentages = [35, 25, 20, 12, 8];
-  const colors = ['#e11d48', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
+  
+  // CEIPOL Palette - con un rojo marcado para el primer tipo (violento) y neutrales/azules para los demás
+  const colors = [
+    '#be123c', // Crimson (Crimen violento)
+    '#1d4f91', // CEIPOL Standard Blue
+    '#475569', // Slate
+    '#5d6b7c', // Muted Blue-gray
+    '#d97706'  // Amber (Incivilidades/Vandalismo)
+  ];
 
   // Dibujar barras horizontales
-  const startY = 80;
-  const spacingY = 50;
-  const barHeight = 24;
-  const maxBarWidth = 320;
+  const startY = 95;
+  const spacingY = 46;
+  const barHeight = 20;
+  const maxBarWidth = 260;
+  const axisX = 220;
+
+  // Gridlines verticales sutiles para la escala de porcentajes
+  ctx.strokeStyle = '#f1f5f9';
+  ctx.lineWidth = 0.8;
+  for (let pct = 10; pct <= 50; pct += 10) {
+    const gx = axisX + (pct / 50) * maxBarWidth;
+    ctx.beginPath();
+    ctx.moveTo(gx, startY - 10);
+    ctx.lineTo(gx, startY + 5 * spacingY - 15);
+    ctx.stroke();
+  }
 
   for (let i = 0; i < 5; i++) {
     const y = startY + i * spacingY;
-    const barWidth = (percentages[i] / 100) * maxBarWidth;
+    const barWidth = (percentages[i] / 50) * maxBarWidth; // Escalado a maxBarWidth (representa el 50% max)
 
-    // Etiqueta del Delito
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(crimes[i], 50, y + 16);
+    // Etiqueta del Delito (Alineado a la derecha en el eje Y)
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(crimes[i], axisX - 12, y + 13);
 
-    // Barra de fondo
-    ctx.fillStyle = '#1c2541';
-    ctx.fillRect(230, y, maxBarWidth, barHeight);
+    // Barra de fondo sutil
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(axisX, y, maxBarWidth, barHeight);
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(axisX, y, maxBarWidth, barHeight);
 
-    // Barra de valor relleno
-    const grad = ctx.createLinearGradient(230, y, 230 + barWidth, y);
+    // Barra de valor relleno con degradado sutil
+    const grad = ctx.createLinearGradient(axisX, y, axisX + barWidth, y);
     grad.addColorStop(0, colors[i]);
-    grad.addColorStop(1, '#00f0ff');
+    grad.addColorStop(1, colors[i] + 'cc');
     ctx.fillStyle = grad;
-    ctx.fillRect(230, y, barWidth, barHeight);
+    ctx.fillRect(axisX, y, barWidth, barHeight);
 
     // Borde de la barra de valor
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = colors[i];
     ctx.lineWidth = 1;
-    ctx.strokeRect(230, y, barWidth, barHeight);
+    ctx.strokeRect(axisX, y, barWidth, barHeight);
 
-    // Porcentaje
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 10px monospace';
+    // Porcentaje explícito
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 9.5px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`${percentages[i]}%`, 238 + barWidth, y + 16);
+    ctx.fillText(`${percentages[i]}%`, axisX + barWidth + 8, y + 13.5);
+
+    // Ticks en el eje Y
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(axisX - 4, y + barHeight / 2);
+    ctx.lineTo(axisX, y + barHeight / 2);
+    ctx.stroke();
   }
 
-  // Eje base Y
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 2;
+  // Eje Y sólido
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(230, 60);
-  ctx.lineTo(230, 330);
+  ctx.moveTo(axisX, startY - 10);
+  ctx.lineTo(axisX, startY + 5 * spacingY - 15);
   ctx.stroke();
+
+  // Eje X ticks e indicadores de escala al fondo
+  const bottomY = startY + 5 * spacingY - 15;
+  ctx.beginPath();
+  ctx.moveTo(axisX, bottomY);
+  ctx.lineTo(axisX + maxBarWidth, bottomY);
+  ctx.stroke();
+
+  for (let pct = 0; pct <= 50; pct += 10) {
+    const tickX = axisX + (pct / 50) * maxBarWidth;
+    ctx.beginPath();
+    ctx.moveTo(tickX, bottomY);
+    ctx.lineTo(tickX, bottomY + 4);
+    ctx.stroke();
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${pct}%`, tickX, bottomY + 13);
+  }
+
+  // Pie de Gráfica / Fuente
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Censo Homologado de Llamadas de Emergencia y Denuncias', 50, 365);
+
+  // Marca de agua sutil en la esquina inferior derecha
+  ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('SSPE-CEIPOL', w - 50, 365);
 
   return canvas.toDataURL('image/png');
 };
@@ -956,89 +1266,135 @@ export const renderEnvironmentalFactorsChart = (input: VectorEngineInput): strin
   const w = 600;
   const h = 400;
 
-  ctx.fillStyle = '#0b132b';
+  // Fondo blanco editorial
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px monospace';
+  // Título Institucional
+  ctx.fillStyle = '#0b1f3a';
+  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('GRÁFICA 3: FACILITADORES AMBIENTALES DE RIESGO', w / 2, 40);
+
+  // Subtítulo
+  ctx.fillStyle = '#475569';
+  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('EVALUACIÓN DE VULNERABILIDADES FÍSICAS Y DE DISEÑO URBANO (ESCALA 1-10)', w / 2, 54);
 
   // Datos
   const factors = [
     'Iluminación Inexistente/Falla',
     'Terrenos Baldíos sin Cierre',
     'Puntos Ciegos / Sin Cámara',
-    'Malea Alta / Ocultamiento',
+    'Maleza Alta / Ocultamiento',
     'Vías de Escape Rápido'
   ];
   const ratings = [9.2, 8.5, 7.8, 6.5, 8.0]; // Escala 1-10
-  const colors = ['#e11d48', '#f59e0b', '#d97706', '#2563eb', '#10b981'];
 
-  // Graficador de barras radiales o barras 3D vectoriales limpias
+  // Paleta de colores CEIPOL/SSPE para factores de riesgo
+  const colors = [
+    '#be123c', // Crimson (Iluminación - muy crítico)
+    '#d97706', // Amber (Terrenos - advertencia)
+    '#d97706', // Amber (Cámaras)
+    '#475569', // Slate (Maleza)
+    '#1d4f91'  // CEIPOL Blue (Vías de escape)
+  ];
+
   const startX = 60;
   const spacingX = 100;
-  const barWidth = 40;
+  const barWidth = 36;
+  const startY = 100;
+  const graphHeight = 200;
+  const axisY = startY + graphHeight; // 300
 
-  // Gridlines horizontales
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
+  // Gridlines horizontales discretas (Escala de 10 puntos)
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 0.8;
   for (let i = 0; i <= 5; i++) {
-    const y = 90 + i * 42;
+    const y = startY + i * (graphHeight / 5);
     ctx.beginPath();
     ctx.moveTo(60, y);
     ctx.lineTo(540, y);
     ctx.stroke();
 
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px monospace';
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`${(10 - i * 2)} pts`, 50, y + 3);
+
+    // Ticks en el eje Y
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(56, y);
+    ctx.lineTo(60, y);
+    ctx.stroke();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.8;
   }
 
   for (let i = 0; i < 5; i++) {
-    const x = startX + 30 + i * spacingX;
-    const heightVal = ratings[i] * 21; // Escalar a píxeles
-    const y = 300 - heightVal;
+    const x = startX + 28 + i * spacingX;
+    const heightVal = (ratings[i] / 10) * graphHeight; // Escalar a píxeles
+    const y = axisY - heightVal;
 
-    // Dibujar barra táctica cian/naranja/azul
-    ctx.fillStyle = colors[i];
+    // Dibujar barra sólida con degradado sutil
+    const grad = ctx.createLinearGradient(x, axisY, x, y);
+    grad.addColorStop(0, colors[i]);
+    grad.addColorStop(1, colors[i] + 'dd');
+    ctx.fillStyle = grad;
     ctx.fillRect(x, y, barWidth, heightVal);
 
-    // Tapa de barra
-    ctx.fillStyle = '#00f0ff';
-    ctx.fillRect(x, y - 4, barWidth, 4);
-
     // Contorno
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(x, y, barWidth, heightVal);
 
-    // Puntuación
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 9px monospace';
+    // Puntuación exacta encima de la barra
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 10px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(ratings[i].toFixed(1), x + barWidth / 2, y - 10);
+    ctx.fillText(ratings[i].toFixed(1), x + barWidth / 2, y - 8);
+
+    // Tick en el eje X
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + barWidth / 2, axisY);
+    ctx.lineTo(x + barWidth / 2, axisY + 4);
+    ctx.stroke();
 
     // Texto de factor en diagonal
     ctx.save();
-    ctx.translate(x + barWidth / 2, 315);
+    ctx.translate(x + barWidth / 2, axisY + 16);
     ctx.rotate(Math.PI / 10);
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '7.5px monospace';
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(factors[i], 0, 0);
     ctx.restore();
   }
 
-  // Eje X
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 2;
+  // Ejes
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(60, 300);
-  ctx.lineTo(540, 300);
+  ctx.moveTo(60, startY - 10);
+  ctx.lineTo(60, axisY);
+  ctx.lineTo(540, axisY);
   ctx.stroke();
+
+  // Pie de Gráfica / Fuente
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Auditoría de Campo y Matriz de Vulnerabilidad Ambiental CEIPOL', 50, 365);
+
+  // Marca de agua sutil en la esquina inferior derecha
+  ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('SSPE-CEIPOL', 540, 365);
 
   return canvas.toDataURL('image/png');
 };
@@ -1051,33 +1407,53 @@ export const renderPredictiveLineChart = (input: VectorEngineInput): string => {
   const w = 600;
   const h = 400;
 
-  ctx.fillStyle = '#0b132b';
+  // Fondo blanco editorial
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px monospace';
+  // Título Institucional
+  ctx.fillStyle = '#0b1f3a';
+  ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('GRÁFICA 4: PROYECCIÓN TENDENCIAL DE INCIDENCIA A 6 MESES', w / 2, 40);
+
+  // Subtítulo
+  ctx.fillStyle = '#475569';
+  ctx.font = '8.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('PROYECCIÓN TÁCTICA MULTIVARIADA DE DELITOS ESTIMADOS EN EL ÁREA', w / 2, 54);
 
   // Meses y valores delictivos proyectados
   const months = ['Mes Actual', 'Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6 (Proy)'];
   const values = [18, 20, 23, 22, 25, 28, 32]; // Delitos simulados
 
-  // Líneas de fondo
-  ctx.strokeStyle = '#1c2541';
-  ctx.lineWidth = 1;
+  // Gridlines horizontales discretas
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 0.8;
+  const startY = 100;
+  const graphHeight = 200;
+  const axisY = startY + graphHeight; // 300
+
   for (let i = 0; i <= 4; i++) {
-    const y = 100 + i * 50;
+    const y = startY + i * (graphHeight / 4);
     ctx.beginPath();
     ctx.moveTo(80, y);
     ctx.lineTo(520, y);
     ctx.stroke();
 
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px monospace';
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`${(40 - i * 10)} del`, 70, y + 3);
+    ctx.fillText(`${(40 - i * 10)} del`, 70, y + 3.5);
+
+    // Ticks en el eje Y
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(76, y);
+    ctx.lineTo(80, y);
+    ctx.stroke();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.8;
   }
 
   // Trazar línea de tendencia (Azul a Naranja Proyectiva)
@@ -1087,23 +1463,23 @@ export const renderPredictiveLineChart = (input: VectorEngineInput): string => {
 
   for (let i = 0; i < 7; i++) {
     const x = startX + i * spacingX;
-    const y = 300 - (values[i] * 5); // Escalar
+    const y = axisY - (values[i] / 40) * graphHeight; // Escalar basado en 40 max
     points.push({ x, y });
   }
 
-  // Dibujar curva suavizada o línea
-  ctx.strokeStyle = '#3b82f6';
-  ctx.lineWidth = 3;
+  // Dibujar línea histórica (Mes Actual a Mes 4)
+  ctx.strokeStyle = '#1d4f91'; // CEIPOL azul principal
+  ctx.lineWidth = 3.5;
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < 5; i++) {
+  for (let i = 1; i <= 4; i++) {
     ctx.lineTo(points[i].x, points[i].y);
   }
   ctx.stroke();
 
   // Línea predictiva discontinua naranja para los últimos meses
-  ctx.strokeStyle = '#f59e0b';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#d97706'; // Amber para advertencia
+  ctx.lineWidth = 3.5;
   ctx.setLineDash([5, 4]);
   ctx.beginPath();
   ctx.moveTo(points[4].x, points[4].y);
@@ -1113,39 +1489,66 @@ export const renderPredictiveLineChart = (input: VectorEngineInput): string => {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Puntos con etiquetas
+  // Puntos con etiquetas y valores explícitos
   for (let i = 0; i < 7; i++) {
     const pt = points[i];
     
-    // Punto de color
-    ctx.fillStyle = i >= 5 ? '#f59e0b' : '#3b82f6';
+    // Punto de color relleno
+    ctx.fillStyle = i >= 5 ? '#d97706' : '#1d4f91';
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    
+    // Borde exterior fino del nodo
+    ctx.strokeStyle = i >= 5 ? '#d97706' : '#1d4f91';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 6.8, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Valor arriba del punto
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 9px monospace';
+    // Valor exacto dibujado arriba del punto (con fondo blanco sutil para contraste)
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 9.5px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(values[i].toString(), pt.x, pt.y - 10);
+    ctx.fillText(values[i].toString() + ' del', pt.x, pt.y - 12);
+
+    // Tick en el eje X
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pt.x, axisY);
+    ctx.lineTo(pt.x, axisY + 4);
+    ctx.stroke();
 
     // Eje X Label
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '8px monospace';
-    ctx.fillText(months[i], pt.x, 320);
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 8.5px "Segoe UI", Arial, sans-serif';
+    ctx.fillText(months[i], pt.x, axisY + 16);
   }
 
-  // Ejes
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 2;
+  // Ejes X e Y
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(80, 80);
-  ctx.lineTo(80, 300);
-  ctx.lineTo(520, 300);
+  ctx.moveTo(80, startY - 10);
+  ctx.lineTo(80, axisY);
+  ctx.lineTo(520, axisY);
   ctx.stroke();
+
+  // Pie de Gráfica / Fuente
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'italic 8px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fuente: Modelo Predictivo de Regresión Espacial CEIPOL', 50, 365);
+
+  // Marca de agua sutil en la esquina inferior derecha
+  ctx.fillStyle = 'rgba(11, 31, 58, 0.06)';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('SSPE-CEIPOL', 520, 365);
 
   return canvas.toDataURL('image/png');
 };
@@ -1158,35 +1561,38 @@ export const renderHypothesisGraph = (input: VectorEngineInput): string => {
   const w = 600;
   const h = 400;
 
-  ctx.fillStyle = '#0f172a'; // Fondo cian militar oscuro (slate-900)
+  // Fondo blanco editorial
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // Título
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 15px monospace';
+  // Título Institucional
+  ctx.fillStyle = '#0b1f3a';
+  ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)', w / 2, 35);
-  ctx.fillStyle = '#00f0ff';
-  ctx.font = '9px monospace';
+  
+  // Subtítulo
+  ctx.fillStyle = '#1d4f91';
+  ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
   ctx.fillText('RELACIÓN ESTRUCTURAL DE RIESGOS Y ACCIONES OPERATIVAS', w / 2, 48);
 
-  // Nodos estructurales (DPI Alto / Tamaños incrementados para impresión)
+  // Nodos estructurales (Paleta CEIPOL con alta legibilidad)
   const nodes = [
-    { id: 'center', label: input.projectName.slice(0, 18), x: 300, y: 200, color: '#00f0ff', r: 45, fontColor: '#0f172a', bold: true },
+    { id: 'center', label: input.projectName.slice(0, 18), x: 300, y: 200, color: '#0b1f3a', r: 45, fontColor: '#ffffff', bold: true }, // Navy principal
     
-    // Factores ambientales (Izquierda)
-    { id: 'f1', label: 'Baldíos/Oscuridad', x: 120, y: 120, color: '#f59e0b', r: 28, fontColor: '#ffffff', bold: true },
-    { id: 'f2', label: 'Sin Cámaras/C2', x: 100, y: 220, color: '#f59e0b', r: 28, fontColor: '#ffffff', bold: true },
+    // Factores ambientales (Izquierda - Amber para advertencia)
+    { id: 'f1', label: 'Baldíos/Oscuridad', x: 120, y: 120, color: '#d97706', r: 28, fontColor: '#ffffff', bold: true },
+    { id: 'f2', label: 'Sin Cámaras/C2', x: 100, y: 220, color: '#d97706', r: 28, fontColor: '#ffffff', bold: true },
     { id: 'f3', label: 'Escape Rápido', x: 140, y: 310, color: '#d97706', r: 28, fontColor: '#ffffff', bold: true },
     
-    // Amenazas / Delitos (Derecha)
-    { id: 'a1', label: 'Robo Peatón', x: 480, y: 110, color: '#e11d48', r: 28, fontColor: '#ffffff', bold: true },
+    // Amenazas / Delitos (Derecha - Crimson para riesgo)
+    { id: 'a1', label: 'Robo Peatón', x: 480, y: 110, color: '#be123c', r: 28, fontColor: '#ffffff', bold: true },
     { id: 'a2', label: 'Mercado Negro', x: 500, y: 200, color: '#be123c', r: 28, fontColor: '#ffffff', bold: true },
-    { id: 'a3', label: 'Consumo Vía Pública', x: 460, y: 300, color: '#e11d48', r: 28, fontColor: '#ffffff', bold: true },
+    { id: 'a3', label: 'Consumo Vía Pública', x: 460, y: 300, color: '#be123c', r: 28, fontColor: '#ffffff', bold: true },
     
-    // Acciones Estratégicas (Arriba y Abajo)
-    { id: 'op1', label: 'Patrullaje Nocturno', x: 300, y: 95, color: '#10b981', r: 32, fontColor: '#ffffff', bold: true },
-    { id: 'op2', label: 'Recuperación Espacio', x: 300, y: 315, color: '#10b981', r: 32, fontColor: '#ffffff', bold: true }
+    // Acciones Estratégicas (Arriba y Abajo - Verde favorable)
+    { id: 'op1', label: 'Patrullaje Nocturno', x: 300, y: 95, color: '#16a34a', r: 32, fontColor: '#ffffff', bold: true },
+    { id: 'op2', label: 'Recuperación Espacio', x: 300, y: 315, color: '#16a34a', r: 32, fontColor: '#ffffff', bold: true }
   ];
 
   // Trazar enlaces entre nodos (Líneas vectoriales con estilo)
@@ -1194,7 +1600,7 @@ export const renderHypothesisGraph = (input: VectorEngineInput): string => {
     const from = nodes.find(n => n.id === fromId)!;
     const to = nodes.find(n => n.id === toId)!;
     
-    ctx.strokeStyle = isDashed ? 'rgba(0, 240, 255, 0.4)' : '#334155';
+    ctx.strokeStyle = isDashed ? 'rgba(29, 79, 145, 0.45)' : '#64748b'; // Conectores CEIPOL / Slate
     ctx.lineWidth = 1.5;
     if (isDashed) ctx.setLineDash([4, 3]);
     
@@ -1208,10 +1614,17 @@ export const renderHypothesisGraph = (input: VectorEngineInput): string => {
     if (label) {
       const mx = (from.x + to.x) / 2;
       const my = (from.y + to.y) / 2;
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '7px monospace';
+      ctx.fillStyle = '#475569';
+      ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(label, mx, my - 4);
+      
+      // Rectángulo de fondo blanco para el texto de la etiqueta
+      ctx.fillStyle = '#ffffff';
+      const textWidth = ctx.measureText(label).width;
+      ctx.fillRect(mx - textWidth / 2 - 3, my - 6, textWidth + 6, 10);
+      
+      ctx.fillStyle = '#475569';
+      ctx.fillText(label, mx, my + 1.5);
     }
   };
 
@@ -1233,58 +1646,74 @@ export const renderHypothesisGraph = (input: VectorEngineInput): string => {
 
   // Dibujar círculos de nodos
   nodes.forEach(node => {
-    // Glow interior del nodo
-    ctx.shadowColor = node.color;
-    ctx.shadowBlur = 10;
+    // Sombra del nodo sutil y gris (no difusa/neón)
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 2;
     
     ctx.fillStyle = node.color;
     ctx.beginPath();
     ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
     ctx.fill();
     
-    ctx.shadowBlur = 0; // Desactivar glow para bordes/textos
+    ctx.shadowBlur = 0; // Desactivar sombra
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
 
-    // Borde
+    // Borde blanco del nodo
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
     ctx.stroke();
 
+    // Borde exterior fino del color de categoría
+    ctx.strokeStyle = node.color;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, node.r + 1.8, 0, Math.PI * 2);
+    ctx.stroke();
+
     // Etiqueta
     ctx.fillStyle = node.fontColor;
-    ctx.font = node.bold ? 'bold 8.5px monospace' : '8px monospace';
+    ctx.font = node.bold ? 'bold 8px "Segoe UI", Arial, sans-serif' : '8px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
     
     // Ajustar texto largo en dos líneas si es necesario
-    const words = node.label.split(' ');
-    if (words.length > 1 && node.label.length > 10) {
-      ctx.fillText(words.slice(0, Math.ceil(words.length / 2)).join(' '), node.x, node.y - 2);
-      ctx.fillText(words.slice(Math.ceil(words.length / 2)).join(' '), node.x, node.y + 7);
+    const words = node.label.split('/');
+    const finalWords = words.length > 1 ? words : node.label.split(' ');
+    
+    if (finalWords.length > 1 && node.label.length > 10) {
+      ctx.fillText(finalWords.slice(0, Math.ceil(finalWords.length / 2)).join(' '), node.x, node.y - 2.5);
+      ctx.fillText(finalWords.slice(Math.ceil(finalWords.length / 2)).join(' '), node.x, node.y + 6.5);
     } else {
-      ctx.fillText(node.label, node.x, node.y + 3);
+      ctx.fillText(node.label, node.x, node.y + 2.5);
     }
   });
 
-  // Leyenda del Grafo en la esquina
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 1;
-  ctx.fillRect(15, h - 85, 120, 70);
-  ctx.strokeRect(15, h - 85, 120, 70);
-
+  // Leyenda de Jerarquía del Grafo en la esquina inferior izquierda
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 7.5px monospace';
-  ctx.fillText('JERARQUÍA DEL GRAFO', 75, h - 74);
+  ctx.strokeStyle = '#0b1f3a';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(15, h - 85, 130, 70);
+  ctx.strokeRect(15, h - 85, 130, 70);
 
-  ctx.fillStyle = '#00f0ff';
-  ctx.fillText('● Nodo Central (Exp)', 25, h - 60);
-  ctx.fillStyle = '#f59e0b';
-  ctx.fillText('● Factores Ambientales', 25, h - 50);
-  ctx.fillStyle = '#e11d48';
-  ctx.fillText('● Amenazas / Delito', 25, h - 40);
-  ctx.fillStyle = '#10b981';
-  ctx.fillText('● Acciones Preventivas', 25, h - 30);
+  ctx.fillStyle = '#0b1f3a';
+  ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('JERARQUÍA DEL GRAFO', 80, h - 74);
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
+  
+  ctx.fillStyle = '#0b1f3a';
+  ctx.fillText('● Nodo Central (Exp)', 22, h - 60);
+  ctx.fillStyle = '#d97706';
+  ctx.fillText('● Factores Ambientales', 22, h - 50);
+  ctx.fillStyle = '#be123c';
+  ctx.fillText('● Amenazas / Delito', 22, h - 40);
+  ctx.fillStyle = '#16a34a';
+  ctx.fillText('● Acciones Preventivas', 22, h - 30);
 
   return canvas.toDataURL('image/png');
 };

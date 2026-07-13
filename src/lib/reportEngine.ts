@@ -105,20 +105,23 @@ export async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
       console.warn("No se pudo renderizar la imagen en PDF:", visual.title, e);
     }
 
-    // Marca de agua institucional (Badge discreto pero visible SSPE-CEIPOL sobre el recurso visual)
-    doc.setFillColor('#0b1f3a');
-    doc.rect(x + width - 35, y + height - 23, 33, 6, 'F');
-    doc.setTextColor('#ffffff');
-    doc.setFontSize(6.5);
-    doc.setFont('helvetica', 'bold');
-    doc.text('SSPE-CEIPOL', x + width - 18.5, y + height - 18.8, { align: 'center' });
-
+    // Mover el badge institucional SSPE-CEIPOL a la barra de pie de figura para no obstruir los mapas/gráficos
     doc.setFillColor('#f4f7fb');
     doc.rect(x, y + height - 15, width, 15, 'F');
+    
+    // Badge institucional alineado a la derecha dentro de la barra
+    doc.setFillColor('#0b1f3a');
+    doc.rect(x + width - 30, y + height - 10.5, 27, 6, 'F');
+    doc.setTextColor('#ffffff');
+    doc.setFontSize(6.2);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SSPE-CEIPOL', x + width - 16.5, y + height - 6.2, { align: 'center' });
+
+    // Pie de figura recortado para evitar colisión con el badge
     doc.setFontSize(7.5);
     doc.setTextColor(COLORS.text);
     doc.setFont('helvetica', 'normal');
-    const caption = doc.splitTextToSize(visual.caption, width - 6).slice(0, 2);
+    const caption = doc.splitTextToSize(visual.caption, width - 35).slice(0, 2);
     doc.text(caption, x + 3, y + height - 10);
   };
 
