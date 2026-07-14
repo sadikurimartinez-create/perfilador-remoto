@@ -67,7 +67,7 @@ export interface OsintGangEvidence {
   eventId: string; // ID del indicio OSINT
   sourceUrl: string; // Enlace de la noticia, foro o reporte social
   detectedGroup: string; // Pandilla o actor citado
-  eventType: "RIÑA" | "CONFLICTO" | "PRESENCIA_SOCIAL" | "OTRO";
+  eventType: "RIÑA" | "AMENAZA" | "ENFRENTAMIENTO" | "REFERENCIA_GENERAL";
   coordinates: { lat: number; lng: number };
   distanceMeters: number; // Distancia calculada mediante Haversine respecto al centroide del proyecto
   validatedAt: string; // Timestamp ISO-8601 de validación perimetral

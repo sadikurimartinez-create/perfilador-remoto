@@ -37,23 +37,20 @@ export class GangOsintAnalyzer {
     return R * c; // Distancia en metros
   }
 
-  /**
-   * Clasifica de forma no criminalizante y basada puramente en evidencia un evento de texto OSINT.
-   */
-  private static classifyEventType(rawType?: string): "RIÑA" | "CONFLICTO" | "PRESENCIA_SOCIAL" | "OTRO" {
-    if (!rawType) return "OTRO";
+  private static classifyEventType(rawType?: string): "RIÑA" | "AMENAZA" | "ENFRENTAMIENTO" | "REFERENCIA_GENERAL" {
+    if (!rawType) return "REFERENCIA_GENERAL";
     const typeUpper = rawType.toUpperCase();
 
-    if (typeUpper === "RIÑA" || typeUpper === "ENFRENTAMIENTO") {
+    if (typeUpper === "RIÑA") {
       return "RIÑA";
     }
     if (typeUpper === "AMENAZA") {
-      return "CONFLICTO";
+      return "AMENAZA";
     }
-    if (typeUpper === "REFERENCIA_GENERAL" || typeUpper === "PRESENCIA_SOCIAL") {
-      return "PRESENCIA_SOCIAL";
+    if (typeUpper === "ENFRENTAMIENTO") {
+      return "ENFRENTAMIENTO";
     }
-    return "OTRO";
+    return "REFERENCIA_GENERAL";
   }
 
   /**

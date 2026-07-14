@@ -3,6 +3,7 @@ import { GangOsintAnalyzer, RawOsintInput } from "./gangOsintAnalyzer";
 import { GraffitiTerritorialAnalyzer } from "./graffitiTerritorialAnalyzer";
 import { GangEvidenceBuilder } from "./gangEvidenceBuilder";
 import { VisualEvidenceEditorial } from "../visualEvidenceEngine/models/visualEvidenceTypes";
+import { GimEvidenceTraceability } from "./gimEvidenceTraceability";
 
 export interface GIMEngineInput {
   projectId: string;
@@ -81,29 +82,31 @@ export class GangIntelligenceEngine {
     const traceabilityLog: GIMTraceabilityRecord[] = [];
 
     osintEvents.forEach((event, idx) => {
-      traceabilityLog.push({
-        id: `gim-trace-osint-${idx + 1}`,
-        sourceType: "OSINT_CRAWLER",
-        sourceName: `Feed OSINT - ID ${event.eventId}`,
-        capturedAt: timestamp,
-        operatorId: operator,
-        transformationApplied: `Filtro geográfico perimetral Haversine (${event.distanceMeters}m)`,
-        gimConfidenceAllocated: event.distanceMeters <= 250 ? 80 : 50,
-        consumersList: ["HIE", "ReportEngine"]
-      });
+      const traceId = GimEvidenceTraceability.generateTraceId("osint", idx + 1);
+      const record = GimEvidenceTraceability.createTraceabilityRecord(
+        traceId,
+        "OSINT_CRAWLER",
+        `Feed OSINT - ID ${event.eventId}`,
+        operator,
+        `Filtro geográfico perimetral Haversine (${event.distanceMeters}m)`,
+        event.distanceMeters <= 250 ? 80 : 50,
+        ["HIE", "ReportEngine"]
+      );
+      traceabilityLog.push(record);
     });
 
     graffitiEvents.forEach((graffiti, idx) => {
-      traceabilityLog.push({
-        id: `gim-trace-graf-${idx + 1}`,
-        sourceType: "VEE_GRAFFITI",
-        sourceName: `VEE Graffiti Editorial - ID ${graffiti.veeReferenceId}`,
-        capturedAt: timestamp,
-        operatorId: operator,
-        transformationApplied: `Mapeo simbólico e interpretación textual pasiva`,
-        gimConfidenceAllocated: 60,
-        consumersList: ["HIE", "ReportEngine"]
-      });
+      const traceId = GimEvidenceTraceability.generateTraceId("graf", idx + 1);
+      const record = GimEvidenceTraceability.createTraceabilityRecord(
+        traceId,
+        "VEE_GRAFFITI",
+        `VEE Graffiti Editorial - ID ${graffiti.veeReferenceId}`,
+        operator,
+        `Mapeo simbólico e interpretación textual pasiva`,
+        60,
+        ["HIE", "ReportEngine"]
+      );
+      traceabilityLog.push(record);
     });
 
     // 6. Ensamblar y retornar la matriz certificada GEM
