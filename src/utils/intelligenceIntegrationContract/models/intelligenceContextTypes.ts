@@ -2,6 +2,7 @@ import { StatisticalEvidenceMatrix } from "../../statisticalEvidenceMatrix/model
 import { VisualEvidenceMatrix } from "../../visualEvidenceEngine/models/visualEvidenceTypes";
 import { TerritorialEvidenceMatrix } from "../../territorialIntelligenceEngine/models/territorialEvidenceTypes";
 import { AnalyticalConsistencyReport, HIEValidationVector } from "../../analyticalConsistencyEngine/models/aceTypes";
+import { GangEvidenceMatrix } from "../../gangIntelligenceEngine/models/gangIntelligenceTypes";
 
 export interface CapabilityStatus {
   statisticalEvidence: boolean;
@@ -44,6 +45,7 @@ export interface IntelligenceIntegrationContext {
     HIE: HIEValidationVector | null;
     CIE: any | null; // Cartographic Intelligence Engine (CIE) result
     ACE: AnalyticalConsistencyReport;
+    GIM?: GangEvidenceMatrix | null;
   };
 
   operationalAssessment: OperationalAssessment;

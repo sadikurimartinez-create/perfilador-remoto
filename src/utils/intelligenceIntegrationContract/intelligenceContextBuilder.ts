@@ -7,6 +7,7 @@ import { StatisticalEvidenceMatrix } from "../statisticalEvidenceMatrix/models/s
 import { VisualEvidenceMatrix } from "../visualEvidenceEngine/models/visualEvidenceTypes";
 import { TerritorialEvidenceMatrix } from "../territorialIntelligenceEngine/models/territorialEvidenceTypes";
 import { AnalyticalConsistencyReport, HIEValidationVector } from "../analyticalConsistencyEngine/models/aceTypes";
+import { GangEvidenceMatrix } from "../gangIntelligenceEngine/models/gangIntelligenceTypes";
 
 export class IntelligenceContextBuilder {
   /**
@@ -20,13 +21,14 @@ export class IntelligenceContextBuilder {
     tie: TerritorialEvidenceMatrix | null,
     hieVector: HIEValidationVector | null,
     ace: AnalyticalConsistencyReport,
-    cie: any | null = null
+    cie: any | null = null,
+    gem?: GangEvidenceMatrix | null
   ): IntelligenceIntegrationContext {
     const timestamp = new Date().toISOString();
     const version = "1.0.0";
 
     // 1. Obtener disponibilidad mediante Capability Registry
-    const capabilityStatus = CapabilityRegistry.getCapabilityStatus(sem, vee, tie);
+    const capabilityStatus = CapabilityRegistry.getCapabilityStatus(sem, vee, tie, gem);
 
     // 2. Extraer patrones soportados basándose en datos reales provistos (sin analizar de cero)
     const supportedPatterns: string[] = [];
@@ -132,7 +134,8 @@ export class IntelligenceContextBuilder {
         TIE: tie,
         HIE: hieVector,
         CIE: cie,
-        ACE: ace
+        ACE: ace,
+        GIM: gem || null
       },
       operationalAssessment,
       capabilityStatus,

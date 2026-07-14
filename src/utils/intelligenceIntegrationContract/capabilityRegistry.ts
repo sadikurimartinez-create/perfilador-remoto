@@ -2,6 +2,7 @@ import { CapabilityStatus } from "./models/intelligenceContextTypes";
 import { StatisticalEvidenceMatrix } from "../statisticalEvidenceMatrix/models/statisticalEvidenceTypes";
 import { VisualEvidenceMatrix } from "../visualEvidenceEngine/models/visualEvidenceTypes";
 import { TerritorialEvidenceMatrix } from "../territorialIntelligenceEngine/models/territorialEvidenceTypes";
+import { GangEvidenceMatrix } from "../gangIntelligenceEngine/models/gangIntelligenceTypes";
 
 export class CapabilityRegistry {
   /**
@@ -11,7 +12,8 @@ export class CapabilityRegistry {
   public static getCapabilityStatus(
     sem: StatisticalEvidenceMatrix,
     vee: VisualEvidenceMatrix | null,
-    tie: TerritorialEvidenceMatrix | null
+    tie: TerritorialEvidenceMatrix | null,
+    gem?: GangEvidenceMatrix | null
   ): CapabilityStatus {
     const hasStatistical = !!sem && (sem.criminalEvidence?.totalEvents ?? 0) > 0;
     
@@ -27,11 +29,13 @@ export class CapabilityRegistry {
       !!tie.urbanStructure?.streetGridType
     );
 
+    const hasGang = !!gem && (gem.status === "READY" || gem.status === "READY_WITH_LIMITATIONS");
+
     return {
       statisticalEvidence: hasStatistical,
       visualEvidence: hasVisual,
       territorialEvidence: hasTerritorial,
-      gangIntelligence: false, // Futuro Módulo (Capítulo 7.2)
+      gangIntelligence: hasGang,
       osintEvidence: false,     // Futuro Módulo (Capítulo 8)
       socialIntelligence: false  // Futuro Módulo (Capítulo 7.1)
     };
