@@ -20,6 +20,9 @@ export interface ReportContext {
   tceData?: any;
   hieData?: any;
   cieData?: any;
+  semData?: any;
+  aceReport?: any;
+  hieValidationVector?: any;
 }
 
 /**
@@ -205,44 +208,74 @@ Instrucciones de Redacción:
  * 5. CAPÍTULO 4: ANÁLISIS ESTADÍSTICO
  */
 export const GraphAnalysisPrompt = (ctx: ReportContext): string => {
-  const sieJson = ctx.sieData ? JSON.stringify(ctx.sieData, null, 2) : "Sin datos procesados por el motor estadístico SIE.";
+  const eventsCount = ctx.semData?.totalCanonicalIncidents ?? ctx.incidenciaLocal?.length ?? 0;
+  
+  if (eventsCount < 5) {
+    return "Evidencia estadística insuficiente para establecer una inferencia táctica válida en el polígono seleccionado.";
+  }
+
+  const semJson = ctx.semData ? JSON.stringify(ctx.semData, null, 2) : "Sin datos procesados en la SEM.";
+  const aceJson = ctx.aceReport ? JSON.stringify({
+    globalStatus: ctx.aceReport.globalStatus,
+    overallConfidence: ctx.aceReport.overallConfidence,
+    alertsCount: ctx.aceReport.alerts?.length ?? 0
+  }, null, 2) : "Sin datos del Quality Gate ACE.";
+  const hieJson = ctx.hieValidationVector ? JSON.stringify(ctx.hieValidationVector, null, 2) : "Sin vector de validación HIE.";
+
   return `
 --- INICIO MÓDULO: ANÁLISIS ESTADÍSTICO (CAPÍTULO 4) ---
-Genera el Capítulo 4: "ANÁLISIS ESTADÍSTICO".
+Genera el CAPÍTULO 4: "ANÁLISIS ESTADÍSTICO DEL FENÓMENO DELICTIVO" para el expediente "${ctx.projectName}" (ID: ${ctx.projectId}).
 Radio de análisis: ${ctx.analysisRadius} metros.
 
-JSON de Resultados del Statistical Intelligence Engine (SIE):
+DATOS CERTIFICADOS DE ENTRADA:
+
+1. MATRIZ DE EVIDENCIA ESTADÍSTICA (SEM):
 \`\`\`json
-${sieJson}
+${semJson}
 \`\`\`
 
-REGLAS DE GENERACIÓN DE TEXTO:
-1. Queda TERMINANTEMENTE PROHIBIDO inventar estadísticas, estimar porcentajes arbitrarios, o interpretar información que no figure de forma explícita en el JSON del SIE.
-2. Tu rol es únicamente de redactor técnico-institucional de la información cuantitativa calculada.
-3. El dictamen debe estructurarse obligatoriamente con los siguientes 5 apartados y responder de forma analítica y formal a las preguntas metodológicas usando los datos provistos:
+2. REPORTE DE CONSISTENCIA ANALÍTICA (ACE QUALITY GATE):
+\`\`\`json
+${aceJson}
+\`\`\`
 
-4.1 Dinámica Temporal del Fenómeno Criminal
-- Describir cómo evoluciona la tendencia de crímenes en el sector según la variación mensual calculada y el índice de aceleración/desaceleración delictiva.
-- Mencionar de forma explícita si existen anomalías (picos de incidencia) en fechas específicas.
+3. VECTOR DE VALIDACIÓN DE HIPÓTESIS (HIE):
+\`\`\`json
+${hieJson}
+\`\`\`
 
-4.2 Inteligencia Espacio Temporal
-- Describir el centro de gravedad (Mean Center), la desviación estándar espacial (en metros) y la dirección dominante de la elipse direccional.
-- Explicar la clasificación de la expansión territorial (ej. "Concentración Sectorizada con Rutas de Escape", "Focalización Táctica Aguda" o "Expansión Crítica") basándote en los datos espaciales.
-- Señalar la ubicación o magnitud de los hotspots principales detectados.
+REGLAS EDITORIALES Y DE INTEGRIDAD DE DATOS (CEIPOL):
+1. Queda estrictamente PROHIBIDO inventar estadísticas, estimar porcentajes alternativos o extrapolar información que no figure en los datos provistos.
+2. Queda prohibido el uso de lenguaje académico, explicaciones metodológicas, fórmulas matemáticas o descripciones de algoritmos (como ecuaciones de Poisson o la teoría de DBSCAN). Todo método matemático debe permanecer invisible; solo se deben redactar los hallazgos operativos y su utilidad táctica.
+3. El dictamen debe estructurarse obligatoriamente con los siguientes 5 apartados exactos:
 
-4.3 Perfil Operativo del Fenómeno
-- Detallar el comportamiento operativo, especificando las variables predominantes: horarios críticos (ventana de oportunidad) y el día de la semana con mayor concentración de incidentes.
-- Vincular la estacionalidad delictiva o ventana crítica con la vulnerabilidad operativa en el área.
+CAPÍTULO 4: ANÁLISIS ESTADÍSTICO DEL FENÓMENO DELICTIVO
 
-4.4 Factores de Oportunidad
-- Analizar la correlación entre la incidencia concentrada en los hotspots y el nivel de oportunidad/vulnerabilidad ambiental provisto por el SIE (índice de oportunidad de atractores y vulnerabilidad ambiental).
+4.1 Magnitud y composición del fenómeno
+- Responder: ¿Qué magnitud tiene la incidencia?
+- Describir el volumen total de delitos georreferenciados válidos en el polígono.
+- Listar los delitos predominantes de la SEM con sus tasas de concentración y detallar si la distribución está focalizada o diversificada.
 
-4.5 Inteligencia Predictiva
-- Explicar qué escenario predictivo puede ocurrir en el área basándose en la probabilidad de repetición semanal y mensual calculada por el modelo de Poisson.
-- Indicar explícitamente el nivel de confianza y error del modelo predictivo y las variables explicativas utilizadas.
+4.2 Dinámica temporal del riesgo
+- Responder: ¿Cuándo ocurre?
+- Redactar la tendencia delictiva robusta no paramétrica de Theil-Sen (dirección y pendiente).
+- Detallar la estacionalidad temporal del fenómeno, identificando la ventana crítica de oportunidad (días y rango horario prioritario) y picos de anomalías históricas.
 
-REGLA DE EVIDENCIA INSUFICIENTE:
-Si el JSON indica totalEventos de 0 o evidencia insuficiente, debes escribir textualmente la frase: "Evidencia insuficiente para establecer una inferencia estadísticamente sustentada", y omitir cualquier tipo de especulación analítica o porcentajes arbitrarios.
+4.3 Concentración espacial y focalización
+- Responder: ¿Dónde ocurre?
+- Describir de forma explícita el número de hotspots de alta densidad detectados por DBSCAN, sus ubicaciones prioritarias en el polígono y el porcentaje de delitos que concentran en relación con el CIE.
+
+4.4 Escenario predictivo y riesgo operativo
+- Responder: ¿Qué probabilidad existe de repetición?
+- Explicar el escenario de riesgo probabilístico de corto plazo según el modelo de Poisson (indicando la probabilidad de ocurrencia semanal y el nivel de confianza de la prueba Chi-Square).
+- Describir el peligro de propagación espacio-temporal mediante la tasa de contagio Near-Repeat, señalando las limitaciones inherentes a los datos históricos.
+
+4.5 Conclusión estadística operacional
+- Responder: ¿Qué significa operativamente toda esta evidencia para la toma de decisiones?
+- Integrar la evidencia de la SEM, la hipótesis criminológica ambiental del HIE y la certificación del ACE.
+- Formular una síntesis ejecutiva directa dirigida al tomador de decisiones que fundamente estrategias de patrullaje dinámico, focalización operativa o remediación urbana en los hotspots prioritarios.
+
+Restricción de Extensión: La narrativa completa debe ser profunda, precisa y ejecutiva, y caber de forma compacta en un rango de 2 a 3 páginas físicas, evitando redundancias.
 --- FIN MÓDULO ---
 `.trim();
 };

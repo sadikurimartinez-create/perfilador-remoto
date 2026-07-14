@@ -15,7 +15,10 @@ import {
   HIGGraphPrompt,
   OperationalConclusionPrompt
 } from "@/prompts/reportEnginePrompts";
-import { StatisticalIntelligenceEngine } from "@/utils/statisticalIntelligenceEngine";
+import { StatisticalIntelligenceEngineV2 } from "@/utils/statisticalIntelligenceEngineV2";
+import { StatisticalEvidenceMatrixManager } from "@/utils/statisticalEvidenceMatrix";
+import { AnalyticalConsistencyEngine } from "@/utils/analyticalConsistencyEngine";
+import { HIEValidationVectorAdapter } from "@/utils/analyticalConsistencyEngine/hieValidationVectorAdapter";
 import { TerritorialContextEngine } from "@/utils/territorialContextEngine";
 import { HypothesisIntelligenceEngine } from "@/utils/hypothesisIntelligenceEngine";
 import { CartographicIntelligenceEngine } from "@/utils/cartographicIntelligenceEngine";
@@ -89,15 +92,22 @@ export async function POST(req: Request) {
 
     // Optimización: Calcular SIE solo si es necesario (Capítulo 2 o Capítulo 4)
     let sieData: any = null;
+    let sem: any = null;
     let generalRisk = "MEDIO";
 
     if (chapter === 3 || chapter === 4 || chapter === 5) {
-      sieData = StatisticalIntelligenceEngine.analyze(
+      sieData = StatisticalIntelligenceEngineV2.analyze(
         safeBody.historicalIncidents || safeBody.incidenciaCompleta || [],
         lat,
         lng,
         radius
       );
+      const semResult = StatisticalEvidenceMatrixManager.process(
+        projectId,
+        safeBody.historicalIncidents || safeBody.incidenciaCompleta || [],
+        sieData
+      );
+      sem = semResult.sem;
       if (sieData.predictivo.indiceRiesgoTerritorial >= 75) {
         generalRisk = "CRÍTICO";
       } else if (sieData.predictivo.indiceRiesgoTerritorial >= 50) {
@@ -160,6 +170,44 @@ export async function POST(req: Request) {
       });
     }
 
+    let validationVector: any = null;
+    let aceReport: any = null;
+
+    if (chapter === 5 && sem) {
+      validationVector = HIEValidationVectorAdapter.adapt(
+        typeof safeBody.analysisContext === "string" ? safeBody.analysisContext : "",
+        projectDescription
+      );
+      const acePayload = {
+        projectId,
+        tceContext: {
+          centroid: { lat, lng },
+          radiusMeters: radius,
+          startDate: sem.temporalEvidence.temporalCoverage.startDate,
+          endDate: sem.temporalEvidence.temporalCoverage.endDate
+        },
+        sieEventsCount: (safeBody.historicalIncidents || safeBody.incidenciaCompleta || []).length,
+        semContext: sem,
+        cieContext: {
+          centroid: { lat, lng },
+          radiusMeters: radius,
+          eventsCount: (safeBody.historicalIncidents || safeBody.incidenciaCompleta || []).length,
+          hotspotsCount: sem.spatialEvidence.hotspots.length
+        },
+        hieContext: {
+          validationVector
+        },
+        reportContext: {
+          mapCount: 4,
+          chartsCount: 3,
+          startDate: sem.temporalEvidence.temporalCoverage.startDate,
+          endDate: sem.temporalEvidence.temporalCoverage.endDate,
+          eventsCount: (safeBody.historicalIncidents || safeBody.incidenciaCompleta || []).length
+        }
+      };
+      aceReport = AnalyticalConsistencyEngine.audit(acePayload, "VALIDATE");
+    }
+
     // 2. Construir el contexto simplificado para los prompts modulares
     const ctx: ReportContext = {
       projectName,
@@ -188,7 +236,10 @@ export async function POST(req: Request) {
       sieData,
       tceData,
       hieData,
-      cieData
+      cieData,
+      semData: sem,
+      aceReport,
+      hieValidationVector: validationVector
     };
 
     // 3. Obtener el prompt del capítulo específico

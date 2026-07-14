@@ -369,6 +369,16 @@ export async function exportToWord(
     FinalReportConsistencyCheck(payload, reportNumber);
     ExecutiveReportQualityGate(payload);
     CartographicQualityGate(payload);
+    if (payload.aceReport?.globalStatus === "FAILED") {
+      const firstFailed = payload.aceReport.alerts?.find((a: any) => a.status === "FAILED") || {
+        module: "ACE",
+        variable: "Global Quality Gate",
+        expected: "PASS/WARNING",
+        received: "FAILED",
+        message: "El expediente no cumple con los criterios mínimos de consistencia analítica."
+      };
+      throw new Error(`[Bloqueo ACE] Estatus: FAILED en Módulo: ${firstFailed.module}, Variable: ${firstFailed.variable}, Esperado: ${firstFailed.expected}, Recibido: ${firstFailed.received}. Mensaje: ${firstFailed.message}`);
+    }
   } catch (err: any) {
     const msg = "Error de consistencia o calidad: " + err.message;
     if (typeof window !== "undefined") {

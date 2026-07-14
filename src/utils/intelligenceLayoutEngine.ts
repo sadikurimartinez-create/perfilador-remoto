@@ -1,7 +1,8 @@
 import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
 import { buildOperationalOsintChapter } from './osintChapterBuilder';
-import { StatisticalIntelligenceEngine } from './statisticalIntelligenceEngine';
+import { StatisticalIntelligenceEngineV2 } from './statisticalIntelligenceEngineV2';
+import { StatisticalEvidenceMatrixManager } from './statisticalEvidenceMatrix';
 import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialContextEngine';
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
@@ -386,6 +387,8 @@ export interface IntelligenceReportPayload {
   cieData?: any;
   historicalIncidents?: any[];
   sieData?: any;
+  semData?: any;
+  aceReport?: any;
 }
 
 /**
@@ -517,7 +520,9 @@ export const buildIntelligenceEditorialPayload = async (
   const lng = project?.lng ?? project?.longitude ?? 0;
   const radius = project?.analysisRadius ?? project?.radius ?? 250;
   const incidents = project?.historicalIncidents ?? project?.incidents ?? project?.incidenciaCompleta ?? project?.incidenciaLocal ?? project?.iaAnalysis?.historicalCrimes ?? [];
-  const stats = StatisticalIntelligenceEngine.analyze(incidents, lat, lng, radius);
+  const stats = StatisticalIntelligenceEngineV2.analyze(incidents, lat, lng, radius);
+  const semResult = StatisticalEvidenceMatrixManager.process(projectId, incidents, stats);
+  const sem = semResult.sem;
 
   let contextoTerritorial = cleanTechnicalJargon(extractSection(rawContent, 2));
   if (!contextoTerritorial || contextoTerritorial.length < 10) {
@@ -565,12 +570,11 @@ export const buildIntelligenceEditorialPayload = async (
     nivelConfianza: `Confianza: ${hieData.confidence.level} (Score: ${hieData.confidence.score}/100)`
   };
 
-  // Bloque I.3: Valoración operacional
   const valoracionOperacional = {
-    amenaza: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de repetición delictiva semanal en el cuadrante.`,
-    oportunidadCriminal: `Facilitadores tácticos y diseño urbano deficiente con índice de vulnerabilidad de ${stats.predictivo.indiceVulnerabilidadAmbiental}/100.`,
-    vulnerabilidades: `Dispersión espacial direccional con clasificación: ${stats.espacial.expansionTerritorialClasificacion}.`,
-    capacidadRequerida: `Patrullaje preventivo focalizado en el baricentro criminal durante la ventana horaria crítica: ${stats.temporal.horarioCritico}.`
+    amenaza: `Probabilidad del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}% de repetición delictiva semanal en el cuadrante.`,
+    oportunidadCriminal: `Facilitadores tácticos y diseño urbano con índice de riesgo de contagio de ${sem.predictiveEvidence.nearRepeatRisk.toFixed(0)}/100.`,
+    vulnerabilidades: `Dispersión de hotspots con clasificación de tendencia temporal: ${sem.temporalEvidence.trendDirection}.`,
+    capacidadRequerida: `Patrullaje preventivo en baricentro durante periodos críticos: ${sem.temporalEvidence.criticalPeriods.join(", ") || "No definido"}.`
   };
 
   // Bloque II: Matriz de Trazabilidad Analítica
@@ -711,35 +715,28 @@ export const buildIntelligenceEditorialPayload = async (
     }
   ];
 
-  // Graphs (Generados programáticamente en lienzo HD)
+  // Graphs (Generados programáticamente en lienzo HD, consumiendo SEM de forma unificada)
   const graphs = [
     {
-      title: "GRÁFICA 1: DINÁMICA TEMPORAL DEL FENÓMENO CRIMINAL",
+      title: "GRÁFICA 1: Distribución temporal y estacionalidad del fenómeno delictivo",
       dataUrl: renderTemporalShiftChart(vectorInput),
-      explanation: `Serie de tiempo de ${stats.temporal.totalEventos} incidentes. Variación mensual del ${stats.temporal.variacionMensualPorcentaje.toFixed(1)}%.`,
-      finding: `Índice de aceleración delictiva: ${stats.temporal.indiceAceleracionDelictiva.toFixed(2)}. Media móvil de 7 días calculada.`,
-      relation: `Anomalías tácticas detectadas en las fechas pico registradas en la bitácora.`
+      explanation: `Análisis de serie de tiempo de ${sem.metadata.totalCanonicalIncidents} incidentes registrados. Tendencia clasificada como ${sem.temporalEvidence.trendDirection} (pendiente: ${sem.temporalEvidence.trendSlope.toFixed(2)}).`,
+      finding: `Periodos críticos identificados: ${sem.temporalEvidence.criticalPeriods.join(", ") || "No definido"}.`,
+      relation: `Coincidencia temporal del fenómeno con anomalías detectadas en fechas clave: ${sem.temporalEvidence.anomalies.map(a => a.date).slice(0, 3).join(", ") || "Ninguna registrada"}.`
     },
     {
-      title: "GRÁFICA 2: ANÁLISIS TOPOLÓGICO DE FRECUENCIA DE INCIDENTES (MATRIZ DE DENSIDAD ESPACIO-TEMPORAL)",
+      title: "GRÁFICA 2: Concentración espacial y topología de hotspots (frecuencia de incidentes)",
       dataUrl: renderCrimeTopologyChart(vectorInput),
-      explanation: "Tabulación cruzada de 7x24 de delitos por día de la semana y hora.",
-      finding: `Ventana de oportunidad táctica crítica en el horario: ${stats.temporal.horarioCritico} (${stats.temporal.ventanaOportunidad}).`,
-      relation: `Concentración delictiva del ${stats.criminologico.indicadores.oportunidad.toFixed(0)}% en horarios de oportunidad.`
+      explanation: `Tabulación espacial cruzada y georreferenciación. El algoritmo adaptativo DBSCAN detectó ${sem.spatialEvidence.hotspots.length} hotspots densos.`,
+      finding: `Baricentro delictivo principal ubicado en coordenadas tácticas: Lat ${sem.spatialEvidence.hotspots[0]?.center?.lat.toFixed(4) ?? "0.0"}, Lng ${sem.spatialEvidence.hotspots[0]?.center?.lng.toFixed(4) ?? "0.0"}.`,
+      relation: `Los hotspots identificados concentran la actividad criminal recurrente, representando focos rojos de alta concentración geoespacial.`
     },
     {
-      title: "GRÁFICA 3: ANÁLISIS DE FACILITADORES AMBIENTALES Y FACTORES DE OPORTUNIDAD DELICTIVA",
-      dataUrl: renderEnvironmentalFactorsChart(vectorInput),
-      explanation: "Análisis multivariable de 7 indicadores táctico-criminológicos.",
-      finding: `Especialización delictiva del ${stats.criminologico.indicadores.especializacion}% (Shannon-Entropy) y Movilidad del ${stats.criminologico.indicadores.movilidad}%.`,
-      relation: `Persistencia delictiva en hotspots del ${stats.criminologico.indicadores.persistencia}% con capacidad territorial de ${stats.criminologico.indicadores.capacidadTerritorial}%.`
-    },
-    {
-      title: "GRÁFICA 4: MODELO DE PREDICCIÓN FUTURA Y AUMENTO DE ÍNDICES DE RIESGO",
+      title: "GRÁFICA 3: Modelo predictivo y nivel de riesgo de oportunidad (pronóstico futuro)",
       dataUrl: renderPredictiveLineChart(vectorInput),
-      explanation: `Estimación de repetición Poisson. Modelo de ajuste: ${stats.predictivo.modelo}.`,
-      finding: `Probabilidad del ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% de repetición semanal. Riesgo territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100.`,
-      relation: `Confiabilidad del modelo al ${stats.predictivo.confiabilidadModeloPorcentaje}% basado en variables explicativas: ${stats.predictivo.variablesPredictivasExplicativas.join(", ")}.`
+      explanation: `Estimación probabilística mediante distribución de Poisson (Prueba Chi-Square con nivel de confianza de ${sem.predictiveEvidence.confidenceMetrics.statisticalConfidence.toFixed(1)}%).`,
+      finding: `Probabilidad del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(1)}% de repetición delictiva para la siguiente semana de estudio.`,
+      relation: `Índice de contagio Near-Repeat indica propagación de riesgo en un radio extendido de contagio espacio-temporal de ${sem.predictiveEvidence.nearRepeatRisk.toFixed(1)} metros.`
     }
   ];
 
@@ -894,7 +891,7 @@ export const buildIntelligenceEditorialPayload = async (
   const hypothesisGraph = {
     title: "Hypothesis Intelligence Graph (HIG 2.0)",
     dataUrl: renderHypothesisGraph(vectorInput),
-    interpretation: `Calibrado con un Índice de Riesgo Territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100 y persistencia delictiva del ${stats.criminologico.indicadores.persistencia}%. \n\n${cleanTechnicalJargon(rawGraphText || "La relación entre factores de oportunidad y delitos en el área sustenta el grafo.")}`
+    interpretation: `Calibrado con un nivel de riesgo predictivo del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}% y confiabilidad analítica del ${sem.predictiveEvidence.confidenceMetrics.statisticalConfidence.toFixed(0)}%. \n\n${cleanTechnicalJargon(rawGraphText || "La relación entre factores de oportunidad y delitos en el área sustenta el grafo.")}`
   };
 
   // Sweeps Data — solo barridos reales integrados al expediente (sin inyección ficticia)
@@ -914,18 +911,18 @@ export const buildIntelligenceEditorialPayload = async (
     recomendacionesEstrategicas: [] as string[]
   };
 
-  // Precalentamiento de conclusiones cuantitativas basadas en SIE
+  // Precalentamiento de conclusiones cuantitativas basadas en SIE y SEM
   conclusiones.hallazgosCriticos.push(
-    `Concentración criminal crítica de ${stats.temporal.totalEventos} eventos identificados en el sector, con un Índice de Riesgo Territorial de ${stats.predictivo.indiceRiesgoTerritorial}/100.`
+    `Concentración criminal de ${sem.metadata.totalCanonicalIncidents} eventos identificados en el sector, con un nivel de riesgo predictivo del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}%.`
   );
   conclusiones.riesgosInmediatos.push(
-    `Probabilidad de repetición delictiva semanal estimada en ${(stats.predictivo.probabilidadRepeticionSemanal * 100).toFixed(0)}% bajo el modelo Poisson (Confiabilidad: ${stats.predictivo.confiabilidadModeloPorcentaje}%).`
+    `Probabilidad de repetición delictiva semanal estimada en ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}% bajo el modelo de Poisson (Nivel de confianza: ${sem.predictiveEvidence.confidenceMetrics.statisticalConfidence.toFixed(0)}%).`
   );
   conclusiones.recomendacionesTacticas.push(
-    `[Acción Inmediata 0-30 días] Focalizar presencia y patrullaje dinámico en el centro de gravedad (${stats.espacial.centroGravedad.lat.toFixed(4)}, ${stats.espacial.centroGravedad.lng.toFixed(4)}) durante la ventana de oportunidad crítica: ${stats.temporal.horarioCritico}.`
+    `[Acción Inmediata 0-30 días] Focalizar presencia y patrullaje dinámico en el centro de gravedad (${stats.spatialAnalysis.centerOfGravity.lat.toFixed(4)}, ${stats.spatialAnalysis.centerOfGravity.lng.toFixed(4)}) durante periodos críticos: ${sem.temporalEvidence.criticalPeriods.join(", ") || "No definido"}.`
   );
   conclusiones.recomendacionesTacticas.push(
-    `[Acción Inmediata 0-30 días] Desplegar patrullajes preventivos para contener la migración espacial estimada en ${stats.espacial.migraciónEspacialMetros.toFixed(0)} metros.`
+    `[Acción Inmediata 0-30 días] Desplegar patrullajes preventivos para contener la dispersión espacial estimada en ${stats.spatialAnalysis.dispersionMeters.toFixed(0)} metros.`
   );
 
   if (rawConclusionsText && rawConclusionsText.trim().length > 10) {
@@ -1095,7 +1092,8 @@ export const buildIntelligenceEditorialPayload = async (
     hieData,
     cieData,
     historicalIncidents: incidents,
-    sieData: stats
+    sieData: stats,
+    semData: sem
   };
 };
 

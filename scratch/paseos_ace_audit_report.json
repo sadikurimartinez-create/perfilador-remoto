@@ -1,7 +1,7 @@
 {
   "metadata": {
     "projectId": "Lwh3M1QJGc9HucZTwtWo",
-    "auditedAt": "2026-07-14T00:23:57.718Z",
+    "auditedAt": "2026-07-14T00:57:54.988Z",
     "aceVersion": "1.0"
   },
   "quantitativeConsistency": {
@@ -30,13 +30,6 @@
   "overallConfidence": 100,
   "alerts": [],
   "auditHistory": [
-    {
-      "date": "2026-07-13T23:39:13.705Z",
-      "execution": "EXPORT",
-      "status": "WARNING",
-      "warnings": 1,
-      "aceVersion": "1.0"
-    },
     {
       "date": "2026-07-13T23:39:13.706Z",
       "execution": "EXPORT",
@@ -165,6 +158,13 @@
     },
     {
       "date": "2026-07-14T00:23:57.718Z",
+      "execution": "EXPORT",
+      "status": "PASS",
+      "warnings": 0,
+      "aceVersion": "1.0"
+    },
+    {
+      "date": "2026-07-14T00:57:54.988Z",
       "execution": "EXPORT",
       "status": "PASS",
       "warnings": 0,
