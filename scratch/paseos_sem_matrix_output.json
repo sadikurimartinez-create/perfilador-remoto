@@ -1,11 +1,13 @@
 {
   "metadata": {
     "projectId": "Lwh3M1QJGc9HucZTwtWo",
-    "analysisDate": "2026-07-13T23:24:18.199Z",
+    "analysisDate": "2026-07-14T00:19:02.245Z",
     "sieVersion": "2.0-core",
     "semVersion": "1.0",
     "totalCanonicalIncidents": 1368,
-    "analysisRadiusMeters": 1000
+    "analysisRadiusMeters": 1000,
+    "centerLat": 21.80929,
+    "centerLng": -102.26964
   },
   "criminalEvidence": {
     "totalEvents": 1368,
@@ -233,25 +235,25 @@
       "source": "SIE-METADATA",
       "engine": "Statistical Intelligence Engine",
       "version": "2.0",
-      "timestamp": "2026-07-13T23:24:18.199Z"
+      "timestamp": "2026-07-14T00:19:02.245Z"
     },
     "hotspots": {
       "source": "SIE-SSM-DBSCAN",
       "engine": "Statistical Intelligence Engine",
       "version": "2.0",
-      "timestamp": "2026-07-13T23:24:18.199Z"
+      "timestamp": "2026-07-14T00:19:02.245Z"
     },
     "poissonRisk": {
       "source": "SIE-CPM-POISSON",
       "engine": "Statistical Intelligence Engine",
       "version": "2.0",
-      "timestamp": "2026-07-13T23:24:18.199Z"
+      "timestamp": "2026-07-14T00:19:02.245Z"
     },
     "trend": {
       "source": "SIE-TIM-THEIL-SEN",
       "engine": "Statistical Intelligence Engine",
       "version": "2.0",
-      "timestamp": "2026-07-13T23:24:18.199Z"
+      "timestamp": "2026-07-14T00:19:02.245Z"
     }
   },
   "intelligenceReadiness": {
@@ -271,6 +273,6 @@
       "Shannon Entropy",
       "Z-Score"
     ],
-    "generatedAt": "2026-07-13T23:24:18.199Z"
+    "generatedAt": "2026-07-14T00:19:02.245Z"
   }
 }

@@ -18,7 +18,7 @@ Este documento contiene la comparación rigurosa entre el motor **Statistical In
 | **Tendencia Delictiva** | Acel: 0.15 | **STABLE**<br>(Slope: 0.0000, Conf: 2.3%) | **V1:** Aceleración mensual directa.<br>**V2 (Theil-Sen):** Pendiente robusta no paramétrica con resistencia a valores atípicos y nivel de significancia del 95%. |
 | **Riesgo Territorial** | 79.0/100 | **Poisson Semanal:** 92.9%<br>**Contagio Near-Repeat:** 58.0% | **V1:** Índice de vulnerabilidad lineal estático.<br>**V2 (CPM):** Probabilidades frecuenciales de Poisson con test de bondad Chi-Cuadrada y tasas de contagio espacio-temporal Near-Repeat. |
 | **Completitud y Calidad** | N/A | **Completitud:** 91%<br>**Excluidos:** 139 eventos | El nuevo motor audita automáticamente los tipos de datos inválidos y registra las causas de exclusión para evitar sesgos analíticos. |
-| **Eficiencia de Cómputo** | 39ms | 4860ms | Ambos motores se ejecutan en milisegundos, aptos para despliegue de alta concurrencia en Vercel. |
+| **Eficiencia de Cómputo** | 16ms | 3094ms | Ambos motores se ejecutan en milisegundos, aptos para despliegue de alta concurrencia en Vercel. |
 
 ## 🔬 Conclusión de Validación de Núcleo Matemático
 1. **Cero Alucinaciones:** Ambos motores operan sobre el mismo subconjunto determinista. Se valida una coincidencia exacta de **1368 eventos** procesados.

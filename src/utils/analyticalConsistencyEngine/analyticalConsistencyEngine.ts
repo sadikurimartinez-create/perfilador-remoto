@@ -1,11 +1,20 @@
-import * as fs from "fs";
-import * as path from "path";
 import { ACEAlert, ACEAuditLog, ACEBlockingReason, ACEPayload, AnalyticalConsistencyReport } from "./models/aceTypes";
 import { ConsistencyValidators } from "./consistencyValidators";
 
+// Carga segura y dinámica de módulos de Node en el servidor para evitar que Webpack intente empaquetarlos en el navegador
+const isServer = typeof window === "undefined";
+const fs = isServer ? eval("require")("fs") : null;
+const path = isServer ? eval("require")("path") : null;
+
 export class AnalyticalConsistencyEngine {
   private static readonly VERSION = "1.0";
-  private static readonly HISTORY_FILE = path.join(process.cwd(), "scratch", "ace_audit_history.json");
+
+  private static getHistoryFile(): string {
+    if (typeof window === "undefined" && path) {
+      return path.join(process.cwd(), "scratch", "ace_audit_history.json");
+    }
+    return "";
+  }
 
   /**
    * Ejecuta la auditoría integral cruzada de consistencia sobre todo el Ecosistema MMAS.
@@ -116,16 +125,22 @@ export class AnalyticalConsistencyEngine {
    */
   private static saveAndGetHistory(newLog: ACEAuditLog): ACEAuditLog[] {
     const history: ACEAuditLog[] = [];
+    const historyFile = this.getHistoryFile();
+
+    if (!historyFile || !fs || !path) {
+      history.push(newLog);
+      return history;
+    }
     
     try {
       // Asegurar que el directorio scratch existe
-      const scratchDir = path.dirname(this.HISTORY_FILE);
+      const scratchDir = path.dirname(historyFile);
       if (!fs.existsSync(scratchDir)) {
         fs.mkdirSync(scratchDir, { recursive: true });
       }
 
-      if (fs.existsSync(this.HISTORY_FILE)) {
-        const raw = fs.readFileSync(this.HISTORY_FILE, "utf8");
+      if (fs.existsSync(historyFile)) {
+        const raw = fs.readFileSync(historyFile, "utf8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           history.push(...parsed);
@@ -142,7 +157,7 @@ export class AnalyticalConsistencyEngine {
     }
 
     try {
-      fs.writeFileSync(this.HISTORY_FILE, JSON.stringify(history, null, 2), "utf8");
+      fs.writeFileSync(historyFile, JSON.stringify(history, null, 2), "utf8");
     } catch (err) {
       // Ignorar errores menores de escritura
     }
