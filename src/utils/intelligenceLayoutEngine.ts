@@ -1122,14 +1122,32 @@ export const buildIntelligenceBriefing = (
     interpretation: payload.osintSynthesized
   });
 
-  // Página 9: CAPÍTULO 8 - Pandillas (Textual)
+  // Página 9: CAPÍTULO 8 - Pandillas (Textual o Certificado de Gobernanza)
+  let pandillasText = payload.pandillasAnalysis;
+  const certifiedGim = payload.intelligenceContext?.aceReport?.certifiedGimOutput;
+
+  if (certifiedGim) {
+    if (certifiedGim.validatedByACE === false) {
+      pandillasText = `RECOMENDACIÓN INSTITUCIONAL DE DESCARTE:\n\nEl análisis territorial del Capítulo 8 para el expediente ${payload.projectId} ha sido SUSPENDIDO de forma oficial. Los datos levantados en campo no superaron los criterios de consistencia analítica o neutralidad lingüística establecidos por la gobernanza de la SSPE.\n\nEVIDENCIA:\nNo certificada por inconsistencia o violación de estilo.\n\nANÁLISIS:\n${certifiedGim.analyticalFindings[0]}\n\nIMPLICACIÓN OPERATIVA:\n${certifiedGim.limitations[0]}`;
+    } else {
+      const hallazgosBullets = certifiedGim.analyticalFindings.map((f: string) => `- ${f}`).join("\n");
+      const evidenciaBullets = certifiedGim.evidenceSummary.map((e: string) => `- ${e}`).join("\n");
+      const territorialBullets = certifiedGim.territorialSummary.map((t: string) => `- ${t}`).join("\n");
+      const limitacionesBullets = certifiedGim.limitations.map((l: string) => `- ${l}`).join("\n");
+      const trazabilidadFirma = `Referencia de Certificación Única: ${certifiedGim.traceabilityReference}`;
+
+      pandillasText = `HALLAZGO:\n${hallazgosBullets || "- No se registraron marcas territoriales activas."}\n\nEVIDENCIA:\n${evidenciaBullets || "- Registros del censo local."}\n\nANÁLISIS:\n${territorialBullets || "- Sector perimetral general."}\n\nIMPLICACIÓN OPERATIVA:\n${limitacionesBullets || "- Monitoreo y patrullaje preventivo rutinario."}\n\n${trazabilidadFirma}`;
+    }
+  }
+
   pages.push({
     id: 'page-pandillas',
     title: 'CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS',
     mode: 'text',
     visuals: [],
-    interpretation: payload.pandillasAnalysis
+    interpretation: pandillasText
   });
+
 
   // Página 10: CAPÍTULO 9: Hypothesis Graph (HIG 2.0)
   pages.push({

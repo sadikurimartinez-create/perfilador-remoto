@@ -1,5 +1,6 @@
 import { ACEAlert, ACEAuditLog, ACEBlockingReason, ACEPayload, AnalyticalConsistencyReport } from "./models/aceTypes";
 import { ConsistencyValidators } from "./consistencyValidators";
+import { AceToReportAdapter } from "../gangIntelligenceEngine/adapters/aceToReportAdapter";
 
 // Carga segura y dinámica de módulos de Node en el servidor para evitar que Webpack intente empaquetarlos en el navegador
 const isServer = typeof window === "undefined";
@@ -120,8 +121,16 @@ export class AnalyticalConsistencyEngine {
       report.blockingReason = blockingReasons;
     }
 
+    // Calcular e inyectar el payload certificado GIM para consumo seguro del Report Engine (ADR-008.8.3)
+    try {
+      report.certifiedGimOutput = AceToReportAdapter.bridge(report, payload);
+    } catch (e) {
+      report.certifiedGimOutput = null;
+    }
+
     return report;
   }
+
 
   /**
    * Guarda el log en un archivo JSON en scratch y devuelve el historial completo.

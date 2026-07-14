@@ -102,4 +102,18 @@ export interface AnalyticalConsistencyReport {
   
   blockingReason?: ACEBlockingReason[]; // Detalles legibles e institucionales de bloqueo (Ajuste 1)
   auditHistory?: ACEAuditLog[]; // Registro histórico de auditorías (Ajuste 5)
+  certifiedGimOutput?: CertifiedGangAnalysisPayload | null; // Salida certificada GIM autorizada para publicación
 }
+
+export interface CertifiedGangAnalysisPayload {
+  schemaVersion: "GIM-REPORT-1.0";
+  validationStatus: "CERTIFIED" | "CERTIFIED_WITH_LIMITATIONS";
+  confidenceScore: number;
+  validatedByACE: boolean;
+  limitations: string[];
+  analyticalFindings: string[];           // Listado de afirmaciones cualitativas seguras y neutralizadas
+  territorialSummary: string[];           // Listado de zonas geográficas sanitizadas
+  evidenceSummary: string[];              // Recuento de evidencias factuales visuales y OSINT
+  traceabilityReference: string;          // Hash único para auditoría pública y trazabilidad legal
+}
+
