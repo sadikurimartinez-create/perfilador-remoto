@@ -15,6 +15,14 @@ export interface ACEGimPayload {
   };
   evidenceDescriptions: string[];
   analyticalObservations: string[];
+  // AGREGADO: Metadatos cualitativos ricos de Madurez OSINT (ADR-009.10.2 / OBS-009.10.1.2-001)
+  osintMaturity?: {
+    totalEventsCount: number;
+    limitedEventsCount: number;
+    mediumEventsCount: number;
+    highEventsCount: number;
+    globalLimitations: string[];
+  };
 }
 
 export class GimToAceAdapter {
@@ -72,6 +80,35 @@ export class GimToAceAdapter {
 
     const hasTraceability = Array.isArray(gem.traceabilityLog) && gem.traceabilityLog.length > 0;
 
+    // Poblado cualitativo rico de madurez OSINT (ADR-009.10.2 / OBS-009.10.1.2-001)
+    let totalEventsCount = 0;
+    let limitedEventsCount = 0;
+    let mediumEventsCount = 0;
+    let highEventsCount = 0;
+    const globalLimitations: string[] = [];
+
+    if (gem.osintEvidence?.events) {
+      gem.osintEvidence.events.forEach(e => {
+        totalEventsCount++;
+        const status = e.qualityStatus || "MEDIUM";
+        if (status === "LIMITED") {
+          limitedEventsCount++;
+        } else if (status === "HIGH") {
+          highEventsCount++;
+        } else {
+          mediumEventsCount++;
+        }
+
+        if (e.limitations) {
+          e.limitations.forEach(lim => {
+            if (!globalLimitations.includes(lim)) {
+              globalLimitations.push(lim);
+            }
+          });
+        }
+      });
+    }
+
     return {
       confidenceScore,
       limitationsCount,
@@ -82,7 +119,14 @@ export class GimToAceAdapter {
         osintEvents: gem.osintEvidence?.eventsFound || gem.osintEvidence?.events?.length || 0
       },
       evidenceDescriptions,
-      analyticalObservations
+      analyticalObservations,
+      osintMaturity: totalEventsCount > 0 ? {
+        totalEventsCount,
+        limitedEventsCount,
+        mediumEventsCount,
+        highEventsCount,
+        globalLimitations
+      } : undefined
     };
   }
 }

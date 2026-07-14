@@ -71,6 +71,11 @@ export interface OsintGangEvidence {
   coordinates: { lat: number; lng: number };
   distanceMeters: number; // Distancia calculada mediante Haversine respecto al centroide del proyecto
   validatedAt: string; // Timestamp ISO-8601 de validación perimetral
+  // Campos opcionales de madurez e integridad (ADR-009.10.2)
+  qualityStatus?: "HIGH" | "MEDIUM" | "LIMITED";
+  limitations?: string[];
+  compositeScore?: number;
+  traceabilityHash?: string;
 }
 
 /**

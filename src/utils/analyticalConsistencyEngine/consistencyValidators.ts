@@ -513,6 +513,36 @@ export class ConsistencyValidators {
       }
     }
 
+    // 5. Validación de Madurez OSINT y Calibración Metodológica (OBS-009.10.1.2-001)
+    if (gim.osintMaturity && gim.osintMaturity.totalEventsCount > 0) {
+      const maturity = gim.osintMaturity;
+      const ratioLimited = maturity.limitedEventsCount / maturity.totalEventsCount;
+
+      if (ratioLimited > 0.50 && gim.confidenceScore >= 80) {
+        if (overallStatus !== "FAILED") overallStatus = "WARNING";
+        alerts.push({
+          type: "CRIMINOLOGICAL",
+          category: "ANALYTICAL",
+          message: `Descalibración Metodológica OSINT: Más de la mitad de los indicios OSINT (${(ratioLimited * 100).toFixed(0)}%) tienen calidad LIMITADA, pero el nivel de confianza de GIM es inusualmente alto (${gim.confidenceScore}/100). Se requiere calibrar el optimismo analítico.`,
+          severity: "MEDIUM",
+          source: "GIM-ACE Auditor",
+          expected: "Nivel de confianza de GIM < 80/100 cuando predomina OSINT de baja calidad",
+          received: `Confianza: ${gim.confidenceScore}, OSINT Limitados: ${maturity.limitedEventsCount}/${maturity.totalEventsCount}`
+        });
+      }
+
+      // Registrar limitaciones globales heredadas de OSINT de forma directa en las alertas para asegurar visibilidad en Report Engine
+      if (maturity.globalLimitations.length > 0) {
+        alerts.push({
+          type: "CRIMINOLOGICAL",
+          category: "ANALYTICAL",
+          message: `Limitaciones OSINT Detectadas: El pipeline de procedencia reporta restricciones: ${maturity.globalLimitations.join(" | ")}`,
+          severity: "LOW",
+          source: "GIM-ACE Auditor"
+        });
+      }
+    }
+
     return { status: overallStatus };
   }
 }
