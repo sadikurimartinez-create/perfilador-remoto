@@ -692,6 +692,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const currentPhoto = album.find((p) => p.id === id);
       const isMapUrl = currentPhoto && (
         currentPhoto.previewUrl?.includes("api-maps.yandex.ru") ||
+        currentPhoto.previewUrl?.includes("openstreetmap.de") ||
         currentPhoto.gpsSource === "POI_MAPA" ||
         currentPhoto.gpsSource === "VERTICE_MAPA" ||
         currentPhoto.tipo?.startsWith("Barrido")
@@ -700,7 +701,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const updateData: any = { lat, lng };
       let newMapUrl = "";
       if (isMapUrl) {
-        newMapUrl = `https://api-maps.yandex.ru/2.1.79/services/constructor/1.0/static/?ll=${lng},${lat}&z=16&l=map&size=600,400`;
+        newMapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=600x400&maptype=mapnik`;
         updateData.url = newMapUrl;
         updateData.previewUrl = newMapUrl;
       }
@@ -1226,7 +1227,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
         try {
           const photoId = `EVI-SWEEP-${Date.now()}`;
-          const previewUrl = `https://api-maps.yandex.ru/2.1.79/services/constructor/1.0/static/?ll=${lngVal},${latVal}&z=16&l=map&size=600,400`;
+          const previewUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${latVal},${lngVal}&zoom=16&size=600x400&maptype=mapnik`;
           const photosColRef = collection(firestore, "projects", project.id, "photos");
           const photoDocData = {
             url: previewUrl,

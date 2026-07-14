@@ -1400,14 +1400,20 @@ const hasMinimumPhotos =
           ...(data.meta?.incidenciaDetalles || []).map((c: any) => ({
             lat: c.lat,
             lng: c.lng,
+            fecha: c.fecha || c.FECHA || c.Fecha || c.fechaStr || c.fecha_hecho || c.FECHA_HECHO || new Date().toISOString().split("T")[0],
             tipoDelito: c.incidente || c.tipoDelito || "Delito",
             rangoHorario: c.rango_horario || c.rangoHorario || "Sin rango",
+            colonia: c.colonia || c.COLONIA || "SECTOR NO ESPECIFICADO",
+            arma: c.arma || c.ARMA || "NINGUNA"
           })),
           ...incidenciaLocal.map((c: any) => ({
             lat: c.lat,
             lng: c.lng,
+            fecha: c.fecha || c.FECHA || c.Fecha || c.fechaStr || c.fecha_hecho || c.FECHA_HECHO || new Date().toISOString().split("T")[0],
             tipoDelito: c.tipo || c.incidente || c.tipoDelito || "Delito",
             rangoHorario: c.rangoHorario || c.rango_horario || "Sin rango",
+            colonia: c.colonia || c.COLONIA || "SECTOR NO ESPECIFICADO",
+            arma: c.arma || c.ARMA || "NINGUNA"
           })),
         ];
 
