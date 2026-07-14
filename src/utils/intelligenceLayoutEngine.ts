@@ -689,28 +689,28 @@ export const buildIntelligenceEditorialPayload = async (
 
   const maps = [
     {
-      title: "1. CONTEXTO TERRITORIAL Y ÁREA DE ANÁLISIS",
+      title: "1. MAPA DE CONTEXTO TERRITORIAL Y ÁREA DE ANÁLISIS",
       dataUrl: densityMapUrl,
       spatialFinding: cieData.spatialPattern.classification || "Distribución sectorizada perimetral.",
       interpretation: getMapInterpretation(0, cieData),
       recommendation: "Verificar límites de amortiguamiento táctico y coordinar sectores de patrullaje."
     },
     {
-      title: "2. DISTRIBUCIÓN ESPACIAL DEL FENÓMENO (DENSIDAD)",
+      title: "2. MAPA DE DISTRIBUCIÓN ESPACIAL DEL FENÓMENO (DENSIDAD Y CORREDORES DE MOVILIDAD)",
       dataUrl: mobilityMapUrl,
       spatialFinding: `Se identificaron ${cieData.densityAnalysis.hotspotsCount || 0} hotspots principales con ${cieData.densityAnalysis.totalEvents || 0} incidentes históricos.`,
       interpretation: getMapInterpretation(1, cieData),
       recommendation: "Desplegar patrullaje dinámico en horarios críticos en los corredores de huida."
     },
     {
-      title: "3. FACTORES TERRITORIALES DE OPORTUNIDAD",
+      title: "3. MAPA DE FACTORES TERRITORIALES DE OPORTUNIDAD Y ATRACTORES",
       dataUrl: attractorsMapUrl,
       spatialFinding: `Concentración delictiva asociada a ${cieData.attractorAnalysis.totalAttractors || 0} atractores comerciales del DENUE.`,
       interpretation: getMapInterpretation(2, cieData),
       recommendation: "Notificar a comercio establecido y coordinar cerramiento de baldíos."
     },
     {
-      title: "4. PROYECCIÓN ESPACIAL DEL RIESGO",
+      title: "4. MAPA DE PROYECCIÓN Y PREDICCIÓN ESPACIAL DEL RIESGO (PREDICTIVA)",
       dataUrl: predictiveMapUrl,
       spatialFinding: `Baricentro delictivo calculado en lat ${cieData.priorityZones.baricenter?.lat.toFixed(4) || 0}, lng ${cieData.priorityZones.baricenter?.lng.toFixed(4) || 0}.`,
       interpretation: getMapInterpretation(3, cieData),
