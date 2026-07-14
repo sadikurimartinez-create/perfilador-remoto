@@ -2,6 +2,7 @@
 
 import axios from 'axios';
 import { GoogleAuth } from 'google-auth-library';
+import crypto from 'crypto';
 import { searchX, searchReddit, searchTelegram } from './socialProviders';
 import { searchSerpAPI, searchYouTubeOSINT } from './osintProviders';
 
@@ -27,7 +28,14 @@ export interface NormalizedOSINTEvent {
   };
   neighborhood?: string; // Colonia asociada por contenido semántico
   url?: string;
+  traceabilityHash: string; // SHA-256 inmutable de la evidencia
 }
+
+export function generateTraceabilityHash(content: string, timestamp: string, url?: string): string {
+  const data = `${content}||${timestamp}||${url || ""}`;
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
 
 export interface OSINTTerritorialV2Response {
   success: boolean;
@@ -341,18 +349,21 @@ export const runOSINTTerritorialV2 = async (
   telegramRaw.forEach((item: any) => {
     const analysis = analyzeTextContent(item.texto);
     const georef = georeferenceSemantically(item.texto, defaultLat, defaultLng);
+    const contentText = `[Canal: ${item.chat}] ${item.texto}`;
+    const timestampVal = item.fecha || new Date().toISOString();
     capa1Events.push({
       id: generateId(),
       source: "Telegram Monitor",
       platform: "Telegram",
-      content: `[Canal: ${item.chat}] ${item.texto}`,
-      timestamp: item.fecha || new Date().toISOString(),
+      content: contentText,
+      timestamp: timestampVal,
       location: georef.location,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
       keywords: analysis.keywords,
       risk_score: analysis.score,
-      risk_level: analysis.level
+      risk_level: analysis.level,
+      traceabilityHash: generateTraceabilityHash(contentText, timestampVal)
     });
   });
 
@@ -361,19 +372,22 @@ export const runOSINTTerritorialV2 = async (
     const text = item.text || "";
     const analysis = analyzeTextContent(text);
     const georef = georeferenceSemantically(text, defaultLat, defaultLng);
+    const timestampVal = item.created_at || new Date().toISOString();
+    const itemUrl = `https://twitter.com/any/status/${item.id}`;
     capa1Events.push({
       id: generateId(),
       source: "Twitter Search",
       platform: "X",
       content: text,
-      timestamp: item.created_at || new Date().toISOString(),
+      timestamp: timestampVal,
       location: georef.location,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
       keywords: analysis.keywords,
       risk_score: analysis.score,
       risk_level: analysis.level,
-      url: `https://twitter.com/any/status/${item.id}`
+      url: itemUrl,
+      traceabilityHash: generateTraceabilityHash(text, timestampVal, itemUrl)
     });
   });
 
@@ -383,19 +397,22 @@ export const runOSINTTerritorialV2 = async (
     const text = `${data.title || ""}\n${data.selftext || ""}`;
     const analysis = analyzeTextContent(text);
     const georef = georeferenceSemantically(text, defaultLat, defaultLng);
+    const timestampVal = new Date((data.created_utc || Date.now() / 1000) * 1000).toISOString();
+    const itemUrl = data.url || `https://reddit.com${data.permalink || ""}`;
     capa1Events.push({
       id: generateId(),
       source: `Subreddit: r/${data.subreddit || "Mexico"}`,
       platform: "Reddit",
       content: text,
-      timestamp: new Date((data.created_utc || Date.now() / 1000) * 1000).toISOString(),
+      timestamp: timestampVal,
       location: georef.location,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
       keywords: analysis.keywords,
       risk_score: analysis.score,
       risk_level: analysis.level,
-      url: data.url || `https://reddit.com${data.permalink || ""}`
+      url: itemUrl,
+      traceabilityHash: generateTraceabilityHash(text, timestampVal, itemUrl)
     });
   });
 
@@ -418,13 +435,15 @@ export const runOSINTTerritorialV2 = async (
     
     // Priorizamos la ubicación explícita de YouTube si existe, de lo contrario usamos georreferenciación semántica
     const finalLocation = item.location || georef.location;
+    const timestampVal = item.publishedAt || new Date().toISOString();
+    const itemUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
 
     capa2Events.push({
       id: item.videoId || generateId(),
       source: `YouTube - Canal: ${item.channelTitle}`,
       platform: "YouTube",
       content: fullContent,
-      timestamp: item.publishedAt || new Date().toISOString(),
+      timestamp: timestampVal,
       location: finalLocation,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
@@ -436,7 +455,8 @@ export const runOSINTTerritorialV2 = async (
         likes: item.likes,
         comments_count: item.commentCount
       },
-      url: `https://www.youtube.com/watch?v=${item.videoId}`
+      url: itemUrl,
+      traceabilityHash: generateTraceabilityHash(fullContent, timestampVal, itemUrl)
     });
   });
 
@@ -445,19 +465,22 @@ export const runOSINTTerritorialV2 = async (
     const fullContent = `${item.title}\n${item.snippet}`;
     const analysis = analyzeTextContent(fullContent);
     const georef = georeferenceSemantically(fullContent, defaultLat, defaultLng);
+    const timestampVal = item.publishedAt;
+    const itemUrl = item.link;
     capa2Events.push({
       id: item.id,
       source: "Google Dorks Engine",
       platform: "Google",
       content: fullContent,
-      timestamp: item.publishedAt,
+      timestamp: timestampVal,
       location: georef.location,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
       keywords: analysis.keywords,
       risk_score: analysis.score,
       risk_level: analysis.level,
-      url: item.link
+      url: itemUrl,
+      traceabilityHash: generateTraceabilityHash(fullContent, timestampVal, itemUrl)
     });
   });
 
@@ -466,19 +489,22 @@ export const runOSINTTerritorialV2 = async (
     const fullContent = `${item.title}\n${item.snippet}`;
     const analysis = analyzeTextContent(fullContent);
     const georef = georeferenceSemantically(fullContent, defaultLat, defaultLng);
+    const timestampVal = item.publishedAt;
+    const itemUrl = item.link;
     capa2Events.push({
       id: item.id,
       source: "Bing Search Engine",
       platform: "Bing",
       content: fullContent,
-      timestamp: item.publishedAt,
+      timestamp: timestampVal,
       location: georef.location,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
       keywords: analysis.keywords,
       risk_score: analysis.score,
       risk_level: analysis.level,
-      url: item.link
+      url: itemUrl,
+      traceabilityHash: generateTraceabilityHash(fullContent, timestampVal, itemUrl)
     });
   });
 
@@ -491,19 +517,22 @@ export const runOSINTTerritorialV2 = async (
   socialDeepRaw.forEach((item: any) => {
     const analysis = analyzeTextContent(item.content);
     const georef = georeferenceSemantically(item.content, defaultLat, defaultLng);
+    const timestampVal = item.timestamp;
+    const itemUrl = item.url;
     capa3Events.push({
       id: generateId(),
       source: `Fusión Deep OSINT - ${item.platform}`,
       platform: item.platform,
       content: item.content,
-      timestamp: item.timestamp,
+      timestamp: timestampVal,
       location: georef.location,
       neighborhood: georef.neighborhood,
       entities: analysis.entities,
       keywords: analysis.keywords,
       risk_score: analysis.score,
       risk_level: analysis.level,
-      url: item.url
+      url: itemUrl,
+      traceabilityHash: generateTraceabilityHash(item.content, timestampVal, itemUrl)
     });
   });
 

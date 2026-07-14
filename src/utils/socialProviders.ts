@@ -4,23 +4,24 @@ import axios from 'axios';
 import { GoogleAuth } from 'google-auth-library';
 
 const REDDIT_USER_AGENT =
-  process.env.PGP_REDDIT_USER_AGENT || process.env.NEXT_PUBLIC_PGP_REDDIT_USER_AGENT || "";
+  process.env.PGP_REDDIT_USER_AGENT || "";
 
 const X_BEARER =
-  process.env.PGP_X_BEARER_TOKEN || process.env.NEXT_PUBLIC_PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.NEXT_PUBLIC_PGP_X_ACCESS_TOKEN || "";
+  process.env.PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || "";
 
 const TELEGRAM_TOKEN =
-  process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_PGP_TELEGRAM_BOT_TOKEN || "";
+  process.env.PGP_TELEGRAM_BOT_TOKEN || "";
 
 // Claves para Vertex AI Search (Discovery Engine)
-const DISCOVERY_PROJECT_ID = process.env.PGP_DISCOVERY_PROJECT_ID || process.env.NEXT_PUBLIC_PGP_DISCOVERY_PROJECT_ID || "";
-const DISCOVERY_LOCATION = process.env.PGP_DISCOVERY_LOCATION || process.env.NEXT_PUBLIC_PGP_DISCOVERY_LOCATION || "";
-const DISCOVERY_ENGINE_ID = process.env.PGP_DISCOVERY_ENGINE_ID || process.env.NEXT_PUBLIC_PGP_DISCOVERY_ENGINE_ID || "";
-const DISCOVERY_API_KEY = process.env.PGP_DISCOVERY_API_KEY || process.env.NEXT_PUBLIC_PGP_DISCOVERY_API_KEY || "";
+const DISCOVERY_PROJECT_ID = process.env.PGP_DISCOVERY_PROJECT_ID || "";
+const DISCOVERY_LOCATION = process.env.PGP_DISCOVERY_LOCATION || "";
+const DISCOVERY_ENGINE_ID = process.env.PGP_DISCOVERY_ENGINE_ID || "";
+const DISCOVERY_API_KEY = process.env.PGP_DISCOVERY_API_KEY || "";
 
 // Claves para Vertex AI (Análisis de Inteligencia)
-const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || process.env.NEXT_PUBLIC_GCP_PROJECT_ID || "";
-const GCP_LOCATION = process.env.GCP_LOCATION || process.env.NEXT_PUBLIC_GCP_LOCATION || "us-central1";
+const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || "";
+const GCP_LOCATION = process.env.GCP_LOCATION || "us-central1";
+
 const GCP_CLIENT_EMAIL = process.env.GCP_CLIENT_EMAIL || "";
 const GCP_PRIVATE_KEY = process.env.GCP_PRIVATE_KEY ? process.env.GCP_PRIVATE_KEY.replace(/\\n/g, '\n') : "";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";

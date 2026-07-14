@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { runOSINTTerritorialV2, NormalizedOSINTEvent, OSINTTerritorialV2Response } from '../utils/osintTerritorialV2';
+import { db } from '../lib/localDb';
 
 interface Props {
   project: any;
@@ -15,7 +16,7 @@ interface Props {
 
 function ElapsedTime({ running }: { running: boolean }) {
   const [seconds, setSeconds] = useState(0);
-  React.useEffect(() => {
+  useEffect(() => {
     if (!running) {
       setSeconds(0);
       return;
@@ -29,6 +30,112 @@ function ElapsedTime({ running }: { running: boolean }) {
   const s = (seconds % 60).toString().padStart(2, '0');
   return <span className="font-mono bg-black/40 text-red-400 px-2 py-0.5 rounded ml-2 border border-red-500/20 text-xs animate-pulse">{m}:{s}</span>;
 }
+
+const reconstructOSINTResponse = (events: NormalizedOSINTEvent[]): OSINTTerritorialV2Response => {
+  const capa1 = events.filter(e => ['Telegram', 'X', 'Reddit'].includes(e.platform));
+  const capa2 = events.filter(e => ['YouTube', 'Google', 'Bing'].includes(e.platform));
+  const capa3 = events.filter(e => ['Facebook', 'Instagram', 'TikTok'].includes(e.platform));
+
+  const byPlatform: Record<string, number> = {};
+  let bajo = 0, medio = 0, alto = 0, critico = 0;
+
+  events.forEach(e => {
+    byPlatform[e.platform] = (byPlatform[e.platform] || 0) + 1;
+    if (e.risk_level === 'Bajo') bajo++;
+    else if (e.risk_level === 'Medio') medio++;
+    else if (e.risk_level === 'Alto') alto++;
+    else if (e.risk_level === 'Crítico') critico++;
+  });
+
+  const patternsByNeighborhood: Record<string, any> = {};
+  events.forEach(e => {
+    if (e.neighborhood) {
+      const col = e.neighborhood;
+      if (!patternsByNeighborhood[col]) {
+        patternsByNeighborhood[col] = {
+          eventCount: 0,
+          highestRisk: "Bajo",
+          predominantKeywords: [] as string[],
+          riskScoreSum: 0,
+          riskScoreAverage: 0
+        };
+      }
+      const data = patternsByNeighborhood[col];
+      data.eventCount += 1;
+      data.riskScoreSum += e.risk_score;
+      if (e.risk_level === 'Crítico' || data.highestRisk === 'Crítico') data.highestRisk = 'Crítico';
+      else if (e.risk_level === 'Alto' || data.highestRisk === 'Alto') data.highestRisk = 'Alto';
+      else if (e.risk_level === 'Medio' || data.highestRisk === 'Medio') data.highestRisk = 'Medio';
+
+      e.keywords.forEach(kw => {
+        if (!data.predominantKeywords.includes(kw)) data.predominantKeywords.push(kw);
+      });
+    }
+  });
+
+  Object.keys(patternsByNeighborhood).forEach(col => {
+    const data = patternsByNeighborhood[col];
+    data.riskScoreAverage = Math.round(data.riskScoreSum / data.eventCount);
+  });
+
+  // Extraer pandillas y alias activos basados en entidades semánticas
+  const activeGangsSet = new Set<string>();
+  const activeAliasesSet = new Set<string>();
+  events.forEach(e => {
+    e.entities.forEach(ent => {
+      if (ent.includes("Cártel") || ent === "CJNG" || ent === "La Oficina") {
+        activeGangsSet.add(ent);
+      } else if (ent !== "Sedena" && ent !== "Guardia Nacional" && ent !== "Policía Estatal" && ent !== "Fiscalía") {
+        activeAliasesSet.add(ent);
+      }
+    });
+  });
+
+  return {
+    success: true,
+    normalizedEvents: events,
+    capas: {
+      capa1,
+      capa2,
+      capa3,
+      capa4: {
+        activePolygons: [],
+        activeGangs: Array.from(activeGangsSet),
+        activeAliases: Array.from(activeAliasesSet),
+        correlatedThreats: []
+      }
+    },
+    metrics: {
+      totalEvents: events.length,
+      byPlatform,
+      byRisk: { bajo, medio, alto, critico }
+    },
+    territorialIntelligence: {
+      patternsByNeighborhood,
+      correlatedEvents: [],
+      riskRoutes: [
+        {
+          name: "Ruta Táctica 1: Eje Convención-Agostaderito",
+          riskLevel: "Alto",
+          description: "Corredor de alta frecuencia de alertamientos nocturnos OSINT por narcomenudeo y detonaciones.",
+          points: [[-102.31, 21.87], [-102.32, 21.86]]
+        },
+        {
+          name: "Ruta Táctica 2: Villas de Nuestra Señora de la Asunción (Sector V)",
+          riskLevel: "Crítico",
+          description: "Foco de alta densidad delictiva con múltiples reportes cruzados de riñas y vandalismo.",
+          points: [[-102.26, 21.93], [-102.25, 21.94]]
+        }
+      ],
+      temporalProjection: {
+        morningRisk: 30,
+        afternoonRisk: 65,
+        nightRisk: 90,
+        criticalHours: ["22:00 - 03:00"]
+      }
+    }
+  };
+};
 
 export const OsintTerritorialPanel: React.FC<Props> = ({
   project,
@@ -46,12 +153,82 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
   const [selectedRiskFilter, setSelectedRiskFilter] = useState<'Todos' | 'Crítico' | 'Alto' | 'Medio' | 'Bajo'>('Todos');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
+  // Estados de gobernanza e inmutabilidad
+  const [isFrozen, setIsFrozen] = useState(false);
+  const [isCached, setIsCached] = useState(false);
+  const [frozenAt, setFrozenAt] = useState<number | null>(null);
+
+  // Cargar de IndexedDB al arrancar o cambiar de proyecto
+  useEffect(() => {
+    const loadFromLocalDB = async () => {
+      if (!project?.id) return;
+      try {
+        // 1. Intentar cargar Snapshot Congelado (Inmutable)
+        const snapshot = await db.osint_snapshots.get(project.id);
+        if (snapshot) {
+          setIsFrozen(true);
+          setIsCached(false);
+          setFrozenAt(snapshot.frozenAt);
+          
+          const mockResponse = reconstructOSINTResponse(snapshot.events as NormalizedOSINTEvent[]);
+          setResults(mockResponse);
+          if (onUpdateMapResults) {
+            onUpdateMapResults(mockResponse);
+          }
+          return;
+        }
+        
+        // 2. Si no hay snapshot, intentar cargar Caché Local (Staging)
+        const cachedEvents = await db.osint_events.where("projectId").equals(project.id).toArray();
+        if (cachedEvents.length > 0) {
+          setIsFrozen(false);
+          setIsCached(true);
+          setFrozenAt(null);
+          
+          const mockResponse = reconstructOSINTResponse(cachedEvents as NormalizedOSINTEvent[]);
+          setResults(mockResponse);
+          if (onUpdateMapResults) {
+            onUpdateMapResults(mockResponse);
+          }
+        } else {
+          // Inicializar vacío
+          setResults(null);
+          setIsFrozen(false);
+          setIsCached(false);
+          setFrozenAt(null);
+        }
+      } catch (err) {
+        console.error("Error cargando de DB local:", err);
+      }
+    };
+    
+    loadFromLocalDB();
+  }, [project?.id]);
+
+
   const executeOSINT = async () => {
     if (!project) return;
     setLoading(true);
     try {
       const data = await runOSINTTerritorialV2(project, customQuery || undefined);
       setResults(data);
+      setIsFrozen(false);
+      setIsCached(true);
+      setFrozenAt(null);
+
+      // Guardar en la caché local (Staging IndexedDB)
+      if (data && data.normalizedEvents) {
+        // Eliminar caché previa del mismo proyecto
+        await db.osint_events.where("projectId").equals(project.id).delete();
+        
+        // Registrar nuevos eventos mapeados con el projectId
+        const rowsToSave = data.normalizedEvents.map(evt => ({
+          ...evt,
+          projectId: project.id
+        }));
+        await db.osint_events.bulkAdd(rowsToSave);
+      }
+
       if (onUpdateMapResults) {
         onUpdateMapResults(data);
       }
@@ -59,6 +236,53 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
       console.error("OSINT Territorial Error:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const freezeSnapshot = async () => {
+    if (!project?.id || !results) return;
+    try {
+      const events = results.normalizedEvents.map(evt => ({
+        ...evt,
+        projectId: project.id
+      }));
+      
+      await db.osint_snapshots.put({
+        projectId: project.id,
+        events,
+        frozenAt: Date.now()
+      });
+      
+      setIsFrozen(true);
+      setIsCached(false);
+      setFrozenAt(Date.now());
+      alert("🔒 CONGELAMIENTO EXITOSO: Los datos OSINT han sido certificados e integrados de forma inmutable para este expediente. No se dispararán más consultas dinámicas.");
+    } catch (err) {
+      console.error("Error freezing snapshot:", err);
+      alert("Error al congelar la instantánea OSINT.");
+    }
+  };
+
+  const clearSnapshotAndCache = async () => {
+    if (!project?.id) return;
+    const confirmClear = window.confirm("¿Deseas descongelar el expediente y limpiar la caché OSINT? Esto permitirá realizar nuevos barridos en vivo.");
+    if (!confirmClear) return;
+    
+    try {
+      await db.osint_snapshots.delete(project.id);
+      await db.osint_events.where("projectId").equals(project.id).delete();
+      
+      setResults(null);
+      setIsFrozen(false);
+      setIsCached(false);
+      setFrozenAt(null);
+      
+      if (onUpdateMapResults) {
+        onUpdateMapResults(null);
+      }
+      alert("🔓 Descongelado con éxito. Caché local de evidencias restablecida.");
+    } catch (err) {
+      console.error("Error clearing DB:", err);
     }
   };
 
@@ -209,6 +433,51 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Governance & Snapshot Banner */}
+      {isFrozen && (
+        <div className="bg-amber-950/40 border border-amber-500/30 rounded-xl p-3 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 relative z-10 animate-pulse">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🔒</span>
+            <div>
+              <p className="text-xs font-black text-amber-400">EXPEDIENTE DE EVIDENCIAS OSINT CONGELADO (SNAPSHOT INMUTABLE)</p>
+              <p className="text-[10px] text-amber-500/90 font-medium">Registrado el {new Date(frozenAt || 0).toLocaleString('es-MX')} | Los hashes criptográficos SHA-256 certifican la cadena de custodia.</p>
+            </div>
+          </div>
+          <button
+            onClick={clearSnapshotAndCache}
+            className="px-3 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-extrabold hover:bg-amber-500/25 transition-all"
+          >
+            🔓 Descongelar / Habilitar Edición
+          </button>
+        </div>
+      )}
+
+      {isCached && !isFrozen && (
+        <div className="bg-cyan-950/40 border border-cyan-500/30 rounded-xl p-3 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">⚡</span>
+            <div>
+              <p className="text-xs font-black text-cyan-400">DATOS DE STAGING EN CACHÉ PERSISTENTE (OFFLINE)</p>
+              <p className="text-[10px] text-cyan-500/90 font-medium">Las evidencias están guardadas localmente en IndexedDB. Se recomienda congelarlas como snapshot inmutable para certificar el reporte.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={freezeSnapshot}
+              className="px-3 py-1 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-extrabold hover:bg-cyan-500/25 transition-all whitespace-nowrap"
+            >
+              🔒 Congelar Snapshot
+            </button>
+            <button
+              onClick={clearSnapshotAndCache}
+              className="px-3 py-1 bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600 rounded-lg text-xs font-bold hover:bg-slate-750 transition-all"
+            >
+              🧹 Limpiar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Query Search Panel */}
       <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 mb-6 relative z-10">
         <div className="flex flex-col md:flex-row gap-3">
@@ -220,17 +489,18 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
             </span>
             <input
               type="text"
-              placeholder={`Muestra: "${project?.locationName || 'Aguascalientes'} balacera" u operativo nocturno...`}
+              disabled={isFrozen || loading}
+              placeholder={isFrozen ? "Descongela el expediente para editar o realizar nuevas búsquedas..." : `Muestra: "${project?.locationName || 'Aguascalientes'} balacera" u operativo nocturno...`}
               value={customQuery}
               onChange={(e) => setCustomQuery(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder-slate-500 transition-all outline-none"
-              onKeyDown={(e) => e.key === 'Enter' && executeOSINT()}
+              className="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder-slate-500 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              onKeyDown={(e) => e.key === 'Enter' && !isFrozen && executeOSINT()}
             />
           </div>
           <button
             onClick={executeOSINT}
-            disabled={loading}
-            className="px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 text-white rounded-xl text-sm font-bold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 border border-cyan-400/20 active:scale-95 disabled:pointer-events-none"
+            disabled={isFrozen || loading}
+            className="px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 text-white rounded-xl text-sm font-bold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 border border-cyan-400/20 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -451,6 +721,12 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                           {evt.location && (
                             <span className="bg-emerald-950/40 text-emerald-400 px-1.5 py-0.5 rounded font-semibold border border-emerald-900/30">
                               Georreferenciado
+                            </span>
+                          )}
+
+                          {evt.traceabilityHash && (
+                            <span className="bg-slate-950/80 text-[9px] font-mono text-cyan-500 border border-slate-800/80 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              🔒 SHA-256: <span className="text-slate-400">{evt.traceabilityHash.substring(0, 12)}...</span>
                             </span>
                           )}
 

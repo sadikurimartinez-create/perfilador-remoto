@@ -1,22 +1,23 @@
 import axios from 'axios';
 
 const SERPAPI_KEY =
-  process.env.PGP_SERPAPI_API_KEY || process.env.NEXT_PUBLIC_PGP_SERPAPI_API_KEY || "";
+  process.env.PGP_SERPAPI_API_KEY || "";
 
 const NEWSAPI_KEY =
-  process.env.PGP_NEWS_API_KEY || process.env.NEXT_PUBLIC_PGP_NEWS_API_KEY || "";
+  process.env.PGP_NEWS_API_KEY || "";
 
 const GNEWS_KEY =
-  process.env.PGP_GNEWS_API_KEY || process.env.NEXT_PUBLIC_PGP_GNEWS_API_KEY || "";
+  process.env.PGP_GNEWS_API_KEY || "";
 
 const NEWSDATA_KEY =
-  process.env.PGP_NEWSDATA_API_KEY || process.env.NEXT_PUBLIC_PGP_NEWSDATA_API_KEY || "";
+  process.env.PGP_NEWSDATA_API_KEY || "";
 
 const THENEWS_KEY =
-  process.env.PGP_THE_NEWS_API_KEY || process.env.NEXT_PUBLIC_PGP_THE_NEWS_API_KEY || "";
+  process.env.PGP_THE_NEWS_API_KEY || "";
 
 const DENUE_KEY =
-  process.env.PGP_INEGI_DENUE_TOKEN || process.env.NEXT_PUBLIC_PGP_INEGI_DENUE_TOKEN || "";
+  process.env.PGP_INEGI_DENUE_TOKEN || "";
+
 
 export const searchSerpAPI = async (
   query: string
