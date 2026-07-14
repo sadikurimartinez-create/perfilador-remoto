@@ -1,6 +1,7 @@
 import { ACEAlert, ACEAuditLog, ACEBlockingReason, ACEPayload, AnalyticalConsistencyReport } from "./models/aceTypes";
 import { ConsistencyValidators } from "./consistencyValidators";
 import { AceToReportAdapter } from "../gangIntelligenceEngine/adapters/aceToReportAdapter";
+import { CertifiedOSINTReportAdapter } from "../gangIntelligenceEngine/adapters/certifiedOsintReportAdapter";
 
 // Carga segura y dinámica de módulos de Node en el servidor para evitar que Webpack intente empaquetarlos en el navegador
 const isServer = typeof window === "undefined";
@@ -126,6 +127,13 @@ export class AnalyticalConsistencyEngine {
       report.certifiedGimOutput = AceToReportAdapter.bridge(report, payload);
     } catch (e) {
       report.certifiedGimOutput = null;
+    }
+
+    // Calcular e inyectar el payload certificado OSINT para consumo seguro del Report Engine (ADR-009.11)
+    try {
+      report.certifiedOsintOutput = CertifiedOSINTReportAdapter.bridge(report, payload);
+    } catch (e) {
+      report.certifiedOsintOutput = null;
     }
 
     return report;

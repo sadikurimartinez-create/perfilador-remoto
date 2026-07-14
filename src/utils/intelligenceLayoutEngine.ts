@@ -1113,13 +1113,35 @@ export const buildIntelligenceBriefing = (
     interpretation: payload.streetViewText || "Análisis territorial no generado."
   });
 
-  // Página 8: CAPÍTULO 7 - OSINT Sintetizado (Textual)
+  // Página 8: CAPÍTULO 7 - OSINT Sintetizado (Textual o Certificado de Gobernanza)
+  let osintText = payload.osintSynthesized;
+  const certifiedOsint = payload.intelligenceContext?.aceReport?.certifiedOsintOutput;
+
+  if (certifiedOsint) {
+    if (certifiedOsint.validatedByACE === false) {
+      osintText = `RECOMENDACIÓN INSTITUCIONAL DE DESCARTE:\n\nEl análisis del Capítulo 7 (OSINT) para el expediente ${payload.projectId} ha sido SUSPENDIDO de forma oficial. Las fuentes de datos abiertas recopiladas no superaron los criterios de consistencia analítica, madurez técnica o trazabilidad digital de la gobernanza de la SSPE.\n\nEVIDENCIA:\nNo certificada por inconsistencia de procedencia o violación de estilo.\n\nANÁLISIS:\nAnálisis suspendido temporalmente por inconsistencia metodológica o lingüística.\n\nIMPLICACIÓN OPERATIVA:\nNo habilitado para visualización o publicación oficial. Se requiere auditoría del lote original.`;
+    } else {
+      const hallazgosBullets = certifiedOsint.analyticalFindings.map((f: string) => `- ${f}`).join("\n");
+      const territorialBullets = certifiedOsint.territorialSummary.map((t: string) => `- ${t}`).join("\n");
+      const limitacionesBullets = certifiedOsint.limitations.map((l: string) => `- ${l}`).join("\n");
+      const calidadBullets = certifiedOsint.qualitySummary.map((q: string) => `- ${q}`).join("\n");
+      const trazabilidadFirma = `Referencia de Certificación Única: ${certifiedOsint.traceabilityReference}`;
+
+      let advertenciaBanner = "";
+      if (certifiedOsint.validationStatus === "CERTIFIED_WITH_LIMITATIONS") {
+        advertenciaBanner = `⚠️ ADVERTENCIA METODOLÓGICA (RESERVA ANALÍTICA INSTITUCIONAL):\nEl presente capítulo incorpora indicios con madurez técnica limitada o bajo score de Almirantazgo. El análisis debe interpretarse con carácter preventivo y requiere corroboración policial de campo de Aguascalientes.\n\n`;
+      }
+
+      osintText = `${advertenciaBanner}RESUMEN DE CALIDAD DE FUENTES:\n${calidadBullets}\n\nHALLAZGOS DE INTELIGENCIA:\n${hallazgosBullets}\n\nANÁLISIS DE DINÁMICAS ESPACIALES:\n${territorialBullets}\n\nRESTRICCIONES Y LIMITACIONES METODOLÓGICAS:\n${limitacionesBullets || "- No se registraron limitaciones de calidad analítica en este lote."}\n\n${trazabilidadFirma}`;
+    }
+  }
+
   pages.push({
     id: 'page-osint',
     title: 'CAPÍTULO 7: INTELIGENCIA OSINT',
     mode: 'text',
     visuals: [],
-    interpretation: payload.osintSynthesized
+    interpretation: osintText
   });
 
   // Página 9: CAPÍTULO 8 - Pandillas (Textual o Certificado de Gobernanza)

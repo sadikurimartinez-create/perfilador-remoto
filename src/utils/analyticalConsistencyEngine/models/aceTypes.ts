@@ -103,6 +103,19 @@ export interface AnalyticalConsistencyReport {
   blockingReason?: ACEBlockingReason[]; // Detalles legibles e institucionales de bloqueo (Ajuste 1)
   auditHistory?: ACEAuditLog[]; // Registro histórico de auditorías (Ajuste 5)
   certifiedGimOutput?: CertifiedGangAnalysisPayload | null; // Salida certificada GIM autorizada para publicación
+  certifiedOsintOutput?: CertifiedOSINTAnalysisPayload | null; // Salida certificada OSINT autorizada para publicación (ADR-009.11)
+}
+
+export interface CertifiedOSINTAnalysisPayload {
+  schemaVersion: "OSINT-CERT-1.0";
+  validationStatus: "CERTIFIED" | "CERTIFIED_WITH_LIMITATIONS" | "NOT_CERTIFIED";
+  validatedByACE: boolean;
+  qualitySummary: string[];
+  analyticalFindings: string[];
+  limitations: string[];
+  territorialSummary: string[];
+  traceabilityReference: string;
+  generatedAt: string;
 }
 
 export interface CertifiedGangAnalysisPayload {
