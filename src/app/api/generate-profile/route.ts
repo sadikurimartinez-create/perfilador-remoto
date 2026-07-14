@@ -94,6 +94,12 @@ export async function POST(req: Request) {
     const lat = parseFloat(String(safeBody.lat ?? safeBody.latitude ?? "0"));
     const lng = parseFloat(String(safeBody.lng ?? safeBody.longitude ?? "0"));
 
+    const rawIncidents = Array.isArray(safeBody.historicalIncidents)
+      ? safeBody.historicalIncidents
+      : Array.isArray(safeBody.incidenciaCompleta)
+        ? safeBody.incidenciaCompleta
+        : [];
+
     // Optimización: Calcular SIE solo si es necesario (Capítulo 2 o Capítulo 4)
     let sieData: any = null;
     let sem: any = null;
@@ -101,14 +107,14 @@ export async function POST(req: Request) {
 
     if (chapter === 3 || chapter === 4 || chapter === 5 || chapter === 6 || chapter === 7) {
       sieData = StatisticalIntelligenceEngineV2.analyze(
-        safeBody.historicalIncidents || safeBody.incidenciaCompleta || [],
+        rawIncidents,
         lat,
         lng,
         radius
       );
       const semResult = StatisticalEvidenceMatrixManager.process(
         projectId,
-        safeBody.historicalIncidents || safeBody.incidenciaCompleta || [],
+        rawIncidents,
         sieData
       );
       sem = semResult.sem;
@@ -141,7 +147,7 @@ export async function POST(req: Request) {
       }
     } else {
       // Estimación liviana basada en total de incidentes para otros capítulos
-      const incCount = safeBody.incidenciaCompleta?.length || 0;
+      const incCount = rawIncidents.length;
       if (incCount >= 20) {
         generalRisk = "CRÍTICO";
       } else if (incCount >= 10) {
@@ -164,7 +170,7 @@ export async function POST(req: Request) {
         geometryType: geometry,
         lat,
         lng,
-        incidenciaCompleta: safeBody.incidenciaCompleta,
+        incidenciaCompleta: rawIncidents,
         streetViews: safeBody.streetViews,
         datosGobMxData: safeBody.datosGobMxData,
         sweeps: safeBody.sweeps,
@@ -233,12 +239,12 @@ export async function POST(req: Request) {
           startDate: sem.temporalEvidence.temporalCoverage.startDate,
           endDate: sem.temporalEvidence.temporalCoverage.endDate
         },
-        sieEventsCount: (safeBody.historicalIncidents || safeBody.incidenciaCompleta || []).length,
+        sieEventsCount: rawIncidents.length,
         semContext: sem,
         cieContext: {
           centroid: { lat, lng },
           radiusMeters: radius,
-          eventsCount: (safeBody.historicalIncidents || safeBody.incidenciaCompleta || []).length,
+          eventsCount: rawIncidents.length,
           hotspotsCount: sem.spatialEvidence.hotspots.length
         },
         hieContext: {
@@ -249,7 +255,7 @@ export async function POST(req: Request) {
           chartsCount: 3,
           startDate: sem.temporalEvidence.temporalCoverage.startDate,
           endDate: sem.temporalEvidence.temporalCoverage.endDate,
-          eventsCount: (safeBody.historicalIncidents || safeBody.incidenciaCompleta || []).length
+          eventsCount: rawIncidents.length
         }
       };
       aceReport = AnalyticalConsistencyEngine.audit(acePayload, "VALIDATE");
