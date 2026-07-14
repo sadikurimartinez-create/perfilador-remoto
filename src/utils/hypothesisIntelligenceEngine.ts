@@ -96,13 +96,72 @@ export class HypothesisIntelligenceEngine {
     // ==========================================
     // MÓDULO 2: Criminal Evidence Engine (SIE)
     // ==========================================
-    const temporal = sie.temporal || {};
-    const espacial = sie.espacial || {};
-    const crimIndicadores = sie.criminologico?.indicadores || {};
-    const predictivo = sie.predictivo || {};
+    // Soporte transparente para el motor estadístico v1 y v2 (SIE / SIE v2)
+    const rawTemporal = sie.temporal || sie.temporalAnalysis || {};
+    const rawEspacial = sie.espacial || sie.spatialAnalysis || {};
+    const rawPredictivo = sie.predictivo || sie.predictiveAnalysis || {};
+
+    const totalEventos = typeof sie.metadata?.totalEvents === "number"
+      ? sie.metadata.totalEvents
+      : typeof rawTemporal.totalEventos === "number"
+        ? rawTemporal.totalEventos
+        : 0;
+
+    const hotspotsCount = typeof rawEspacial.hotspotsCount === "number"
+      ? rawEspacial.hotspotsCount
+      : Array.isArray(rawEspacial.hotspots)
+        ? rawEspacial.hotspots.length
+        : 0;
+
+    const desviacionEstandarEspacialMetros = typeof rawEspacial.desviacionEstandarEspacialMetros === "number"
+      ? rawEspacial.desviacionEstandarEspacialMetros
+      : typeof rawEspacial.dispersionMeters === "number"
+        ? rawEspacial.dispersionMeters
+        : 0;
+
+    const centroGravedad = rawEspacial.centroGravedad || rawEspacial.centerOfGravity || null;
+
+    const persistencia = typeof sie.criminologico?.indicadores?.persistencia === "number"
+      ? sie.criminologico.indicadores.persistencia
+      : typeof rawTemporal.trendConfidence === "number"
+        ? Math.round(rawTemporal.trendConfidence)
+        : 50;
+
+    const especializacion = typeof sie.criminologico?.indicadores?.especializacion === "number"
+      ? sie.criminologico.indicadores.especializacion
+      : typeof rawTemporal.seasonalityIndex === "number"
+        ? Math.round(rawTemporal.seasonalityIndex * 100)
+        : 0;
+
+    const ventanaOportunidad = rawTemporal.ventanaOportunidad || 
+      (Array.isArray(rawTemporal.seasonalRiskPeriods) && rawTemporal.seasonalRiskPeriods.length > 0
+        ? rawTemporal.seasonalRiskPeriods.join(", ")
+        : undefined);
+
+    const primaryCrimeType = rawTemporal.primaryCrimeType || tContext.primaryCrimeType || "delito de oportunidad";
+
+    // Reconstruir objetos compatibles con el esquema clásico del HIE
+    const temporal = {
+      totalEventos,
+      ventanaOportunidad,
+      primaryCrimeType
+    };
+
+    const espacial = {
+      hotspotsCount,
+      desviacionEstandarEspacialMetros,
+      centroGravedad
+    };
+
+    const crimIndicadores = {
+      persistencia,
+      especializacion
+    };
+
+    const predictivo = rawPredictivo;
     let criminalScore = 0;
 
-    const hasSieData = typeof temporal.totalEventos === "number" && temporal.totalEventos > 0;
+    const hasSieData = totalEventos > 0;
     if (hasSieData) {
       // 1. Volumen de Incidencia
       const volItem = {
@@ -351,11 +410,15 @@ export class HypothesisIntelligenceEngine {
       const hotspotsText = espacial.hotspotsCount > 0 
         ? `concentrado en ${espacial.hotspotsCount} nodo(s) crítico(s) de calor` 
         : "disperso de forma uniforme";
-      const centroText = espacial.centroGravedad 
-        ? `${espacial.centroGravedad.lat.toFixed(6)}, ${espacial.centroGravedad.lng.toFixed(6)}`
-        : `${tContext.latitude.toFixed(6)}, ${tContext.longitude.toFixed(6)}`;
 
-      dondeOcurre = `El fenómeno se encuentra geográficamente ${hotspotsText} alrededor del centro de gravedad situado en las coordenadas ${centroText}, abarcando una dispersión de ${tContext.radiusMetros} metros.`;
+      const latVal = espacial.centroGravedad?.lat ?? tContext.latitude;
+      const lngVal = espacial.centroGravedad?.lng ?? tContext.longitude;
+
+      const latText = typeof latVal === "number" && isFinite(latVal) ? latVal.toFixed(6) : "0.000000";
+      const lngText = typeof lngVal === "number" && isFinite(lngVal) ? lngVal.toFixed(6) : "0.000000";
+      const centroText = `${latText}, ${lngText}`;
+
+      dondeOcurre = `El fenómeno se encuentra geográficamente ${hotspotsText} alrededor del centro de gravedad situado en las coordenadas ${centroText}, abarcando una dispersión de ${tContext.radiusMetros || 250} metros.`;
       
       const vDetected = vulnerabilities || [];
       const vText = vDetected.length > 0 
@@ -451,7 +514,7 @@ export class HypothesisIntelligenceEngine {
     };
 
     return {
-      evidence: sie?.temporal?.totalEventos || 0,
+      evidence: totalEventos,
       centralHypothesis: {
         queOcurre,
         dondeOcurre,
