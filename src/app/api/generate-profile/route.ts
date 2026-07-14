@@ -112,11 +112,29 @@ export async function POST(req: Request) {
         sieData
       );
       sem = semResult.sem;
-      if (sieData.predictivo.indiceRiesgoTerritorial >= 75) {
+
+      // =======================================================================
+      // ADAPTADOR ALGORÍTMICO HÍBRIDO (Gobernanza del Ecosistema SAI)
+      // Mapea de forma segura el nivel de riesgo de acuerdo al esquema provisto.
+      // Si se ejecuta bajo SIE v2, se utiliza la probabilidad semanal de Poisson 
+      // como un estimador probabilístico auxiliar, normalizado a escala de 0-100.
+      // =======================================================================
+      const rawPredictivo = sieData.predictivo || sieData.predictiveAnalysis || {};
+      const poissonProb = typeof rawPredictivo.poissonProbabilityWeekly === "number"
+        ? rawPredictivo.poissonProbabilityWeekly
+        : 0;
+
+      const normalizedRiskScore = typeof rawPredictivo.indiceRiesgoTerritorial === "number"
+        ? rawPredictivo.indiceRiesgoTerritorial
+        : poissonProb <= 1.0 
+          ? Math.round(poissonProb * 100) 
+          : Math.round(poissonProb);
+
+      if (normalizedRiskScore >= 75) {
         generalRisk = "CRÍTICO";
-      } else if (sieData.predictivo.indiceRiesgoTerritorial >= 50) {
+      } else if (normalizedRiskScore >= 50) {
         generalRisk = "ALTO";
-      } else if (sieData.predictivo.indiceRiesgoTerritorial >= 20) {
+      } else if (normalizedRiskScore >= 20) {
         generalRisk = "MEDIO";
       } else {
         generalRisk = "BAJO";
@@ -329,6 +347,16 @@ ${sectionPrompt}
 Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE esta sección en Markdown, sin agregar explicaciones previas ni encerrarlo en bloques de código triple comilla (\`\`\`).
 `.trim();
 
+    // =======================================================================
+    // TELEMETRÍA DE SOLICITUD DE IA (Gobernanza del Ecosistema SAI)
+    // Registro detallado del contexto, capítulo y modelo despachado.
+    // =======================================================================
+    console.log(`\n[AI REQUEST] -----------------------------------------`);
+    console.log(`Capítulo: ${chapter} - ${currentChapterLabel}`);
+    console.log(`Modelo: ${GEMINI_MODEL}`);
+    console.log(`Tamaño de Contexto del Expediente: ${systemPrompt.length} caracteres`);
+    console.log(`------------------------------------------------------\n`);
+
     // 5. Llamada a VertexAI (Gemini) en modo Streaming
     const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
     let streamingResp: any = null;
@@ -381,6 +409,8 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           } catch {}
         }, 3000);
 
+        let accumulatedText = "";
+
         try {
           if (streamingResp) {
             let hasCleanedMarkdownHeader = false;
@@ -398,10 +428,22 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
                   }
                 }
 
+                accumulatedText += text;
                 const escapedText = JSON.stringify(text).slice(1, -1);
                 controller.enqueue(encoder.encode(escapedText));
               }
             }
+
+            // =======================================================================
+            // TELEMETRÍA DE RESPUESTA IA (Streaming)
+            // =======================================================================
+            console.log(`\n[AI RESPONSE] ----------------------------------------`);
+            console.log(`Capítulo: ${chapter} - ${currentChapterLabel}`);
+            console.log(`Status: Completado (Streaming exitoso)`);
+            console.log(`Longitud del Markdown generado: ${accumulatedText.length} caracteres`);
+            console.log(`Formato estructurado válido: ${accumulatedText.includes("##") ? "SÍ" : "NO"}`);
+            console.log(`------------------------------------------------------\n`);
+
           } else {
             // Fallback to REST API
             const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
@@ -419,11 +461,25 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             if (cleanedText.endsWith("```")) {
               cleanedText = cleanedText.slice(0, -3);
             }
+
+            // =======================================================================
+            // TELEMETRÍA DE RESPUESTA IA (REST API Fallback)
+            // =======================================================================
+            console.log(`\n[AI RESPONSE] ----------------------------------------`);
+            console.log(`Capítulo: ${chapter} - ${currentChapterLabel}`);
+            console.log(`Status: Completado (REST API exitoso)`);
+            console.log(`Longitud del Markdown generado: ${cleanedText.length} caracteres`);
+            console.log(`Formato estructurado válido: ${cleanedText.includes("##") ? "SÍ" : "NO"}`);
+            console.log(`------------------------------------------------------\n`);
+
             const escapedText = JSON.stringify(cleanedText).slice(1, -1);
             controller.enqueue(encoder.encode(escapedText));
           }
         } catch (e: any) {
-          console.error("Error generating AI content:", e);
+          console.error(`\n[AI RESPONSE ERROR] ----------------------------------`);
+          console.error(`Falla en Capítulo: ${chapter}`);
+          console.error(`Descripción del error: ${e.message}`);
+          console.error(`------------------------------------------------------\n`);
           const errorMsg = "\\n\\n[Error de generación: " + e.message + "]";
           controller.enqueue(encoder.encode(errorMsg));
         } finally {

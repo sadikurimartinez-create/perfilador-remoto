@@ -102,8 +102,92 @@ export class CartographicIntelligenceEngine {
 
   constructor(input: CIEInput) {
     this.tceData = input.tceData || {};
-    this.sieData = input.sieData || {};
     this.rawInput = input.rawInput || {};
+
+    const sie = input.sieData || {};
+    
+    // Validar esquema SIE para gobernanza y telemetría
+    this.validateSIESchema(sie);
+
+    const rawTemporal = sie.temporal || sie.temporalAnalysis || {};
+    const rawEspacial = sie.espacial || sie.spatialAnalysis || {};
+    const rawPredictivo = sie.predictivo || sie.predictiveAnalysis || {};
+
+    const totalEventos = typeof sie.metadata?.totalEvents === "number"
+      ? sie.metadata.totalEvents
+      : typeof rawTemporal.totalEventos === "number"
+        ? rawTemporal.totalEventos
+        : 0;
+
+    const hotspotsCount = typeof rawEspacial.hotspotsCount === "number"
+      ? rawEspacial.hotspotsCount
+      : Array.isArray(rawEspacial.hotspots)
+        ? rawEspacial.hotspots.length
+        : 0;
+
+    const desviacionEstandarEspacialMetros = typeof rawEspacial.desviacionEstandarEspacialMetros === "number"
+      ? rawEspacial.desviacionEstandarEspacialMetros
+      : typeof rawEspacial.dispersionMeters === "number"
+        ? rawEspacial.dispersionMeters
+        : 0;
+
+    const centroGravedad = rawEspacial.centroGravedad || rawEspacial.centerOfGravity || null;
+
+    const temporal = {
+      totalEventos,
+      ventanaOportunidad: rawTemporal.ventanaOportunidad || 
+        (Array.isArray(rawTemporal.seasonalRiskPeriods) && rawTemporal.seasonalRiskPeriods.length > 0
+          ? rawTemporal.seasonalRiskPeriods.join(", ")
+          : undefined),
+      primaryCrimeType: rawTemporal.primaryCrimeType || "delito de oportunidad"
+    };
+
+    const espacial = {
+      hotspotsCount,
+      desviacionEstandarEspacialMetros,
+      centroGravedad,
+      topHotspotCoords: rawEspacial.topHotspotCoords || (Array.isArray(rawEspacial.hotspots)
+        ? rawEspacial.hotspots.map((h: any) => ({ 
+            lat: h.center?.lat || h.lat, 
+            lng: h.center?.lng || h.lng, 
+            count: h.incidentsCount || h.count 
+          }))
+        : [])
+    };
+
+    this.sieData = {
+      temporal,
+      espacial,
+      predictivo: rawPredictivo
+    };
+  }
+
+  /**
+   * Validador de Gobernanza y Esquema de Datos Estadísticos (SIE)
+   * Detecta y registra la versión de estructura de datos provista al ecosistema.
+   */
+  private validateSIESchema(sie: any): string {
+    if (!sie || typeof sie !== "object") {
+      console.log("[CIE GOVERNANCE] SIE Schema detected: Unknown (No data provided)");
+      return "Unknown";
+    }
+
+    const hasV1 = sie.temporal !== undefined || sie.espacial !== undefined;
+    const hasV2 = sie.temporalAnalysis !== undefined || sie.spatialAnalysis !== undefined;
+
+    if (hasV1 && hasV2) {
+      console.log("[CIE GOVERNANCE] SIE Schema detected: Hybrid (Coexistence v1 and v2 active)");
+      return "Hybrid";
+    } else if (hasV2) {
+      console.log("[CIE GOVERNANCE] SIE Schema detected: V2 (Statistical Intelligence Engine V2)");
+      return "V2";
+    } else if (hasV1) {
+      console.log("[CIE GOVERNANCE] SIE Schema detected: V1 (Statistical Intelligence Engine Classic)");
+      return "V1";
+    } else {
+      console.log("[CIE GOVERNANCE] SIE Schema detected: Unknown (Unrecognized property mapping)");
+      return "Unknown";
+    }
   }
 
   /**
