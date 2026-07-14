@@ -11,11 +11,19 @@ export interface EvidenceProvenance {
   confidence: number;
 }
 
+export interface CapabilityStatus {
+  statisticalEvidence: boolean;
+  visualEvidence: boolean;
+  territorialEvidence: boolean;
+  gangIntelligence: boolean;
+  osintEvidence: boolean;
+}
+
 export interface OperationalAssessment {
   evidenceAgreement: "HIGH" | "MEDIUM" | "LOW";
   supportedPatterns: string[];
-  unresolvedQuestions: string[];
-  limitations: string[];
+  unresolvedQuestions: string[]; // Líneas futuras de investigación táctica
+  limitations: string[];         // Restricciones metodológicas o técnicas estrictas
 }
 
 export interface IntelligenceIntegrationContext {
@@ -24,6 +32,8 @@ export interface IntelligenceIntegrationContext {
     generatedAt: string;
     version: string;
   };
+
+  capabilityStatus: CapabilityStatus; // Indica qué módulos de datos están disponibles
 
   statisticalEvidence: {
     source: "SEM";

@@ -1,7 +1,8 @@
 import { 
   IntelligenceIntegrationContext, 
   EvidenceProvenance, 
-  OperationalAssessment 
+  OperationalAssessment,
+  CapabilityStatus
 } from "./models/intelligenceContextTypes";
 import { StatisticalEvidenceMatrix } from "../statisticalEvidenceMatrix/models/statisticalEvidenceTypes";
 import { VisualEvidenceMatrix } from "../visualEvidenceEngine/models/visualEvidenceTypes";
@@ -61,7 +62,16 @@ export class IntelligenceContextBuilder {
       confidence: ace.overallConfidence || 100
     };
 
-    // 2. Extraer Patrones Soportados y Limitaciones Cruzadas (Ajuste 2: operationalAssessment controlado)
+    // 2. Determinar disponibilidad de módulos (Ajuste 2: CapabilityStatus)
+    const capabilityStatus: CapabilityStatus = {
+      statisticalEvidence: (sem.criminalEvidence?.totalEvents ?? 0) > 0,
+      visualEvidence: vee.analystPhotos.length > 0 || vee.streetViewEvidence.length > 0,
+      territorialEvidence: tie.economicAttractors.length > 0 || !!tie.territorialContext?.tipologyName,
+      gangIntelligence: false, // Módulo futuro
+      osintEvidence: false     // Módulo futuro
+    };
+
+    // 3. Extraer Patrones Soportados
     const supportedPatterns: string[] = [];
     if (sem.spatialEvidence?.spatialPattern) {
       supportedPatterns.push(`Patrón Espacial Estadístico: ${sem.spatialEvidence.spatialPattern}`);
@@ -76,25 +86,31 @@ export class IntelligenceContextBuilder {
       supportedPatterns.push(`Esquema Hipotético Criminológico: ${hie.centralHypothesis.queOcurre}`);
     }
 
-    // Gaps y dudas analíticas
-    const unresolvedQuestions: string[] = [...(hie.missingEvidence || [])];
+    // 4. Separación Estricta entre unresolvedQuestions y limitations (Ajuste 3)
+    
+    // unresolvedQuestions: Líneas futuras de investigación táctica o vacíos en el terreno
+    const unresolvedQuestions: string[] = [];
     if (vee.streetViewEvidence.length === 0) {
-      unresolvedQuestions.push("No se cuenta con capturas de Google Street View en el baricentro del polígono.");
+      unresolvedQuestions.push("Verificación en campo pendiente de visibilidad táctica debido a ausencia de Street View en baricentro.");
     }
     if (tie.economicAttractors.length === 0) {
-      unresolvedQuestions.push("Baja densidad o ausencia de atractores comerciales DENUE registrados en el radio táctico.");
+      unresolvedQuestions.push("Línea futura: Identificar si la movilidad peatonal obedece a atractores informales no registrados.");
     }
+    unresolvedQuestions.push("Línea futura: Investigar presencia y dinámicas de grupos organizados (pandillas) en el polígono.");
 
-    // Limitaciones consolidadas
+    // limitations: Restricciones metodológicas o técnicas estrictas
     const limitations: string[] = [];
     if (sem.limitations && Array.isArray(sem.limitations)) {
-      sem.limitations.forEach(l => limitations.push(`[SEM] ${l.description}`));
+      sem.limitations.forEach(l => limitations.push(`[SEM-Método] ${l.description}`));
     }
-    if (hie.contradictoryEvidence && Array.isArray(hie.contradictoryEvidence)) {
-      hie.contradictoryEvidence.forEach(c => limitations.push(`[HIE] Contradicción: ${c}`));
+    if (sem.metadata?.totalCanonicalIncidents <= 3) {
+      limitations.push("[SEM-Muestra] Volumen histórico estadísticamente reducido en el polígono.");
+    }
+    if (vee.analystPhotos.length === 0) {
+      limitations.push("[VEE-Capa] Ausencia de registro fotográfico directo del investigador.");
     }
 
-    // Concordancia de evidencia basada directamente en la consistencia de ACE (Ajuste 1: ACE es dueño de la consistencia)
+    // Concordancia de evidencia basada directamente en ACE (Ajuste 1: ACE es dueño de la consistencia)
     let evidenceAgreement: "HIGH" | "MEDIUM" | "LOW" = "HIGH";
     if (ace.globalStatus === "FAILED") {
       evidenceAgreement = "LOW";
@@ -109,7 +125,7 @@ export class IntelligenceContextBuilder {
       limitations
     };
 
-    // 3. Determinar Estado de Validación del Contrato
+    // 5. Determinar Estado de Validación del Contrato
     let validationStatus: "VALIDATED" | "VALID_WITH_LIMITATIONS" | "WARNING" | "FAILED" = "VALIDATED";
     
     if (ace.globalStatus === "FAILED") {
@@ -126,6 +142,7 @@ export class IntelligenceContextBuilder {
         generatedAt: timestamp,
         version: "1.0.0"
       },
+      capabilityStatus,
       statisticalEvidence: {
         source: "SEM",
         data: sem,

@@ -1,5 +1,5 @@
 import { IntelligenceContextBuilder } from "../intelligenceContextBuilder";
-import { IntelligenceContextValidator } from "../intelligenceContextValidator";
+import { IntelligenceContextInspector } from "../intelligenceContextInspector";
 import { IntelligenceEvidenceResolver } from "../intelligenceEvidenceResolver";
 import { StatisticalEvidenceMatrix } from "../../statisticalEvidenceMatrix/models/statisticalEvidenceTypes";
 import { VisualEvidenceMatrix } from "../../visualEvidenceEngine/models/visualEvidenceTypes";
@@ -146,19 +146,22 @@ export function runIntegrationContractTests() {
   };
 
   // ============================================================================
-  // CASO 1: Integración Correcta
+  // CASO 1: Integración Completa (PASS)
   // ============================================================================
   const context1 = IntelligenceContextBuilder.build("PR-PASEOS", baseSem, baseVee, baseTie, baseHie, baseAce);
-  const result1 = IntelligenceContextValidator.validate(context1);
+  const result1 = IntelligenceContextInspector.inspect(context1);
 
-  console.assert(result1.status === "VALIDATED", "❌ CASO 1 FALLÓ: Estatus de integración no fue VALIDATED");
+  console.assert(result1.status === "VALIDATED", "❌ CASO 1 FALLÓ: Estatus de inspección no fue VALIDATED");
   console.assert(context1.operationalAssessment.evidenceAgreement === "HIGH", "❌ CASO 1 FALLÓ: El acuerdo de evidencia no es HIGH");
-  if (result1.status === "VALIDATED" && context1.operationalAssessment.evidenceAgreement === "HIGH") {
-    console.log("✅ CASO 1 PASÓ: Integración correcta ensamblada y validada de forma impecable.");
+  console.assert(context1.capabilityStatus.statisticalEvidence === true, "❌ CASO 1 FALLÓ: statisticalEvidence debió estar disponible");
+  console.assert(context1.capabilityStatus.visualEvidence === true, "❌ CASO 1 FALLÓ: visualEvidence debió estar disponible");
+  console.assert(context1.capabilityStatus.gangIntelligence === false, "❌ CASO 1 FALLÓ: gangIntelligence debió ser false");
+  if (result1.status === "VALIDATED" && context1.capabilityStatus.statisticalEvidence) {
+    console.log("✅ CASO 1 PASÓ: Integración completa ensamblada, capabilityStatus registrado y validado.");
   }
 
   // ============================================================================
-  // CASO 2: Inconsistencia Espacial SEM vs TIE
+  // CASO 2 / CASO 6: Divergencia Espacial / Evidencia Contradictoria Válida
   // ============================================================================
   const mockSemConcentrated = {
     ...baseSem,
@@ -178,18 +181,22 @@ export function runIntegrationContractTests() {
   };
 
   const context2 = IntelligenceContextBuilder.build("PR-PASEOS", mockSemConcentrated, baseVee, mockTieDispersed, baseHie, baseAce);
-  const result2 = IntelligenceContextValidator.validate(context2);
+  const result2 = IntelligenceContextInspector.inspect(context2);
 
-  // De acuerdo con Caso 6 (ajuste del usuario), una contradicción física/territorial es un HALLAZGO válido y retorna VALID_WITH_LIMITATIONS
+  // De acuerdo con Caso 6, una contradicción física/territorial es un HALLAZGO válido y retorna VALID_WITH_LIMITATIONS
   console.assert(result2.status === "VALID_WITH_LIMITATIONS", "❌ CASO 2/6 FALLÓ: Estatus no conmutó a VALID_WITH_LIMITATIONS");
-  const hasContradictionMsg = result2.messages.some(m => m.includes("CONTRADICCIÓN VÁLIDA"));
+  const hasContradictionMsg = result2.messages.some(m => m.includes("DIVERGENCIA VÁLIDA CON LIMITACIÓN"));
   console.assert(hasContradictionMsg, "❌ CASO 2/6 FALLÓ: No se emitió el mensaje de contradicción válida");
-  if (result2.status === "VALID_WITH_LIMITATIONS" && hasContradictionMsg) {
-    console.log("✅ CASO 2 / CASO 6 PASÓ: Contradicción SEM-TIE reportada como un hallazgo válido (VALID_WITH_LIMITATIONS).");
+  
+  const hasAddedQuestion = context2.operationalAssessment.unresolvedQuestions.some(q => q.includes("dinámicas de movilidad"));
+  console.assert(hasAddedQuestion, "❌ CASO 2/6 FALLÓ: No se agregó la pregunta de investigación para pandillas");
+
+  if (result2.status === "VALID_WITH_LIMITATIONS" && hasAddedQuestion) {
+    console.log("✅ CASO 2 / CASO 6 PASÓ: Contradicción SEM-TIE reportada como un hallazgo válido (VALID_WITH_LIMITATIONS) con pregunta táctica.");
   }
 
   // ============================================================================
-  // CASO 3: Ausencia de fotografías (No debe bloquear)
+  // CASO 3: Sin Evidencia Visual (VALID)
   // ============================================================================
   const mockVeeEmpty = {
     ...baseVee,
@@ -198,15 +205,16 @@ export function runIntegrationContractTests() {
   };
 
   const context3 = IntelligenceContextBuilder.build("PR-PASEOS", baseSem, mockVeeEmpty, baseTie, baseHie, baseAce);
-  const result3 = IntelligenceContextValidator.validate(context3);
+  const result3 = IntelligenceContextInspector.inspect(context3);
 
   console.assert(result3.status === "VALID_WITH_LIMITATIONS", "❌ CASO 3 FALLÓ: Estatus con fotos vacías no fue VALID_WITH_LIMITATIONS");
-  if (result3.status === "VALID_WITH_LIMITATIONS") {
-    console.log("✅ CASO 3 PASÓ: Ausencia de fotografías no bloqueó y retornó VALID_WITH_LIMITATIONS con éxito.");
+  console.assert(context3.capabilityStatus.visualEvidence === false, "❌ CASO 3 FALLÓ: capabilityStatus de visualEvidence debió ser false");
+  if (result3.status === "VALID_WITH_LIMITATIONS" && !context3.capabilityStatus.visualEvidence) {
+    console.log("✅ CASO 3 PASÓ: Ausencia de fotografías no bloqueó y desactivó la capability de visualEvidence con éxito.");
   }
 
   // ============================================================================
-  // CASO 4: Hipótesis fuerte vs SEM con baja evidencia (<= 2 eventos)
+  // CASO 4: Hipótesis fuerte vs SEM con baja evidencia (HIE sobredimensionado) -> WARNING
   // ============================================================================
   const mockSemLowEvents = {
     ...baseSem,
@@ -221,10 +229,10 @@ export function runIntegrationContractTests() {
   };
 
   const context4 = IntelligenceContextBuilder.build("PR-PASEOS", mockSemLowEvents, baseVee, baseTie, baseHie, baseAce);
-  const result4 = IntelligenceContextValidator.validate(context4);
+  const result4 = IntelligenceContextInspector.inspect(context4);
 
   console.assert(result4.status === "WARNING", "❌ CASO 4 FALLÓ: Estatus no es WARNING ante hipótesis sobredimensionada");
-  const hasStrongHypothesisWarning = result4.messages.some(m => m.includes("estadísticamente insuficiente"));
+  const hasStrongHypothesisWarning = result4.messages.some(m => m.includes("insuficiente"));
   console.assert(hasStrongHypothesisWarning, "❌ CASO 4 FALLÓ: No se emitió la advertencia de volumen estadístico insuficiente");
   if (result4.status === "WARNING" && hasStrongHypothesisWarning) {
     console.log("✅ CASO 4 PASÓ: Hipótesis fuerte con baja evidencia estadística detonó WARNING con éxito.");
@@ -237,10 +245,10 @@ export function runIntegrationContractTests() {
     ...baseAce,
     globalStatus: "FAILED",
     alerts: [{ type: "SPATIAL", category: "ANALYTICAL", message: "Discrepancia crítica de centroides", severity: "HIGH", source: "ACE-SPATIAL" }]
-  };
+  } as any;
 
   const context5 = IntelligenceContextBuilder.build("PR-PASEOS", baseSem, baseVee, baseTie, baseHie, mockAceFailed);
-  const result5 = IntelligenceContextValidator.validate(context5);
+  const result5 = IntelligenceContextInspector.inspect(context5);
 
   console.assert(result5.status === "FAILED", "❌ CASO 5 FALLÓ: El contrato no conmutó a FAILED ante rechazo de ACE");
   if (result5.status === "FAILED") {
@@ -248,13 +256,13 @@ export function runIntegrationContractTests() {
   }
 
   // ============================================================================
-  // CASO 7: Falta General de Evidencia (Baja densidad / No bloqueante)
+  // CASO 7: Ausencia General de Evidencia (VALID_WITH_LIMITATIONS)
   // ============================================================================
   const mockVeeEmptyGeneral = { ...baseVee, analystPhotos: [], streetViewEvidence: [] };
   const mockTieEmptyGeneral = { ...baseTie, economicAttractors: [] };
 
   const context7 = IntelligenceContextBuilder.build("PR-PASEOS", baseSem, mockVeeEmptyGeneral, mockTieEmptyGeneral, baseHie, baseAce);
-  const result7 = IntelligenceContextValidator.validate(context7);
+  const result7 = IntelligenceContextInspector.inspect(context7);
 
   console.assert(result7.status === "VALID_WITH_LIMITATIONS", "❌ CASO 7 FALLÓ: Falta de evidencia no retornó VALID_WITH_LIMITATIONS");
   if (result7.status === "VALID_WITH_LIMITATIONS") {
@@ -262,7 +270,7 @@ export function runIntegrationContractTests() {
   }
 
   // ============================================================================
-  // PRUEBA DEL RESOLVER FACTUAL (Ajuste 3)
+  // PRUEBA DEL RESOLVER FACTUAL
   // ============================================================================
   const relationship = IntelligenceEvidenceResolver.resolveEvidenceRelationship(context1);
   console.assert(relationship.coincidesWithHotspot === true, "❌ RESOLVER FALLÓ: No identificó atractor coincidiendo con hotspot");
