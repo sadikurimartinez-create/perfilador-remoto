@@ -2,14 +2,6 @@ import { StatisticalEvidenceMatrix } from "../../statisticalEvidenceMatrix/model
 import { VisualEvidenceMatrix } from "../../visualEvidenceEngine/models/visualEvidenceTypes";
 import { TerritorialEvidenceMatrix } from "../../territorialIntelligenceEngine/models/territorialEvidenceTypes";
 import { AnalyticalConsistencyReport, HIEValidationVector } from "../../analyticalConsistencyEngine/models/aceTypes";
-import { HIEResult } from "../../hypothesisIntelligenceEngine";
-
-export interface EvidenceProvenance {
-  source: string;
-  engineVersion: string;
-  generatedAt: string;
-  confidence: number;
-}
 
 export interface CapabilityStatus {
   statisticalEvidence: boolean;
@@ -22,8 +14,8 @@ export interface CapabilityStatus {
 export interface OperationalAssessment {
   evidenceAgreement: "HIGH" | "MEDIUM" | "LOW";
   supportedPatterns: string[];
-  unresolvedQuestions: string[]; // Líneas futuras de investigación táctica
-  limitations: string[];         // Restricciones metodológicas o técnicas estrictas
+  unresolvedQuestions: string[];
+  limitations: string[];
 }
 
 export interface IntelligenceIntegrationContext {
@@ -33,40 +25,27 @@ export interface IntelligenceIntegrationContext {
     version: string;
   };
 
-  capabilityStatus: CapabilityStatus; // Indica qué módulos de datos están disponibles
-
-  statisticalEvidence: {
-    source: "SEM";
-    data: StatisticalEvidenceMatrix;
-    provenance: EvidenceProvenance;
-  };
-
-  visualEvidence: {
-    source: "VEE";
-    data: VisualEvidenceMatrix;
-    provenance: EvidenceProvenance;
-  };
-
-  territorialEvidence: {
-    source: "TIE";
-    data: TerritorialEvidenceMatrix;
-    provenance: EvidenceProvenance;
-  };
-
-  hypothesisEvidence: {
-    source: "HIE";
-    data: HIEResult;
-    validationVector?: HIEValidationVector;
-    provenance: EvidenceProvenance;
-  };
-
-  qualityControl: {
-    source: "ACE";
-    data: AnalyticalConsistencyReport;
-    provenance: EvidenceProvenance;
+  evidenceSources: {
+    SEM: StatisticalEvidenceMatrix;
+    VEE: VisualEvidenceMatrix | null;
+    TIE: TerritorialEvidenceMatrix | null;
+    HIE: HIEValidationVector | null;
+    ACE: AnalyticalConsistencyReport;
   };
 
   operationalAssessment: OperationalAssessment;
-  
-  validationStatus: "VALIDATED" | "VALID_WITH_LIMITATIONS" | "WARNING" | "FAILED";
+
+  capabilityStatus: CapabilityStatus;
+
+  provenance: {
+    source: string;
+    engineVersion: string;
+    generatedAt: string;
+    confidence: number;
+  };
+
+  qualityControl: {
+    status: "PASS" | "WARNING" | "FAILED";
+    aceReference: string;
+  };
 }

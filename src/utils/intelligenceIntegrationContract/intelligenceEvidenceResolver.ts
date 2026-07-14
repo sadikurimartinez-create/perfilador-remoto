@@ -1,77 +1,86 @@
 import { IntelligenceIntegrationContext } from "./models/intelligenceContextTypes";
 
-export interface EvidenceRelationship {
+export interface ResolvedRelationshipResult {
   coincidesWithHotspot: boolean;
+  closestAttractorName: string;
+  distanceToHotspotMeters: number;
+  temporalConcurrence: string[];
   correlatedFactors: string[];
-  confidenceScore: number;
-  description: string;
 }
 
 export class IntelligenceEvidenceResolver {
   /**
-   * Resuelve relaciones analíticas factuales entre los distintos motores del contrato (Ajuste 3).
-   * No emite directivas tácticas de patrullaje, solo describe concurrencia de factores y correlaciones.
+   * Resuelve relaciones puramente factuales entre la incidencia estadística de la SEM
+   * y las características físicas del entorno registradas en el terreno.
+   * Prohíbe rigurosamente emitir juicios causales directos o recomendaciones de patrullaje.
    */
-  public static resolveEvidenceRelationship(
-    context: IntelligenceIntegrationContext,
-    hotspotId?: string
-  ): EvidenceRelationship {
-    const sem = context.statisticalEvidence.data;
-    const vee = context.visualEvidence.data;
-    const tie = context.territorialEvidence.data;
+  public static resolveEvidenceRelationship(context: IntelligenceIntegrationContext): ResolvedRelationshipResult {
+    const sem = context.evidenceSources.SEM;
+    const tie = context.evidenceSources.TIE;
+    const vee = context.evidenceSources.VEE;
 
-    const correlatedFactors: string[] = [];
     let coincidesWithHotspot = false;
-    let confidenceScore = Math.min(
-      sem.predictiveEvidence?.confidenceMetrics?.operationalReliability || 100,
-      tie.confidence?.operationalConfidence || 100
-    );
+    let closestAttractorName = "Ninguno identificado";
+    let distanceToHotspotMeters = 9999;
+    const temporalConcurrence: string[] = [];
+    const correlatedFactors: string[] = [];
 
-    // 1. Correlacionar Atractores y Hotspots
-    const hasHotspots = sem.spatialEvidence?.hotspots?.length > 0;
-    const hasAttractors = tie.economicAttractors?.length > 0;
+    // 1. Resolver coincidencia con atractores económicos (DENUE)
+    if (tie && tie.economicAttractors && tie.economicAttractors.length > 0) {
+      // Buscar el atractor más cercano a cualquier hotspot de la SEM
+      const hotspots = sem.spatialEvidence?.hotspots || [];
+      for (const hs of hotspots) {
+        for (const attr of tie.economicAttractors) {
+          const dist = attr.distanceToHotspotMeters ?? 9999;
+          if (dist < 100) {
+            coincidesWithHotspot = true;
+          }
+          if (dist < distanceToHotspotMeters) {
+            distanceToHotspotMeters = dist;
+            closestAttractorName = attr.name;
+          }
+        }
+      }
+    }
 
-    if (hasHotspots && hasAttractors) {
-      // Verificar si hay algún atractor con proximidad baja al hotspot
-      const closeAttractors = tie.economicAttractors.filter(
-        a => a.distanceToHotspotMeters !== undefined && a.distanceToHotspotMeters <= 100
-      );
+    // 2. Resolver confluencia temporal
+    if (sem.temporalEvidence?.criticalPeriods && sem.temporalEvidence.criticalPeriods.length > 0) {
+      sem.temporalEvidence.criticalPeriods.forEach(p => temporalConcurrence.push(p));
+    }
 
-      if (closeAttractors.length > 0) {
-        coincidesWithHotspot = true;
-        closeAttractors.forEach(a => {
-          correlatedFactors.push(`Atractor Cercano: ${a.name} (${a.category}) a ${a.distanceToHotspotMeters}m de hotspot`);
+    // 3. Correlacionar factores físicos sin atribuir causalidad directa (CPTED / Vulnerabilidades)
+    if (tie?.environmentalRiskFactors) {
+      const risks = tie.environmentalRiskFactors;
+      if (risks.lightingScore === "DEFICIENT" || risks.lightingScore === "CRITICAL") {
+        correlatedFactors.push("Deficiencia en iluminación pública");
+      }
+      if (risks.abandonedLotsCount && risks.abandonedLotsCount > 0) {
+        correlatedFactors.push(`Predios baldíos abandonados (${risks.abandonedLotsCount})`);
+      }
+      if (risks.visibilityObstructions && risks.visibilityObstructions.length > 0) {
+        risks.visibilityObstructions.forEach(obs => correlatedFactors.push(`Obstrucción de visibilidad: ${obs}`));
+      }
+    }
+
+    if (vee) {
+      if (vee.graffitiEvidence && vee.graffitiEvidence.length >= 2) {
+        correlatedFactors.push("Presencia acumulada de grafiti en muros circundantes");
+      }
+      if (vee.analystPhotos && vee.analystPhotos.length > 0) {
+        vee.analystPhotos.forEach(f => {
+          if (f.finding && !correlatedFactors.includes(f.finding)) {
+            correlatedFactors.push(`Hallazgo visual: ${f.finding}`);
+          }
         });
       }
     }
 
-    // 2. Correlacionar Factores Ambientales y Alumbrado
-    if (tie.environmentalRiskFactors?.lightingScore === "DEFICIENT" || 
-        tie.environmentalRiskFactors?.lightingScore === "CRITICAL") {
-      correlatedFactors.push(`Vulnerabilidad Física: Alumbrado Público Deficiente o Crítico`);
-    }
-
-    if (tie.environmentalRiskFactors?.abandonedLotsCount > 0) {
-      correlatedFactors.push(`Vulnerabilidad Física: Presencia de ${tie.environmentalRiskFactors.abandonedLotsCount} lote(s) baldío(s)`);
-    }
-
-    // 3. Correlacionar Hallazgos de Grafitis
-    if (vee.graffitiEvidence && vee.graffitiEvidence.length > 0) {
-      correlatedFactors.push(`Apropiación Espacial: Detección activa de marcas y grafitis territoriales`);
-    }
-
-    // Construir descripción objetiva libre de causalidad criminalizante
-    let description = "El análisis factual de coincidencia espacial no registra factores concurrentes significativos en la periferia de interés.";
-
-    if (correlatedFactors.length > 0) {
-      description = `El análisis espacial correlativo identifica la concurrencia de ${correlatedFactors.length} factores de exposición y facilitadores físicos dentro del entorno analizado, los cuales modifican las condiciones de exposición situacional.`;
-    }
-
     return {
       coincidesWithHotspot,
-      correlatedFactors,
-      confidenceScore,
-      description
+      closestAttractorName,
+      distanceToHotspotMeters,
+      temporalConcurrence,
+      correlatedFactors
     };
   }
 }

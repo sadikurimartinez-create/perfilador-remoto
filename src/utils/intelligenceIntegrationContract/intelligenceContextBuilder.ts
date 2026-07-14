@@ -1,117 +1,74 @@
 import { 
   IntelligenceIntegrationContext, 
-  EvidenceProvenance, 
-  OperationalAssessment,
-  CapabilityStatus
+  OperationalAssessment 
 } from "./models/intelligenceContextTypes";
+import { CapabilityRegistry } from "./capabilityRegistry";
 import { StatisticalEvidenceMatrix } from "../statisticalEvidenceMatrix/models/statisticalEvidenceTypes";
 import { VisualEvidenceMatrix } from "../visualEvidenceEngine/models/visualEvidenceTypes";
 import { TerritorialEvidenceMatrix } from "../territorialIntelligenceEngine/models/territorialEvidenceTypes";
-import { AnalyticalConsistencyReport } from "../analyticalConsistencyEngine/models/aceTypes";
-import { HIEResult } from "../hypothesisIntelligenceEngine";
-import { HIEValidationVectorAdapter } from "../analyticalConsistencyEngine/hieValidationVectorAdapter";
+import { AnalyticalConsistencyReport, HIEValidationVector } from "../analyticalConsistencyEngine/models/aceTypes";
 
 export class IntelligenceContextBuilder {
   /**
-   * Ensambla, unifica, versiona y establece la trazabilidad del contexto integrado de inteligencia (IIC)
-   * en estricto cumplimiento con la regla de consistencia y no-recalculación.
+   * Ensambla, unifica y versiona los resultados analíticos certificados en un único
+   * IntelligenceIntegrationContext inmutable, aplicando estrictamente la regla de no-recalculación.
    */
   public static build(
     projectId: string,
     sem: StatisticalEvidenceMatrix,
-    vee: VisualEvidenceMatrix,
-    tie: TerritorialEvidenceMatrix,
-    hie: HIEResult,
+    vee: VisualEvidenceMatrix | null,
+    tie: TerritorialEvidenceMatrix | null,
+    hieVector: HIEValidationVector | null,
     ace: AnalyticalConsistencyReport
   ): IntelligenceIntegrationContext {
     const timestamp = new Date().toISOString();
+    const version = "1.0.0";
 
-    // 1. Crear Provenance de Evidencias (Ajuste Adicional)
-    const semProvenance: EvidenceProvenance = {
-      source: "SEM",
-      engineVersion: sem.metadata.semVersion || "1.0",
-      generatedAt: sem.traceability?.generatedAt || timestamp,
-      confidence: sem.predictiveEvidence?.confidenceMetrics?.statisticalConfidence || 100
-    };
+    // 1. Obtener disponibilidad mediante Capability Registry
+    const capabilityStatus = CapabilityRegistry.getCapabilityStatus(sem, vee, tie);
 
-    const veeProvenance: EvidenceProvenance = {
-      source: "VEE",
-      engineVersion: "1.0",
-      generatedAt: timestamp,
-      confidence: vee.overallVisualConfidence || 100
-    };
-
-    const tieProvenance: EvidenceProvenance = {
-      source: "TIE",
-      engineVersion: tie.temVersion || "1.0",
-      generatedAt: tie.traceability?.queryTimestamp || timestamp,
-      confidence: tie.confidence?.operationalConfidence || 100
-    };
-
-    const hieProvenance: EvidenceProvenance = {
-      source: "HIE",
-      engineVersion: "1.0",
-      generatedAt: timestamp,
-      confidence: hie.confidence?.score || 100
-    };
-
-    const aceProvenance: EvidenceProvenance = {
-      source: "ACE",
-      engineVersion: ace.metadata.aceVersion || "1.0",
-      generatedAt: ace.metadata.auditedAt || timestamp,
-      confidence: ace.overallConfidence || 100
-    };
-
-    // 2. Determinar disponibilidad de módulos (Ajuste 2: CapabilityStatus)
-    const capabilityStatus: CapabilityStatus = {
-      statisticalEvidence: (sem.criminalEvidence?.totalEvents ?? 0) > 0,
-      visualEvidence: vee.analystPhotos.length > 0 || vee.streetViewEvidence.length > 0,
-      territorialEvidence: tie.economicAttractors.length > 0 || !!tie.territorialContext?.tipologyName,
-      gangIntelligence: false, // Módulo futuro
-      osintEvidence: false     // Módulo futuro
-    };
-
-    // 3. Extraer Patrones Soportados
+    // 2. Extraer patrones soportados basándose en datos reales provistos (sin analizar de cero)
     const supportedPatterns: string[] = [];
     if (sem.spatialEvidence?.spatialPattern) {
-      supportedPatterns.push(`Patrón Espacial Estadístico: ${sem.spatialEvidence.spatialPattern}`);
+      supportedPatterns.push(`Patrón de Concentración Espacial: ${sem.spatialEvidence.spatialPattern}`);
     }
     if (sem.criminalEvidence?.dominantCrime) {
-      supportedPatterns.push(`Concentración de Delito Dominante: ${sem.criminalEvidence.dominantCrime}`);
+      supportedPatterns.push(`Concentración de Delito: ${sem.criminalEvidence.dominantCrime}`);
     }
-    if (tie.urbanStructure?.streetGridType) {
-      supportedPatterns.push(`Diseño de Trama Urbana: ${tie.urbanStructure.streetGridType}`);
+    if (tie?.urbanStructure?.streetGridType) {
+      supportedPatterns.push(`Configuración de Trama Vial: ${tie.urbanStructure.streetGridType}`);
     }
-    if (hie.centralHypothesis?.queOcurre) {
-      supportedPatterns.push(`Esquema Hipotético Criminológico: ${hie.centralHypothesis.queOcurre}`);
+    if (hieVector?.spatialPattern) {
+      supportedPatterns.push(`Patrón Hipotético Espacial (HIE): ${hieVector.spatialPattern}`);
     }
 
-    // 4. Separación Estricta entre unresolvedQuestions y limitations (Ajuste 3)
-    
-    // unresolvedQuestions: Líneas futuras de investigación táctica o vacíos en el terreno
-    const unresolvedQuestions: string[] = [];
-    if (vee.streetViewEvidence.length === 0) {
-      unresolvedQuestions.push("Verificación en campo pendiente de visibilidad táctica debido a ausencia de Street View en baricentro.");
-    }
-    if (tie.economicAttractors.length === 0) {
-      unresolvedQuestions.push("Línea futura: Identificar si la movilidad peatonal obedece a atractores informales no registrados.");
-    }
-    unresolvedQuestions.push("Línea futura: Investigar presencia y dinámicas de grupos organizados (pandillas) en el polígono.");
-
-    // limitations: Restricciones metodológicas o técnicas estrictas
+    // 3. Separación estricta de limitations y unresolvedQuestions
     const limitations: string[] = [];
-    if (sem.limitations && Array.isArray(sem.limitations)) {
-      sem.limitations.forEach(l => limitations.push(`[SEM-Método] ${l.description}`));
+    const unresolvedQuestions: string[] = [];
+
+    // Limitations (Restricciones técnicas o metodológicas del expediente)
+    if (!vee || vee.analystPhotos.length === 0) {
+      limitations.push("[VEE-LIMIT] El expediente carece de registro fotográfico directo del investigador.");
     }
     if (sem.metadata?.totalCanonicalIncidents <= 3) {
-      limitations.push("[SEM-Muestra] Volumen histórico estadísticamente reducido en el polígono.");
+      limitations.push("[SEM-LIMIT] Muestra estadística reducida; volumen histórico bajo en el polígono.");
     }
-    if (vee.analystPhotos.length === 0) {
-      limitations.push("[VEE-Capa] Ausencia de registro fotográfico directo del investigador.");
+    if (!tie || tie.economicAttractors.length === 0) {
+      limitations.push("[TIE-LIMIT] Ausencia de atractores económicos registrados en el área de influencia.");
     }
 
-    // Concordancia de evidencia basada directamente en ACE (Ajuste 1: ACE es dueño de la consistencia)
-    let evidenceAgreement: "HIGH" | "MEDIUM" | "LOW" = "HIGH";
+    // Unresolved Questions (Líneas futuras de investigación táctica o brechas explicativas de terreno)
+    if (!vee || vee.streetViewEvidence.length === 0) {
+      unresolvedQuestions.push("Verificación de campo requerida: Confirmar visibilidad táctica debido a ausencia de Street View en baricentro.");
+    }
+    if (!tie || tie.economicAttractors.length === 0) {
+      unresolvedQuestions.push("Línea futura: Identificar si el desplazamiento de personas responde a polos de atracción informales.");
+    }
+    unresolvedQuestions.push("Línea futura: Investigar presencia, fronteras invisibles y dinámicas operativas de pandillas organizadas.");
+    unresolvedQuestions.push("Línea futura: Consolidar rastreo de redes de mensajería locales y OSINT para este polígono.");
+
+    // 4. Determinar nivel de acuerdo basándose en la auditoría de ACE
+    let evidenceAgreement: OperationalAssessment["evidenceAgreement"] = "HIGH";
     if (ace.globalStatus === "FAILED") {
       evidenceAgreement = "LOW";
     } else if (ace.globalStatus === "WARNING") {
@@ -125,52 +82,37 @@ export class IntelligenceContextBuilder {
       limitations
     };
 
-    // 5. Determinar Estado de Validación del Contrato
-    let validationStatus: "VALIDATED" | "VALID_WITH_LIMITATIONS" | "WARNING" | "FAILED" = "VALIDATED";
-    
-    if (ace.globalStatus === "FAILED") {
-      validationStatus = "FAILED";
-    } else if (ace.globalStatus === "WARNING") {
-      validationStatus = "WARNING";
-    } else if (vee.analystPhotos.length === 0 || limitations.length > 0) {
-      validationStatus = "VALID_WITH_LIMITATIONS";
-    }
+    // 5. Procedencia consolidada de la unificación
+    const provenance = {
+      source: "INTELLIGENCE_INTEGRATION_CONTRACT (IIC)",
+      engineVersion: version,
+      generatedAt: timestamp,
+      confidence: ace.overallConfidence ?? 90
+    };
+
+    // 6. Reporte de calidad (réplica exacta de la auditoría de ACE sin duplicar lógicas)
+    const qualityControl = {
+      status: ace.globalStatus,
+      aceReference: `ACE-REF-${projectId}-${ace.metadata.auditedAt.replace(/[\/:]/g, "")}`
+    };
 
     return {
       metadata: {
         projectId,
         generatedAt: timestamp,
-        version: "1.0.0"
+        version
       },
-      capabilityStatus,
-      statisticalEvidence: {
-        source: "SEM",
-        data: sem,
-        provenance: semProvenance
-      },
-      visualEvidence: {
-        source: "VEE",
-        data: vee,
-        provenance: veeProvenance
-      },
-      territorialEvidence: {
-        source: "TIE",
-        data: tie,
-        provenance: tieProvenance
-      },
-      hypothesisEvidence: {
-        source: "HIE",
-        data: hie,
-        validationVector: (ace as any).hieContext?.validationVector || HIEValidationVectorAdapter.adapt(hie.centralHypothesis?.porQueOcurre || ""),
-        provenance: hieProvenance
-      },
-      qualityControl: {
-        source: "ACE",
-        data: ace,
-        provenance: aceProvenance
+      evidenceSources: {
+        SEM: sem,
+        VEE: vee,
+        TIE: tie,
+        HIE: hieVector,
+        ACE: ace
       },
       operationalAssessment,
-      validationStatus
+      capabilityStatus,
+      provenance,
+      qualityControl
     };
   }
 }
