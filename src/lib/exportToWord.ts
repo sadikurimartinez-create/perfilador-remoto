@@ -30,6 +30,11 @@ import {
 import { saveAs } from "file-saver";
 import { TCE_DEFAULT_FALLBACK } from "../utils/territorialContextEngine";
 
+export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  return String(value).toUpperCase();
+}
+
 async function fetchLocalImageBuffer(path: string): Promise<ArrayBuffer | null> {
   try {
     const res = await fetch(path);
@@ -429,6 +434,22 @@ export async function exportToWord(
   reportNumber?: string,
   user?: any
 ) {
+  // --- FASE 4: EXPORT VALIDATION LOGS DEFENSIVOS ---
+  console.log("================= [EXPORT VALIDATION] =================");
+  const criticalFields = [
+    { name: "projectName", val: payload.projectName, fallback: "EXPEDIENTE" },
+    { name: "projectId", val: payload.projectId, fallback: "N/D" },
+    { name: "geometryType", val: payload.geometryType, fallback: "POLÍGONO" },
+    { name: "classification", val: payload.classification, fallback: "CONFIDENCIAL" },
+    { name: "status", val: payload.status, fallback: "ACTIVO" },
+    { name: "modality", val: payload.modality, fallback: "PREVENTIVO" }
+  ];
+  criticalFields.forEach(f => {
+    const norm = safeUpperCase(f.val, f.fallback);
+    console.log(`Campo: ${f.name} | Valor Original: ${f.val} | Normalizado: ${norm}`);
+  });
+  console.log("======================================================");
+
   // Pre-slicing / mutation to guarantee synthesis limits across the entire pipeline
   if (payload.maps) {
     payload.maps = payload.maps.map((m: any) => ({
@@ -576,7 +597,7 @@ export async function exportToWord(
         children: [
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 16 }), new TextRun({ text: ` ${(payload.projectName || "EXPEDIENTE").toUpperCase()}`, size: 16 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 16 }), new TextRun({ text: ` ${safeUpperCase(payload.projectName, "EXPEDIENTE")}`, size: 16 })] })]
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
@@ -600,7 +621,7 @@ export async function exportToWord(
         children: [
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "GEOMETRÍA:", bold: true, size: 16 }), new TextRun({ text: ` ${(payload.geometryType || "POLÍGONO").toUpperCase()}`, size: 16 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "GEOMETRÍA:", bold: true, size: 16 }), new TextRun({ text: ` ${safeUpperCase(payload.geometryType, "POLÍGONO")}`, size: 16 })] })]
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },

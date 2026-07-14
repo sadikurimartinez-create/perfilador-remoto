@@ -294,7 +294,7 @@ const drawProfessionalGISDecorations = (
 
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 12px sans-serif';
-  ctx.fillText(title.toUpperCase(), 30, 40);
+  ctx.fillText((title || "GRÁFICA ESTADÍSTICA").toUpperCase(), 30, 40);
 
   ctx.fillStyle = '#cbd5e1';
   ctx.font = '9px sans-serif';
@@ -473,7 +473,7 @@ const drawTacticalFrame = (
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 11px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(mapTitle.toUpperCase(), w / 2, 28);
+  ctx.fillText((mapTitle || "ANÁLISIS DE COBERTURA").toUpperCase(), w / 2, 28);
   
   ctx.restore();
 };
@@ -1738,9 +1738,11 @@ export const renderPredictiveLineChart = (input: VectorEngineInput): string => {
   ctx.fillStyle = '#0f172a';
   ctx.font = 'bold 7.5px "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(`MODELO MATEMÁTICO: ${pred.modelo.toUpperCase()}`, 65, blockY + 16);
+  ctx.fillText(`MODELO MATEMÁTICO: ${(pred?.modelo || "POISSON & INFERENCIA FRECUENCIAL").toUpperCase()}`, 65, blockY + 16);
 
-  const varsUsed = pred.variablesPredictivasExplicativas.join(", ");
+  const varsUsed = Array.isArray(pred?.variablesPredictivasExplicativas)
+    ? pred.variablesPredictivasExplicativas.join(", ")
+    : "VOLUMEN HISTÓRICO, ESTACIONALIDAD, DENSIDAD TERRITORIAL";
   ctx.fillStyle = '#475569';
   ctx.font = '7px "Segoe UI", Arial, sans-serif';
   ctx.fillText(`VARIABLES DE CONTROL: ${varsUsed}`, 65, blockY + 34);

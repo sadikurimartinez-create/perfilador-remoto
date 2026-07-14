@@ -7,6 +7,7 @@ import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialCon
 import { VisualEvidenceEngine } from "./visualEvidenceEngine";
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
+import { safeUpperCase } from '../lib/exportToWord';
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -1027,7 +1028,7 @@ export const buildIntelligenceBriefing = (
       `Número de Expediente: ${payload.projectId}`,
       `Fecha: ${payload.date}`,
       `Analista Responsable: ${payload.analyst}`,
-      `Geometría de Cobertura: ${(payload.geometryType || "POLÍGONO").toUpperCase()}`,
+      `Geometría de Cobertura: ${safeUpperCase(payload.geometryType, "POLÍGONO")}`,
       `Clasificación: CONFIDENCIAL / EXCLUSIVO SSPE-CEIPOL`
     ]
   });

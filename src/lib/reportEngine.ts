@@ -298,12 +298,12 @@ export async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
         doc.setFontSize(9.5);
         doc.setTextColor(COLORS.navy);
         doc.setFont('helvetica', 'bold');
-        doc.text(sweep.engine.toUpperCase(), PAGE.margin + 6, currentY + 8);
+        doc.text((sweep.engine || "BARRIDO TÁCTICO").toUpperCase(), PAGE.margin + 6, currentY + 8);
         
         doc.setFontSize(7.5);
         doc.setTextColor(COLORS.muted);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Fuente: ${sweep.source}`, PAGE.width - PAGE.margin - 6, currentY + 8, { align: 'right' });
+        doc.text(`Fuente: ${sweep.source || "CIE-SAI"}`, PAGE.width - PAGE.margin - 6, currentY + 8, { align: 'right' });
         
         doc.setDrawColor(COLORS.line);
         doc.line(PAGE.margin + 6, currentY + 12, PAGE.width - PAGE.margin - 6, currentY + 12);
