@@ -799,102 +799,14 @@ export async function exportToWord(
     }
   }
 
-  // ================= PÁGINA 7: CAPÍTULO 6 - STREET VIEW INTELLIGENCE =================
-  // StreetViewEvidenceValidator (Caso 1 y Caso 2)
-  const validStreetViewAnalysis = payload.streetViewAnalysis
-    ? payload.streetViewAnalysis.filter((sv: any) => sv.dataUrl && sv.dataUrl.trim().length > 0)
-    : [];
-
-  const hasStreetViewImages = validStreetViewAnalysis.length > 0;
-
-  if (hasStreetViewImages) {
-    // FlexibleChapterFlow: No pageBreakBefore, flow naturally
-    elements.push(createTitle("CAPÍTULO 6: STREET VIEW INTELLIGENCE"));
-    elements.push(createBodyText(payload.streetViewText || ""));
-
-    for (let i = 0; i < validStreetViewAnalysis.length; i++) {
-      const sv = validStreetViewAnalysis[i];
-      const imgRes = sv.dataUrl ? await getImageDimensionsAndBuffer(sv.dataUrl, 420, 240) : null;
-      if (imgRes) {
-        elements.push(
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-              bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-              left: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
-              right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  new TableCell({
-                    shading: { fill: "F8FAFC", type: ShadingType.CLEAR },
-                    margins: { top: 120, bottom: 120, left: 140, right: 140 },
-                    children: [
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [
-                          new TextRun({
-                            text: `REGISTRO ${sv.id || `SV-00${i + 1}`}`,
-                            bold: true,
-                            size: 18,
-                            color: "0D2B52",
-                            font: "Calibri"
-                          })
-                        ],
-                        spacing: { after: 120 }
-                      }),
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-                        spacing: { after: 120 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${sv.location} (${sv.direccion || "Aguascalientes, México"})`, size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 80 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Fecha: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: sv.fechaCaptura || "08/07/2026", size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 80 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Elemento observado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: sv.observed, size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 80 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Interpretación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: sv.inferenciaAnalitica || sv.observed, size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 80 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Nivel de confianza: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: sv.confianza || "Alto", size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 80 }
-                      })
-                    ]
-                  })
-                ]
-              })
-            ]
-          })
-        );
-      }
-    }
-  }
+  // ================= PÁGINA 7: CAPÍTULO 6 - ANÁLISIS TERRITORIAL OPERACIONAL =================
+  elements.push(createTitle("CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD"));
+  
+  let sanitizedStreetViewText = payload.streetViewText || "Análisis territorial táctico no disponible.";
+  // Asegurar sanitización geográfica absoluta (Regla 1 / Test 5)
+  sanitizedStreetViewText = sanitizedStreetViewText.replace(/\b\d{1,3}\.\d{5,8}\b|\b-\d{1,3}\.\d{5,8}\b|lat:|lng:|coordinates:/gi, "");
+  
+  elements.push(createBodyText(sanitizedStreetViewText));
 
   // ================= PÁGINA 8: CAPÍTULO 7 - INTELIGENCIA OSINT =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally

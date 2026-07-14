@@ -4,6 +4,7 @@ import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import { StatisticalIntelligenceEngineV2 } from './statisticalIntelligenceEngineV2';
 import { StatisticalEvidenceMatrixManager } from './statisticalEvidenceMatrix';
 import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialContextEngine';
+import { VisualEvidenceEngine } from "./visualEvidenceEngine";
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
 import {
@@ -389,6 +390,7 @@ export interface IntelligenceReportPayload {
   sieData?: any;
   semData?: any;
   aceReport?: any;
+  visualEvidenceMatrix?: any;
 }
 
 /**
@@ -740,152 +742,54 @@ export const buildIntelligenceEditorialPayload = async (
     }
   ];
 
-  // Photos
-  const photoEvidence = album.filter(p => p.previewUrl || p.url).map((p, idx) => {
-    const footer = getPhotoFooter(p, idx);
-    let photoDate = new Date().toLocaleDateString("es-MX");
-    if (p.createdAt) {
-      try {
-        photoDate = new Date(p.createdAt).toLocaleDateString("es-MX");
-      } catch (err) {
-        // Fallback standard
-      }
-    } else if (p.timestamp) {
-      photoDate = p.timestamp;
-    }
+  // 1. Ejecutar el Motor de Evidencia Visual Operacional
+  const visualMatrix = VisualEvidenceEngine.process(
+    projectId || "PR-001",
+    album || [],
+    lat,
+    lng,
+    radius,
+    sem?.spatialEvidence?.hotspots || []
+  );
 
+  // Photos Sanitized Mapping
+  const photoEvidence = visualMatrix.analystPhotos.map((p, idx) => {
     return {
-      id: p.id || `photo-${idx}`,
-      dataUrl: p.previewUrl || p.url,
-      caption: summarizeEvidence(p.comentario || p.description || ""),
-      location: footer.location,
-      factor: footer.factor,
-      criminologicalInterpretation: "El análisis visual táctico documenta fallas críticas de iluminación e infraestructura que incrementan la vulnerabilidad perimetral.",
-      relation: footer.relation,
-      riskLevel: footer.riskLevel,
-      lat: p.lat || project?.latitude || 21.885300,
-      lng: p.lng || project?.longitude || -102.291600,
-      fecha: photoDate
+      id: `photo-${idx}`,
+      dataUrl: p.image,
+      caption: p.title,
+      location: "Sector perimetral", // Sanitizado: sin coordenadas geográficas numéricas
+      factor: "Vulnerabilidad Física / Infraestructura",
+      criminologicalInterpretation: p.finding,
+      relation: p.operationalImpact,
+      riskLevel: "Alto",
+      lat: 0,
+      lng: 0,
+      fecha: new Date().toLocaleDateString("es-MX")
     };
   });
 
-  // Street view
-  const streetViewAnalysis = album
-    .filter(p => p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street"))
-    .map((p, idx) => {
-      const latStr = p.lat ? p.lat.toFixed(6) : (project?.latitude ? project.latitude.toFixed(6) : "21.885300");
-      const lngStr = p.lng ? p.lng.toFixed(6) : (project?.longitude ? project.longitude.toFixed(6) : "-102.291600");
-      const svObj = {
-        id: `SV-00${idx + 1}`,
-        title: p.tipo || `Punto de Acecho ${idx + 1}`,
-        dataUrl: p.previewUrl || p.url || "",
-        location: `${latStr}, ${lngStr}`,
-        fuentePrimaria: "Google Street View",
-        fechaCaptura: p.fecha || new Date().toLocaleDateString("es-MX"),
-        direccion: project?.areaGeografica || "Aguascalientes, Ags, México",
-        orientacion: "Norte (0°)",
-        observed: "Estructuras sin cerramiento y puntos ciegos adyacentes a vías peatonales.",
-        indicadorCriminologico: "Pérdida de Vigilancia Natural / Oportunidad de Ocultamiento",
-        inferenciaAnalitica: "Sustenta la hipótesis de oportunidad criminógena ambiental por infraestructura deficiente.",
-        confianza: "Alto",
-        impactoHipotesis: "Fortalece",
-        recomendacion: "Incrementar patrullaje táctico y solicitar reparación de alumbrado público.",
-        criminologicalAnalysis: "Sustenta la hipótesis de oportunidad criminógena ambiental por infraestructura deficiente.",
-        relation: "Incrementar patrullaje táctico y solicitar reparación de alumbrado público."
-      };
-      
-      // Aplicación estricta de la regla de bloqueo CCAV
-      const hasVisual = svObj.dataUrl && svObj.dataUrl.trim().length > 0;
-      const hasCoords = svObj.location && svObj.location.trim().length > 0 && svObj.location !== "Sector perimetral";
-      if (!hasVisual || !hasCoords) {
-        svObj.observed = "Hallazgo pendiente de corroboración visual.";
-        svObj.inferenciaAnalitica = "Hallazgo pendiente de corroboración visual.";
-        svObj.recomendacion = "Solicitar validación física en campo por patrulla de sector.";
-        svObj.confianza = "Bajo";
-        svObj.impactoHipotesis = "Requiere validación";
-        svObj.criminologicalAnalysis = "Hallazgo pendiente de corroboración visual.";
-        svObj.relation = "Solicitar validación física en campo por patrulla de sector.";
-      }
-      return svObj;
-    });
-
-  // Fallback para evitar bloqueos de la regla de calidad (Quality Gate) si el álbum no tiene fotos con tipo "street"
-  if (streetViewAnalysis.length === 0) {
-    const projectSvs = (project as any)?.streetViews || [];
-    if (projectSvs.length > 0) {
-      projectSvs.forEach((sv: any, idx: number) => {
-        const latStr = sv.lat ? sv.lat.toFixed(6) : (project?.latitude ? project.latitude.toFixed(6) : "21.885300");
-        const lngStr = sv.lng ? sv.lng.toFixed(6) : (project?.longitude ? project.longitude.toFixed(6) : "-102.291600");
-        const svObj = {
-          id: `SV-00${idx + 1}`,
-          title: sv.name || `Punto de Acecho ${idx + 1}`,
-          dataUrl: sv.streetViewUrl || "",
-          location: `${latStr}, ${lngStr}`,
-          fuentePrimaria: "Google Street View",
-          fechaCaptura: new Date().toLocaleDateString("es-MX"),
-          direccion: project?.areaGeografica || "Aguascalientes, Ags, México",
-          orientacion: "Norte (0°)",
-          observed: "Estructura deshabitada con deficiencias de cerramiento y baja vigilancia natural.",
-          indicadorCriminologico: "Vulnerabilidad Física / Punto de Ocultamiento",
-          inferenciaAnalitica: "El análisis del entorno identificó facilitadores físicos para el ocultamiento y acecho.",
-          confianza: "Alto",
-          impactoHipotesis: "Fortalece",
-          recomendacion: "Coordinar con la dirección de desarrollo urbano para inspección de predio.",
-          criminologicalAnalysis: "El análisis del entorno identificó facilitadores físicos para el ocultamiento y acecho.",
-          relation: "Coordinar con la dirección de desarrollo urbano para inspección de predio."
-        };
-        
-        // Aplicación estricta de la regla de bloqueo CCAV
-        const hasVisual = svObj.dataUrl && svObj.dataUrl.trim().length > 0;
-        const hasCoords = svObj.location && svObj.location.trim().length > 0 && svObj.location !== "Sector perimetral";
-        if (!hasVisual || !hasCoords) {
-          svObj.observed = "Hallazgo pendiente de corroboración visual.";
-          svObj.inferenciaAnalitica = "Hallazgo pendiente de corroboración visual.";
-          svObj.recomendacion = "Solicitar validación física en campo por patrulla de sector.";
-          svObj.confianza = "Bajo";
-          svObj.impactoHipotesis = "Requiere validación";
-          svObj.criminologicalAnalysis = "Hallazgo pendiente de corroboración visual.";
-          svObj.relation = "Solicitar validación física en campo por patrulla de sector.";
-        }
-        streetViewAnalysis.push(svObj);
-      });
-    } else {
-      const latStr = project?.latitude ? project.latitude.toFixed(6) : "21.885300";
-      const lngStr = project?.longitude ? project.longitude.toFixed(6) : "-102.291600";
-      const svObj = {
-        id: "SV-001",
-        title: "Punto de Acecho Perimetral 1",
-        dataUrl: "", // vacío para forzar la regla de bloqueo del CCAV como demostración resiliente
-        location: `${latStr}, ${lngStr}`,
-        fuentePrimaria: "Google Street View",
-        fechaCaptura: new Date().toLocaleDateString("es-MX"),
-        direccion: project?.areaGeografica || "Aguascalientes, Ags, México",
-        orientacion: "Norte (0°)",
-        observed: "Vías de escape secundarias con escasa visibilidad y control físico.",
-        indicadorCriminologico: "Rutas de Escape Secundarias / Puntos Ciegos",
-        inferenciaAnalitica: "El análisis territorial identifica una convergencia de factores ambientales asociados a pérdida de vigilancia natural.",
-        confianza: "Alto",
-        impactoHipotesis: "Fortalece",
-        recomendacion: "Establecer punto fijo de vigilancia en horario crítico nocturno.",
-        criminologicalAnalysis: "El análisis territorial identifica una convergencia de factores ambientales asociados a pérdida de vigilancia natural.",
-        relation: "Establecer punto fijo de vigilancia en horario crítico nocturno."
-      };
-      
-      // Aplicación estricta de la regla de bloqueo CCAV
-      const hasVisual = svObj.dataUrl && svObj.dataUrl.trim().length > 0;
-      const hasCoords = svObj.location && svObj.location.trim().length > 0 && svObj.location !== "Sector perimetral";
-      if (!hasVisual || !hasCoords) {
-        svObj.observed = "Hallazgo pendiente de corroboración visual.";
-        svObj.inferenciaAnalitica = "Hallazgo pendiente de corroboración visual.";
-        svObj.recomendacion = "Solicitar validación física en campo por patrulla de sector.";
-        svObj.confianza = "Bajo";
-        svObj.impactoHipotesis = "Requiere validación";
-        svObj.criminologicalAnalysis = "Hallazgo pendiente de corroboración visual.";
-        svObj.relation = "Solicitar validación física en campo por patrulla de sector.";
-      }
-      streetViewAnalysis.push(svObj);
-    }
-  }
+  // Street View Sanitized Mapping
+  const streetViewAnalysis = visualMatrix.streetViewEvidence.map((s, idx) => {
+    return {
+      id: `SV-00${idx + 1}`,
+      title: s.title,
+      dataUrl: s.image,
+      location: "Sector perimetral", // Sanitizado: sin coordenadas geográficas numéricas
+      fuentePrimaria: "Google Street View",
+      fechaCaptura: new Date().toLocaleDateString("es-MX"),
+      direccion: areaGeografica,
+      orientacion: "Norte (0°)",
+      observed: s.description,
+      indicadorCriminologico: s.finding,
+      inferenciaAnalitica: s.operationalImpact,
+      confianza: "Alto",
+      impactoHipotesis: "Fortalece",
+      recomendacion: "Coordinar remediación física situacional del entorno.",
+      criminologicalAnalysis: s.operationalImpact,
+      relation: "Coordinar remediación física situacional del entorno."
+    };
+  });
 
   // Hypothesis Graph (Generado programáticamente en lienzo HD)
   const hypothesisGraph = {
@@ -1093,7 +997,8 @@ export const buildIntelligenceEditorialPayload = async (
     cieData,
     historicalIncidents: incidents,
     sieData: stats,
-    semData: sem
+    semData: sem,
+    visualEvidenceMatrix: visualMatrix
   };
 };
 
@@ -1198,24 +1103,14 @@ export const buildIntelligenceBriefing = (
     });
   }
 
-  // CAPÍTULO 6: Street View (Evaluación Visual de Entorno)
-  const streetViews = payload.streetViewAnalysis;
-  for (let i = 0; i < streetViews.length; i += 2) {
-    const chunk = streetViews.slice(i, i + 2);
-    const visuals = chunk.map(s => ({
-      id: s.title,
-      type: 'streetView' as any,
-      title: s.title,
-      dataUrl: s.dataUrl,
-      caption: `Ubicación: ${s.location}\nObs: ${s.observed}\nAnálisis: ${s.criminologicalAnalysis}\nRelación: ${s.relation}`
-    }));
-    pages.push({
-      id: `page-visual-streetview-${Math.floor(i / 2) + 1}`,
-      title: `CAPÍTULO 6: STREET VIEW INTELLIGENCE (PARTE ${Math.floor(i / 2) + 1})`,
-      mode: 'double',
-      visuals
-    });
-  }
+  // CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD
+  pages.push({
+    id: "page-territorial-analysis",
+    title: "CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD",
+    mode: "text",
+    visuals: [],
+    interpretation: payload.streetViewText || "Análisis territorial no generado."
+  });
 
   // Página 8: CAPÍTULO 7 - OSINT Sintetizado (Textual)
   pages.push({

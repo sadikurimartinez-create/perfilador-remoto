@@ -23,6 +23,8 @@ export interface ReportContext {
   semData?: any;
   aceReport?: any;
   hieValidationVector?: any;
+  visualEvidenceMatrix?: any;
+  territorialEvidenceMatrix?: any;
 }
 
 /**
@@ -284,42 +286,102 @@ Restricción de Extensión: La narrativa completa debe ser profunda, precisa y e
  * 6. CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA
  */
 export const EvidenceAnalysisPrompt = (ctx: ReportContext): string => {
-  const photoCount = ctx.photos?.length || 0;
-  return `
---- INICIO MÓDULO: EVIDENCIA FOTOGRÁFICA DE CAMPO (CAPÍTULO 5) ---
-Genera el Capítulo 5: "EVIDENCIA FOTOGRÁFICA".
-Fotografías de campo en el expediente: ${photoCount}.
+  const matrix = ctx.visualEvidenceMatrix;
+  if (!matrix) {
+    return `
+--- INICIO MÓDULO: EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL (CAPÍTULO 5) ---
+No se cargó evidencia de campo ni se detectaron anomalías en el barrido territorial.
+--- FIN MÓDULO ---
+`.trim();
+  }
 
-Instrucciones:
-- Estructura el análisis de cada una de las fotografías de campo agregadas al expediente.
-- El análisis de cada fotografía debe ser sintético (máximo 150 palabras) y contener obligatoriamente estos tres títulos:
-  - Observación: Qué elemento físico o anomalía del entorno aparece.
-  - Interpretación: Qué significa o qué vulnerabilidad física representa.
-  - Relación con hipótesis: Cómo influye o fortalece la hipótesis criminal central.
-- No incluyas nombres de herramientas de desarrollo ni procesos internos.
+  const analystPhotosStr = matrix.analystPhotos.length > 0
+    ? matrix.analystPhotos.map((p: any) => `
+- ${p.title}:
+  * Descripción factual: ${p.description}
+  * Hallazgo identificado: ${p.finding}
+  * Impacto operacional táctico: ${p.operationalImpact}
+`).join("\n")
+    : "No se cargaron fotografías de campo por parte del investigador.";
+
+  const streetViewStr = matrix.streetViewEvidence.length > 0
+    ? matrix.streetViewEvidence.map((p: any) => `
+- ${p.title}:
+  * Descripción: ${p.description}
+  * Hallazgo: ${p.finding}
+  * Impacto táctico: ${p.operationalImpact}
+`).join("\n")
+    : "El barrido territorial no identificó elementos visuales relevantes para incorporar como evidencia operacional.";
+
+  const graffitiStr = matrix.graffitiEvidence.length > 0
+    ? matrix.graffitiEvidence.map((p: any) => `
+- ${p.title}:
+  * Descripción: ${p.description}
+  * Hallazgo: ${p.finding}
+  * Impacto operacional: ${p.operationalImpact}
+`).join("\n")
+    : "No se identificaron patrones densos ni repetitivos de grafiti territorial en el área de interés.";
+
+  return `
+--- INICIO MÓDULO: EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL (CAPÍTULO 5) ---
+Genera el Capítulo 5: "EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL".
+
+Instrucciones Generales de Redacción:
+- Sigue la Regla Institucional de Diseño: "La construcción analítica debe ser profunda, determinista y auditable; la materialización documental debe ser ejecutiva, breve y orientada a la toma de decisiones."
+- Prohibición Absoluta de Alucinación Visual: Analiza únicamente las evidencias visuales proporcionadas a continuación. No agregues elementos no observados en los metadatos ni infieras tipos de delitos específicos o conclusiones criminales subjetivas a partir de fotos (ej. no afirmes "venta de drogas" o "zona de asaltantes" en base a una foto deteriorada).
+- No incluyas coordenadas geográficas (latitud, longitud), identificadores de fotos internos (ej., uuid, file paths) ni nombres de motores estadísticos o variables de sistema.
+- Redacte de forma directa, ejecutiva e institucional.
+
+Estructura del Capítulo:
+
+## 5.1 Síntesis Visual Territorial
+Redacte un párrafo de síntesis ejecutiva (máximo 150 palabras) describiendo de forma agregada el entorno territorial analizado, resumiendo los principales riesgos observados y su influencia en la vigilancia natural o el control social. Apóyate en este resumen base: "${matrix.executiveAbstract}"
+
+## 5.2 Evidencia Fotográfica de Campo (Analista)
+Redacte una narrativa integrada para las siguientes fotografías tomadas por el investigador en el terreno, explicando de forma ejecutiva cómo las condiciones físicas observadas inciden en las vulnerabilidades operativas:
+${analystPhotosStr}
+
+## 5.3 Evidencia de Barrido Vial (Google Street View)
+Redacte un análisis táctico detallado y conciso sobre las siguientes imágenes de Street View seleccionadas por su alta relevancia criminógena y cercanía con hotspots:
+${streetViewStr}
+
+## 5.4 Indicadores Visuales de Grafiti Territorial
+Si está activo, analice de forma espacial el patrón repetitivo de grafitis en el sector como un indicador físico de apropiación de espacios y posible deterioro de la vigilancia natural:
+${graffitiStr}
+
+## 5.5 Conclusión Operacional
+Redacte una conclusión de carácter táctico-operativo orientada a directivas de patrullaje policial, patrullas dinámicas y remediación física ambiental de las anomalías observadas (alumbrado, cerramientos, matorrales, etc.) en un máximo de 3 párrafos.
+
 --- FIN MÓDULO ---
 `.trim();
 };
 
 /**
- * 7. CAPÍTULO 6: STREET VIEW INTELLIGENCE
+ * 7. CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD
  */
 export const StreetViewIntelligencePrompt = (ctx: ReportContext): string => {
-  const svCount = ctx.streetViews?.length || 0;
+  const tem = ctx.territorialEvidenceMatrix || {};
   return `
---- INICIO MÓDULO: STREET VIEW INTELLIGENCE (CAPÍTULO 6) ---
-Genera el Capítulo 6: "STREET VIEW INTELLIGENCE".
-Evidencias Street View en el expediente: ${svCount}.
+--- INICIO MÓDULO: ANÁLISIS TERRITORIAL OPERACIONAL (CAPÍTULO 6) ---
+Genera el Capítulo 6 del dictamen: "ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD".
 
-Instrucciones:
-- Analiza de forma exhaustiva y analítica los puntos críticos de vulnerabilidad física identificados en Street View.
-- Busca identificar factores como: puntos de ocultamiento, lugares de acecho, rutas de escape, espacios de baja visibilidad natural, inmuebles abandonados o barreras visuales.
-- Para cada hallazgo analizado, detalla obligatoriamente:
-  1. Ubicación.
-  2. Descripción física detallada.
-  3. Valoración operativa de vulnerabilidad.
-- Prohibido limitarse a decir "Se detectó mediante Street View". Se debe realizar una valoración criminológica real.
-- Incluir sello de agua institucional: "🔒 SSPE-CEIPOL".
+Estructura de Evidencia Territorial (TEM):
+${JSON.stringify(tem, null, 2)}
+
+Reglas de Generación:
+1. Divide la redacción rigurosamente en las siguientes cinco secciones oficiales, respetando sus encabezados en mayúsculas:
+   6.1 CARACTERIZACIÓN TERRITORIAL: Describe el tipo de suelo (residencial, comercial, mixto, industrial), trama vial y conectividad.
+   6.2 ESTRUCTURA URBANA Y ATRACTORES: Detalla los atractores económicos del DENUE analizados (escuelas, comercios, paradas, etc.) y su nivel de concentración temporal y movilidad.
+   6.3 CONDICIONES AMBIENTALES DEL ENTORNO: Diagnostica factores físicos (alumbrado, lotes baldíos, visibilidad) que disminuyen la vigilancia natural.
+   6.4 RELACIÓN TERRITORIO-FENÓMENO: Explica cómo interactúan las vulnerabilidades físicas detectadas con los hotspots de la SEM.
+   6.5 CONCLUSIÓN OPERATIVA: Propone las recomendaciones prioritarias para patrullaje focalizado y remediación del espacio físico.
+
+2. REGLA EDITORIAL OBLIGATORIA "Territorio no criminalizado":
+   Queda TERMINANTEMENTE PROHIBIDO utilizar términos criminalizantes como "zona criminal", "territorio controlado", "punto de venta", "área dominada", "zona de operación delictiva". 
+   En su lugar, utiliza obligatoriamente terminología de prevención situacional y diseño ambiental: "vulnerabilidad territorial", "oportunidad situacional", "concentración de actividad", "condiciones ambientales", "reducción de vigilancia natural".
+   El comercio, escuelas o parques NO deben describirse como factores criminales directos, sino como polos de atracción y concentración temporal de flujos humanos que alteran la exposición situacional.
+
+3. Máximo 2 páginas de texto, formato ejecutivo, conciso, formal e institucional. Todo elemento visual o tabla debe llevar la marca de agua: "🔒 SSPE-CEIPOL".
 --- FIN MÓDULO ---
 `.trim();
 };

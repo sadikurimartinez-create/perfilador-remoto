@@ -22,6 +22,8 @@ import { HIEValidationVectorAdapter } from "@/utils/analyticalConsistencyEngine/
 import { TerritorialContextEngine } from "@/utils/territorialContextEngine";
 import { HypothesisIntelligenceEngine } from "@/utils/hypothesisIntelligenceEngine";
 import { CartographicIntelligenceEngine } from "@/utils/cartographicIntelligenceEngine";
+import { VisualEvidenceEngine } from "@/utils/visualEvidenceEngine";
+import { TerritorialIntelligenceEngine } from "@/utils/territorialIntelligenceEngine";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -95,7 +97,7 @@ export async function POST(req: Request) {
     let sem: any = null;
     let generalRisk = "MEDIO";
 
-    if (chapter === 3 || chapter === 4 || chapter === 5) {
+    if (chapter === 3 || chapter === 4 || chapter === 5 || chapter === 6 || chapter === 7) {
       sieData = StatisticalIntelligenceEngineV2.analyze(
         safeBody.historicalIncidents || safeBody.incidenciaCompleta || [],
         lat,
@@ -172,6 +174,31 @@ export async function POST(req: Request) {
 
     let validationVector: any = null;
     let aceReport: any = null;
+    let visualEvidenceMatrix: any = null;
+    let territorialEvidenceMatrix: any = null;
+
+    if (chapter === 6 && sem) {
+      visualEvidenceMatrix = VisualEvidenceEngine.process(
+        projectId,
+        safeBody.photos || [],
+        lat,
+        lng,
+        radius,
+        sem.spatialEvidence?.hotspots || []
+      );
+    }
+
+    if (chapter === 7 && sem) {
+      const rawAttractors = safeBody.osintEngineData?.denue || safeBody.denueData || safeBody.attractors || [];
+      territorialEvidenceMatrix = TerritorialIntelligenceEngine.process(
+        { id: projectId, nombre: projectName, lat, lng, radio: radius },
+        tceData,
+        rawAttractors,
+        safeBody.inegiData,
+        safeBody.photos || [],
+        sem.spatialEvidence?.hotspots || []
+      );
+    }
 
     if (chapter === 5 && sem) {
       validationVector = HIEValidationVectorAdapter.adapt(
@@ -239,7 +266,9 @@ export async function POST(req: Request) {
       cieData,
       semData: sem,
       aceReport,
-      hieValidationVector: validationVector
+      hieValidationVector: validationVector,
+      visualEvidenceMatrix,
+      territorialEvidenceMatrix
     };
 
     // 3. Obtener el prompt del capítulo específico
@@ -276,7 +305,7 @@ export async function POST(req: Request) {
       chapter === 4 ? 'CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO' :
       chapter === 5 ? 'CAPÍTULO 4: ANÁLISIS ESTADÍSTICO' :
       chapter === 6 ? 'CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA' :
-      chapter === 7 ? 'CAPÍTULO 6: STREET VIEW INTELLIGENCE' :
+      chapter === 7 ? 'CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD' :
       chapter === 8 ? 'CAPÍTULO 7: INTELIGENCIA OSINT' :
       chapter === 9 ? 'CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS' :
       chapter === 10 ? 'CAPÍTULO 9: GRAFO DE HIPÓTESIS HIG 2.0' :
