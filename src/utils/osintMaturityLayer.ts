@@ -302,6 +302,8 @@ export interface GIMEvidenceInput {
   timestamp: string;
   confidenceWeight: number; // Factor normalizado de 0 a 1 para el GIM
   traceabilityHash: string;
+  qualityStatus: "HIGH" | "MEDIUM" | "LIMITED";
+  limitations: string[];
   metadata: {
     compositeScore: number;
     precision: "Exacta" | "Sectorizada" | "Estimada";
@@ -314,28 +316,42 @@ export class OSINTMaturityGIMAdapter {
   private static readonly CRITICAL_QUALITY_THRESHOLD = 45;
 
   /**
-   * Filtra eventos que no cumplan con el umbral de madurez institucional,
-   * previniendo que fake news o rumores contaminen el análisis de pandillas.
+   * Mantiene el 100% de los eventos para auditoría de trazabilidad completa (ADR-009.10.1.1).
+   * En lugar de eliminarlos físicamente, se conservan en el flujo de datos.
+   * Su degradación de impacto analítico (Downgrade) se realiza de forma segura en `adaptToGIM`.
    */
   public static filterLowQualityEvents(
-    events: NormalizedOSINTEventV3[],
-    customThreshold?: number
+    events: NormalizedOSINTEventV3[]
   ): NormalizedOSINTEventV3[] {
-    const threshold = customThreshold || this.CRITICAL_QUALITY_THRESHOLD;
-    
-    return events.filter(
-      (evt) => evt.reliabilityScore.compositeScore >= threshold
-    );
+    // Retorna todos los eventos para asegurar que no haya pérdida silenciosa de indicios
+    return events;
   }
 
   /**
-   * Adapta un evento enriquecido v3 al estándar de entrada transaccional del GIM (GEM)
+   * Adapta un evento enriquecido v3 al estándar de entrada transaccional del GIM (GEM).
+   * Aplica la regla de Quality Downgrade para eventos por debajo del umbral institucional (45%).
    */
   public static adaptToGIM(event: NormalizedOSINTEventV3): GIMEvidenceInput {
-    // Normalizar el compositeScore (0 - 100) a un peso decimal para el GIM (0.0 - 1.0)
-    const confidenceWeight = parseFloat(
-      (event.reliabilityScore.compositeScore / 100).toFixed(2)
-    );
+    const compositeScore = event.reliabilityScore.compositeScore;
+    let confidenceWeight = parseFloat((compositeScore / 100).toFixed(2));
+    let qualityStatus: "HIGH" | "MEDIUM" | "LIMITED" = "MEDIUM";
+    const limitations: string[] = [];
+
+    // Regla de Degradación Controlada de Calidad (Quality Downgrade - OBS-009.10.1-001)
+    if (compositeScore < this.CRITICAL_QUALITY_THRESHOLD) {
+      confidenceWeight = 0.05; // Impacto analítico prácticamente nulo
+      qualityStatus = "LIMITED";
+      limitations.push("Bajo score de calidad analítica en la Escala de Almirantazgo de la OTAN.");
+      limitations.push("Requiere verificación policial de campo antes de cualquier acción operativa.");
+    } else if (compositeScore >= 75) {
+      qualityStatus = "HIGH";
+    }
+
+    // Si no posee hash forense, marcar como limitación de integridad criptográfica
+    if (!event.traceabilityHash) {
+      qualityStatus = "LIMITED";
+      limitations.push("Falta de firma criptográfica digital (Integridad no certificada).");
+    }
 
     return {
       evidenceId: event.id,
@@ -345,8 +361,10 @@ export class OSINTMaturityGIMAdapter {
       timestamp: event.timestamp,
       confidenceWeight,
       traceabilityHash: event.traceabilityHash,
+      qualityStatus,
+      limitations,
       metadata: {
-        compositeScore: event.reliabilityScore.compositeScore,
+        compositeScore,
         precision: event.location ? event.location.precision : "Estimada",
         analystSignature: event.chainOfCustody.registeredBy,
       },
