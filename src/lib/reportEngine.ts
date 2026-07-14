@@ -559,6 +559,7 @@ export class ReportEngineKernelClass {
         this.context.reportNumber = payload.reportNumber;
         this.context.selectedAnnexes = payload.selectedAnnexes;
         this.context.includeOsintAppendix = payload.includeOsintAppendix;
+        this.context.intelligenceContext = payload.intelligenceContext;
 
         this.state = "INPUT_LOCKED";
         this.transitionsList.push("LOCK_INPUT");
@@ -615,6 +616,9 @@ export class ReportEngineKernelClass {
           this.context.reportNumber,
           this.context.user?.name || this.context.user?.username
         );
+
+        // Adjuntar el IntelligenceIntegrationContext unificado para los exportadores subsiguientes
+        editorialPayload.intelligenceContext = this.context.intelligenceContext;
 
         const briefing = buildIntelligenceBriefing(
           {
@@ -727,82 +731,39 @@ export class ReportEngineKernelClass {
           }
         }
 
-        // --- INTEGRACIÓN DEL ANALYTICAL CONSISTENCY ENGINE (ACE) ---
-        const project = this.context.project || {};
-        const incidents = project.historicalIncidents || project.incidents || [];
-        const lat = project.latitude || 21.8850;
-        const lng = project.longitude || -102.2910;
-        const radius = project.analysisRadius || 1000;
-        const projectId = project.id || "EXPEDIENTE_TACTICO";
+        // --- VALIDACIÓN DE INTEGRACIÓN MEDIANTE EL CONTRATO UNIFICADO (IIC) ---
+        const iic = this.context.intelligenceContext;
 
-        // 1. Obtener la SEM analizando e integrando
-        const sieResult = StatisticalIntelligenceEngineV2.analyze(incidents, lat, lng, radius);
-        const { sem } = StatisticalEvidenceMatrixManager.process(projectId, incidents, sieResult);
+        // Caso 5: Bloqueo de acceso legacy (si no se proporciona el IIC)
+        if (!iic) {
+          throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
+        }
 
-        // 2. Crear vector de validación HIE a través de su adaptador
-        const hypothesisText = this.context.content || "";
-        const projectDesc = project.descripcion || "";
-        const validationVector = HIEValidationVectorAdapter.adapt(hypothesisText, projectDesc);
+        const aceReport = iic.evidenceSources.ACE;
 
-        // 3. Contar mapas y gráficas en reportContext
-        const mapSnapshots = this.context.mapSnapshots || [];
-        const mapCount = mapSnapshots.filter((s: any) => {
-          const title = s.title.toLowerCase();
-          return title.includes("mapa") || title.includes("densidad") || title.includes("corredores") || title.includes("atractores") || title.includes("atracción") || title.includes("proyección") || title.includes("predicción");
-        }).length;
-        const chartsCount = mapSnapshots.filter((s: any) => {
-          const title = s.title.toLowerCase();
-          return title.includes("gráfica") || title.includes("grafica") || title.includes("topo") || title.includes("temporal") || title.includes("línea") || title.includes("linea") || title.includes("facilitadores") || title.includes("oportunidad");
-        }).length;
+        // Caso 4: Bloqueo estricto de NOT_READY / ACE FAILED
+        if (iic.analysisReadiness === "NOT_READY" || iic.qualityControl.status === "FAILED") {
+          const firstReason = aceReport?.blockingReason?.[0] || {
+            module: "ACE",
+            variable: "status",
+            expected: "PASS/WARNING",
+            received: "FAILED",
+            message: "Inconsistencia crítica o datos estadísticos insuficientes en el expediente."
+          };
+          throw new Error(`BLOQUEO DE SEGURIDAD (NOT_READY): El expediente no cumple con los requisitos metodológicos mínimos para su exportación institucional. Detalle: ${firstReason.message}`);
+        }
 
-        // 4. Armar el ACEPayload
-        const acePayload = {
-          projectId,
-          tceContext: {
-            centroid: { lat, lng },
-            radiusMeters: radius,
-            startDate: sem.temporalEvidence.temporalCoverage.startDate,
-            endDate: sem.temporalEvidence.temporalCoverage.endDate
-          },
-          sieEventsCount: incidents.length,
-          semContext: sem,
-          cieContext: {
-            centroid: { lat, lng },
-            radiusMeters: radius,
-            eventsCount: incidents.length,
-            hotspotsCount: sem.spatialEvidence.hotspots.length
-          },
-          hieContext: {
-            validationVector
-          },
-          reportContext: {
-            mapCount,
-            chartsCount,
-            startDate: sem.temporalEvidence.temporalCoverage.startDate,
-            endDate: sem.temporalEvidence.temporalCoverage.endDate,
-            eventsCount: incidents.length
-          }
-        };
-
-        // 5. Ejecutar Auditoría ACE
-        const aceReport = AnalyticalConsistencyEngine.audit(acePayload, "VALIDATE");
-
-        // 6. Inyectar el reporte ACE en el contexto de maquetación editorial para Word/PDF
+        // Inyectar el reporte ACE en el contexto de maquetación editorial para Word/PDF
         if (this.context.editorialPayload) {
           this.context.editorialPayload.aceReport = aceReport;
+          this.context.editorialPayload.intelligenceContext = iic;
         }
 
-        // 7. Bloqueo estructurado si el estatus global es FAILED
-        if (aceReport.globalStatus === "FAILED") {
-          const firstReason = aceReport.blockingReason?.[0] || { module: "UNKNOWN", variable: "unknown", expected: "", received: "", message: "Inconsistencia crítica indeterminada." };
-          throw new Error(`BLOQUEO POR INCONSISTENCIA CRÍTICA: El módulo [${firstReason.module}] (variable ${firstReason.variable}) presenta un valor recibido de ${JSON.stringify(firstReason.received)} pero se esperaba ${JSON.stringify(firstReason.expected)}. Detalle: ${firstReason.message}`);
-        }
-
-        // 8. Tratamiento WARNING o PASS con alertas: agregar bloque compacto de consistencia analítica
-        if (aceReport.globalStatus === "WARNING" || aceReport.globalStatus === "PASS") {
-          const alertsCount = aceReport.alerts.length;
+        // Tratamiento WARNING o PASS con alertas: agregar página de consistencia analítica
+        if (aceReport && (aceReport.globalStatus === "WARNING" || aceReport.globalStatus === "PASS")) {
+          const alertsCount = aceReport.alerts?.length ?? 0;
           const observation = aceReport.globalStatus === "WARNING"
-            ? (aceReport.alerts.find((a: any) => a.severity === "HIGH" || a.severity === "MEDIUM")?.message || aceReport.alerts[0]?.message || "Bajo ajuste estadístico detectado en el modelo.")
+            ? (aceReport.alerts?.find((a: any) => a.severity === "HIGH" || a.severity === "MEDIUM")?.message || aceReport.alerts?.[0]?.message || "Bajo ajuste estadístico detectado en el modelo.")
             : "No se identificaron inconsistencias técnicas ni analíticas en los datos auditados de los motores.";
 
           const consistencyPage = {

@@ -19,7 +19,8 @@ export class IntelligenceContextBuilder {
     vee: VisualEvidenceMatrix | null,
     tie: TerritorialEvidenceMatrix | null,
     hieVector: HIEValidationVector | null,
-    ace: AnalyticalConsistencyReport
+    ace: AnalyticalConsistencyReport,
+    cie: any | null = null
   ): IntelligenceIntegrationContext {
     const timestamp = new Date().toISOString();
     const version = "1.0.0";
@@ -82,7 +83,30 @@ export class IntelligenceContextBuilder {
       limitations
     };
 
-    // 5. Procedencia consolidada de la unificación
+    // 5. Determinar analysisReadiness
+    let analysisReadiness: "READY" | "READY_WITH_LIMITATIONS" | "NOT_READY" = "READY";
+    
+    const totalEvents = sem.criminalEvidence?.totalEvents ?? sem.metadata?.totalCanonicalIncidents ?? 0;
+    const isAceFailed = ace.globalStatus === "FAILED";
+    const isIntegrityBroken = ((sem.spatialEvidence?.hotspots?.length || 0) > 0) && (!tie || !tie.economicAttractors);
+
+    if (totalEvents < 5 || isAceFailed || isIntegrityBroken) {
+      analysisReadiness = "NOT_READY";
+    } else if (!capabilityStatus.visualEvidence || !capabilityStatus.territorialEvidence || !capabilityStatus.gangIntelligence || !capabilityStatus.osintEvidence || !capabilityStatus.socialIntelligence) {
+      analysisReadiness = "READY_WITH_LIMITATIONS";
+    }
+
+    // 6. Preparar contenedores de módulos
+    const intelligenceModules = {
+      statistical: true,
+      territorial: capabilityStatus.territorialEvidence,
+      visual: capabilityStatus.visualEvidence,
+      gang: capabilityStatus.gangIntelligence,
+      osint: capabilityStatus.osintEvidence,
+      social: capabilityStatus.socialIntelligence
+    };
+
+    // 7. Procedencia consolidada de la unificación
     const provenance = {
       source: "INTELLIGENCE_INTEGRATION_CONTRACT (IIC)",
       engineVersion: version,
@@ -90,7 +114,7 @@ export class IntelligenceContextBuilder {
       confidence: ace.overallConfidence ?? 90
     };
 
-    // 6. Reporte de calidad (réplica exacta de la auditoría de ACE sin duplicar lógicas)
+    // 8. Reporte de calidad (réplica exacta de la auditoría de ACE sin duplicar lógicas)
     const qualityControl = {
       status: ace.globalStatus,
       aceReference: `ACE-REF-${projectId}-${ace.metadata.auditedAt.replace(/[\/:]/g, "")}`
@@ -107,10 +131,13 @@ export class IntelligenceContextBuilder {
         VEE: vee,
         TIE: tie,
         HIE: hieVector,
+        CIE: cie,
         ACE: ace
       },
       operationalAssessment,
       capabilityStatus,
+      intelligenceModules,
+      analysisReadiness,
       provenance,
       qualityControl
     };

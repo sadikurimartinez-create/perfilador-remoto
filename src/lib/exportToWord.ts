@@ -369,15 +369,23 @@ export async function exportToWord(
     FinalReportConsistencyCheck(payload, reportNumber);
     ExecutiveReportQualityGate(payload);
     CartographicQualityGate(payload);
-    if (payload.aceReport?.globalStatus === "FAILED") {
-      const firstFailed = payload.aceReport.alerts?.find((a: any) => a.status === "FAILED") || {
+
+    // --- INTEGRACIÓN EXCLUSIVA CON EL CONTRATO UNIFICADO (IIC) ---
+    const iic = payload.intelligenceContext;
+    if (!iic) {
+      throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
+    }
+
+    if (iic.analysisReadiness === "NOT_READY" || iic.qualityControl?.status === "FAILED") {
+      const aceReport = iic.evidenceSources.ACE;
+      const firstFailed = aceReport?.alerts?.find((a: any) => a.status === "FAILED") || {
         module: "ACE",
         variable: "Global Quality Gate",
         expected: "PASS/WARNING",
         received: "FAILED",
-        message: "El expediente no cumple con los criterios mínimos de consistencia analítica."
+        message: "El expediente no cumple con los criterios mínimos de consistencia analítica o de datos de terreno."
       };
-      throw new Error(`[Bloqueo ACE] Estatus: FAILED en Módulo: ${firstFailed.module}, Variable: ${firstFailed.variable}, Esperado: ${firstFailed.expected}, Recibido: ${firstFailed.received}. Mensaje: ${firstFailed.message}`);
+      throw new Error(`[Bloqueo IIC] Estatus: NOT_READY / FAILED en Módulo: ${firstFailed.module}, Variable: ${firstFailed.variable}, Esperado: ${firstFailed.expected}, Recibido: ${firstFailed.received}. Mensaje: ${firstFailed.message}`);
     }
   } catch (err: any) {
     const msg = "Error de consistencia o calidad: " + err.message;
@@ -550,7 +558,70 @@ export async function exportToWord(
   );
 
   // --- COMPACT CONTROL DE CONSISTENCIA ANALÍTICA (ACE) CALLOUT ---
-  if (payload.aceReport) {
+  if (payload.intelligenceContext) {
+    const iic = payload.intelligenceContext;
+    const ace = iic.evidenceSources.ACE;
+    const readiness = iic.analysisReadiness;
+
+    const boxColor = readiness === "READY_WITH_LIMITATIONS" ? "D97706" : "10B981";
+    const boxTitle = readiness === "READY_WITH_LIMITATIONS" ? "⚠️ ADVERTENCIA: EXPEDIENTE CON LIMITACIONES OPERATIVAS" : "✅ EXPEDIENTE VALIDADO SIN RESTRICCIONES";
+
+    const alertsCount = ace?.alerts?.length ?? 0;
+    const observation = readiness === "READY_WITH_LIMITATIONS"
+      ? "Expediente integrado con algunas limitaciones de datos en terreno (como ausencia de registros fotográficos o módulos opcionales). Se autoriza su despliegue bajo los términos de responsabilidad institucional definidos en el perfil de geointeligencia."
+      : "Expediente de inteligencia táctica validado e integrado plenamente con consistencia analítica y certidumbre metodológica.";
+
+    const aceTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: "F9FAFB", type: ShadingType.CLEAR },
+              borders: {
+                left: { color: boxColor, space: 1, style: BorderStyle.SINGLE, size: 24 },
+                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }
+              },
+              margins: { left: 180, right: 180, top: 120, bottom: 120 },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: boxTitle, bold: true, size: 18, color: boxColor, font: "Calibri" })
+                  ],
+                  spacing: { after: 100 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Estatus de Integración: ", bold: true, size: 16 }),
+                    new TextRun({ text: `${readiness}     `, size: 16 }),
+                    new TextRun({ text: "Nivel de Confianza: ", bold: true, size: 16 }),
+                    new TextRun({ text: `${ace?.overallConfidence ?? 100}%     `, size: 16 }),
+                    new TextRun({ text: "Alertas Detectadas: ", bold: true, size: 16 }),
+                    new TextRun({ text: `${alertsCount}`, size: 16 })
+                  ],
+                  spacing: { after: 100 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "OBSERVACIÓN METODOLÓGICA INSTITUCIONAL:", bold: true, size: 16, color: "0D2B52" })
+                  ],
+                  spacing: { after: 60 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: `"${observation}"`, italic: true, size: 16 })
+                  ]
+                })
+              ]
+            })
+          ]
+        })
+      ],
+      spacing: { before: 200, after: 200 }
+    });
+    elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
+    elements.push(aceTable);
+  } else if (payload.aceReport) {
     const ace = payload.aceReport;
     const observation = ace.globalStatus === "WARNING"
       ? (ace.alerts.find((a: any) => a.severity === "HIGH" || a.severity === "MEDIUM")?.message || ace.alerts[0]?.message || "Bajo ajuste estadístico detectado en el modelo.")

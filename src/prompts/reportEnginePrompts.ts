@@ -1,44 +1,44 @@
-export interface ReportContext {
-  projectName: string;
-  projectId: string;
-  projectDescription: string;
-  analysisRadius: number;
-  geometryType: string;
-  focusAreas?: string[];
-  incidenciaLocal?: any[];
-  bibliografiaLocal?: string;
-  multimodalContext?: string;
-  osintEngineData?: any;
-  streetViews?: any[];
-  datosGobMxData?: any;
-  linkedGangReport?: any;
-  sweeps?: any[];
-  sweepsComments?: string;
-  photos?: any[];
-  analysisContext?: string;
-  sieData?: any;
-  tceData?: any;
-  hieData?: any;
-  cieData?: any;
-  semData?: any;
-  aceReport?: any;
-  hieValidationVector?: any;
-  visualEvidenceMatrix?: any;
-  territorialEvidenceMatrix?: any;
-}
+import { CEIPOLReportContext } from "../utils/intelligenceIntegrationContract/models/reportContextTypes";
+
+export type ReportContext = CEIPOLReportContext;
+
+const GLOBAL_CONTEXT_RULE = `
+REGLA ABSOLUTA DE CONTEXTO:
+Toda información analítica proviene exclusivamente del objeto IntelligenceIntegrationContext.
+El modelo generativo NO deberá:
+- calcular estadísticas;
+- generar hotspots;
+- inferir relaciones territoriales;
+- completar información faltante;
+- crear hipótesis no contenidas en el contexto;
+- modificar valores certificados.
+
+Su única función es transformar evidencia certificada en narrativa ejecutiva.
+`.trim();
 
 /**
  * 1. PORTADA + EXECUTIVE SUMMARY
  */
 export const ExecutiveSummaryPrompt = (ctx: ReportContext): string => {
+  const iic = ctx.intelligenceContext;
+  const sem = iic.evidenceSources.SEM;
+  const tie = iic.evidenceSources.TIE;
+
+  const projectName = tie?.projectName || sem.metadata?.projectId || "Zona de Estudio";
+  const projectId = iic.metadata.projectId;
+  const analysisRadius = sem.metadata?.analysisRadiusMeters || 250;
+  const geometryType = tie?.urbanStructure?.streetGridType || "polígono";
+
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: RESUMEN EJECUTIVO (PORTADA) ---
-Genera el Resumen Ejecutivo del "Informe de Geointeligencia Operativa" para el expediente "${ctx.projectName}" (Número de Expediente: ${ctx.projectId}).
+Genera el Resumen Ejecutivo del "Informe de Geointeligencia Operativa" para el expediente "${projectName}" (Número de Expediente: ${projectId}).
 
 El resumen ejecutivo debe ser sumamente analítico y formal, con un máximo de 350 palabras, y estructurarse bajo los siguientes apartados explícitos:
 
 1. ¿Qué ocurre?: Descripción del fenómeno territorial delictivo o de desorden analizado.
-2. ¿Dónde ocurre?: Ubicación exacta y delimitación geoespacial del área (Radio: ${ctx.analysisRadius}m, Cobertura: ${ctx.geometryType}).
+2. ¿Dónde ocurre?: Ubicación exacta y delimitación geoespacial del área (Radio: ${analysisRadius}m, Cobertura: ${geometryType}).
 3. ¿Qué evidencia lo sostiene?: Fuentes utilizadas para sostener el análisis (secciones de incidencia, mapas, fotografías, OSINT, Street View, pandillas, DENUE y SCINCE).
 4. ¿Cuál es el riesgo?: Clasificación formal de riesgo (BAJO, MEDIO, ALTO).
 5. ¿Qué debe hacerse?: Tres acciones prioritarias recomendadas en terreno.
@@ -55,8 +55,13 @@ Reglas:
  * 2. CAPÍTULO 1: CONTEXTO DEL ANÁLISIS
  */
 export const TerritorialAnalysisPrompt = (ctx: ReportContext): string => {
-  const tceJson = ctx.tceData ? JSON.stringify(ctx.tceData, null, 2) : "Sin datos procesados por el motor de contexto territorial TCE.";
+  const iic = ctx.intelligenceContext;
+  const tie = iic.evidenceSources.TIE;
+  const tceJson = tie ? JSON.stringify(tie, null, 2) : "Sin datos procesados por el motor de contexto territorial TCE.";
+
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: CONTEXTO DEL ANÁLISIS (CAPÍTULO 1) ---
 Genera el Capítulo 1: "CONTEXTO DEL ANÁLISIS".
 
@@ -93,8 +98,13 @@ REGLAS EDITORIALES:
  * 3. CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL
  */
 export const HypothesisPrompt = (ctx: ReportContext): string => {
-  const hieJson = ctx.hieData ? JSON.stringify(ctx.hieData, null, 2) : "Sin datos procesados por el motor de hipótesis HIE.";
+  const iic = ctx.intelligenceContext;
+  const hie = iic.evidenceSources.HIE;
+  const hieJson = hie ? JSON.stringify(hie, null, 2) : "Sin datos procesados por el motor de hipótesis HIE.";
+
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL (CAPÍTULO 2) ---
 Genera el Capítulo 2: "HIPÓTESIS CRIMINOLÓGICA AMBIENTAL".
 
@@ -144,7 +154,8 @@ REGLAS EDITORIALES:
  * 4. CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO
  */
 export const MapsInterpretationPrompt = (ctx: ReportContext): string => {
-  const cie = ctx.cieData || {};
+  const iic = ctx.intelligenceContext;
+  const cie = iic.evidenceSources.CIE || {};
   const spatialPattern = cie.spatialPattern || {};
   const density = cie.densityAnalysis || {};
   const mobility = cie.mobilityAnalysis || {};
@@ -165,7 +176,7 @@ export const MapsInterpretationPrompt = (ctx: ReportContext): string => {
       confidence: `Nivel de confianza geoespacial: ${confidence.level || "MEDIO"} (Score: ${confidence.score || 50}/100)`
     },
     mobilityMap: {
-      finding: `Presencia de ${mobility.corridors?.length || 0} corredores tácticos de movilidad delictiva radiales detectados.`,
+      finding: `Presencia de ${mobility.corridors?.length || 0} corridors tácticos de movilidad delictiva radiales detectados.`,
       evidence: (mobility.corridors || []).map((c: any) => c.description).join(" "),
       confidence: `Nivel de accesibilidad territorial calculado en ${mobility.accessibilityScore || 100}%`
     },
@@ -182,6 +193,8 @@ export const MapsInterpretationPrompt = (ctx: ReportContext): string => {
   };
 
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: ANÁLISIS TERRITORIAL CARTOGRÁFICO (CAPÍTULO 3) ---
 Genera el Capítulo 3: "ANÁLISIS TERRITORIAL CARTOGRÁFICO".
 
@@ -201,7 +214,7 @@ Instrucciones de Redacción:
   - [Interpretación criminológica]
   - [Impacto operativo]
 - No utilices etiquetas Markdown adicionales (*, _, \`) en los apartados.
-- Añade el sello de agua: "🔒 SSPE-CEIPOL" al final del capítulo.
+- Enmarca todo elemento visual con la marca de agua: "🔒 SSPE-CEIPOL".
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -210,24 +223,31 @@ Instrucciones de Redacción:
  * 5. CAPÍTULO 4: ANÁLISIS ESTADÍSTICO
  */
 export const GraphAnalysisPrompt = (ctx: ReportContext): string => {
-  const eventsCount = ctx.semData?.totalCanonicalIncidents ?? ctx.incidenciaLocal?.length ?? 0;
+  const iic = ctx.intelligenceContext;
+  const sem = iic.evidenceSources.SEM;
+  const ace = iic.evidenceSources.ACE;
+  const hie = iic.evidenceSources.HIE;
+
+  const eventsCount = sem?.criminalEvidence?.totalEvents ?? sem?.metadata?.totalCanonicalIncidents ?? 0;
   
   if (eventsCount < 5) {
     return "Evidencia estadística insuficiente para establecer una inferencia táctica válida en el polígono seleccionado.";
   }
 
-  const semJson = ctx.semData ? JSON.stringify(ctx.semData, null, 2) : "Sin datos procesados en la SEM.";
-  const aceJson = ctx.aceReport ? JSON.stringify({
-    globalStatus: ctx.aceReport.globalStatus,
-    overallConfidence: ctx.aceReport.overallConfidence,
-    alertsCount: ctx.aceReport.alerts?.length ?? 0
+  const semJson = sem ? JSON.stringify(sem, null, 2) : "Sin datos procesados en la SEM.";
+  const aceJson = ace ? JSON.stringify({
+    globalStatus: ace.globalStatus,
+    overallConfidence: ace.overallConfidence,
+    alertsCount: ace.alerts?.length ?? 0
   }, null, 2) : "Sin datos del Quality Gate ACE.";
-  const hieJson = ctx.hieValidationVector ? JSON.stringify(ctx.hieValidationVector, null, 2) : "Sin vector de validación HIE.";
+  const hieJson = hie ? JSON.stringify(hie, null, 2) : "Sin vector de validación HIE.";
 
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: ANÁLISIS ESTADÍSTICO (CAPÍTULO 4) ---
-Genera el CAPÍTULO 4: "ANÁLISIS ESTADÍSTICO DEL FENÓMENO DELICTIVO" para el expediente "${ctx.projectName}" (ID: ${ctx.projectId}).
-Radio de análisis: ${ctx.analysisRadius} metros.
+Genera el CAPÍTULO 4: "ANÁLISIS ESTADÍSTICO DEL FENÓMENO DELICTIVO" para el expediente "${iic.evidenceSources.TIE?.projectName || "Expediente"}" (ID: ${iic.metadata.projectId}).
+Radio de análisis: ${sem.metadata?.analysisRadiusMeters || 250} metros.
 
 DATOS CERTIFICADOS DE ENTRADA:
 
@@ -286,9 +306,12 @@ Restricción de Extensión: La narrativa completa debe ser profunda, precisa y e
  * 6. CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA
  */
 export const EvidenceAnalysisPrompt = (ctx: ReportContext): string => {
-  const matrix = ctx.visualEvidenceMatrix;
+  const iic = ctx.intelligenceContext;
+  const matrix = iic.evidenceSources.VEE;
   if (!matrix) {
     return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL (CAPÍTULO 5) ---
 No se cargó evidencia de campo ni se detectaron anomalías en el barrido territorial.
 --- FIN MÓDULO ---
@@ -323,6 +346,8 @@ No se cargó evidencia de campo ni se detectaron anomalías en el barrido territ
     : "No se identificaron patrones densos ni repetitivos de grafiti territorial en el área de interés.";
 
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL (CAPÍTULO 5) ---
 Genera el Capítulo 5: "EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL".
 
@@ -360,8 +385,12 @@ Redacte una conclusión de carácter táctico-operativo orientada a directivas d
  * 7. CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD
  */
 export const StreetViewIntelligencePrompt = (ctx: ReportContext): string => {
-  const tem = ctx.territorialEvidenceMatrix || {};
+  const iic = ctx.intelligenceContext;
+  const tem = iic.evidenceSources.TIE || {};
+
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: ANÁLISIS TERRITORIAL OPERACIONAL (CAPÍTULO 6) ---
 Genera el Capítulo 6 del dictamen: "ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD".
 
@@ -390,6 +419,10 @@ Reglas de Generación:
  * 8. CAPÍTULO 7: INTELIGENCIA OSINT
  */
 export const OSINTAnalysisPrompt = (ctx: ReportContext): string => {
+  const iic = ctx.intelligenceContext;
+  const sem = iic.evidenceSources.SEM;
+  const analysisRadius = sem.metadata?.analysisRadiusMeters || 250;
+
   const sweepSummary = ctx.sweeps && ctx.sweeps.length > 0
     ? ctx.sweeps.slice(0, 10).map(s => `- [${s.engine || s.source}]: ${(s.data || "").slice(0, 200)}`).join("\n")
     : "Sin barridos OSINT integrados en el expediente.";
@@ -399,9 +432,11 @@ export const OSINTAnalysisPrompt = (ctx: ReportContext): string => {
     : "Sin reporte de pandillas.";
 
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: INTELIGENCIA OSINT (CAPÍTULO 7) ---
 Genera el Capítulo 7: "INTELIGENCIA OSINT".
-Radio de análisis: ${ctx.analysisRadius} metros.
+Radio de análisis: ${analysisRadius} metros.
 Datos de entrada OSINT: "${ctx.osintEngineData ? JSON.stringify(ctx.osintEngineData) : 'Sin barrido directo disponible.'}"
 Barridos integrados al expediente:
 ${sweepSummary}
@@ -413,7 +448,7 @@ REGLA CRÍTICA DE COHERENCIA DE PANDILLAS (MÚLTIPLES BARRIDOS):
 Si el Resultado del Barrido de Pandillas indica que no hay presencia de pandillas (matched_gangs vacío, o confidencescore / confidence de 0, o riesgo LOW), queda TERMINANTEMENTE PROHIBIDO que el análisis OSINT invente, mencione o infiera la presencia, control territorial o actividad de pandillas específicas (tales como "ZKL13", "LOS 90", "La Clica Palomino Dena", "Benito Palomino Sur Gang" o cualquier otra) en el área de análisis.
 Si el barrido es negativo o de bajo riesgo, el dictamen OSINT debe ser consistente: debe limitarse a reportar la actividad de delincuencia común (robo a transeúnte, robo de vehículos, asalto peatonal) y flujos comerciales, pero SIN asociarla a pandillas u organizaciones delictivas locales. Prioriza siempre la coherencia del expediente.
 
-REGLA CRÍTICA GENERAL: Prohibido redactar afirmaciones abstractas. Cada conclusión debe ser inteligencia operativa verificable.
+REGLA CRÍTICA GENERAL: Prohibido redactar afirmaciones abstractas. Cada conclusión debe ser inteligencia operativa de campo verificable.
 
 Estructura OBLIGATORIA (usar exactamente estos encabezados):
 
@@ -446,16 +481,22 @@ Ejemplo de calidad mínima aceptable:
  * 9. CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS
  */
 export const GangAnalysisPrompt = (ctx: ReportContext): string => {
+  const iic = ctx.intelligenceContext;
+  const sem = iic.evidenceSources.SEM;
+  const analysisRadius = sem.metadata?.analysisRadiusMeters || 250;
+
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: ACTORES TERRITORIALES Y PANDILLAS (CAPÍTULO 8) ---
 Genera el Capítulo 8: "ACTORES TERRITORIALES Y PANDILLAS".
-Radio de análisis: ${ctx.analysisRadius} metros.
+Radio de análisis: ${analysisRadius} metros.
 Datos de pandilla vinculada: ${ctx.linkedGangReport ? JSON.stringify(ctx.linkedGangReport) : 'Ninguno.'}
 
 Instrucciones:
 - Regla Crítica: Prohibido afirmar presencia territorial de grupos de riesgo por simple coincidencia nominal.
 - Regla Geoespacial: Prohibido incluir actores cuya distancia al epicentro no esté calculada con coordenadas geográficas reales (Haversine). No asignar distancia únicamente por colonia.
-- Solo incluir integrantes con domicilio geocodificado verificable dentro del radio de ${ctx.analysisRadius} metros.
+- Solo incluir integrantes con domicilio geocodificado verificable dentro del radio de ${analysisRadius} metros.
 - Audita y valida la vinculación respondiendo a:
   1. ¿La pandilla tiene zona de influencia activa dentro del área analizada?
   2. ¿Existe algún integrante plenamente identificado en el área?
@@ -472,6 +513,8 @@ Instrucciones:
  */
 export const HIGGraphPrompt = (ctx: ReportContext): string => {
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: GRAFO DE HIPÓTESIS HIG 2.0 (CAPÍTULO 9) ---
 Genera el Capítulo 9: "GRAFO DE HIPÓTESIS HIG 2.0".
 
@@ -497,6 +540,8 @@ Instrucciones:
  */
 export const OperationalConclusionPrompt = (ctx: ReportContext): string => {
   return `
+${GLOBAL_CONTEXT_RULE}
+
 --- INICIO MÓDULO: CONCLUSIONES OPERATIVAS (CAPÍTULO 10) ---
 Genera el Capítulo 10: "CONCLUSIONES OPERATIVAS".
 

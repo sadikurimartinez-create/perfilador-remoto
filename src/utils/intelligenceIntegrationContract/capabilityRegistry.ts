@@ -32,7 +32,8 @@ export class CapabilityRegistry {
       visualEvidence: hasVisual,
       territorialEvidence: hasTerritorial,
       gangIntelligence: false, // Futuro Módulo (Capítulo 7.2)
-      osintEvidence: false     // Futuro Módulo (Capítulo 8)
+      osintEvidence: false,     // Futuro Módulo (Capítulo 8)
+      socialIntelligence: false  // Futuro Módulo (Capítulo 7.1)
     };
   }
 }

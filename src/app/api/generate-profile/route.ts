@@ -24,6 +24,8 @@ import { HypothesisIntelligenceEngine } from "@/utils/hypothesisIntelligenceEngi
 import { CartographicIntelligenceEngine } from "@/utils/cartographicIntelligenceEngine";
 import { VisualEvidenceEngine } from "@/utils/visualEvidenceEngine";
 import { TerritorialIntelligenceEngine } from "@/utils/territorialIntelligenceEngine";
+import { IntelligenceContextBuilder } from "@/utils/intelligenceIntegrationContract/intelligenceContextBuilder";
+import { ReportContextAdapter } from "@/utils/intelligenceIntegrationContract/reportContextAdapter";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -235,41 +237,39 @@ export async function POST(req: Request) {
       aceReport = AnalyticalConsistencyEngine.audit(acePayload, "VALIDATE");
     }
 
-    // 2. Construir el contexto simplificado para los prompts modulares
-    const ctx: ReportContext = {
-      projectName,
-      projectId,
-      projectDescription,
-      analysisRadius: radius,
-      geometryType: geometry,
-      focusAreas: safeBody.focusAreas,
-      incidenciaLocal: safeBody.incidenciaLocal
-        ? safeBody.incidenciaLocal.slice(0, 45).map((c: any) => ({
-            delito: c.INCIDENTE || c.tipo || c.delito || "Delito",
-            distancia: c.distancia_m || c.distancia || 0,
-            fecha: c.FECHA || c.fecha || ""
-          }))
-        : [],
-      bibliografiaLocal: typeof safeBody.bibliografiaLocal === "string" ? safeBody.bibliografiaLocal.slice(0, 500) : "",
-      multimodalContext: typeof safeBody.multimodalContext === "string" ? safeBody.multimodalContext.slice(0, 500) : "",
-      osintEngineData: simplifyOsintData(safeBody.osintEngineData),
-      streetViews: safeBody.streetViews ? safeBody.streetViews.slice(0, 5) : [],
-      datosGobMxData: null,
-      linkedGangReport: safeBody.linkedGangReport,
-      sweeps: simplifySweeps(safeBody.sweeps),
-      sweepsComments: typeof safeBody.sweepsComments === "string" ? safeBody.sweepsComments.slice(0, 500) : "",
-      photos: safeBody.photos ? safeBody.photos.slice(0, 5).map((p: any) => ({ ...p, dataUrl: "" })) : [],
-      analysisContext: typeof safeBody.analysisContext === "string" ? safeBody.analysisContext.slice(0, 800) : "",
-      sieData,
-      tceData,
-      hieData,
-      cieData,
-      semData: sem,
-      aceReport,
-      hieValidationVector: validationVector,
-      visualEvidenceMatrix,
-      territorialEvidenceMatrix
+    // 2. Construir el IntelligenceIntegrationContext unificado (IIC) antes del motor editorial
+    const safeAceReport = aceReport || {
+      globalStatus: "PASS",
+      overallConfidence: 100,
+      alerts: [],
+      metadata: { auditedAt: new Date().toISOString() }
     };
+
+    const safeSem = sem || {
+      metadata: { projectId, totalCanonicalIncidents: 0, analysisRadiusMeters: radius },
+      criminalEvidence: { totalEvents: 0, dominantCrime: "Ninguno" },
+      temporalEvidence: { temporalCoverage: { startDate: "", endDate: "" } },
+      spatialEvidence: { hotspots: [], hotspotsCount: 0 }
+    };
+
+    const iic = IntelligenceContextBuilder.build(
+      projectId,
+      safeSem,
+      visualEvidenceMatrix,
+      territorialEvidenceMatrix,
+      hieData,
+      safeAceReport,
+      cieData
+    );
+
+    const ctx = ReportContextAdapter.adapt(iic, {
+      chapterId: String(chapter),
+      reportMode: "FULL",
+      includeOsintAppendix: true,
+      sweeps: simplifySweeps(safeBody.sweeps),
+      linkedGangReport: safeBody.linkedGangReport,
+      osintEngineData: simplifyOsintData(safeBody.osintEngineData)
+    });
 
     // 3. Obtener el prompt del capítulo específico
     let sectionPrompt = "";

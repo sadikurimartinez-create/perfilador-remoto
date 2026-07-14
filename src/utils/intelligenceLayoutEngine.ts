@@ -391,6 +391,7 @@ export interface IntelligenceReportPayload {
   semData?: any;
   aceReport?: any;
   visualEvidenceMatrix?: any;
+  intelligenceContext?: any;
 }
 
 /**
