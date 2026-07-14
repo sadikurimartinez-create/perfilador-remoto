@@ -121,7 +121,17 @@ export class TemporalIntelligence {
    * Calcula la regresión robusta de Theil-Sen.
    */
   private static calculateTheilSen(timeline: { dateStr: string; dateObj: Date; count: number }[]) {
-    const n = timeline.length;
+    // Robustecimiento y Blindaje ante RangeError (Invalid array length):
+    // Si la serie diaria es demasiado grande (por ejemplo, por registros históricos con fechas corruptas/nulas),
+    // realizamos un remuestreo sistemático seguro a un máximo de 200 puntos representativos
+    // para evitar el desborde exponencial en memoria y CPU del bucle anidado.
+    let sampledTimeline = timeline;
+    if (timeline.length > 200) {
+      const step = Math.ceil(timeline.length / 200);
+      sampledTimeline = timeline.filter((_, idx) => idx % step === 0);
+    }
+
+    const n = sampledTimeline.length;
     if (n < 2) {
       return { trendSlope: 0, trendDirection: "stable" as const, confidence: 0 };
     }
@@ -130,7 +140,7 @@ export class TemporalIntelligence {
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const dx = j - i;
-        const dy = timeline[j].count - timeline[i].count;
+        const dy = sampledTimeline[j].count - sampledTimeline[i].count;
         slopes.push(dy / dx);
       }
     }
@@ -143,7 +153,7 @@ export class TemporalIntelligence {
     let discordant = 0;
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        const dy = timeline[j].count - timeline[i].count;
+        const dy = sampledTimeline[j].count - sampledTimeline[i].count;
         if (dy > 0) concordant++;
         else if (dy < 0) discordant++;
       }

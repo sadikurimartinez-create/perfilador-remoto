@@ -1296,8 +1296,10 @@ const hasMinimumPhotos =
             const text = res ? await res.text().catch(() => "") : "";
             let msg = `Error al generar el capítulo ${ch} de la IA tras varios reintentos`;
             try {
-              const json = JSON.parse(text) as { error?: string };
-              if (json && json.error) msg = json.error;
+              const json = JSON.parse(text) as { error?: string; details?: string };
+              if (json && json.error) {
+                msg = json.error + (json.details ? ` | Detalles técnicos: ${json.details}` : "");
+              }
             } catch {}
             throw new Error(msg);
           }
