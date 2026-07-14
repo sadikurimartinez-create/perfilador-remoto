@@ -4,6 +4,11 @@ import { buildIntelligenceBriefing, loadPublicImageAsDataUrl, IntelligenceBriefi
 import { ReportQualityGate } from "@/utils/reportQualityGate";
 import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { StatisticalIntelligenceEngineV2 } from "@/utils/statisticalIntelligenceEngineV2";
+import { StatisticalEvidenceMatrixManager } from "@/utils/statisticalEvidenceMatrix";
+import { HIEValidationVectorAdapter } from "@/utils/analyticalConsistencyEngine/hieValidationVectorAdapter";
+import { AnalyticalConsistencyEngine } from "@/utils/analyticalConsistencyEngine";
+
 
 type FinalizeOptions = {
   project: any;
@@ -722,6 +727,101 @@ export class ReportEngineKernelClass {
           }
         }
 
+        // --- INTEGRACIÓN DEL ANALYTICAL CONSISTENCY ENGINE (ACE) ---
+        const project = this.context.project || {};
+        const incidents = project.historicalIncidents || project.incidents || [];
+        const lat = project.latitude || 21.8850;
+        const lng = project.longitude || -102.2910;
+        const radius = project.analysisRadius || 1000;
+        const projectId = project.id || "EXPEDIENTE_TACTICO";
+
+        // 1. Obtener la SEM analizando e integrando
+        const sieResult = StatisticalIntelligenceEngineV2.analyze(incidents, lat, lng, radius);
+        const { sem } = StatisticalEvidenceMatrixManager.process(projectId, incidents, sieResult);
+
+        // 2. Crear vector de validación HIE a través de su adaptador
+        const hypothesisText = this.context.content || "";
+        const projectDesc = project.descripcion || "";
+        const validationVector = HIEValidationVectorAdapter.adapt(hypothesisText, projectDesc);
+
+        // 3. Contar mapas y gráficas en reportContext
+        const mapSnapshots = this.context.mapSnapshots || [];
+        const mapCount = mapSnapshots.filter((s: any) => {
+          const title = s.title.toLowerCase();
+          return title.includes("mapa") || title.includes("densidad") || title.includes("corredores") || title.includes("atractores") || title.includes("atracción") || title.includes("proyección") || title.includes("predicción");
+        }).length;
+        const chartsCount = mapSnapshots.filter((s: any) => {
+          const title = s.title.toLowerCase();
+          return title.includes("gráfica") || title.includes("grafica") || title.includes("topo") || title.includes("temporal") || title.includes("línea") || title.includes("linea") || title.includes("facilitadores") || title.includes("oportunidad");
+        }).length;
+
+        // 4. Armar el ACEPayload
+        const acePayload = {
+          projectId,
+          tceContext: {
+            centroid: { lat, lng },
+            radiusMeters: radius,
+            startDate: sem.temporalEvidence.temporalCoverage.startDate,
+            endDate: sem.temporalEvidence.temporalCoverage.endDate
+          },
+          sieEventsCount: incidents.length,
+          semContext: sem,
+          cieContext: {
+            centroid: { lat, lng },
+            radiusMeters: radius,
+            eventsCount: incidents.length,
+            hotspotsCount: sem.spatialEvidence.hotspots.length
+          },
+          hieContext: {
+            validationVector
+          },
+          reportContext: {
+            mapCount,
+            chartsCount,
+            startDate: sem.temporalEvidence.temporalCoverage.startDate,
+            endDate: sem.temporalEvidence.temporalCoverage.endDate,
+            eventsCount: incidents.length
+          }
+        };
+
+        // 5. Ejecutar Auditoría ACE
+        const aceReport = AnalyticalConsistencyEngine.audit(acePayload, "VALIDATE");
+
+        // 6. Inyectar el reporte ACE en el contexto de maquetación editorial para Word/PDF
+        if (this.context.editorialPayload) {
+          this.context.editorialPayload.aceReport = aceReport;
+        }
+
+        // 7. Bloqueo estructurado si el estatus global es FAILED
+        if (aceReport.globalStatus === "FAILED") {
+          const firstReason = aceReport.blockingReason?.[0] || { module: "UNKNOWN", variable: "unknown", expected: "", received: "", message: "Inconsistencia crítica indeterminada." };
+          throw new Error(`BLOQUEO POR INCONSISTENCIA CRÍTICA: El módulo [${firstReason.module}] (variable ${firstReason.variable}) presenta un valor recibido de ${JSON.stringify(firstReason.received)} pero se esperaba ${JSON.stringify(firstReason.expected)}. Detalle: ${firstReason.message}`);
+        }
+
+        // 8. Tratamiento WARNING o PASS con alertas: agregar bloque compacto de consistencia analítica
+        if (aceReport.globalStatus === "WARNING" || aceReport.globalStatus === "PASS") {
+          const alertsCount = aceReport.alerts.length;
+          const observation = aceReport.globalStatus === "WARNING"
+            ? (aceReport.alerts.find((a: any) => a.severity === "HIGH" || a.severity === "MEDIUM")?.message || aceReport.alerts[0]?.message || "Bajo ajuste estadístico detectado en el modelo.")
+            : "No se identificaron inconsistencias técnicas ni analíticas en los datos auditados de los motores.";
+
+          const consistencyPage = {
+            id: "ace-consistency-page",
+            title: "Control de Consistencia Analítica (ACE)",
+            mode: "executive" as const,
+            interpretation: `Estatus de Calidad: ${aceReport.globalStatus === "WARNING" ? "ADVERTENCIA (WARN)" : "VALIDADO (PASS)"}\nNivel de Confianza Global: ${aceReport.overallConfidence}%\nValidaciones de Coherencia Ejecutadas: 5 de 5\nAlertas de Coherencia Detectadas: ${alertsCount}\n\nOBSERVACIÓN METODOLÓGICA INSTITUCIONAL:\n"${observation}"`,
+            visuals: []
+          };
+          
+          // Insertar la página de consistencia justo después del resumen ejecutivo
+          const pages = this.context.briefing?.pages || [];
+          if (pages.length > 2) {
+            pages.splice(2, 0, consistencyPage);
+          } else {
+            pages.push(consistencyPage);
+          }
+        }
+
         const analyticalPageCount = this.context.briefing?.pages?.filter((p: any) =>
           p.mode === 'cover' || p.mode === 'hypothesis' || p.mode === 'executive' || p.mode === 'trazabilidad' || p.mode === 'text' || p.mode === 'conclusions'
         ).length || 0;
@@ -737,6 +837,7 @@ export class ReportEngineKernelClass {
         this.transitionsList.push("VALIDATE_KERNEL");
         this.takeSnapshot();
         this.notify();
+
         break;
 
       case "EXECUTE_EXPORT":

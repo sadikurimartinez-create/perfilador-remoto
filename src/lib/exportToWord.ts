@@ -538,6 +538,66 @@ export async function exportToWord(
       ]
     })
   );
+
+  // --- COMPACT CONTROL DE CONSISTENCIA ANALÍTICA (ACE) CALLOUT ---
+  if (payload.aceReport) {
+    const ace = payload.aceReport;
+    const observation = ace.globalStatus === "WARNING"
+      ? (ace.alerts.find((a: any) => a.severity === "HIGH" || a.severity === "MEDIUM")?.message || ace.alerts[0]?.message || "Bajo ajuste estadístico detectado en el modelo.")
+      : "No se identificaron inconsistencias técnicas ni analíticas en los datos auditados.";
+
+    const aceTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              shading: { fill: "F9FAFB", type: ShadingType.CLEAR },
+              borders: {
+                left: { color: ace.globalStatus === "WARNING" ? "D97706" : "10B981", space: 1, style: BorderStyle.SINGLE, size: 24 },
+                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }
+              },
+              margins: { left: 180, right: 180, top: 120, bottom: 120 },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "⚠️ CONTROL DE CONSISTENCIA ANALÍTICA (ACE)", bold: true, size: 18, color: ace.globalStatus === "WARNING" ? "D97706" : "10B981", font: "Calibri" })
+                  ],
+                  spacing: { after: 100 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Estatus de Calidad: ", bold: true, size: 16 }),
+                    new TextRun({ text: `${ace.globalStatus === "WARNING" ? "ADVERTENCIA (WARN)" : "VALIDADO (PASS)"}     `, size: 16 }),
+                    new TextRun({ text: "Nivel de Confianza: ", bold: true, size: 16 }),
+                    new TextRun({ text: `${ace.overallConfidence}%     `, size: 16 }),
+                    new TextRun({ text: "Alertas Detectadas: ", bold: true, size: 16 }),
+                    new TextRun({ text: `${ace.alerts.length}`, size: 16 })
+                  ],
+                  spacing: { after: 100 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "OBSERVACIÓN METODOLÓGICA INSTITUCIONAL:", bold: true, size: 16, color: "0D2B52" })
+                  ],
+                  spacing: { after: 60 }
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: `"${observation}"`, italic: true, size: 16 })
+                  ]
+                })
+              ]
+            })
+          ]
+        })
+      ],
+      spacing: { before: 200, after: 200 }
+    });
+    elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
+    elements.push(aceTable);
+  }
+
   elements.push(new Paragraph({ pageBreakBefore: true }));
   elements.push(createTitle("CAPÍTULO 1: CONTEXTO DEL ANÁLISIS"));
   elements.push(createBodyText(payload.contextoTerritorial));

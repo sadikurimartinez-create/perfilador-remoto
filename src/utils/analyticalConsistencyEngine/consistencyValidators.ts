@@ -283,7 +283,26 @@ export class ConsistencyValidators {
       });
     }
 
+    // Detectar contradicciones de patrones predictivos (WARNING predictivo)
+    const semPoisson = payload.semContext.predictiveEvidence.poissonProbability;
+    const hieOpportunity = payload.hieContext.validationVector.criticalOpportunity;
+
+    if (semPoisson < 0.30 && hieOpportunity === "HIGH") {
+      overallStatus = "WARNING";
+      hypothesisContradictory = true;
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "ANALYTICAL",
+        message: `Contradicción predictiva: El HIE califica la oportunidad crítica como ALTA (HIGH), pero el modelo predictivo Poisson de la SEM estima una probabilidad de evento muy baja (${(semPoisson * 100).toFixed(1)}%).`,
+        severity: "MEDIUM",
+        source: "HIE-SEM-PREDICTIVE-CROSS",
+        expected: "LOW/MEDIUM",
+        received: "HIGH"
+      });
+    }
+
     return { status: overallStatus, hypothesisContradictory };
+
   }
 
   /**

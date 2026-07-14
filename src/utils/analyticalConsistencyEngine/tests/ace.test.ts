@@ -193,6 +193,34 @@ export function runAceTests() {
   console.log(`  └─> Motivo: ${report6.blockingReason![0].message}`);
 
   // =========================================================================
+  // PRUEBA 7: Contradicción Predictiva (WARNING predictivo esperado)
+  // =========================================================================
+  const predictiveWarningPayload: ACEPayload = {
+    ...consistentPayload,
+    semContext: {
+      ...mockPaseosSem,
+      predictiveEvidence: {
+        ...mockPaseosSem.predictiveEvidence,
+        poissonProbability: 0.15 // Probabilidad baja (< 0.30)
+      }
+    },
+    hieContext: {
+      validationVector: {
+        spatialPattern: "CONCENTRATED",
+        temporalPattern: "SEASONAL",
+        criticalOpportunity: "HIGH" // Contradicción: oportunidad ALTA pero probabilidad BAJA
+      }
+    }
+  };
+
+  const report7 = AnalyticalConsistencyEngine.audit(predictiveWarningPayload, "EXPORT");
+  console.assert(report7.globalStatus === "WARNING", `Prueba 7 falló. Esperado "WARNING", obtenido "${report7.globalStatus}"`);
+  console.assert(report7.criminologicalConsistency.status === "WARNING", "Prueba 7 falló. Se esperaba WARNING en validación predictiva/criminológica.");
+  console.assert(report7.alerts.some(a => a.source === "HIE-SEM-PREDICTIVE-CROSS"), "Prueba 7 falló. Se esperaba una alerta de contradicción predictiva.");
+  console.log(`[PASS] Prueba 7: Advertencia analítica por contradicción predictiva detectada.`);
+  console.log(`  └─> Alerta: ${report7.alerts.find(a => a.source === "HIE-SEM-PREDICTIVE-CROSS")!.message}`);
+
+  // =========================================================================
   // AUDITORÍA HISTÓRICA: Verificar registro de historial (Ajuste 5)
   // =========================================================================
   const lastReport = report6;
