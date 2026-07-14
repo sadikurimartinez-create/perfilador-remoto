@@ -33,6 +33,7 @@ export class AnalyticalConsistencyEngine {
     const temporal = ConsistencyValidators.validateTemporal(payload, alerts, blockingReasons);
     const criminological = ConsistencyValidators.validateCriminological(payload, alerts, blockingReasons);
     const document = ConsistencyValidators.validateDocument(payload, alerts, blockingReasons);
+    const gang = ConsistencyValidators.validateGangConsistency(payload, alerts, blockingReasons);
 
     // 2. Determinar Estatus Global de Calidad
     let globalStatus: "PASS" | "WARNING" | "FAILED" = "PASS";
@@ -40,7 +41,8 @@ export class AnalyticalConsistencyEngine {
       quantitative.status === "FAILED" ||
       spatial.status === "FAILED" ||
       temporal.status === "FAILED" ||
-      document.status === "FAILED"
+      document.status === "FAILED" ||
+      gang.status === "FAILED"
     ) {
       globalStatus = "FAILED";
     } else if (
@@ -48,7 +50,8 @@ export class AnalyticalConsistencyEngine {
       spatial.status === "WARNING" ||
       temporal.status === "WARNING" ||
       criminological.status === "WARNING" ||
-      document.status === "WARNING"
+      document.status === "WARNING" ||
+      gang.status === "WARNING"
     ) {
       globalStatus = "WARNING";
     }

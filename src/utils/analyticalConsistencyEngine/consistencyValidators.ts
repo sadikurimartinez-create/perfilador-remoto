@@ -358,4 +358,161 @@ export class ConsistencyValidators {
 
     return { status: overallStatus, mapsOrChartsInconsistent };
   }
+
+  /**
+   * FASE 3: Valida la gobernanza, lenguaje y consistencia metodológica de la GangEvidenceMatrix adaptada (GIM).
+   * No emite juicios criminológicos directos, evaluando únicamente la coherencia institucional del lenguaje
+   * y la proporcionalidad de las conclusiones de acuerdo con la Regla ACE-GIM-003.
+   */
+  public static validateGangConsistency(
+    payload: ACEPayload,
+    alerts: ACEAlert[],
+    blockingReasons: ACEBlockingReason[]
+  ): { status: "PASS" | "WARNING" | "FAILED" } {
+    const gim = payload.gimContext;
+    if (!gim) {
+      // Expedientes históricos sin GIM pasan de forma retrocompatible
+      return { status: "PASS" };
+    }
+
+    let overallStatus: "PASS" | "WARNING" | "FAILED" = "PASS";
+
+    // 1. Lenguaje Institucional y Neutralidad (Presunción de Inocencia)
+    const forbiddenPhrasesFailed = ["pertenece a la pandilla", "miembro confirmado"];
+    const forbiddenPhrasesWarning = ["controla territorio", "zona dominada"];
+
+    // Inspeccionar descripciones analíticas y factuales
+    const allTexts = [...gim.evidenceDescriptions, ...gim.analyticalObservations];
+
+    for (const text of allTexts) {
+      const lowerText = text.toLowerCase();
+      
+      // Buscar violaciones críticas (FAILED)
+      for (const phrase of forbiddenPhrasesFailed) {
+        if (lowerText.includes(phrase)) {
+          overallStatus = "FAILED";
+          alerts.push({
+            type: "CRIMINOLOGICAL",
+            category: "ANALYTICAL",
+            message: `Violación de neutralidad lingüística: Se identificó la expresión restrictiva '${phrase}' en las aserciones de GIM, violando la presunción de inocencia de la SSPE.`,
+            severity: "HIGH",
+            source: "GIM-ACE Auditor",
+            expected: "Lenguaje descriptivo e institucional neutro",
+            received: text
+          });
+
+          // Agregar razón de bloqueo si no está duplicada
+          if (!blockingReasons.some(r => r.variable === "styleJargonConstraint")) {
+            blockingReasons.push({
+              module: "CRIMINOLOGICAL",
+              variable: "styleJargonConstraint",
+              expected: "Uso de lenguaje de grupo de atención especial y presunción de inocencia",
+              received: text,
+              message: `El dictamen contiene juicios penales incriminatorios prohibidos por la SSPE ('${phrase}'). Debe ajustarse el texto antes de certificar el expediente.`
+            });
+          }
+        }
+      }
+
+      // Buscar advertencias (WARNING)
+      for (const phrase of forbiddenPhrasesWarning) {
+        if (lowerText.includes(phrase)) {
+          if (overallStatus !== "FAILED") overallStatus = "WARNING";
+          alerts.push({
+            type: "CRIMINOLOGICAL",
+            category: "ANALYTICAL",
+            message: `Advertencia de neutralidad: Se detectó jerga de dominación física '${phrase}'. Se recomienda reemplazar por 'zona de influencia analítica' o 'factores de oportunidad'.`,
+            severity: "MEDIUM",
+            source: "GIM-ACE Auditor",
+            expected: "Neutralidad de control físico perimetral",
+            received: text
+          });
+        }
+      }
+    }
+
+    // 2. Proporcionalidad Evidencia-Conclusión
+    // Si tenemos un grafiti aislado (<= 1) pero el texto describe un control territorial absoluto
+    const hasAbsoluteNarrative = allTexts.some(text => {
+      const lower = text.toLowerCase();
+      return lower.includes("control absoluto") || lower.includes("hegemonía") || lower.includes("controla la zona") || lower.includes("control absoluto de zona");
+    });
+
+    if (gim.evidenceCount.graffiti <= 1 && hasAbsoluteNarrative) {
+      overallStatus = "FAILED";
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "ANALYTICAL",
+        message: `Falta de proporcionalidad analítica: Se declara control territorial absoluto o hegemonía grupal teniendo solamente ${gim.evidenceCount.graffiti} grafiti(s) registrados como sustento.`,
+        severity: "HIGH",
+        source: "GIM-ACE Auditor",
+        expected: "Proporcionalidad entre volumen de indicios y aserciones territoriales",
+        received: `Grafitis: ${gim.evidenceCount.graffiti}, Conclusión: Control territorial absoluto`
+      });
+
+      if (!blockingReasons.some(r => r.variable === "analyticalProportionality")) {
+        blockingReasons.push({
+          module: "CRIMINOLOGICAL",
+          variable: "analyticalProportionality",
+          expected: "Aserción proporcional al volumen de indicios físicos",
+          received: `Grafitis: ${gim.evidenceCount.graffiti}`,
+          message: "No se puede declarar hegemonía o control territorial basándose en un grafiti aislado. Se requiere corroboración adicional o suavizar la conclusión descriptiva."
+        });
+      }
+    }
+
+    // 3. Calibración Epistémica (Confianza vs. Limitaciones)
+    if (gim.confidenceScore < 80 && gim.limitationsCount === 0) {
+      if (overallStatus !== "FAILED") overallStatus = "WARNING";
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "ANALYTICAL",
+        message: `Falta de calibración epistémica: El nivel de confianza de GIM es bajo (${gim.confidenceScore}/100) pero no se declararon limitaciones metodológicas ni reservas analíticas.`,
+        severity: "MEDIUM",
+        source: "GIM-ACE Auditor",
+        expected: "Limitaciones declaradas cuando la confianza analítica es menor a 80/100",
+        received: `Confianza: ${gim.confidenceScore}, Limitaciones: 0`
+      });
+    }
+
+    // 4. Certificación de Trazabilidad
+    if (!gim.hasTraceability) {
+      const isOfficialReport = payload.projectId?.startsWith("EXP-") || false;
+      if (isOfficialReport) {
+        overallStatus = "FAILED";
+        alerts.push({
+          type: "CRIMINOLOGICAL",
+          category: "TECHNICAL",
+          message: "Falta de trazabilidad: El expediente oficial requiere bitácora de procedencia completa de GIM para sustento legal.",
+          severity: "HIGH",
+          source: "GIM-ACE Auditor",
+          expected: "traceabilityLog poblado con indicios verificados",
+          received: "traceabilityLog vacío o inactivo"
+        });
+
+        if (!blockingReasons.some(r => r.variable === "traceabilityAudit")) {
+          blockingReasons.push({
+            module: "CRIMINOLOGICAL",
+            variable: "traceabilityAudit",
+            expected: "Historial de procedencia e identificadores de indicios válidos",
+            received: "hasTraceability = false",
+            message: "Los expedientes institucionales oficiales de CEIPOL requieren trazabilidad rigurosa al 100% de la GEM."
+          });
+        }
+      } else {
+        if (overallStatus !== "FAILED") overallStatus = "WARNING";
+        alerts.push({
+          type: "CRIMINOLOGICAL",
+          category: "TECHNICAL",
+          message: "Trazabilidad ausente en modo exploratorio: Se recomienda poblar el registro de trazas de GIM antes de proceder a la exportación oficial.",
+          severity: "MEDIUM",
+          source: "GIM-ACE Auditor",
+          expected: "hasTraceability = true",
+          received: "false"
+        });
+      }
+    }
+
+    return { status: overallStatus };
+  }
 }

@@ -1,4 +1,5 @@
 import { StatisticalEvidenceMatrix } from "../../statisticalEvidenceMatrix/models/statisticalEvidenceTypes";
+import { ACEGimPayload } from "../../gangIntelligenceEngine/adapters/gimToAceAdapter";
 
 export interface HIEValidationVector {
   spatialPattern: "CONCENTRATED" | "DISPERSED" | "STABLE" | "UNIFORM";
@@ -32,6 +33,7 @@ export interface ACEPayload {
     endDate: string;
     eventsCount: number;
   };
+  gimContext?: ACEGimPayload | null;
 }
 
 export interface ACEAlert {
