@@ -55,18 +55,28 @@ async function getImageDimensionsAndBuffer(
     if (imageUrl.includes("api-maps.yandex.ru")) {
       console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Interceptada URL legacy de Yandex Maps:", imageUrl);
       const match = imageUrl.match(/ll=([^&]+)/);
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
       if (match && match[1]) {
         const [lng, lat] = match[1].split(",");
-        imgSrc = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=600x400&maptype=mapnik`;
-        console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a OpenStreetMap.`);
+        if (apiKey) {
+          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a Google Maps Static API.`);
+        } else {
+          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
+          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a CartoDB.`);
+        }
       } else {
-        imgSrc = `https://staticmap.openstreetmap.de/staticmap.php?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=mapnik`;
+        if (apiKey) {
+          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+        } else {
+          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png`;
+        }
         console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de Yandex. Aplicado centro por defecto de Aguascalientes.");
       }
     }
 
     if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
-      const response = await fetch(imageUrl, { mode: "cors", cache: "no-cache" });
+      const response = await fetch(imgSrc, { mode: "cors", cache: "no-cache" });
       if (!response.ok) return null;
       const blob = await response.blob();
       objectUrl = URL.createObjectURL(blob);
@@ -566,7 +576,7 @@ export async function exportToWord(
         children: [
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.projectName.toUpperCase()}`, size: 16 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "EXPEDIENTE:", bold: true, size: 16 }), new TextRun({ text: ` ${(payload.projectName || "EXPEDIENTE").toUpperCase()}`, size: 16 })] })]
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
@@ -590,7 +600,7 @@ export async function exportToWord(
         children: [
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "GEOMETRÍA:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.geometryType.toUpperCase()}`, size: 16 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "GEOMETRÍA:", bold: true, size: 16 }), new TextRun({ text: ` ${(payload.geometryType || "POLÍGONO").toUpperCase()}`, size: 16 })] })]
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },

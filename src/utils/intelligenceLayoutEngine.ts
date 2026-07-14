@@ -1027,7 +1027,7 @@ export const buildIntelligenceBriefing = (
       `Número de Expediente: ${payload.projectId}`,
       `Fecha: ${payload.date}`,
       `Analista Responsable: ${payload.analyst}`,
-      `Geometría de Cobertura: ${payload.geometryType.toUpperCase()}`,
+      `Geometría de Cobertura: ${(payload.geometryType || "POLÍGONO").toUpperCase()}`,
       `Clasificación: CONFIDENCIAL / EXCLUSIVO SSPE-CEIPOL`
     ]
   });

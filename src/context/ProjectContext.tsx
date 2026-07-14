@@ -701,7 +701,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const updateData: any = { lat, lng };
       let newMapUrl = "";
       if (isMapUrl) {
-        newMapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=600x400&maptype=mapnik`;
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+        if (apiKey) {
+          console.log("[ProjectContext] Actualizando mapa dinámico con Google Maps Static API (Habilitada por Analista)...");
+          newMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+        } else {
+          console.warn("[ProjectContext] API Key de Google no detectada. Usando fallback estable de CartoDB (Voyager)...");
+          newMapUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
+        }
         updateData.url = newMapUrl;
         updateData.previewUrl = newMapUrl;
       }
@@ -1227,7 +1234,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
         try {
           const photoId = `EVI-SWEEP-${Date.now()}`;
-          const previewUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${latVal},${lngVal}&zoom=16&size=600x400&maptype=mapnik`;
+          const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+          let previewUrl = "";
+          if (apiKey) {
+            console.log("[ProjectContext] Creando mapa de barrido con Google Maps Static API (Habilitada por Analista)...");
+            previewUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${latVal},${lngVal}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+          } else {
+            console.warn("[ProjectContext] API Key de Google no detectada en creación de barrido. Usando CartoDB...");
+            previewUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lngVal}/${latVal}/600x400.png`;
+          }
           const photosColRef = collection(firestore, "projects", project.id, "photos");
           const photoDocData = {
             url: previewUrl,
