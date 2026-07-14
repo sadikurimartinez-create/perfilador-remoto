@@ -94,3 +94,15 @@ export interface GangEvidenceMatrix {
   traceabilityLog: GIMTraceabilityRecord[];
   status: "READY" | "READY_WITH_LIMITATIONS" | "NOT_READY"; // Calificación de disponibilidad local
 }
+
+/**
+ * Contrato de resultado del validador local de GIM (Capa 1).
+ */
+export interface GangValidationResult {
+  status: "READY" | "READY_WITH_LIMITATIONS" | "NOT_READY";
+  confidence: number;
+  warnings: string[];
+  errors: string[];
+  validatedAt: string;
+}
+

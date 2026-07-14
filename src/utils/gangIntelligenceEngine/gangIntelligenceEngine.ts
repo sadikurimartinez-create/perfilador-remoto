@@ -4,6 +4,7 @@ import { GraffitiTerritorialAnalyzer } from "./graffitiTerritorialAnalyzer";
 import { GangEvidenceBuilder } from "./gangEvidenceBuilder";
 import { VisualEvidenceEditorial } from "../visualEvidenceEngine/models/visualEvidenceTypes";
 import { GimEvidenceTraceability } from "./gimEvidenceTraceability";
+import { GangEvidenceValidator } from "./gangEvidenceValidator";
 
 export interface GIMEngineInput {
   projectId: string;
@@ -109,13 +110,19 @@ export class GangIntelligenceEngine {
       traceabilityLog.push(record);
     });
 
-    // 6. Ensamblar y retornar la matriz certificada GEM
-    return GangEvidenceBuilder.assemble(
+    // 6. Ensamblar la matriz certificada GEM
+    const assembledGem = GangEvidenceBuilder.assemble(
       presenceEvidence,
       territorialInfluence,
       graffitiEvents,
       osintEvents,
       traceabilityLog
     );
+
+    // 7. Ejecutar validación interna (Capa 1) para calibrar y certificar el estatus
+    const validationResult = GangEvidenceValidator.validate(assembledGem);
+    assembledGem.status = validationResult.status;
+
+    return assembledGem;
   }
 }

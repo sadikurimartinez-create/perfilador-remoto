@@ -9,3 +9,4 @@ export * from "./gangEvidenceBuilder";
 export * from "./gangOsintAnalyzer";
 export * from "./graffitiTerritorialAnalyzer";
 export * from "./gimEvidenceTraceability";
+export * from "./gangEvidenceValidator";
