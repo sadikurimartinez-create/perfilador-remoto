@@ -819,7 +819,7 @@ export async function exportToWord(
             alignment: AlignmentType.CENTER,
             children: [
               new TextRun({
-                text: `MAPA: ${map.title.toUpperCase()}`,
+                text: `MAPA: ${safeUpperCase(map.title, "MAPA DE GEOINTELIGENCIA")}`,
                 bold: true,
                 size: 18,
                 color: "0D2B52",
@@ -873,7 +873,7 @@ export async function exportToWord(
             alignment: AlignmentType.CENTER,
             children: [
               new TextRun({
-                text: graph.title.toUpperCase(),
+                text: safeUpperCase(graph.title, "GRÁFICA ESTADÍSTICA"),
                 bold: true,
                 size: 16,
                 color: "0D2B52",
