@@ -986,8 +986,10 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
 const getResilientStats = (incidents: any[], lat: number, lng: number, fallbackRadius = 9999999): any => {
   let stats: any = StatisticalIntelligenceEngine.analyze(incidents, lat, lng, fallbackRadius);
   
+  console.log(`[AUDITORÍA CONSISTENCIA SAI] Verificando consistencia analítica: Eventos procesados en motor estadístico = ${stats?.temporal?.totalEventos || 0} | Total registros en el expediente = ${incidents.length}`);
+
   if ((!stats || stats.temporal?.totalEventos === 0) && incidents.length > 0) {
-    console.warn("[StatisticalVisualizationAdapter] totalEventos es 0 en el filtro del motor V1 pero incidents.length es > 0. Reconstruyendo stats resiliente...");
+    console.warn("[AUDITORÍA CONSISTENCIA SAI] totalEventos es 0 en el filtro del motor V1 pero incidents.length es > 0. Ejecutando reconstrucción de consistencia analítica en caliente...");
     
     const totalEventos = incidents.length;
     const series: Record<string, number> = {};

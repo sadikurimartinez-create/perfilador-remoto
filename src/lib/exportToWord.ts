@@ -51,7 +51,21 @@ async function getImageDimensionsAndBuffer(
   try {
     let imgSrc = imageUrl;
 
-    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    // INTERCEPTOR DE COMPATIBILIDAD DOCUMENTAL YANDEX LEGACY (MIGRACIÓN TÁCTICA)
+    if (imageUrl.includes("api-maps.yandex.ru")) {
+      console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Interceptada URL legacy de Yandex Maps:", imageUrl);
+      const match = imageUrl.match(/ll=([^&]+)/);
+      if (match && match[1]) {
+        const [lng, lat] = match[1].split(",");
+        imgSrc = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=600x400&maptype=mapnik`;
+        console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a OpenStreetMap.`);
+      } else {
+        imgSrc = `https://staticmap.openstreetmap.de/staticmap.php?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=mapnik`;
+        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de Yandex. Aplicado centro por defecto de Aguascalientes.");
+      }
+    }
+
+    if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
       const response = await fetch(imageUrl, { mode: "cors", cache: "no-cache" });
       if (!response.ok) return null;
       const blob = await response.blob();

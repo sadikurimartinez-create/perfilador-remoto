@@ -718,28 +718,27 @@ export const buildIntelligenceEditorialPayload = async (
     }
   ];
 
-  // Graphs (Generados programáticamente en lienzo HD, consumiendo SEM de forma unificada)
   const graphs = [
     {
       title: "GRÁFICA 1: Distribución temporal y estacionalidad del fenómeno delictivo",
       dataUrl: renderTemporalShiftChart(vectorInput),
-      explanation: `Análisis de serie de tiempo de ${sem.metadata.totalCanonicalIncidents} incidentes registrados. Tendencia clasificada como ${sem.temporalEvidence.trendDirection} (pendiente: ${sem.temporalEvidence.trendSlope.toFixed(2)}).`,
-      finding: `Periodos críticos identificados: ${sem.temporalEvidence.criticalPeriods.join(", ") || "No definido"}.`,
-      relation: `Coincidencia temporal del fenómeno con anomalías detectadas en fechas clave: ${sem.temporalEvidence.anomalies.map(a => a.date).slice(0, 3).join(", ") || "Ninguna registrada"}.`
+      explanation: `Análisis secuencial del volumen de incidentes históricos registrados en la zona de estudio.`,
+      finding: `Periodos de mayor riesgo delictivo concentrados durante los días ${sem.temporalEvidence.criticalPeriods?.[0] || "No definido"}.`,
+      relation: `Focalizar patrullajes preventivos dinámicos en los rangos horarios críticos identificados.`
     },
     {
-      title: "GRÁFICA 2: Concentración espacial y topología de hotspots (frecuencia de incidentes)",
+      title: "GRÁFICA 2: Concentración territorial del fenómeno delictivo",
       dataUrl: renderCrimeTopologyChart(vectorInput),
-      explanation: `Tabulación espacial cruzada y georreferenciación. El algoritmo adaptativo DBSCAN detectó ${sem.spatialEvidence.hotspots.length} hotspots densos.`,
-      finding: `Baricentro delictivo principal ubicado en coordenadas tácticas: Lat ${sem.spatialEvidence.hotspots[0]?.center?.lat.toFixed(4) ?? "0.0"}, Lng ${sem.spatialEvidence.hotspots[0]?.center?.lng.toFixed(4) ?? "0.0"}.`,
-      relation: `Los hotspots identificados concentran la actividad criminal recurrente, representando focos rojos de alta concentración geoespacial.`
+      explanation: `Distribución geoespacial densa focalizada en sectores tácticos prioritarios del cuadrante.`,
+      finding: `Baricentro delictivo principal ubicado en Lat ${sem.spatialEvidence.centerOfGravity?.lat?.toFixed(4) || "0.0"}, Lng ${sem.spatialEvidence.centerOfGravity?.lng?.toFixed(4) || "0.0"}.`,
+      relation: `Implementar cercos tácticos y puntos de control disuasivo alrededor del baricentro espacial.`
     },
     {
-      title: "GRÁFICA 3: Modelo predictivo y nivel de riesgo de oportunidad (pronóstico futuro)",
+      title: "GRÁFICA 3: Proyección del riesgo y tendencia futura",
       dataUrl: renderPredictiveLineChart(vectorInput),
-      explanation: `Estimación probabilística mediante distribución de Poisson (Prueba Chi-Square con nivel de confianza de ${sem.predictiveEvidence.confidenceMetrics.statisticalConfidence.toFixed(1)}%).`,
-      finding: `Probabilidad del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(1)}% de repetición delictiva para la siguiente semana de estudio.`,
-      relation: `Índice de contagio Near-Repeat indica propagación de riesgo en un radio extendido de contagio espacio-temporal de ${sem.predictiveEvidence.nearRepeatRisk.toFixed(1)} metros.`
+      explanation: `Estimación analítica de la probabilidad delictiva estimada para el periodo de corto plazo.`,
+      finding: `Probabilidad de repetición calculada del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}% en el cuadrante estudiado.`,
+      relation: `Sincronizar el despliegue analítico en calle según la tasa de riesgo predictivo.`
     }
   ];
 

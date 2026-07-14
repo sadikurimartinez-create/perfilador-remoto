@@ -246,59 +246,98 @@ export const GraphAnalysisPrompt = (ctx: ReportContext): string => {
 ${GLOBAL_CONTEXT_RULE}
 
 --- INICIO MÓDULO: ANÁLISIS ESTADÍSTICO (CAPÍTULO 4) ---
-Genera el CAPÍTULO 4: "ANÁLISIS ESTADÍSTICO DEL FENÓMENO DELICTIVO" para el expediente "${iic.evidenceSources.TIE?.projectName || "Expediente"}" (ID: ${iic.metadata.projectId}).
-Radio de análisis: ${sem.metadata?.analysisRadiusMeters || 250} metros.
+Genera el CAPÍTULO 4 del "Dictamen Técnico de Inteligencia Territorial".
+Nombre oficial de la sección: CAPÍTULO 4: ANÁLISIS ESTADÍSTICO DEL FENÓMENO
+
+Tu objetivo es redactar un análisis del fenómeno delictivo sumamente ejecutivo, reduciendo un 60-70% el volumen de texto explicativo o metodológico de la versión anterior. 
+No expliques algoritmos. No expliques la teoría de Poisson, ni la de DBSCAN, ni menciones la prueba de Chi-Square ni los cálculos de la desviación estándar. Enfócate exclusivamente en la interpretación del fenómeno, la dinámica operacional y la utilidad táctica para seguridad pública.
 
 DATOS CERTIFICADOS DE ENTRADA:
+1. Eventos analizados en polígono: ${eventsCount}
+2. Delito predominante: ${sem?.criminalEvidence?.dominantCrime || "No definido"}
+3. Concentración espacial en hotspots: ${(sem?.criminalEvidence?.concentrationScore ? (sem.criminalEvidence.concentrationScore * 100).toFixed(0) : "0")}%
+4. Día crítico: ${sem?.temporalEvidence?.criticalPeriods?.[0] || "No definido"}
+5. Horario crítico: ${sem?.temporalEvidence?.criticalPeriods?.[1] || "No definido"}
+6. Nivel de riesgo inferido: ${ace?.overallConfidence && ace.overallConfidence >= 75 ? "Alto" : "Medio"}
+7. Principales Delitos (SEM):
+${JSON.stringify(sem?.criminalEvidence?.crimeTypes || [], null, 2)}
+8. Concentración espacial (Hotspots):
+- Número de hotspots: ${sem?.spatialEvidence?.hotspots?.length || 0}
+- Radio operativo promedio: ${sem?.metadata?.analysisRadiusMeters || 250} metros
+- Centro de gravedad espacial: Lat: ${sem?.spatialEvidence?.centerOfGravity?.lat?.toFixed(4) || "0.0"}, Lng: ${sem?.spatialEvidence?.centerOfGravity?.lng?.toFixed(4) || "0.0"}
+9. Proyección y probabilidad de repetición:
+- Riesgo de repetición semanal (Poisson): ${(sem?.predictiveEvidence?.poissonProbability * 100).toFixed(0) || "0"}%
+- Riesgo de propagación (Near Repeat): ${(sem?.predictiveEvidence?.nearRepeatRisk * 100).toFixed(0) || "0"}%
 
-1. MATRIZ DE EVIDENCIA ESTADÍSTICA (SEM):
-\`\`\`json
-${semJson}
-\`\`\`
+ESTRUCTURA OBLIGATORIA DEL CAPÍTULO 4 (No omitas ningún título ni alteres el formato):
 
-2. REPORTE DE CONSISTENCIA ANALÍTICA (ACE QUALITY GATE):
-\`\`\`json
-${aceJson}
-\`\`\`
+4.1 Resumen estadístico ejecutivo
 
-3. VECTOR DE VALIDACIÓN DE HIPÓTESIS (HIE):
-\`\`\`json
-${hieJson}
-\`\`\`
+Genera exactamente la siguiente tabla compacta de Markdown:
 
-REGLAS EDITORIALES Y DE INTEGRIDAD DE DATOS (CEIPOL):
-1. Queda estrictamente PROHIBIDO inventar estadísticas, estimar porcentajes alternativos o extrapolar información que no figure en los datos provistos.
-2. Queda prohibido el uso de lenguaje académico, explicaciones metodológicas, fórmulas matemáticas o descripciones de algoritmos (como ecuaciones de Poisson o la teoría de DBSCAN). Todo método matemático debe permanecer invisible; solo se deben redactar los hallazgos operativos y su utilidad táctica.
-3. El dictamen debe estructurarse obligatoriamente con los siguientes 5 apartados exactos:
+| Indicador | Resultado |
+| :--- | :--- |
+| Eventos analizados | ${eventsCount} |
+| Periodo analizado | Histórico acumulado |
+| Delito predominante | ${sem?.criminalEvidence?.dominantCrime || "No definido"} |
+| Concentración espacial | ${(sem?.criminalEvidence?.concentrationScore ? (sem.criminalEvidence.concentrationScore * 100).toFixed(0) : "0")}% |
+| Día crítico | ${sem?.temporalEvidence?.criticalPeriods?.[0] || "No definido"} |
+| Horario crítico | ${sem?.temporalEvidence?.criticalPeriods?.[1] || "No definido"} |
+| Nivel de riesgo | ${ace?.overallConfidence && ace.overallConfidence >= 75 ? "Alto" : "Medio"} |
 
-CAPÍTULO 4: ANÁLISIS ESTADÍSTICO DEL FENÓMENO DELICTIVO
+Inmediatamente debajo, escribe únicamente un párrafo interpretativo de máximo 5 líneas. Ejemplo:
+"El análisis estadístico identifica una concentración significativa del fenómeno dentro del área de estudio, con predominio de [Delito predominante], localizado principalmente en la zona de hotspots identificada. La distribución temporal evidencia una ventana crítica de ocurrencia durante [Día crítico] en el horario de [Horario crítico], por lo que el riesgo operativo se concentra en dicho espacio-tiempo."
 
-4.1 Magnitud y composición del fenómeno
-- Responder: ¿Qué magnitud tiene la incidencia?
-- Describir el volumen total de delitos georreferenciados válidos en el polígono.
-- Listar los delitos predominantes de la SEM con sus tasas de concentración y detallar si la distribución está focalizada o diversificada.
+4.2 Magnitud y composición criminal
+Escribe exactamente en este formato (sin rodeos ni introducciones largas):
+"El universo analizado comprende ${eventsCount} eventos.
 
-4.2 Dinámica temporal del riesgo
-- Responder: ¿Cuándo ocurre?
-- Redactar la tendencia delictiva robusta no paramétrica de Theil-Sen (dirección y pendiente).
-- Detallar la estacionalidad temporal del fenómeno, identificando la ventana crítica de oportunidad (días y rango horario prioritario) y picos de anomalías históricas.
+La composición principal corresponde a:
+1. ${sem?.criminalEvidence?.crimeTypes?.[0]?.type || "Delito Principal"}: ${sem?.criminalEvidence?.crimeTypes?.[0]?.count || 0} eventos (${((sem?.criminalEvidence?.crimeTypes?.[0]?.count || 0) / (eventsCount || 1) * 100).toFixed(0)}%)
+2. ${sem?.criminalEvidence?.crimeTypes?.[1]?.type || "Delito Secundario"}: ${sem?.criminalEvidence?.crimeTypes?.[1]?.count || 0} eventos (${((sem?.criminalEvidence?.crimeTypes?.[1]?.count || 0) / (eventsCount || 1) * 100).toFixed(0)}%)
+3. ${sem?.criminalEvidence?.crimeTypes?.[2]?.type || "Delito Terciario"}: ${sem?.criminalEvidence?.crimeTypes?.[2]?.count || 0} eventos (${((sem?.criminalEvidence?.crimeTypes?.[2]?.count || 0) / (eventsCount || 1) * 100).toFixed(0)}%)
 
-4.3 Concentración espacial y focalización
-- Responder: ¿Dónde ocurre?
-- Describir de forma explícita el número de hotspots de alta densidad detectados por DBSCAN, sus ubicaciones prioritarias en el polígono y el porcentaje de delitos que concentran en relación con el CIE.
+Hallazgo:
+El fenómeno presenta una concentración predominante en la categoría de ${sem?.criminalEvidence?.dominantCrime || "No definido"}."
 
-4.4 Escenario predictivo y riesgo operativo
-- Responder: ¿Qué probabilidad existe de repetición?
-- Explicar el escenario de riesgo probabilístico de corto plazo según el modelo de Poisson (indicando la probabilidad de ocurrencia semanal y el nivel de confianza de la prueba Chi-Square).
-- Describir el peligro de propagación espacio-temporal mediante la tasa de contagio Near-Repeat, señalando las limitaciones inherentes a los datos históricos.
+4.3 Dinámica temporal
+Escribe exactamente en este formato (máximo 5 líneas totales):
+"Ventana crítica:
+- Día: ${sem?.temporalEvidence?.criticalPeriods?.[0] || "No definido"}
+- Horario: ${sem?.temporalEvidence?.criticalPeriods?.[1] || "No definido"}
+- Periodo: Histórico recurrente
+- Interpretación: La distribución temporal identifica una ventana recurrente de mayor exposición delictiva durante estos periodos. Este patrón permite orientar acciones preventivas y despliegue operativo hacia periodos específicos."
 
-4.5 Conclusión estadística operacional
-- Responder: ¿Qué significa operativamente toda esta evidencia para la toma de decisiones?
-- Integrar la evidencia de la SEM, la hipótesis criminológica ambiental del HIE y la certificación del ACE.
-- Formular una síntesis ejecutiva directa dirigida al tomador de decisiones que fundamente estrategias de patrullaje dinámico, focalización operativa o remediación urbana en los hotspots prioritarios.
+4.4 Concentración espacial
+Escribe exactamente en este formato:
+"Concentración espacial:
+- Hotspots identificados: ${sem?.spatialEvidence?.hotspots?.length || 0}
+- Concentración del fenómeno: ${(sem?.criminalEvidence?.concentrationScore ? (sem.criminalEvidence.concentrationScore * 100).toFixed(0) : "0")}%
+- Radio operativo: ${sem?.metadata?.analysisRadiusMeters || 250} metros
+- Centro de gravedad: Lat: ${sem?.spatialEvidence?.centerOfGravity?.lat?.toFixed(4) || "0.0"}, Lng: ${sem?.spatialEvidence?.centerOfGravity?.lng?.toFixed(4) || "0.0"}
 
-Restricción de Extensión: La narrativa completa debe ser profunda, precisa y ejecutiva, y caber de forma compacta en un rango de 2 a 3 páginas físicas, evitando redundancias.
---- FIN MÓDULO ---
+Interpretación:
+El fenómeno presenta una distribución focalizada en sectores territoriales clave, concentrándose principalmente en el baricentro de alta densidad espacial."
+
+4.5 Evaluación predictiva
+Escribe exactamente en este formato (máximo 6 líneas totales):
+"Proyección:
+- Riesgo de repetición: ${(sem?.predictiveEvidence?.poissonProbability * 100).toFixed(0) || "0"}%
+- Riesgo de propagación espacial: ${(sem?.predictiveEvidence?.nearRepeatRisk * 100).toFixed(0) || "0"}%
+- Nivel predictivo: ${ace?.overallConfidence && ace.overallConfidence >= 75 ? "Alto" : "Medio"}
+- Limitación principal: Volumen de datos de la serie histórica.
+
+Interpretación: El escenario predictivo denota una probabilidad de repetición focalizada en el entorno inmediato, sugiriendo un patrón de riesgo de contagio territorial de corto plazo."
+
+4.6 Conclusión estadística operacional
+Escribe exactamente en este formato:
+"Hallazgo central:
+La evidencia estadística confirma un patrón delictivo focalizado territorialmente, con concentración espacial definida y una ventana temporal específica de mayor riesgo.
+
+Implicación operativa:
+1. Patrullaje focalizado en el baricentro espacial durante la ventana crítica.
+2. Intervención táctica disuasiva en los límites georreferenciados del hotspot.
+3. Sincronización analítica continua de reportes de incidencia local."
 `.trim();
 };
 
