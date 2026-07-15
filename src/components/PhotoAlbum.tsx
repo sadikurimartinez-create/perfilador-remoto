@@ -1273,7 +1273,7 @@ const hasMinimumPhotos =
                   sweepsComments: sweepsComments,
                   chapter: ch
                 }),
-              }, 55000);
+              }, 120000);
 
               if (res.ok) {
                 break;
@@ -1304,10 +1304,48 @@ const hasMinimumPhotos =
             throw new Error(msg);
           }
 
-          const resText = await res.text();
+          const reader = res.body?.getReader();
+          if (!reader) {
+            throw new Error("No se pudo iniciar el lector de flujo del servidor.");
+          }
+
+          const decoder = new TextDecoder("utf-8");
+          let accumulatedResponse = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            accumulatedResponse += chunk;
+
+            try {
+              const markdownMatch = accumulatedResponse.match(/"markdown"\s*:\s*"(.*)/);
+              if (markdownMatch) {
+                let currentMarkdown = markdownMatch[1];
+                if (currentMarkdown.endsWith('"}')) {
+                  currentMarkdown = currentMarkdown.slice(0, -2);
+                }
+                try {
+                  // Unescape JSON string fragment
+                  currentMarkdown = JSON.parse(`"${currentMarkdown}"`);
+                } catch {
+                  // Fallback unescape
+                  currentMarkdown = currentMarkdown
+                    .replace(/\\n/g, "\n")
+                    .replace(/\\"/g, '"')
+                    .replace(/\\\\/g, "\\");
+                }
+                setAiProfile(finalMarkdown + currentMarkdown);
+                setEditableProfile(finalMarkdown + currentMarkdown);
+              }
+            } catch (streamErr) {
+              console.warn("[confirmAndGenerateProfile] Stream chunk parse warning:", streamErr);
+            }
+          }
+
           let chapterData: any;
           try {
-            chapterData = JSON.parse(resText);
+            chapterData = JSON.parse(accumulatedResponse);
           } catch (err) {
             throw new Error(`El servidor devolvió una respuesta vacía o incompleta en el capítulo ${ch}.`);
           }
