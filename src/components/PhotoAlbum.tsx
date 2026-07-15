@@ -1472,9 +1472,33 @@ const hasMinimumPhotos =
         // Integrar automáticamente los lugares de acecho (StreetView) al Álbum
         if (data.meta?.tacticalStreetViews && data.meta.tacticalStreetViews.length > 0) {
           for (const sv of data.meta.tacticalStreetViews) {
+            let svLat = sv.lat;
+            let svLng = sv.lng;
+
+            if (typeof svLat !== "number" || typeof svLng !== "number") {
+              try {
+                if (sv.streetViewUrl) {
+                  const urlObj = new URL(sv.streetViewUrl);
+                  const loc = urlObj.searchParams.get("location");
+                  if (loc) {
+                    const [latStr, lngStr] = loc.split(",");
+                    svLat = parseFloat(latStr);
+                    svLng = parseFloat(lngStr);
+                  }
+                }
+              } catch (e) {
+                console.error("[PhotoAlbum] No se pudieron extraer coordenadas de StreetView URL:", e);
+              }
+            }
+
+            if (typeof svLat !== "number" || typeof svLng !== "number" || isNaN(svLat) || typeof svLng !== "number" || isNaN(svLng)) {
+              console.warn("[PhotoAlbum] Ignorando StreetView sin coordenadas válidas:", sv);
+              continue;
+            }
+
             const exists = album.some(p => 
-              Math.abs((p.lat || 0) - sv.lat) < 0.0001 && 
-              Math.abs((p.lng || 0) - sv.lng) < 0.0001
+              Math.abs((p.lat || 0) - svLat) < 0.0001 && 
+              Math.abs((p.lng || 0) - svLng) < 0.0001
             );
             
             if (!exists && uploadAndAddPhoto) {
@@ -1484,7 +1508,7 @@ const hasMinimumPhotos =
                 if (svRes.ok) {
                   const blob = await svRes.blob();
                   const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
-                  await uploadAndAddPhoto(file, sv.lat, sv.lng, {
+                  await uploadAndAddPhoto(file, svLat, svLng, {
                     tipo: "STREET_VIEW",
                     gpsSource: "STREET_VIEW",
                     comentario: `EVIDENCIA VIRTUAL STREET VIEW: ${sv.name}. ${sv.observed || "Punto de observación de entorno vial."}`,

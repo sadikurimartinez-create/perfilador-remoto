@@ -190,7 +190,16 @@ Devuelve un JSON con: {"score": <0-100 evaluando lógica original>, "suggestions
     }
 
     cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return NextResponse.json(JSON.parse(cleanText));
+    
+    // Robust parsing: extract outermost bracketed JSON structure
+    let jsonToParse = cleanText;
+    const firstBrace = cleanText.indexOf("{");
+    const lastBrace = cleanText.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonToParse = cleanText.substring(firstBrace, lastBrace + 1);
+    }
+    
+    return NextResponse.json(JSON.parse(jsonToParse));
   } catch (error: any) {
     console.error("[RSS Parser API] Error:", error);
     if (requestMode === "rss-news") {
