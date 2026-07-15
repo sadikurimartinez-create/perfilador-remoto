@@ -382,7 +382,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           generationConfig: { temperature: 0.15 }
         });
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout en inicialización de Vertex AI (10s)")), 10000)
+          setTimeout(() => reject(new Error("Timeout en inicialización de Vertex AI (2s)")), 2000)
         );
         streamingResp = await Promise.race([streamPromise, timeoutPromise]);
       } catch (vertexInitErr: any) {
