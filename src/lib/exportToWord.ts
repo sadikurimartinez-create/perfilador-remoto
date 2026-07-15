@@ -80,6 +80,30 @@ async function getImageDimensionsAndBuffer(
       }
     }
 
+    // INTERCEPTOR DE COMPATIBILIDAD DOCUMENTAL OPENSTREETMAP ALEMANIA (MIGRACIÓN TÁCTICA)
+    if (imageUrl.includes("staticmap.openstreetmap.de")) {
+      console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Interceptada URL legacy de OpenStreetMap Alemania:", imageUrl);
+      const match = imageUrl.match(/center=([^&]+)/);
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+      if (match && match[1]) {
+        const [lat, lng] = match[1].split(",");
+        if (apiKey) {
+          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: OSM Center [${lat}, ${lng}] -> Redireccionado a Google Maps Static API.`);
+        } else {
+          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
+          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: OSM Center [${lat}, ${lng}] -> Redireccionado a CartoDB.`);
+        }
+      } else {
+        if (apiKey) {
+          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+        } else {
+          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png`;
+        }
+        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de OSM. Aplicado centro por defecto de Aguascalientes.");
+      }
+    }
+
     if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
       const response = await fetch(imgSrc, { mode: "cors", cache: "no-cache" });
       if (!response.ok) return null;
