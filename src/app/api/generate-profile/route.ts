@@ -60,6 +60,39 @@ function simplifySweeps(sweeps: any[]): any[] {
   }));
 }
 
+function simplifyGangReport(gangData: any): any {
+  if (!gangData) return "Sin reporte de pandilla vinculado.";
+  if (typeof gangData === "string") return gangData.slice(0, 1500);
+  if (typeof gangData === "object") {
+    const simplified: any = {};
+    if (gangData.name || gangData.nombre) simplified.nombre = gangData.name || gangData.nombre;
+    if (gangData.type || gangData.tipo) simplified.tipo = gangData.type || gangData.tipo;
+    if (gangData.riskLevel || gangData.nivelRiesgo) simplified.nivelRiesgo = gangData.riskLevel || gangData.nivelRiesgo;
+    if (gangData.territory || gangData.territorio) simplified.territorio = gangData.territory || gangData.territorio;
+    if (gangData.summary || gangData.resumen) simplified.resumen = gangData.summary || gangData.resumen;
+    
+    const members = gangData.members || gangData.integrantes || gangData.aliasList || [];
+    if (Array.isArray(members)) {
+      simplified.integrantes = members.slice(0, 10).map((m: any) => {
+        if (typeof m === "string") return m.slice(0, 100);
+        return {
+          alias: m.alias || m.name || m.nombre || "",
+          role: m.role || m.rol || m.rank || "",
+          notes: typeof m.notes === "string" ? m.notes.slice(0, 150) : ""
+        };
+      });
+    }
+    
+    if (gangData.activities || gangData.actividades) {
+      simplified.actividades = typeof gangData.activities === "string" 
+        ? gangData.activities.slice(0, 300) 
+        : gangData.activities || gangData.actividades;
+    }
+    return simplified;
+  }
+  return JSON.stringify(gangData).slice(0, 1500);
+}
+
 async function callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
@@ -338,7 +371,7 @@ export async function POST(req: Request) {
       reportMode: "FULL",
       includeOsintAppendix: true,
       sweeps: simplifySweeps(safeBody.sweeps),
-      linkedGangReport: safeBody.linkedGangReport,
+      linkedGangReport: simplifyGangReport(safeBody.linkedGangReport),
       osintEngineData: simplifyOsintData(safeBody.osintEngineData)
     });
 
