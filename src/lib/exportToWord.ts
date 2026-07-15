@@ -107,7 +107,10 @@ async function getImageDimensionsAndBuffer(
     }
 
     if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
-      const response = await fetch(imgSrc, { mode: "cors", cache: "no-cache" });
+      const isExternal = typeof window !== "undefined" && !imgSrc.includes(window.location.host);
+      const fetchUrl = isExternal ? `/api/proxy-image?url=${encodeURIComponent(imgSrc)}` : imgSrc;
+      
+      const response = await fetch(fetchUrl, { cache: "no-cache" });
       if (!response.ok) return null;
       const blob = await response.blob();
       objectUrl = URL.createObjectURL(blob);
