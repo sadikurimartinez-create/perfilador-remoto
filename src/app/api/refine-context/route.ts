@@ -62,44 +62,71 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la siguiente estruct
 IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directamente con el carácter { y termínala con el carácter }.
 `.trim();
 
-      if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID no está configurado.");
-      const authOptions = GCP_PRIVATE_KEY ? { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } } : undefined;
-      const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
-      const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ googleSearch: {} } as any] });
-      
-      const streamingResp = await model.generateContentStream({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { temperature: 0.2 } });
+      const apiKey = process.env.GEMINI_API_KEY || "";
+      const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          // Enviar un espacio en blanco inmediatamente para evitar el Timeout (504) de Vercel
-          controller.enqueue(new TextEncoder().encode(" "));
-          
-          // Enviar "pulsos de vida" cada 4 segundos para mantener la conexión abierta
-          const keepAlive = setInterval(() => {
+      if (useVertexAI) {
+        const authOptions = { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } };
+        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+        const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL, tools: [{ googleSearch: {} } as any] });
+        const streamingResp = await model.generateContentStream({ contents: [{ role: "user", parts: [{ text: promptRss }] }], generationConfig: { temperature: 0.2 } });
+
+        const stream = new ReadableStream({
+          async start(controller) {
             controller.enqueue(new TextEncoder().encode(" "));
-          }, 4000);
+            const keepAlive = setInterval(() => {
+              controller.enqueue(new TextEncoder().encode(" "));
+            }, 4000);
 
-          try {
-            for await (const item of streamingResp.stream) {
-              if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
-                let text = item.candidates[0].content.parts[0].text;
-                text = text.replace(/```json/gi, '').replace(/```/g, '');
-                controller.enqueue(new TextEncoder().encode(text));
+            try {
+              for await (const item of streamingResp.stream) {
+                if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  let text = item.candidates[0].content.parts[0].text;
+                  text = text.replace(/```json/gi, '').replace(/```/g, '');
+                  controller.enqueue(new TextEncoder().encode(text));
+                }
               }
+            } catch (e: any) {
+              console.error("Error durante el streaming de VertexAI:", e);
+              const errorMsg = JSON.stringify({ success: false, error: e.message, data: { eventosCriticos: [], conclusionOperativa: "Fallo en el análisis de IA: " + e.message } });
+              controller.enqueue(new TextEncoder().encode(errorMsg));
+            } finally {
+              clearInterval(keepAlive);
+              controller.close();
             }
-          } catch (e: any) {
-            console.error("Error durante el streaming de VertexAI:", e);
-            // Si la IA falla a medio camino, enviamos un JSON válido con el error para que la pantalla no se congele
-            const errorMsg = JSON.stringify({ success: false, error: e.message, data: { eventosCriticos: [], conclusionOperativa: "Fallo en el análisis de IA: " + e.message } });
-            controller.enqueue(new TextEncoder().encode(errorMsg));
-          } finally {
-            clearInterval(keepAlive);
+          }
+        });
+        return new Response(stream, { headers: { "Content-Type": "application/json" } });
+      } else {
+        if (!apiKey) {
+          throw new Error("No se detectó GEMINI_API_KEY ni credenciales de Vertex AI.");
+        }
+        const modelName = GEMINI_MODEL || "gemini-flash-latest";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: promptRss }] }],
+            generationConfig: { temperature: 0.2 }
+          })
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Gemini REST API returned ${response.status}: ${errorText}`);
+        }
+        const resJson = await response.json();
+        let cleanText = (resJson.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+        cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        const stream = new ReadableStream({
+          async start(controller) {
+            controller.enqueue(new TextEncoder().encode(cleanText));
             controller.close();
           }
-        }
-      });
-
-      return new Response(stream, { headers: { "Content-Type": "application/json" } });
+        });
+        return new Response(stream, { headers: { "Content-Type": "application/json" } });
+      }
     }
 
     // ============================================================================
@@ -130,15 +157,39 @@ Texto original: """${context}""" \nCoordenadas:\n${coordsText}
 Devuelve un JSON con: {"score": <0-100 evaluando lógica original>, "suggestions": "<texto mejorado>"}`;
     }
 
-    if (!GCP_PROJECT_ID) throw new Error("GCP_PROJECT_ID no está configurado.");
-    const authOptions = GCP_PRIVATE_KEY ? { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } } : undefined;
-    
-    const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
-    const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-    
-    const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: sysPrompt.trim() }] }], generationConfig: { temperature: 0.2 } });
-    const cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").replace(/```json/gi, '').replace(/```/g, '').trim();
-    
+    const apiKey = process.env.GEMINI_API_KEY || "";
+    const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
+    let cleanText = "";
+
+    if (useVertexAI) {
+      const authOptions = { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } };
+      const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
+      const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
+      const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: sysPrompt.trim() }] }], generationConfig: { temperature: 0.2 } });
+      cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+    } else {
+      if (!apiKey) {
+        throw new Error("No se detectó GEMINI_API_KEY ni credenciales de Vertex AI.");
+      }
+      const modelName = GEMINI_MODEL || "gemini-flash-latest";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: sysPrompt.trim() }] }],
+          generationConfig: { temperature: 0.2 }
+        })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Gemini REST API returned ${response.status}: ${errorText}`);
+      }
+      const resJson = await response.json();
+      cleanText = (resJson.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+    }
+
+    cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
     return NextResponse.json(JSON.parse(cleanText));
   } catch (error: any) {
     console.error("[RSS Parser API] Error:", error);
