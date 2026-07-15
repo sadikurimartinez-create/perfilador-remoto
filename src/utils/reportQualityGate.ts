@@ -134,6 +134,18 @@ export class ReportQualityGate {
     const textValues = getEditorialTextValues(payload);
     const allText = textValues.join(" ");
 
+    // Additional Street View Narrative quality gate (Requisito 6)
+    if (!payload.streetViewAnalysis || payload.streetViewAnalysis.length === 0) {
+      const narrativeHasReferences = textValues.some(val => 
+        val.includes("Street View") || 
+        val.includes("EVIDENCIA VIRTUAL") || 
+        val.includes("Barrido vial")
+      );
+      if (narrativeHasReferences) {
+        throw new Error("ERROR CRÍTICO: La narrativa contiene referencias Street View sin evidencia visual asociada.");
+      }
+    }
+
     // 4. Hay Markdown residual (negritas, cursivas o backticks) - Evaluado por cada valor de texto de forma aislada
     const markdownPatterns = [
       /\*\*[^*]+\*\*/,

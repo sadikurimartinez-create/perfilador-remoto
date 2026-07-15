@@ -1445,7 +1445,12 @@ const hasMinimumPhotos =
                 if (svRes.ok) {
                   const blob = await svRes.blob();
                   const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
-                  await uploadAndAddPhoto(file, sv.lat, sv.lng);
+                  await uploadAndAddPhoto(file, sv.lat, sv.lng, {
+                    tipo: "STREET_VIEW",
+                    gpsSource: "STREET_VIEW",
+                    comentario: `EVIDENCIA VIRTUAL STREET VIEW: ${sv.name}. ${sv.observed || "Punto de observación de entorno vial."}`,
+                    validado: true
+                  });
                 }
               } catch (err) {
                 console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);

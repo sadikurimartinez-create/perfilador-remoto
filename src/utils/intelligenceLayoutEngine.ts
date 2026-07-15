@@ -743,6 +743,20 @@ export const buildIntelligenceEditorialPayload = async (
     }
   ];
 
+  // ==================== STREET VIEW TRACE ====================
+  const svCaptured = (album || []).filter(p => 
+    p.tipo?.toLowerCase().includes("street") || 
+    p.url?.toLowerCase().includes("street") || 
+    p.comentario?.toLowerCase().includes("street") || 
+    p.description?.toLowerCase().includes("street") ||
+    p.evidenceType === "VIRTUAL_STREET_VIEW" ||
+    p.fuente === "Google Street View"
+  );
+  
+  const tacticalSVs = project?.tacticalStreetViews || [];
+  const storedFirestore = svCaptured.length; 
+  const receivedByEngine = (album || []).length;
+  
   // 1. Ejecutar el Motor de Evidencia Visual Operacional
   const visualMatrix = VisualEvidenceEngine.process(
     projectId || "PR-001",
@@ -752,6 +766,41 @@ export const buildIntelligenceEditorialPayload = async (
     radius,
     sem?.spatialEvidence?.hotspots || []
   );
+
+  console.log("=== STREET VIEW TRACE ===");
+  console.log(`Cantidad de imágenes Street View capturadas: ${svCaptured.length}`);
+  console.log(`Cantidad de objetos tacticalStreetViews: ${tacticalSVs.length}`);
+  console.log(`Cantidad de objetos almacenados en Firestore: ${storedFirestore}`);
+  console.log(`Cantidad recibida por VisualEvidenceEngine: ${receivedByEngine}`);
+  console.log(`Cantidad clasificada como STREET_VIEW: ${svCaptured.filter(p => p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW").length}`);
+  console.log(`Cantidad enviada en payload.streetViewAnalysis: ${visualMatrix.streetViewEvidence.length}`);
+  console.log(`Cantidad consumida por exportToWord: ${visualMatrix.streetViewEvidence.length}`);
+  console.log("\nDetalle de cada etapa:");
+  
+  console.log("\n--- CAPTURADAS EN PHOTO ALBUM / FIRESTORE ---");
+  svCaptured.forEach((item, idx) => {
+    console.log(`[Item #${idx + 1}]`);
+    console.log(`  id: ${item.id}`);
+    console.log(`  tipo: ${item.tipo}`);
+    console.log(`  fuente: ${item.fuente || "Google Street View"}`);
+    console.log(`  URL/dataUrl: ${item.previewUrl || item.url || ""}`);
+    console.log(`  thumbnail: ${item.previewUrl || item.url || ""}`);
+    console.log(`  coordenadas: Lat ${item.lat}, Lng ${item.lng}`);
+    console.log(`  timestamp: ${item.createdAt || item.fecha || ""}`);
+  });
+
+  console.log("\n--- CLASIFICADAS POR ENGINE EN payload.streetViewAnalysis ---");
+  visualMatrix.streetViewEvidence.forEach((item, idx) => {
+    console.log(`[Editorial SV #${idx + 1}]`);
+    console.log(`  id: SV-00${idx + 1}`);
+    console.log(`  tipo: STREET_VIEW`);
+    console.log(`  fuente: Google Street View`);
+    console.log(`  URL/dataUrl: ${item.image}`);
+    console.log(`  thumbnail: ${item.image}`);
+    console.log(`  coordenadas: Lat ${lat}, Lng ${lng}`);
+    console.log(`  timestamp: ${new Date().toLocaleDateString("es-MX")}`);
+  });
+  console.log("=========================================\n");
 
   // Photos Sanitized Mapping
   const photoEvidence = visualMatrix.analystPhotos.map((p, idx) => {

@@ -580,6 +580,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     let photoDocId = photoId;
 
+    const isStreetView = defaultTipo === "STREET_VIEW" || metadata?.gpsSource === "STREET_VIEW" || (metadata as any)?.evidenceType === "VIRTUAL_STREET_VIEW";
+
     // 3. Guardar metadatos en Firestore (con fallback local ante cuotas agotadas)
     try {
       const firestore = getDb();
@@ -591,7 +593,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         lng,
         projectId: project.id,
         createdAt: Date.now(),
-        tipo: defaultTipo,
+        tipo: isStreetView ? "STREET_VIEW" : defaultTipo,
+        fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
+        evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : ((metadata as any)?.evidenceType || "ANALYST_PHOTO"),
         comentario: metadata?.comentario || "",
         isIndependentPoi: metadata?.isIndependentPoi || false,
         gpsAccuracy: metadata?.gpsAccuracy ?? null,
@@ -621,7 +625,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       previewUrl: downloadURL,
       lat,
       lng,
-      tipo: defaultTipo,
+      tipo: isStreetView ? "STREET_VIEW" : defaultTipo,
+      fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
+      evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : ((metadata as any)?.evidenceType || "ANALYST_PHOTO"),
       comentario: metadata?.comentario || "",
       isIndependentPoi: metadata?.isIndependentPoi || false,
       file: compressedFile,
@@ -634,7 +640,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng: metadata?.gpsLng ?? null,
       diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
       validado: metadata?.validado ?? false,
-    }, photoDocId);
+    } as any, photoDocId);
 
     // Auto-seleccionar la foto en la lista activa para asegurar su exportación
     setSelectedIds((prev) => {

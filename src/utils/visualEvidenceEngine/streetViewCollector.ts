@@ -18,7 +18,9 @@ export class StreetViewCollector {
         img.tipo?.toLowerCase().includes("street") ||
         img.url?.toLowerCase().includes("street") ||
         img.comentario?.toLowerCase().includes("street") ||
-        img.description?.toLowerCase().includes("street")
+        img.description?.toLowerCase().includes("street") ||
+        img.evidenceType === "VIRTUAL_STREET_VIEW" ||
+        img.fuente === "Google Street View"
     );
 
     // Mapear cada uno a VisualEvidenceInternal
