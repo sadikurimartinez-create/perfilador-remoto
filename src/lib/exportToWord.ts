@@ -30,6 +30,7 @@ import {
 } from "docx";
 import { saveAs } from "file-saver";
 import { TCE_DEFAULT_FALLBACK } from "../utils/territorialContextEngine";
+import { EditorialStructureEngine } from "@/utils/editorialStructureEngine";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -572,6 +573,120 @@ export async function exportToWord(
     alignment: AlignmentType.JUSTIFIED
   });
 
+  const renderEditorialText = (text: string, isChapter4 = false): Paragraph[] => {
+    if (!text) return [];
+    const blocks = EditorialStructureEngine.parse(text, isChapter4);
+    const paragraphs: Paragraph[] = [];
+
+    for (const block of blocks) {
+      switch (block.type) {
+        case "TITLE":
+          paragraphs.push(
+            new Paragraph({
+              keepWithNext: true,
+              children: [
+                new TextRun({
+                  text: block.text?.toUpperCase(),
+                  bold: true,
+                  size: 24,
+                  color: "0D2B52",
+                  font: "Calibri"
+                })
+              ],
+              spacing: { before: 240, after: 120 }
+            })
+          );
+          break;
+
+        case "SUBTITLE":
+          paragraphs.push(
+            new Paragraph({
+              keepWithNext: true,
+              children: [
+                new TextRun({
+                  text: block.text,
+                  bold: true,
+                  size: 20,
+                  color: "1F4E79",
+                  font: "Calibri"
+                })
+              ],
+              spacing: { before: 180, after: 80 }
+            })
+          );
+          break;
+
+        case "BULLET":
+          if (block.items) {
+            block.items.forEach(item => {
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "• ", bold: true, color: "0D2B52", size: 20 }),
+                    new TextRun({ text: item, color: "222222", size: 18, font: "Calibri" })
+                  ],
+                  spacing: { after: 80 },
+                  indent: { left: 360 }
+                })
+              );
+            });
+          }
+          break;
+
+        case "NUMBERED_LIST":
+          const prefix = block.isStatistical 
+            ? `${block.level}. ` 
+            : `☐ ${block.level}. `;
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: prefix, bold: !block.isStatistical, color: "0D2B52", size: 18, font: "Calibri" }),
+                new TextRun({ text: block.text, color: "222222", size: 18, font: "Calibri" })
+              ],
+              spacing: { after: 100 },
+              indent: { left: 360 }
+            })
+          );
+          break;
+
+        case "ANALYTICAL_BLOCK":
+          let categoryLabel = "ANÁLISIS";
+          let categoryColor = "1F4E79";
+          if (block.category === "HECHO_OBSERVADO") { categoryLabel = "HECHO OBSERVADO"; categoryColor = "A51D24"; }
+          else if (block.category === "INFERENCIA_ANALITICA") { categoryLabel = "INFERENCIA ANALÍTICA"; categoryColor = "0D2B52"; }
+          else if (block.category === "EVIDENCIA") { categoryLabel = "EVIDENCIA"; categoryColor = "2E7D32"; }
+          else if (block.category === "IMPACTO_OPERACIONAL") { categoryLabel = "IMPLICACIÓN OPERACIONAL"; categoryColor = "E65100"; }
+          else if (block.category === "RECOMMENDATION") { categoryLabel = "RECOMENDACIÓN"; categoryColor = "1565C0"; }
+
+          const cleanContent = block.text?.replace(new RegExp(`^\\[?${categoryLabel}\\]?:?\\s*`, "i"), "") || "";
+          paragraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: `[${categoryLabel}] `, bold: true, color: categoryColor, size: 18, font: "Calibri" }),
+                new TextRun({ text: cleanContent, color: "222222", size: 18, font: "Calibri", italic: true })
+              ],
+              spacing: { before: 100, after: 100 },
+              indent: { left: 240 }
+            })
+          );
+          break;
+
+        case "PARAGRAPH":
+        default:
+          paragraphs.push(
+            new Paragraph({
+              children: [new TextRun({ text: block.text, size: 20, font: "Calibri", color: "222222" })],
+              spacing: { after: 120 },
+              alignment: AlignmentType.JUSTIFIED
+            })
+          );
+          break;
+      }
+    }
+
+    return paragraphs;
+  };
+
   const createBullet = (boldPrefix: string, text: string, color = "222222") => new Paragraph({
     children: [
       new TextRun({ text: "• ", bold: true, color: "0D2B52", size: 20 }),
@@ -822,17 +937,17 @@ export async function exportToWord(
 
   elements.push(new Paragraph({ pageBreakBefore: true }));
   elements.push(createTitle("CAPÍTULO 1: CONTEXTO DEL ANÁLISIS"));
-  elements.push(createBodyText(payload.contextoTerritorial));
+  elements.push(...renderEditorialText(payload.contextoTerritorial));
 
   // ================= PÁGINA 3: CAPÍTULO 2 - HIPÓTESIS CRIMINOLÓGICA AMBIENTAL =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 2: HIPÓTESIS CRIMINOLÓGICA AMBIENTAL"));
-  elements.push(createBodyText(payload.finalHypothesis));
+  elements.push(...renderEditorialText(payload.finalHypothesis));
 
   // ================= PÁGINA 4: CAPÍTULO 3 - ANÁLISIS TERRITORIAL CARTOGRÁFICO =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO"));
-  elements.push(createBodyText(payload.mapsText || ""));
+  elements.push(...renderEditorialText(payload.mapsText || "", true));
 
   if (payload.maps && payload.maps.length > 0) {
     for (const map of payload.maps) {
@@ -886,7 +1001,7 @@ export async function exportToWord(
   // ================= PÁGINA 5: CAPÍTULO 4 - ANÁLISIS ESTADÍSTICO =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 4: ANÁLISIS ESTADÍSTICO"));
-  elements.push(createBodyText(payload.statsText || ""));
+  elements.push(...renderEditorialText(payload.statsText || "", true));
 
   if (payload.graphs && payload.graphs.length > 0) {
     for (const graph of payload.graphs) {
@@ -949,7 +1064,7 @@ export async function exportToWord(
   // ================= PÁGINA 6: CAPÍTULO 5 - EVIDENCIA FOTOGRÁFICA =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA"));
-  elements.push(createBodyText(payload.evidenceText || ""));
+  elements.push(...renderEditorialText(payload.evidenceText || ""));
 
   if (payload.photoEvidence && payload.photoEvidence.length > 0) {
     for (let i = 0; i < payload.photoEvidence.length; i++) {
@@ -1029,7 +1144,7 @@ export async function exportToWord(
     sanitizedStreetViewText = "Sin captura visual disponible. Se registra alerta metodológica institucional: la ausencia de material Street View para el presente dictamen limita la corroboración remota, procediendo únicamente a partir de las valoraciones territoriales recopiladas en campo.";
   }
 
-  elements.push(createBodyText(sanitizedStreetViewText));
+  elements.push(...renderEditorialText(sanitizedStreetViewText));
 
   // Renderizar las Tarjetas de Evidencia Virtual de Street View
   if (hasStreetViewImages) {
@@ -1398,7 +1513,7 @@ export async function exportToWord(
   // ================= PÁGINA 11: CAPÍTULO 10 - CONCLUSIONES OPERATIVAS =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 10: CONCLUSIONES OPERATIVAS"));
-  elements.push(createBodyText(payload.conclusionesText || ""));
+  elements.push(...renderEditorialText(payload.conclusionesText || ""));
 
   elements.push(createSubtitle("Recomendaciones de Acción Inmediata (0-30 días):"));
   payload.conclusiones.recomendacionesTacticas.forEach(t => elements.push(createBullet("", t, "B91C1C")));

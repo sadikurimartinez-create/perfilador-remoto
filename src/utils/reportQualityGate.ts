@@ -1,5 +1,6 @@
 import { IntelligenceReportPayload, IntelligenceBriefing } from './intelligenceLayoutEngine';
 import { hasGenericOsintContent } from './osintChapterBuilder';
+import { EditorialStructureEngine } from './editorialStructureEngine';
 // Trigger Vercel deploy webhook manually via new commit
 
 /**
@@ -205,6 +206,38 @@ export class ReportQualityGate {
     if (payload.osintSynthesized && !payload.osintSynthesized.includes("HALLAZGO")) {
       throw new Error("ReportQualityGate: El Capítulo 7 (OSINT) debe estructurarse en bloques HALLAZGO, EVIDENCIA, ANÁLISIS e IMPLICACIÓN OPERATIVA.");
     }
+
+    // --- QUALITY GATE EDITORIAL ---
+    const checkChapterStructure = (text: string, chapterName: string) => {
+      if (!text) return;
+      if (text.length > 2500) {
+        const blocks = EditorialStructureEngine.parse(text);
+        if (blocks.length < 3 || (blocks.length === 1 && blocks[0].type === "PARAGRAPH")) {
+          throw new Error(`[QUALITY GATE EDITORIAL] ${chapterName} contiene estructura semántica detectada pero composición editorial perdida.`);
+        }
+      }
+    };
+
+    const checkMergedAnalyticalLabels = (text: string, chapterName: string) => {
+      if (!text) return;
+      const lower = text.toLowerCase();
+      if (lower.includes("hecho observado") && lower.includes("inferencia analítica")) {
+        const lines = text.split(/\n+/);
+        const hasSeparateLines = lines.some(l => l.toLowerCase().includes("hecho observado")) && 
+                                 lines.some(l => l.toLowerCase().includes("inferencia analítica"));
+        if (!hasSeparateLines) {
+          throw new Error(`[QUALITY GATE EDITORIAL] ${chapterName} contiene etiquetas analíticas fusionadas sin segmentación editorial.`);
+        }
+      }
+    };
+
+    checkChapterStructure(payload.contextoTerritorial, "Capítulo 1");
+    checkChapterStructure(payload.finalHypothesis, "Capítulo 2");
+    checkChapterStructure(payload.osintSynthesized, "Capítulo 7");
+    checkChapterStructure(payload.pandillasAnalysis, "Capítulo 8");
+
+    checkMergedAnalyticalLabels(payload.finalHypothesis, "Capítulo 2");
+    checkMergedAnalyticalLabels(payload.osintSynthesized, "Capítulo 7");
 
     // 10. Cross Chapter Consistency Check (Calidad de consistencia intercapítulos)
     const hieEvents = payload.hieData?.evidence ?? 0;
