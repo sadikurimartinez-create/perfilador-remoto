@@ -1,6 +1,13 @@
 export interface StandardCrimeRecord {
   id: string;
-  delito: string;
+  delito: string; // Will store the homologated delito_homologado_SAI
+  delitoOriginal: string;
+  delito_homologado_SAI: string;
+  nivel_confianza: number;
+  reglas_aplicadas: string[];
+  variables_detectadas: string[];
+  requiere_revision_humana: boolean;
+  tipo_homicidio?: "DOLOSO" | "CULPOSO" | "EJECUCIÓN" | "OTRO";
   fechaStr: string; // YYYY-MM-DD
   horaStr: string; // HH:MM
   lat: number;

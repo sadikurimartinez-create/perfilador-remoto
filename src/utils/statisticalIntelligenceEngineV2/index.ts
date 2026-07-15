@@ -2,6 +2,7 @@ import { StandardCrimeRecord, ExclusionLog, SIECoreResult } from "./models/stati
 import { TemporalIntelligence } from "./temporal/temporalIntelligence";
 import { SpatialStatistics } from "./spatial/spatialStatistics";
 import { PredictiveCrimeModel } from "./predictive/predictiveCrimeModel";
+import { SemanticNormalizerSAI } from "../semanticNormalizerSAI";
 
 export * from "./models/statisticalTypes";
 export * from "./temporal/temporalIntelligence";
@@ -90,9 +91,18 @@ export class StatisticalIntelligenceEngineV2 {
       const violenciaRaw = r.VIOLENCIA ?? r.violencia ?? r.Violencia ?? r.MODALIDAD ?? "";
       const violencia = /violencia|con_violencia|lesiones|arma/i.test(String(violenciaRaw)) || /fuego|blanca/i.test(String(armaRaw));
 
+      const norm = SemanticNormalizerSAI.normalize(r);
+
       cleanRecords.push({
         id: r.id ?? `crime-${logCounter++}`,
-        delito: delitoClean,
+        delito: norm.delito_homologado_SAI, // Use homologated name for statistical/spatial/predictive calculations!
+        delitoOriginal: norm.delito_original,
+        delito_homologado_SAI: norm.delito_homologado_SAI,
+        nivel_confianza: norm.nivel_confianza,
+        reglas_aplicadas: norm.reglas_aplicadas,
+        variables_detectadas: norm.variables_detectadas,
+        requiere_revision_humana: norm.requiere_revision_humana,
+        tipo_homicidio: norm.tipo_homicidio,
         fechaStr,
         horaStr: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
         lat: latNum,
