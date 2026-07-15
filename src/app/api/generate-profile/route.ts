@@ -492,11 +492,12 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             controller.enqueue(encoder.encode(escapedText));
           }
         } catch (e: any) {
-          console.error(`\n[AI RESPONSE ERROR] ----------------------------------`);
-          console.error(`Falla en Capítulo: ${chapter}`);
-          console.error(`Descripción del error: ${e.message}`);
-          console.error(`------------------------------------------------------\n`);
-          const errorMsg = "\\n\\n[Error de generación: " + e.message + "]";
+          const escapedErr = (e.message || "Error desconocido")
+            .replace(/\\/g, "\\\\")
+            .replace(/\"/g, '\\"')
+            .replace(/\n/g, "\\n")
+            .replace(/\r/g, "\\r");
+          const errorMsg = "\\n\\n[Error de generación: " + escapedErr + "]";
           controller.enqueue(encoder.encode(errorMsg));
         } finally {
           clearInterval(keepAlive);
