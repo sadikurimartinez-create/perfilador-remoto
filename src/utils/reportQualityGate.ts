@@ -1,6 +1,7 @@
 import { IntelligenceReportPayload, IntelligenceBriefing } from './intelligenceLayoutEngine';
 import { hasGenericOsintContent } from './osintChapterBuilder';
 import { EditorialStructureEngine } from './editorialStructureEngine';
+import { IntelligenceNarrativeValidator } from './intelligenceNarrativeValidator';
 // Trigger Vercel deploy webhook manually via new commit
 
 /**
@@ -258,6 +259,13 @@ export class ReportQualityGate {
 
     if (hieEvents !== cieEvents || cieEvents !== sieEvents) {
       throw new Error(`INCONSISTENCIA ANALÍTICA: Los capítulos utilizan diferentes bases criminales (HIE: ${hieEvents}, CIE: ${cieEvents}, SIE: ${sieEvents}).`);
+    }
+
+    // 11. Narrative INDE Quality Gate (ADR-010)
+    const narrativeResult = IntelligenceNarrativeValidator.validateReport(payload, briefing);
+    if (narrativeResult.status === "REJECTED") {
+      const errorMsg = `[INTELLIGENCE QUALITY GATE REJECTED] IDS: ${narrativeResult.idsScore}/100. Clasificación: ${narrativeResult.classification}.\nMotivo:\n- ${narrativeResult.reasons.join("\n- ")}\nViolaciones:\n- ${narrativeResult.violations.join("\n- ")}`;
+      throw new Error(errorMsg);
     }
   }
 }

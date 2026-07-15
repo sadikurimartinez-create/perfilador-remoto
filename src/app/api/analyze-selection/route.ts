@@ -7,6 +7,7 @@ import {
   buildIrregularBusinesses
 } from "@/lib/environmentProfile";
 import { getPool } from "@/lib/db";
+import { buildStreetViewUrl } from "@/lib/googleStreetView";
 
 type PhotoPayload = {
   id: string;
@@ -208,6 +209,44 @@ export async function POST(req: Request) {
         ]
       : [];
 
+    // Generar lugares de acecho virtuales con imágenes reales de Google Street View
+    const tacticalStreetViews = [];
+    
+    // 1. Obtener de los puntos de interés (POIs) reales en el radio
+    const svFromPois = pois.slice(0, 8).map((p) => {
+      const svUrl = buildStreetViewUrl(p.lat, p.lng);
+      return {
+        name: p.name,
+        observed: `Análisis de entorno táctico en inmediaciones de ${p.name} (Clasificación: ${p.category || "Punto de interés"}).`,
+        streetViewUrl: svUrl
+      };
+    }).filter(sv => sv.streetViewUrl != null);
+    
+    tacticalStreetViews.push(...svFromPois);
+    
+    // 2. Si no hay suficientes POIs, generar puntos tácticos perimetrales utilizando coordenadas compensadas
+    if (tacticalStreetViews.length < 3) {
+      const offsets = [
+        { name: "Baricentro del Sector", dLat: 0, dLng: 0 },
+        { name: "Acceso Norte del Sector", dLat: 0.001, dLng: 0 },
+        { name: "Acceso Sur del Sector", dLat: -0.001, dLng: 0 },
+        { name: "Acceso Este del Sector", dLat: 0, dLng: 0.001 },
+        { name: "Acceso Oeste del Sector", dLat: 0, dLng: -0.001 }
+      ];
+      for (const off of offsets) {
+        const targetLat = centerLat + off.dLat;
+        const targetLng = centerLng + off.dLng;
+        const svUrl = buildStreetViewUrl(targetLat, targetLng);
+        if (svUrl) {
+          tacticalStreetViews.push({
+            name: off.name,
+            observed: `Punto de control perimetral virtual para monitoreo y patrullaje táctico preventivo en la zona de estudio.`,
+            streetViewUrl: svUrl
+          });
+        }
+      }
+    }
+
     return NextResponse.json(
       {
         perPhotoFindings,
@@ -215,6 +254,7 @@ export async function POST(req: Request) {
         heatmapData,
         historicalCrimes,
         pois,
+        tacticalStreetViews,
         analysisPolygon: analysisPolygon ?? null,
         manualPois: manualPois ?? [],
         raw: {
