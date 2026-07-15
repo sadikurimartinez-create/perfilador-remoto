@@ -31,6 +31,7 @@ export function PowerUpsModule({
   isContextualized = false,
   onApplyDetailedAnalysis
 }: PowerUpsModuleProps) {
+  const [isExpanded, setIsExpanded] = useState(insumoType !== "photo");
   const [selectedPu, setSelectedPu] = useState<PowerUpConfig | null>(null);
   const [hoveredPu, setHoveredPu] = useState<PowerUpConfig | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -202,6 +203,29 @@ export function PowerUpsModule({
   const recommendedPowerUp = analysisRec 
     ? POWER_UPS_CONFIG.find(p => p.id === analysisRec.primaryPuId) 
     : null;
+
+  if (!isExpanded) {
+    return (
+      <div className="w-full bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left transition-all">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+            🧠
+          </div>
+          <div>
+            <h5 className="text-[12px] font-bold text-slate-200">Asistente de Inteligencia Operativa v2.1</h5>
+            <p className="text-[10px] text-slate-400 leading-snug">Capacidades tácticas y de análisis de entorno por IA.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsExpanded(true)}
+          className="shrink-0 bg-indigo-600/90 hover:bg-indigo-500 text-white font-bold text-[10px] py-1 px-3 rounded-lg transition-all flex items-center gap-1 shadow-md hover:scale-[1.02] active:scale-[0.98]"
+        >
+          ⚡ Abrir Asistente
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full bg-slate-950 border border-slate-800/80 rounded-xl p-4 shadow-2xl space-y-3.5 text-left">

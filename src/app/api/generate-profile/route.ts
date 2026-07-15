@@ -377,10 +377,14 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         };
         const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
         const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-        streamingResp = await model.generateContentStream({
+        const streamPromise = model.generateContentStream({
           contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
           generationConfig: { temperature: 0.15 }
         });
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout en inicialización de Vertex AI (10s)")), 10000)
+        );
+        streamingResp = await Promise.race([streamPromise, timeoutPromise]);
       } catch (vertexInitErr: any) {
         console.warn("[api/generate-profile] Vertex AI initialization failed, falling back to REST API:", vertexInitErr.message);
       }

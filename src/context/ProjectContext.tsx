@@ -435,7 +435,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
           // NORMALIZAR OPENSTREETMAP ALEMANIA EN CALIENTE PARA LA VISTA CLIENTE
           if (rawUrl.includes("staticmap.openstreetmap.de")) {
-            console.warn("[ProjectContext] Detectado previewUrl de OpenStreetMap Alemania caído en Firestore. Normalizando en caliente para la vista cliente...");
+            // console.warn("[ProjectContext] Detectado previewUrl de OpenStreetMap Alemania caído en Firestore. Normalizando en caliente para la vista cliente...");
             const match = rawUrl.match(/center=([^&]+)/);
             if (match && match[1]) {
               const [lat, lng] = match[1].split(",");
@@ -455,7 +455,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
           // NORMALIZAR YANDEX MAPS EN CALIENTE PARA LA VISTA CLIENTE
           if (rawUrl.includes("api-maps.yandex.ru")) {
-            console.warn("[ProjectContext] Detectado previewUrl de Yandex Maps caído en Firestore. Normalizando en caliente para la vista cliente...");
+            // console.warn("[ProjectContext] Detectado previewUrl de Yandex Maps caído en Firestore. Normalizando en caliente para la vista cliente...");
             const match = rawUrl.match(/ll=([^&]+)/);
             if (match && match[1]) {
               const [lng, lat] = match[1].split(",");
