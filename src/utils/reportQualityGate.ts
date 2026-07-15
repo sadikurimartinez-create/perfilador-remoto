@@ -46,10 +46,17 @@ export class ReportQualityGate {
     cleanObjectMarkdown(payload);
     cleanObjectMarkdown(briefing);
 
-    // 1. Falta Street View
+    // 1. Falta Street View o tiene referencias vacías
     const hasStreetView = !!payload.streetViewAnalysis && payload.streetViewAnalysis.length > 0;
     if (!hasStreetView) {
       throw new Error("ReportQualityGate: El informe requiere obligatoriamente integrar análisis visual de Street View.");
+    }
+
+    // Validar procedencia y presencia real de imagen en Street View
+    for (const sv of payload.streetViewAnalysis) {
+      if (!sv.dataUrl || sv.dataUrl.trim() === "") {
+        throw new Error("Informe no autorizado para exportación: existen referencias documentales de Street View sin evidencia visual asociada.");
+      }
     }
 
     // 2. Faltan mapas
@@ -62,6 +69,15 @@ export class ReportQualityGate {
     const hasGraphs = !!payload.graphs && payload.graphs.length > 0;
     if (!hasGraphs) {
       throw new Error("ReportQualityGate: El informe requiere obligatoriamente integrar Modelos Analíticos (Gráficas).");
+    }
+
+    // Validar presencia de imagen real en fotos de campo
+    if (payload.photoEvidence) {
+      for (const photo of payload.photoEvidence) {
+        if (!photo.dataUrl || photo.dataUrl.trim() === "") {
+          throw new Error("Informe no autorizado para exportación: existen referencias documentales de fotos de campo sin evidencia visual asociada.");
+        }
+      }
     }
 
     // 3.5. Extraer únicamente los campos de texto de contenido editorial (capítulos de IA) para la auditoría

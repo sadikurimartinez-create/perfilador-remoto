@@ -8,6 +8,7 @@ import {
   formatDomicilio,
 } from "@/utils/geoActorValidation";
 import { buildOsintFindingsFromSweeps } from "@/utils/osintChapterBuilder";
+import { ReportIntelligenceNormalizer } from "@/utils/reportIntelligenceNormalizer";
 import {
   Document,
   ImageRun,
@@ -1014,10 +1015,89 @@ export async function exportToWord(
   elements.push(createTitle("CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD"));
   
   let sanitizedStreetViewText = payload.streetViewText || "Análisis territorial táctico no disponible.";
-  // Asegurar sanitización geográfica absoluta (Regla 1 / Test 5)
-  sanitizedStreetViewText = sanitizedStreetViewText.replace(/\b\d{1,3}\.\d{5,8}\b|\b-\d{1,3}\.\d{5,8}\b|lat:|lng:|coordinates:/gi, "");
   
+  // Normalizar usando el depurador de IA oficial
+  sanitizedStreetViewText = ReportIntelligenceNormalizer.normalize(sanitizedStreetViewText);
+  
+  // Asegurar sanitización geográfica absoluta
+  sanitizedStreetViewText = sanitizedStreetViewText.replace(/\b\d{1,3}\.\d{5,8}\b|\b-\d{1,3}\.\d{5,8}\b|lat:|lng:|coordinates:/gi, "");
+
+  const hasStreetViewImages = payload.streetViewAnalysis && payload.streetViewAnalysis.some((sv: any) => sv.dataUrl);
+
+  // Regla de Oro: Si no existen capturas de Street View cargadas, no se permite narrativa afirmativa.
+  if (!hasStreetViewImages) {
+    sanitizedStreetViewText = "Sin captura visual disponible. Se registra alerta metodológica institucional: la ausencia de material Street View para el presente dictamen limita la corroboración remota, procediendo únicamente a partir de las valoraciones territoriales recopiladas en campo.";
+  }
+
   elements.push(createBodyText(sanitizedStreetViewText));
+
+  // Renderizar las Tarjetas de Evidencia Virtual de Street View
+  if (hasStreetViewImages) {
+    for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
+      const sv = payload.streetViewAnalysis[i];
+      if (!sv.dataUrl) continue;
+      
+      const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
+      const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height);
+      if (imgRes) {
+        elements.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+              bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+              left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+              right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
+            },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
+                    margins: { top: 180, bottom: 180, left: 180, right: 180 },
+                    children: [
+                      // Encabezado de Evidencia
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: `EVIDENCIA VIRTUAL STREET VIEW No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+                        spacing: { after: 120 }
+                      }),
+                      // Imagen de Street View
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
+                        spacing: { after: 140 }
+                      }),
+                      // Metadatos y análisis criminológico formal (Cero fuga de coordenadas)
+                      new Paragraph({
+                        children: [
+                          new TextRun({ text: "Fuente Primaria: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${sv.fuentePrimaria || "Google Street View"}\n\n`, size: 16, font: "Calibri" }),
+
+                          new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${sv.location || "Sector de estudio perimetral (coordenadas geográficas omitidas para resguardo de confidencialidad)"}\n\n`, size: 16, font: "Calibri" }),
+
+                          new TextRun({ text: "Elemento Observado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.observed || "Se aprecian condiciones físicas del entorno del perímetro estudiado.").slice(0, 250)}\n\n`, size: 16, font: "Calibri" }),
+
+                          new TextRun({ text: "Indicador Criminológico: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.indicadorCriminologico || sv.observed || "El análisis físico-ambiental identifica vulnerabilidades tácticas de oportunidad criminológica ambiental.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
+
+                          new TextRun({ text: "Inferencia Analítica: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                          new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.inferenciaAnalitica || sv.relation || "Sustenta la necesidad de implementar medidas de control informal en el entorno.")}`, size: 16, font: "Calibri" })
+                        ],
+                        spacing: { after: 120 }
+                      })
+                    ]
+                  })
+                ]
+              })
+            ]
+          })
+        );
+      }
+    }
+  }
 
   // ================= PÁGINA 8: CAPÍTULO 7 - INTELIGENCIA OSINT =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
