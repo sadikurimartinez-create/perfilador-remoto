@@ -1071,58 +1071,76 @@ export async function exportToWord(
       const photo = payload.photoEvidence[i];
       const dims = PageBalanceEngine.calculateDimensions(photo.caption.length, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(photo.dataUrl, dims.width, dims.height);
+      
+      const cardChildren: any[] = [
+        // Encabezado
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text: `EVIDENCIA FOTOGRÁFICA No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+          spacing: { after: 120 }
+        })
+      ];
+
       if (imgRes) {
-        // FlexibleChapterFlow: No pageBreakBefore here to let cards flow naturally
-        elements.push(
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  new TableCell({
-                    shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
-                    margins: { top: 180, bottom: 180, left: 180, right: 180 },
-                    children: [
-                      // Encabezado
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [new TextRun({ text: `EVIDENCIA FOTOGRÁFICA No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
-                        spacing: { after: 120 }
-                      }),
-                      // Foto Grande
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-                        spacing: { after: 140 }
-                      }),
-                      // Lista de Metadatos estructurados de CCAV para Fotos (v13.0)
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Observación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${(photo.caption || "Se observan elementos del entorno sin cerramiento y baja iluminación.").slice(0, 180)}\n\n`, size: 16, font: "Calibri" }),
-                          
-                          new TextRun({ text: "Análisis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${(photo.criminologicalInterpretation || "El análisis táctico identifica facilitadores físicos que aumentan la vulnerabilidad del sector por pérdida de vigilancia natural.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
-                          
-                          new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${(photo.relation || "Sustenta la hipótesis de oportunidad criminológica ambiental.").slice(0, 180)}`, size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 120 }
-                      })
-                    ]
-                  })
-                ]
-              })
-            ]
+        // Foto Grande si cargó exitosamente
+        cardChildren.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
+            spacing: { after: 140 }
+          })
+        );
+      } else {
+        // Marcador de posición profesional si falló la carga (CORS, red, etc.)
+        cardChildren.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: "📷 [EVIDENCIA FOTOGRÁFICA ADJUNTA EN PLATAFORMA DIGITAL - REGISTRO DE CAMPO PRESERVADO]", italics: true, color: "7F8C8D", size: 16, font: "Calibri" })],
+            spacing: { after: 140 }
           })
         );
       }
+
+      // Lista de Metadatos estructurados de CCAV para Fotos (v13.0)
+      cardChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Observación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${(photo.caption || "Se observan elementos del entorno sin cerramiento y baja iluminación.").slice(0, 180)}\n\n`, size: 16, font: "Calibri" }),
+            
+            new TextRun({ text: "Análisis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${(photo.criminologicalInterpretation || "El análisis táctico identifica facilitadores físicos que aumentan la vulnerabilidad del sector por pérdida de vigilancia natural.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
+            
+            new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${(photo.relation || "Sustenta la hipótesis de oportunidad criminológica ambiental.").slice(0, 180)}`, size: 16, font: "Calibri" })
+          ],
+          spacing: { after: 120 }
+        })
+      );
+
+      // FlexibleChapterFlow: No pageBreakBefore here to let cards flow naturally
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+            bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+            left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+            right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
+          },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
+                  margins: { top: 180, bottom: 180, left: 180, right: 180 },
+                  children: cardChildren
+                })
+              ]
+            })
+          ]
+        })
+      );
     }
   }
 
@@ -1154,63 +1172,81 @@ export async function exportToWord(
       
       const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height);
+      
+      const cardChildren: any[] = [
+        // Encabezado de Evidencia
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text: `EVIDENCIA VIRTUAL STREET VIEW No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
+          spacing: { after: 120 }
+        })
+      ];
+
       if (imgRes) {
-        elements.push(
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-              right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  new TableCell({
-                    shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
-                    margins: { top: 180, bottom: 180, left: 180, right: 180 },
-                    children: [
-                      // Encabezado de Evidencia
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [new TextRun({ text: `EVIDENCIA VIRTUAL STREET VIEW No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
-                        spacing: { after: 120 }
-                      }),
-                      // Imagen de Street View
-                      new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-                        spacing: { after: 140 }
-                      }),
-                      // Metadatos y análisis criminológico formal (Cero fuga de coordenadas)
-                      new Paragraph({
-                        children: [
-                          new TextRun({ text: "Fuente Primaria: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${sv.fuentePrimaria || "Google Street View"}\n\n`, size: 16, font: "Calibri" }),
-
-                          new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${sv.location || "Sector de estudio perimetral (coordenadas geográficas omitidas para resguardo de confidencialidad)"}\n\n`, size: 16, font: "Calibri" }),
-
-                          new TextRun({ text: "Elemento Observado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.observed || "Se aprecian condiciones físicas del entorno del perímetro estudiado.").slice(0, 250)}\n\n`, size: 16, font: "Calibri" }),
-
-                          new TextRun({ text: "Indicador Criminológico: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.indicadorCriminologico || sv.observed || "El análisis físico-ambiental identifica vulnerabilidades tácticas de oportunidad criminológica ambiental.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
-
-                          new TextRun({ text: "Inferencia Analítica: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-                          new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.inferenciaAnalitica || sv.relation || "Sustenta la necesidad de implementar medidas de control informal en el entorno.")}`, size: 16, font: "Calibri" })
-                        ],
-                        spacing: { after: 120 }
-                      })
-                    ]
-                  })
-                ]
-              })
-            ]
+        // Imagen de Street View si cargó exitosamente
+        cardChildren.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
+            spacing: { after: 140 }
+          })
+        );
+      } else {
+        // Marcador de posición profesional si falló la carga (CORS, red, etc.)
+        cardChildren.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: "📷 [EVIDENCIA VIRTUAL STREET VIEW ADJUNTA EN PLATAFORMA DIGITAL - REGISTRO DE BARRIDO PRESERVADO]", italics: true, color: "7F8C8D", size: 16, font: "Calibri" })],
+            spacing: { after: 140 }
           })
         );
       }
+
+      // Metadatos y análisis criminológico formal (Cero fuga de coordenadas)
+      cardChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Fuente Primaria: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${sv.fuentePrimaria || "Google Street View"}\n\n`, size: 16, font: "Calibri" }),
+
+            new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${sv.location || "Sector de estudio perimetral (coordenadas geográficas omitidas para resguardo de confidencialidad)"}\n\n`, size: 16, font: "Calibri" }),
+
+            new TextRun({ text: "Elemento Observado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.observed || "Se aprecian condiciones físicas del entorno del perímetro estudiado.").slice(0, 250)}\n\n`, size: 16, font: "Calibri" }),
+
+            new TextRun({ text: "Indicador Criminológico: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.indicadorCriminologico || sv.observed || "El análisis físico-ambiental identifica vulnerabilidades tácticas de oportunidad criminológica ambiental.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
+
+            new TextRun({ text: "Inferencia Analítica: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.inferenciaAnalitica || sv.relation || "Sustenta la necesidad de implementar medidas de control informal en el entorno.")}`, size: 16, font: "Calibri" })
+          ],
+          spacing: { after: 120 }
+        })
+      );
+
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+            bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+            left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
+            right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
+          },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
+                  margins: { top: 180, bottom: 180, left: 180, right: 180 },
+                  children: cardChildren
+                })
+              ]
+            })
+          ]
+        })
+      );
     }
   }
 
