@@ -218,7 +218,9 @@ export async function POST(req: Request) {
       return {
         name: p.name,
         observed: `Análisis de entorno táctico en inmediaciones de ${p.name} (Clasificación: ${p.category || "Punto de interés"}).`,
-        streetViewUrl: svUrl
+        streetViewUrl: svUrl,
+        lat: p.lat,
+        lng: p.lng
       };
     }).filter(sv => sv.streetViewUrl != null);
     
@@ -241,7 +243,9 @@ export async function POST(req: Request) {
           tacticalStreetViews.push({
             name: off.name,
             observed: `Punto de control perimetral virtual para monitoreo y patrullaje táctico preventivo en la zona de estudio.`,
-            streetViewUrl: svUrl
+            streetViewUrl: svUrl,
+            lat: targetLat,
+            lng: targetLng
           });
         }
       }
