@@ -392,6 +392,12 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         // Enviar un espacio en blanco inmediatamente para evitar el Timeout (504) de Vercel
         controller.enqueue(encoder.encode(" "));
 
+        let safeSieDataForClient = null;
+        if (sieData) {
+          const { exclusionLogs, ...rest } = sieData;
+          safeSieDataForClient = rest;
+        }
+
         const metaPart = JSON.stringify({
           riskLevel: generalRisk.toLowerCase(),
           summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
@@ -399,7 +405,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           pois: [],
           inegiDemographics: null,
           tacticalStreetViews: safeBody.streetViews || [],
-          sieData: sieData,
+          sieData: safeSieDataForClient,
           tceData: tceData,
           hieData: hieData
         });
