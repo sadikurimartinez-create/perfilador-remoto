@@ -1441,7 +1441,8 @@ const hasMinimumPhotos =
             
             if (!exists && uploadAndAddPhoto) {
               try {
-                const svRes = await fetch(sv.streetViewUrl);
+                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(sv.streetViewUrl)}`;
+                const svRes = await fetch(proxyUrl);
                 if (svRes.ok) {
                   const blob = await svRes.blob();
                   const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
@@ -1451,6 +1452,8 @@ const hasMinimumPhotos =
                     comentario: `EVIDENCIA VIRTUAL STREET VIEW: ${sv.name}. ${sv.observed || "Punto de observación de entorno vial."}`,
                     validado: true
                   });
+                } else {
+                  console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
                 }
               } catch (err) {
                 console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);
