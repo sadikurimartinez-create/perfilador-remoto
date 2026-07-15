@@ -80,6 +80,53 @@ async function callGeminiRestApi(prompt: string, modelName: string, apiKey: stri
   return text;
 }
 
+async function streamGeminiRestApi(
+  prompt: string,
+  modelName: string,
+  apiKey: string,
+  onChunk: (text: string) => void
+): Promise<void> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.15 }
+    })
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini REST API returned ${response.status}: ${errText}`);
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No response body stream available.");
+
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const regex = /"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    let match;
+    let lastIndex = 0;
+    while ((match = regex.exec(buffer)) !== null) {
+      const escapedText = match[1];
+      try {
+        const unescaped = JSON.parse(`"${escapedText}"`);
+        if (unescaped) onChunk(unescaped);
+      } catch {
+        onChunk(escapedText);
+      }
+      lastIndex = regex.lastIndex;
+    }
+    buffer = buffer.slice(lastIndex);
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -466,30 +513,29 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             if (!apiKey) {
               throw new Error("No se configuró la variable GEMINI_API_KEY ni credenciales válidas de Vertex AI.");
             }
-            console.log("[api/generate-profile] Calling Gemini REST API...");
-            const textResult = await callGeminiRestApi(systemPrompt, GEMINI_MODEL, apiKey);
-            let cleanedText = textResult;
-            if (cleanedText.startsWith("```markdown")) {
-              cleanedText = cleanedText.replace(/^```markdown\s*/i, "");
-            } else if (cleanedText.startsWith("```")) {
-              cleanedText = cleanedText.replace(/^```\s*/, "");
-            }
-            if (cleanedText.endsWith("```")) {
-              cleanedText = cleanedText.slice(0, -3);
-            }
+            console.log("[api/generate-profile] Calling Gemini REST API with Streaming Fallback...");
+            let isFirstChunk = true;
+            let totalLength = 0;
+            await streamGeminiRestApi(systemPrompt, GEMINI_MODEL, apiKey, (chunkText) => {
+              let cleanedChunk = chunkText;
+              if (isFirstChunk) {
+                if (cleanedChunk.startsWith("```markdown")) {
+                  cleanedChunk = cleanedChunk.replace(/^```markdown\s*/i, "");
+                } else if (cleanedChunk.startsWith("```")) {
+                  cleanedChunk = cleanedChunk.replace(/^```\s*/, "");
+                }
+                isFirstChunk = false;
+              }
+              totalLength += cleanedChunk.length;
+              const escapedChunk = JSON.stringify(cleanedChunk).slice(1, -1);
+              controller.enqueue(encoder.encode(escapedChunk));
+            });
 
-            // =======================================================================
-            // TELEMETRÍA DE RESPUESTA IA (REST API Fallback)
-            // =======================================================================
             console.log(`\n[AI RESPONSE] ----------------------------------------`);
             console.log(`Capítulo: ${chapter} - ${currentChapterLabel}`);
-            console.log(`Status: Completado (REST API exitoso)`);
-            console.log(`Longitud del Markdown generado: ${cleanedText.length} caracteres`);
-            console.log(`Formato estructurado válido: ${cleanedText.includes("##") ? "SÍ" : "NO"}`);
+            console.log(`Status: Completado (REST API Streaming Fallback exitoso)`);
+            console.log(`Longitud del Markdown generado: ${totalLength} caracteres`);
             console.log(`------------------------------------------------------\n`);
-
-            const escapedText = JSON.stringify(cleanedText).slice(1, -1);
-            controller.enqueue(encoder.encode(escapedText));
           }
         } catch (e: any) {
           const escapedErr = (e.message || "Error desconocido")
