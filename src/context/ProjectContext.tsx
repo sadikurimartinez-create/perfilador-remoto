@@ -430,9 +430,52 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const albumPhotos: AlbumPhoto[] = photosSnap.docs
         .map((photoDoc) => {
           const data = photoDoc.data();
+          let rawUrl = data.url || "";
+          const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+          // NORMALIZAR OPENSTREETMAP ALEMANIA EN CALIENTE PARA LA VISTA CLIENTE
+          if (rawUrl.includes("staticmap.openstreetmap.de")) {
+            console.warn("[ProjectContext] Detectado previewUrl de OpenStreetMap Alemania caído en Firestore. Normalizando en caliente para la vista cliente...");
+            const match = rawUrl.match(/center=([^&]+)/);
+            if (match && match[1]) {
+              const [lat, lng] = match[1].split(",");
+              if (apiKey) {
+                rawUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+              } else {
+                rawUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
+              }
+            } else if (data.lat && data.lng) {
+              if (apiKey) {
+                rawUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${data.lat},${data.lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+              } else {
+                rawUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${data.lng}/${data.lat}/600x400.png`;
+              }
+            }
+          }
+
+          // NORMALIZAR YANDEX MAPS EN CALIENTE PARA LA VISTA CLIENTE
+          if (rawUrl.includes("api-maps.yandex.ru")) {
+            console.warn("[ProjectContext] Detectado previewUrl de Yandex Maps caído en Firestore. Normalizando en caliente para la vista cliente...");
+            const match = rawUrl.match(/ll=([^&]+)/);
+            if (match && match[1]) {
+              const [lng, lat] = match[1].split(",");
+              if (apiKey) {
+                rawUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+              } else {
+                rawUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
+              }
+            } else if (data.lat && data.lng) {
+              if (apiKey) {
+                rawUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${data.lat},${data.lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
+              } else {
+                rawUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${data.lng}/${data.lat}/600x400.png`;
+              }
+            }
+          }
+
           return {
             id: photoDoc.id,
-            previewUrl: data.url,
+            previewUrl: rawUrl,
             lat: data.lat,
             lng: data.lng,
             tipo: data.tipo,
