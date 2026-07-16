@@ -151,11 +151,17 @@ export function ProjectMap({
     streetViewControl: true,
     rotateControl: true,
     fullscreenControl: true,
+    gestureHandling: "cooperative" as const, // Desactivar scroll de mapa para evitar interrupción al bajar la página
   }), []);
 
   // Filter georeferenced evidence items
   const georeferencedPhotos = useMemo(() => {
-    return album.filter((p) => p.lat != null && p.lng != null);
+    return album.filter((p) => {
+      if (p.lat == null || p.lng == null) return false;
+      // Filtrar pines por defecto automáticos de Aguascalientes para evitar distorsionar el mapa
+      const isDefaultFallback = Math.abs(Number(p.lat) - 21.8853) < 0.0001 && Math.abs(Number(p.lng) - (-102.2916)) < 0.0001;
+      return !isDefaultFallback;
+    });
   }, [album]);
 
   // Group coordinates of evidences for corridor polyline or polygon drawing (excl. independent POIs)

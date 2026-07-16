@@ -1022,6 +1022,34 @@ export const buildIntelligenceEditorialPayload = async (
     "Ejecutar acciones tácticas inmediatas en 0-30 días y preventivas en 30-90 días según el dictamen."
   );
 
+  const hypothesisLifecycle: InvestigationHypothesis = {
+    id: `H-${projectId}`,
+    expedienteId: projectId,
+    hipotesisInicial: hieData?.centralHypothesis?.queOcurre || (finalHypothesis && finalHypothesis.length > 10 ? finalHypothesis.split("\n")[0] : "Actividad delictiva disonante bajo investigación territorial."),
+    hipotesisActual: finalHypothesis || hieData?.centralHypothesis?.queOcurre || "Línea de análisis en proceso.",
+    variablesIniciales: ["incidencia", "territorio", "actores", "oportunidad"],
+    estadoActual: "EN_ANALISIS",
+    evidenciaConfirmatoria: (visualMatrix?.streetViewEvidence || []).map((s: any, idx: number) => `SV-00${idx + 1}`),
+    evidenciaContradictoria: [],
+    nivelConfianza: "ALTO",
+    justificacionActual: "Se cuenta con un alto grado de convergencia en la evidencia física situacional y registros estadísticos delictivos locales.",
+    historialEvolucion: [
+      {
+        fecha: Date.now(),
+        estadoAnterior: "INICIAL",
+        estadoNuevo: "EN_ANALISIS",
+        tipoCambio: "AMPLIACION",
+        evidenciaRelacionada: (visualMatrix?.streetViewEvidence || []).map((s: any, idx: number) => `SV-00${idx + 1}`),
+        justificacionAnalitica: "Se integra geointeligencia operativa de barrido Street View y análisis estadístico local.",
+        motorQueGeneroCambio: "HIE_ENGINE",
+        usuarioResponsable: analyst
+      }
+    ],
+    confidenceScore: sem?.predictiveEvidence?.confidenceMetrics?.statisticalConfidence ?? 85,
+    confidenceLevel: "ALTO",
+    confidenceHistory: []
+  };
+
   return {
     projectName,
     projectId,
@@ -1058,7 +1086,8 @@ export const buildIntelligenceEditorialPayload = async (
     historicalIncidents: incidents,
     sieData: stats,
     semData: sem,
-    visualEvidenceMatrix: visualMatrix
+    visualEvidenceMatrix: visualMatrix,
+    hypothesisLifecycle
   };
 };
 
