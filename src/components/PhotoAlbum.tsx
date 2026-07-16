@@ -28,6 +28,9 @@ import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
 import { CEIPOLBadge } from "./ui/CEIPOLBadge";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
 import { CEIPOLLoader } from "./ui/CEIPOLLoader";
+import { CEIPOLEmptyState } from "./ui/CEIPOLEmptyState";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
 
 type EvidencePhotoType = {
   id: string;
@@ -447,20 +450,19 @@ function SweepSummaryItemRow({ sweep, updateSweep }: { sweep: any; updateSweep: 
             className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-sky-500 min-h-[50px] resize-y"
           />
         </div>
-        <button
-          type="button"
+        <CEIPOLButton
+          variant="primary"
+          size="sm"
+          loading={isSaving}
+          disabled={comments === (sweep.comments || "")}
           onClick={handleSave}
-          disabled={isSaving || comments === (sweep.comments || "")}
-          className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all duration-200 ${
-            comments === (sweep.comments || "")
-              ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed"
-              : isSaved
-              ? "bg-emerald-900/60 text-emerald-200 border border-emerald-500/50"
-              : "bg-sky-900/60 text-sky-200 border border-sky-500/50 hover:bg-sky-850"
-          }`}
         >
-          {isSaving ? "Guardando..." : isSaved ? "✓ Guardado" : "💾 Guardar"}
-        </button>
+          {isSaving
+            ? "Guardando..."
+            : isSaved
+            ? "✓ Guardado"
+            : "💾 Guardar Ajustes"}
+        </CEIPOLButton>
       </div>
     </div>
   );
@@ -1541,12 +1543,43 @@ const hasMinimumPhotos =
                 if (svRes.ok) {
                   const blob = await svRes.blob();
                   const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
+                  const category = sv.streetViewCategory || "hideout";
                   await uploadAndAddPhoto(file, svLat, svLng, {
                     tipo: "STREET_VIEW",
                     gpsSource: "STREET_VIEW",
-                    comentario: `EVIDENCIA VIRTUAL STREET VIEW: ${sv.name}. ${sv.observed || "Punto de observación de entorno vial."}`,
+                    streetViewCategory: category,
+                    streetViewSource: "Google Street View",
+                    analysisType: "STREET_VIEW",
+                    comentario: `EVIDENCIA VIRTUAL STREET VIEW [Categoría: ${category}]: ${sv.name}. ${sv.observed || "Punto de observación de entorno vial."}`,
                     validado: true
-                  });
+                  } as any);
+
+                  if (project?.id) {
+                    try {
+                      const { collection, query, where, getDocs, updateDoc } = await import("firebase/firestore");
+                      const { getDb } = await import("@/lib/firebase");
+                      const db = getDb();
+                      const photosCol = collection(db, "projects", project.id, "photos");
+                      const q = query(
+                        photosCol,
+                        where("lat", "==", svLat),
+                        where("lng", "==", svLng)
+                      );
+                      const qSnap = await getDocs(q);
+                      if (!qSnap.empty) {
+                        for (const docDom of qSnap.docs) {
+                          await updateDoc(docDom.ref, {
+                            streetViewCategory: category,
+                            streetViewSource: "Google Street View",
+                            analysisType: "STREET_VIEW"
+                          });
+                        }
+                        console.log(`[PhotoAlbum] Metadata de StreetView persistida en Firestore para lat=${svLat}, lng=${svLng}`);
+                      }
+                    } catch (fsErr) {
+                      console.warn("[PhotoAlbum] No se pudo escribir extra metadata en Firestore (pero el archivo ya se subió):", fsErr);
+                    }
+                  }
                 } else {
                   console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
                 }
@@ -1902,9 +1935,13 @@ const hasMinimumPhotos =
 
   if (album.length === 0) {
     return (
-      <section className="card p-6 text-center text-slate-400 text-sm">
-        El álbum está vacío. Agregue fotografías desde el bloque de captura.
-      </section>
+      <div className="p-6 col-span-full w-full">
+        <CEIPOLEmptyState
+          icon="📸"
+          title="Álbum sin fotografías"
+          description="Agregue fotografías desde el bloque de captura."
+        />
+      </div>
     );
   }
 
@@ -2651,8 +2688,9 @@ const hasMinimumPhotos =
                   ))}
                   
                   <div className="flex justify-end gap-3 pt-2 border-t border-yellow-750/30">
-                    <button
-                      type="button"
+                    <CEIPOLButton
+                      variant="warning"
+                      loading={isRefining}
                       onClick={async () => {
                         setIsRefining(true);
                         try {
@@ -2688,11 +2726,9 @@ const hasMinimumPhotos =
                           setIsRefining(false);
                         }
                       }}
-                      disabled={isRefining}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-950 font-black px-4 py-2.5 rounded-lg text-[10px] uppercase tracking-wider transition active:scale-[0.97] shadow-md flex items-center gap-1.5"
                     >
                       ⚠️ Confirmar y Certificar Hipótesis con Precisiones Adicionales
-                    </button>
+                    </CEIPOLButton>
                   </div>
                 </div>
               )}
@@ -2702,7 +2738,10 @@ const hasMinimumPhotos =
       </div>
 
       {/* 4. AUDITORÍA SOFT IA */}
-      <div className="max-w-4xl mx-auto w-full mt-6 bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 shadow-xl space-y-4 font-sans">
+      <CEIPOLCard
+        variant="glass"
+        className="max-w-4xl mx-auto w-full mt-6 space-y-4 font-sans"
+      >
         <header className="flex items-center justify-between border-b border-slate-800/80 pb-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">🛡️</span>
@@ -2716,7 +2755,10 @@ const hasMinimumPhotos =
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 flex flex-col gap-1.5">
+          <CEIPOLCard
+            variant="default"
+            className="p-4 flex flex-col gap-1.5"
+          >
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Coherencia Visual</span>
             <div className="flex items-center gap-2 mt-1">
               <span className={album.length > 0 ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
@@ -2724,9 +2766,12 @@ const hasMinimumPhotos =
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">Evaluación automatizada de correlación de evidencia in situ.</p>
-          </div>
+          </CEIPOLCard>
 
-          <div className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 flex flex-col gap-1.5">
+          <CEIPOLCard
+            variant="default"
+            className="p-4 flex flex-col gap-1.5"
+          >
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Correspondencia Territorial</span>
             <div className="flex items-center gap-2 mt-1">
               <span className={project?.latitude || album.some(p => p.lat != null) ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
@@ -2734,9 +2779,12 @@ const hasMinimumPhotos =
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">Cruce geoespacial de polígonos, corredores e hitos urbanos.</p>
-          </div>
+          </CEIPOLCard>
 
-          <div className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 flex flex-col gap-1.5">
+          <CEIPOLCard
+            variant="default"
+            className="p-4 flex flex-col gap-1.5"
+          >
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consistencia Descriptiva</span>
             <div className="flex items-center gap-2 mt-1">
               <span className={isHypothesisValidatedInWorkspace ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
@@ -2744,9 +2792,9 @@ const hasMinimumPhotos =
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">Análisis gramatical y correlación predictiva de la hipótesis.</p>
-          </div>
+          </CEIPOLCard>
         </div>
-      </div>
+      </CEIPOLCard>
 
       <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
 
@@ -2758,27 +2806,35 @@ const hasMinimumPhotos =
             Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
           </p>
         </header>
-        <div className="w-full overflow-hidden rounded-lg border border-slate-700">
-          {album.length > 0 && project && (
-            <ProjectMap
-              project={project}
-              album={album}
-              geometryType={project.geometryType || "individual"}
-              coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
-                lat: Number(photo.lat),
-                lng: Number(photo.lng),
-              }))}
-              onAddPoint={handleAddMapPoint}
-              onMoveMarker={updatePhotoCoordinates}
-              onUpdateCoordinates={(newCoords) => {
-                newCoords.forEach((coord, idx) => {
-                  const photo = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")[idx];
-                  if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
-                    void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
-                  }
-                });
-              }}
+        <div className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-950/20">
+          {album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))).length === 0 ? (
+            <CEIPOLEmptyState
+              icon="📍"
+              title="Sin ubicación disponible"
+              description="Seleccione fotografías con coordenadas GPS o agregue vértices al mapa."
             />
+          ) : (
+            album.length > 0 && project && (
+              <ProjectMap
+                project={project}
+                album={album}
+                geometryType={project.geometryType || "individual"}
+                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
+                  lat: Number(photo.lat),
+                  lng: Number(photo.lng),
+                }))}
+                onAddPoint={handleAddMapPoint}
+                onMoveMarker={updatePhotoCoordinates}
+                onUpdateCoordinates={(newCoords) => {
+                  newCoords.forEach((coord, idx) => {
+                    const photo = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")[idx];
+                    if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
+                      void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
+                    }
+                  });
+                }}
+              />
+            )
           )}
         </div>
       </div>
@@ -2830,10 +2886,11 @@ const hasMinimumPhotos =
                 ? `El barrido se calculará sobre el centroide de las ${selectedIds.length} fotos seleccionadas.`
                 : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
             </p>
-            <button
-              type="button"
-              disabled={selectedIds.length === 0 || isCheckingScince || isReadOnly}
-              onClick={async (e) => {
+            <CEIPOLButton
+              variant="primary"
+              loading={isCheckingScince}
+              disabled={selectedIds.length === 0 || isReadOnly}
+              onClick={async (e: React.MouseEvent<HTMLButtonElement>) => {
                 setClickCoords({ x: e.clientX, y: e.clientY });
                 setIsCheckingScince(true);
                 setError(null);
@@ -2857,10 +2914,9 @@ const hasMinimumPhotos =
                 } catch (err: any) { setError(err.message || "Error de red al conectar con SCINCE."); } 
                 finally { setIsCheckingScince(false); }
               }}
-              className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
             >
               📊 Consultar Cuadra y Añadir a Hipótesis
-            </button>
+            </CEIPOLButton>
           </div>
         )}
       </div>
@@ -2880,44 +2936,48 @@ const hasMinimumPhotos =
             </>
           }
         />
-        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
-          <p className="text-xs text-slate-300 flex-1">
-            {selectedIds.length > 0
-              ? `El barrido buscará negocios a 500 metros del centroide de las ${selectedIds.length} fotos seleccionadas.`
-              : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
-          </p>
-          <button
-            type="button"
-            disabled={selectedIds.length === 0 || isCheckingDenue || isReadOnly}
-            onClick={async (e) => {
-              setClickCoords({ x: e.clientX, y: e.clientY });
-              setIsCheckingDenue(true);
-              setError(null);
-              try {
-                const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
-                if (selectedPhotos.length === 0) {
-                  setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
-                  setIsCheckingDenue(false);
-                  return;
-                }
-                const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
-                const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
+        {isCheckingDenue ? (
+          <CEIPOLLoader message="Consultando establecimientos comerciales INEGI DENUE" />
+        ) : (
+          <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+            <p className="text-xs text-slate-300 flex-1">
+              {selectedIds.length > 0
+                ? `El barrido buscará negocios a 500 metros del centroide de las ${selectedIds.length} fotos seleccionadas.`
+                : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
+            </p>
+            <CEIPOLButton
+              variant="primary"
+              loading={isCheckingDenue}
+              disabled={selectedIds.length === 0 || isReadOnly}
+              onClick={async (e: React.MouseEvent<HTMLButtonElement>) => {
+                setClickCoords({ x: e.clientX, y: e.clientY });
+                setIsCheckingDenue(true);
+                setError(null);
+                try {
+                  const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
+                  if (selectedPhotos.length === 0) {
+                    setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
+                    setIsCheckingDenue(false);
+                    return;
+                  }
+                  const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
+                  const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
 
-                const data = await getDenueData(centerLat, centerLng, 500);
-                if (data.exito) {
-                  const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
-                  setDenueDataConfirm(newContext);
-                } else {
-                  setError(data.error || "Error al consultar INEGI DENUE.");
-                }
-              } catch (err: any) { setError(err.message || "Error de red al conectar con DENUE."); } 
-              finally { setIsCheckingDenue(false); }
-            }}
-            className="w-full md:w-auto bg-amber-700 hover:bg-amber-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
-          >
-            {isCheckingDenue ? <span className="flex items-center justify-center">Buscando Negocios... <ElapsedTime running={isCheckingDenue} /></span> : "🏪 Consultar DENUE y Añadir a Hipótesis"}
-          </button>
-        </div>
+                  const data = await getDenueData(centerLat, centerLng, 500);
+                  if (data.exito) {
+                    const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
+                    setDenueDataConfirm(newContext);
+                  } else {
+                    setError(data.error || "Error al consultar INEGI DENUE.");
+                  }
+                } catch (err: any) { setError(err.message || "Error de red al conectar con DENUE."); } 
+                finally { setIsCheckingDenue(false); }
+              }}
+            >
+              🏪 Consultar DENUE y Añadir a Hipótesis
+            </CEIPOLButton>
+          </div>
+        )}
       </div>
 
 
@@ -2995,6 +3055,9 @@ const hasMinimumPhotos =
             />
           </div>
 
+        {isCheckingIncidencia ? (
+          <CEIPOLLoader message="Consultando incidencia delictiva" />
+        ) : (
           <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
             <p className="text-xs text-slate-300 flex-1">
               {selectedIds.length > 0
@@ -3003,9 +3066,10 @@ const hasMinimumPhotos =
                 ? "El barrido buscará delitos a 1 km del centro del polígono/corredor del proyecto."
                 : "⚠️ Seleccione al menos una fotografía o agregue vértices al mapa para establecer el centro de búsqueda."}
             </p>
-            <button
-              type="button"
-              disabled={isCheckingIncidencia || isReadOnly || (!(project?.latitude && project?.longitude) && selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI"))}
+            <CEIPOLButton
+              variant="primary"
+              loading={isCheckingIncidencia}
+              disabled={isReadOnly || (!(project?.latitude && project?.longitude) && selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI"))}
               onClick={async () => {
                 let queryLat = Number(project?.latitude);
                 let queryLng = Number(project?.longitude);
@@ -3097,11 +3161,11 @@ const hasMinimumPhotos =
                   setIsCheckingIncidencia(false);
                 }
               }}
-              className="w-full md:w-auto bg-sky-700 hover:bg-sky-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
             >
-              {isCheckingIncidencia ? <span className="flex items-center justify-center">Consultando Incidencia... <ElapsedTime running={isCheckingIncidencia} /></span> : "🚔 Ejecutar Barrido Delictivo"}
-            </button>
+              🚔 Ejecutar Barrido Delictivo
+            </CEIPOLButton>
           </div>
+        )}
 
           {(() => {
             const filteredInc = incidents.filter(inc => activeDelitos.includes(getCategoryForFilename(inc.fuente || "")));
@@ -3147,6 +3211,16 @@ const hasMinimumPhotos =
                       </div>
                     )}
                   </div>
+                </div>
+              );
+            } else if (project && (project as any).incidents !== undefined && !error) {
+              return (
+                <div className="mt-4">
+                  <CEIPOLEmptyState
+                    icon="🚔"
+                    title="Sin incidencia registrada"
+                    description="No se localizaron eventos delictivos bajo los filtros seleccionados."
+                  />
                 </div>
               );
             }

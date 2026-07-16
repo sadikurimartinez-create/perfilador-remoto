@@ -17,6 +17,9 @@ import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
 import { CEIPOLBadge } from "./ui/CEIPOLBadge";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
 import { CEIPOLLoader } from "./ui/CEIPOLLoader";
+import { CEIPOLEmptyState } from "./ui/CEIPOLEmptyState";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
 
 export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
   osint_territorial: "OSINT Territorial CEIPOL v2.0",
@@ -165,58 +168,53 @@ export const CifaCeipolPanel: React.FC<Props> = ({
 
         {/* Tab Navigation */}
         <div className="flex flex-wrap bg-slate-900 border border-slate-800 p-1 rounded-xl gap-1">
-          <button
+          <CEIPOLButton
+            size="sm"
+            variant={activeTab === "pri" ? "primary" : "secondary"}
             onClick={() => setActiveTab("pri")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === "pri" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
-            }`}
           >
             📋 Plan PRI
-          </button>
-          <button
+          </CEIPOLButton>
+          <CEIPOLButton
+            size="sm"
+            variant={activeTab === "coverage" ? "primary" : "secondary"}
             onClick={() => {
               if (!results) { alert("Debe ejecutar un barrido primero."); return; }
               setActiveTab("coverage");
             }}
             disabled={!results}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 ${
-              activeTab === "coverage" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
-            }`}
           >
             📊 Cobertura
-          </button>
-          <button
+          </CEIPOLButton>
+          <CEIPOLButton
+            size="sm"
+            variant={activeTab === "correlation" ? "primary" : "secondary"}
             onClick={() => {
               if (!results) { alert("Debe ejecutar un barrido primero."); return; }
               setActiveTab("correlation");
             }}
             disabled={!results}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 ${
-              activeTab === "correlation" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
-            }`}
           >
             🧠 Correlaciones
-          </button>
-          <button
+          </CEIPOLButton>
+          <CEIPOLButton
+            size="sm"
+            variant={activeTab === "chronology" ? "primary" : "secondary"}
             onClick={() => {
               if (!results) { alert("Debe ejecutar un barrido primero."); return; }
               setActiveTab("chronology");
             }}
             disabled={!results}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 ${
-              activeTab === "chronology" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
-            }`}
           >
             ⏱️ Cronología
-          </button>
-          <button
+          </CEIPOLButton>
+          <CEIPOLButton
+            size="sm"
+            variant={activeTab === "learning" ? "primary" : "secondary"}
             onClick={() => setActiveTab("learning")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === "learning" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
-            }`}
           >
             🤖 Aprendizaje
-          </button>
+          </CEIPOLButton>
         </div>
       </div>
 
@@ -246,31 +244,17 @@ export const CifaCeipolPanel: React.FC<Props> = ({
 
                 {/* Execution Button */}
                 <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    disabled={selectedSources.length === 0 || loading}
+                  <CEIPOLButton
+                    variant="primary"
+                    loading={loading}
+                    disabled={selectedSources.length === 0}
                     onClick={(e) => {
                       setClickCoords({ x: e.clientX, y: e.clientY });
                       void handleExecuteScan();
                     }}
-                    className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg flex items-center justify-center gap-2 active:scale-95 disabled:pointer-events-none"
                   >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        Ejecutando Barrido Inteligente...
-                      </span>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4 fill-current text-cyan-200" viewBox="0 0 24 24">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5" />
-                        </svg>
-                        Ejecutar Barrido Inteligente
-                      </>
-                    )}
-                  </button>
+                    Ejecutar Barrido Inteligente
+                  </CEIPOLButton>
                 </div>
               </>
             )}
@@ -281,22 +265,22 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         {activeTab === "coverage" && results && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              <CEIPOLCard variant="default" className="p-4">
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tiempo de Ingesta</p>
                 <p className="text-2xl font-black text-cyan-300 mt-1">{results.coveragePanel.totalProcessingTime}s</p>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              </CEIPOLCard>
+              <CEIPOLCard variant="default" className="p-4">
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Publicaciones</p>
                 <p className="text-2xl font-black text-indigo-300 mt-1">{results.coveragePanel.publicationsAnalyzed}</p>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              </CEIPOLCard>
+              <CEIPOLCard variant="default" className="p-4">
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Documentos Drive</p>
                 <p className="text-2xl font-black text-fuchsia-300 mt-1">{results.coveragePanel.documentsConsulted}</p>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              </CEIPOLCard>
+              <CEIPOLCard variant="default" className="p-4">
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Hallazgos Clave</p>
                 <p className="text-2xl font-black text-emerald-300 mt-1">{results.coveragePanel.findingsObtained}</p>
-              </div>
+              </CEIPOLCard>
             </div>
 
             {/* Global Coverage Index Progress */}
@@ -361,7 +345,11 @@ export const CifaCeipolPanel: React.FC<Props> = ({
               <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Entidades Correlacionadas ({results.correlation.correlatedEntities.length})</h4>
               
               {results.correlation.correlatedEntities.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-xs">No se identificaron coincidencias cruzadas entre las fuentes indicadas.</div>
+                <CEIPOLEmptyState
+                  icon="🛰️"
+                  title="Sin coincidencias OSINT"
+                  description="No se identificaron coincidencias cruzadas entre las fuentes analizadas."
+                />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {results.correlation.correlatedEntities.map((ent: any) => (
@@ -433,7 +421,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         {/* TAB 5: Learning Engine */}
         {activeTab === "learning" && (
           <div className="space-y-6">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
+            <CEIPOLCard variant="analysis" className="p-5 space-y-4">
               <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">Índice de Utilidad y Rendimiento de Fuentes</h4>
               <p className="text-xs text-slate-400">
                 El Motor de Aprendizaje registra automáticamente los tiempos de respuesta y la precisión de cada barrido para guiar futuras planificaciones.
@@ -462,7 +450,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                   );
                 })}
               </div>
-            </div>
+            </CEIPOLCard>
           </div>
         )}
       </div>

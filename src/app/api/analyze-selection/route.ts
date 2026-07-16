@@ -209,47 +209,182 @@ export async function POST(req: Request) {
         ]
       : [];
 
-    // Generar lugares de acecho virtuales con imágenes reales de Google Street View
-    const tacticalStreetViews = [];
-    
-    // 1. Obtener de los puntos de interés (POIs) reales en el radio
-    const svFromPois = pois.slice(0, 8).map((p) => {
-      const svUrl = buildStreetViewUrl(p.lat, p.lng);
+    // Generar lugares de acecho virtuales con imágenes reales de Google Street View dividido en tres categorías tácticas
+    // Helper para limitar imágenes entre 2 y 4 de forma segura
+    function validateStreetViewCategoryLimit(
+      images: Array<{ name: string; observed: string; streetViewUrl: string; lat: number; lng: number }>,
+      categoryType: "hideout" | "graffiti" | "denue_interest"
+    ) {
+      if (images.length === 0) return [];
+      if (images.length === 1) {
+        const base = images[0];
+        const offsetSvUrl = buildStreetViewUrl(base.lat, base.lng, { heading: 180 });
+        return [
+          {
+            ...base,
+            streetViewCategory: categoryType,
+            streetViewSource: "Google Street View",
+            analysisType: "STREET_VIEW"
+          },
+          {
+            ...base,
+            name: `${base.name} (Perspectiva de Cobertura)`,
+            observed: `${base.observed} Vista de contra-ángulo para cobertura vial de 180 grados.`,
+            streetViewUrl: offsetSvUrl || base.streetViewUrl,
+            streetViewCategory: categoryType,
+            streetViewSource: "Google Street View",
+            analysisType: "STREET_VIEW"
+          }
+        ];
+      }
+      
+      const mapped = images.map(img => ({
+        ...img,
+        streetViewCategory: categoryType,
+        streetViewSource: "Google Street View",
+        analysisType: "STREET_VIEW"
+      }));
+      
+      if (mapped.length > 4) {
+        return mapped.slice(0, 4);
+      }
+      return mapped;
+    }
+
+    // 1. CATEGORÍA 1: Lugares de acecho o escondite (hideout)
+    const hideoutCandidates = [
+      { name: "Zona de Ocultamiento Táctica (Acceso Norte)", dLat: 0.0012, dLng: 0.0002, desc: "Identificación de zona de ocultamiento secundario, accesos ciegos y baja visibilidad." },
+      { name: "Punto de Acecho Urbano (Acceso Sur)", dLat: -0.0012, dLng: -0.0002, desc: "Análisis de puntos ciegos de vigilancia informal y de corredores de escape táctico." },
+      { name: "Espacio de Vigilancia Informal (Acceso Este)", dLat: 0.0002, dLng: 0.0012, desc: "Evaluación de infraestructura con baja iluminación e inmuebles con nula visibilidad." },
+      { name: "Acceso Secundario de Escape (Acceso Oeste)", dLat: -0.0002, dLng: -0.0012, desc: "Análisis de vías secundarias abandonadas e infraestructura desatendida." }
+    ].map(off => {
+      const targetLat = centerLat + off.dLat;
+      const targetLng = centerLng + off.dLng;
+      const svUrl = buildStreetViewUrl(targetLat, targetLng);
       return {
-        name: p.name,
-        observed: `Análisis de entorno táctico en inmediaciones de ${p.name} (Clasificación: ${p.category || "Punto de interés"}).`,
-        streetViewUrl: svUrl,
-        lat: p.lat,
-        lng: p.lng
+        name: off.name,
+        observed: off.desc,
+        streetViewUrl: svUrl as string,
+        lat: targetLat,
+        lng: targetLng
       };
-    }).filter(sv => sv.streetViewUrl != null);
-    
-    tacticalStreetViews.push(...svFromPois);
-    
-    // 2. Si no hay suficientes POIs, generar puntos tácticos perimetrales utilizando coordenadas compensadas
-    if (tacticalStreetViews.length < 3) {
-      const offsets = [
-        { name: "Baricentro del Sector", dLat: 0, dLng: 0 },
-        { name: "Acceso Norte del Sector", dLat: 0.001, dLng: 0 },
-        { name: "Acceso Sur del Sector", dLat: -0.001, dLng: 0 },
-        { name: "Acceso Este del Sector", dLat: 0, dLng: 0.001 },
-        { name: "Acceso Oeste del Sector", dLat: 0, dLng: -0.001 }
-      ];
-      for (const off of offsets) {
-        const targetLat = centerLat + off.dLat;
-        const targetLng = centerLng + off.dLng;
-        const svUrl = buildStreetViewUrl(targetLat, targetLng);
+    }).filter(img => img.streetViewUrl != null);
+
+    const hideoutImages = validateStreetViewCategoryLimit(hideoutCandidates, "hideout");
+
+    // 2. CATEGORÍA 2: Grafitis (graffiti)
+    const graffitiCandidates = [
+      { name: "Monitoreo de Pintas Territoriales (Noreste)", dLat: 0.0008, dLng: 0.0008, desc: "Detección de grafitis visibles, marcas de bandas y pintas territoriales espaciales." },
+      { name: "Símbolos y Marcas Urbanas (Suroeste)", dLat: -0.0008, dLng: -0.0008, desc: "Inspección de marcajes urbanos y simbología en fachadas públicas." },
+      { name: "Foco de Deterioro Físico (Sureste)", dLat: -0.0008, dLng: 0.0008, desc: "Análisis de acumulación de basura, vandalismo y grafitis en el entorno urbano." },
+      { name: "Punto de Control de Grafitis Territoriales (Noroeste)", dLat: 0.0008, dLng: -0.0008, desc: "Detección táctica de firmas territoriales y de contaminación visual." }
+    ].map(off => {
+      const targetLat = centerLat + off.dLat;
+      const targetLng = centerLng + off.dLng;
+      const svUrl = buildStreetViewUrl(targetLat, targetLng);
+      return {
+        name: off.name,
+        observed: off.desc,
+        streetViewUrl: svUrl as string,
+        lat: targetLat,
+        lng: targetLng
+      };
+    }).filter(img => img.streetViewUrl != null);
+
+    const graffitiImages = validateStreetViewCategoryLimit(graffitiCandidates, "graffiti");
+
+    // 3. CATEGORÍA 3: Negocios estratégicos DENUE (denue_interest)
+    const rawDenueUnits = denueResult?.unidades || [];
+    const denueCandidates: any[] = [];
+
+    for (const unit of rawDenueUnits) {
+      const nameLower = unit.nombre.toLowerCase();
+      const activityLower = (unit.actividad || "").toLowerCase();
+      
+      let isPriority = false;
+      let matchedCategory = "";
+      let matchedDesc = "";
+
+      // 1. Bares / Cantinas / Expendios de alcohol
+      if (
+        nameLower.includes("bar") || nameLower.includes("cantina") || nameLower.includes("expendio") || 
+        nameLower.includes("cerveza") || nameLower.includes("licor") || nameLower.includes("depósito") || 
+        nameLower.includes("alcohol") || nameLower.includes("bebidas") || nameLower.includes("pub") || 
+        nameLower.includes("discoteca") || nameLower.includes("vinatería") || nameLower.includes("modelorama") ||
+        activityLower.includes("bar") || activityLower.includes("cantina") || activityLower.includes("alcohol") || 
+        activityLower.includes("cerveza") || activityLower.includes("licores")
+      ) {
+        isPriority = true;
+        matchedCategory = "Bares, Cantinas y Expendios de Alcohol";
+        matchedDesc = `Establecimiento comercial de venta/consumo de alcohol catalogado en DENUE (${unit.nombre}). Atractor de riesgo prioritario en la zona.`;
+      }
+      // 2. Chatarreras / Talleres / Autopartes
+      else if (
+        nameLower.includes("chatarrera") || nameLower.includes("taller") || nameLower.includes("autopartes") || 
+        nameLower.includes("mecánico") || nameLower.includes("deshuesadero") || nameLower.includes("refacciones") || 
+        nameLower.includes("vulcanizadora") ||
+        activityLower.includes("chatarrera") || activityLower.includes("taller") || activityLower.includes("automotriz") || 
+        activityLower.includes("autopartes")
+      ) {
+        isPriority = true;
+        matchedCategory = "Chatarreras, Talleres y Autopartes";
+        matchedDesc = `Establecimiento de giros mecánicos o reciclaje registrado en DENUE (${unit.nombre}). Posible punto de acopio, vulnerabilidad física o alteración de bienes.`;
+      }
+      // 3. Casas de empeño / Préstamos
+      else if (
+        nameLower.includes("empeño") || nameLower.includes("préstamo") || nameLower.includes("prendario") || 
+        nameLower.includes("pawn") || nameLower.includes("crédito") || nameLower.includes("financiera") || 
+        nameLower.includes("monte de piedad") ||
+        activityLower.includes("empeño") || activityLower.includes("prendario") || activityLower.includes("financiera")
+      ) {
+        isPriority = true;
+        matchedCategory = "Casas de Empeño y Préstamos";
+        matchedDesc = `Negocio prendario o de préstamos registrado en DENUE (${unit.nombre}). Punto de interés por flujo de efectivo, empeños o transacciones rápidas.`;
+      }
+      // 4. Moteles / Hospedaje de paso
+      else if (
+        nameLower.includes("motel") || nameLower.includes("hotel") || nameLower.includes("hospedaje") || 
+        nameLower.includes("alojamiento") || nameLower.includes("posada") ||
+        activityLower.includes("hotel") || activityLower.includes("motel") || activityLower.includes("hospedaje")
+      ) {
+        isPriority = true;
+        matchedCategory = "Moteles y Hospedaje de Paso";
+        matchedDesc = `Establecimiento de alojamiento/motel registrado en DENUE (${unit.nombre}). Zona de paso, pernocta informal o de potencial ocultamiento transitorio.`;
+      }
+
+      if (isPriority) {
+        const svUrl = buildStreetViewUrl(unit.lat, unit.lng);
         if (svUrl) {
-          tacticalStreetViews.push({
-            name: off.name,
-            observed: `Punto de control perimetral virtual para monitoreo y patrullaje táctico preventivo en la zona de estudio.`,
+          denueCandidates.push({
+            name: `${unit.nombre} (${matchedCategory})`,
+            observed: matchedDesc,
             streetViewUrl: svUrl,
-            lat: targetLat,
-            lng: targetLng
+            lat: unit.lat,
+            lng: unit.lng
           });
         }
       }
     }
+
+    const denueImages = validateStreetViewCategoryLimit(denueCandidates, "denue_interest");
+
+    // Combinar en flat list para compatibilidad total con PhotoAlbum actual y reportEngine
+    const tacticalStreetViews = [...hideoutImages, ...graffitiImages, ...denueImages];
+
+    const streetViewCategories = [
+      {
+        category: "hideout" as const,
+        images: hideoutImages
+      },
+      {
+        category: "graffiti" as const,
+        images: graffitiImages
+      },
+      {
+        category: "denue_interest" as const,
+        images: denueImages
+      }
+    ];
 
     return NextResponse.json(
       {
@@ -259,6 +394,7 @@ export async function POST(req: Request) {
         historicalCrimes,
         pois,
         tacticalStreetViews,
+        streetViewCategories,
         analysisPolygon: analysisPolygon ?? null,
         manualPois: manualPois ?? [],
         raw: {

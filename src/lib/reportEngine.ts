@@ -617,6 +617,20 @@ export class ReportEngineKernelClass {
           this.context.user?.name || this.context.user?.username
         );
 
+        // BLOQUE F: Separar fotos de Street View por su streetViewCategory para reportes estructurados
+        const svPhotos = (this.context.album || []).filter((p: any) => p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW");
+        (editorialPayload as any).streetViewTerritorial = svPhotos
+          .filter((p: any) => p.streetViewCategory === "hideout")
+          .map((p: any) => ({ url: p.previewUrl || p.url, comment: p.comentario }));
+          
+        (editorialPayload as any).streetViewInfrastructure = svPhotos
+          .filter((p: any) => p.streetViewCategory === "graffiti")
+          .map((p: any) => ({ url: p.previewUrl || p.url, comment: p.comentario }));
+          
+        (editorialPayload as any).streetViewCommercial = svPhotos
+          .filter((p: any) => p.streetViewCategory === "denue_interest")
+          .map((p: any) => ({ url: p.previewUrl || p.url, comment: p.comentario }));
+
         // Adjuntar el IntelligenceIntegrationContext unificado para los exportadores subsiguientes
         editorialPayload.intelligenceContext = this.context.intelligenceContext;
 

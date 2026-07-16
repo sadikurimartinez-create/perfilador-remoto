@@ -128,6 +128,10 @@ export function ProjectMap({
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
   const [subMode, setSubMode] = useState<"vertex" | "poi">("poi");
 
+  const isFallback = useMemo(() => {
+    return !project?.latitude && !project?.longitude && coordinates.length === 0;
+  }, [project, coordinates]);
+
   const center = useMemo(() => {
     if (project?.latitude && project?.longitude) {
       return { lat: project.latitude, lng: project.longitude };
@@ -196,6 +200,18 @@ export function ProjectMap({
 
   return (
     <div className="relative w-full">
+      {isFallback && (
+        <div className="absolute inset-0 bg-slate-950/85 flex items-center justify-center z-[11] backdrop-blur-sm rounded-xl border border-slate-850">
+          <div className="bg-slate-900/90 border border-amber-500/30 p-6 rounded-2xl max-w-sm text-center shadow-2xl space-y-3 font-sans">
+            <span className="text-3xl inline-block animate-bounce">📍</span>
+            <h5 className="text-sm font-black text-slate-100 uppercase tracking-wider">Sin ubicación geográfica disponible</h5>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              El expediente actual no cuenta con coordenadas GPS reales. El mapa interactivo se encuentra inhabilitado hasta que se carguen imágenes georreferenciadas o se defina un polígono de interés.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Floating Toolbar to toggle sub-modalities for corridors and polygons */}
       {(geometryType === "lineal" || geometryType === "poligono" || geometryType === "corredor") && (
         <div className="absolute top-3 left-3 z-[10] bg-slate-950/95 border border-slate-800 p-2.5 rounded-xl shadow-2xl flex gap-2 font-sans">
