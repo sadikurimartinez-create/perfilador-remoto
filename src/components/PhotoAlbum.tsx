@@ -27,6 +27,7 @@ import { DynamicPopup, PopupPositionManager } from "./DynamicPopup";
 import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
 import { CEIPOLBadge } from "./ui/CEIPOLBadge";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
+import { CEIPOLLoader } from "./ui/CEIPOLLoader";
 
 type EvidencePhotoType = {
   id: string;
@@ -2820,44 +2821,48 @@ const hasMinimumPhotos =
             </>
           }
         />
-        <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
-          <p className="text-xs text-slate-300 flex-1">
-            {selectedIds.length > 0
-              ? `El barrido se calculará sobre el centroide de las ${selectedIds.length} fotos seleccionadas.`
-              : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
-          </p>
-          <button
-            type="button"
-            disabled={selectedIds.length === 0 || isCheckingScince || isReadOnly}
-            onClick={async (e) => {
-              setClickCoords({ x: e.clientX, y: e.clientY });
-              setIsCheckingScince(true);
-              setError(null);
-              try {
-                const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
-                if (selectedPhotos.length === 0) {
-                  setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
-                  setIsCheckingScince(false);
-                  return;
-                }
-                const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
-                const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
+        {isCheckingScince ? (
+          <CEIPOLLoader message="Consultando indicadores demográficos INEGI SCINCE" />
+        ) : (
+          <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
+            <p className="text-xs text-slate-300 flex-1">
+              {selectedIds.length > 0
+                ? `El barrido se calculará sobre el centroide de las ${selectedIds.length} fotos seleccionadas.`
+                : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
+            </p>
+            <button
+              type="button"
+              disabled={selectedIds.length === 0 || isCheckingScince || isReadOnly}
+              onClick={async (e) => {
+                setClickCoords({ x: e.clientX, y: e.clientY });
+                setIsCheckingScince(true);
+                setError(null);
+                try {
+                  const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
+                  if (selectedPhotos.length === 0) {
+                    setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
+                    setIsCheckingScince(false);
+                    return;
+                  }
+                  const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
+                  const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
 
-                const data = await getScinceData(centerLat, centerLng);
-                if (data.exito) {
-                  const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
-                  setScinceDataConfirm(newContext);
-                } else {
-                  setError(data.error || "Error al consultar INEGI SCINCE.");
-                }
-              } catch (err: any) { setError(err.message || "Error de red al conectar con SCINCE."); } 
-              finally { setIsCheckingScince(false); }
-            }}
-            className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
-          >
-            {isCheckingScince ? <span className="flex items-center justify-center">Consultando INEGI... <ElapsedTime running={isCheckingScince} /></span> : "📊 Consultar Cuadra y Añadir a Hipótesis"}
-          </button>
-        </div>
+                  const data = await getScinceData(centerLat, centerLng);
+                  if (data.exito) {
+                    const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
+                    setScinceDataConfirm(newContext);
+                  } else {
+                    setError(data.error || "Error al consultar INEGI SCINCE.");
+                  }
+                } catch (err: any) { setError(err.message || "Error de red al conectar con SCINCE."); } 
+                finally { setIsCheckingScince(false); }
+              }}
+              className="w-full md:w-auto bg-purple-700 hover:bg-purple-600 text-white py-2 px-4 rounded text-xs font-semibold disabled:opacity-50 transition shadow-lg"
+            >
+              📊 Consultar Cuadra y Añadir a Hipótesis
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) (Paso 6) */}
