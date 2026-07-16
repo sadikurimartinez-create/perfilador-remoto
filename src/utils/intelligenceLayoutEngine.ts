@@ -8,6 +8,9 @@ import { VisualEvidenceEngine } from "./visualEvidenceEngine";
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
 import { safeUpperCase } from '../lib/exportToWord';
+import { InvestigationHypothesis } from './hypothesisLifecycle';
+import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
+
 import {
   renderDensityMap,
   renderMobilityMap,
@@ -393,6 +396,8 @@ export interface IntelligenceReportPayload {
   aceReport?: any;
   visualEvidenceMatrix?: any;
   intelligenceContext?: any;
+  hypothesisLifecycle?: InvestigationHypothesis;
+  evidenceRegistry?: IntelligenceEvidenceObject[];
 }
 
 /**

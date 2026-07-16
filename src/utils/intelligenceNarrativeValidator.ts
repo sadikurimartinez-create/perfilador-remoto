@@ -1,4 +1,6 @@
 import { IntelligenceReportPayload, IntelligenceBriefing } from './intelligenceLayoutEngine';
+import { EvidenceInferenceMatrix } from './evidenceInferenceMatrix';
+import { IntelligenceDepthScore, ChapterScoreResult, GlobalScoreResult } from './intelligenceDepthScore';
 
 export interface NarrativeValidationReport {
   status: "APPROVED" | "REJECTED";
@@ -8,255 +10,133 @@ export interface NarrativeValidationReport {
   pendingItems: string[];
   violations: string[];
   reasons: string[];
+  chapterScores: Record<string, ChapterScoreResult>;
 }
 
 export class IntelligenceNarrativeValidator {
-  private static PROHIBITED_WORDS = [
-    "control territorial de la organización",
-    "zona dominada por",
-    "presencia confirmada de grupo criminal",
-    "operación del cártel",
-    "la pandilla utiliza",
-    "los delincuentes operan",
-    "célula criminal",
-    "célula operativa",
-    "control territorial",
-    "zona de operación",
-    "plaza criminal",
-    "halcones",
-    "punto de venta",
-    "casa de seguridad",
-    "narcomenudeo activo",
-    "presencia del cártel"
-  ];
-
-  private static CAUSAL_CONNECTORS = [
-    "debido a",
-    "causa",
-    "provoca",
-    "consecuencia",
-    "vulnerabilidad compatible",
-    "pérdida de vigilancia",
-    "incrementa la oportunidad",
-    "factor de oportunidad",
-    "relación causal",
-    "asociado con",
-    "deriva de",
-    "condición territorial"
-  ];
-
-  private static OPERATIONAL_ACTIONS = [
-    "patrulla",
-    "recorrido",
-    "presencia",
-    "vigilancia",
-    "horario",
-    "operativ",
-    "acción",
-    "despliegue",
-    "mitiga",
-    "intervenc"
-  ];
-
+  /**
+   * Valida un reporte completo (payload) analizando cada capítulo y calculando las métricas INDE.
+   */
   public static validateReport(
     payload: IntelligenceReportPayload,
     briefing: IntelligenceBriefing
   ): NarrativeValidationReport {
-    const textValues: string[] = this.getEditorialTextValues(payload);
-    const fullText = textValues.join("\n").toLowerCase();
-
+    const chapterTexts = this.extractChapters(payload);
+    const chapterScores: Record<string, ChapterScoreResult> = {};
     const strengths: string[] = [];
     const pendingItems: string[] = [];
     const violations: string[] = [];
     const reasons: string[] = [];
 
-    // --- 1. Calcular Variables IDS ---
-    let evidenceScore = 0; // Peso: 25%
-    let causalScore = 0;   // Peso: 25%
-    let inferentialScore = 0; // Peso: 20%
-    let confidenceScore = 0; // Peso: 15%
-    let operationalScore = 0; // Peso: 15%
-
-    // A. Evidencia Identificada (25%)
-    // Verificar referencias claras a fuentes (fotos, registros, denue, mapas)
-    const hasPhotoRef = /foto|fotografía|imagen|captura/i.test(fullText);
-    const hasSourceRef = /denue|inegi|registro|incidencia|fuente/i.test(fullText);
-    const hasTrazabilidad = /trazabilidad|origen|sustentado en/i.test(fullText);
-
-    if (hasPhotoRef) evidenceScore += 10;
-    if (hasSourceRef) evidenceScore += 10;
-    if (hasTrazabilidad) evidenceScore += 5;
-    
-    if (evidenceScore >= 20) {
-      strengths.push("Evidencia plenamente identificada con fuentes territoriales, fotográficas y documentales sólidas.");
-    } else {
-      pendingItems.push("Falta declarar de forma más explícita la trazabilidad y las fuentes de evidencia utilizadas.");
-    }
-
-    // B. Relación Causal (25%)
-    // Contar cuántos conectores causales criminológicos se usan
-    let causalMatches = 0;
-    this.CAUSAL_CONNECTORS.forEach(connector => {
-      const regex = new RegExp(connector, "g");
-      const count = (fullText.match(regex) || []).length;
-      causalMatches += count;
-    });
-
-    if (causalMatches >= 5) {
-      causalScore = 25;
-      strengths.push("Explicación causal robusta de factores criminológicos ambientales.");
-    } else if (causalMatches >= 2) {
-      causalScore = 15;
-      strengths.push("Relación de factores territoriales con baja vigilancia natural razonablemente explicados.");
-      pendingItems.push("Se recomienda robustecer la relación de causa y efecto utilizando conectores de criminología ambiental.");
-    } else {
-      causalScore = 5;
-      pendingItems.push("El informe tiende a ser descriptivo superficial; falta incorporar análisis de relación causa-efecto.");
-    }
-
-    // C. Control de Inferencia (20%)
-    // Escaneo de palabras prohibidas y mitigaciones
-    const detectedProhibited: string[] = [];
-    this.PROHIBITED_WORDS.forEach(word => {
-      if (fullText.includes(word)) {
-        detectedProhibited.push(word);
-      }
-    });
-
-    const hasMitigations = /compatible con|condición que requiere|posible dinámica|hipótesis/i.test(fullText);
-
-    if (detectedProhibited.length === 0) {
-      inferentialScore += 15;
-      if (hasMitigations) inferentialScore += 5;
-      strengths.push("Excelente control de inferencias y mantenimiento del principio de proporcionalidad analítica.");
-    } else {
-      inferentialScore = Math.max(0, 15 - detectedProhibited.length * 5);
-      if (hasMitigations) inferentialScore += 3;
+    // 1. Evaluar cada capítulo de forma independiente
+    Object.entries(chapterTexts).forEach(([chapterName, text]) => {
+      const scoreRes = IntelligenceDepthScore.calculateChapterScore(text, chapterName);
       
-      detectedProhibited.forEach(word => {
-        violations.push(`Uso no sustentado del término policial sensible: "${word}".`);
-      });
-      pendingItems.push("Debe eliminarse el catálogo de términos proscritos de imputación delictiva directa.");
-    }
+      // Aplicar Matriz de Evidencia-Inferencia
+      const matrixRes = EvidenceInferenceMatrix.validate(text);
+      if (!matrixRes.isValid) {
+        matrixRes.violations.forEach(v => {
+          violations.push(`[${chapterName}] ${v}`);
+          scoreRes.violations.push(v);
+        });
+      }
 
-    // D. Nivel de Confianza (15%)
-    const hasConfidenceDecl = /confianza[^\n]{0,60}(alto|medio|bajo)/i.test(fullText) || /nivel de confianza/i.test(fullText);
-    const hasConfidenceRationale = /fundamento|motivo|debido a|convergencia|sustenta/i.test(fullText);
+      // Consolidar violaciones encontradas en el escaneo léxico del capítulo
+      if (scoreRes.violations.length > 0) {
+        scoreRes.violations.forEach(v => {
+          if (!violations.includes(v)) {
+            violations.push(v);
+          }
+        });
+      }
 
-    if (hasConfidenceDecl) confidenceScore += 10;
-    if (hasConfidenceRationale) confidenceScore += 5;
-
-    if (confidenceScore >= 15) {
-      strengths.push("Declaración formal y razonada del nivel de confianza de inteligencia.");
-    } else {
-      pendingItems.push("Falta incorporar de forma explícita el nivel de confianza del análisis y su justificación técnica.");
-    }
-
-    // E. Acción Operacional (15%)
-    let opMatches = 0;
-    this.OPERATIONAL_ACTIONS.forEach(word => {
-      const regex = new RegExp(word, "g");
-      const count = (fullText.match(regex) || []).length;
-      opMatches += count;
+      chapterScores[chapterName] = scoreRes;
     });
 
-    const hasTimeWindow = /\b\d{2}:\d{2}\s*(a|y|-)\s*\d{2}:\d{2}\b/i.test(fullText);
+    // 2. Calcular los resultados globales y validar umbrales críticos
+    const globalRes: GlobalScoreResult = IntelligenceDepthScore.calculateGlobalScore(chapterScores);
 
-    if (opMatches >= 4) {
-      operationalScore += 10;
-    }
-    if (hasTimeWindow) {
-      operationalScore += 5;
-    }
-
-    if (operationalScore >= 15) {
-      strengths.push("Sugerencias tácticas accionables con enfoque operativo espacio-temporal.");
-    } else if (operationalScore >= 8) {
-      operationalScore = 10;
-      pendingItems.push("Se recomienda definir ventanas de horario y áreas prioritarias específicas para patrullajes recomendados.");
-    } else {
-      pendingItems.push("Falta traducir el dictamen en implicaciones operativas de campo concretas en lugar de directrices generales.");
+    // 3. Generar fortalezas y pendientes dinámicos
+    if (globalRes.overallScore >= 90) {
+      strengths.push("Excepcional profundidad analítica y rigurosa trazabilidad de inteligencia en todos los capítulos.");
+    } else if (globalRes.overallScore >= 70) {
+      strengths.push("Estructura narrativa y explicaciones causales conformes con los requisitos operacionales.");
     }
 
-    // --- 2. Score Final ---
-    const totalScore = evidenceScore + causalScore + inferentialScore + confidenceScore + operationalScore;
-
-    // Clasificación formal
-    let classification: NarrativeValidationReport["classification"] = "Requiere revisión analítica";
-    if (totalScore >= 90) {
-      classification = "Dictamen Estratégico";
-    } else if (totalScore >= 70) {
-      classification = "Dictamen Operativo";
+    // Identificar capítulos críticos reprobados
+    if (globalRes.criticalChaptersBelowThreshold.length > 0) {
+      reasons.push(
+        `Los siguientes capítulos críticos no alcanzaron el estándar mínimo de 70 puntos: ${globalRes.criticalChaptersBelowThreshold.join(", ")}.`
+      );
+      globalRes.criticalChaptersBelowThreshold.forEach(ch => {
+        pendingItems.push(`Robustecer el análisis en el ${ch} para cumplir con la estructura analítica INDE.`);
+      });
     }
 
-    // Regla de bloqueo de violaciones éticas críticas
-    let status: NarrativeValidationReport["status"] = "APPROVED";
-    if (totalScore < 70) {
-      status = "REJECTED";
-      reasons.push(`El Score de Profundidad de Inteligencia (IDS: ${totalScore}/100) es inferior al estándar mínimo aprobado de 70 puntos.`);
-    }
-
+    // Agregar violaciones por sobreinferencias detectadas
     if (violations.length > 0) {
-      status = "REJECTED";
-      reasons.push(`El informe contiene afirmaciones o términos de criminalidad delictiva sensible que no se sustentan en la evidencia del expediente (Inferencia sobrepasada).`);
+      reasons.push("Se identificaron violaciones lógicas por sobreinferencia criminal no sustentada o términos policiales proscritos.");
     }
+
+    // Si el promedio general es bajo
+    if (globalRes.overallScore < 70) {
+      reasons.push(`El Score de Profundidad de Inteligencia global (IDS: ${globalRes.overallScore}/100) es inferior al estándar mínimo de 70 puntos.`);
+    }
+
+    // Determinar estatus final
+    const finalStatus: "APPROVED" | "REJECTED" = 
+      (globalRes.status === "APPROVED" && violations.length === 0) ? "APPROVED" : "REJECTED";
 
     return {
-      status,
-      idsScore: totalScore,
-      classification,
+      status: finalStatus,
+      idsScore: globalRes.overallScore,
+      classification: globalRes.classification,
       strengths,
       pendingItems,
       violations,
-      reasons
+      reasons,
+      chapterScores
     };
   }
 
-  private static getEditorialTextValues(obj: IntelligenceReportPayload): string[] {
-    const values: string[] = [];
-    
-    const add = (val: any) => {
-      if (typeof val === 'string') {
-        values.push(val);
-      } else if (Array.isArray(val)) {
-        val.forEach(add);
-      } else if (val && typeof val === 'object') {
-        Object.values(val).forEach(add);
-      }
-    };
+  /**
+   * Extrae la narrativa de cada capítulo del payload para su mapeo de evaluación.
+   */
+  private static extractChapters(payload: IntelligenceReportPayload): Record<string, string> {
+    const chapters: Record<string, string> = {};
 
-    add(obj.contextoTerritorial);
-    add(obj.executiveSummary);
-    add(obj.finalHypothesis);
-    add(obj.osintSynthesized);
-    add(obj.pandillasAnalysis);
-    add(obj.conclusiones);
+    chapters["Capítulo 1"] = payload.contextoTerritorial || "";
+    chapters["Capítulo 2"] = payload.finalHypothesis || "";
     
-    if (obj.maps) {
-      obj.maps.forEach(m => add(m.interpretation));
-    }
-    if (obj.graphs) {
-      obj.graphs.forEach(g => {
-        add(g.explanation);
-        add(g.finding);
-        add(g.relation);
-      });
-    }
-    if (obj.streetViewAnalysis) {
-      obj.streetViewAnalysis.forEach(s => {
-        add(s.observed);
-        add(s.criminologicalAnalysis);
-        add(s.relation);
-      });
-    }
-    if (obj.photoEvidence) {
-      obj.photoEvidence.forEach(p => {
-        add(p.caption);
-        add(p.criminologicalInterpretation);
-        add(p.relation);
-      });
-    }
+    // Capítulo 3 (Interpretación de mapas)
+    chapters["Capítulo 3"] = (payload.maps || []).map(m => m.interpretation).join("\n");
 
-    return values;
+    // Capítulo 4 (Modelos estadísticos / Gráficas)
+    chapters["Capítulo 4"] = (payload.graphs || []).map(g => `${g.explanation}\n${g.finding}\n${g.relation}`).join("\n");
+
+    // Capítulo 5 (Evidencia Fotográfica / Campo)
+    chapters["Capítulo 5"] = (payload.photoEvidence || []).map(p => `${p.caption}\n${p.criminologicalInterpretation}\n${p.relation}`).join("\n");
+
+    // Capítulo 6 (Street View / Entorno vial)
+    chapters["Capítulo 6"] = (payload.streetViewAnalysis || []).map(s => `${s.observed}\n${s.criminologicalAnalysis}\n${s.relation}`).join("\n");
+
+    chapters["Capítulo 7"] = payload.osintSynthesized || "";
+    chapters["Capítulo 8"] = payload.pandillasAnalysis || "";
+    
+    // Capítulo 9 (Grafo de Vínculos Tácticos)
+    chapters["Capítulo 9"] = (payload.intelligenceContext as any)?.narrative || "";
+
+    const conc = payload.conclusiones;
+    chapters["Capítulo 10"] = conc
+      ? [
+          ...(conc.hallazgosCriticos || []),
+          ...(conc.riesgosInmediatos || []),
+          ...(conc.escenariosFuturos || []),
+          ...(conc.recomendacionesTacticas || []),
+          ...(conc.recomendacionesEstrategicas || [])
+        ].join("\n")
+      : "";
+
+    return chapters;
   }
 }

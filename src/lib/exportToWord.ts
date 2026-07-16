@@ -938,6 +938,191 @@ export async function exportToWord(
     elements.push(aceTable);
   }
 
+  // ================= PÁGINA: CAPÍTULO 0 - TRAYECTORIA DE LA HIPÓTESIS DE INVESTIGACIÓN =================
+  const hl = payload.hypothesisLifecycle || {
+    hipotesisInicial: payload.hipotesisPrincipal?.queOcurre || (payload.finalHypothesis && payload.finalHypothesis.length > 10 ? payload.finalHypothesis.split("\n")[0] : "Actividad delictiva disonante bajo investigación territorial."),
+    hipotesisActual: payload.finalHypothesis || "Análisis en desarrollo.",
+    variablesIniciales: ["territorio", "oportunidad", "incidencia"],
+    estadoActual: "EN_ANALISIS",
+    evidenciaConfirmatoria: [],
+    evidenciaContradictoria: [],
+    nivelConfianza: "MEDIO",
+    justificacionActual: "Análisis preliminar fundamentado en expediente geocriminológico.",
+    historialEvolucion: []
+  };
+
+  elements.push(new Paragraph({ pageBreakBefore: true }));
+  elements.push(createTitle("CAPÍTULO 0: TRAYECTORIA DE LA HIPÓTESIS DE INVESTIGACIÓN"));
+  
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: "RESUMEN METODOLÓGICO Y CADENA DE RAZONAMIENTO", bold: true, color: "0B1F3A", font: "Calibri", size: 24 })
+    ],
+    spacing: { before: 200, after: 100 }
+  }));
+  
+  // 0.1 Planteamiento inicial
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: "0.1 PLANTEAMIENTO INICIAL FORMULADO POR EL ANALISTA", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
+    ],
+    spacing: { before: 150, after: 80 }
+  }));
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: hl.hipotesisInicial, font: "Calibri", italic: true, size: 22 })
+    ],
+    spacing: { before: 80, after: 150 }
+  }));
+
+  // 0.2 Variables iniciales
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: "0.2 VARIABLES INICIALES DE EVALUACIÓN", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
+    ],
+    spacing: { before: 150, after: 80 }
+  }));
+  
+  (hl.variablesIniciales || ["territorio", "oportunidad", "incidencia"]).forEach((v: string) => {
+    elements.push(new Paragraph({
+      text: `• ${v.toUpperCase()}`,
+      spacing: { before: 40, after: 40 },
+      indent: { left: 360 }
+    }));
+  });
+
+  // 0.3 Evidencia incorporada
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: "0.3 EVIDENCIA INCORPORADA DURANTE EL ANÁLISIS", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
+    ],
+    spacing: { before: 150, after: 80 }
+  }));
+
+  const evidenceRows = [
+    new TableRow({
+      children: [
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: "Categoría de Evidencia", bold: true, color: "FFFFFF" })] })],
+          shading: { fill: "0B1F3A" },
+          width: { size: 3000, type: WidthType.DXA }
+        }),
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: "Impacto Metodológico / Tipo", bold: true, color: "FFFFFF" })] })],
+          shading: { fill: "0B1F3A" },
+          width: { size: 5000, type: WidthType.DXA }
+        })
+      ]
+    })
+  ];
+
+  const confList = hl.evidenciaConfirmatoria || [];
+  const contraList = hl.evidenciaContradictoria || [];
+  
+  if (confList.length === 0 && contraList.length === 0) {
+    evidenceRows.push(
+      new TableRow({
+        children: [
+          new TableCell({ children: [new Paragraph({ text: "Registro de Incidencia" })] }),
+          new TableCell({ children: [new Paragraph({ text: "Fortalece análisis espacial e histórico (CONFIRMACIÓN)" })] })
+        ]
+      })
+    );
+  } else {
+    confList.forEach((e: string) => {
+      evidenceRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ text: e })] }),
+            new TableCell({ children: [new Paragraph({ text: "Aporta sustento empírico verificable (CONFIRMACIÓN)" })] })
+          ]
+        })
+      );
+    });
+    contraList.forEach((e: string) => {
+      evidenceRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ text: e })] }),
+            new TableCell({ children: [new Paragraph({ text: "Presenta disonancia o refutación de patrón (REFUTACIÓN)" })] })
+          ]
+        })
+      );
+    });
+  }
+
+  const evidenceTable = new Table({
+    rows: evidenceRows,
+    width: { size: 8000, type: WidthType.DXA }
+  });
+  elements.push(evidenceTable);
+  elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
+
+  // 0.4 Evolución de la hipótesis
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: "0.4 TRAYECTORIA DE EVOLUCIÓN HISTÓRICA", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
+    ],
+    spacing: { before: 150, after: 80 }
+  }));
+
+  const events = hl.historialEvolucion || [];
+  if (events.length === 0) {
+    elements.push(new Paragraph({
+      children: [
+        new TextRun({ text: "LÍNEA BASE: [INICIAL] -> EN_ANÁLISIS (Sin transiciones adicionales registradas)", font: "Calibri", size: 20 })
+      ],
+      spacing: { before: 50, after: 100 },
+      indent: { left: 180 }
+    }));
+  } else {
+    events.forEach((ev: any, index: number) => {
+      const dateStr = new Date(ev.fecha).toLocaleDateString() || "16/07/2026";
+      elements.push(new Paragraph({
+        children: [
+          new TextRun({ text: `Evento ${index + 1} (${dateStr}) - Tipo: ${ev.tipoChange || ev.tipoCambio || "AMPLIACIÓN"}\n`, bold: true, color: "0B1F3A" }),
+          new TextRun({ text: `Estado Anterior: ${ev.estadoAnterior} → Estado Nuevo: ${ev.estadoNuevo}\n`, italic: true }),
+          new TextRun({ text: `Justificación: ${ev.justificacionAnalitica}\n` }),
+          new TextRun({ text: `Generado por: ${ev.motorQueGeneroCambio || "Analista"} (Usuario: ${ev.usuarioResponsable || "Analista Responsable"})`, size: 18, color: "555555" })
+        ],
+        spacing: { before: 80, after: 150 },
+        indent: { left: 180 }
+      }));
+    });
+  }
+
+  // 0.5 Resultado final y 0.6 Nivel de confianza
+  elements.push(new Paragraph({
+    children: [
+      new TextRun({ text: "0.5 ESTADO FINAL Y NIVEL DE CONFIANZA", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
+    ],
+    spacing: { before: 150, after: 80 }
+  }));
+
+  const stateBox = new Table({
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `ESTADO FINAL DE HIPÓTESIS: ${hl.estadoActual}\n`, bold: true, color: "FFFFFF" }),
+                  new TextRun({ text: `NIVEL DE CONFIANZA: ${hl.nivelConfianza}\n`, bold: true, color: "FFFFFF" }),
+                  new TextRun({ text: `JUSTIFICACIÓN INTEGRAL: ${hl.justificacionActual}`, color: "FFFFFF" })
+                ]
+              })
+            ],
+            shading: { fill: "1F4E79" },
+            width: { size: 8000, type: WidthType.DXA }
+          })
+        ]
+      })
+    ]
+  });
+  elements.push(stateBox);
+  elements.push(new Paragraph({ spacing: { before: 150, after: 150 } }));
+
   elements.push(new Paragraph({ pageBreakBefore: true }));
   elements.push(createTitle("CAPÍTULO 1: CONTEXTO DEL ANÁLISIS"));
   elements.push(...renderEditorialText(payload.contextoTerritorial));

@@ -3,6 +3,7 @@ import { VisualEvidenceMatrix } from "../../visualEvidenceEngine/models/visualEv
 import { TerritorialEvidenceMatrix } from "../../territorialIntelligenceEngine/models/territorialEvidenceTypes";
 import { AnalyticalConsistencyReport, HIEValidationVector } from "../../analyticalConsistencyEngine/models/aceTypes";
 import { GangEvidenceMatrix } from "../../gangIntelligenceEngine/models/gangIntelligenceTypes";
+import { IntelligenceEvidenceObject } from "../../evidenceGovernanceEngine";
 
 export interface CapabilityStatus {
   statisticalEvidence: boolean;
@@ -65,4 +66,5 @@ export interface IntelligenceIntegrationContext {
     status: "PASS" | "WARNING" | "FAILED";
     aceReference: string;
   };
+  evidenceRegistry?: IntelligenceEvidenceObject[];
 }

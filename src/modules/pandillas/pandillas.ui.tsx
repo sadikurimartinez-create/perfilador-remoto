@@ -20,6 +20,8 @@ import { GangGISAnalysisLayer, GISRelationshipLine } from "@/lib/providers/gangG
 import { GISMemberNode, InfluenceZone } from "@/lib/providers/gangInfluenceEngine";
 import { getDb } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
+import { GangIntelligenceProfile } from "./components/GangIntelligenceProfile";
+import { GangProfile, GangMemberCandidate, ILEMemory, Evidence } from "./types";
 
 const MAP_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
 
@@ -319,7 +321,112 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const [archivos, setArchivos] = useState<{ nombre: string; size: number; tipo: string; contexto?: string }[]>([]);
 
   // --- INTERACTION & EDITING SUB-STATES ---
-  const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "registro" | "integrantes" | "relaciones" | "geointeligencia" | "barridos" | "gip">("dashboard");
+
+  // --- NEW GOVERNANCE GIP STATES ---
+  const [candidates, setCandidates] = useState<GangMemberCandidate[]>([]);
+  const [ileMemories, setIleMemories] = useState<ILEMemory[]>([]);
+  const [evidences, setEvidences] = useState<Evidence[]>([]);
+
+  useEffect(() => {
+    if (selectedGangId) {
+      setCandidates([
+        {
+          id: "cand-1",
+          personaId: "MAPC040512HDFRRR01",
+          personaNombre: "Carlos Pérez Morales",
+          personaAlias: "El Charly",
+          pandillaId: selectedGangId,
+          rolPropuesto: "Distribuidor",
+          estado: "propuesto",
+          fechaRegistro: new Date(),
+          usuarioRegistro: "analista_ceipol"
+        },
+        {
+          id: "cand-2",
+          personaId: "ROGL981123MDFLNN02",
+          personaNombre: "Luis Rojas Gómez",
+          personaAlias: "El Flaco",
+          pandillaId: selectedGangId,
+          rolPropuesto: "Vigilante",
+          estado: "propuesto",
+          fechaRegistro: new Date(),
+          usuarioRegistro: "analista_ceipol"
+        }
+      ]);
+
+      setIleMemories([
+        {
+          id: "ile-mem-1",
+          entidadOrigen: "Carlos Pérez Morales",
+          entidadDestino: nombre || "Pandilla Seleccionada",
+          tipoRelacion: "Pertenencia",
+          algoritmo: "EME-JaroWinkler-v1",
+          variablesEvaluadas: [
+            { name: "Coincidencia Territorial", value: "85%", weight: 35 },
+            { name: "Evidencias de Campo", value: "90%", weight: 30 },
+            { name: "Redes Sociales", value: "75%", weight: 20 },
+            { name: "Eventos Criminógenos", value: "80%", weight: 15 }
+          ],
+          resultado: "Alta correlación identificada por cruce de detenciones concurrentes en Sector Oriente y grafitis firmados en el perímetro de su domicilio.",
+          confianza: 84,
+          fecha: new Date(),
+          estado: "propuesto",
+          usuarioValidacion: null
+        }
+      ]);
+
+      setEvidences([
+        {
+          id: "ev-1",
+          tipo: "grafiti",
+          fuente: "Muro perimetral en Calle Laurel, Aguascalientes",
+          fecha: new Date(),
+          hash: "a4f2c8d19e3b572c6a0f4e8d3c2b1a9f0e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
+          confianza: "Alta",
+          relacion: "cand-1"
+        },
+        {
+          id: "ev-2",
+          tipo: "red_social",
+          fuente: "Publicación de Facebook con simbología de clica",
+          fecha: new Date(),
+          hash: "b5f3c9e20f4b683d7a1f5e9d4c3b2a0f1e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5c",
+          confianza: "Media",
+          relacion: "cand-1"
+        }
+      ]);
+    } else {
+      setCandidates([]);
+      setIleMemories([]);
+      setEvidences([]);
+    }
+  }, [selectedGangId, nombre]);
+
+  const handleCertifyCandidate = (candId: string) => {
+    setCandidates(prev =>
+      prev.map(c => (c.id === candId ? { ...c, estado: "certificado" as const } : c))
+    );
+    const certifiedCandidate = candidates.find(c => c.id === candId);
+    if (certifiedCandidate) {
+      const newMember: GangMember = {
+        nombre: certifiedCandidate.personaNombre,
+        alias: certifiedCandidate.personaAlias,
+        rol: certifiedCandidate.rolPropuesto,
+        estatusPandilla: certifiedCandidate.rolPropuesto as any,
+        peligrosidadCalculada: 75,
+        domicilioConocido: "Sector Oriente, Aguascalientes",
+        fotografiaUrl: "/avatars/avatar_male.png"
+      };
+      setIntegrantes(prev => [...prev, newMember]);
+    }
+  };
+
+  const handleRejectCandidate = (candId: string) => {
+    setCandidates(prev =>
+      prev.map(c => (c.id === candId ? { ...c, estado: "descartado" as const } : c))
+    );
+  };
 
   const onMapLoad = useCallback((mapInstance: any) => {
     setMapInstance(mapInstance);
@@ -1525,6 +1632,7 @@ ${analysisResult.ficha.crossCheckJuridico}
       <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1.5 gap-1.5 shadow-xl overflow-x-auto">
         {[
           { id: "dashboard", label: "📊 Panel Ejecutivo" },
+          { id: "gip", label: "🛡️ Expediente GIP" },
           { id: "registro", label: "📋 Registro Pandilla" },
           { id: "integrantes", label: "👥 Dossier Integrantes" },
           { id: "relaciones", label: "🕸️ Vínculos & Redes" },
@@ -1772,6 +1880,45 @@ ${analysisResult.ficha.crossCheckJuridico}
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB 7: GIP INTEL PROFILE */}
+        {activeTab === "gip" && (
+          <div className="w-full">
+            <GangIntelligenceProfile
+              profile={{
+                id: selectedGangId || "mock-gip-id",
+                identidad: {
+                  nombre: nombre || "Nueva Pandilla",
+                  alias: aliasConocidos ? aliasConocidos.split(",").map((s: string) => s.trim()) : [],
+                  simbolos: simbolosIdentificacion ? simbolosIdentificacion.split(",").map((s: string) => s.trim()) : []
+                },
+                estadoInteligencia: (estatus === "Activa" ? "vigente" : estatus === "Desarticulada" ? "historico" : "validacion") as any,
+                organizacion: {
+                  nivel: peligrosidad || "Medio",
+                  descripcion: modusOperandi || "Sin descripción de modus operandi"
+                },
+                integrantes: [],
+                territorios: [],
+                eventos: [],
+                evidencias: [],
+                indicadores: {
+                  riesgo: peligrosidad === "Crítico" ? 95 : peligrosidad === "Alto" ? 75 : peligrosidad === "Medio" ? 45 : 20,
+                  cohesion: 65,
+                  expansion: 55
+                },
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }}
+              members={integrantes}
+              candidates={candidates}
+              ileMemories={ileMemories}
+              evidences={evidences}
+              onCertifyCandidate={handleCertifyCandidate}
+              onRejectCandidate={handleRejectCandidate}
+              onEdit={() => setActiveTab("registro")}
+            />
           </div>
         )}
 

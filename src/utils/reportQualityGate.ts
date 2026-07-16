@@ -2,6 +2,8 @@ import { IntelligenceReportPayload, IntelligenceBriefing } from './intelligenceL
 import { hasGenericOsintContent } from './osintChapterBuilder';
 import { EditorialStructureEngine } from './editorialStructureEngine';
 import { IntelligenceNarrativeValidator } from './intelligenceNarrativeValidator';
+import { InvestigationHypothesis } from './hypothesisLifecycle';
+import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
 // Trigger Vercel deploy webhook manually via new commit
 
 /**
@@ -260,6 +262,104 @@ export class ReportQualityGate {
     if (hieEvents !== cieEvents || cieEvents !== sieEvents) {
       throw new Error(`INCONSISTENCIA ANALÍTICA: Los capítulos utilizan diferentes bases criminales (HIE: ${hieEvents}, CIE: ${cieEvents}, SIE: ${sieEvents}).`);
     }
+
+    // --- ADR-011: QUALITY GATE - HYPOTHESIS LIFECYCLE INTELLIGENCE ENGINE (HLIE) ---
+    const hl = payload.hypothesisLifecycle;
+    
+    // BLOQUEO 1: Si el expediente no tiene hipótesis inicial.
+    if (!hl || !hl.hipotesisInicial || hl.hipotesisInicial.trim() === "") {
+      throw new Error("[QUALITY GATE HLIE - BLOQUEO 1] El expediente no cuenta con una hipótesis de investigación inicial declarada.");
+    }
+
+    // BLOQUEO 2: Existe conclusión final sin evolución de hipótesis registrada.
+    const hasConclusions = payload.conclusiones && (payload.conclusiones.hallazgosCriticos || []).length > 0;
+    const hasHistoryEvents = hl.historialEvolucion && hl.historialEvolucion.length > 0;
+    if (hasConclusions && !hasHistoryEvents) {
+      throw new Error("[QUALITY GATE HLIE - BLOQUEO 2] Existe conclusión final declarada en el informe pero no se registra ningún evento de evolución o evaluación de hipótesis en la trayectoria.");
+    }
+
+    // BLOQUEO 3: El fenómeno confirmado no tiene evidencia asociada.
+    const isPhenomenonConfirmed = (hl.estadoActual as any) === "FENOMENO_CONFIRMADO" || (hl.estadoActual as any) === "FENOMENOCONFIRMADO";
+    if (isPhenomenonConfirmed && (!hl.evidenciaConfirmatoria || hl.evidenciaConfirmatoria.length === 0)) {
+      throw new Error("[QUALITY GATE HLIE - BLOQUEO 3] Se declaró el estado analítico de FENÓMENO_CONFIRMADO, pero no existe ninguna evidencia asociada que sustente empíricamente esta afirmación.");
+    }
+
+    // BLOQUEO 4: La hipótesis cambió pero no existe evento de evolución registrado.
+    if ((hl.estadoActual as any) !== "INICIAL" && !hasHistoryEvents) {
+      throw new Error("[QUALITY GATE HLIE - BLOQUEO 4] La hipótesis de investigación ha experimentado un cambio de estado analítico pero no se encuentra registrado ningún evento en el historial de evolución.");
+    }
+
+    // BLOQUEO 5: Salto epistemológico no documentado.
+    const isVulnerabilityInitial = /vulnerabilidad|baldío|iluminación|maleza|urbano|infraestructura/i.test(hl.hipotesisInicial);
+    const isCartelOrCellConclusion = /cártel|cartel|célula criminal|organización criminal|grupo delictivo organizado/i.test(payload.finalHypothesis || "") || 
+                                     (payload.conclusiones.hallazgosCriticos || []).some(h => /cártel|cartel|célula criminal|organización criminal|grupo delictivo organizado/i.test(h));
+    
+    if (isVulnerabilityInitial && isCartelOrCellConclusion) {
+      const hasReorientationEvent = (hl.historialEvolucion || []).some(e => e.tipoCambio === "REORIENTACION" || e.tipoCambio === "AMPLIACION");
+      if (!hasReorientationEvent) {
+        throw new Error("[QUALITY GATE HLIE - BLOQUEO 5] SALTO EPISTEMOLÓGICO DETECTADO: Se formuló una hipótesis inicial de vulnerabilidad urbana, pero se concluye con la confirmación de operación de célula/organización criminal sin haber documentado un evento intermedio de REORIENTACIÓN o AMPLIACIÓN analítica.");
+      }
+    }
+
+    // --- ADR-012: QUALITY GATE - EVIDENCE GOVERNANCE ENGINE (EGE) ---
+    const registry = payload.evidenceRegistry || [];
+
+    // BLOQUEO EGE-1: Uso de evidencia no validada en conclusiones/capítulos.
+    registry.forEach(ev => {
+      const isUsedInConclusions = ev.historialUso && ev.historialUso.some(u => u.capituloDestino === "Capítulo 10" || u.capituloDestino === "Conclusiones");
+      if (isUsedInConclusions && ev.estadoValidacion !== "VALIDADA") {
+        throw new Error(`[QUALITY GATE EGE - BLOQUEO 1] El informe utiliza como sustento analítico crítico la evidencia ID: ${ev.id} (${ev.descripcion}), la cual no posee el estado de validación VALIDADA (Estado actual: ${ev.estadoValidacion}).`);
+      }
+    });
+
+    // BLOQUEO EGE-2: Confiabilidad insuficiente para dictámenes con confianza ALTO.
+    const declaresHighConfidence = /confianza: ALTO/i.test(payload.finalHypothesis || "") || 
+                                   (payload.conclusiones.hallazgosCriticos || []).some(h => /confianza: ALTO/i.test(h));
+    if (declaresHighConfidence && registry.length > 0) {
+      const activeEvidences = registry.filter(ev => (ev.historialUso && ev.historialUso.length > 0) || ev.hipotesisRelacionadas.length > 0);
+      if (activeEvidences.length > 0) {
+        const totalWeight = activeEvidences.reduce((sum, ev) => sum + ev.pesoEvidencial, 0);
+        const averageWeight = totalWeight / activeEvidences.length;
+        const hasLowReliability = activeEvidences.some(ev => ev.nivelConfiabilidad === "BAJA");
+        if (averageWeight < 50 || hasLowReliability) {
+          throw new Error(`[QUALITY GATE EGE - BLOQUEO 2] CONFIABILIDAD INSUFICIENTE: Se emitió un dictamen declarando nivel de confianza ALTO, pero la confiabilidad promedio de las evidencias asociadas es insuficiente (${averageWeight.toFixed(1)}/100) o existen elementos críticos con confiabilidad BAJA.`);
+        }
+      }
+    }
+
+    // BLOQUEO EGE-3: Inferencia desbordada.
+    registry.forEach(ev => {
+      const usageInConclusions = ev.historialUso && ev.historialUso.filter(u => u.capituloDestino === "Capítulo 10" || u.capituloDestino === "Conclusiones");
+      if (usageInConclusions && usageInConclusions.length > 0) {
+        usageInConclusions.forEach(u => {
+          const normalizedAnalisis = u.analisisDondeSeUso.toLowerCase();
+          const violatedLimit = (ev.limitacionesInferenciales || []).find(limit => normalizedAnalisis.includes(limit.toLowerCase()));
+          if (violatedLimit) {
+            throw new Error(`[QUALITY GATE EGE - BLOQUEO 3] INFERENCIA DESBORDADA: El análisis de la evidencia ID: ${ev.id} asocia conclusiones que exceden los límites institucionales de interpretación. Límite violado: "${violatedLimit}".`);
+          }
+        });
+      }
+    });
+
+    // BLOQUEO EGE-4: Trazabilidad rota (solo evidencias UTILIZADAS para sostener una conclusión analítica deben estar vinculadas a una hipótesis).
+    registry.forEach(ev => {
+      const isUsedForConclusion = ev.historialUso && ev.historialUso.some(u => u.capituloDestino === "Capítulo 10" || u.capituloDestino === "Conclusiones" || u.capituloDestino === "Hipótesis Final");
+      if (isUsedForConclusion) {
+        if (!ev.hipotesisRelacionadas || ev.hipotesisRelacionadas.length === 0) {
+          throw new Error(`[QUALITY GATE EGE - BLOQUEO 4] TRAZABILIDAD ROTA: La evidencia ID: ${ev.id} sustentó una conclusión analítica final pero no se encuentra vinculada a ninguna hipótesis de investigación del ADR-011.`);
+        }
+      }
+    });
+
+    // BLOQUEO EGE-5: Evidencia IA (generada artificialmente) utilizada como evidencia primaria.
+    registry.forEach(ev => {
+      if (ev.isIAGenerated || ev.naturaleza === "DERIVADA") {
+        const isUsedAsPrimary = ev.historialUso && ev.historialUso.some(u => u.capituloDestino === "Evidencia Primaria" || u.analisisDondeSeUso.toLowerCase().includes("primaria"));
+        if (isUsedAsPrimary) {
+          throw new Error(`[QUALITY GATE EGE - BLOQUEO 5] ABUSO EPISTEMOLÓGICO: La evidencia ID: ${ev.id} fue generada por IA (Naturaleza DERIVADA), por lo que no puede ser declarada ni utilizada como una fuente de evidencia primaria.`);
+        }
+      }
+    });
 
     // 11. Narrative INDE Quality Gate (ADR-010)
     const narrativeResult = IntelligenceNarrativeValidator.validateReport(payload, briefing);
