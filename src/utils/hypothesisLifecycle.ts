@@ -1,6 +1,7 @@
 export type HypothesisState =
   | "INICIAL"
   | "EN_ANALISIS"
+  | "HIPOTESIS_SUSTENTADA_POR_CONVERGENCIA"
   | "CONFIRMADA"
   | "REFUTADA"
   | "MODIFICADA"
@@ -23,6 +24,22 @@ export interface HypothesisEvolutionEvent {
   usuarioResponsable: string;
 }
 
+export type ConfidenceLevel =
+  | "MUY_BAJO"
+  | "BAJO"
+  | "MEDIO"
+  | "ALTO"
+  | "MUY_ALTO";
+
+export interface ConfidenceAdjustmentEvent {
+  fecha: number;
+  scoreAnterior: number;
+  scoreNuevo: number;
+  motivo: string;
+  evidenciaRelacionada: string[];
+  motorResponsable: string;
+}
+
 export interface InvestigationHypothesis {
   id: string;
   expedienteId: string;
@@ -32,9 +49,14 @@ export interface InvestigationHypothesis {
   estadoActual: HypothesisState;
   evidenciaConfirmatoria: string[];
   evidenciaContradictoria: string[];
-  nivelConfianza: "ALTO" | "MEDIO" | "BAJO";
+  nivelConfianza: "ALTO" | "MEDIO" | "BAJO"; // Para retrocompatibilidad
   justificacionActual: string;
   historialEvolucion: HypothesisEvolutionEvent[];
+  
+  // ADR-014
+  confidenceScore?: number;
+  confidenceLevel?: ConfidenceLevel;
+  confidenceHistory?: ConfidenceAdjustmentEvent[];
 }
 
 export class HypothesisLifecycleManager {
@@ -58,7 +80,10 @@ export class HypothesisLifecycleManager {
       evidenciaContradictoria: [],
       nivelConfianza: "MEDIO",
       justificacionActual: "Hipótesis inicial registrada por el analista responsable.",
-      historialEvolucion: []
+      historialEvolucion: [],
+      confidenceScore: 30, // Score inicial por defecto
+      confidenceLevel: "BAJO",
+      confidenceHistory: []
     };
   }
 
@@ -103,7 +128,10 @@ export class HypothesisLifecycleManager {
       evidenciaConfirmatoria: newConf,
       evidenciaContradictoria: newContra,
       justificacionActual: justificacion,
-      historialEvolucion: updatedEvents
+      historialEvolucion: updatedEvents,
+      confidenceScore: hypothesis.confidenceScore,
+      confidenceLevel: hypothesis.confidenceLevel,
+      confidenceHistory: hypothesis.confidenceHistory || []
     };
   }
 }

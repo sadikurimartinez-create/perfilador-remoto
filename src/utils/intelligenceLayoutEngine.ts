@@ -10,6 +10,8 @@ import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine
 import { safeUpperCase } from '../lib/exportToWord';
 import { InvestigationHypothesis } from './hypothesisLifecycle';
 import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
+import { HypothesisConfidenceAssessment } from './hypothesisConfidenceCalibrationEngine';
+import { OperationalDecisionObject } from './hypothesisDecisionIntelligenceEngine';
 
 import {
   renderDensityMap,
@@ -398,6 +400,9 @@ export interface IntelligenceReportPayload {
   intelligenceContext?: any;
   hypothesisLifecycle?: InvestigationHypothesis;
   evidenceRegistry?: IntelligenceEvidenceObject[];
+  confidenceAssessment?: HypothesisConfidenceAssessment;
+  evidenceConflicts?: any[];
+  operationalDecision?: OperationalDecisionObject;
 }
 
 /**
@@ -1254,6 +1259,104 @@ export const buildIntelligenceBriefing = (
       ...payload.conclusiones.recomendacionesEstrategicas.map(s => `Recomendación Estratégica: ${s}`)
     ]
   });
+
+  // Página 12: CAPÍTULO 11 - Calibración de Confianza de la Hipótesis (HCCE ADR-014)
+  if (payload.confidenceAssessment) {
+    const ca = payload.confidenceAssessment;
+    const bulletPositivos = [
+      `Contribución de Evidencia Gobernada: ${ca.evidenceContribution}%`,
+      `Contribución de Correlación Multidominio: ${ca.correlationContribution}%`,
+      `Consistencia Temporal: ${ca.temporalConsistency}%`,
+      `Estabilidad Analítica: ${ca.analyticalStability}%`
+    ].map(item => `✓ ${item}`).join("\n");
+
+    const bulletLimites = ca.limitingFactors.map(f => `- ${f}`).join("\n");
+    const bulletReqs = ca.validationRequirements.map(r => `- ${r}`).join("\n");
+    const bulletPenalties = ca.penaltiesApplied.length > 0
+      ? ca.penaltiesApplied.map(p => `• ${p}`).join("\n")
+      : "• Ninguna penalización aplicada.";
+
+    const confidenceText = `DIAGNÓSTICO DE CALIBRACIÓN DE CONFIANZA (HCCS v1.0)
+
+ESTADO DE LA HIPÓTESIS:
+${payload.hypothesisLifecycle?.estadoActual || "EN_ANALISIS"}
+
+SCORE DE CONFIANZA MATEMÁTICO:
+${ca.confidenceScore} / 100
+
+NIVEL FINAL DE CONFIANZA:
+${ca.confidenceLevel} — ${ca.justification}
+
+FACTORES POSITIVOS DE SOPORTE:
+${bulletPositivos}
+
+FACTORES LIMITANTES (RAZONES QUE IMPIDEN MAYOR CONFIANZA):
+${bulletLimites || "- No se identificaron factores limitantes relevantes."}
+
+REQUERIMIENTOS DE VALIDACIÓN TÁCTICA PARA INCREMENTAR LA CONFIANZA:
+${bulletReqs || "- La hipótesis ha alcanzado el máximo rigor metodológico."}
+
+PENALIZACIONES Y TOPES DE GOBERNANZA APLICADOS:
+${bulletPenalties}`;
+
+    pages.push({
+      id: 'page-confidence-calibration',
+      title: 'CAPÍTULO 11: CALIBRACIÓN DE CONFIANZA DE LA HIPÓTESIS',
+      mode: 'text',
+      visuals: [],
+      interpretation: confidenceText
+    });
+  }
+
+  // Página 13: CAPÍTULO 12 - Decisión Operacional Derivada de la Hipótesis (HDIE ADR-015)
+  if (payload.operationalDecision) {
+    const dec = payload.operationalDecision;
+    const bulletIndicators = dec.successIndicators.map(item => `- ${item}`).join("\n");
+    const bulletLimitations = dec.limitations.map(item => `- ${item}`).join("\n");
+    const bulletEvidences = dec.evidenceBasis.map(item => `• ${item}`).join("\n");
+
+    const decisionText = `CAPÍTULO 12: DECISIÓN OPERACIONAL DERIVADA DE LA HIPÓTESIS
+
+12.1 HIPÓTESIS EVALUADA:
+${payload.hypothesisLifecycle?.hipotesisActual || "Hipótesis no registrada."}
+
+12.2 NIVEL DE CONFIANZA CALIBRADO (HCCS):
+${dec.confidenceScore} / 100 — ${payload.confidenceAssessment?.confidenceLevel || "DETERMINADO"}
+
+12.3 EVIDENCIAS DETERMINANTES DE SOPORTE:
+${bulletEvidences || "• No se registraron evidencias asociadas de soporte."}
+
+12.4 DECISIÓN Y PLAN DE ACCIÓN RECOMENDADO:
+TIPO: ${dec.decisionType}
+PRIORIDAD: ${dec.priority}
+OBJETIVO OPERACIONAL: ${dec.objective}
+
+12.5 VARIABLES DE DESPLIEGUE OPERATIVO:
+ZONA DE INTERVENCIÓN: ${dec.operationalVariables.zona}
+HORARIO CRÍTICO: ${dec.operationalVariables.horario || "No especificado"}
+FACTOR DE INTERVENCIÓN TÁCTICA: ${dec.operationalVariables.factorIntervencion}
+POBLACIÓN OBJETIVO: ${dec.operationalVariables.poblacionObjetivo || "No especificado"}
+
+12.6 FUNDAMENTO ANALÍTICO OPERACIONAL:
+La hipótesis evaluada, sustentada por evidencia gobernada, correlación multidominio y confianza calibrada, genera una recomendación operacional proporcional, medible y sujeta a reevaluación.
+
+12.7 INDICADORES DE ÉXITO DE LA INTERVENCIÓN:
+${bulletIndicators || "- No se definieron indicadores de medición."}
+
+12.8 LIMITACIONES TÁCTICAS OPERACIONALES:
+${bulletLimitations || "- No se identificaron limitaciones operativas."}
+
+12.9 REQUERIMIENTOS DE REEVALUACIÓN POST-INTERVENCION:
+Se requiere registrar obligatoriamente los resultados e impacto en la incidencia delictiva mediante el DecisionOutcomeTracker al concluir el periodo de despliegue táctico.`;
+
+    pages.push({
+      id: 'page-operational-decision',
+      title: 'CAPÍTULO 12: DECISIÓN OPERACIONAL DERIVADA DE LA HIPÓTESIS',
+      mode: 'text',
+      visuals: [],
+      interpretation: decisionText
+    });
+  }
 
   return {
     title: 'INFORME DE GEOINTELIGENCIA OPERATIVA',

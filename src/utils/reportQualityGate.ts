@@ -4,6 +4,10 @@ import { EditorialStructureEngine } from './editorialStructureEngine';
 import { IntelligenceNarrativeValidator } from './intelligenceNarrativeValidator';
 import { InvestigationHypothesis } from './hypothesisLifecycle';
 import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
+import { HypothesisCorrelationEngine } from './hypothesisCorrelationEngine';
+import { HypothesisConfidenceCalibrationEngine } from './hypothesisConfidenceCalibrationEngine';
+import { HypothesisDecisionIntelligenceEngine } from './hypothesisDecisionIntelligenceEngine';
+import { DecisionOutcomeTracker } from './decisionOutcomeTracker';
 // Trigger Vercel deploy webhook manually via new commit
 
 /**
@@ -36,7 +40,14 @@ export class ReportQualityGate {
         });
       } else if (typeof obj === 'object') {
         Object.keys(obj).forEach(key => {
-          if (key !== 'id' && key !== 'dataUrl' && key !== 'url' && key !== 'storagePath' && key !== 'projectId') {
+          const isExcludedKey = [
+            'id', 'dataUrl', 'url', 'storagePath', 'projectId',
+            'tipo', 'naturaleza', 'estadoValidacion', 'nivelConfiabilidad',
+            'estadoActual', 'tipoCambio', 'tipoRelacion', 'nivelConfianza',
+            'hipotesisRelacionadas', 'evidenciasOrigen', 'evidenciaConfirmatoria', 'evidenciaContradictoria'
+          ].includes(key);
+
+          if (!isExcludedKey) {
             if (typeof obj[key] === 'string') {
               obj[key] = sanitizeText(obj[key]);
             } else if (obj[key] && typeof obj[key] === 'object') {
@@ -360,6 +371,137 @@ export class ReportQualityGate {
         }
       }
     });
+
+    // BLOQUEO SV-6: Narrativa o análisis de Street View sin imágenes físicas de soporte.
+    const hasStreetViewNarrative = payload.streetViewAnalysis && payload.streetViewAnalysis.length > 0;
+    if (hasStreetViewNarrative) {
+      const hasMissingImages = payload.streetViewAnalysis.some(sv => !sv.dataUrl || sv.dataUrl.trim() === "" || sv.dataUrl === "data:image/png;base64,");
+      if (hasMissingImages) {
+        throw new Error("[QUALITY GATE SV - BLOQUEO 6] Se detectó narrativa o análisis de Street View pero existen registros sin imágenes físicas de soporte.");
+      }
+    }
+
+    // --- ADR-013: QUALITY GATE - HYPOTHESIS CORRELATION & EVIDENCE FUSION ENGINE (HCEF) ---
+    if (hl) {
+      const correlationResult = HypothesisCorrelationEngine.analyzeCorrelation(hl, registry);
+
+      // HCEF-1: Insuficiencia de Convergencia
+      if (registry.length > 3 && correlationResult.hcsScore < 40) {
+        throw new Error(`[QUALITY GATE HCEF-1] INSUFICIENCIA DE CONVERGENCIA: El expediente posee múltiples evidencias asociadas pero el Score de Convergencia Multi-Dominio (HCS: ${correlationResult.hcsScore}/100) es inferior al estándar mínimo de 40 puntos.`);
+      }
+
+      // HCEF-2: Confirmación Prematura
+      const isConfirmedState = hl.estadoActual === "CONFIRMADA" || hl.estadoActual === "FENOMENO_CONFIRMADO" || (hl.estadoActual as any) === "FENOMENOCONFIRMADO";
+      if (isConfirmedState && correlationResult.hcsScore < 80) {
+        throw new Error(`[QUALITY GATE HCEF-2] CONFIRMACIÓN PREMATURA: El fenómeno declarado no cuenta con convergencia multidominio suficiente (HCS: ${correlationResult.hcsScore}/100 < 80). La evidencia disponible permite únicamente una hipótesis sustentada o modificada.`);
+      }
+
+      // HCEF-3: Contradicción Ignorada
+      const hasUnresolvedConflicts = correlationResult.conflicts.length > 0;
+      const hasConflictAcknowledged = (payload as any).evidenceConflicts && (payload as any).evidenceConflicts.length > 0;
+      if (hasUnresolvedConflicts && !hasConflictAcknowledged) {
+        throw new Error("[QUALITY GATE HCEF-3] CONTRADICCIÓN IGNORADA: Se identificaron tendencias opuestas entre la estadística oficial y las fuentes tácticas de campo. Debe registrarse explícitamente el tratamiento de conflicto manteniendo la incertidumbre analítica.");
+      }
+
+      // ====================================================================
+      // QUALITY GATES HCCE (ADR-014)
+      // ====================================================================
+      const ca = payload.confidenceAssessment || HypothesisConfidenceCalibrationEngine.calibrate(
+        hl,
+        payload.evidenceRegistry || [],
+        correlationResult,
+        (payload as any).hasEpistemologicalLeap,
+        hasUnresolvedConflicts && !hasConflictAcknowledged,
+        (payload as any).hasTraceabilityIssues
+      );
+
+      // HCCE-1: Bloqueo de Confirmación Sin Score
+      if (isConfirmedState && ca.confidenceScore < 70) {
+        throw new Error(`[QUALITY GATE HCCE-1] BLOQUEO DE CONFIRMACIÓN: El estado CONFIRMADA o FENÓMENO CONFIRMADO requiere un score de confianza calibrada (HCCS) mínimo de 70/100 (Score actual: ${ca.confidenceScore}/100).`);
+      }
+
+      // HCCE-2: Bloqueo de Confianza Artificial
+      const declaredHighConfidence = (payload.hipotesisPrincipal && (payload.hipotesisPrincipal.nivelConfianza === "ALTO" || payload.hipotesisPrincipal.nivelConfianza === "MUY_ALTO")) || ca.confidenceLevel === "ALTO" || ca.confidenceLevel === "MUY_ALTO";
+      if (declaredHighConfidence && ca.confidenceScore < 70) {
+        throw new Error(`[QUALITY GATE HCCE-2] CONFIANZA ARTIFICIAL: Se declara nivel de confianza alto pero el score matemático calibrado es inferior a 70 (Score actual: ${ca.confidenceScore}/100).`);
+      }
+
+      // HCCE-4: Bloqueo de IA como Fuente de Certeza
+      const isIAIncreasedOnly = (payload as any).isIAIncreasedOnly === true;
+      if (isIAIncreasedOnly || (ca.evidenceContribution === 0 && ca.confidenceScore > 40)) {
+        throw new Error("[QUALITY GATE HCCE-4] IA COMO FUENTE DE CERTEZA: La IA no puede aumentar autónomamente el nivel de confianza basado únicamente en interpretaciones o narrativas derivadas sin soporte de evidencias primarias.");
+      }
+
+      // HCCE-3: Bloqueo de Confianza Sin Explicación
+      if (ca.confidenceScore > 30 && (ca.evidenceContribution === 0 || !ca.justification || ca.justification.length < 10)) {
+        throw new Error("[QUALITY GATE HCCE-3] CONFIANZA SIN EXPLICACIÓN: Todo nivel de confianza superior al umbral mínimo requiere la asociación de evidencias primarias validadas y una justificación metodológica estructurada.");
+      }
+
+      // HCCE-5: Bloqueo de Evidencia Insuficiente para Confianza Declarada (Tope Epistemológico)
+      if (ca.confidenceScore > ca.maxAllowedConfidence) {
+        throw new Error(`[QUALITY GATE HCCE-5] TOPE EPISTEMOLÓGICO: La confianza declarada supera la capacidad demostrativa de las evidencias gobernadas (Capacidad máxima: ${ca.maxAllowedConfidence}/100, Score intentado: ${ca.confidenceScore}/100).`);
+      }
+
+      // ====================================================================
+      // QUALITY GATES HDIE (ADR-015)
+      // ====================================================================
+      if (payload.operationalDecision) {
+        const dec = payload.operationalDecision;
+
+        // HDIE-1: DECISIÓN SIN HIPÓTESIS
+        if (!dec.hypothesisId || dec.hypothesisId !== hl.id) {
+          throw new Error("[QUALITY GATE HDIE-1] DECISIÓN SIN HIPÓTESIS: Toda recomendación operacional generada debe estar vinculada obligatoriamente a una hipótesis de investigación activa.");
+        }
+
+        // HDIE-2: DECISIÓN SUPERIOR A CONFIANZA
+        const consistency = HypothesisDecisionIntelligenceEngine.evaluateDecisionConsistency(dec, ca);
+        if (consistency.status === "INCONSISTENTE") {
+          throw new Error(`[QUALITY GATE HDIE-2] DECISIÓN SUPERIOR A CONFIANZA: ${consistency.reason}`);
+        }
+
+        // HDIE-3: RECOMENDACIÓN GENÉRICA
+        const hasMissingVariables = !dec.operationalVariables.zona || 
+                                    dec.operationalVariables.zona.length < 5 ||
+                                    !dec.operationalVariables.factorIntervencion ||
+                                    dec.operationalVariables.factorIntervencion.length < 10 ||
+                                    !dec.objective ||
+                                    dec.objective.length < 10;
+        
+        const isGenericText = dec.operationalVariables.factorIntervencion.toLowerCase().includes("incrementar patrullajes") || 
+                              dec.operationalVariables.factorIntervencion.toLowerCase().includes("realizar recorridos") ||
+                              dec.operationalVariables.factorIntervencion.toLowerCase().includes("aumentar vigilancia");
+        
+        if (hasMissingVariables || isGenericText) {
+          throw new Error("[QUALITY GATE HDIE-3] RECOMENDACIÓN GENÉRICA: Se bloqueó la recomendación operacional por carecer de variables obligatorias detalladas (zona, factor de intervención detallado, objetivo específico) o contener términos genéricos prohibidos.");
+        }
+
+        // HDIE-4: IA COMO GENERADOR DE DECISIÓN ABSOLUTA
+        const absoluteKeywords = ["ordenar", "se ordena", "ejecutar arresto", "instrucción directa", "ordenar despliegue", "detener inmediatamente"];
+        const hasAbsoluteCommands = absoluteKeywords.some(kw => 
+          dec.objective.toLowerCase().includes(kw) || 
+          dec.operationalVariables.factorIntervencion.toLowerCase().includes(kw)
+        );
+        if (hasAbsoluteCommands) {
+          throw new Error("[QUALITY GATE HDIE-4] IA COMO GENERADOR DE DECISIÓN ABSOLUTA: El sistema de inteligencia no está autorizado para emitir directivas u órdenes absolutas. Toda recomendación debe formularse como propuesta analítica sujeta a la toma de decisión humana.");
+        }
+
+        // HDIE-5: FALTA DE INDICADORES DE EVALUACIÓN
+        if (!dec.successIndicators || dec.successIndicators.length === 0 || dec.successIndicators.some(ind => ind.trim().length < 5)) {
+          throw new Error("[QUALITY GATE HDIE-5] FALTA DE INDICADORES DE EVALUACIÓN: Toda decisión operacional autorizada debe definir de forma obligatoria cómo medir su impacto mediante indicadores de éxito estructurados.");
+        }
+
+        // HDIE-6: INCONSISTENCIA POSTERIOR
+        const previousOutcomes = DecisionOutcomeTracker.getOutcomesForHypothesis(hl.id);
+        const hasFailures = previousOutcomes.some(o => o.resultado === "NEGATIVA" || o.resultado === "SIN_CAMBIO");
+        if (hasFailures) {
+          const factorClean = dec.operationalVariables.factorIntervencion.toLowerCase();
+          const hasAdaptiveResponse = factorClean.includes("variando") || factorClean.includes("fracaso previo") || factorClean.includes("aprendizaje") || factorClean.includes("remodelación");
+          if (!hasAdaptiveResponse) {
+            throw new Error("[QUALITY GATE HDIE-6] INCONSISTENCIA POSTERIOR: Se detectaron intervenciones previas con resultados negativos o nulos en este sector. La nueva propuesta debe considerar obligatoriamente ese antecedente y adaptar/variar el factor de intervención para romper el bucle.");
+          }
+        }
+      }
+    }
 
     // 11. Narrative INDE Quality Gate (ADR-010)
     const narrativeResult = IntelligenceNarrativeValidator.validateReport(payload, briefing);
