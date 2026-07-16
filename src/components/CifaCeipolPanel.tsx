@@ -16,6 +16,7 @@ interface Props {
 import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
 import { CEIPOLBadge } from "./ui/CEIPOLBadge";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
+import { CEIPOLLoader } from "./ui/CEIPOLLoader";
 
 export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
   osint_territorial: "OSINT Territorial CEIPOL v2.0",
@@ -225,7 +226,9 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         {/* TAB 1: Plan de Recolección (PRI) */}
         {activeTab === "pri" && (
           <div className="space-y-6">
-            {!plan ? (
+            {loading ? (
+              <CEIPOLLoader message="Generando análisis CIFA-CEIPOL" />
+            ) : !plan ? (
               <div className="text-center py-10 text-slate-500 text-sm animate-pulse">Generando plan operativo...</div>
             ) : (
               <>
