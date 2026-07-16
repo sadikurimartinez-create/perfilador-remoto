@@ -24,6 +24,10 @@ import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
 import { DynamicPopup, PopupPositionManager } from "./DynamicPopup";
 
+import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
+import { CEIPOLBadge } from "./ui/CEIPOLBadge";
+import { CEIPOLToast } from "./ui/CEIPOLToast";
+
 type EvidencePhotoType = {
   id: string;
   previewUrl?: string;
@@ -303,6 +307,32 @@ const DELITOS_CATEGORIES = [
   { id: "cristalazo_autopartes", label: "Cristalazo y Autopartes" },
   { id: "otros", label: "Otros Delitos" }
 ];
+
+const CRIME_SEMANTIC_MAP: Record<string, string> = {
+  "robo a casa": "Robo a Casa Habitación",
+  "robo a casa habitación": "Robo a Casa Habitación",
+  "robo a casa habitacion": "Robo a Casa Habitación",
+  "robo domiciliario": "Robo a Casa Habitación",
+  "robo a domicilio": "Robo a Casa Habitación",
+
+  "robo de vehiculo": "Robo Vehicular",
+  "robo de vehículo": "Robo Vehicular",
+  "robo vehicular": "Robo Vehicular",
+  "robo automotor": "Robo Vehicular",
+
+  "robo a transeunte": "Robo a Persona / Transeúnte",
+  "robo a transeúnte": "Robo a Persona / Transeúnte",
+  "robo a persona": "Robo a Persona / Transeúnte",
+  "robo a personas": "Robo a Persona / Transeúnte"
+};
+
+const getNormalizedCrimeCategory = (rawCrime: string): string => {
+  if (!rawCrime) {
+    return "Delito No Especificado";
+  }
+  const normalizedKey = rawCrime.trim().toLowerCase();
+  return CRIME_SEMANTIC_MAP[normalizedKey] || rawCrime;
+};
 
 const getCategoryForFilename = (filename: string): string => {
   const name = String(filename || "").toLowerCase();
@@ -623,6 +653,7 @@ export function PhotoAlbum({
   const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [scinceDataConfirm, setScinceDataConfirm] = useState<string | null>(null);
+  const [denueDataConfirm, setDenueDataConfirm] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
     if (!clickCoords) return {};
@@ -855,6 +886,7 @@ export function PhotoAlbum({
   // FASE 3: Indicadores de Conexión en tiempo real (Telemetría)
   const [statusScince, setStatusScince] = useState<"checking" | "online" | "offline">("checking");
   const [statusDenue, setStatusDenue] = useState<"checking" | "online" | "offline">("checking");
+  const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
 
   // FASE 2: Estados de validación de auditoría (semáforo)
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
@@ -2132,7 +2164,7 @@ const hasMinimumPhotos =
 
                   <div className="mt-1 mb-2">
                     <div className="flex justify-between items-center text-[9px] mb-0.5">
-                      <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                      <span className="text-slate-400">Aptitud de contenido (Longitud mínima):</span>
                       <span className={`font-bold ${(p.comentario || "").length < 40 ? "text-red-400" : (p.comentario || "").length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
                         {(p.comentario || "").length === 0 ? "Sin contexto" : (p.comentario || "").length < 40 ? "Básico" : (p.comentario || "").length < 120 ? "Aceptable" : "Óptimo"}
                       </span>
@@ -2273,23 +2305,43 @@ const hasMinimumPhotos =
 
       {/* Formulario de Hipótesis y Precisiones de Barridos en la página principal */}
       <div className="pt-8 mt-6 border-t border-slate-800 w-full print:hidden">
-        {!isHypothesisValidatedInWorkspace ? (
-          <div className="space-y-6 max-w-4xl mx-auto w-full">
-            <header className="text-center space-y-2 mb-6">
-              <h3 className="text-lg font-black text-slate-100 uppercase tracking-wider">
-                🧠 Formulación de Hipótesis y Ajustes de Barridos
-              </h3>
-              <p className="text-xs text-slate-400">
-                Escriba la hipótesis central del expediente, revise el resumen de todos los barridos de inteligencia y agregue precisiones generales para validar con la IA.
+        {isHypothesisValidatedInWorkspace && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 max-w-4xl mx-auto mb-6 text-center md:text-left shadow-xl backdrop-blur-sm font-sans">
+            <div className="space-y-1">
+              <span className="text-xs text-emerald-400 font-black tracking-wider uppercase flex items-center gap-1.5">
+                🛡️ Hipótesis de Gobernanza Validada y Certificada por IA
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Las herramientas de análisis táctico y el dictamen oficial están habilitados. La hipótesis se encuentra en modo de lectura protegida.
               </p>
-            </header>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsHypothesisValidatedInWorkspace(false)}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-1.5 border border-slate-700 whitespace-nowrap active:scale-[0.97]"
+            >
+              🔓 Editar Hipótesis y Precisiones
+            </button>
+          </div>
+        )}
 
-            {/* 1. TEXTAREA DE HIPÓTESIS */}
-            <div className="space-y-3 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-              <div className="flex items-center justify-between gap-2">
-                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  📝 Hipótesis de la Persona Perfiladora (Contexto de cruce de ubicaciones)
-                </label>
+        <div className="space-y-6 max-w-4xl mx-auto w-full">
+          <header className="text-center space-y-2 mb-6">
+            <h3 className="text-lg font-black text-slate-100 uppercase tracking-wider">
+              🧠 Formulación de Hipótesis y Ajustes de Barridos
+            </h3>
+            <p className="text-xs text-slate-400">
+              Escriba la hipótesis central del expediente, revise el resumen de todos los barridos de inteligencia y agregue precisiones generales para validar con la IA.
+            </p>
+          </header>
+
+          {/* 1. TEXTAREA DE HIPÓTESIS */}
+          <div className="space-y-3 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+                📝 Hipótesis de la Persona Perfiladora (Contexto de cruce de ubicaciones)
+              </label>
+              {!isHypothesisValidatedInWorkspace && (
                 <div className="flex items-center gap-2">
                   {!isReadOnly && projectId && (
                     <button
@@ -2325,141 +2377,146 @@ const hasMinimumPhotos =
                     <span>🎙️</span> {listeningField === 'analysisContext' ? "Grabando..." : "Dictar hipótesis"}
                   </button>
                 </div>
-              </div>
-              <textarea
-                spellCheck={true}
-                value={analysisContext}
-                onChange={(e) => {
-                  setAnalysisContext(e.target.value);
-                  setIsAnalysisContextAudited(false);
-                }}
-                rows={6}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 text-slate-100 px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
-              />
-              
-              <div className="mt-1.5">
-                <div className="flex justify-between items-center text-[10px] mb-1">
-                  <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
-                  <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
-                    {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
-                  </span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5">
-                  <div 
-                    className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
-                    style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              {/* PowerUps y Resultados de Puente */}
-              {!isReadOnly && (
-                <div className="mt-2.5">
-                  <PowerUpsModule
-                    onApplyPowerUp={(text) => {
-                      setIsAnalysisContextAudited(false);
-                    }}
-                    isReadOnly={isReadOnly}
-                    insumoText={analysisContext || ""}
-                    insumoType="hypothesis"
-                    insumoId="main_hypothesis"
-                    insumoName="Hipótesis de Análisis"
-                    isContextualized={isAnalysisContextAudited}
-                    locationCoords={(() => {
-                      const geo = album.find(p => p.lat != null && p.lng != null);
-                      return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
-                    })()}
-                    onApplyDetailedAnalysis={async (results) => {
-                      for (const res of results) {
-                        res.insumoId = "main_hypothesis";
-                        await saveCustomDocument(
-                          `Resultados Puente Contextual: ${res.powerUpTitle}`,
-                          "powerup_execution",
-                          JSON.stringify(res)
-                        );
-                      }
-                    }}
-                  />
-                </div>
               )}
-              {documents && documents
-                .filter((doc: any) => doc.type === "powerup_execution")
-                .map((doc: any) => {
-                  try {
-                    const parsed = JSON.parse(doc.context);
-                    if (parsed.insumoId === "main_hypothesis") {
-                      return (
-                        <div key={doc.id} className="mt-2 text-left">
-                          <VentanaResultadosPuente
-                            data={parsed}
-                            onRemove={isReadOnly ? undefined : () => removeDocument(doc.id)}
-                          />
-                        </div>
+            </div>
+            <textarea
+              spellCheck={true}
+              value={analysisContext}
+              disabled={isHypothesisValidatedInWorkspace}
+              onChange={(e) => {
+                setAnalysisContext(e.target.value);
+                setIsAnalysisContextAudited(false);
+              }}
+              rows={6}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 text-slate-100 px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-sky-500 focus:outline-none disabled:opacity-75 disabled:bg-slate-955"
+              placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
+            />
+            
+            <div className="mt-1.5">
+              <div className="flex justify-between items-center text-[10px] mb-1">
+                <span className="text-slate-400 font-bold">Aptitud de contenido (Longitud mínima):</span>
+                <span className={`font-bold ${analysisContext.length < 60 ? "text-red-400" : analysisContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {analysisContext.length === 0 ? "Sin contexto" : analysisContext.length < 60 ? "Básico" : analysisContext.length < 180 ? "Aceptable" : "Óptimo"}
+                </span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-1.5">
+                <div 
+                  className={`h-1.5 rounded-full transition-all duration-300 ${analysisContext.length < 60 ? "bg-red-500" : analysisContext.length < 180 ? "bg-amber-500" : "bg-emerald-500"}`}
+                  style={{ width: `${Math.min((analysisContext.length / 250) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+
+            {/* PowerUps y Resultados de Puente */}
+            {!isReadOnly && !isHypothesisValidatedInWorkspace && (
+              <div className="mt-2.5">
+                <PowerUpsModule
+                  onApplyPowerUp={(text) => {
+                    setIsAnalysisContextAudited(false);
+                  }}
+                  isReadOnly={isReadOnly}
+                  insumoText={analysisContext || ""}
+                  insumoType="hypothesis"
+                  insumoId="main_hypothesis"
+                  insumoName="Hipótesis de Análisis"
+                  isContextualized={isAnalysisContextAudited}
+                  locationCoords={(() => {
+                    const geo = album.find(p => p.lat != null && p.lng != null);
+                    return geo ? { lat: geo.lat!, lng: geo.lng! } : undefined;
+                  })()}
+                  onApplyDetailedAnalysis={async (results) => {
+                    for (const res of results) {
+                      res.insumoId = "main_hypothesis";
+                      await saveCustomDocument(
+                        `Resultados Puente Contextual: ${res.powerUpTitle}`,
+                        "powerup_execution",
+                        JSON.stringify(res)
                       );
                     }
-                  } catch (err) {
-                    console.error("Error parsing powerup_execution doc.context", err);
+                  }}
+                />
+              </div>
+            )}
+            {documents && documents
+              .filter((doc: any) => doc.type === "powerup_execution")
+              .map((doc: any) => {
+                try {
+                  const parsed = JSON.parse(doc.context);
+                  if (parsed.insumoId === "main_hypothesis") {
+                    return (
+                      <div key={doc.id} className="mt-2 text-left">
+                        <VentanaResultadosPuente
+                          data={parsed}
+                          onRemove={isReadOnly || isHypothesisValidatedInWorkspace ? undefined : () => removeDocument(doc.id)}
+                        />
+                      </div>
+                    );
                   }
-                  return null;
-                })
-              }
+                } catch (err) {
+                  console.error("Error parsing powerup_execution doc.context", err);
+                }
+                return null;
+              })
+            }
 
-              {/* Radio de búsqueda geoespacial */}
-              <div className="space-y-2 pt-3 border-t border-slate-800/60 mt-3">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  📏 Radio de búsqueda geoespacial
-                </label>
-                <input
-                  type="range"
-                  min={100}
-                  max={10000}
-                  step={100}
-                  value={analysisRadius}
-                  onChange={(e) => setAnalysisRadius(Number(e.target.value))}
-                  className="w-full accent-sky-500"
-                />
-                <p className="text-[10px] text-slate-400 font-bold">
-                  Radio de búsqueda:{" "}
-                  <span className="font-semibold text-slate-100">
-                    {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
-                  </span>
-                </p>
-              </div>
-            </div>
-
-            {/* 2. RESUMEN Y PRECISIONES DE BARRIDOS */}
-            <div className="space-y-3 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-              <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
-                📡 Resumen de todos los Barridos con sus hallazgos
+            {/* Radio de búsqueda geoespacial */}
+            <div className="space-y-2 pt-3 border-t border-slate-800/60 mt-3">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                📏 Radio de búsqueda geoespacial
               </label>
-              
-              <div className="bg-slate-950 border border-slate-805 rounded-lg p-3 max-h-[160px] overflow-y-auto text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
-                {sweepsSummaryText}
-              </div>
+              <input
+                type="range"
+                min={100}
+                max={10000}
+                step={100}
+                disabled={isHypothesisValidatedInWorkspace}
+                value={analysisRadius}
+                onChange={(e) => setAnalysisRadius(Number(e.target.value))}
+                className="w-full accent-sky-500 disabled:opacity-50"
+              />
+              <p className="text-[10px] text-slate-400 font-bold">
+                Radio de búsqueda:{" "}
+                <span className="font-semibold text-slate-100">
+                  {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
+                </span>
+              </p>
+            </div>
+          </div>
 
-              <div className="space-y-1.5 pt-2">
-                <label className="block text-[11px] text-slate-400 uppercase tracking-wider font-bold">
-                  ✍️ Precisiones del Analista e Indicaciones para la IA
-                </label>
-                <textarea
-                  value={sweepsComments}
-                  onChange={(e) => setSweepsComments(e.target.value)}
-                  rows={4}
-                  placeholder="Escriba aquí los ajustes, exclusiones, precisiones sobre los hallazgos de los barridos, o instrucciones específicas que desea que la IA analice en conjunto..."
-                  className="w-full text-xs bg-slate-950 border border-slate-805 rounded-lg p-3 text-slate-100 focus:outline-none focus:border-sky-500 resize-none min-h-[80px]"
-                />
-              </div>
+          {/* 2. RESUMEN Y PRECISIONES DE BARRIDOS */}
+          <div className="space-y-3 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
+            <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+              📡 Resumen de todos los Barridos con sus hallazgos
+            </label>
+            
+            <div className="bg-slate-950 border border-slate-805 rounded-lg p-3 max-h-[160px] overflow-y-auto text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
+              {sweepsSummaryText}
             </div>
 
-            {/* 3. BOTÓN FUSIONADO DE VALIDACIÓN Y GENERACIÓN */}
+            <div className="space-y-1.5 pt-2">
+              <label className="block text-[11px] text-slate-400 uppercase tracking-wider font-bold">
+                ✍️ Precisiones del Analista e Indicaciones para la IA
+              </label>
+              <textarea
+                value={sweepsComments}
+                disabled={isHypothesisValidatedInWorkspace}
+                onChange={(e) => setSweepsComments(e.target.value)}
+                rows={4}
+                placeholder="Escriba aquí los ajustes, exclusiones, precisiones sobre los hallazgos de los barridos, o instrucciones específicas que desea que la IA analice en conjunto..."
+                className="w-full text-xs bg-slate-955 border border-slate-850 rounded-lg p-3 text-slate-100 focus:outline-none focus:border-sky-500 resize-none min-h-[80px] disabled:opacity-75 disabled:bg-slate-955"
+              />
+            </div>
+          </div>
+
+          {/* 3. BOTÓN FUSIONADO DE VALIDACIÓN Y GENERACIÓN */}
+          {!isHypothesisValidatedInWorkspace && (
             <div className="bg-slate-900/20 p-5 rounded-xl border border-slate-800 space-y-4">
               <div className="flex flex-col gap-2">
                 {!isAnalysisContextAudited && aiQuestionsList.length === 0 && (
-                  <p className="text-xs text-amber-400 text-center">⚠️ La hipótesis y las precisiones de barridos deben ser validadas por la IA para habilitar las herramientas (Idoneidad de al menos 80%).</p>
+                  <p className="text-xs text-amber-400 text-center">⚠️ La hipótesis y las precisiones de barridos deben contar con la Auditoría Soft IA aprobada para habilitar las herramientas de análisis.</p>
                 )}
                 {isAnalysisContextAudited && (
-                  <p className="text-xs text-emerald-400 text-center">✅ Hipótesis validada con éxito (Idoneidad: {analysisAuditScore}%). Las herramientas de análisis y el informe están listos.</p>
+                  <p className="text-xs text-emerald-400 text-center">✅ Auditoría Soft IA: Aprobada con éxito. Las herramientas de análisis y el informe oficial están habilitados.</p>
                 )}
               </div>
 
@@ -2543,7 +2600,7 @@ const hasMinimumPhotos =
                           void loadAnalysisData();
 
                           // Generar informe de manera automática
-                          window.alert("¡Validación exitosa! Habilitando herramientas y generando el dictamen oficial...");
+                          window.alert("¡Validación exitosa! El dictamen y el expediente han sido certificados por la Auditoría Soft IA.");
                           await confirmAndGenerateProfile();
                         } else {
                           setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
@@ -2555,27 +2612,30 @@ const hasMinimumPhotos =
                           setQaIteration((prev) => prev + 1);
                         }
                       }
-                    } catch (err) {
+                    } catch (err: any) {
                       console.error(err);
-                      alert("Error de comunicación con IA.");
+                      window.alert("Error de validación: " + err.message);
                     } finally {
                       setIsRefining(false);
                     }
                   }}
                   disabled={isRefining || !analysisContext.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-8 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2"
+                  className="bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-black px-6 py-3 rounded-lg text-xs uppercase tracking-wider transition active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none shadow-lg flex items-center gap-2"
                 >
                   {isRefining ? (
-                    <>Validando con IA y Procesando...</>
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Certificando consistencia...
+                    </>
                   ) : (
-                    <>🧠 Validar Hipótesis y Generar Informe Oficial</>
+                    <>🧠 Validar Hipótesis e Iniciar Auditoría Soft IA</>
                   )}
                 </button>
               </div>
 
               {!isAnalysisContextAudited && aiQuestionsList.length > 0 && (
                 <div className="mt-4 rounded-md border border-yellow-750 bg-yellow-950/20 px-4 py-4 text-xs text-yellow-200 space-y-4 max-w-2xl mx-auto shadow-xl">
-                  <p className="font-bold text-yellow-400">💡 Preguntas de afinación de la IA (Idoneidad actual: {analysisAuditScore}%):</p>
+                  <p className="font-bold text-yellow-400">💡 Preguntas de afinación de la IA (Estado de Auditoría Soft IA: Requiere precisiones):</p>
                   {aiQuestionsList.map((q, idx) => (
                     <div key={idx} className="space-y-2">
                       <p className="font-semibold text-yellow-100">{idx + 1}. {q}</p>
@@ -2603,10 +2663,9 @@ const hasMinimumPhotos =
                           const updatedContext = answersString.trim()
                             ? analysisContext + "\n\nContexto adicional:\n" + answersString
                             : analysisContext;
-
+                          
                           setAnalysisContext(updatedContext);
 
-                          // Guardar hipótesis y precisiones en la BDD
                           const { getDb } = await import("@/lib/firebase");
                           const { doc, updateDoc } = await import("firebase/firestore");
                           const firestore = getDb();
@@ -2615,12 +2674,10 @@ const hasMinimumPhotos =
                             sweepsComments: sweepsComments
                           });
 
-                          // Forzar aceptación (Gobernanza/ADR analista al mando)
                           setIsAnalysisContextAudited(true);
                           setIsHypothesisValidatedInWorkspace(true);
                           void loadAnalysisData();
 
-                          // Generar informe de manera automática
                           window.alert("¡Aceptación manual confirmada! Generando el dictamen oficial...");
                           await confirmAndGenerateProfile();
                         } catch (err: any) {
@@ -2631,27 +2688,63 @@ const hasMinimumPhotos =
                         }
                       }}
                       disabled={isRefining}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-950 font-black px-4 py-2.5 rounded-lg text-[10px] uppercase tracking-wider transition active:scale-95 shadow-md flex items-center gap-1.5"
+                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-950 font-black px-4 py-2.5 rounded-lg text-[10px] uppercase tracking-wider transition active:scale-[0.97] shadow-md flex items-center gap-1.5"
                     >
-                      ⚠️ Aceptar Hipótesis y Generar Informe Oficial de Todas Formas
+                      ⚠️ Confirmar y Certificar Hipótesis con Precisiones Adicionales
                     </button>
                   </div>
                 </div>
               )}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. AUDITORÍA SOFT IA */}
+      <div className="max-w-4xl mx-auto w-full mt-6 bg-slate-900/40 p-6 rounded-xl border border-slate-700/50 shadow-xl space-y-4 font-sans">
+        <header className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🛡️</span>
+            <h4 className="text-xs font-black text-slate-100 uppercase tracking-wider">
+              Auditoría Soft IA
+            </h4>
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2 max-w-md mx-auto text-center">
-            <span className="text-xs text-emerald-400 font-bold flex items-center justify-center gap-1">✅ Hipótesis de análisis y precisiones de barridos validadas con éxito. Herramientas habilitadas.</span>
-            <button
-              type="button"
-              onClick={() => setIsHypothesisValidatedInWorkspace(false)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs transition-all flex items-center gap-1.5 border border-slate-700"
-            >
-              ⚙️ Re-editar/Re-validar Hipótesis y Precisiones
-            </button>
+          <span className={`px-2.5 py-1 text-[9px] font-bold rounded-full tracking-wider uppercase ${isHypothesisValidatedInWorkspace ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
+            {isHypothesisValidatedInWorkspace ? "CONSISTENCIA CERTIFICADA" : "ANÁLISIS EN CURSO"}
+          </span>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Coherencia Visual</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={album.length > 0 ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
+                {album.length > 0 ? "✓ Revisada" : "⚠ Pendiente"}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-normal">Evaluación automatizada de correlación de evidencia in situ.</p>
           </div>
-        )}
+
+          <div className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Correspondencia Territorial</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={project?.latitude || album.some(p => p.lat != null) ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
+                {project?.latitude || album.some(p => p.lat != null) ? "✓ Compatible" : "⚠ Sin georreferencia"}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-normal">Cruce geoespacial de polígonos, corredores e hitos urbanos.</p>
+          </div>
+
+          <div className="p-4 bg-slate-950/80 rounded-lg border border-slate-800 flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consistencia Descriptiva</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={isHypothesisValidatedInWorkspace ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
+                {isHypothesisValidatedInWorkspace ? "✓ Validada" : "⚠ Borrador / Sin Validar"}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-normal">Análisis gramatical y correlación predictiva de la hipótesis.</p>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6 pt-6 mt-6 border-t border-slate-800 w-full print:hidden">
@@ -2714,17 +2807,19 @@ const hasMinimumPhotos =
 
       {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) (Paso 5) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h4 className="text-base font-semibold text-slate-200 font-bold">Demografía y Marginación (INEGI SCINCE) (Paso 5)</h4>
-            {statusScince === "checking" && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full animate-pulse">⏳ Verificando...</span>}
-            {statusScince === "online" && <span className="text-[10px] bg-emerald-900/60 border border-emerald-700 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE</span>}
-            {statusScince === "offline" && <span className="text-[10px] bg-red-900/60 border border-red-700 text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> OFFLINE (404)</span>}
-          </div>
-          <p className="text-xs text-slate-400">
-            Extrae datos sociodemográficos a nivel manzana/AGEB basados en el centro de las fotografías seleccionadas. Identifica viviendas deshabitadas y desorganización social.
-          </p>
-        </header>
+        <CEIPOLSectionHeader
+          icon="📊"
+          title="Demografía y Marginación (INEGI SCINCE) (Paso 5)"
+          subtitle="Extrae datos sociodemográficos a nivel manzana/AGEB basados en el centro de las fotografías seleccionadas. Identifica viviendas deshabitadas y desorganización social."
+          className="mb-2"
+          actions={
+            <>
+              {statusScince === "checking" && <CEIPOLBadge status="processing">Verificando...</CEIPOLBadge>}
+              {statusScince === "online" && <CEIPOLBadge status="validated">ONLINE</CEIPOLBadge>}
+              {statusScince === "offline" && <CEIPOLBadge status="error">OFFLINE (404)</CEIPOLBadge>}
+            </>
+          }
+        />
         <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
           <p className="text-xs text-slate-300 flex-1">
             {selectedIds.length > 0
@@ -2767,17 +2862,19 @@ const hasMinimumPhotos =
 
       {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) (Paso 6) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h4 className="text-base font-semibold text-slate-200 font-bold">Giros Comerciales (INEGI DENUE) (Paso 6)</h4>
-            {statusDenue === "checking" && <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full animate-pulse">⏳ Verificando...</span>}
-            {statusDenue === "online" && <span className="text-[10px] bg-emerald-900/60 border border-emerald-700 text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> ONLINE</span>}
-            {statusDenue === "offline" && <span className="text-[10px] bg-red-900/60 border border-red-700 text-red-400 px-2 py-0.5 rounded-full flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> OFFLINE (404)</span>}
-          </div>
-          <p className="text-xs text-slate-400">
-            Realice un barrido para identificar negocios, bares, chatarreras y unidades económicas formales a 500 metros de la evidencia.
-          </p>
-        </header>
+        <CEIPOLSectionHeader
+          icon="🏬"
+          title="Giros Comerciales (INEGI DENUE) (Paso 6)"
+          subtitle="Realice un barrido para identificar negocios, bares, chatarreras y unidades económicas formales a 500 metros de la evidencia."
+          className="mb-2"
+          actions={
+            <>
+              {statusDenue === "checking" && <CEIPOLBadge status="processing">Verificando...</CEIPOLBadge>}
+              {statusDenue === "online" && <CEIPOLBadge status="validated">ONLINE</CEIPOLBadge>}
+              {statusDenue === "offline" && <CEIPOLBadge status="error">OFFLINE (404)</CEIPOLBadge>}
+            </>
+          }
+        />
         <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
           <p className="text-xs text-slate-300 flex-1">
             {selectedIds.length > 0
@@ -2787,7 +2884,8 @@ const hasMinimumPhotos =
           <button
             type="button"
             disabled={selectedIds.length === 0 || isCheckingDenue || isReadOnly}
-            onClick={async () => {
+            onClick={async (e) => {
+              setClickCoords({ x: e.clientX, y: e.clientY });
               setIsCheckingDenue(true);
               setError(null);
               try {
@@ -2803,13 +2901,7 @@ const hasMinimumPhotos =
                 const data = await getDenueData(centerLat, centerLng, 500);
                 if (data.exito) {
                   const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
-                  await registerSweep({
-                    engine: "Giros Comerciales (DENUE)",
-                    source: "OSINT",
-                    type: "Directa",
-                    relevance: "Medio",
-                    data: newContext
-                  });
+                  setDenueDataConfirm(newContext);
                 } else {
                   setError(data.error || "Error al consultar INEGI DENUE.");
                 }
@@ -3015,7 +3107,7 @@ const hasMinimumPhotos =
                     <h5 className="text-xs font-semibold text-slate-300 mb-3">Gráficas de Severidad Criminal</h5>
                     <CrimeCharts crimes={filteredInc.map(inc => ({
                       ...inc,
-                      tipoDelito: inc.INCIDENTE || "Delito No Especificado",
+                      tipoDelito: getNormalizedCrimeCategory(inc.INCIDENTE || "Delito No Especificado"),
                       lat: inc.lat,
                       lng: inc.lng
                     }))} />
@@ -3035,7 +3127,7 @@ const hasMinimumPhotos =
                         <tbody className="divide-y divide-slate-800 text-slate-200">
                           {filteredInc.slice(0, 50).map((inc, index) => (
                             <tr key={index} className="hover:bg-slate-800/30">
-                              <td className="p-2 font-semibold text-sky-400">{inc.INCIDENTE || "No especificado"}</td>
+                              <td className="p-2 font-semibold text-sky-400">{getNormalizedCrimeCategory(inc.INCIDENTE || "No especificado")}</td>
                               <td className="p-2">{inc.FECHA || "N/A"}</td>
                               <td className="p-2">{inc.NOM_ASEN || "N/A"}</td>
                               <td className="p-2 text-right text-slate-400">{inc.distancia_m ? `${Math.round(inc.distancia_m)}m` : "N/A"}</td>
@@ -3125,7 +3217,7 @@ const hasMinimumPhotos =
             </div>
             <div className="mt-1 mb-2">
               <div className="flex justify-between items-center text-[10px] mb-1">
-                <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                <span className="text-slate-400">Aptitud de contenido (Longitud mínima):</span>
                 <span className={`font-bold ${plateContext.length < 40 ? "text-red-400" : plateContext.length < 120 ? "text-amber-400" : "text-emerald-400"}`}>
                   {plateContext.length === 0 ? "Sin contexto" : plateContext.length < 40 ? "Básico" : plateContext.length < 120 ? "Aceptable" : "Óptimo"}
                 </span>
@@ -3506,7 +3598,7 @@ const hasMinimumPhotos =
               
               <div className="mt-1 mb-2">
                 <div className="flex justify-between items-center text-[10px] mb-1">
-                  <span className="text-slate-400">Idoneidad técnica (Longitud mínima):</span>
+                  <span className="text-slate-400">Aptitud de contenido (Longitud mínima):</span>
                   <span className={`font-bold ${docContext.length < 60 ? "text-red-400" : docContext.length < 180 ? "text-amber-400" : "text-emerald-400"}`}>
                     {docContext.length === 0 ? "Sin contexto" : docContext.length < 60 ? "Básico" : docContext.length < 180 ? "Aceptable" : "Óptimo"}
                   </span>
@@ -4741,23 +4833,25 @@ const hasMinimumPhotos =
         onClose={() => setScinceDataConfirm(null)}
         className="max-w-md w-full"
       >
-        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5">
-          📊 Confirmación de Inteligencia Demográfica (SCINCE)
+        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5 font-sans">
+          📊 Confirmación de Hipótesis: INEGI SCINCE
         </h3>
-        <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-          Se han obtenido los siguientes datos sociodemográficos de la cuadra. Confirme su incorporación al análisis de hipótesis:
+        <p className="text-xs text-slate-400 mb-3 leading-relaxed font-sans">
+          Se han obtenido los siguientes datos sociodemográficos de la cuadra (Demografía, Marginación, Población e Indicadores Sociales). Confirme su incorporación al análisis de hipótesis:
         </p>
         <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs text-slate-200 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4">
           {scinceDataConfirm}
         </div>
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
           <button
+            type="button"
             onClick={() => setScinceDataConfirm(null)}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
           >
             Cancelar
           </button>
           <button
+            type="button"
             onClick={async () => {
               if (!scinceDataConfirm) return;
               try {
@@ -4769,12 +4863,61 @@ const hasMinimumPhotos =
                   data: scinceDataConfirm
                 });
                 setScinceDataConfirm(null);
-                alert("Datos sociodemográficos agregados a la hipótesis correctamente.");
+                setToast({ type: "success", message: "✓ Datos sociodemográficos agregados a la hipótesis correctamente" });
               } catch (err: any) {
                 alert("Error al registrar barrido: " + err.message);
               }
             }}
             className="px-4 py-2 bg-purple-700 hover:bg-purple-650 text-white text-xs font-semibold rounded-lg transition-all shadow-md"
+          >
+            Aceptar y Añadir
+          </button>
+        </div>
+      </DynamicPopup>
+
+      {/* CONFIRMACIÓN DE HIPÓTESIS COMERCIAL (DENUE) */}
+      <DynamicPopup
+        open={!!denueDataConfirm}
+        anchorPosition={clickCoords}
+        onClose={() => setDenueDataConfirm(null)}
+        className="max-w-md w-full"
+      >
+        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5 font-sans">
+          🏪 Confirmación de Hipótesis: INEGI DENUE
+        </h3>
+        <p className="text-xs text-slate-400 mb-3 leading-relaxed font-sans">
+          Se han obtenido los siguientes datos de la actividad comercial (Giros, Concentración y Establecimientos Comerciales). Confirme su incorporación al análisis de hipótesis:
+        </p>
+        <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs text-slate-200 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4">
+          {denueDataConfirm}
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
+          <button
+            type="button"
+            onClick={() => setDenueDataConfirm(null)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all active:scale-[0.97]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!denueDataConfirm) return;
+              try {
+                await registerSweep({
+                  engine: "Giros Comerciales (DENUE)",
+                  source: "OSINT",
+                  type: "Directa",
+                  relevance: "Medio",
+                  data: denueDataConfirm
+                });
+                setDenueDataConfirm(null);
+                setToast({ type: "success", message: "✓ Datos comerciales agregados a la hipótesis correctamente" });
+              } catch (err: any) {
+                alert("Error al registrar barrido: " + err.message);
+              }
+            }}
+            className="px-4 py-2 bg-amber-700 hover:bg-amber-650 text-white text-xs font-semibold rounded-lg transition-all shadow-md active:scale-[0.97]"
           >
             Aceptar y Añadir
           </button>
@@ -4868,6 +5011,15 @@ const hasMinimumPhotos =
         />
         <TacticalCharts analysisResult={analysisResult} />
       </div>
+
+      {/* TOAST DE GOBERNANZA CEIPOL */}
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </>
   );
 }

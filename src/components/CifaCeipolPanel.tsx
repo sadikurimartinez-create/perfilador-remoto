@@ -5,12 +5,34 @@ import { proposeIntelligencePlan, IntelligencePlan } from "../utils/moiOrchestra
 import { runUnifiedCifaScan } from "../utils/cifaEngine";
 import { getAuthorizedSources, ImfoSource } from "../utils/imfoService";
 import { useProject } from "@/context/ProjectContext";
+import { DynamicPopup } from "./DynamicPopup";
 
 interface Props {
   project: any;
   onAppendToAnalysis?: (text: string) => void;
   onUpdateMapResults?: (data: any) => void;
 }
+
+import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
+import { CEIPOLBadge } from "./ui/CEIPOLBadge";
+import { CEIPOLToast } from "./ui/CEIPOLToast";
+
+export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
+  osint_territorial: "OSINT Territorial CEIPOL v2.0",
+  rss_regional: "Radar OSINT Regional (RSS)",
+  google_dorks: "Google Dorks Search",
+  discovery_engine: "Discovery Engine (Vertex AI)",
+  telegram: "Telegram Bot, Grupos y Canales",
+  x_twitter: "X (Twitter) Publicaciones",
+  reddit: "Reddit Subreddits & Foros",
+  youtube: "YouTube Videos y Shorts",
+  drive_intelligence: "Google Drive Intelligence",
+  google_maps: "Google Maps Geosearch",
+  street_view: "Street View Vision Analysis",
+  apis_gubernamentales: "APIs Gubernamentales (INEGI/DENUE)",
+  facebook_public: "Facebook Páginas Públicas",
+  instagram_public: "Instagram Public hashtags"
+};
 
 export const CifaCeipolPanel: React.FC<Props> = ({
   project,
@@ -29,6 +51,11 @@ export const CifaCeipolPanel: React.FC<Props> = ({
   const [editablePriority, setEditablePriority] = useState<IntelligencePlan["priority"]>("Medio");
   const [editableInvestigationType, setEditableInvestigationType] = useState("");
 
+  // Confirmation state
+  const [cifaDataConfirm, setCifaDataConfirm] = useState<string | null>(null);
+  const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
+
   // Navigation
   const [activeTab, setActiveTab] = useState<"pri" | "coverage" | "correlation" | "chronology" | "learning">("pri");
   
@@ -45,7 +72,6 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       // Propose plan automatically via MOI
       const p = await proposeIntelligencePlan(project);
       setPlan(p);
-      setSelectedSources(p.suggestedSources);
       setEditableHypothesis(p.hypothesis);
       setEditablePriority(p.priority);
       setEditableInvestigationType(p.investigationType);
@@ -53,6 +79,11 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       // Load sources catalog from IMFO
       const sources = await getAuthorizedSources();
       setAvailableSources(sources);
+
+      // Auto-select all available sources by default (automatic global OSINT sweep)
+      const authorizedKeys = sources.map(s => s.id || "").filter(Boolean);
+      const finalSources = authorizedKeys.length > 0 ? authorizedKeys : Object.keys(SOURCE_PLATFORM_LABELS);
+      setSelectedSources(finalSources);
     };
 
     loadPlanAndSources();
@@ -70,6 +101,11 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       if (onUpdateMapResults && scanData.correlation?.graphData) {
         onUpdateMapResults(scanData.rawResults);
       }
+
+      // Trigger the independent hypothesis confirmation popup
+      if (scanData.correlation?.updatedHypothesis) {
+        setCifaDataConfirm(scanData.correlation.updatedHypothesis);
+      }
       
       // Switch to coverage tab automatically
       setActiveTab("coverage");
@@ -82,8 +118,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
   };
 
   const handleAppendHypothesis = async () => {
-    if (!results?.correlation?.updatedHypothesis) return;
-    const text = `[HIPÓTESIS DE INTELIGENCIA FUSIÓN CIFA-CEIPOL v3.0]\nTipo de Investigación: ${editableInvestigationType}\nPrioridad: ${editablePriority}\n\n${results.correlation.updatedHypothesis}\n\n* Origen y Trazabilidad: Correlacionado automáticamente de ${selectedSources.length} fuentes OSINT autorizadas.`;
+    if (!cifaDataConfirm) return;
+    const text = `[HIPÓTESIS DE INTELIGENCIA FUSIÓN CIFA-CEIPOL v3.0]\nTipo de Investigación: ${editableInvestigationType}\nPrioridad: ${editablePriority}\n\n${cifaDataConfirm}\n\n* Origen y Trazabilidad: Correlacionado automáticamente de ${selectedSources.length} fuentes OSINT autorizadas.`;
     try {
       await registerSweep({
         engine: "Fusión CIFA-CEIPOL v3.0",
@@ -92,6 +128,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         relevance: "Alto",
         data: text
       });
+      setCifaDataConfirm(null);
+      setToast({ type: "success", message: "✓ Hipótesis OSINT guardada correctamente en el expediente" });
     } catch (err: any) {
       alert("❌ Error al registrar el barrido: " + err.message);
     }
@@ -106,23 +144,6 @@ export const CifaCeipolPanel: React.FC<Props> = ({
     }
   };
 
-  const SOURCE_PLATFORM_LABELS: Record<string, string> = {
-    osint_territorial: "OSINT Territorial CEIPOL v2.0",
-    rss_regional: "Radar OSINT Regional (RSS)",
-    google_dorks: "Google Dorks Search",
-    discovery_engine: "Discovery Engine (Vertex AI)",
-    telegram: "Telegram Bot, Grupos y Canales",
-    x_twitter: "X (Twitter) Publicaciones",
-    reddit: "Reddit Subreddits & Foros",
-    youtube: "YouTube Videos y Shorts",
-    drive_intelligence: "Google Drive Intelligence",
-    google_maps: "Google Maps Geosearch",
-    street_view: "Street View Vision Analysis",
-    apis_gubernamentales: "APIs Gubernamentales (INEGI/DENUE)",
-    facebook_public: "Facebook Páginas Públicas",
-    instagram_public: "Instagram Public hashtags"
-  };
-
   return (
     <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden backdrop-blur-md">
       {/* Background gradients */}
@@ -131,19 +152,15 @@ export const CifaCeipolPanel: React.FC<Props> = ({
 
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-5 border-b border-slate-800 mb-6 relative z-10">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 text-[9px] font-black tracking-wider bg-cyan-950 border border-cyan-800 text-cyan-400 rounded-full uppercase">
-              Orquestador v3.0
-            </span>
-            <h2 className="text-xl font-extrabold text-white tracking-wide">
-              Centro de Inteligencia de Fuentes Abiertas <span className="text-cyan-400">(CIFA-CEIPOL)</span>
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Fusión operativa, orquestación de motores y análisis de correlación multifuente.
-          </p>
-        </div>
+        <CEIPOLSectionHeader
+          icon="🛰️"
+          title="Centro de Inteligencia de Fuentes Abiertas (CIFA-CEIPOL)"
+          subtitle="Fusión operativa, orquestación de motores y análisis de correlación multifuente"
+          className="border-none pb-0"
+          actions={
+            <CEIPOLBadge status="processing">Orquestador v3.0</CEIPOLBadge>
+          }
+        />
 
         {/* Tab Navigation */}
         <div className="flex flex-wrap bg-slate-900 border border-slate-800 p-1 rounded-xl gap-1">
@@ -212,114 +229,6 @@ export const CifaCeipolPanel: React.FC<Props> = ({
               <div className="text-center py-10 text-slate-500 text-sm animate-pulse">Generando plan operativo...</div>
             ) : (
               <>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-                  <h3 className="text-sm font-bold text-cyan-300 uppercase tracking-wider">Plan de Recolección Propuesto (PRI)</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hipótesis Criminológica Detectada:</label>
-                      <input
-                        type="text"
-                        value={editableHypothesis}
-                        onChange={(e) => setEditableHypothesis(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Área de Interés / Ubicación:</label>
-                      <input
-                        type="text"
-                        disabled
-                        value={plan.areaOfInterest}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-400 outline-none cursor-not-allowed"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipo de Investigación:</label>
-                      <input
-                        type="text"
-                        value={editableInvestigationType}
-                        onChange={(e) => setEditableInvestigationType(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nivel de Prioridad:</label>
-                      <select
-                        value={editablePriority}
-                        onChange={(e) => setEditablePriority(e.target.value as any)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                      >
-                        <option value="Bajo">Bajo</option>
-                        <option value="Medio">Medio</option>
-                        <option value="Alto">Alto</option>
-                        <option value="Crítico">Crítico</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Checklist Sources */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Fuentes de Recolección Sugeridas</h4>
-                    <span className="text-[10px] text-slate-400">Total: {selectedSources.length} seleccionadas</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {Object.keys(SOURCE_PLATFORM_LABELS).map((srcKey) => {
-                      const isChecked = selectedSources.includes(srcKey);
-                      return (
-                        <div
-                          key={srcKey}
-                          onClick={() => {
-                            if (isChecked) {
-                              setSelectedSources(prev => prev.filter(s => s !== srcKey));
-                            } else {
-                              setSelectedSources(prev => [...prev, srcKey]);
-                            }
-                          }}
-                          className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
-                            isChecked
-                              ? "bg-cyan-950/20 border-cyan-800 text-cyan-200"
-                              : "bg-slate-900/40 border-slate-800/80 text-slate-400 hover:border-slate-700/60"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            readOnly
-                            className="h-3.5 w-3.5 rounded bg-slate-900 border-slate-700 text-cyan-600 focus:ring-0 focus:ring-offset-0 pointer-events-none"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold leading-tight truncate">{SOURCE_PLATFORM_LABELS[srcKey]}</p>
-                            <p className="text-[9px] text-slate-400 mt-0.5 capitalize leading-none">{srcKey.split("_")[0]}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Estimate Dashboard Box */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-900/30 border border-slate-800/80 rounded-xl p-4">
-                  <div className="text-center sm:border-r border-slate-800">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Tiempo Estimado</p>
-                    <p className="text-lg font-extrabold text-cyan-300 mt-1">~{plan.estimatedTimeSeconds} segundos</p>
-                  </div>
-                  <div className="text-center sm:border-r border-slate-800">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Volumen de Registros</p>
-                    <p className="text-lg font-extrabold text-indigo-300 mt-1">{plan.approximateVolume}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Cobertura Esperada</p>
-                    <p className="text-lg font-extrabold text-emerald-300 mt-1">{plan.expectedCoverage}%</p>
-                  </div>
-                </div>
-
                 {/* Custom Soft Context query input */}
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contexto soft de búsqueda (Parámetros/Detalles de interés):</label>
@@ -336,7 +245,10 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                 <div className="flex justify-end gap-3 pt-2">
                   <button
                     disabled={selectedSources.length === 0 || loading}
-                    onClick={handleExecuteScan}
+                    onClick={(e) => {
+                      setClickCoords({ x: e.clientX, y: e.clientY });
+                      void handleExecuteScan();
+                    }}
                     className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg flex items-center justify-center gap-2 active:scale-95 disabled:pointer-events-none"
                   >
                     {loading ? (
@@ -345,14 +257,14 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
-                        Ejecutando Plan de Ingesta y Correlación...
+                        Ejecutando Barrido Inteligente...
                       </span>
                     ) : (
                       <>
                         <svg className="w-4 h-4 fill-current text-cyan-200" viewBox="0 0 24 24">
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5" />
                         </svg>
-                        Aprobar y Ejecutar Barrido Unificado
+                        Ejecutar Barrido Inteligente
                       </>
                     )}
                   </button>
@@ -591,6 +503,66 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* CONFIRMACIÓN DE HIPÓTESIS INVESTIGATIVA CIFA-CEIPOL */}
+      <DynamicPopup
+        open={!!cifaDataConfirm}
+        anchorPosition={clickCoords}
+        onClose={() => setCifaDataConfirm(null)}
+        className="max-w-md w-full"
+      >
+        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5 font-sans">
+          🛰️ Confirmación de Hipótesis: CIFA-CEIPOL
+        </h3>
+        <p className="text-xs text-slate-400 mb-3 leading-relaxed font-sans">
+          Se ha realizado el barrido inteligente automático sobre todas las fuentes OSINT autorizadas disponibles. Revise la síntesis predictiva generada a partir de los parámetros tácticos analizados:
+        </p>
+        
+        {softContext && (
+          <div className="mb-3">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Contexto Soft Analizado:</span>
+            <div className="bg-slate-900 border border-slate-800 px-2.5 py-1.5 rounded text-xs text-slate-300 italic font-sans leading-relaxed">
+              "{softContext}"
+            </div>
+          </div>
+        )}
+
+        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Síntesis de Hallazgos y Correlaciones:</span>
+        <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs text-slate-200 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4">
+          {cifaDataConfirm}
+        </div>
+
+        <div className="flex justify-between items-center text-[10px] text-slate-400 mb-4 border-t border-slate-850 pt-2 font-sans">
+          <span>Fuentes: {selectedSources.length} OSINT</span>
+          <span className="text-cyan-400 font-bold uppercase tracking-wider">CEIPOL FUSIÓN v3.0</span>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
+          <button
+            type="button"
+            onClick={() => setCifaDataConfirm(null)}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleAppendHypothesis}
+            className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-95"
+          >
+            Confirmar y Persistir
+          </button>
+        </div>
+      </DynamicPopup>
+
+      {/* TOAST DE GOBERNANZA CEIPOL */}
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );
