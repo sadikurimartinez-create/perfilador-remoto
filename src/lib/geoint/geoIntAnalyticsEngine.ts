@@ -1,5 +1,6 @@
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 export interface GeoIntMemberNode {
   member_id: string;
@@ -622,13 +623,20 @@ ${fallbackText}
    * Deterministic fallback generator for the 9-section markdown report
    */
   private static buildDeterministicReport(context: GeoIntAnalysisContext, output: GeoIntStructuredOutput): string {
-    const centerLat = context.domiciles.length > 0 ? context.domiciles.reduce((acc, d) => acc + d.location.lat, 0) / context.domiciles.length : 21.8853;
-    const centerLng = context.domiciles.length > 0 ? context.domiciles.reduce((acc, d) => acc + d.location.lng, 0) / context.domiciles.length : -102.2916;
+    const rawLat = context.domiciles.length > 0 ? context.domiciles.reduce((acc, d) => acc + d.location.lat, 0) / context.domiciles.length : null;
+    const rawLng = context.domiciles.length > 0 ? context.domiciles.reduce((acc, d) => acc + d.location.lng, 0) / context.domiciles.length : null;
+
+    const geoValidation = validateGeoIntegrity(rawLat, rawLng);
+    const centerLat = geoValidation.latitude;
+    const centerLng = geoValidation.longitude;
 
     let markdown = `# INFORME DE INTELIGENCIA TÁCTICA GEOINT CRIMINAL\n`;
     markdown += `**Centro de Estudios y Política Criminal (CEIPOL)**\n`;
     markdown += `**Fecha de Análisis:** ${new Date().toLocaleDateString("es-MX")}\n`;
-    markdown += `**Área de Operación:** Sector Aguascalientes [${centerLat.toFixed(5)}, ${centerLng.toFixed(5)}]\n`;
+    const locationTag = centerLat !== null && centerLng !== null 
+      ? `[${centerLat.toFixed(5)}, ${centerLng.toFixed(5)}]` 
+      : "[Ubicación No Validada]";
+    markdown += `**Área de Operación:** Sector Aguascalientes ${locationTag}\n`;
     markdown += `**Confianza del Análisis:** **${output.confianza_global}/10.0**\n\n`;
 
     markdown += `### 1. Resumen Ejecutivo\n`;

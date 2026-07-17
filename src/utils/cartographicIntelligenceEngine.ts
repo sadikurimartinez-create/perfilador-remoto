@@ -238,8 +238,8 @@ export class CartographicIntelligenceEngine {
    */
   private analyzeSpatialPattern(): any {
     const tContext = this.tceData.territorialContext || {};
-    const lat = tContext.latitude || 21.8853;
-    const lng = tContext.longitude || -102.2916;
+    const lat = tContext.latitude ?? null;
+    const lng = tContext.longitude ?? null;
     const radiusMetros = tContext.radiusMetros || 250;
     const geomType = tContext.geometryType || "individual";
 
@@ -303,20 +303,8 @@ export class CartographicIntelligenceEngine {
     const tContext = this.tceData.territorialContext || {};
     const primaryIncidentType = this.sieData.temporal?.primaryCrimeType || "Incidente de oportunidad";
 
-    if (topHotspots.length === 0) {
-      // Retornar fallbacks simulados basados en centro real
-      const lat = tContext.latitude || 21.8853;
-      const lng = tContext.longitude || -102.2916;
-      return [
-        {
-          id: "HS-001",
-          center: { lat: lat + 0.0004, lng: lng - 0.0003 },
-          incidentsCount: 5,
-          primaryIncidentType,
-          radiusMetros: 35,
-          spatialWeight: 1.0
-        }
-      ];
+    if (topHotspots.length === 0 || tContext.latitude == null || tContext.longitude == null) {
+      return [];
     }
 
     const totalWeight = topHotspots.reduce((sum: number, hs: any) => sum + (hs.count || 1), 0);
@@ -531,14 +519,18 @@ export class CartographicIntelligenceEngine {
     // 2. Consistencia espacial (hotspots deben estar dentro del radio)
     let spatialConsistency = 100;
     const tContext = this.tceData.territorialContext || {};
-    const center = { lat: tContext.latitude || 21.8853, lng: tContext.longitude || -102.2916 };
+    const center = { lat: tContext.latitude ?? null, lng: tContext.longitude ?? null };
 
-    hotspots.forEach(hs => {
-      const dist = this.calculateHaversine(center.lat, center.lng, hs.center.lat, hs.center.lng);
-      if (dist > radius) {
-        spatialConsistency = Math.max(0, spatialConsistency - 30);
-      }
-    });
+    if (center.lat !== null && center.lng !== null) {
+      hotspots.forEach(hs => {
+        const dist = this.calculateHaversine(center.lat!, center.lng!, hs.center.lat, hs.center.lng);
+        if (dist > radius) {
+          spatialConsistency = Math.max(0, spatialConsistency - 30);
+        }
+      });
+    } else {
+      spatialConsistency = 0;
+    }
 
     // 3. Convergencia de fuentes (tenemos datos de delincuencia y datos urbanos en el buffer)
     let convergence = 0;

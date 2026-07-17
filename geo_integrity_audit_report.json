@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-07-17T23:19:50.961Z",
+  "totalProjects": 14,
+  "valid": 0,
+  "defaultLocation": 0,
+  "duplicated": 0,
+  "empty": 14,
+  "suspicious": 0,
+  "classifications": [
+    {
+      "id": "39bR997kB709hcaOkKtT",
+      "name": "Geronimo lineal",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "7d4VuZCXuUJXQ5UcN7ng",
+      "name": "Polígono Guadalupe Peralta",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "933hR2qQzKxuDtpLdL1M",
+      "name": "UNPOL3",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "GyWFcMs5m4Rd0gy8tiWC",
+      "name": "VILLAS1",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "H6jWzuHhO6RMwGJLue5c",
+      "name": "Lineal Guadalupe Peralta",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "Lwh3M1QJGc9HucZTwtWo",
+      "name": "Polígono Paseos",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "QjoOPCf01JeWjarRUGvt",
+      "name": "Comisaría móvil Villa Montaña",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "SdTUOZl87kiRQoH63gB5",
+      "name": "Polígono Sec. Estación",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "WhDh1GOQtcVtfQj2ugLx",
+      "name": "Guadalupe Peralta individual",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "WtYMmqiPn9oJMUOHHGaf",
+      "name": "Polígono Villa Montaña",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "XLeeM0Xz5bemDlwgn8eP",
+      "name": "Hacienda San Marcos Lineal",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "aB0Ql0ACfeOZ3WEof4Of",
+      "name": "CEIPOL",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "bLjjiQvgwheiEY3FVRxX",
+      "name": "UNPOL2",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    },
+    {
+      "id": "hNVlwnWbIGlK7W0wmvcH",
+      "name": "UNPOL",
+      "latitude": null,
+      "longitude": null,
+      "status": "EMPTY",
+      "reason": "Sin coordenadas de ubicación asignadas"
+    }
+  ]
+}

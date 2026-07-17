@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
+import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 
 import {
   createContext,
@@ -1275,8 +1276,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           latVal = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
           lngVal = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
         } else {
-          latVal = (project as any).latitude || 21.8853;
-          lngVal = (project as any).longitude || -102.2916;
+          const geoValidation = validateGeoIntegrity((project as any).latitude, (project as any).longitude);
+          latVal = geoValidation.latitude;
+          lngVal = geoValidation.longitude;
         }
       }
 

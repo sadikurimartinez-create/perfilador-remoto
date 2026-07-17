@@ -5,6 +5,7 @@
  */
 
 import { StatisticalIntelligenceEngine } from "./statisticalIntelligenceEngine";
+import { validateGeoIntegrity } from "./geoIntegrityEngine";
 
 export interface VectorEngineInput {
   projectName: string;
@@ -617,6 +618,48 @@ const drawTacticalStreets = (ctx: CanvasRenderingContext2D, w: number, h: number
     ctx.restore();
 };
 
+const renderInvalidGeoFallback = (ctx: CanvasRenderingContext2D, w: number, h: number, title: string) => {
+  ctx.fillStyle = '#0f172a'; // Deep slate dark mode background
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw subtle gradient overlay
+  const grad = ctx.createRadialGradient(w/2, h/2, 50, w/2, h/2, w/2);
+  grad.addColorStop(0, '#1e293b');
+  grad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Border
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, w - 20, h - 20);
+
+  // Warning Icon/Graphics (triangle)
+  ctx.beginPath();
+  ctx.moveTo(w / 2, h / 2 - 40);
+  ctx.lineTo(w / 2 - 30, h / 2 + 15);
+  ctx.lineTo(w / 2 + 30, h / 2 + 15);
+  ctx.closePath();
+  ctx.strokeStyle = '#f59e0b'; // Amber
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = '#f59e0b';
+  ctx.font = 'bold 24px "Inter", "Helvetica Neue", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('!', w / 2, h / 2 - 8);
+
+  // Title / Message
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 16px "Inter", "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText(title, w / 2, h / 2 + 45);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '12px "Inter", "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText('La representación territorial requiere validación geográfica.', w / 2, h / 2 + 70);
+};
+
 /**
  * 1. MAPA DE DENSIDAD CRIMINOLÓGICA (Hotspot Heatmap vectorial)
  */
@@ -624,8 +667,14 @@ export const renderDensityMap = async (input: VectorEngineInput): Promise<string
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 21.8853;
-  const centerLng = input.longitude || -102.2916;
+  
+  const geoValidation = validateGeoIntegrity(input.latitude, input.longitude);
+  if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+    renderInvalidGeoFallback(ctx, w, h, 'Mapa de Densidad Criminológica');
+    return canvas.toDataURL('image/png');
+  }
+  const centerLat = geoValidation.latitude;
+  const centerLng = geoValidation.longitude;
   
   // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
@@ -687,8 +736,14 @@ export const renderMobilityMap = async (input: VectorEngineInput): Promise<strin
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 21.8853;
-  const centerLng = input.longitude || -102.2916;
+  
+  const geoValidation = validateGeoIntegrity(input.latitude, input.longitude);
+  if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+    renderInvalidGeoFallback(ctx, w, h, 'Mapa de Movilidad y Corredores Tácticos');
+    return canvas.toDataURL('image/png');
+  }
+  const centerLat = geoValidation.latitude;
+  const centerLng = geoValidation.longitude;
   
   // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
@@ -802,8 +857,14 @@ export const renderAttractorsMap = async (input: VectorEngineInput): Promise<str
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 21.8853;
-  const centerLng = input.longitude || -102.2916;
+  
+  const geoValidation = validateGeoIntegrity(input.latitude, input.longitude);
+  if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+    renderInvalidGeoFallback(ctx, w, h, 'Mapa de Atracción y Factores Ambientales');
+    return canvas.toDataURL('image/png');
+  }
+  const centerLat = geoValidation.latitude;
+  const centerLng = geoValidation.longitude;
   
   // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);
@@ -905,8 +966,14 @@ export const renderPredictiveMap = async (input: VectorEngineInput): Promise<str
   const { canvas, ctx } = getHDCanvas(600, 400);
   const w = 600;
   const h = 400;
-  const centerLat = input.latitude || 21.8853;
-  const centerLng = input.longitude || -102.2916;
+  
+  const geoValidation = validateGeoIntegrity(input.latitude, input.longitude);
+  if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+    renderInvalidGeoFallback(ctx, w, h, 'Mapa de Proyección Predictiva a 6 Meses');
+    return canvas.toDataURL('image/png');
+  }
+  const centerLat = geoValidation.latitude;
+  const centerLng = geoValidation.longitude;
   
   // 1. Cargar Mapa Base Real
   const baseMapImg = await loadStaticMapImage(centerLat, centerLng, 15, w, h);

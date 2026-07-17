@@ -5,6 +5,7 @@ import { GoogleAuth } from 'google-auth-library';
 import crypto from 'crypto';
 import { searchX, searchReddit, searchTelegram } from './socialProviders';
 import { searchSerpAPI, searchYouTubeOSINT } from './osintProviders';
+import { validateGeoIntegrity } from './geoIntegrityEngine';
 
 // Interfaces obligatorias para OSINT Territorial v2.0
 export interface NormalizedOSINTEvent {
@@ -194,7 +195,7 @@ function analyzeTextContent(text: string): { keywords: string[]; entities: strin
 }
 
 // Georreferenciar semánticamente buscando menciones de colonias o municipios en el texto
-function georeferenceSemantically(text: string, defaultLat: number, defaultLng: number): { location: { type: "Point"; coordinates: [number, number] }; neighborhood: string | undefined } {
+function georeferenceSemantically(text: string, defaultLat: number | null, defaultLng: number | null): { location: { type: "Point"; coordinates: [number, number] } | null; neighborhood: string | undefined } {
   const lowercaseText = text.toLowerCase();
   
   for (const [colonia, coords] of Object.entries(COLONIAS_AGS_COORDENADAS)) {
@@ -207,6 +208,13 @@ function georeferenceSemantically(text: string, defaultLat: number, defaultLng: 
         neighborhood: colonia.toUpperCase()
       };
     }
+  }
+
+  if (defaultLat === null || defaultLng === null) {
+    return {
+      location: null,
+      neighborhood: undefined
+    };
   }
 
   // Si no se menciona ninguna colonia en el texto, generamos una coordenada con un ligero ruido aleatorio (jitter)
@@ -327,8 +335,9 @@ export const runOSINTTerritorialV2 = async (
   }
 
   const projectLocation = project.locationName || "Aguascalientes";
-  const defaultLat = project.latitude || 21.8853; // Aguascalientes centro
-  const defaultLng = project.longitude || -102.2916;
+  const geoValidation = validateGeoIntegrity(project.latitude, project.longitude);
+  const defaultLat = geoValidation.latitude;
+  const defaultLng = geoValidation.longitude;
 
   // Query principal de búsqueda
   const query = customQuery || `${projectLocation} operativo OR balacera OR robo OR detención`;

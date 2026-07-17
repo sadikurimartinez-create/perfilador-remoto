@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { exportToWord } from "@/lib/exportToWord";
 import { buildIntelligenceBriefing, loadPublicImageAsDataUrl, IntelligenceBriefing, buildIntelligenceEditorialPayload, IntelligenceReportPayload } from "@/utils/intelligenceLayoutEngine";
 import { ReportQualityGate } from "@/utils/reportQualityGate";
+import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { StatisticalIntelligenceEngineV2 } from "@/utils/statisticalIntelligenceEngineV2";
@@ -686,6 +687,18 @@ export class ReportEngineKernelClass {
         if (selectedAnnexes) {
           console.log("[AUDITORÍA CONSISTENCIA SAI] Iniciando validación y auto-reparación de Gobernanza para anexos...");
 
+          const geoValidation = validateGeoIntegrity(this.context.project?.latitude, this.context.project?.longitude);
+          const hasValidCoords = geoValidation.confidence !== "UNKNOWN" && geoValidation.latitude !== null && geoValidation.longitude !== null;
+          
+          const getMapUrl = () => {
+            if (hasValidCoords) {
+              return `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${geoValidation.longitude}/${geoValidation.latitude}/600x400.png`;
+            }
+            return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'><rect width='600' height='400' fill='%230f172a'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' font-weight='bold' fill='%2394a3b8'>La representación territorial requiere validación geográfica.</text></svg>";
+          };
+
+          const mapUrl = getMapUrl();
+
           // 1. Validar y auto-reparar Mapas
           if (selectedAnnexes.mapDensity) {
             const hasDensity = payloadObj.maps.some((m: any) => m.title && (m.title.toLowerCase().includes("densidad") || m.title.toLowerCase().includes("calor") || m.title.toLowerCase().includes("riesgo") || m.title.toLowerCase().includes("mapa")));
@@ -697,8 +710,8 @@ export class ReportEngineKernelClass {
                 console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Inyectando mapa fallback de Densidad vacío debido a degradación...");
                 payloadObj.maps.push({
                   title: "Mapa de Densidad y Calor de Incidentes (Fallback)",
-                  url: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
-                  previewUrl: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
+                  url: mapUrl,
+                  previewUrl: mapUrl,
                   description: "Mapa analítico de concentración delictiva."
                 });
               }
@@ -718,8 +731,8 @@ export class ReportEngineKernelClass {
                 console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Inyectando mapa fallback de Corredores...");
                 payloadObj.maps.push({
                   title: "Mapa de Corredores de Movilidad y Flujos (Fallback)",
-                  url: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
-                  previewUrl: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
+                  url: mapUrl,
+                  previewUrl: mapUrl,
                   description: "Mapa analítico de flujos y movilidad delictiva."
                 });
               }
@@ -736,8 +749,8 @@ export class ReportEngineKernelClass {
               } else {
                 payloadObj.maps.push({
                   title: "Mapa de Atractores Ambientales de Riesgo (Fallback)",
-                  url: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
-                  previewUrl: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
+                  url: mapUrl,
+                  previewUrl: mapUrl,
                   description: "Mapa analítico de atractores urbanos de oportunidad."
                 });
               }
@@ -754,8 +767,8 @@ export class ReportEngineKernelClass {
               } else {
                 payloadObj.maps.push({
                   title: "Mapa de Proyección Predictiva y Patrones (Fallback)",
-                  url: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
-                  previewUrl: "https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png",
+                  url: mapUrl,
+                  previewUrl: mapUrl,
                   description: "Mapa analítico predictivo del comportamiento espacial."
                 });
               }

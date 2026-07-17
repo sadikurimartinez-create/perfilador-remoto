@@ -1,5 +1,6 @@
 import { IProvider, ProviderResponse, HealthCheckResult } from "./baseProvider";
 import { GeoDataNormalizerEngine } from "./geoNormalizer";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 export class ConaguaProvider implements IProvider {
   getId(): string {
@@ -29,8 +30,21 @@ export class ConaguaProvider implements IProvider {
   async fetchData(params: any): Promise<ProviderResponse> {
     const start = Date.now();
     const action = params?.action || "hydrology";
-    const lat = params?.lat || 21.8853;
-    const lng = params?.lng || -102.2916;
+    
+    const geoValidation = validateGeoIntegrity(params?.lat, params?.lng);
+    if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+      return {
+        provider: this.getId(),
+        status: "error",
+        timestamp: new Date().toISOString(),
+        confidence: 0,
+        payload: null,
+        latency: Date.now() - start,
+        errors: ["Ausencia de coordenadas geográficas válidas. Consulta cancelada para preservar la integridad."]
+      };
+    }
+    const lat = geoValidation.latitude;
+    const lng = geoValidation.longitude;
     const errors: string[] = [];
 
     try {

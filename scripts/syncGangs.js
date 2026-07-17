@@ -106,8 +106,8 @@ try {
       const lngVal = parseFloat(r["_24"]);
 
       const georreferencia = {
-        lat: isNaN(latVal) ? 21.8853 : latVal,
-        lng: isNaN(lngVal) ? -102.2916 : lngVal,
+        lat: isNaN(latVal) ? null : latVal,
+        lng: isNaN(lngVal) ? null : lngVal,
         confidence: isNaN(latVal) ? 0 : 7,
         status: isNaN(latVal) ? "unresolved" : "local_db_colonia_jitter"
       };

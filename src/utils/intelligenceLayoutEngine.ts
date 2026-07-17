@@ -1,5 +1,6 @@
 import { ConsolidatedReport } from '../types/Report';
 import { ReportIntelligenceNormalizer } from './reportIntelligenceNormalizer';
+import { validateGeoIntegrity } from './geoIntegrityEngine';
 import { buildOperationalOsintChapter } from './osintChapterBuilder';
 import { StatisticalIntelligenceEngineV2 } from './statisticalIntelligenceEngineV2';
 import { StatisticalEvidenceMatrixManager } from './statisticalEvidenceMatrix';
@@ -387,8 +388,8 @@ export interface IntelligenceReportPayload {
   streetViewText?: string;
   graphText?: string;
   conclusionesText?: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   analysisRadius?: number;
   hieData?: HIEResult;
   cieData?: any;
@@ -962,9 +963,12 @@ export const buildIntelligenceEditorialPayload = async (
 
   // Estructurar obligatoriamente todos los capítulos narrativos clave en formato de 4 partes (HALLAZGO, EVIDENCIA, ANÁLISIS, IMPLICACIÓN)
   const analysisRadius = Number(project?.analysisRadius) > 0 ? Number(project.analysisRadius) : 500;
-  const epicenterLat = project?.latitude || 21.8853;
-  const epicenterLng = project?.longitude || -102.2916;
-  const locationStr = `${epicenterLat.toFixed(6)}, ${epicenterLng.toFixed(6)} (${projectName})`;
+  const geoValidation = validateGeoIntegrity(project?.latitude, project?.longitude);
+  const epicenterLat = geoValidation.latitude;
+  const epicenterLng = geoValidation.longitude;
+  const locationStr = epicenterLat !== null && epicenterLng !== null 
+    ? `${epicenterLat.toFixed(6)}, ${epicenterLng.toFixed(6)} (${projectName})`
+    : "La representación territorial requiere validación geográfica.";
 
   const rawOsintClean = cleanTechnicalJargon(rawOsintText);
   const osintSynthesized = buildOperationalOsintChapter({

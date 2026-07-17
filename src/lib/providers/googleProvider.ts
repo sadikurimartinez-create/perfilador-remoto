@@ -1,5 +1,6 @@
 import { IProvider, ProviderResponse, HealthCheckResult } from "./baseProvider";
 import { GeoDataNormalizerEngine } from "./geoNormalizer";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { analyzeBrokenWindowsWithVision } from "@/lib/googleVision";
 import { analyzeStreetViewWithGemini } from "@/utils/socialProviders";
@@ -36,6 +37,21 @@ export class GoogleProvider implements IProvider {
   async fetchData(params: any): Promise<ProviderResponse> {
     const start = Date.now();
     const action = params?.action || "places";
+    
+    const geoValidation = validateGeoIntegrity(params?.lat, params?.lng);
+    if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+      return {
+        provider: this.getId(),
+        status: "error",
+        timestamp: new Date().toISOString(),
+        confidence: 0,
+        payload: null,
+        latency: Date.now() - start,
+        errors: ["Ausencia de coordenadas geográficas válidas. Consulta cancelada para preservar la integridad."]
+      };
+    }
+    const lat = geoValidation.latitude;
+    const lng = geoValidation.longitude;
     const key = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
     const errors: string[] = [];
 
@@ -54,8 +70,6 @@ export class GoogleProvider implements IProvider {
 
       let data: any = null;
       let confidence = 100;
-      const lat = params?.lat || 21.8853;
-      const lng = params?.lng || -102.2916;
 
       if (action === "places") {
         const radius = params?.radius || 500;

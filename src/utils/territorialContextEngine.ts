@@ -1,11 +1,13 @@
+import { validateGeoIntegrity } from "./geoIntegrityEngine";
+
 export interface TCEInput {
   projectName?: string;
   projectId?: string;
   projectDescription?: string;
   analysisRadius?: number;
   geometryType?: string;
-  lat?: number;
-  lng?: number;
+  lat?: number | null;
+  lng?: number | null;
   incidenciaCompleta?: any[];
   streetViews?: any[];
   datosGobMxData?: any;
@@ -23,12 +25,12 @@ export interface TCEResult {
     availability: string;
   };
   territorialContext: {
-    latitude: number;
-    longitude: number;
+    latitude: number | null;
+    longitude: number | null;
     radiusMetros: number;
     geometryType: string;
     areaColonia: string;
-    centroide: { lat: number; lng: number };
+    centroide: { lat: number | null; lng: number | null };
     superficieEstimadaM2: number;
     perimetroEstimadoM: number;
     availability: string;
@@ -84,11 +86,14 @@ export class TerritorialContextEngine {
     const analyst = input.analystName || "Analista CEIPOL Táctico";
     const dateStr = new Date().toLocaleDateString("es-MX");
 
-    const lat = typeof input.lat === "number" && isFinite(input.lat) ? input.lat : 21.8853;
-    const lng = typeof input.lng === "number" && isFinite(input.lng) ? input.lng : -102.2916;
+    const geoValidation = validateGeoIntegrity(input.lat, input.lng);
+    const lat = geoValidation.latitude;
+    const lng = geoValidation.longitude;
     const radius = input.analysisRadius || 250;
     const geomType = input.geometryType || "polígono";
-    const desc = input.projectDescription || "Ubicación indeterminada, Aguascalientes";
+    const desc = lat !== null && lng !== null 
+      ? (input.projectDescription || "Ubicación Georreferenciada")
+      : "Ubicación indeterminada (La representación territorial requiere validación geográfica)";
 
     const superficie = Math.round(Math.PI * Math.pow(radius, 2));
     const perimetro = Math.round(2 * Math.PI * radius);

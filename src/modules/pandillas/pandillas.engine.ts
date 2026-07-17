@@ -1,6 +1,7 @@
 import { getScinceData, getDenueData, getTelegramOsintData } from "@/lib/osintActions";
 import { PandillasService } from "./pandillas.service";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 /**
  * Pandillas intelligence orchestration engine.
@@ -19,9 +20,23 @@ export class PandillasEngine {
     gang: GangEntity,
     userContext: string
   ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; isAiGenerated: boolean; warning?: string }> {
-    // Default coordinates: Aguascalientes Centro
-    const lat = gang.coordenadas?.lat || 21.8853;
-    const lng = gang.coordenadas?.lng || -102.2916;
+    const geoValidation = validateGeoIntegrity(gang.coordenadas?.lat, gang.coordenadas?.lng);
+    const lat = geoValidation.latitude;
+    const lng = geoValidation.longitude;
+
+    if (lat === null || lng === null) {
+      return {
+        exito: false,
+        razon: "Ausencia de coordenadas geográficas válidas. El barrido territorial requiere validación.",
+        elementosFusionados: [],
+        resumenEjecutivo: "La representación territorial requiere validación geográfica.",
+        scoreRiesgo: 0,
+        accionesSugeridas: [],
+        origenDatos: "NONE",
+        isAiGenerated: false,
+        warning: "La representación territorial requiere validación geográfica."
+      } as any;
+    }
 
     console.log(`[PandillasEngine] Iniciando barrido geoespacial en [${lat}, ${lng}]`);
 

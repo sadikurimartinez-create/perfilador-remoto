@@ -1,4 +1,5 @@
 import { MultiSourceCorrelationEngine, CorrelationReport } from "./multiSourceCorrelationEngine";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 export interface ForecastZone {
   nombre: string;
@@ -60,10 +61,10 @@ export class GeoFloodForecastEngine {
   }): GeoFloodForecastResult {
     const { fecha, hora, horizonte, scope, scopeId, lat, lng, radioMetros } = params;
 
-    // 1. Model Governance Layer: evaluate data sources, authority weight, eliminate redundancy
+    const geoValidation = validateGeoIntegrity(lat, lng);
     const governanceReport = MultiSourceCorrelationEngine.correlate("inundaciones", {
-      lat: lat || 21.8853,
-      lng: lng || -102.2916,
+      lat: geoValidation.latitude ?? undefined,
+      lng: geoValidation.longitude ?? undefined,
       query: `${scope} ${scopeId} horizon ${horizonte}`
     });
 

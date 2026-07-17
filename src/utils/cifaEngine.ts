@@ -27,6 +27,7 @@ import { DriveIngestionEngine } from '../modules/drive-ingestion/drive-ingestion
 import { runMultiSourceCorrelation } from './mcmCorrelation';
 import { logLearningAction, autoDiscoverSource } from './imfoService';
 import { getRegionalRSSFeeds } from '@/lib/osintSources';
+import { validateGeoIntegrity } from './geoIntegrityEngine';
 
 // Fast parser for RSS feeds from the server (similar to Next.js route)
 async function fetchRssFeedData(url: string, name: string): Promise<any[]> {
@@ -170,8 +171,9 @@ export const runUnifiedCifaScan = async (
 ) => {
   const startTime = Date.now();
   const location = project?.locationName || "Aguascalientes";
-  const lat = project?.latitude || 21.8853;
-  const lng = project?.longitude || -102.2916;
+  const geoValidation = validateGeoIntegrity(project?.latitude, project?.longitude);
+  const lat = geoValidation.latitude;
+  const lng = geoValidation.longitude;
 
   // Build standard query keywords for security investigations
   const query = customQuery || `${location} operativo OR balacera OR robo OR detención OR cartel`;
@@ -268,24 +270,24 @@ export const runUnifiedCifaScan = async (
   }
 
   // 10. Google Maps & Overpass APIs
-  if (selectedSources.includes("google_maps") && project?.latitude) {
+  if (selectedSources.includes("google_maps") && lat !== null && lng !== null) {
     promises.googlePlaces = executeWithLearning("tg_ceipol_bot", "Google Places", async () => {
       return searchGooglePlaces(lat, lng);
     }, () => getMockDENUE(lat, lng));
   }
-  if (selectedSources.includes("apis_gubernamentales") && project?.latitude) {
+  if (selectedSources.includes("apis_gubernamentales") && lat !== null && lng !== null) {
     promises.denue = executeWithLearning("tg_ceipol_bot", "INEGI DENUE", async () => {
       return searchDENUE(lat, lng);
     }, () => getMockDENUE(lat, lng));
   }
-  if (project?.latitude) {
+  if (lat !== null && lng !== null) {
     promises.overpass = executeWithLearning("tg_ceipol_bot", "OpenStreetMap Overpass", async () => {
       return searchOverpass(lat, lng);
     }, () => []);
   }
 
   // 11. Street View
-  if (selectedSources.includes("street_view") && project?.latitude) {
+  if (selectedSources.includes("street_view") && lat !== null && lng !== null) {
     promises.streetViewAnalysis = executeWithLearning("tg_ceipol_bot", "Gemini Street View Analysis", async () => {
       return analyzeStreetViewWithGemini(lat, lng);
     }, () => ({ analisis: "Entorno urbano de riesgo: Presencia de grafitis en fachadas residenciales y barda de cemento, iluminación nocturna precaria y callejones sin salida que propician el narcomenudeo perimetral en la zona de Aguascalientes.", imagenesBase64: [] }));

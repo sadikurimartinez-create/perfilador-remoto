@@ -206,7 +206,7 @@ export const MapsInterpretationPrompt = (ctx: ReportContext): string => {
   const geminiInput = {
     spatialPattern: {
       geometryType: spatialPattern.geometryType || "individual",
-      center: spatialPattern.center || { lat: 21.8853, lng: -102.2916 },
+      center: spatialPattern.center || { lat: null, lng: null },
       radiusMetros: spatialPattern.radiusMetros || 250,
       classification: spatialPattern.classification || "Distribución sectorizada"
     },

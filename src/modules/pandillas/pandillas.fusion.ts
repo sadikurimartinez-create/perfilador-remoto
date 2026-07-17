@@ -1,4 +1,5 @@
 import { GangEntity, FusionResult, calculateSimilarity } from "./pandillas.mapper";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 /**
  * Pandillas Intelligence Fusion Engine
@@ -132,22 +133,27 @@ export function fuseGangsAndBuildGraph(
   const geolocalizacion: FusionResult["mapa"]["geolocalizacion"] = [];
   const areasCalientes: FusionResult["mapa"]["areasCalientes"] = [];
 
-  // Default coordinate if none available (Aguascalientes Centro)
-  const defaultLat = 21.8853;
-  const defaultLng = -102.2916;
+  const geoValidation = validateGeoIntegrity(manualGang.coordenadas?.lat, manualGang.coordenadas?.lng);
+  const defaultLat = geoValidation.latitude;
+  const defaultLng = geoValidation.longitude;
 
   if (csvMatches.length > 0) {
     csvMatches.forEach((match, idx) => {
       let lat = Number(match.Lat);
       let lng = Number(match.Lng);
 
-      // Fallback only if the CSV coordinates are missing or invalid
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      const itemValidation = validateGeoIntegrity(lat, lng);
+      if (itemValidation.confidence !== "UNKNOWN" && itemValidation.latitude !== null && itemValidation.longitude !== null) {
+        lat = itemValidation.latitude;
+        lng = itemValidation.longitude;
+      } else if (defaultLat !== null && defaultLng !== null) {
         const seed = idx * 17.5 + (match.Calle || "").length + (match.Colonia || "").length;
         const dLat = (Math.sin(seed) * 0.015);
         const dLng = (Math.cos(seed) * 0.015);
         lat = defaultLat + dLat;
         lng = defaultLng + dLng;
+      } else {
+        return; // Skip adding point as it has no valid spatial anchor
       }
 
       geolocalizacion.push({
@@ -164,8 +170,8 @@ export function fuseGangsAndBuildGraph(
         intensidad: (idx % 3 === 0) ? 0.9 : 0.4,
       });
     });
-  } else if (primaryGang.zonaInfluencia) {
-    // If no CSV matches but zone exists, make a single central point
+  } else if (primaryGang.zonaInfluencia && defaultLat !== null && defaultLng !== null) {
+    // If no CSV matches but zone exists and anchor is valid, make a single central point
     geolocalizacion.push({
       lat: defaultLat,
       lng: defaultLng,

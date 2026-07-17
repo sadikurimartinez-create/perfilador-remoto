@@ -1,4 +1,5 @@
 import { IProvider, ProviderResponse, HealthCheckResult } from "./baseProvider";
+import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 export interface WmsLayer {
   id: string;
@@ -192,8 +193,22 @@ export class InegiWmsProvider implements IProvider {
     const start = Date.now();
     const action = params?.action || "get_capabilities";
     const layer = params?.layer || "m_ageb_m_g";
-    const lat = params?.lat || 21.8853;
-    const lng = params?.lng || -102.2916;
+    
+    const geoValidation = validateGeoIntegrity(params?.lat, params?.lng);
+    if (geoValidation.confidence === "UNKNOWN" || geoValidation.latitude === null || geoValidation.longitude === null) {
+      InegiWmsProvider.telemetry.errorsCount++;
+      return {
+        provider: this.getId(),
+        status: "error",
+        timestamp: new Date().toISOString(),
+        confidence: 0,
+        payload: null,
+        latency: Date.now() - start,
+        errors: ["Ausencia de coordenadas geográficas válidas. Consulta cancelada para preservar la integridad."]
+      };
+    }
+    const lat = geoValidation.latitude;
+    const lng = geoValidation.longitude;
 
     InegiWmsProvider.telemetry.totalQueries++;
     this.trackLayerUsage(layer);

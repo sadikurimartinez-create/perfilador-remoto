@@ -259,8 +259,8 @@ export class ModelGovernanceEngine {
     const activeProviders = activeEntries.map(([prov]) => prov.toLowerCase());
 
     const geom = geometry || {
-      type: "Point",
-      coordinates: [-102.2916, 21.8853]
+      type: "Unknown",
+      coordinates: []
     };
 
     if (activeEntries.length === 0) {
