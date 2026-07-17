@@ -4345,8 +4345,8 @@ const hasMinimumPhotos =
         onClose={() => setEditingPhoto(null)}
         className="max-w-2xl w-full max-h-[85vh] overflow-y-auto"
       >
-        <h3 className="text-lg font-bold text-sky-200 mb-1">Ventana de Edición de Contexto</h3>
-        <p className="text-xs text-slate-400 mb-4">Edite la contextualización de la evidencia de manera cómoda.</p>
+        <h3 className="text-sm font-black text-cyan-400 uppercase tracking-wider mb-1">VENTANA DE EDICIÓN DE CONTEXTO</h3>
+        <p className="text-[11px] text-slate-400 font-medium mb-4">Edite la contextualización de la evidencia de manera cómoda y cumpla con la bitácora operativa.</p>
         <textarea
           spellCheck={true}
           value={editingPhoto ? (editingPhoto.comentario || "") : ""}
@@ -4356,52 +4356,56 @@ const hasMinimumPhotos =
               setEditingPhoto({ ...editingPhoto, comentario: e.target.value });
             }
           }}
-          className="w-full min-h-[150px] bg-slate-800 text-slate-100 border border-slate-600 rounded-md p-4 text-sm focus:outline-none focus:border-sky-500 resize-y shadow-inner mb-4"
+          className="w-full min-h-[150px] bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 hover:border-slate-700 transition-all duration-200 font-sans resize-y mb-4 shadow-inner"
           placeholder="Escribe el comentario detallado aquí..."
         />
         <div className="flex justify-end pt-2 border-t border-slate-800">
-          <button onClick={() => setEditingPhoto(null)} className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition-colors shadow-md text-xs">
+          <CEIPOLButton 
+            variant="confirm" 
+            size="sm" 
+            onClick={() => setEditingPhoto(null)}
+          >
             Aceptar y Cerrar
-          </button>
+          </CEIPOLButton>
         </div>
       </DynamicPopup>
 
       {/* MODAL DE DICTAMEN OFICIAL (PREVISUALIZACIÓN, ANEXOS Y DESCARGA) */}
       {showReportModal && editableProfile && (
-        <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm p-4 overflow-y-auto print:hidden" onClick={() => setShowReportModal(false)}>
+        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto print:hidden" onClick={() => setShowReportModal(false)}>
           <div 
             role="dialog" 
             aria-modal="true" 
             onClick={(e) => e.stopPropagation()}
             style={getDynamicModalStyle(950, 700)}
-            className="w-full max-w-5xl bg-slate-950 border border-slate-800 p-6 rounded-2xl shadow-2xl space-y-6 text-left max-h-[90vh] overflow-y-auto animate-fadeIn"
+            className="w-full max-w-5xl bg-slate-950/95 backdrop-blur-md border border-slate-800/80 p-6 rounded-2xl shadow-2xl space-y-6 text-left max-h-[90vh] overflow-y-auto animate-fadeIn"
           >
-            <header className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-black text-slate-100 uppercase tracking-wider flex items-center gap-2">
+            <header className="flex justify-between items-center border-b border-slate-800/80 pb-3">
+              <h3 className="text-sm font-black text-cyan-400 uppercase tracking-wider flex items-center gap-2">
                 📄 Dictamen Criminológico Ambiental Generado
               </h3>
               <button 
                 type="button" 
                 onClick={() => setShowReportModal(false)}
-                className="text-slate-400 hover:text-white transition"
+                className="text-slate-400 hover:text-white transition duration-200"
               >
                 ✕
               </button>
             </header>
 
             {/* TABS DE MODO */}
-            <div className="flex border-b border-slate-800 gap-4 mb-4">
+            <div className="flex border-b border-slate-800/80 gap-4 mb-4">
               <button
                 type="button"
                 onClick={() => setActiveReportTab("edit")}
-                className={`pb-2 text-xs font-bold uppercase tracking-wider transition ${activeReportTab === "edit" ? "border-b-2 border-sky-500 text-sky-400" : "text-slate-400 hover:text-slate-200"}`}
+                className={`pb-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeReportTab === "edit" ? "border-b-2 border-cyan-500 text-cyan-400" : "text-slate-400 hover:text-slate-200"}`}
               >
                 📝 Editar Dictamen
               </button>
               <button
                 type="button"
                 onClick={() => setActiveReportTab("preview")}
-                className={`pb-2 text-xs font-bold uppercase tracking-wider transition ${activeReportTab === "preview" ? "border-b-2 border-sky-500 text-sky-400" : "text-slate-400 hover:text-slate-200"}`}
+                className={`pb-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeReportTab === "preview" ? "border-b-2 border-cyan-500 text-cyan-400" : "text-slate-400 hover:text-slate-200"}`}
               >
                 👁️ Vista Previa Institucional
               </button>
@@ -4411,7 +4415,7 @@ const hasMinimumPhotos =
               <>
                 {/* 1. EDICIÓN DEL CUERPO DEL DICTAMEN */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     📝 Editar Cuerpo del Dictamen
                   </label>
                   <textarea
@@ -4421,190 +4425,190 @@ const hasMinimumPhotos =
                       setEditableProfile(e.target.value);
                       setHasSavedAnalysis(false);
                     }}
-                    className="w-full min-h-[250px] rounded-xl border border-slate-700 bg-slate-900 text-slate-100 p-4 text-xs font-mono leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                    className="w-full min-h-[250px] rounded-xl border border-slate-850 bg-slate-950/60 text-slate-200 p-4 text-xs font-mono leading-relaxed resize-y focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 hover:border-slate-800 transition-all duration-200"
                     placeholder="Escribe el cuerpo del dictamen aquí..."
                   />
                 </div>
 
                 {/* 2. SELECCIÓN DE ANEXOS */}
-                <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-800 space-y-4">
-                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800/80 space-y-4">
+                  <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-2">
                     📋 Configuración del Dictamen y Selección de Anexos
                   </h4>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-400 font-medium">
                     Seleccione qué componentes y barridos de información desea adjuntar al documento oficial.
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-350">
                     {/* Mapas */}
-                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
-                      <p className="font-extrabold text-sky-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                    <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-850 space-y-2.5 shadow-inner">
+                      <p className="font-extrabold text-cyan-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1 flex items-center gap-1">
                         🗺️ Atlas Cartográfico
                       </p>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.mapInteractive}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapInteractive: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Mapa de Evidencias de Campo</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.mapDensity}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapDensity: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Mapa 1: Densidad Criminológica</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.mapMobility}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapMobility: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Mapa 2: Corredores y Movilidad</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.mapAttractors}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapAttractors: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Mapa 3: Atracción y Factores</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.mapPredictive}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, mapPredictive: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Mapa 4: Proyección Predictiva</span>
                       </label>
                     </div>
 
                     {/* Modelos Analíticos */}
-                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
-                      <p className="font-extrabold text-indigo-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                    <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-850 space-y-2.5 shadow-inner">
+                      <p className="font-extrabold text-indigo-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1 flex items-center gap-1">
                         📊 Modelos Analíticos
                       </p>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.chartTemporal}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTemporal: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Gráfica 1: Distribución por Turno</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.chartTopology}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartTopology: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Gráfica 2: Topología y Frecuencia</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.chartEnvironmental}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartEnvironmental: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Gráfica 3: Facilitadores Ambientales</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.chartPrediction}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, chartPrediction: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Gráfica 4: Predicción a 6 Meses</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.graphConnections}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, graphConnections: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Grafo 1: Relaciones y Redes</span>
                       </label>
                     </div>
 
                     {/* Barridos */}
-                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-850 space-y-2">
-                      <p className="font-extrabold text-emerald-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1">
+                    <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-850 space-y-2.5 shadow-inner">
+                      <p className="font-extrabold text-emerald-400 uppercase tracking-wider text-[9px] border-b border-slate-850 pb-1 flex items-center gap-1">
                         📡 Barridos e Inteligencia
                       </p>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.sweepDenue}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepDenue: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Barrido DENUE (INEGI)</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.sweepIncidencia}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepIncidencia: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Barrido de Incidencia Delictiva</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.sweepRepuve}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRepuve: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Consulta Vehicular (REPUVE)</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.sweepRnpdno}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepRnpdno: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Registro Desaparecidos (RNPDNO)</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.sweepMultimodal}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepMultimodal: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Búsqueda Multimodal Geo-Espacial</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.sweepCifa}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, sweepCifa: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Fusión CIFA-CEIPOL</span>
                       </label>
-                      <label className="flex items-center gap-2 hover:text-white cursor-pointer select-none">
+                      <label className="flex items-center gap-2 hover:text-slate-200 cursor-pointer select-none text-[11px] text-slate-400 font-medium transition duration-150">
                         <input
                           type="checkbox"
                           checked={selectedAnnexes.includeOsintAppendix}
                           onChange={(e) => setSelectedAnnexes(prev => ({ ...prev, includeOsintAppendix: e.target.checked }))}
-                          className="rounded border-slate-700 text-sky-500 bg-slate-900 focus:ring-sky-500"
+                          className="rounded border-slate-800 text-cyan-500 bg-slate-950 focus:ring-cyan-500/30 w-3.5 h-3.5"
                         />
                         <span>Anexo Técnico B (Detalle OSINT Crudo)</span>
                       </label>
@@ -4614,76 +4618,76 @@ const hasMinimumPhotos =
 
                 {/* 3. METADATOS DE EMISIÓN */}
                 {reportGenerationMeta && (
-                  <div className="bg-slate-950 border border-slate-900 rounded-xl p-4 space-y-1 text-xs text-slate-400">
-                    <p className="font-bold text-slate-300 uppercase tracking-widest text-[9px] mb-1">
+                  <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-4 space-y-1.5 text-xs text-slate-400 shadow-inner">
+                    <p className="font-extrabold text-slate-400 uppercase tracking-widest text-[9px] mb-1">
                       ⚙️ DETALLES DE GENERACIÓN
                     </p>
                     <p><strong>Fecha de Emisión:</strong> {reportGenerationMeta.date}</p>
                     <p><strong>Hora de Emisión:</strong> {reportGenerationMeta.time}</p>
-                    <p><strong>Analista a Cargo:</strong> {reportGenerationMeta.user}</p>
+                    <p><strong>Analista a Cargo:</strong> <span className="text-slate-300 font-bold">{reportGenerationMeta.user}</span></p>
                   </div>
                 )}
               </>
             ) : (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
-                  <span className="text-xs font-bold text-slate-300 uppercase">
+              <div className="space-y-4 animate-fadeIn">
+                <div className="flex justify-between items-center bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     Paginación Rígida de Geointeligencia (Pág. {previewPageIdx + 1} de 12)
                   </span>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
+                    <CEIPOLButton
+                      variant="secondary"
+                      size="sm"
                       disabled={previewPageIdx === 0}
                       onClick={() => setPreviewPageIdx(p => Math.max(0, p - 1))}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 rounded-lg text-xs font-bold transition"
                     >
                       ◀ Anterior
-                    </button>
-                    <button
-                      type="button"
+                    </CEIPOLButton>
+                    <CEIPOLButton
+                      variant="secondary"
+                      size="sm"
                       disabled={previewPageIdx === 11}
                       onClick={() => setPreviewPageIdx(p => Math.min(11, p + 1))}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 rounded-lg text-xs font-bold transition"
                     >
                       Siguiente ▶
-                    </button>
+                    </CEIPOLButton>
                   </div>
                 </div>
 
                 {/* Hoja de papel simulada */}
-                <div className="w-full aspect-[297/210] bg-slate-950 border border-slate-850 rounded-xl overflow-hidden shadow-2xl p-6 relative flex flex-col justify-between text-slate-200">
+                <div className="w-full aspect-[297/210] bg-slate-950 border border-slate-850 rounded-2xl overflow-hidden shadow-2xl p-6 relative flex flex-col justify-between text-slate-200">
                   {/* Encabezado Institucional */}
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2 text-[10px] uppercase font-bold tracking-widest text-slate-400">
+                  <div className="flex justify-between items-center border-b border-slate-800/80 pb-2 text-[10px] uppercase font-bold tracking-widest text-slate-400">
                     <span>CEIPOL - SSPE</span>
                     <span>Dictamen Técnico de Inteligencia Territorial</span>
-                    <span className="text-red-400 font-extrabold">CONFIDENCIAL</span>
+                    <span className="text-red-500 font-extrabold tracking-wider">CONFIDENCIAL</span>
                   </div>
 
                   {/* Cuerpo de la Página */}
                   <div className="flex-1 py-4 flex flex-col justify-center text-xs overflow-y-auto">
                     {previewPageIdx === 0 && (
                       <div className="space-y-4 text-center">
-                        <h4 className="text-base font-black text-slate-100 uppercase tracking-wide">DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL</h4>
+                        <h4 className="text-sm font-black text-slate-100 uppercase tracking-wide">DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL</h4>
                         <p className="text-[10px] font-semibold text-slate-400">SECRETARÍA DE SEGURIDAD PÚBLICA / CEIPOL</p>
-                        <div className="grid grid-cols-2 gap-3 bg-slate-900/60 p-3 rounded-lg border border-slate-800 text-left text-[10px] text-slate-350">
+                        <div className="grid grid-cols-2 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-left text-[10px] text-slate-350">
                           <p><strong>Expediente:</strong> {project?.nombre || "Polígono"}</p>
                           <p><strong>Número:</strong> {project?.id || "EXP_TACTICO"}</p>
                           <p><strong>Analista:</strong> {user?.username || "Analista"}</p>
                           <p><strong>Fecha:</strong> {new Date().toLocaleDateString("es-MX")}</p>
                           <p><strong>Geometría:</strong> {project?.geometryType?.toUpperCase() || "POLÍGONO"}</p>
-                          <p><strong>Clasificación:</strong> <span className="text-red-400 font-bold">CONFIDENCIAL</span></p>
+                          <p><strong>Clasificación:</strong> <span className="text-red-500 font-bold">CONFIDENCIAL</span></p>
                         </div>
-                        <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-850 text-left leading-relaxed max-h-[100px] overflow-y-auto">
+                        <div className="bg-slate-950/30 p-3 rounded-xl border border-slate-850 text-left leading-relaxed max-h-[100px] overflow-y-auto">
                           <p className="font-semibold text-slate-300 text-[10px] uppercase mb-1">Resumen del Dictamen:</p>
-                          <p className="text-[10px] text-slate-350">{reportSummary || "Dictamen estratégico de geointeligencia operativa perimetral."}</p>
+                          <p className="text-[10px] text-slate-450">{reportSummary || "Dictamen estratégico de geointeligencia operativa perimetral."}</p>
                         </div>
                       </div>
                     )}
 
                     {previewPageIdx === 1 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - CONTEXTO TERRITORIAL</h4>
-                        <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 leading-relaxed text-[11px] max-h-[220px] overflow-y-auto text-slate-300">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - CONTEXTO TERRITORIAL</h4>
+                        <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 leading-relaxed text-[11px] max-h-[220px] overflow-y-auto text-slate-300 select-all">
                           {editableProfile.slice(0, 1000)}
                         </div>
                       </div>
@@ -4691,8 +4695,8 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 2 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - HIPÓTESIS PRINCIPAL</h4>
-                        <div className="grid grid-cols-1 gap-2 text-[10px] text-slate-300 bg-slate-900/40 p-3 rounded-lg border border-slate-800">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - HIPÓTESIS PRINCIPAL</h4>
+                        <div className="grid grid-cols-1 gap-2 text-[10px] text-slate-300 bg-slate-950/40 p-3 rounded-xl border border-slate-800">
                           <p><strong>¿Qué ocurre?:</strong> Fenómenos de oportunidad delictiva y faltas administrativas nocturnas.</p>
                           <p><strong>¿Dónde ocurre?:</strong> En las intersecciones principales y puntos ciegos de la zona perimetral.</p>
                           <p><strong>¿Quién podría participar?:</strong> Grupos locales de riesgo y personas en tránsito.</p>
@@ -4705,8 +4709,8 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 3 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - VALORACIÓN OPERACIONAL</h4>
-                        <div className="grid grid-cols-1 gap-2 text-[10px] text-slate-300 bg-slate-900/40 p-3 rounded-lg border border-slate-800">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE I: ANÁLISIS EJECUTIVO - VALORACIÓN OPERACIONAL</h4>
+                        <div className="grid grid-cols-1 gap-2 text-[10px] text-slate-300 bg-slate-950/40 p-3 rounded-xl border border-slate-800">
                           <p><strong>Amenaza:</strong> Aumento progresivo de asaltos a transeúntes durante el horario de cierre comercial.</p>
                           <p><strong>Oportunidad criminal:</strong> Facilidad de acecho en predios sin cerramientos y callejones sin iluminación.</p>
                           <p><strong>Vulnerabilidades:</strong> Falta de iluminación pública formal en el 60% del área y cerramientos vulnerables.</p>
@@ -4717,32 +4721,32 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 4 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-indigo-400 uppercase tracking-wider">BLOQUE II: MATRIZ DE TRAZABILIDAD ANALÍTICA (GEOINT)</h4>
-                        <div className="bg-slate-900 p-2 rounded-lg border border-slate-800 overflow-x-auto">
+                        <h4 className="text-xs font-black text-indigo-400 uppercase tracking-wider">BLOQUE II: MATRIZ DE TRAZABILIDAD ANALÍTICA (GEOINT)</h4>
+                        <div className="bg-slate-950/40 p-2 rounded-xl border border-slate-800 overflow-x-auto">
                           <table className="w-full text-left text-[9px] border-collapse">
                             <thead>
                               <tr className="border-b border-slate-800 bg-slate-950 text-slate-400">
-                                <th className="p-1">Componente</th>
-                                <th className="p-1">Fuente</th>
-                                <th className="p-1">Método</th>
-                                <th className="p-1">Hallazgo</th>
-                                <th className="p-1">Impacto</th>
+                                <th className="p-1.5 font-bold uppercase">Componente</th>
+                                <th className="p-1.5 font-bold uppercase">Fuente</th>
+                                <th className="p-1.5 font-bold uppercase">Método</th>
+                                <th className="p-1.5 font-bold uppercase">Hallazgo</th>
+                                <th className="p-1.5 font-bold uppercase">Impacto</th>
                               </tr>
                             </thead>
                             <tbody>
-                              <tr className="border-b border-slate-900 bg-slate-900/50">
-                                <td className="p-1">Street View</td>
-                                <td className="p-1">Google Maps</td>
-                                <td className="p-1">Análisis visual</td>
-                                <td className="p-1">Predios ciegos</td>
-                                <td className="p-1">Vulnerabilidad</td>
+                              <tr className="border-b border-slate-900 bg-slate-950/20 text-slate-300">
+                                <td className="p-1.5">Street View</td>
+                                <td className="p-1.5">Google Maps</td>
+                                <td className="p-1.5">Análisis visual</td>
+                                <td className="p-1.5">Predios ciegos</td>
+                                <td className="p-1.5">Vulnerabilidad</td>
                               </tr>
-                              <tr className="border-b border-slate-900">
-                                <td className="p-1">Cartografía</td>
-                                <td className="p-1">CEIPOL GIS</td>
-                                <td className="p-1">Mapeo de calor</td>
-                                <td className="p-1">Concentración</td>
-                                <td className="p-1">Focalización</td>
+                              <tr className="border-b border-slate-900 text-slate-300">
+                                <td className="p-1.5">Cartografía</td>
+                                <td className="p-1.5">CEIPOL GIS</td>
+                                <td className="p-1.5">Mapeo de calor</td>
+                                <td className="p-1.5">Concentración</td>
+                                <td className="p-1.5">Focalización</td>
                               </tr>
                             </tbody>
                           </table>
@@ -4752,41 +4756,41 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 5 && (
                       <div className="space-y-2 text-center">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE III: ATLAS CARTOGRÁFICO OPERATIVO</h4>
-                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE III: ATLAS CARTOGRÁFICO OPERATIVO</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-950/80 border border-slate-800 rounded-xl mx-auto flex items-center justify-center text-slate-500 text-[9px] relative shadow-inner select-none font-medium">
                           [Cartografía de Densidades y Corredores de Calor delictivo]
-                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 italic">Cada mapa seleccionado se inserta en página independiente del cuerpo analítico.</p>
+                        <p className="text-[10px] text-slate-500 italic">Cada mapa seleccionado se inserta en página independiente del cuerpo analítico.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 6 && (
                       <div className="space-y-2 text-center">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (STREET VIEW)</h4>
-                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE IV: EVALUACIÓN VISUAL DE ENTORNO (STREET VIEW)</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-950/80 border border-slate-800 rounded-xl mx-auto flex items-center justify-center text-slate-500 text-[9px] relative shadow-inner select-none font-medium">
                           [Capturas Automáticas de Acecho y Puntos de Ocultamiento]
-                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 italic">Identificación visual georreferenciada con clasificación criminológica de factores urbanos.</p>
+                        <p className="text-[10px] text-slate-500 italic">Identificación visual georreferenciada con clasificación criminológica de factores urbanos.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 7 && (
                       <div className="space-y-2 text-center">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE V: MODELOS ANALÍTICOS Y GRÁFICAS</h4>
-                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE V: MODELOS ANALÍTICOS Y GRÁFICAS</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-950/80 border border-slate-800 rounded-xl mx-auto flex items-center justify-center text-slate-500 text-[9px] relative shadow-inner select-none font-medium">
                           [Gráficas de Distribución Temporal y Facilitadores]
-                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 italic">Modelos estadísticos integrados para sustentar la oportunidad ambiental.</p>
+                        <p className="text-[10px] text-slate-500 italic">Modelos estadísticos integrados para sustentar la oportunidad ambiental.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 8 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE VI: BARRIDOS DE INTELIGENCIA DE FUENTES</h4>
-                        <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 leading-relaxed text-[10px] text-slate-350 space-y-1">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE VI: BARRIDOS DE INTELIGENCIA DE FUENTES</h4>
+                        <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 leading-relaxed text-[10px] text-slate-350 space-y-1">
                           <p><strong>DENUE:</strong> Giros comerciales de tipo atractor identificados en el radio táctico.</p>
                           <p><strong>Incidencia:</strong> Histórico de delitos y denuncias de BigQuery en el perímetro.</p>
                           <p><strong>REPUVE:</strong> Flujos de vehículos con alertas de seguridad en los accesos.</p>
@@ -4796,18 +4800,18 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 9 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE VII: EVIDENCIA FOTOGRÁFICA DE CAMPO (Corte 45%)</h4>
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE VII: EVIDENCIA FOTOGRÁFICA DE CAMPO (Corte 45%)</h4>
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1 relative">
-                            <div className="h-[90px] bg-slate-950 flex items-center justify-center text-[8px] text-slate-550 relative">
+                          <div className="bg-slate-950/40 p-2 rounded-xl border border-slate-800 space-y-1 relative">
+                            <div className="h-[90px] bg-slate-950 flex items-center justify-center text-[8px] text-slate-550 relative shadow-inner rounded-lg">
                               [Imagen Táctica - 45%]
                               <span className="absolute top-2 right-2 text-[6px] text-slate-700">SSPE-CEIPOL</span>
                             </div>
                             <p className="text-[8px] text-slate-400"><strong>Ubicación:</strong> Zona de Ocultamiento norte</p>
                             <p className="text-[8px] text-slate-400"><strong>Factor:</strong> Luminaria inactiva</p>
                           </div>
-                          <div className="bg-slate-900 p-2 rounded border border-slate-800 space-y-1 relative">
-                            <div className="h-[90px] bg-slate-950 flex items-center justify-center text-[8px] text-slate-550 relative">
+                          <div className="bg-slate-950/40 p-2 rounded-xl border border-slate-800 space-y-1 relative">
+                            <div className="h-[90px] bg-slate-950 flex items-center justify-center text-[8px] text-slate-550 relative shadow-inner rounded-lg">
                               [Imagen Táctica - 45%]
                               <span className="absolute top-2 right-2 text-[6px] text-slate-700">SSPE-CEIPOL</span>
                             </div>
@@ -4820,18 +4824,18 @@ const hasMinimumPhotos =
 
                     {previewPageIdx === 10 && (
                       <div className="space-y-2 text-center">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)</h4>
-                        <div className="w-[280px] h-[130px] bg-slate-900 border border-slate-800 rounded-lg mx-auto flex items-center justify-center text-slate-500 text-[9px] relative">
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE VIII: HYPOTHESIS INTELLIGENCE GRAPH (HIG 2.0)</h4>
+                        <div className="w-[280px] h-[130px] bg-slate-950/80 border border-slate-800 rounded-xl mx-auto flex items-center justify-center text-slate-500 text-[9px] relative shadow-inner select-none font-medium">
                           [Visualizador de Grafo Relacional HIG 2.0]
-                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-650">SSPE-CEIPOL</span>
+                          <span className="absolute bottom-2 right-2 text-[7px] text-slate-600">SSPE-CEIPOL</span>
                         </div>
-                        <p className="text-[9px] text-slate-400 italic">Mapeo estructurado de relaciones, actores, lugares, evidencias y pesos.</p>
+                        <p className="text-[9px] text-slate-500 italic">Mapeo de relaciones, actores, lugares, evidencias y pesos.</p>
                       </div>
                     )}
 
                     {previewPageIdx === 11 && (
                       <div className="space-y-3">
-                        <h4 className="text-xs font-extrabold text-sky-400 uppercase tracking-wider">BLOQUE IX: CONCLUSIONES OPERATIVAS Y RECOMENDACIONES</h4>
+                        <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">BLOQUE IX: CONCLUSIONES OPERATIVAS Y RECOMENDACIONES</h4>
                         <ul className="list-disc list-inside space-y-1 text-[10px] text-slate-350">
                           <li><strong>Hallazgo Crítico:</strong> Alumbrado ausente en más de un 60% perimetral.</li>
                           <li><strong>Riesgo Inmediato:</strong> Oportunidad de acecho sobre vías peatonales tácticas.</li>
@@ -4843,7 +4847,7 @@ const hasMinimumPhotos =
                   </div>
 
                   {/* Pie de Página */}
-                  <div className="flex justify-between items-center border-t border-slate-800 pt-2 text-[9px] text-slate-400">
+                  <div className="flex justify-between items-center border-t border-slate-800/80 pt-2 text-[9px] text-slate-450 font-medium">
                     <span>Página {previewPageIdx + 1} de 12</span>
                     <span>SSPE-CEIPOL - Perímetro de Vigilancia</span>
                   </div>
@@ -4852,63 +4856,63 @@ const hasMinimumPhotos =
             )}
 
             {/* 4. ESTADO DE GENERACIÓN Y BOTONES DE CONTROL (v9.0) */}
-            <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-4 space-y-3 pt-3 border-t border-slate-800">
+            <div className="bg-slate-950/80 border border-emerald-500/20 rounded-xl p-5 space-y-3 shadow-inner">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-black text-emerald-400 flex items-center gap-1.5 animate-pulse">
+                <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5 animate-pulse uppercase tracking-wider">
                   ✅ INFORME GENERADO CORRECTAMENTE
                 </span>
-                <span className="text-[10px] text-slate-400">Versión: v9.0 | Gobernanza Algorítmica</span>
+                <span className="text-[10px] text-slate-500 font-medium tracking-wider">Versión: v9.0 | Gobernanza Algorítmica</span>
               </div>
               
-              <div className="flex flex-wrap gap-2 justify-between items-center">
+              <div className="flex flex-wrap gap-2 justify-between items-center pt-1 border-t border-slate-800/60">
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
+                  <CEIPOLButton
+                    variant="confirm"
+                    size="sm"
                     disabled={isSavingAnalysis}
                     onClick={() => handleFinalizeAndExport("PDF")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
                   >
                     📄 Descargar PDF
-                  </button>
-                  <button
-                    type="button"
+                  </CEIPOLButton>
+                  <CEIPOLButton
+                    variant="primary"
+                    size="sm"
                     disabled={isSavingAnalysis}
                     onClick={() => handleFinalizeAndExport("WORD")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-2.5 text-xs font-extrabold text-white uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
                   >
                     📝 Descargar Word
-                  </button>
-                  <button
-                    type="button"
+                  </CEIPOLButton>
+                  <CEIPOLButton
+                    variant="warning"
+                    size="sm"
                     disabled={isSavingExpediente}
                     onClick={() => handleSaveExpediente()}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 px-4 py-2.5 text-xs font-extrabold text-slate-950 uppercase tracking-wider shadow transition disabled:opacity-50 active:scale-95"
                   >
                     💾 Guardar Expediente
-                  </button>
-                  <button
-                    type="button"
+                  </CEIPOLButton>
+                  <CEIPOLButton
+                    variant="secondary"
+                    size="sm"
                     onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); handleConsultarHistorial(); }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-extrabold text-slate-200 uppercase tracking-wider shadow transition active:scale-95"
                   >
                     📂 Consultar Historial
-                  </button>
-                  <button
-                    type="button"
+                  </CEIPOLButton>
+                  <CEIPOLButton
+                    variant="secondary"
+                    size="sm"
                     onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-850 hover:bg-slate-750 px-4 py-2.5 text-xs font-extrabold text-slate-300 uppercase tracking-wider shadow transition active:scale-95"
                   >
                     🔄 Regenerar Informe
-                  </button>
+                  </CEIPOLButton>
                 </div>
                 
-                <button
-                  type="button"
+                <CEIPOLButton
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setShowReportModal(false)}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
                 >
                   Cerrar Ventana
-                </button>
+                </CEIPOLButton>
               </div>
             </div>
           </div>
@@ -4923,10 +4927,10 @@ const hasMinimumPhotos =
         className="max-w-2xl w-full max-h-[85vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-          <h3 className="text-lg font-black text-sky-400 flex items-center gap-2">
+          <h3 className="text-sm font-black text-cyan-400 flex items-center gap-2 uppercase tracking-wider">
             📂 Historial de Expedientes Guardados (v9.0)
           </h3>
-          <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white text-sm">✖</button>
+          <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-white text-sm transition-colors">✖</button>
         </div>
         
         <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
@@ -4941,20 +4945,21 @@ const hasMinimumPhotos =
             />
           ) : (
             historyDossiers.map((h) => (
-              <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+              <div key={h.id} className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs hover:border-slate-700 transition-all">
                 <div className="space-y-1.5 text-left">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-200">Fecha y Hora:</span>
-                    <span className="text-sky-400 font-mono">{new Date(h.fecha).toLocaleString("es-MX")}</span>
+                    <span className="font-bold text-slate-400">Fecha y Hora:</span>
+                    <span className="text-cyan-400 font-mono font-bold">{new Date(h.fecha).toLocaleString("es-MX")}</span>
                   </div>
                   <div>
-                    <span className="font-bold text-slate-200">Nombre del Autor:</span>
-                    <span className="text-slate-300 ml-1.5">{h.analyst || "Desconocido"}</span>
+                    <span className="font-bold text-slate-400">Nombre del Autor:</span>
+                    <span className="text-slate-200 font-medium ml-1.5">{h.analyst || "Desconocido"}</span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
+                  <CEIPOLButton
+                    variant="primary"
+                    size="sm"
                     onClick={async () => {
                       try {
                         if (!h.editorialPayload) {
@@ -4971,12 +4976,12 @@ const hasMinimumPhotos =
                         alert("Error al generar Word: " + err.message);
                       }
                     }}
-                    className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded text-[10px] font-bold transition shadow"
                   >
-                    📝 Generar Word
-                  </button>
-                  <button
-                    type="button"
+                    📝 WORD
+                  </CEIPOLButton>
+                  <CEIPOLButton
+                    variant="confirm"
+                    size="sm"
                     onClick={async () => {
                       try {
                         if (!h.briefing) {
@@ -4988,17 +4993,16 @@ const hasMinimumPhotos =
                         alert("Error al generar PDF: " + err.message);
                       }
                     }}
-                    className="px-2.5 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded text-[10px] font-bold transition shadow"
                   >
-                    📄 Generar PDF
-                  </button>
-                  <button
-                    type="button"
+                    📄 PDF
+                  </CEIPOLButton>
+                  <CEIPOLButton
+                    variant="danger"
+                    size="sm"
                     onClick={() => handleDeleteDossier(h.id)}
-                    className="px-2.5 py-1.5 bg-red-850 hover:bg-red-750 text-white rounded text-[10px] font-bold transition shadow"
                   >
-                    🗑️ Borrar
-                  </button>
+                    🗑️ BORRAR
+                  </CEIPOLButton>
                 </div>
               </div>
             ))
@@ -5006,9 +5010,13 @@ const hasMinimumPhotos =
         </div>
         
         <div className="flex justify-end pt-4 mt-2 border-t border-slate-800">
-          <button onClick={() => setShowHistoryModal(false)} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">
+          <CEIPOLButton 
+            variant="secondary" 
+            size="sm" 
+            onClick={() => setShowHistoryModal(false)}
+          >
             Cerrar Historial
-          </button>
+          </CEIPOLButton>
         </div>
       </DynamicPopup>
 
@@ -5022,19 +5030,19 @@ const hasMinimumPhotos =
         }}
         className="max-w-md w-full border-red-700/50"
       >
-        <h3 className="text-lg font-black text-red-400 flex items-center gap-2 mb-2">
+        <h3 className="text-sm font-black text-red-500 flex items-center gap-2 mb-2 uppercase tracking-wider">
           ⚠️ Confirmar Eliminación Controlada
         </h3>
-        <p className="text-xs text-slate-300 leading-relaxed mb-4">
-          Está a punto de enviar este elemento ({deleteModal?.type}) a la <span className="font-bold text-amber-400">Papelera de Reciclaje Institucional</span>. Permanecerá allí por 7 días naturales antes de su eliminación definitiva.
+        <p className="text-[11px] text-slate-400 font-medium leading-relaxed mb-4">
+          Está a punto de enviar este elemento ({deleteModal?.type}) a la <span className="font-bold text-amber-500">Papelera de Reciclaje Institucional</span>. Permanecerá allí por 7 días naturales antes de su eliminación definitiva.
         </p>
         
         <div className="space-y-1 mb-4">
-          <label className="block text-[11px] font-bold text-slate-400 uppercase">Motivo de Eliminación (Obligatorio)</label>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Motivo de Eliminación (Obligatorio) *</label>
           <select
             value={deleteReason}
             onChange={(e) => setDeleteReason(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-xs text-slate-200 focus:border-red-500 focus:outline-none"
+            className="w-full bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/30 hover:border-slate-700 transition-all duration-200 font-sans"
           >
             <option value="">-- Seleccione un motivo --</option>
             <option value="Registro duplicado">Registro duplicado</option>
@@ -5047,16 +5055,19 @@ const hasMinimumPhotos =
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
-          <button
+          <CEIPOLButton
+            variant="secondary"
+            size="sm"
             onClick={() => {
               setDeleteModal(null);
               setDeleteReason("");
             }}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
           >
             Cancelar
-          </button>
-          <button
+          </CEIPOLButton>
+          <CEIPOLButton
+            variant="danger"
+            size="sm"
             disabled={!deleteReason.trim()}
             onClick={async () => {
               if (!deleteReason || !deleteModal) return;
@@ -5074,10 +5085,9 @@ const hasMinimumPhotos =
                 alert("Error al eliminar: " + err.message);
               }
             }}
-            className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-red-900/30"
           >
             Confirmar Eliminación
-          </button>
+          </CEIPOLButton>
         </div>
       </DynamicPopup>
 
@@ -5088,25 +5098,26 @@ const hasMinimumPhotos =
         onClose={() => setScinceDataConfirm(null)}
         className="max-w-md w-full"
       >
-        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5 font-sans">
+        <h3 className="text-sm font-black text-cyan-400 flex items-center gap-2 mb-2 uppercase tracking-wider">
           📊 Confirmación de Hipótesis: INEGI SCINCE
         </h3>
-        <p className="text-xs text-slate-400 mb-3 leading-relaxed font-sans">
+        <p className="text-[11px] text-slate-400 font-medium leading-relaxed mb-3">
           Se han obtenido los siguientes datos sociodemográficos de la cuadra (Demografía, Marginación, Población e Indicadores Sociales). Confirme su incorporación al análisis de hipótesis:
         </p>
-        <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs text-slate-200 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4">
+        <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
           {scinceDataConfirm}
         </div>
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
-          <button
-            type="button"
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+          <CEIPOLButton
+            variant="secondary"
+            size="sm"
             onClick={() => setScinceDataConfirm(null)}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
           >
             Cancelar
-          </button>
-          <button
-            type="button"
+          </CEIPOLButton>
+          <CEIPOLButton
+            variant="confirm"
+            size="sm"
             onClick={async () => {
               if (!scinceDataConfirm) return;
               try {
@@ -5123,10 +5134,9 @@ const hasMinimumPhotos =
                 alert("Error al registrar barrido: " + err.message);
               }
             }}
-            className="px-4 py-2 bg-purple-700 hover:bg-purple-650 text-white text-xs font-semibold rounded-lg transition-all shadow-md"
           >
             Aceptar y Añadir
-          </button>
+          </CEIPOLButton>
         </div>
       </DynamicPopup>
 
@@ -5137,25 +5147,26 @@ const hasMinimumPhotos =
         onClose={() => setDenueDataConfirm(null)}
         className="max-w-md w-full"
       >
-        <h3 className="text-sm font-bold text-slate-100 mb-2 flex items-center gap-1.5 font-sans">
+        <h3 className="text-sm font-black text-cyan-400 flex items-center gap-2 mb-2 uppercase tracking-wider">
           🏪 Confirmación de Hipótesis: INEGI DENUE
         </h3>
-        <p className="text-xs text-slate-400 mb-3 leading-relaxed font-sans">
+        <p className="text-[11px] text-slate-400 font-medium leading-relaxed mb-3">
           Se han obtenido los siguientes datos de la actividad comercial (Giros, Concentración y Establecimientos Comerciales). Confirme su incorporación al análisis de hipótesis:
         </p>
-        <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs text-slate-200 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4">
+        <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
           {denueDataConfirm}
         </div>
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
-          <button
-            type="button"
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+          <CEIPOLButton
+            variant="secondary"
+            size="sm"
             onClick={() => setDenueDataConfirm(null)}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all active:scale-[0.97]"
           >
             Cancelar
-          </button>
-          <button
-            type="button"
+          </CEIPOLButton>
+          <CEIPOLButton
+            variant="confirm"
+            size="sm"
             onClick={async () => {
               if (!denueDataConfirm) return;
               try {
@@ -5172,10 +5183,9 @@ const hasMinimumPhotos =
                 alert("Error al registrar barrido: " + err.message);
               }
             }}
-            className="px-4 py-2 bg-amber-700 hover:bg-amber-650 text-white text-xs font-semibold rounded-lg transition-all shadow-md active:scale-[0.97]"
           >
             Aceptar y Añadir
-          </button>
+          </CEIPOLButton>
         </div>
       </DynamicPopup>
 

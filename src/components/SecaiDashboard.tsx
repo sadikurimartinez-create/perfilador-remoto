@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
 import {
   ResponsiveContainer,
   RadarChart,
@@ -265,7 +266,7 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
   return (
     <div className="space-y-6">
       {/* 1. Header SECAI de la Ficha */}
-      <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <CEIPOLCard variant="glass" className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <span className="bg-fuchsia-900/30 text-fuchsia-400 text-[10px] font-black uppercase tracking-widest border border-fuchsia-800/40 px-3 py-1 rounded-full">
             Modelo de Evaluación SECAI v1.2
@@ -291,11 +292,11 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
             </span>
           </div>
         </div>
-      </div>
+      </CEIPOLCard>
 
       {/* 2. Alertas Tempranas si existen */}
       {alerts.length > 0 && (
-        <div className="bg-slate-950/30 border border-slate-800 rounded-2xl p-4">
+        <CEIPOLCard variant="glass" className="p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-amber-400 text-sm">⚠️</span>
             <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
@@ -317,13 +318,13 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               </div>
             ))}
           </div>
-        </div>
+        </CEIPOLCard>
       )}
 
       {/* 3. Panel de Indicadores Clave del Desempeño */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* ICC Card */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Calidad de Contexto</p>
@@ -344,10 +345,10 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <div className="bg-sky-500 h-full rounded-full" style={{ width: `${iccScore}%` }} />
             </div>
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* IVA Card */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Aporte al Análisis</p>
@@ -370,10 +371,10 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <div className="bg-fuchsia-500 h-full rounded-full" style={{ width: `${ivaScore}%` }} />
             </div>
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* ISH Card */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Solidez Hipotética</p>
@@ -396,10 +397,10 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${ishScore}%` }} />
             </div>
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* ICA Card */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Correlación Analítica</p>
@@ -420,10 +421,10 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${icaScore}%` }} />
             </div>
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* IAA Card */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Autonomía Analítica</p>
@@ -444,10 +445,10 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <div className="bg-amber-500 h-full rounded-full" style={{ width: `${iaaScore}%` }} />
             </div>
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* Idoneidad Histórica Card */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
+        <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Idoneidad Alcanzada</p>
@@ -470,13 +471,13 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <div className="bg-cyan-500 h-full rounded-full" style={{ width: `${finalIdoneidad}%` }} />
             </div>
           </div>
-        </div>
+        </CEIPOLCard>
       </div>
 
       {/* 4. Competencias Específicas / Radar & Evolución Histórica */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Radar Chart Panel */}
-        <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+        <CEIPOLCard variant="glass" className="p-5 shadow-lg space-y-4">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
             Radar de Competencias Analíticas
           </h4>
@@ -484,38 +485,30 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                 <PolarGrid stroke="#334155" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: "#94a3b8", fontSize: 10 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 8 }} />
+                <PolarAngleAxis dataKey="subject" stroke="#64748b" tick={{ fontSize: 10, fontWeight: "bold" }} />
+                <PolarRadiusAxis stroke="#334155" angle={30} domain={[0, 100]} tick={{ fontSize: 8 }} />
                 <Radar
                   name="Analista"
                   dataKey="Analista"
-                  stroke="#38bdf8"
-                  fill="#0284c7"
+                  stroke="#c084fc"
+                  fill="#c084fc"
                   fillOpacity={0.25}
                 />
                 <Radar
-                  name="Promedio Inst."
+                  name="Promedio SSP"
                   dataKey="Promedio"
-                  stroke="#ec4899"
-                  fill="#db2777"
-                  fillOpacity={0.15}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    color: "#f8fafc",
-                  }}
+                  stroke="#94a3b8"
+                  fill="#94a3b8"
+                  fillOpacity={0.1}
                 />
                 <Legend />
               </RadarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* Line Chart Panel */}
-        <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+        <CEIPOLCard variant="glass" className="p-5 shadow-lg space-y-4">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
             Evolución Mensual e Idoneidad Histórica
           </h4>
@@ -551,11 +544,11 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </CEIPOLCard>
       </div>
 
       {/* 5. Certificaciones por Competencia */}
-      <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-lg">
+      <CEIPOLCard variant="glass" className="p-5 shadow-lg">
         <h4 className="text-xs font-black uppercase tracking-wider text-slate-300 mb-4 flex items-center gap-2">
           <span>🏅</span> Certificación de Competencias Institucionales (CEIPOL)
         </h4>
@@ -585,7 +578,7 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
             );
           })}
         </div>
-      </div>
+      </CEIPOLCard>
 
       {/* 6. Motor Automático de Fortalezas y Áreas de Fortalecimiento */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -3,6 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { runOSINTTerritorialV2, NormalizedOSINTEvent, OSINTTerritorialV2Response } from '../utils/osintTerritorialV2';
 import { db } from '../lib/localDb';
+import { CEIPOLToast } from "./ui/CEIPOLToast";
+import { CEIPOLConfirmModal } from "./ui/CEIPOLConfirmModal";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
 
 interface Props {
   project: any;
@@ -157,6 +161,8 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
   const [isFrozen, setIsFrozen] = useState(false);
   const [isCached, setIsCached] = useState(false);
   const [frozenAt, setFrozenAt] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   // Cargar de IndexedDB al arrancar o cambiar de proyecto
   useEffect(() => {
@@ -256,18 +262,21 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
       setIsFrozen(true);
       setIsCached(false);
       setFrozenAt(Date.now());
-      alert("🔒 CONGELAMIENTO EXITOSO: Los datos OSINT han sido certificados e integrados de forma inmutable para este expediente. No se dispararán más consultas dinámicas.");
+      setToast({ type: "success", message: "🔒 CONGELAMIENTO EXITOSO: Los datos OSINT han sido certificados e integrados de forma inmutable para este expediente. No se dispararán más consultas dinámicas." });
     } catch (err) {
       console.error("Error freezing snapshot:", err);
-      alert("Error al congelar la instantánea OSINT.");
+      setToast({ type: "error", message: "Error al congelar la instantánea OSINT." });
     }
   };
 
-  const clearSnapshotAndCache = async () => {
+  const clearSnapshotAndCache = () => {
     if (!project?.id) return;
-    const confirmClear = window.confirm("¿Deseas descongelar el expediente y limpiar la caché OSINT? Esto permitirá realizar nuevos barridos en vivo.");
-    if (!confirmClear) return;
-    
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmClear = async () => {
+    if (!project?.id) return;
+    setIsConfirmOpen(false);
     try {
       await db.osint_snapshots.delete(project.id);
       await db.osint_events.where("projectId").equals(project.id).delete();
@@ -280,9 +289,10 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
       if (onUpdateMapResults) {
         onUpdateMapResults(null);
       }
-      alert("🔓 Descongelado con éxito. Caché local de evidencias restablecida.");
+      setToast({ type: "success", message: "🔓 Descongelado con éxito. Caché local de evidencias restablecida." });
     } catch (err) {
       console.error("Error clearing DB:", err);
+      setToast({ type: "error", message: "Error al limpiar la caché local." });
     }
   };
 
@@ -376,7 +386,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
   });
 
   return (
-    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 mt-4 backdrop-blur-md shadow-2xl relative overflow-hidden">
+    <CEIPOLCard variant="glass" className="p-6 mt-4 relative overflow-hidden shadow-2xl">
       {/* Background radial accent */}
       <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -399,36 +409,30 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
 
         <div className="flex items-center gap-2">
           {onToggleMapMarkers && (
-            <button
+            <CEIPOLButton
+              variant={showMapMarkers ? "confirm" : "secondary"}
               onClick={() => onToggleMapMarkers(!showMapMarkers)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-300 ${
-                showMapMarkers 
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
-                  : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
-              }`}
+              className="px-3 py-1.5 text-xs font-semibold"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Marcadores {showMapMarkers ? 'On' : 'Off'}
-            </button>
+            </CEIPOLButton>
           )}
 
           {onToggleMapRoutes && (
-            <button
+            <CEIPOLButton
+              variant={showMapRoutes ? "primary" : "secondary"}
               onClick={() => onToggleMapRoutes(!showMapRoutes)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-300 ${
-                showMapRoutes 
-                  ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30' 
-                  : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
-              }`}
+              className="px-3 py-1.5 text-xs font-semibold"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
               </svg>
               Rutas {showMapRoutes ? 'On' : 'Off'}
-            </button>
+            </CEIPOLButton>
           )}
         </div>
       </div>
@@ -443,12 +447,13 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
               <p className="text-[10px] text-amber-500/90 font-medium">Registrado el {new Date(frozenAt || 0).toLocaleString('es-MX')} | Los hashes criptográficos SHA-256 certifican la cadena de custodia.</p>
             </div>
           </div>
-          <button
+          <CEIPOLButton
+            variant="warning"
             onClick={clearSnapshotAndCache}
-            className="px-3 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-extrabold hover:bg-amber-500/25 transition-all"
+            className="px-3 py-1 text-xs font-extrabold"
           >
             🔓 Descongelar / Habilitar Edición
-          </button>
+          </CEIPOLButton>
         </div>
       )}
 
@@ -461,25 +466,27 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
               <p className="text-[10px] text-cyan-500/90 font-medium">Las evidencias están guardadas localmente en IndexedDB. Se recomienda congelarlas como snapshot inmutable para certificar el reporte.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end gap-1.5">
+            <CEIPOLButton
+              variant="primary"
               onClick={freezeSnapshot}
-              className="px-3 py-1 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-extrabold hover:bg-cyan-500/25 transition-all whitespace-nowrap"
+              className="px-3 py-1 text-xs font-extrabold whitespace-nowrap"
             >
               🔒 Congelar Snapshot
-            </button>
-            <button
+            </CEIPOLButton>
+            <CEIPOLButton
+              variant="secondary"
               onClick={clearSnapshotAndCache}
-              className="px-3 py-1 bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600 rounded-lg text-xs font-bold hover:bg-slate-750 transition-all"
+              className="px-3 py-1 text-xs font-bold"
             >
               🧹 Limpiar
-            </button>
+            </CEIPOLButton>
           </div>
         </div>
       )}
 
       {/* Query Search Panel */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 mb-6 relative z-10">
+      <CEIPOLCard variant="glass" className="p-4 mb-6 relative z-10">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -497,17 +504,15 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
               onKeyDown={(e) => e.key === 'Enter' && !isFrozen && executeOSINT()}
             />
           </div>
-          <button
+          <CEIPOLButton
+            variant="primary"
             onClick={executeOSINT}
             disabled={isFrozen || loading}
-            className="px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 text-white rounded-xl text-sm font-bold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 border border-cyan-400/20 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+            loading={loading}
+            className="px-6 py-2.5 h-auto"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
                 Rastreando Fuentes... <ElapsedTime running={loading} />
               </span>
             ) : (
@@ -518,7 +523,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                 Escanear OSINT Territorial v2.0
               </>
             )}
-          </button>
+          </CEIPOLButton>
         </div>
         <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
           <svg className="w-3 h-3 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -526,21 +531,21 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
           </svg>
           Sincronizado de forma segura con YouTube Data API, SerpAPI Google Dorks y rastreo sintético de capas profundas.
         </p>
-      </div>
+      </CEIPOLCard>
 
       {results && (
         <div className="space-y-6 relative z-10 animate-fadeIn">
           {/* KPI Cards Row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between">
+            <CEIPOLCard variant="glass" className="p-4 flex flex-col justify-between shadow-md">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Eventos Totales</span>
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-3xl font-black text-cyan-400">{results.metrics.totalEvents}</span>
                 <span className="text-xs text-slate-500">encontrados</span>
               </div>
-            </div>
+            </CEIPOLCard>
 
-            <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between">
+            <CEIPOLCard variant="glass" className="p-4 flex flex-col justify-between shadow-md">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Plataformas Clave</span>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {Object.entries(results.metrics.byPlatform).map(([platform, count]) => (
@@ -549,9 +554,9 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                   </span>
                 ))}
               </div>
-            </div>
+            </CEIPOLCard>
 
-            <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between">
+            <CEIPOLCard variant="glass" className="p-4 flex flex-col justify-between shadow-md">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Riesgo Crítico / Alto</span>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-3xl font-black text-red-500">{results.metrics.byRisk.critico + results.metrics.byRisk.alto}</span>
@@ -560,9 +565,9 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                   <p className="text-orange-400 font-bold">{results.metrics.byRisk.alto} Altos</p>
                 </div>
               </div>
-            </div>
+            </CEIPOLCard>
 
-            <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between">
+            <CEIPOLCard variant="glass" className="p-4 flex flex-col justify-between shadow-md">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Colonia Más Afectada</span>
               <div className="mt-1">
                 {Object.keys(results.territorialIntelligence.patternsByNeighborhood).length > 0 ? (
@@ -580,93 +585,96 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                   <p className="text-xs text-slate-500">No detectado</p>
                 )}
               </div>
-            </div>
+            </CEIPOLCard>
           </div>
 
           {/* Sub Navigation Tabs */}
           <div className="flex border-b border-slate-800/80 gap-1 overflow-x-auto pb-1">
-            <button
+            <CEIPOLButton
+              variant="ghost"
               onClick={() => setActiveTab('all')}
-              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-t-lg transition-all duration-200 ${
+              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-none rounded-t-lg transition-all duration-200 ${
                 activeTab === 'all' 
                   ? 'border-b-2 border-cyan-400 text-cyan-400 bg-cyan-950/20' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               Todos los Eventos ({allEvents.length})
-            </button>
-            <button
+            </CEIPOLButton>
+            <CEIPOLButton
+              variant="ghost"
               onClick={() => setActiveTab('capa1')}
-              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-t-lg transition-all duration-200 ${
+              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-none rounded-t-lg transition-all duration-200 ${
                 activeTab === 'capa1' 
                   ? 'border-b-2 border-sky-400 text-sky-400 bg-sky-950/20' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               Capa 1: Streaming (Telegram, X, Reddit)
-            </button>
-            <button
+            </CEIPOLButton>
+            <CEIPOLButton
+              variant="ghost"
               onClick={() => setActiveTab('capa2')}
-              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-t-lg transition-all duration-200 ${
+              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-none rounded-t-lg transition-all duration-200 ${
                 activeTab === 'capa2' 
                   ? 'border-b-2 border-red-400 text-red-400 bg-red-950/20' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               Capa 2: Search (YouTube, Dorks, Bing)
-            </button>
-            <button
+            </CEIPOLButton>
+            <CEIPOLButton
+              variant="ghost"
               onClick={() => setActiveTab('capa3')}
-              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-t-lg transition-all duration-200 ${
+              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-none rounded-t-lg transition-all duration-200 ${
                 activeTab === 'capa3' 
                   ? 'border-b-2 border-fuchsia-400 text-fuchsia-400 bg-fuchsia-950/20' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               Capa 3: Social Deep (FB, IG, TikTok)
-            </button>
-            <button
+            </CEIPOLButton>
+            <CEIPOLButton
+              variant="ghost"
               onClick={() => setActiveTab('capa4')}
-              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-t-lg transition-all duration-200 ${
+              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-none rounded-t-lg transition-all duration-200 ${
                 activeTab === 'capa4' 
                   ? 'border-b-2 border-emerald-400 text-emerald-400 bg-emerald-950/20' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               Capa 4: Correlación GEOINT
-            </button>
-            <button
+            </CEIPOLButton>
+            <CEIPOLButton
+              variant="ghost"
               onClick={() => setActiveTab('predictive')}
-              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-t-lg transition-all duration-200 ${
+              className={`px-4 py-2.5 text-xs font-bold whitespace-nowrap rounded-none rounded-t-lg transition-all duration-200 ${
                 activeTab === 'predictive' 
                   ? 'border-b-2 border-indigo-400 text-indigo-400 bg-indigo-950/20' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               Predicciones & Rutas de Riesgo
-            </button>
+            </CEIPOLButton>
           </div>
 
           {/* Main Content Area based on Tab */}
           {activeTab !== 'capa4' && activeTab !== 'predictive' && (
             <div className="space-y-4">
               {/* Risk filters */}
-              <div className="flex flex-wrap items-center gap-2 bg-slate-950/20 p-2.5 rounded-lg border border-slate-800">
+              <CEIPOLCard variant="glass" className="flex flex-wrap items-center gap-2 p-2.5">
                 <span className="text-xs text-slate-400 font-bold px-1">Filtro de Riesgo:</span>
                 {['Todos', 'Crítico', 'Alto', 'Medio', 'Bajo'].map((r) => (
-                  <button
+                  <CEIPOLButton
                     key={r}
+                    variant={selectedRiskFilter === r ? "primary" : "ghost"}
                     onClick={() => setSelectedRiskFilter(r as any)}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
-                      selectedRiskFilter === r
-                        ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-md h-auto"
                   >
                     {r}
-                  </button>
+                  </CEIPOLButton>
                 ))}
-              </div>
+              </CEIPOLCard>
 
               {/* Event Cards Grid */}
               {filteredEvents.length === 0 ? (
@@ -787,18 +795,18 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                               )}
 
                               {onAppendToAnalysis && (
-                                <button
-                                  type="button"
+                                <CEIPOLButton
+                                  variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const textToAppend = `[OSINT TERRITORIAL V2.0 - EVENTO DETECTADO]\nPlataforma: ${evt.platform} | Origen: ${evt.source}\nFecha: ${new Date(evt.timestamp).toLocaleString('es-MX')}\nColonia: ${evt.neighborhood || 'Sin especificar'}\nContenido/Resumen: ${evt.content}\nConceptos Clave: ${evt.keywords.join(', ')}\nNivel de Riesgo: ${evt.risk_level} (${evt.risk_score}%)`;
                                     onAppendToAnalysis(textToAppend);
-                                    alert("✅ El hallazgo de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe.");
+                                    setToast({ type: "success", message: "✅ El hallazgo de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe." });
                                   }}
-                                  className="px-2.5 py-1 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-extrabold text-cyan-400 hover:bg-cyan-900/60 transition-colors flex items-center gap-1 cursor-pointer"
+                                  className="px-2.5 py-1 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-extrabold text-cyan-400 hover:bg-cyan-900/60 transition-colors flex items-center gap-1 cursor-pointer h-auto"
                                 >
                                   📥 Integrar a Hipótesis
-                                </button>
+                                </CEIPOLButton>
                               )}
 
                               <span className="text-[10px] text-slate-500">
@@ -819,7 +827,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
           {activeTab === 'capa4' && (
             <div className="space-y-6">
               {/* Repeating Patterns by Neighborhood */}
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-5">
+              <CEIPOLCard variant="glass" className="p-5">
                 <h3 className="text-sm font-extrabold text-cyan-300 mb-3 flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -864,27 +872,27 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
 
                         {onAppendToAnalysis && (
                           <div className="mt-3 flex justify-end">
-                            <button
-                              type="button"
+                            <CEIPOLButton
+                              variant="secondary"
                               onClick={() => {
                                 const textToAppend = `[OSINT TERRITORIAL V2.0 - PATRÓN DE COLONIA DE RIESGO]\nColonia: ${neighborhood}\nEventos Relacionados: ${pattern.eventCount} incidentes\nRiesgo Promedio: ${pattern.riskScoreAverage}%\nRiesgo Máximo Detectado: ${pattern.highestRisk}\nConceptos recurrentes: ${pattern.predominantKeywords.join(', ')}`;
                                 onAppendToAnalysis(textToAppend);
-                                alert("✅ El patrón de colonia de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe.");
+                                setToast({ type: "success", message: "✅ El patrón de colonia de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe." });
                               }}
-                              className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[9px] font-extrabold text-slate-300 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                              className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[9px] font-extrabold text-slate-300 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer h-auto"
                             >
                               📥 Integrar Patrón a Hipótesis
-                            </button>
+                            </CEIPOLButton>
                           </div>
                         )}
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </CEIPOLCard>
 
               {/* Cross-Platform Correlated Alerts */}
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-5">
+              <CEIPOLCard variant="glass" className="p-5">
                 <h3 className="text-sm font-extrabold text-fuchsia-300 mb-3 flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -918,11 +926,11 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                     ))}
                   </div>
                 )}
-              </div>
+              </CEIPOLCard>
 
               {/* Active Gangs and Aliases */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4">
+                <CEIPOLCard variant="glass" className="p-4">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Pandillas en Expediente</span>
                   <div className="flex flex-wrap gap-1.5">
                     {results.capas.capa4.activeGangs.map(gang => (
@@ -931,9 +939,9 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                       </span>
                     ))}
                   </div>
-                </div>
+                </CEIPOLCard>
 
-                <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4">
+                <CEIPOLCard variant="glass" className="p-4">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Alias Identificados</span>
                   <div className="flex flex-wrap gap-1.5">
                     {results.capas.capa4.activeAliases.map(alias => (
@@ -942,7 +950,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                       </span>
                     ))}
                   </div>
-                </div>
+                </CEIPOLCard>
               </div>
             </div>
           )}
@@ -951,7 +959,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
           {activeTab === 'predictive' && (
             <div className="space-y-6">
               {/* Suggested Tactical Risk Routes */}
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-5">
+              <CEIPOLCard variant="glass" className="p-5">
                 <h3 className="text-sm font-extrabold text-indigo-300 mb-3 flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -978,26 +986,26 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
 
                       {onAppendToAnalysis && (
                         <div className="mt-3 flex justify-end">
-                          <button
-                            type="button"
+                          <CEIPOLButton
+                            variant="secondary"
                             onClick={() => {
                               const textToAppend = `[OSINT TERRITORIAL V2.0 - RUTA TÁCTICA DE RIESGO]\nRuta: ${route.name}\nNivel de Riesgo: ${route.riskLevel}\nDescripción de Alerta: ${route.description}`;
                               onAppendToAnalysis(textToAppend);
-                              alert("✅ La ruta de riesgo de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe.");
+                              setToast({ type: "success", message: "✅ La ruta de riesgo de OSINT Territorial se ha agregado con éxito al cuadro de Hipótesis para su análisis final e integración al informe." });
                             }}
-                            className="px-2.5 py-1 rounded-md bg-indigo-950/85 border border-indigo-500/40 text-[10px] font-extrabold text-indigo-400 hover:text-white hover:bg-indigo-900 transition-colors cursor-pointer"
+                            className="px-2.5 py-1 rounded-md bg-indigo-950/85 border border-indigo-500/40 text-[10px] font-extrabold text-indigo-400 hover:text-white hover:bg-indigo-900 transition-colors cursor-pointer h-auto"
                           >
                             📥 Integrar Ruta a Hipótesis
-                          </button>
+                          </CEIPOLButton>
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-              </div>
+              </CEIPOLCard>
 
               {/* Temporal risk projections */}
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-5">
+              <CEIPOLCard variant="glass" className="p-5">
                 <h3 className="text-sm font-extrabold text-cyan-300 mb-4 flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1035,11 +1043,30 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
                     ))}
                   </div>
                 </div>
-              </div>
+              </CEIPOLCard>
             </div>
           )}
         </div>
       )}
-    </div>
+
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <CEIPOLConfirmModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleConfirmClear}
+        title="Descongelar Expediente"
+        message="¿Deseas descongelar el expediente y limpiar la caché OSINT? Esto permitirá realizar nuevos barridos en vivo."
+        variant="danger"
+        confirmText="Descongelar"
+        cancelText="Conservar Datos"
+      />
+    </CEIPOLCard>
   );
 };

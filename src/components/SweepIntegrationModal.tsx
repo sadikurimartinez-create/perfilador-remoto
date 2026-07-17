@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useProject, SweepIntegrationItem } from "@/context/ProjectContext";
+import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 
 export function SweepIntegrationModal() {
   const { activeSweepForModal, updateSweep, setActiveSweepForModal } = useProject();
@@ -114,12 +115,12 @@ export function SweepIntegrationModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] bg-slate-950/40 backdrop-blur-[2px] pointer-events-auto">
+    <div className="fixed inset-0 z-[300] bg-slate-950/20 backdrop-blur-[1px] pointer-events-auto">
       <div 
         role="dialog" 
         aria-modal="true" 
         style={positionStyle}
-        className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 relative overflow-hidden flex flex-col gap-5 text-slate-100 animate-fadeIn"
+        className="bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-2xl p-5 relative overflow-hidden flex flex-col gap-5 text-slate-100 animate-fadeIn"
       >
         {/* Decorative glowing gradient arches */}
         <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none" />
@@ -192,28 +193,27 @@ export function SweepIntegrationModal() {
 
             {/* Actions Panel */}
             <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
-              <button
-                type="button"
+              <CEIPOLButton
+                variant="secondary"
                 onClick={() => setMode("adjust")}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-all flex items-center justify-center gap-1.5"
+                className="flex-1"
               >
                 ✏️ Ajustar contexto
-              </button>
-              <button
-                type="button"
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="danger"
                 onClick={() => setMode("reject")}
-                className="py-2.5 px-4 rounded-xl border border-red-950 bg-red-950/20 hover:bg-red-900/20 text-xs font-bold text-red-400 transition-all"
               >
                 ❌ Rechazar
-              </button>
-              <button
-                type="button"
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="confirm"
                 onClick={handleConfirm}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-lg shadow-sky-950/40"
+                loading={isSubmitting}
+                className="flex-1"
               >
-                {isSubmitting ? "Procesando..." : activeSweepForModal.type === "Directa" ? "✔ Confirmar integración" : "✔ Integrar a la Hipótesis"}
-              </button>
+                {activeSweepForModal.type === "Directa" ? "✔ Confirmar integración" : "✔ Integrar a la Hipótesis"}
+              </CEIPOLButton>
             </div>
           </div>
         )}
@@ -230,7 +230,7 @@ export function SweepIntegrationModal() {
                 value={contextInput}
                 onChange={e => setContextInput(e.target.value)}
                 rows={5}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-sky-500 transition-all font-sans"
+                className="w-full bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 hover:border-slate-700 transition-all duration-200 font-sans"
                 placeholder="Escriba aquí los comentarios, detalles adicionales o el contexto operacional del analista..."
               />
               <p className="text-[10px] text-slate-500 italic">
@@ -240,21 +240,21 @@ export function SweepIntegrationModal() {
 
             {/* Actions Panel */}
             <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
+              <CEIPOLButton
+                variant="secondary"
                 onClick={() => setMode("view")}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 text-xs font-bold transition-all"
+                className="flex-1"
               >
                 Volver
-              </button>
-              <button
-                type="button"
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="confirm"
                 onClick={handleAdjust}
-                disabled={isSubmitting}
-                className="flex-[2] py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-lg shadow-sky-950/40"
+                loading={isSubmitting}
+                className="flex-[2]"
               >
-                {isSubmitting ? "Guardando..." : "✔ Confirmar Ajuste e Integrar"}
-              </button>
+                ✔ Confirmar Ajuste e Integrar
+              </CEIPOLButton>
             </div>
           </div>
         )}
@@ -278,28 +278,29 @@ export function SweepIntegrationModal() {
                 value={justificationInput}
                 onChange={e => setJustificationInput(e.target.value)}
                 rows={4}
-                className="w-full bg-slate-950 border border-red-900/30 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-red-500 transition-all font-sans"
+                className="w-full bg-slate-950/60 border border-red-900/40 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/30 hover:border-red-800/40 transition-all duration-200 font-sans"
                 placeholder="Ejemplo: Inconsistencia con datos GPS de campo, los datos de las placas vehiculares corresponden a otro sector..."
               />
             </div>
 
             {/* Actions Panel */}
             <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
+              <CEIPOLButton
+                variant="secondary"
                 onClick={() => setMode("view")}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 text-xs font-bold transition-all"
+                className="flex-1"
               >
                 Volver
-              </button>
-              <button
-                type="button"
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="danger"
                 onClick={handleReject}
-                disabled={isSubmitting || !justificationInput.trim()}
-                className="flex-[2] py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-lg shadow-red-950/40"
+                loading={isSubmitting}
+                disabled={!justificationInput.trim()}
+                className="flex-[2]"
               >
-                {isSubmitting ? "Rechazando..." : "❌ Descartar y Registrar Justificación"}
-              </button>
+                ❌ Descartar y Registrar Justificación
+              </CEIPOLButton>
             </div>
           </div>
         )}

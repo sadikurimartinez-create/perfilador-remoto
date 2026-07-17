@@ -3,6 +3,9 @@
 import { useRef, useState, useEffect } from "react";
 import exifr from "exifr";
 import { useProject } from "@/context/ProjectContext";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
+import { CEIPOLToast } from "./ui/CEIPOLToast";
 
 function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
@@ -134,6 +137,7 @@ export function CaptureAndAddPhoto() {
   const hasMinimumPhotos =
     currentPhotos >= requiredPhotos;
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'warning' | 'error' | 'info'; message: string } | null>(null);
   const [isFetchingGPS, setIsFetchingGPS] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -403,7 +407,7 @@ export function CaptureAndAddPhoto() {
       for (const file of files) {
         await uploadDocument(file, "PENDIENTE DE CONTEXTUALIZAR EN GABINETE");
       }
-      alert("Evidencia in-situ capturada.\nRecuerde contextualizarla en la pestaña de Evidencias Adicionales (Gabinete).");
+      setToast({ type: "success", message: "Evidencia in-situ capturada. Recuerde contextualizarla en la pestaña de Evidencias Adicionales (Gabinete)." });
     } catch (err: any) {
       setError(err.message || "Error al subir evidencia complementaria.");
     } finally {
@@ -415,7 +419,7 @@ export function CaptureAndAddPhoto() {
   <>
 
     {project && !hasMinimumPhotos && (
-      <div className="mb-4 rounded-lg border border-amber-500 bg-amber-950/40 p-3 text-sm text-amber-200">
+      <CEIPOLCard variant="alert" className="mb-4 border-l-4 border-l-amber-500 bg-amber-950/20 p-4 rounded-xl text-sm text-amber-200">
         
         <div className="font-semibold mb-1">
           Validación de geometría operacional
@@ -443,10 +447,10 @@ export function CaptureAndAddPhoto() {
           </div>
         )}
 
-      </div>
+      </CEIPOLCard>
     )}
 
-    <section className="card p-4 md:p-6 space-y-4 col-span-full w-full">
+    <CEIPOLCard variant="glass" className="p-4 md:p-6 space-y-4 col-span-full w-full border border-slate-900 shadow-2xl relative overflow-hidden">
       {isFetchingGPS && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
           <div className="flex flex-col items-center bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
@@ -472,44 +476,55 @@ export function CaptureAndAddPhoto() {
 
       {/* MODAL / SECCIÓN DE INGRESO MANUAL */}
       {manualQueue.length > 0 && (
-        <div className="mt-4 p-4 border border-sky-500 bg-slate-800 rounded-lg space-y-3">
-          <p className="text-sm text-sky-300 font-semibold">
-            Acción Requerida: Ubicación Manual ({manualQueue.length} pendiente(s))
+        <CEIPOLCard variant="glass" className="mt-4 p-5 border border-sky-500/50 bg-slate-950/60 rounded-xl space-y-4">
+          <p className="text-sm text-sky-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+            🛰️ Acción Requerida: Ubicación Manual ({manualQueue.length} pendiente{manualQueue.length > 1 ? "s" : ""})
           </p>
-          <p className="text-xs text-slate-400">
-            La imagen &quot;{manualQueue[0].file.name}&quot; no tiene GPS. Ingrese la latitud y longitud.
+          <p className="text-xs text-slate-400 leading-relaxed">
+            La imagen <strong className="text-slate-200">&quot;{manualQueue[0].file.name}&quot;</strong> no contiene metadatos GPS válidos. Por favor, especifique las coordenadas geográficas de captura.
           </p>
-          <div className="flex flex-col gap-3">
-            <input type="number" placeholder="Latitud (ej. 21.8853)" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
-            <input type="number" placeholder="Longitud (ej. -102.2916)" value={manualCoords.lng} onChange={(e) => setManualCoords({ ...manualCoords, lng: e.target.value })} className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-sm" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Latitud</label>
+              <input type="number" placeholder="ej. 21.8853" value={manualCoords.lat} onChange={(e) => setManualCoords({ ...manualCoords, lat: e.target.value })} className="w-full p-2.5 bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl text-sm text-slate-100 outline-none transition-all" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Longitud</label>
+              <input type="number" placeholder="ej. -102.2916" value={manualCoords.lng} onChange={(e) => setManualCoords({ ...manualCoords, lng: e.target.value })} className="w-full p-2.5 bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl text-sm text-slate-100 outline-none transition-all" />
+            </div>
           </div>
           <div className="flex flex-col gap-3 mt-2">
-          <button 
-            onClick={async () => {
-              setError("Buscando señal GPS...");
-              try {
-                const loc = await getFallbackLocation();
-                setManualCoords({ lat: loc.lat.toString(), lng: loc.lng.toString() });
-                setError(null);
-              } catch (err: any) {
-                setError(err.message);
-              }
-            }}
-            className="w-full bg-emerald-600 text-white py-2 rounded text-sm font-semibold transition"
-          >
-            📍 Obtener Mi Ubicación Actual
-          </button>
-          <div className="flex gap-3">
-            <button onClick={handleManualSubmit} className="flex-1 bg-sky-600 text-white py-2 rounded text-sm font-semibold">Guardar y Subir</button>
-            <button onClick={() => { setManualQueue([]); setError(null); setManualCoords({ lat: "", lng: "" }); }} className="flex-1 bg-slate-700 text-white py-2 rounded text-sm font-semibold">Cancelar</button>
+            <CEIPOLButton 
+              onClick={async () => {
+                setError("Buscando señal GPS...");
+                try {
+                  const loc = await getFallbackLocation();
+                  setManualCoords({ lat: loc.lat.toString(), lng: loc.lng.toString() });
+                  setError(null);
+                } catch (err: any) {
+                  setError(err.message);
+                }
+              }}
+              variant="confirm"
+              className="w-full py-2.5 font-bold shadow-lg"
+            >
+              📍 Obtener Mi Ubicación Actual
+            </CEIPOLButton>
+            <div className="flex gap-3">
+              <CEIPOLButton onClick={handleManualSubmit} variant="primary" className="flex-1 py-2.5 font-bold shadow-lg">
+                Guardar y Subir
+              </CEIPOLButton>
+              <CEIPOLButton onClick={() => { setManualQueue([]); setError(null); setManualCoords({ lat: "", lng: "" }); }} variant="secondary" className="flex-1 py-2.5 font-bold">
+                Cancelar
+              </CEIPOLButton>
+            </div>
           </div>
-          </div>
-        </div>
+        </CEIPOLCard>
       )}
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row gap-4">
         <label
-          className={`w-full text-center rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 px-3 py-3 text-base font-semibold hover:bg-emerald-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+          className={`flex-1 text-center rounded-xl border border-emerald-500/30 bg-emerald-950/20 text-emerald-300 px-4 py-3.5 text-sm font-extrabold shadow-lg backdrop-blur-sm tracking-wide transition-all duration-300 hover:bg-emerald-500/10 hover:border-emerald-500/65 flex items-center justify-center gap-2 cursor-pointer ${!isProjectReady ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
         >
           📷 Tomar Foto In-Situ (Cámara)
           <input
@@ -522,9 +537,9 @@ export function CaptureAndAddPhoto() {
         </label>
 
         <label
-          className={`w-full text-center rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 px-3 py-3 text-base font-semibold hover:bg-sky-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+          className={`flex-1 text-center rounded-xl border border-sky-500/30 bg-sky-950/20 text-sky-300 px-4 py-3.5 text-sm font-extrabold shadow-lg backdrop-blur-sm tracking-wide transition-all duration-300 hover:bg-sky-500/10 hover:border-sky-500/65 flex items-center justify-center gap-2 cursor-pointer ${!isProjectReady ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
         >
-          📸 Seleccionar fotos del Carrete / Galería
+          📸 Seleccionar del Carrete / Galería
           <input
             type="file"
             accept="image/*"
@@ -536,7 +551,7 @@ export function CaptureAndAddPhoto() {
       </div>
 
       {/* FASE: EVIDENCIA COMPLEMENTARIA IN-SITU */}
-      <div className="mt-8 border-t border-slate-700 pt-6 space-y-4">
+      <div className="mt-8 border-t border-slate-800 pt-6 space-y-4">
         <header className="space-y-1">
           <h3 className="text-lg font-semibold text-slate-100">
             Evidencia Complementaria (In-situ)
@@ -545,9 +560,9 @@ export function CaptureAndAddPhoto() {
             Tome fotografías adicionales en calidad de evidencias (fuera de la geometría del perfil). Podrá contextualizarlas y auditarlas con IA posteriormente en el trabajo de Gabinete.
           </p>
         </header>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           <label
-            className={`w-full text-center rounded-lg border border-purple-600 bg-purple-900/30 text-purple-100 px-3 py-3 text-base font-semibold hover:bg-purple-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady || isUploadingEvidencia ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+            className={`flex-1 text-center rounded-xl border border-purple-500/30 bg-purple-950/20 text-purple-300 px-4 py-3.5 text-sm font-extrabold shadow-lg backdrop-blur-sm tracking-wide transition-all duration-300 hover:bg-purple-500/10 hover:border-purple-500/65 flex items-center justify-center gap-2 cursor-pointer ${!isProjectReady || isUploadingEvidencia ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
           >
             {isUploadingEvidencia ? "Guardando Evidencia..." : "📸 Capturar Evidencia (Cámara)"}
             <input
@@ -559,7 +574,7 @@ export function CaptureAndAddPhoto() {
             />
           </label>
           <label
-            className={`w-full text-center rounded-lg border border-indigo-600 bg-indigo-900/30 text-indigo-100 px-3 py-3 text-base font-semibold hover:bg-indigo-800/50 shadow-md transition-colors cursor-pointer ${!isProjectReady || isUploadingEvidencia ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+            className={`flex-1 text-center rounded-xl border border-indigo-500/30 bg-indigo-950/20 text-indigo-300 px-4 py-3.5 text-sm font-extrabold shadow-lg backdrop-blur-sm tracking-wide transition-all duration-300 hover:bg-indigo-500/10 hover:border-indigo-500/65 flex items-center justify-center gap-2 cursor-pointer ${!isProjectReady || isUploadingEvidencia ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
           >
             🖼️ Subir Evidencia (Galería)
             <input
@@ -574,7 +589,15 @@ export function CaptureAndAddPhoto() {
       </div>
 
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-    </section>
+
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </CEIPOLCard>
   </>
   );
 }

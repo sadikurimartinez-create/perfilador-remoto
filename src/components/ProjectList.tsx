@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
 
 type ProjectWithCount = {
   id: string;
@@ -670,31 +671,29 @@ export function ProjectList() {
                 e.target.value = "";
               }}
             />
-            <button
+            <CEIPOLButton
               id="btn-importar"
-              type="button"
+              variant="secondary"
               onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-sm hover:bg-slate-700 transition-colors shadow-md"
             >
               📥 Importar desde Campo
-            </button>
+            </CEIPOLButton>
             {isAdmin && (
-              <button
-                type="button"
+              <CEIPOLButton
+                variant="primary"
                 onClick={handleExportFineTuningDataset}
-                className="px-4 py-2 rounded-lg border border-purple-600 bg-purple-900/30 text-purple-200 text-sm font-semibold hover:bg-purple-800/50 transition-colors shadow-md"
+                className="from-purple-900/50 to-indigo-900/50 hover:from-purple-800/50 hover:to-indigo-800/50 border-purple-800/20"
                 title="Exportar dictámenes validados para entrenar a Vertex AI"
               >
                 🧠 Exportar Dataset ML
-              </button>
+              </CEIPOLButton>
             )}
-            <button
-              type="button"
+            <CEIPOLButton
+              variant="primary"
               onClick={handleNuevoProyecto}
-              className="btn-primary text-sm px-4 py-2"
             >
               Nuevo Proyecto
-            </button>
+            </CEIPOLButton>
           </div>
           </div>
 
@@ -705,13 +704,13 @@ export function ProjectList() {
             >
               <p className="text-sm">No se encontraron expedientes con esos criterios.</p>
               <p className="text-xs mt-1">Cree un proyecto nuevo o modifique su búsqueda.</p>
-              <button
-                type="button"
+              <CEIPOLButton
+                variant="ghost"
                 onClick={handleNuevoProyecto}
-                className="mt-4 text-sky-400 hover:text-sky-300 text-sm font-medium"
+                className="mt-4 text-cyan-400 hover:text-cyan-300 mx-auto"
               >
                 Crear primer proyecto
-              </button>
+              </CEIPOLButton>
             </CEIPOLCard>
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -767,71 +766,77 @@ export function ProjectList() {
 
                       <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
                         {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => void exportProjectData(p.id)}
                           title="Descargar archivo para enviarlo a Gabinete"
-                          className="p-2 rounded text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-900/30 transition-colors border border-transparent hover:border-amber-700/50"
+                          className="!p-2 text-xs text-amber-400 hover:text-amber-300"
                         >
                           📤 Exportar
-                        </button>
+                        </CEIPOLButton>
                         )}
                         {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => void handleDeleteProject(p.id)}
-                          className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
+                          className="!p-2 text-xs text-red-400 hover:text-red-300"
                         >
                           🗑️ Eliminar
-                        </button>
+                        </CEIPOLButton>
                         )}
                         {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleRenameProject(p)}
                           title="Cambiar el nombre del expediente"
-                          className="p-2 rounded text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-900/30 transition-colors border border-transparent hover:border-sky-700/50"
+                          className="!p-2 text-xs text-cyan-400 hover:text-cyan-300"
                         >
                           ✏️ Renombrar
-                        </button>
+                        </CEIPOLButton>
                         )}
                         {(!p.estado || p.estado === "ABIERTO" || p.estado === "DEVUELTO") && (
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleArchiveProject(p)}
                           title="Archivar este expediente"
-                          className="p-2 rounded text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-900/30 transition-colors border border-transparent hover:border-amber-700/50"
+                          className="!p-2 text-xs text-amber-500 hover:text-amber-400"
                         >
                           📦 Archivar
-                        </button>
+                        </CEIPOLButton>
                         )}
                         {p.estado === "ARCHIVADO" && (
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleReactivateProject(p)}
                           title="Reactivar este expediente archivado"
-                          className="p-2 rounded text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30 transition-colors border border-transparent hover:border-emerald-700/50"
+                          className="!p-2 text-xs text-emerald-400 hover:text-emerald-300"
                         >
                           🔄 Reactivar
-                        </button>
+                        </CEIPOLButton>
                         )}
                         {isAdmin && (
-                          <button
-                            type="button"
+                          <CEIPOLButton
+                            variant="ghost"
+                            size="sm"
                             onClick={() => void handleReassignProject(p.id, p.createdBy)}
-                            className="p-2 rounded text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-900/30 transition-colors"
+                            className="!p-2 text-xs text-cyan-400 hover:text-cyan-300"
                             title="Reasignar expediente a otro analista"
                           >
                             🔄 Reasignar
-                          </button>
+                          </CEIPOLButton>
                         )}
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant={p.estado === "EN REVISIÓN" || p.estado === "CERRADO" ? "secondary" : "primary"}
                           onClick={() => handleOpenProject(p)}
-                          className={`flex-1 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-bold text-white transition-colors shadow-md ${p.estado === "EN REVISIÓN" || p.estado === "CERRADO" ? "bg-slate-700 hover:bg-slate-600" : "bg-sky-600 hover:bg-sky-500"}`}
+                          className="flex-1 text-sm py-2"
                         >
                           {p.estado === "EN REVISIÓN" ? "En Revisión" : p.estado === "CERRADO" ? "Validado" : "Abrir Proyecto"}
-                        </button>
+                        </CEIPOLButton>
                       </div>
                     </div>
                     <div className="bg-slate-900/80 p-4 border-t border-slate-800/80">
@@ -865,22 +870,24 @@ export function ProjectList() {
                                   : a.content}
                               </p>
                               <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
+                                <CEIPOLButton
+                                  variant="secondary"
+                                  size="sm"
                                   onClick={() => {
                                     router.push(`/project/${p.id}`);
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-700 transition-colors"
+                                  className="!text-[10px] !py-1 !px-2.5"
                                 >
                                   Vista previa
-                                </button>
-                                <button
-                                  type="button"
+                                </CEIPOLButton>
+                                <CEIPOLButton
+                                  variant="primary"
+                                  size="sm"
                                   onClick={() => void handleOpenPreview(p, a)}
-                                  className="inline-flex items-center gap-1 rounded-md bg-blue-900/40 text-blue-300 hover:bg-blue-800/50 border border-blue-700/50 px-3 py-1 text-[11px] font-semibold transition-colors"
+                                  className="!text-[10px] !py-1 !px-2.5 from-blue-900/40 to-indigo-900/40 border border-blue-700/30 text-blue-300 hover:text-white"
                                 >
                                   👁️ Vista Previa y Evidencia
-                                </button>
+                                </CEIPOLButton>
                               </div>
                             </div>
                           ))}
@@ -896,23 +903,25 @@ export function ProjectList() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 mt-8 pb-4">
-              <button
+              <CEIPOLButton
+                variant="secondary"
+                size="sm"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-700 hover:text-white text-sm font-semibold transition-colors shadow-sm"
               >
                 ← Anterior
-              </button>
+              </CEIPOLButton>
               <span className="text-sm text-slate-400 font-medium">
                 Página <span className="text-slate-200">{currentPage}</span> de <span className="text-slate-200">{totalPages}</span>
               </span>
-              <button
+              <CEIPOLButton
+                variant="secondary"
+                size="sm"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/80 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-700 hover:text-white text-sm font-semibold transition-colors shadow-sm"
               >
                 Siguiente →
-              </button>
+              </CEIPOLButton>
             </div>
           )}
         </>
@@ -1089,11 +1098,11 @@ export function ProjectList() {
 
       {renameModalOpen && projectToRename && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
-            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 className="text-lg font-bold text-slate-100 mb-2 flex items-center gap-2">
               ✏️ Modificar Nombre de Expediente
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-400 mb-4 font-sans leading-relaxed">
               Cambia el nombre de identificación de este expediente. Se guardará de manera permanente en los registros.
             </p>
             <div className="space-y-4 mb-6">
@@ -1103,29 +1112,31 @@ export function ProjectList() {
                   type="text"
                   value={renameInput}
                   onChange={(e) => setRenameInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-sky-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none"
+                  className="w-full bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl p-2.5 text-sm text-slate-100 outline-none transition-all"
                   placeholder="Ej. Aguascalientes Operativo Norte"
                 />
               </div>
             </div>
             <div className="flex justify-end gap-3">
-              <button
+              <CEIPOLButton
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setRenameModalOpen(false);
                   setProjectToRename(null);
                   setRenameInput("");
                 }}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 Cancelar
-              </button>
-              <button
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="confirm"
+                size="sm"
                 onClick={confirmRenameProject}
                 disabled={!renameInput.trim()}
-                className="px-4 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
               >
                 Guardar Cambios
-              </button>
+              </CEIPOLButton>
             </div>
           </div>
         </div>
@@ -1133,11 +1144,11 @@ export function ProjectList() {
 
       {archiveModalOpen && projectToArchive && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
             <h3 className="text-lg font-bold text-amber-500 mb-2 flex items-center gap-2">
               📦 Archivar Expediente
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-400 mb-4 font-sans leading-relaxed">
               ¿Estás seguro de que deseas archivar este expediente? Esto cambiará su estado a ARCHIVADO.
             </p>
             <div className="space-y-4 mb-6">
@@ -1147,29 +1158,31 @@ export function ProjectList() {
                   value={archiveReason}
                   onChange={(e) => setArchiveReason(e.target.value)}
                   rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-amber-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none resize-none"
+                  className="w-full bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl p-2.5 text-sm text-slate-100 outline-none resize-none transition-all"
                   placeholder="Escribe el motivo por el cual archivas este expediente..."
                 />
               </div>
             </div>
             <div className="flex justify-end gap-3">
-              <button
+              <CEIPOLButton
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setArchiveModalOpen(false);
                   setProjectToArchive(null);
                   setArchiveReason("");
                 }}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 Cancelar
-              </button>
-              <button
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="warning"
+                size="sm"
                 onClick={confirmArchiveProject}
                 disabled={!archiveReason.trim()}
-                className="px-4 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
               >
                 Archivar Expediente
-              </button>
+              </CEIPOLButton>
             </div>
           </div>
         </div>
@@ -1177,11 +1190,11 @@ export function ProjectList() {
 
       {reactivateModalOpen && projectToReactivate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
             <h3 className="text-lg font-bold text-emerald-500 mb-2 flex items-center gap-2">
               🔄 Reactivar Expediente
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-400 mb-4 font-sans leading-relaxed">
               ¿Deseas reactivar este expediente archivado? Volverá a estar ABIERTO para edición.
             </p>
             <div className="space-y-4 mb-6">
@@ -1191,29 +1204,31 @@ export function ProjectList() {
                   value={reactivateReason}
                   onChange={(e) => setReactivateReason(e.target.value)}
                   rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none resize-none"
+                  className="w-full bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl p-2.5 text-sm text-slate-100 outline-none resize-none transition-all"
                   placeholder="Escribe el motivo de la reactivación..."
                 />
               </div>
             </div>
             <div className="flex justify-end gap-3">
-              <button
+              <CEIPOLButton
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setReactivateModalOpen(false);
                   setProjectToReactivate(null);
                   setReactivateReason("");
                 }}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 Cancelar
-              </button>
-              <button
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="confirm"
+                size="sm"
                 onClick={confirmReactivateProject}
                 disabled={!reactivateReason.trim()}
-                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
               >
                 Reactivar Expediente
-              </button>
+              </CEIPOLButton>
             </div>
           </div>
         </div>
@@ -1221,11 +1236,11 @@ export function ProjectList() {
 
       {deleteModalOpen && projectToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-red-900/30 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
             <h3 className="text-lg font-bold text-red-500 mb-2 flex items-center gap-2">
               🗑️ Enviar Expediente a Papelera
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-400 mb-4 font-sans leading-relaxed">
               ¿Estás seguro de que deseas eliminar este expediente? Se moverá de manera lógica a la Papelera de Reciclaje de conformidad con la cadena de custodia digital y gobernanza de la información.
             </p>
             <div className="space-y-4 mb-6">
@@ -1234,7 +1249,7 @@ export function ProjectList() {
                 <select
                   value={deleteReason}
                   onChange={(e) => setDeleteReason(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-red-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none mb-3"
+                  className="w-full bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl p-2.5 text-sm text-slate-100 outline-none mb-3 cursor-pointer transition-all"
                 >
                   <option value="">-- Selecciona un motivo --</option>
                   <option value="Error en captura de datos">Error en captura de datos</option>
@@ -1248,31 +1263,33 @@ export function ProjectList() {
                     value={deleteReasonCustom}
                     onChange={(e) => setDeleteReasonCustom(e.target.value)}
                     rows={3}
-                    className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-red-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none resize-none"
+                    className="w-full bg-slate-950 border border-slate-850 hover:border-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 rounded-xl p-2.5 text-sm text-slate-100 outline-none resize-none transition-all"
                     placeholder="Describe detalladamente el motivo institucional para eliminar este expediente..."
                   />
                 )}
               </div>
             </div>
             <div className="flex justify-end gap-3">
-              <button
+              <CEIPOLButton
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setDeleteModalOpen(false);
                   setProjectToDelete(null);
                   setDeleteReason("");
                   setDeleteReasonCustom("");
                 }}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 Cancelar
-              </button>
-              <button
+              </CEIPOLButton>
+              <CEIPOLButton
+                variant="danger"
+                size="sm"
                 onClick={confirmDeleteProject}
                 disabled={!deleteReason || (deleteReason === "Otro" && !deleteReasonCustom.trim())}
-                className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-500 disabled:bg-slate-800 text-white rounded-lg shadow-lg transition-colors"
               >
                 Enviar a Papelera
-              </button>
+              </CEIPOLButton>
             </div>
           </div>
         </div>

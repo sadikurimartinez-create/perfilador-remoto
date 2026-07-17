@@ -14,6 +14,9 @@ import {
 } from 'recharts';
 
 import { useAuth } from "@/context/AuthContext";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
+import { CEIPOLToast } from "./ui/CEIPOLToast";
 
 import { calculateExecutiveMetrics }
   from '../utils/executiveMetrics';
@@ -30,6 +33,7 @@ const ExecutiveDashboard: React.FC<Props> = ({
   const isSuperAdmin = (user as any)?.role === "SUPERADMIN" || (user as any)?.role === "SUPER_ADMIN";
 
   const [wmsTelemetry, setWmsTelemetry] = useState<any>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'warning' | 'error' | 'info'; message: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/providers/telemetry')
@@ -69,20 +73,21 @@ const ExecutiveDashboard: React.FC<Props> = ({
 
   return (
 
-    <div className="bg-slate-950 border border-slate-700 rounded-xl p-5 mt-5">
+    <div className="bg-slate-950/70 border border-slate-800/80 backdrop-blur-md rounded-2xl p-6 shadow-2xl relative mt-5 overflow-hidden">
 
       <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
         <h1 className="text-2xl font-bold text-cyan-300">
           Consola Ejecutiva CEIPOL
         </h1>
         {isSuperAdmin && (
-          <button
+          <CEIPOLButton
             type="button"
-            onClick={() => alert("Funcionalidad en desarrollo: Conexiones para el entrenamiento (Fine-Tuning) y exportación de Dataset ML.")}
-            className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors border border-purple-500"
+            variant="primary"
+            onClick={() => setToast({ type: "info", message: "Funcionalidad en desarrollo: Conexiones para el entrenamiento (Fine-Tuning) y exportación de Dataset ML." })}
+            className="shadow-lg hover:shadow-purple-500/10 transition-all font-bold"
           >
             🧠 Entrenamiento de IA (ML)
-          </button>
+          </CEIPOLButton>
         )}
       </div>
 
@@ -142,140 +147,96 @@ const ExecutiveDashboard: React.FC<Props> = ({
         </div>
       )}
 
-      <div className="flex flex-col gap-4 mb-6">
-
-        <div className="bg-slate-800 rounded-lg p-4">
-
-          <p className="text-xs text-slate-400">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <CEIPOLCard variant="glass" className="p-4 shadow-md flex flex-col gap-1.5 border border-slate-900/40">
+          <p className="text-[10px] uppercase font-black tracking-wider text-slate-500">
             Proyectos Activos
           </p>
-
-          <p className="text-3xl font-bold text-white">
+          <p className="text-3xl font-extrabold text-white mt-1">
             {metrics.totalProjects}
           </p>
+        </CEIPOLCard>
 
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-
-          <p className="text-xs text-slate-400">
+        <CEIPOLCard variant="glass" className="p-4 shadow-md flex flex-col gap-1.5 border border-slate-900/40">
+          <p className="text-[10px] uppercase font-black tracking-wider text-slate-500">
             Hallazgos Totales
           </p>
-
-          <p className="text-3xl font-bold text-fuchsia-300">
+          <p className="text-3xl font-extrabold text-fuchsia-400 mt-1">
             {metrics.totalFindings}
           </p>
+        </CEIPOLCard>
 
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-
-          <p className="text-xs text-slate-400">
+        <CEIPOLCard variant="glass" className="p-4 shadow-md flex flex-col gap-1.5 border border-slate-900/40">
+          <p className="text-[10px] uppercase font-black tracking-wider text-slate-500">
             Riesgo Alto
           </p>
-
-          <p className="text-3xl font-bold text-red-400">
+          <p className="text-3xl font-extrabold text-red-500 mt-1">
             {metrics.highRisk}
           </p>
+        </CEIPOLCard>
 
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-
-          <p className="text-xs text-slate-400">
+        <CEIPOLCard variant="glass" className="p-4 shadow-md flex flex-col gap-1.5 border border-slate-900/40">
+          <p className="text-[10px] uppercase font-black tracking-wider text-slate-500">
             Riesgo Promedio
           </p>
-
-          <p className="text-3xl font-bold text-amber-300">
+          <p className="text-3xl font-extrabold text-amber-400 mt-1">
             {metrics.averageRisk}
           </p>
-
-        </div>
-
+        </CEIPOLCard>
       </div>
 
-      <div className="flex flex-col gap-6">
-
-        <div className="bg-slate-800 rounded-lg p-4 h-96">
-
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CEIPOLCard variant="glass" className="p-5 h-[340px] flex flex-col border border-slate-900">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-4">
             Distribución Institucional
           </h2>
+          <div className="flex-1 min-h-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={100}
+                  label
+                >
+                  <Cell fill="#ef4444" />
+                  <Cell fill="#f59e0b" />
+                  <Cell fill="#10b981" />
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </CEIPOLCard>
 
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-          >
-
-            <PieChart>
-
-              <Pie
-                data={pieData}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={120}
-                label
-              >
-
-                <Cell fill="#ef4444" />
-                <Cell fill="#f59e0b" />
-                <Cell fill="#10b981" />
-
-              </Pie>
-
-              <Tooltip />
-
-            </PieChart>
-
-          </ResponsiveContainer>
-
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4 h-96">
-
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">
+        <CEIPOLCard variant="glass" className="p-5 h-[340px] flex flex-col border border-slate-900">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-4">
             Comparativa de Riesgos
           </h2>
-
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-          >
-
-            <BarChart data={barData}>
-
-              <CartesianGrid
-                strokeDasharray="3 3"
-              />
-
-              <XAxis dataKey="categoria" />
-
-              <YAxis />
-
-              <Tooltip />
-
-              <Bar
-                dataKey="Alto"
-                fill="#ef4444"
-              />
-
-              <Bar
-                dataKey="Medio"
-                fill="#f59e0b"
-              />
-
-              <Bar
-                dataKey="Bajo"
-                fill="#10b981"
-              />
-
-            </BarChart>
-
-          </ResponsiveContainer>
-
-        </div>
-
+          <div className="flex-1 min-h-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={barData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="categoria" stroke="#64748b" fontSize={11} />
+                <YAxis stroke="#64748b" fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="Alto" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Medio" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Bajo" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CEIPOLCard>
       </div>
+
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
 
     </div>
   );

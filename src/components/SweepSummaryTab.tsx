@@ -2,11 +2,15 @@
 
 import React, { useState } from "react";
 import { useProject, SweepIntegrationItem } from "@/context/ProjectContext";
+import { CEIPOLToast } from "./ui/CEIPOLToast";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
 
 export function SweepSummaryTab() {
   const { project, updateProjectDetails, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
   const [isSavingHypothesis, setIsSavingHypothesis] = useState(false);
   const [hypothesisText, setHypothesisText] = useState(project?.hipotesis || "");
+  const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
 
   // Sync hypothesis text with context if changed externally
   React.useEffect(() => {
@@ -29,9 +33,9 @@ export function SweepSummaryTab() {
     setIsSavingHypothesis(true);
     try {
       await updateProjectDetails({ hipotesis: hypothesisText });
-      alert("✅ Hipótesis consolidada guardada exitosamente.");
+      setToast({ type: "success", message: "✅ Hipótesis consolidada guardada exitosamente." });
     } catch (err: any) {
-      alert("❌ Error al guardar la hipótesis: " + err.message);
+      setToast({ type: "error", message: "❌ Error al guardar la hipótesis: " + err.message });
     } finally {
       setIsSavingHypothesis(false);
     }
@@ -64,8 +68,7 @@ export function SweepSummaryTab() {
       {/* Overview Dashboard Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Progress Gauge */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col items-center text-center justify-between min-h-[190px] relative overflow-hidden shadow-xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none" />
+        <CEIPOLCard variant="glass" className="p-6 flex flex-col items-center text-center justify-between min-h-[190px] shadow-xl">
           <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Completitud del Análisis</h4>
           
           <div className="relative flex items-center justify-center h-24 w-24">
@@ -100,11 +103,10 @@ export function SweepSummaryTab() {
               ? "No se han ejecutado barridos de información." 
               : `${completedSweeps} de ${totalSweeps} barridos completados.`}
           </p>
-        </div>
+        </CEIPOLCard>
 
         {/* Pending Summary */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between min-h-[190px] relative overflow-hidden shadow-xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-[40px] pointer-events-none" />
+        <CEIPOLCard variant="glass" className="p-6 flex flex-col justify-between min-h-[190px] shadow-xl">
           <div>
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Elementos Pendientes</h4>
             {pendingSweeps > 0 ? (
@@ -137,11 +139,10 @@ export function SweepSummaryTab() {
               </div>
             )}
           </div>
-        </div>
+        </CEIPOLCard>
 
         {/* Integration Rules Check */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between min-h-[190px] relative overflow-hidden shadow-xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none" />
+        <CEIPOLCard variant="glass" className="p-6 flex flex-col justify-between min-h-[190px] shadow-xl">
           <div>
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Gobernanza Criminológica</h4>
             <div className="space-y-1.5 text-xs text-slate-300 font-medium">
@@ -162,11 +163,11 @@ export function SweepSummaryTab() {
           <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
             Normativa Operativa CEIPOL v3.0
           </div>
-        </div>
+        </CEIPOLCard>
       </div>
 
       {/* Hypothesis Viewer & Editor */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+      <CEIPOLCard variant="glass" className="p-6 space-y-4 shadow-xl">
         <header className="flex justify-between items-center border-b border-slate-800 pb-3">
           <div className="space-y-0.5">
             <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">
@@ -177,14 +178,14 @@ export function SweepSummaryTab() {
             </p>
           </div>
           {!isReadOnly && (
-            <button
-              type="button"
+            <CEIPOLButton
+              variant="confirm"
               onClick={handleSaveHypothesis}
-              disabled={isSavingHypothesis}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 px-3.5 py-1.5 text-xs font-black uppercase tracking-wide transition-all shadow-md"
+              loading={isSavingHypothesis}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-black"
             >
-              {isSavingHypothesis ? "Guardando..." : "💾 Guardar Hipótesis"}
-            </button>
+              💾 Guardar Hipótesis
+            </CEIPOLButton>
           )}
         </header>
 
@@ -197,10 +198,10 @@ export function SweepSummaryTab() {
           className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed outline-none focus:border-sky-500/50 transition-all resize-y select-all shadow-inner"
           placeholder="Escriba o consolide la hipótesis del expediente..."
         />
-      </div>
+      </CEIPOLCard>
 
       {/* Sweeps List */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+      <CEIPOLCard variant="glass" className="p-6 space-y-4 shadow-xl">
         <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider border-b border-slate-800 pb-3">
           Historial de Barridos Realizados ({totalSweeps})
         </h3>
@@ -259,13 +260,13 @@ export function SweepSummaryTab() {
                     </td>
                     {!isReadOnly && (
                       <td className="p-3 text-right">
-                        <button
-                          type="button"
+                        <CEIPOLButton
+                          variant="secondary"
                           onClick={() => setActiveSweepForModal(s)}
-                          className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition-all border border-slate-750"
+                          className="px-3 py-1 text-[10px] font-bold"
                         >
                           ✏️ Modificar
-                        </button>
+                        </CEIPOLButton>
                       </td>
                     )}
                   </tr>
@@ -274,7 +275,15 @@ export function SweepSummaryTab() {
             </table>
           </div>
         )}
-      </div>
+      </CEIPOLCard>
+
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

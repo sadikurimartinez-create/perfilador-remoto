@@ -28,3 +28,7 @@ cloudflared.exe
 *.pdf
 *.BAK
 
+# Local scratch files, builds and dev envs
+scratch/
+env.local
+tsconfig.tsbuildinfo

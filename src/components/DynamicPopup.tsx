@@ -114,7 +114,7 @@ export const DynamicPopup: React.FC<DynamicPopupProps> = ({
     <>
       {/* Backdrop for click outside */}
       <div 
-        className="fixed inset-0 z-40 bg-black/10 transition-opacity" 
+        className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[1px] transition-opacity duration-200" 
         onClick={onClose}
       />
       <div
@@ -124,7 +124,7 @@ export const DynamicPopup: React.FC<DynamicPopupProps> = ({
           top: `${coords.y}px`,
           left: `${coords.x}px`,
         }}
-        className={`z-50 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-4 text-slate-100 max-w-sm sm:max-w-md w-80 sm:w-96 transition-all duration-150 ${className}`}
+        className={`z-50 bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-2xl p-5 text-slate-100 max-w-sm sm:max-w-md w-80 sm:w-96 transition-all duration-150 ${className}`}
       >
         {children}
       </div>

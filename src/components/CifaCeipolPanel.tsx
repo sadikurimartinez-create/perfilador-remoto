@@ -115,7 +115,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       setActiveTab("coverage");
     } catch (err) {
       console.error("[CIFA Scan Error]:", err);
-      alert("Ocurró un error al ejecutar el barrido de inteligencia.");
+      setToast({ type: "error", message: "Ocurrió un error al ejecutar el barrido de inteligencia." });
     } finally {
       setLoading(false);
     }
@@ -135,7 +135,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       setCifaDataConfirm(null);
       setToast({ type: "success", message: "✓ Hipótesis OSINT guardada correctamente en el expediente" });
     } catch (err: any) {
-      alert("❌ Error al registrar el barrido: " + err.message);
+      setToast({ type: "error", message: "❌ Error al registrar el barrido: " + err.message });
     }
   };
 
@@ -179,7 +179,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             size="sm"
             variant={activeTab === "coverage" ? "primary" : "secondary"}
             onClick={() => {
-              if (!results) { alert("Debe ejecutar un barrido primero."); return; }
+              if (!results) { setToast({ type: "warning", message: "Debe ejecutar un barrido primero." }); return; }
               setActiveTab("coverage");
             }}
             disabled={!results}
@@ -190,7 +190,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             size="sm"
             variant={activeTab === "correlation" ? "primary" : "secondary"}
             onClick={() => {
-              if (!results) { alert("Debe ejecutar un barrido primero."); return; }
+              if (!results) { setToast({ type: "warning", message: "Debe ejecutar un barrido primero." }); return; }
               setActiveTab("correlation");
             }}
             disabled={!results}
@@ -201,7 +201,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             size="sm"
             variant={activeTab === "chronology" ? "primary" : "secondary"}
             onClick={() => {
-              if (!results) { alert("Debe ejecutar un barrido primero."); return; }
+              if (!results) { setToast({ type: "warning", message: "Debe ejecutar un barrido primero." }); return; }
               setActiveTab("chronology");
             }}
             disabled={!results}
@@ -323,22 +323,24 @@ export const CifaCeipolPanel: React.FC<Props> = ({
           <div className="space-y-6">
 
             {/* Revised Hypothesis Panel */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-3">
+            <CEIPOLCard variant="glass" className="p-5 space-y-3">
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">Hipótesis Táctica Actualizada</h4>
                 {onAppendToAnalysis && (
-                  <button
+                  <CEIPOLButton
+                    variant="primary"
+                    size="sm"
                     onClick={handleAppendHypothesis}
-                    className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold rounded-lg transition"
+                    className="py-1.5 text-[10px]"
                   >
                     ✏️ Anexar al Expediente
-                  </button>
+                  </CEIPOLButton>
                 )}
               </div>
               <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-800">
                 {results.correlation.updatedHypothesis}
               </p>
-            </div>
+            </CEIPOLCard>
 
             {/* Correlated Entities List */}
             <div className="space-y-3">
@@ -459,12 +461,13 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       {selectedEntity && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto">
-            <button
+            <CEIPOLButton
+              variant="secondary"
               onClick={() => setSelectedEntity(null)}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white text-sm bg-slate-800 hover:bg-slate-700 h-8 w-8 rounded-full flex items-center justify-center transition"
+              className="absolute top-3 right-3 rounded-full w-8 h-8 p-0 flex items-center justify-center"
             >
               ✕
-            </button>
+            </CEIPOLButton>
             <div className="flex items-center gap-2 mb-4">
               <span className="px-2 py-0.5 text-[8px] font-extrabold bg-slate-950 text-slate-300 rounded border border-slate-800 uppercase tracking-wider">{selectedEntity.type}</span>
               <h3 className="text-base font-bold text-white">{selectedEntity.value}</h3>
@@ -530,20 +533,20 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
-          <button
-            type="button"
+          <CEIPOLButton
+            variant="secondary"
             onClick={() => setCifaDataConfirm(null)}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-lg transition-all"
+            className="px-4 py-2 text-xs font-semibold"
           >
             Cancelar
-          </button>
-          <button
-            type="button"
+          </CEIPOLButton>
+          <CEIPOLButton
+            variant="primary"
             onClick={handleAppendHypothesis}
-            className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-95"
+            className="px-4 py-2 text-xs font-bold shadow-md"
           >
             Confirmar y Persistir
-          </button>
+          </CEIPOLButton>
         </div>
       </DynamicPopup>
 

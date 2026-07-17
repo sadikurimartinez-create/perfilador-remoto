@@ -12,6 +12,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
+import { CEIPOLToast } from "./ui/CEIPOLToast";
 
 export function ProjectManager() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export function ProjectManager() {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
+  const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
@@ -48,7 +50,7 @@ export function ProjectManager() {
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Este navegador no soporta dictado por voz. Use la versión de escritorio o Chrome/Android.");
+      setToast({ type: "warning", message: "Este navegador no soporta dictado por voz. Use la versión de escritorio o Chrome/Android." });
       return;
     }
 
@@ -163,9 +165,9 @@ export function ProjectManager() {
       await updateDoc(doc(firestore, "projects", project.id), {
         descripcion: descripcionInput
       });
-      window.alert("Contexto operacional guardado correctamente.");
+      setToast({ type: "success", message: "Contexto operacional guardado correctamente." });
     } catch (err: any) {
-      window.alert("Error al guardar contexto: " + err.message);
+      setToast({ type: "error", message: "Error al guardar contexto: " + err.message });
     }
   };
 
@@ -180,10 +182,10 @@ export function ProjectManager() {
         estado: "EN REVISIÓN",
         fechaEnvioRevision: Date.now()
       });
-      window.alert("Expediente enviado a revisión correctamente.");
+      setToast({ type: "success", message: "Expediente enviado a revisión correctamente." });
       router.push("/");
     } catch (err: any) {
-      window.alert("Error al enviar a revisión: " + err.message);
+      setToast({ type: "error", message: "Error al enviar a revisión: " + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -201,7 +203,7 @@ export function ProjectManager() {
         fechaInicioAuditoria: Date.now()
       });
     } catch (err: any) {
-      window.alert("Error al iniciar auditoría: " + err.message);
+      setToast({ type: "error", message: "Error al iniciar auditoría: " + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -218,9 +220,9 @@ export function ProjectManager() {
         fechaValidacion: Date.now(),
         validadoPor: (user as any)?.username || "Administrador"
       });
-      window.alert("Expediente validado y cerrado correctamente.");
+      setToast({ type: "success", message: "Expediente validado y cerrado correctamente." });
     } catch (err: any) {
-      window.alert("Error al validar: " + err.message);
+      setToast({ type: "error", message: "Error al validar: " + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -229,7 +231,7 @@ export function ProjectManager() {
   const handleDevolverProyecto = async () => {
     if (!project) return;
     if (!comentariosAdmin.trim()) {
-      window.alert("Debes ingresar un comentario justificando la devolución.");
+      setToast({ type: "warning", message: "Debes ingresar un comentario justificando la devolución." });
       return;
     }
     try {
@@ -244,9 +246,9 @@ export function ProjectManager() {
       });
       setShowDevolverPrompt(false);
       setComentariosAdmin("");
-      window.alert(`Expediente devuelto al usuario con un término de ${plazoDevolucion} horas.`);
+      setToast({ type: "success", message: `Expediente devuelto al usuario con un término de ${plazoDevolucion} horas.` });
     } catch (err: any) {
-      window.alert("Error al devolver expediente: " + err.message);
+      setToast({ type: "error", message: "Error al devolver expediente: " + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -259,9 +261,9 @@ export function ProjectManager() {
       setIsProcessing(true);
       const firestore = getDb();
       await updateDoc(doc(firestore, "projects", project.id), { estado: "ABIERTO" });
-      window.alert("Edición habilitada. El expediente ahora está abierto.");
+      setToast({ type: "success", message: "Edición habilitada. El expediente ahora está abierto." });
     } catch (err: any) {
-      window.alert("Error: " + err.message);
+      setToast({ type: "error", message: "Error: " + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -314,13 +316,14 @@ export function ProjectManager() {
             <p className="text-sm text-slate-400 text-center">
               Flujo por proyectos: cree un proyecto, agregue fotos al álbum y genere el análisis. Aquí verá Proyecto, Álbum y Perfil generado.
             </p>
-            <button
+            <CEIPOLButton
               type="button"
+              variant="primary"
               onClick={handleNuevoProyecto}
-              className="btn-primary text-base px-6 py-3"
+              className="text-base px-6 py-3"
             >
               Nuevo Proyecto
-            </button>
+            </CEIPOLButton>
           </div>
         ) : (
           <div className="card p-6 space-y-4 max-w-6xl w-full">
@@ -337,7 +340,7 @@ export function ProjectManager() {
                     value={nombreInput}
                     onChange={(e) => setNombreInput(e.target.value)}
                     placeholder="Ej. Diagnóstico Polígono VNSA"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 hover:border-slate-700 transition-all duration-200"
                   />
                 </label>
 
@@ -351,7 +354,7 @@ export function ProjectManager() {
                         value="individual"
                         checked={geometryType === "individual"}
                         onChange={() => setGeometryType("individual")}
-                        className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
+                        className="form-radio h-4 w-4 text-cyan-500 focus:ring-cyan-500/30 bg-slate-950 border-slate-800 hover:border-slate-700 checked:bg-cyan-500 checked:border-cyan-500 transition-all cursor-pointer focus:ring-offset-slate-950"
                       />{" "}
                       Individual (Punto + Radio operacional)
                     </label>
@@ -362,7 +365,7 @@ export function ProjectManager() {
                         value="lineal"
                         checked={geometryType === "lineal"}
                         onChange={() => setGeometryType("lineal")}
-                        className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
+                        className="form-radio h-4 w-4 text-cyan-500 focus:ring-cyan-500/30 bg-slate-950 border-slate-800 hover:border-slate-700 checked:bg-cyan-500 checked:border-cyan-500 transition-all cursor-pointer focus:ring-offset-slate-950"
                       />{" "}
                       Lineal (Rutas de patrullaje / Proyecciones)
                     </label>
@@ -373,7 +376,7 @@ export function ProjectManager() {
                         value="poligono"
                         checked={geometryType === "poligono"}
                         onChange={() => setGeometryType("poligono")}
-                        className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
+                        className="form-radio h-4 w-4 text-cyan-500 focus:ring-cyan-500/30 bg-slate-950 border-slate-800 hover:border-slate-700 checked:bg-cyan-500 checked:border-cyan-500 transition-all cursor-pointer focus:ring-offset-slate-950"
                       />{" "}
                       Polígono (Áreas de interés / Zonas calientes)
                     </label>
@@ -438,21 +441,23 @@ export function ProjectManager() {
             </div>
 
             <div className="flex gap-2 pt-4 border-t border-slate-800">
-              <button
+              <CEIPOLButton
                 type="button"
+                variant="primary"
                 onClick={handleConfirmarNombre}
                 disabled={!nombreInput.trim()}
-                className="btn-primary flex-1 py-2.5 text-sm font-semibold"
+                className="flex-1 py-2.5 text-sm font-semibold"
               >
                 Crear e ingresar
-              </button>
-              <button
+              </CEIPOLButton>
+              <CEIPOLButton
                 type="button"
+                variant="secondary"
                 onClick={() => setShowPrompt(false)}
-                className="px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 text-sm hover:bg-slate-800 font-semibold transition-colors"
+                className="px-4 py-2.5 text-sm font-semibold"
               >
                 Cancelar
-              </button>
+              </CEIPOLButton>
             </div>
           </div>
         )}
@@ -553,14 +558,14 @@ export function ProjectManager() {
           value={comentariosAdmin}
           onChange={(e) => setComentariosAdmin(e.target.value)}
           placeholder="Escribe los comentarios, observaciones o correcciones requeridas..."
-          className="w-full rounded-lg border border-orange-700/50 bg-slate-900 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px] mb-3"
+          className="w-full bg-slate-950/60 border border-orange-900/40 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 hover:border-orange-800/40 transition-all duration-200 min-h-[80px] mb-3"
         />
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
           <label className="text-sm text-slate-300 font-medium">Término para subsanar:</label>
           <select
             value={plazoDevolucion}
             onChange={(e) => setPlazoDevolucion(Number(e.target.value))}
-            className="bg-slate-900 text-slate-100 border border-slate-700 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+            className="bg-slate-950/80 text-slate-100 border border-orange-900/40 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 hover:border-orange-800/40 cursor-pointer transition-all duration-200"
           >
             <option value={24}>24 horas</option>
             <option value={48}>48 horas</option>
@@ -590,7 +595,7 @@ export function ProjectManager() {
       </CEIPOLCard>
     )}
     {estadoProyecto === "DEVUELTO" && (
-      <div className="card p-4 border-l-4 border-red-500 bg-red-950/20">
+      <CEIPOLCard variant="alert" className="border-l-4 border-l-red-500 bg-red-950/20 p-4 rounded-xl">
         <h3 className="text-red-400 font-bold text-sm flex items-center justify-between">
           <span>Expediente Devuelto</span>
           {(project as any).deadlineAt && (
@@ -603,16 +608,25 @@ export function ProjectManager() {
         </h3>
         <p className="text-sm text-slate-300 mt-1"><span className="font-semibold">Comentarios de auditoría ({(project as any).devueltoPor}):</span> {(project as any).comentariosAuditoria}</p>
         <p className="text-xs text-red-300 mt-2">Por favor, subsana las observaciones y vuelve a hacer clic en &quot;Enviar a Revisión&quot;.</p>
-      </div>
+      </CEIPOLCard>
     )}
     {estadoProyecto === "EN REVISIÓN" && (
-      <div className="card p-4 border-l-4 border-blue-500 bg-blue-950/20"><h3 className="text-blue-400 font-bold text-sm">En Revisión</h3><p className="text-sm text-slate-300 mt-1">Este expediente ha sido enviado y está en espera de ser auditado.</p></div>
+      <CEIPOLCard variant="glass" className="border-l-4 border-l-blue-500 bg-blue-950/20 p-4 rounded-xl">
+        <h3 className="text-blue-400 font-bold text-sm">En Revisión</h3>
+        <p className="text-sm text-slate-300 mt-1">Este expediente ha sido enviado y está en espera de ser auditado.</p>
+      </CEIPOLCard>
     )}
     {estadoProyecto === "EN AUDITORÍA" && (
-      <div className="card p-4 border-l-4 border-purple-500 bg-purple-950/20"><h3 className="text-purple-400 font-bold text-sm">En Auditoría</h3><p className="text-sm text-slate-300 mt-1">Este expediente está siendo auditado actualmente por {(project as any).auditorNombre}.</p></div>
+      <CEIPOLCard variant="glass" className="border-l-4 border-l-purple-500 bg-purple-950/20 p-4 rounded-xl">
+        <h3 className="text-purple-400 font-bold text-sm">En Auditoría</h3>
+        <p className="text-sm text-slate-300 mt-1">Este expediente está siendo auditado actualmente por {(project as any).auditorNombre}.</p>
+      </CEIPOLCard>
     )}
     {estadoProyecto === "VALIDADO" && (
-      <div className="card p-4 border-l-4 border-emerald-500 bg-emerald-950/20"><h3 className="text-emerald-400 font-bold text-sm">Validado y Cerrado</h3><p className="text-sm text-slate-300 mt-1">Este expediente ha sido aprobado definitivamente por {(project as any).validadoPor}.</p></div>
+      <CEIPOLCard variant="glass" className="border-l-4 border-l-emerald-500 bg-emerald-950/20 p-4 rounded-xl">
+        <h3 className="text-emerald-400 font-bold text-sm">Validado y Cerrado</h3>
+        <p className="text-sm text-slate-300 mt-1">Este expediente ha sido aprobado definitivamente por {(project as any).validadoPor}.</p>
+      </CEIPOLCard>
     )}
 
     {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") ? (
@@ -633,7 +647,7 @@ export function ProjectManager() {
           value={descripcionInput}
           onChange={(e) => setDescripcionInput(e.target.value)}
           placeholder="Describa el contexto, hipótesis o detalles relevantes de la geometría seleccionada..."
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[80px]"
+          className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 hover:border-slate-700 transition-all duration-200 min-h-[80px]"
         />
         <div className="mt-3 flex justify-end">
           <CEIPOLButton
@@ -689,6 +703,14 @@ export function ProjectManager() {
           });
         }}
       />
+
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

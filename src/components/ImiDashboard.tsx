@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
 import {
   ResponsiveContainer,
   RadarChart,
@@ -392,32 +394,34 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
     <div className="space-y-6">
       {/* Selector de Pestañas del IMI Dashboard */}
       <div className="flex border-b border-slate-800">
-        <button
+        <CEIPOLButton
+          variant="ghost"
           onClick={() => setDashboardTab("dashboard")}
-          className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+          className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider border-b-2 rounded-none transition-all ${
             dashboardTab === "dashboard"
               ? "border-sky-500 text-sky-400 bg-sky-950/10"
               : "border-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-900/40"
           }`}
         >
           📊 Cuadro de Mando IMI
-        </button>
-        <button
+        </CEIPOLButton>
+        <CEIPOLButton
+          variant="ghost"
           onClick={() => setDashboardTab("explicacion")}
-          className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+          className={`flex-1 py-3 text-center text-xs font-bold uppercase tracking-wider border-b-2 rounded-none transition-all ${
             dashboardTab === "explicacion"
               ? "border-amber-500 text-amber-400 bg-amber-950/10"
               : "border-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-900/40"
           }`}
         >
           ⚖️ ¿Qué es el IMI? Metodología
-        </button>
+        </CEIPOLButton>
       </div>
 
       {dashboardTab === "dashboard" ? (
         <div className="space-y-6">
           {/* 1. Header Principal del IMI */}
-          <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
+          <CEIPOLCard variant="glass" className="p-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <span className="bg-sky-900/30 text-sky-400 text-[10px] font-black uppercase tracking-widest border border-sky-800/40 px-3 py-1 rounded-full">
@@ -469,7 +473,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 </div>
               </div>
             </div>
-          </div>
+          </CEIPOLCard>
 
           {/* 2. Alertas de Rendimiento Activas */}
           {warnings.length > 0 && (
@@ -768,28 +772,25 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
           </div>
 
           {/* 6. Historial de Tendencias Temporales */}
-          <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+          <CEIPOLCard variant="glass" className="p-5 shadow-lg space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-2.5">
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
                 Evolución Histórica de Madurez Investigativa
               </h4>
-              <div className="flex bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+              <div className="flex bg-slate-950 border border-slate-800 rounded-lg p-0.5 gap-0.5">
                 {[
                   { value: "90", label: "90 días" },
                   { value: "180", label: "180 días" },
                   { value: "365", label: "1 año" }
                 ].map((opt) => (
-                  <button
+                  <CEIPOLButton
                     key={opt.value}
+                    variant={timeFilter === opt.value ? "primary" : "secondary"}
                     onClick={() => setTimeFilter(opt.value as any)}
-                    className={`px-3 py-1 rounded text-[10px] font-bold uppercase transition-all ${
-                      timeFilter === opt.value
-                        ? "bg-sky-600 text-white"
-                        : "text-slate-400 hover:text-slate-300"
-                    }`}
+                    className="px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
                   >
                     {opt.label}
-                  </button>
+                  </CEIPOLButton>
                 ))}
               </div>
             </div>
@@ -843,7 +844,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 </LineChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </CEIPOLCard>
 
           {/* 7. Recomendaciones Basadas en Evidencia */}
           <div className="bg-sky-950/10 border border-sky-900/20 rounded-2xl p-5 space-y-4">
