@@ -10,6 +10,8 @@ import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
 import { doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CEIPOLCard } from "./ui/CEIPOLCard";
 
 export function ProjectManager() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export function ProjectManager() {
   const [plazoDevolucion, setPlazoDevolucion] = useState<number>(24);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
@@ -171,6 +174,7 @@ export function ProjectManager() {
     if (!window.confirm("¿Estás seguro de enviar este expediente a revisión? Ya no podrás editarlo hasta que un administrador lo evalúe.")) return;
     
     try {
+      setIsProcessing(true);
       const firestore = getDb();
       await updateDoc(doc(firestore, "projects", project.id), {
         estado: "EN REVISIÓN",
@@ -180,12 +184,15 @@ export function ProjectManager() {
       router.push("/");
     } catch (err: any) {
       window.alert("Error al enviar a revisión: " + err.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleIniciarAuditoria = async () => {
     if (!project) return;
     try {
+      setIsProcessing(true);
       const firestore = getDb();
       await updateDoc(doc(firestore, "projects", project.id), {
         estado: "EN AUDITORÍA",
@@ -195,6 +202,8 @@ export function ProjectManager() {
       });
     } catch (err: any) {
       window.alert("Error al iniciar auditoría: " + err.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -202,6 +211,7 @@ export function ProjectManager() {
     if (!project) return;
     if (!window.confirm("¿Estás seguro de VALIDAR y cerrar definitivamente este expediente?")) return;
     try {
+      setIsProcessing(true);
       const firestore = getDb();
       await updateDoc(doc(firestore, "projects", project.id), {
         estado: "VALIDADO",
@@ -211,6 +221,8 @@ export function ProjectManager() {
       window.alert("Expediente validado y cerrado correctamente.");
     } catch (err: any) {
       window.alert("Error al validar: " + err.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -221,6 +233,7 @@ export function ProjectManager() {
       return;
     }
     try {
+      setIsProcessing(true);
       const firestore = getDb();
       await updateDoc(doc(firestore, "projects", project.id), {
         estado: "DEVUELTO",
@@ -234,6 +247,23 @@ export function ProjectManager() {
       window.alert(`Expediente devuelto al usuario con un término de ${plazoDevolucion} horas.`);
     } catch (err: any) {
       window.alert("Error al devolver expediente: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleHabilitarEdicion = async () => {
+    if (!project) return;
+    if (!window.confirm("¿Seguro que deseas habilitar la edición manual de este expediente bloqueado?")) return;
+    try {
+      setIsProcessing(true);
+      const firestore = getDb();
+      await updateDoc(doc(firestore, "projects", project.id), { estado: "ABIERTO" });
+      window.alert("Edición habilitada. El expediente ahora está abierto.");
+    } catch (err: any) {
+      window.alert("Error: " + err.message);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -444,69 +474,79 @@ export function ProjectManager() {
       <div className="flex flex-wrap items-center gap-2 justify-end">
         {/* FLUJO USUARIO */}
         {(estadoProyecto === "ABIERTO" || estadoProyecto === "DEVUELTO") && (
-            <button
+            <CEIPOLButton
               type="button"
+              variant="primary"
+              loading={isProcessing}
+              disabled={isProcessing || !hasMinimumPhotos}
               onClick={handleEnviarRevision}
-              disabled={!hasMinimumPhotos}
-              className="text-sm px-4 py-2 rounded-lg font-bold bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md"
             >
               Enviar a Revisión
-            </button>
+            </CEIPOLButton>
           )}
         {/* FLUJO ADMIN: INICIAR AUDITORÍA (En revisión o cerrados por 24h) */}
         {isAdmin && (estadoProyecto === "EN REVISIÓN" || estadoProyecto === "ABIERTO") && (
-          <button
+          <CEIPOLButton
             type="button"
+            variant="primary"
+            loading={isProcessing}
+            disabled={isProcessing}
             onClick={handleIniciarAuditoria}
-            className="text-sm px-4 py-2 rounded-lg font-bold bg-purple-600 text-white hover:bg-purple-500 transition-colors shadow-md"
           >
             Iniciar Auditoría
-          </button>
+          </CEIPOLButton>
         )}
         {/* FLUJO ADMIN: DEVOLVER O VALIDAR */}
         {isAdmin && estadoProyecto === "EN AUDITORÍA" && (
           <>
-            <button type="button" onClick={() => setShowDevolverPrompt(!showDevolverPrompt)} className="text-sm px-4 py-2 rounded-lg font-bold bg-orange-600 text-white hover:bg-orange-500 transition-colors shadow-md">
-              Devolver
-            </button>
-            <button type="button" onClick={handleValidarProyecto} className="text-sm px-4 py-2 rounded-lg font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-md">
-              Validar y Cerrar
-            </button>
-          </>
+             <CEIPOLButton
+               type="button"
+               variant="warning"
+               onClick={() => setShowDevolverPrompt(!showDevolverPrompt)}
+             >
+               Devolver
+             </CEIPOLButton>
+             <CEIPOLButton
+               type="button"
+               variant="confirm"
+               size="md"
+               loading={isProcessing}
+               disabled={isProcessing}
+               onClick={handleValidarProyecto}
+             >
+               Validar y Cerrar
+             </CEIPOLButton>
+           </>
         )}
         {/* BOTÓN EXTRA: HABILITAR EDICIÓN EN CUALQUIER ESTADO BLOQUEADO (ADMIN) */}
         {isAdmin && (estadoProyecto === "EN REVISIÓN" || estadoProyecto === "EN AUDITORÍA" || estadoProyecto === "VALIDADO") && (
-          <button
-            type="button"
-            onClick={async () => {
-              if (window.confirm("¿Seguro que deseas habilitar la edición manual de este expediente bloqueado?")) {
-                try {
-                  const firestore = getDb();
-                  await updateDoc(doc(firestore, "projects", project.id), { estado: "ABIERTO" });
-                  window.alert("Edición habilitada. El expediente ahora está abierto.");
-                } catch(err: any) {
-                  window.alert("Error: " + err.message);
-                }
-              }
-            }}
-            className="text-sm px-4 py-2 rounded-lg font-bold bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors shadow-md border border-slate-600"
-          >
-            🔓 Habilitar Edición
-          </button>
+           <CEIPOLButton
+             type="button"
+             variant="secondary"
+             size="md"
+             loading={isProcessing}
+             disabled={isProcessing}
+             onClick={handleHabilitarEdicion}
+           >
+             🔓 Habilitar Edición
+           </CEIPOLButton>
         )}
-          <button
+          <CEIPOLButton
             type="button"
+            variant="secondary"
             onClick={handleGuardarYSalir}
-            className="text-sm px-4 py-2 rounded-lg font-bold bg-slate-700 text-white hover:bg-slate-600 transition-colors shadow-md"
           >
             💾 Guardar y Salir
-          </button>
+          </CEIPOLButton>
         </div>
       </div>
 
     {/* BANNERS Y PROMPTS DE ESTADO */}
     {showDevolverPrompt && (
-      <div className="card p-4 border-l-4 border-orange-500 bg-orange-950/20 w-full max-w-none">
+      <CEIPOLCard
+        variant="alert"
+        className="p-4 border-l-4 border-orange-500 bg-orange-950/20 w-full max-w-none"
+      >
         <h3 className="text-orange-400 font-bold mb-2 text-sm">Devolver Expediente a Usuario</h3>
         <textarea
           spellCheck={true}
@@ -528,14 +568,26 @@ export function ProjectManager() {
           </select>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleDevolverProyecto} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
-            Confirmar Devolución
-          </button>
-          <button onClick={() => setShowDevolverPrompt(false)} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition-colors">
+           <CEIPOLButton
+             type="button"
+             variant="danger"
+             size="md"
+             loading={isProcessing}
+             disabled={isProcessing}
+             onClick={handleDevolverProyecto}
+           >
+             Confirmar Devolución
+           </CEIPOLButton>
+          <CEIPOLButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowDevolverPrompt(false)}
+          >
             Cancelar
-          </button>
+          </CEIPOLButton>
         </div>
-      </div>
+      </CEIPOLCard>
     )}
     {estadoProyecto === "DEVUELTO" && (
       <div className="card p-4 border-l-4 border-red-500 bg-red-950/20">
@@ -567,18 +619,14 @@ export function ProjectManager() {
       <div className="card p-4 md:p-6 border border-sky-900/50 bg-slate-900/40">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-slate-100">1. Contextualizar Geometría Operacional</h3>
-          <button
+          <CEIPOLButton
             type="button"
+            variant={isListening ? "danger" : "ghost"}
+            size="sm"
             onClick={handleToggleDictation}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold border ${
-              isListening
-                ? "border-red-500 text-red-300 bg-red-900/40"
-                : "border-slate-600 text-slate-200 bg-slate-900"
-            }`}
           >
-            <span aria-hidden="true">🎙️</span>
-            <span>{isListening ? "Detener grabación" : "Dictar contexto"}</span>
-          </button>
+            🎙️ {isListening ? "Detener dictado" : "Dictar contexto"}
+          </CEIPOLButton>
         </div>
         <textarea
           spellCheck={true}
@@ -588,9 +636,13 @@ export function ProjectManager() {
           className="w-full rounded-lg border border-slate-700 bg-slate-950 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[80px]"
         />
         <div className="mt-3 flex justify-end">
-          <button onClick={handleGuardarContexto} className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors">
+          <CEIPOLButton
+            type="button"
+            variant="primary"
+            onClick={handleGuardarContexto}
+          >
             Guardar Contexto
-          </button>
+          </CEIPOLButton>
         </div>
       </div>
     ) : (

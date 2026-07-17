@@ -272,18 +272,44 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
        }
 
        <div className="flex items-center gap-2 mt-1">
-          <button type="button" onClick={handleRequestSuggestions} disabled={isRefining || !context.trim() || isReadOnly} className="bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-md text-white text-[11px] font-semibold disabled:opacity-50 transition-colors">
-              {isRefining ? "Consultando IA..." : "Auditar Contexto"}
-          </button>
+          <CEIPOLButton
+            type="button"
+            variant="secondary"
+            onClick={handleRequestSuggestions}
+            disabled={!context.trim() || isReadOnly}
+            loading={isRefining}
+          >
+            Sugerir Refinamiento
+          </CEIPOLButton>
        </div>
        {suggestions && (
            <div className="p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-md text-xs text-yellow-200 mt-2 space-y-2">
                <div className="flex justify-between items-center"><p className="font-semibold">Sugerencias IA:</p>{auditScore !== null && (<span className={`px-2 py-0.5 rounded font-bold ${auditScore >= 80 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>Lógica: {auditScore}%</span>)}</div>
                <textarea value={suggestions} onChange={(e) => setSuggestions(e.target.value)} className="w-full bg-yellow-950/50 border border-yellow-700/50 rounded p-2 text-yellow-100 min-h-[60px] focus:outline-none" />
-               <div className="flex gap-2"><button type="button" onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }} className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded font-medium text-[11px]">Aplicar Power-Up Sugerido</button><button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button></div>
+               <div className="flex gap-2">
+                 <CEIPOLButton
+                   type="button"
+                   variant="ghost"
+                   size="sm"
+                   onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }}
+                 >
+                   + Añadir plantilla...
+                 </CEIPOLButton>
+                 <button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button>
+               </div>
            </div>
        )}
-       <div className="flex justify-end mt-2"><button type="button" onClick={handleSave} disabled={isSaving || !context.trim() || !isAudited || isReadOnly} className="bg-sky-600 hover:bg-sky-500 text-white px-4 py-1.5 rounded-md text-[11px] font-bold disabled:opacity-50 transition-colors shadow-md">{isSaving ? "Guardando..." : "✅ Subir al Análisis (Completar Gabinete)"}</button></div>
+       <div className="flex justify-end mt-2">
+         <CEIPOLButton
+           type="button"
+           variant="confirm"
+           onClick={handleSave}
+           disabled={!context.trim() || !isAudited || isReadOnly}
+           loading={isSaving}
+         >
+           Guardar Dictamen
+         </CEIPOLButton>
+       </div>
     </div>
   );
 }
@@ -4907,7 +4933,12 @@ const hasMinimumPhotos =
           {isLoadingHistory ? (
             <p className="text-xs text-slate-400">Cargando bitácora...</p>
           ) : historyDossiers.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">No hay expedientes registrados en el historial de este proyecto.</p>
+            <CEIPOLEmptyState
+              icon="📂"
+              title="Historial de Expedientes Vacío"
+              description="No existen expedientes registrados en la bitácora histórica de este proyecto."
+              className="max-w-sm"
+            />
           ) : (
             historyDossiers.map((h) => (
               <div key={h.id} className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
