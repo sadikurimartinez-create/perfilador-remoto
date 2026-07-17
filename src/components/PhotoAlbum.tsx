@@ -2,10 +2,10 @@
 // @ts-nocheck
 /* eslint-disable */
 
-import React, { Fragment, useRef, useState, useEffect, useCallback } from "react";
+import React, { Fragment, useRef, useState, useEffect, useCallback, useMemo } from "react";
 import html2canvas from "html2canvas";
 import { useAuth } from "@/context/AuthContext";
-import { useProject } from "@/context/ProjectContext";
+import { useProject, AlbumPhoto } from "@/context/ProjectContext";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
@@ -476,7 +476,7 @@ export function PhotoAlbum({
   const { user } = useAuth();
   const {
     project,
-    album,
+    album: rawAlbum,
     selectedIds,
     analysisResult,
     togglePhotoSelection,
@@ -505,6 +505,71 @@ export function PhotoAlbum({
     setActiveSweepForModal,
     logAuditAction,
   } = useProject();
+
+  // 1. Auditoría y validación de Street View (Gobernanza FIX-GEO-01)
+  const streetViewValidation = useMemo(() => {
+    const svPhotos = (rawAlbum || []).filter(
+      (p: any) => p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW"
+    );
+
+    const getStatus = (count: number) => {
+      if (count === 0) return "EMPTY";
+      if (count < 2) return "INSUFFICIENT";
+      if (count > 4) return "CAPPED";
+      return "VALID";
+    };
+
+    const hideouts = svPhotos.filter((p: any) => p.streetViewCategory === "hideout");
+    const graffitis = svPhotos.filter((p: any) => p.streetViewCategory === "graffiti");
+    const denues = svPhotos.filter((p: any) => p.streetViewCategory === "denue_interest");
+
+    return {
+      hideout: {
+        count: hideouts.length,
+        status: getStatus(hideouts.length),
+        photos: hideouts,
+        label: "Lugares de acecho o escondite",
+      },
+      graffiti: {
+        count: graffitis.length,
+        status: getStatus(graffitis.length),
+        photos: graffitis,
+        label: "Grafitis de pandillas",
+      },
+      denue_interest: {
+        count: denues.length,
+        status: getStatus(denues.length),
+        photos: denues,
+        label: "Puntos de interés DENUE",
+      },
+    };
+  }, [rawAlbum]);
+
+  // 2. Normalización de fotos del Álbum al vuelo (Gobernanza FIX-GEO-01)
+  const normalizedAlbum = useMemo(() => {
+    if (!rawAlbum) return [];
+
+    // Conservar todas las fotos de usuario intactas
+    const userPhotos = rawAlbum.filter(
+      (p: any) => p.tipo !== "STREET_VIEW" && p.evidenceType !== "VIRTUAL_STREET_VIEW"
+    );
+
+    // Fotos de Street View gobernadas (Máximo visual de 4 por categoría)
+    const hideouts = streetViewValidation.hideout.photos.slice(0, 4);
+    const graffitis = streetViewValidation.graffiti.photos.slice(0, 4);
+    const denues = streetViewValidation.denue_interest.photos.slice(0, 4);
+
+    // Otras fotos Street View que no pertenezcan a las categorías principales
+    const otherSvs = rawAlbum.filter((p: any) => 
+      (p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW") &&
+      !["hideout", "graffiti", "denue_interest"].includes(p.streetViewCategory)
+    );
+
+    return [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs];
+  }, [rawAlbum, streetViewValidation]);
+
+  // Sobrescribir "album" local para que todo el componente herede las reglas gobernadas
+  const album: AlbumPhoto[] = normalizedAlbum;
 
   const svContainerRef = useRef<HTMLDivElement | null>(null);
   const [svError, setSvError] = useState<string | null>(null);
@@ -2016,6 +2081,86 @@ const hasMinimumPhotos =
           )}
         </div>
       </header>
+
+      {/* Panel de Auditoría Street View - FIX-GEO-01 */}
+      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-3 font-sans shadow-xl print:hidden">
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+          <span className="text-base">📍</span>
+          <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+            Auditoría de Gobernanza: Evidencia Street View
+          </h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {Object.entries(streetViewValidation).map(([key, value]: [string, any]) => {
+            const isInsufficient = value.status === "INSUFFICIENT";
+            const isCapped = value.status === "CAPPED";
+            const isEmpty = value.status === "EMPTY";
+            const isValid = value.status === "VALID";
+
+            let bgClass = "bg-slate-900/40 border-slate-800/50 text-slate-400";
+            let badgeClass = "bg-slate-800 text-slate-400 border border-slate-700";
+            let statusText = "Sin capturas";
+
+            if (isValid) {
+              bgClass = "bg-emerald-950/20 border-emerald-500/20 text-emerald-300";
+              badgeClass = "bg-emerald-950/60 text-emerald-400 border border-emerald-800/60";
+              statusText = "✓ Conforme";
+            } else if (isInsufficient) {
+              bgClass = "bg-amber-950/20 border-amber-500/20 text-amber-300";
+              badgeClass = "bg-amber-950/60 text-amber-400 border border-amber-800/60";
+              statusText = "⚠ Requiere captura adicional";
+            } else if (isCapped) {
+              bgClass = "bg-blue-950/20 border-blue-500/20 text-blue-300";
+              badgeClass = "bg-blue-950/60 text-blue-400 border border-blue-800/60";
+              statusText = "ⓘ Exceso (Capped at 4)";
+            }
+
+            return (
+              <div
+                key={key}
+                className={`p-3 rounded-lg border flex flex-col justify-between gap-2.5 transition-all hover:bg-slate-900/30 ${bgClass}`}
+              >
+                <div className="space-y-1">
+                  <div className="flex justify-between items-start gap-1">
+                    <span className="text-[11px] font-bold text-slate-100 uppercase tracking-wide">
+                      {value.label}
+                    </span>
+                    <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-full ${badgeClass}`}>
+                      {statusText}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Capturas en el expediente: <strong className="text-slate-200">{value.count}</strong>
+                  </p>
+                </div>
+                {isInsufficient && (
+                  <div className="text-[9px] text-amber-400 leading-normal border-t border-amber-500/10 pt-1.5 flex items-center gap-1">
+                    <span>⚠</span>
+                    <span>Evidencia Street View insuficiente. Se requieren mínimo 2 capturas.</span>
+                  </div>
+                )}
+                {isCapped && (
+                  <div className="text-[9px] text-blue-400 leading-normal border-t border-blue-500/10 pt-1.5 flex items-center gap-1">
+                    <span>ⓘ</span>
+                    <span>Mostrando únicamente 4 capturas en el reporte y visualización para evitar contaminación.</span>
+                  </div>
+                )}
+                {isEmpty && (
+                  <div className="text-[9px] text-slate-500 leading-normal border-t border-slate-800/50 pt-1.5">
+                    No se han registrado capturas de Street View en esta categoría.
+                  </div>
+                )}
+                {isValid && (
+                  <div className="text-[9px] text-emerald-400 leading-normal border-t border-emerald-500/10 pt-1.5 flex items-center gap-1">
+                    <span>✓</span>
+                    <span>Gobernanza conforme. Evidencia validada correctamente.</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {(() => {
         let groups: { title: string; photos: typeof album }[] = [];

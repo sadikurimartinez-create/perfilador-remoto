@@ -5,6 +5,9 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// Burlar la validación de certificados TLS del proxy institucional local
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 function formatCoord(n: number | null | undefined): string {
   return typeof n === "number" ? n.toFixed(5) : "N/A";
 }
@@ -101,7 +104,7 @@ IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directa
         if (!apiKey) {
           throw new Error("No se detectó GEMINI_API_KEY ni credenciales de Vertex AI.");
         }
-        const modelName = GEMINI_MODEL || "gemini-flash-latest";
+        const modelName = GEMINI_MODEL || "gemini-3.1-flash-lite";
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const response = await fetch(url, {
           method: "POST",
@@ -171,7 +174,7 @@ Devuelve un JSON con: {"score": <0-100 evaluando lógica original>, "suggestions
       if (!apiKey) {
         throw new Error("No se detectó GEMINI_API_KEY ni credenciales de Vertex AI.");
       }
-      const modelName = GEMINI_MODEL || "gemini-flash-latest";
+      const modelName = GEMINI_MODEL || "gemini-3.1-flash-lite";
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: "POST",

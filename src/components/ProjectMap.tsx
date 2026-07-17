@@ -128,20 +128,6 @@ export function ProjectMap({
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
   const [subMode, setSubMode] = useState<"vertex" | "poi">("poi");
 
-  const isFallback = useMemo(() => {
-    return !project?.latitude && !project?.longitude && coordinates.length === 0;
-  }, [project, coordinates]);
-
-  const center = useMemo(() => {
-    if (project?.latitude && project?.longitude) {
-      return { lat: project.latitude, lng: project.longitude };
-    }
-    if (coordinates.length > 0) {
-      return coordinates[0];
-    }
-    return { lat: 21.8853, lng: -102.2916 }; // Default Aguascalientes
-  }, [project, coordinates]);
-
   const mapOptions = useMemo(() => ({
     styles: darkMapStyles,
     disableDefaultUI: false,
@@ -151,7 +137,7 @@ export function ProjectMap({
     streetViewControl: true,
     rotateControl: true,
     fullscreenControl: true,
-    gestureHandling: "cooperative" as const, // Desactivar scroll de mapa para evitar interrupción al bajar la página
+    gestureHandling: "cooperative" as const,
   }), []);
 
   // Filter georeferenced evidence items
@@ -163,6 +149,36 @@ export function ProjectMap({
       return !isDefaultFallback;
     });
   }, [album]);
+
+  const isFallback = useMemo(() => {
+    const hasProjectCoords = project?.latitude != null && project?.longitude != null;
+    const isProjectDefault = hasProjectCoords && 
+      Math.abs(Number(project.latitude) - 21.8853) < 0.0001 && 
+      Math.abs(Number(project.longitude) - (-102.2916)) < 0.0001;
+
+    const hasRealProjectCenter = hasProjectCoords && !isProjectDefault;
+    const hasCoordinates = coordinates && coordinates.length > 0;
+    const hasRealPhotos = georeferencedPhotos.length > 0;
+
+    return !hasRealProjectCenter && !hasCoordinates && !hasRealPhotos;
+  }, [project, coordinates, georeferencedPhotos]);
+
+  const center = useMemo(() => {
+    if (project?.latitude && project?.longitude) {
+      const isProjectDefault = Math.abs(Number(project.latitude) - 21.8853) < 0.0001 && 
+                               Math.abs(Number(project.longitude) - (-102.2916)) < 0.0001;
+      if (!isProjectDefault) {
+        return { lat: Number(project.latitude), lng: Number(project.longitude) };
+      }
+    }
+    if (georeferencedPhotos.length > 0) {
+      return { lat: Number(georeferencedPhotos[0].lat), lng: Number(georeferencedPhotos[0].lng) };
+    }
+    if (coordinates.length > 0) {
+      return coordinates[0];
+    }
+    return { lat: 21.8853, lng: -102.2916 }; // Default Aguascalientes (sólo para cargar mapa base, pero oculto tras isFallback)
+  }, [project, coordinates, georeferencedPhotos]);
 
   // Group coordinates of evidences for corridor polyline or polygon drawing (excl. independent POIs)
   const geoShapePath = useMemo(() => {
@@ -246,7 +262,7 @@ export function ProjectMap({
         onClick={handleMapClick}
       >
         {/* Draw circle for individual type projects */}
-        {geometryType === "individual" && project?.latitude && project?.longitude && (
+        {geometryType === "individual" && project?.latitude && project?.longitude && !isFallback && (
           <Circle
             center={{ lat: project.latitude, lng: project.longitude }}
             radius={Number(project.radius || 500)}
