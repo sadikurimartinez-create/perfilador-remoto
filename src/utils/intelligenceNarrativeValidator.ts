@@ -80,12 +80,11 @@ export class IntelligenceNarrativeValidator {
 
     // Si el promedio general es bajo
     if (globalRes.overallScore < 70) {
-      reasons.push(`El Score de Profundidad de Inteligencia global (IDS: ${globalRes.overallScore}/100) es inferior al estándar mínimo de 70 puntos.`);
+      reasons.push(`El Indicador de Profundidad Analítica global (IDS: ${globalRes.overallScore}/100) es inferior al umbral recomendado de 70 puntos.`);
     }
 
-    // Determinar estatus final
-    const finalStatus: "APPROVED" | "REJECTED" = 
-      (globalRes.status === "APPROVED" && violations.length === 0) ? "APPROVED" : "REJECTED";
+    // Determinar estatus final: Siempre APPROVED (Gobernanza analítica orientativa blanda - No bloqueante)
+    const finalStatus: "APPROVED" | "REJECTED" = "APPROVED";
 
     return {
       status: finalStatus,

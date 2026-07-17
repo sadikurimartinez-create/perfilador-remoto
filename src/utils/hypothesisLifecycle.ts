@@ -1,3 +1,30 @@
+export interface EvidenceReference {
+  id: string;
+  type: string;
+  description: string;
+}
+
+export interface GeneralHypothesis {
+  id: string;
+  type: "GENERAL";
+  title: string;
+  hypothesis: string;
+  analyticalBasis: EvidenceReference[];
+  confidenceLevel: "baja" | "media" | "alta";
+}
+
+export interface SecondaryAnalyticalFactor {
+  type: string;
+  description: string;
+}
+
+export interface HypothesisLifecycle {
+  rawHypotheses: string[];
+  hipotesisGeneral: GeneralHypothesis;
+  secondaryAnalyticalFactors: SecondaryAnalyticalFactor[];
+  consolidationMethod: "manual" | "automatic";
+}
+
 export type HypothesisState =
   | "INICIAL"
   | "EN_ANALISIS"

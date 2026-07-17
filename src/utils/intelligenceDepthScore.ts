@@ -188,7 +188,7 @@ export class IntelligenceDepthScore {
     const overallScore = count > 0 ? Math.round(totalScoreSum / count) : 0;
 
     let classification: GlobalScoreResult["classification"] = "Requiere revisión analítica";
-    let status: GlobalScoreResult["status"] = "APPROVED";
+    let status: GlobalScoreResult["status"] = "APPROVED"; // Siempre APPROVED bajo Gobernanza Blanda (No limita exportación)
 
     if (overallScore >= 90) {
       classification = "Dictamen Estratégico";
@@ -196,11 +196,6 @@ export class IntelligenceDepthScore {
       classification = "Dictamen Operativo";
     } else {
       classification = "Requiere revisión analítica";
-      status = "REJECTED";
-    }
-
-    if (criticalChaptersBelowThreshold.length > 0) {
-      status = "REJECTED";
     }
 
     return {

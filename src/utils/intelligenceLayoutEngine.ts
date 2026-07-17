@@ -8,7 +8,7 @@ import { VisualEvidenceEngine } from "./visualEvidenceEngine";
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
 import { safeUpperCase } from '../lib/exportToWord';
-import { InvestigationHypothesis } from './hypothesisLifecycle';
+import { InvestigationHypothesis, GeneralHypothesis, SecondaryAnalyticalFactor, HypothesisLifecycle } from './hypothesisLifecycle';
 import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
 import { HypothesisConfidenceAssessment } from './hypothesisConfidenceCalibrationEngine';
 import { OperationalDecisionObject } from './hypothesisDecisionIntelligenceEngine';
@@ -399,6 +399,9 @@ export interface IntelligenceReportPayload {
   visualEvidenceMatrix?: any;
   intelligenceContext?: any;
   hypothesisLifecycle?: InvestigationHypothesis;
+  hipotesisGeneral?: GeneralHypothesis;
+  secondaryAnalyticalFactors?: SecondaryAnalyticalFactor[];
+  hypothesisLifecycleUnificada?: HypothesisLifecycle;
   evidenceRegistry?: IntelligenceEvidenceObject[];
   confidenceAssessment?: HypothesisConfidenceAssessment;
   evidenceConflicts?: any[];
