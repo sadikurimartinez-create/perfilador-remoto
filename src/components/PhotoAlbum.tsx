@@ -3201,7 +3201,7 @@ const hasMinimumPhotos =
           </div>
 
         {isCheckingIncidencia ? (
-          <CEIPOLLoader message="Consultando incidencia delictiva" />
+          <CEIPOLLoader message="Consultando información delictiva territorial" />
         ) : (
           <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
             <p className="text-xs text-slate-300 flex-1">
