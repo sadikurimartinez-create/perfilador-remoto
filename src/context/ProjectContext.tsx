@@ -609,6 +609,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         gpsLng: metadata?.gpsLng ?? null,
         diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
         validado: metadata?.validado ?? false,
+        streetViewCategory: (metadata as any)?.streetViewCategory || null,
+        streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
+        analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null)
       };
       const photoDocRef = await addDoc(photosColRef, photoDocData);
       photoDocId = photoDocRef.id;
@@ -642,6 +645,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng: metadata?.gpsLng ?? null,
       diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
       validado: metadata?.validado ?? false,
+      streetViewCategory: (metadata as any)?.streetViewCategory || null,
+      streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
+      analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null)
     } as any, photoDocId);
 
     // Auto-seleccionar la foto en la lista activa para asegurar su exportación

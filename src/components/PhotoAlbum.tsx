@@ -690,7 +690,7 @@ export function PhotoAlbum({
           if (!active) return;
           if (status === window.google.maps.StreetViewStatus.OK && data && data.location && data.location.latLng) {
             setSvError(null);
-            new window.google.maps.StreetViewPanorama(svContainerRef.current!, {
+            const pano = new window.google.maps.StreetViewPanorama(svContainerRef.current!, {
               position: data.location.latLng,
               pov: { heading: 34, pitch: 10 },
               zoom: 1,
@@ -699,6 +699,7 @@ export function PhotoAlbum({
               panControl: true,
               enableCloseButton: false
             });
+            setActivePanorama(pano);
           } else {
             setSvError("No se encontraron panoramas de Street View en un radio de 150 metros de esta ubicación.");
           }
@@ -728,6 +729,18 @@ export function PhotoAlbum({
     photo: any;
     step: 1 | 2;
   } | null>(null);
+  const [activePanorama, setActivePanorama] = useState<any>(null);
+  const [temporaryCintilla, setTemporaryCintilla] = useState<{
+    id: string;
+    url: string;
+    lat: number;
+    lng: number;
+    heading: number;
+    pitch: number;
+    comentario: string;
+    streetViewCategory: "hideout" | "graffiti" | "denue_interest" | "other";
+  }[]>([]);
+  const [isCapturingSv, setIsCapturingSv] = useState(false);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -3014,12 +3027,12 @@ const hasMinimumPhotos =
         </div>
       </div>
 
-      {/* PASO 3: STREET VIEW PANORAMA */}
+      {/* PASO 3: STREET VIEW PANORAMA & ENTORNO VIRTUAL GOBERNADO */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <header className="space-y-1">
           <h4 className="text-base font-semibold text-slate-200">🛣️ Street View - Entorno Virtual (Paso 3)</h4>
           <p className="text-xs text-slate-400">
-            Exploración a pie de calle de las inmediaciones del punto central de las evidencias seleccionadas.
+            Exploración a pie de calle de las inmediaciones del punto central de las evidencias seleccionadas y generación controlada de evidencia virtual.
           </p>
         </header>
         {svError ? (
@@ -3027,11 +3040,193 @@ const hasMinimumPhotos =
             ⚠️ {svError}
           </div>
         ) : (
-          <div 
-            ref={svContainerRef} 
-            style={{ width: "100%", height: "400px" }} 
-            className="rounded-lg border border-slate-700 overflow-hidden bg-black"
-          />
+          <div className="space-y-4">
+            <div 
+              ref={svContainerRef} 
+              style={{ width: "100%", height: "400px" }} 
+              className="rounded-lg border border-slate-700 overflow-hidden bg-black"
+            />
+            
+            {activePanorama && (
+              <div className="flex justify-start">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pos = activePanorama.getPosition();
+                    const pov = activePanorama.getPov();
+                    const lat = pos.lat();
+                    const lng = pos.lng();
+                    const heading = pov.heading;
+                    const pitch = pov.pitch;
+                    const zoom = activePanorama.getZoom();
+                    const fov = 180 / Math.pow(2, zoom);
+                    
+                    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA";
+                    const staticUrl = `https://maps.googleapis.com/maps/api/streetview?size=600x400&location=${lat},${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&key=${apiKey}`;
+                    
+                    const newCapture = {
+                      id: `temp-sv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      url: staticUrl,
+                      lat,
+                      lng,
+                      heading,
+                      pitch,
+                      comentario: "",
+                      streetViewCategory: "hideout" as const
+                    };
+                    
+                    setTemporaryCintilla(prev => [...prev, newCapture]);
+                  }}
+                  className="px-4 py-2 bg-sky-600/90 text-white rounded-lg hover:bg-sky-500 font-sans text-xs font-bold shadow-lg border border-sky-500/20 transition-all duration-150 flex items-center gap-2"
+                >
+                  <span>📷</span>
+                  <span>Capturar Vista Actual (Cintilla)</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CINTILLA TEMPORAL DE EVIDENCIA CAPTURADA */}
+        {temporaryCintilla.length > 0 && (
+          <div className="mt-4 bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎞️</span>
+                <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                  Cintilla Temporal de Evidencias Virtuales ({temporaryCintilla.length})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("¿Desea limpiar todas las capturas temporales?")) {
+                    setTemporaryCintilla([]);
+                  }
+                }}
+                className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider"
+              >
+                Limpiar todo
+              </button>
+            </div>
+
+            <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              {temporaryCintilla.map((item, idx) => (
+                <div 
+                  key={item.id} 
+                  className="flex-shrink-0 w-72 bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-3 relative group"
+                >
+                  <div className="w-full h-36 relative rounded overflow-hidden bg-black border border-slate-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src={item.url} 
+                      alt={`Captura ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTemporaryCintilla(prev => prev.filter(c => c.id !== item.id));
+                      }}
+                      className="absolute top-1.5 right-1.5 p-1 bg-red-600/90 text-white hover:bg-red-500 rounded-full shadow-lg border border-red-500/20"
+                      title="Eliminar de la cintilla"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Categoría Táctica *
+                      </label>
+                      <select
+                        value={item.streetViewCategory}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setTemporaryCintilla(prev => prev.map(c => c.id === item.id ? { ...c, streetViewCategory: val } : c));
+                        }}
+                        className="w-full bg-slate-950/60 border border-slate-800 rounded-lg p-1.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/50"
+                      >
+                        <option value="hideout">Lugar de acecho o escondite</option>
+                        <option value="graffiti">Grafiti de pandilla</option>
+                        <option value="denue_interest">Punto de interés DENUE</option>
+                        <option value="other">Otros / Sin clasificar</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Comentario / Observación *
+                      </label>
+                      <textarea
+                        value={item.comentario}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTemporaryCintilla(prev => prev.map(c => c.id === item.id ? { ...c, comentario: val } : c));
+                        }}
+                        placeholder="Describa los elementos sospechosos o facilitadores físicos observados..."
+                        rows={2}
+                        className="w-full bg-slate-950/60 border border-slate-800 rounded-lg p-1.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/50 resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800/60">
+              <CEIPOLButton
+                variant="primary"
+                size="sm"
+                disabled={isCapturingSv || temporaryCintilla.some(c => !c.comentario.trim())}
+                onClick={async () => {
+                  if (!uploadAndAddPhoto) return;
+                  setIsCapturingSv(true);
+                  try {
+                    for (let i = 0; i < temporaryCintilla.length; i++) {
+                      const item = temporaryCintilla[i];
+                      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(item.url)}`;
+                      const svRes = await fetch(proxyUrl);
+                      if (!svRes.ok) {
+                        throw new Error(`Error al descargar la captura virtual #${i + 1}`);
+                      }
+                      const blob = await svRes.blob();
+                      const file = new File([blob], `StreetView_Capture_${Date.now()}_${i}.jpg`, { type: "image/jpeg" });
+                      
+                      const category = item.streetViewCategory;
+                      await uploadAndAddPhoto(file, item.lat, item.lng, {
+                        tipo: "STREET_VIEW",
+                        gpsSource: "STREET_VIEW",
+                        streetViewCategory: category,
+                        streetViewSource: "Google Street View",
+                        analysisType: "STREET_VIEW",
+                        comentario: `EVIDENCIA VIRTUAL STREET VIEW [Categoría: ${category}]: ${item.comentario}`,
+                        validado: true
+                      } as any);
+                    }
+                    setTemporaryCintilla([]);
+                    alert("Capturas temporales incorporadas exitosamente al expediente bajo las reglas de gobernanza ADR-011.");
+                  } catch (err: any) {
+                    console.error("[PhotoAlbum] Error al incorporar cintilla:", err);
+                    alert("Error al incorporar capturas virtuales: " + err.message);
+                  } finally {
+                    setIsCapturingSv(false);
+                  }
+                }}
+              >
+                {isCapturingSv ? "Incorporando..." : "📥 Incorporar Capturas al Expediente (ADR-011)"}
+              </CEIPOLButton>
+            </div>
+            {temporaryCintilla.some(c => !c.comentario.trim()) && (
+              <p className="text-[9px] text-amber-400 text-right leading-none mt-1">
+                ⚠️ Complete el comentario / observación de todas las capturas para poder incorporarlas.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
