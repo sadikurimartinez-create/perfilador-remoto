@@ -9,6 +9,7 @@ interface ProjectMapProps {
   onUpdateCoordinates?: (newCoords: { lat: number; lng: number }[]) => void;
   onAddPoint?: (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => Promise<void>;
   onMoveMarker?: (id: string, lat: number, lng: number) => Promise<void>;
+  onCandidateCapture?: (lat: number, lng: number, context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }) => void;
   album: any[];
   project: {
     id: string;
@@ -115,6 +116,7 @@ export function ProjectMap({
   onUpdateCoordinates,
   onAddPoint,
   onMoveMarker,
+  onCandidateCapture,
   album,
   project,
 }: ProjectMapProps) {
@@ -199,6 +201,12 @@ export function ProjectMap({
     } else {
       if (subMode === "vertex") {
         // Modalidad 1: Ampliar / Modificar Trazado
+        if (onCandidateCapture) {
+          onCandidateCapture(lat, lng, {
+            geometryType: geometryType === "lineal" || geometryType === "corredor" ? "LINE" : "POLYGON",
+            captureContext: "vertex_add"
+          });
+        }
         await onAddPoint(lat, lng, { name: "Vértice de trazado", isIndependentPoi: false, isVertex: true });
       } else {
         // Modalidad 2: Evidencia / POI Independiente
@@ -327,6 +335,13 @@ export function ProjectMap({
                       "2 - Agregar como nuevo punto al corredor/polígono (Conservar el original)",
                       "1"
                     );
+                    if (onCandidateCapture) {
+                      onCandidateCapture(lat, lng, {
+                        geometryType: geometryType === "lineal" || geometryType === "corredor" ? "LINE" : "POLYGON",
+                        captureContext: "vertex_edit",
+                        previousPhotoId: photo.id
+                      });
+                    }
                     if (choice === "1") {
                       await onMoveMarker(photo.id, lat, lng);
                     } else if (choice === "2" && onAddPoint) {

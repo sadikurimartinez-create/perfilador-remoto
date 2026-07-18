@@ -741,6 +741,45 @@ export function PhotoAlbum({
     streetViewCategory: "hideout" | "graffiti" | "denue_interest" | "other";
   }[]>([]);
   const [isCapturingSv, setIsCapturingSv] = useState(false);
+  const [mapTemporaryCintilla, setMapTemporaryCintilla] = useState<{
+    id: string;
+    url: string;
+    lat: number;
+    lng: number;
+    geometryType: "POLYGON" | "LINE";
+    captureContext: "vertex_add" | "vertex_edit";
+    targetPhotoId?: string;
+    comentario: string;
+    streetViewCategory: "hideout" | "graffiti" | "denue_interest" | "other";
+  }[]>([]);
+  const [isCapturingMap, setIsCapturingMap] = useState(false);
+  const [mapConfirmModal, setMapConfirmModal] = useState<{
+    isOpen: boolean;
+  } | null>(null);
+
+  const handleCandidateCapture = useCallback((
+    lat: number,
+    lng: number,
+    context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }
+  ) => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA";
+    const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=17&size=600x400&maptype=hybrid&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
+
+    const newCapture = {
+      id: `temp-map-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      url: staticUrl,
+      lat,
+      lng,
+      geometryType: context.geometryType,
+      captureContext: context.captureContext,
+      targetPhotoId: context.previousPhotoId,
+      comentario: "",
+      streetViewCategory: "other" as const
+    };
+
+    setMapTemporaryCintilla(prev => [...prev, newCapture]);
+  }, []);
+
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -3013,6 +3052,7 @@ const hasMinimumPhotos =
                 }))}
                 onAddPoint={handleAddMapPoint}
                 onMoveMarker={updatePhotoCoordinates}
+                onCandidateCapture={handleCandidateCapture}
                 onUpdateCoordinates={(newCoords) => {
                   newCoords.forEach((coord, idx) => {
                     const photo = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")[idx];
@@ -3025,6 +3065,122 @@ const hasMinimumPhotos =
             )
           )}
         </div>
+
+        {/* CINTILLA TEMPORAL DE MAPA (MAP EVIDENCE CAPTURE LAYER) */}
+        {mapTemporaryCintilla.length > 0 && (
+          <div className="mt-4 bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎞️</span>
+                <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                  Cintilla Temporal de Evidencias de Mapa ({mapTemporaryCintilla.length})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("¿Desea limpiar todas las capturas de mapa temporales?")) {
+                    setMapTemporaryCintilla([]);
+                  }
+                }}
+                className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider"
+              >
+                Limpiar todo
+              </button>
+            </div>
+
+            <div className="flex gap-4 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              {mapTemporaryCintilla.map((item, idx) => (
+                <div 
+                  key={item.id} 
+                  className="flex-shrink-0 w-72 bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-3 relative group animate-fade-in"
+                >
+                  <div className="w-full h-36 relative rounded overflow-hidden bg-black border border-slate-800">
+                    <img 
+                      src={item.url} 
+                      alt={`Captura de Mapa ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMapTemporaryCintilla(prev => prev.filter(c => c.id !== item.id));
+                      }}
+                      className="absolute top-1.5 right-1.5 p-1 bg-red-600/90 text-white hover:bg-red-500 rounded-full shadow-lg border border-red-500/20"
+                      title="Eliminar de la cintilla"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 text-[10px]">
+                    <div className="grid grid-cols-2 gap-1 text-[9px] text-slate-400 border-b border-slate-800 pb-1.5">
+                      <div><span className="text-slate-500 font-bold">Origen:</span> MAP_CAPTURE</div>
+                      <div><span className="text-slate-500 font-bold">Tipo:</span> STATIC_MAP_CONTEXT</div>
+                      <div><span className="text-slate-500 font-bold">Geometría:</span> {item.geometryType}</div>
+                      <div><span className="text-slate-500 font-bold">Contexto:</span> {item.captureContext}</div>
+                      <div className="col-span-2"><span className="text-slate-500 font-bold">Coords:</span> {item.lat.toFixed(5)}, {item.lng.toFixed(5)}</div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Categoría Táctica *
+                      </label>
+                      <select
+                        value={item.streetViewCategory}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setMapTemporaryCintilla(prev => prev.map(c => c.id === item.id ? { ...c, streetViewCategory: val } : c));
+                        }}
+                        className="w-full bg-slate-950/60 border border-slate-800 rounded-lg p-1.5 text-[10px] text-slate-200 focus:outline-none focus:border-sky-500/50"
+                      >
+                        <option value="hideout">Lugar de acecho o escondite</option>
+                        <option value="graffiti">Grafiti de pandilla</option>
+                        <option value="denue_interest">Punto de interés DENUE</option>
+                        <option value="other">Otros / Sin clasificar</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Comentario / Observación *
+                      </label>
+                      <textarea
+                        value={item.comentario}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMapTemporaryCintilla(prev => prev.map(c => c.id === item.id ? { ...c, comentario: val } : c));
+                        }}
+                        placeholder="Describa el contexto o la actualización de trazado observada..."
+                        rows={2}
+                        className="w-full bg-slate-950/60 border border-slate-800 rounded-lg p-1.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/50 resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800/60">
+              <CEIPOLButton
+                variant="primary"
+                size="sm"
+                disabled={isCapturingMap || mapTemporaryCintilla.some(c => !c.comentario.trim())}
+                onClick={() => setMapConfirmModal({ isOpen: true })}
+              >
+                {isCapturingMap ? "Incorporando..." : "📥 Incorporar Capturas de Mapa al Expediente (ADR-011)"}
+              </CEIPOLButton>
+            </div>
+            {mapTemporaryCintilla.some(c => !c.comentario.trim()) && (
+              <p className="text-[9px] text-amber-400 text-right leading-none mt-1">
+                ⚠️ Complete el comentario / observación de todas las capturas de mapa para poder incorporarlas.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* PASO 3: STREET VIEW PANORAMA & ENTORNO VIRTUAL GOBERNADO */}
@@ -5113,6 +5269,100 @@ const hasMinimumPhotos =
                   Cerrar Ventana
                 </CEIPOLButton>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE CAPTURA DE MAPA (MAP_CAPTURE) */}
+      {mapConfirmModal?.isOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 font-sans animate-fade-in">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 text-amber-500">
+                <span className="text-3xl">⚠️</span>
+                <h3 className="text-base font-black uppercase tracking-wider">Confirmar Incorporación Cartográfica</h3>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                La imagen será incorporada al expediente fotográfico asociada a la geometría seleccionada. Deberá cumplir las reglas de validación fotográfica institucional.
+              </p>
+              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 space-y-2 text-[10px] text-slate-400">
+                <div className="flex justify-between">
+                  <span>Capturas a procesar:</span>
+                  <span className="font-bold text-slate-200">{mapTemporaryCintilla.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Origen de Evidencia:</span>
+                  <span className="font-bold text-cyan-400">MAP_CAPTURE</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tipo de Representación:</span>
+                  <span className="font-bold text-emerald-400">STATIC_MAP_CONTEXT</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-950/40 border-t border-slate-850">
+              <button
+                type="button"
+                onClick={() => setMapConfirmModal(null)}
+                className="px-4 py-2 text-xs font-black text-slate-400 hover:text-white uppercase tracking-wider bg-transparent border-0 cursor-pointer"
+              >
+                CANCELAR
+              </button>
+              <button
+                type="button"
+                disabled={isCapturingMap}
+                onClick={async () => {
+                  if (!uploadAndAddPhoto) return;
+                  setIsCapturingMap(true);
+                  setMapConfirmModal(null);
+                  try {
+                    for (let i = 0; i < mapTemporaryCintilla.length; i++) {
+                      const item = mapTemporaryCintilla[i];
+                      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(item.url)}`;
+                      const res = await fetch(proxyUrl);
+                      if (!res.ok) {
+                        throw new Error(`Error al descargar la captura satelital de mapa #${i + 1}`);
+                      }
+                      const blob = await res.blob();
+                      const file = new File([blob], `Map_Capture_${Date.now()}_${i}.jpg`, { type: "image/jpeg" });
+
+                      await uploadAndAddPhoto(file, item.lat, item.lng, {
+                        tipo: item.geometryType === "LINE" ? "Corredor" : "Polígono",
+                        gpsSource: "VERTICE_MAPA",
+                        source: "MAP_CAPTURE",
+                        visualType: "STATIC_MAP_CONTEXT",
+                        geometryType: item.geometryType,
+                        captureMethod: item.captureContext === "vertex_edit" ? "VERTEX_EDIT" : "VERTEX_ADD",
+                        captureContext: "map_geometry_change",
+                        createdFrom: "ProjectMap",
+                        streetViewCategory: item.streetViewCategory,
+                        streetViewSource: "Google Maps Static API",
+                        analysisType: "MAP_CAPTURE",
+                        comentario: `EVIDENCIA CARTOGRÁFICA DE MAPA [Categoría: ${item.streetViewCategory}]: ${item.comentario}`,
+                        validado: true,
+                        // Trazabilidad de relación geométrica sin sobreescribir previas
+                        ...(item.targetPhotoId ? {
+                          relation: {
+                            type: "GEOMETRY_UPDATE",
+                            previousPhotoId: item.targetPhotoId
+                          }
+                        } : {})
+                      } as any);
+                    }
+                    setMapTemporaryCintilla([]);
+                    alert("Capturas de mapa incorporadas exitosamente al expediente bajo las reglas de gobernanza ADR-011.");
+                  } catch (err: any) {
+                    console.error("[PhotoAlbum] Error al incorporar cintilla de mapa:", err);
+                    alert("Error al incorporar capturas de mapa: " + err.message);
+                  } finally {
+                    setIsCapturingMap(false);
+                  }
+                }}
+                className="px-4 py-2 bg-emerald-600/90 text-white hover:bg-emerald-500 rounded-lg text-xs font-black uppercase tracking-wider shadow-lg border border-emerald-500/20 cursor-pointer"
+              >
+                {isCapturingMap ? "INCORPORANDO..." : "INCORPORAR"}
+              </button>
             </div>
           </div>
         </div>
