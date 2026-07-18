@@ -3,6 +3,7 @@
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import { ImageDeletionGovernanceService } from "@/utils/imageDeletionGovernanceService";
+import { EvidenceRelationship } from "@/utils/evidenceRelationshipEngine";
 
 import {
   createContext,
@@ -62,6 +63,7 @@ export type AlbumPhoto = {
   diagnosticLogs?: string;
   validado?: boolean;
   isIndependentPoi?: boolean;
+  evidenceRelationship?: EvidenceRelationship | null;
 };
 
 export type SweepIntegrationItem = {
@@ -175,6 +177,7 @@ type ProjectContextValue = {
   removeAllPhotosFromAlbum: (projectId: string) => Promise<void>;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
   updatePhotoCoordinates: (id: string, lat: number, lng: number) => Promise<void>;
+  updatePhotoRelationship: (id: string, relationship: EvidenceRelationship) => Promise<void>;
   togglePhotoSelection: (id: string) => void;
   selectAllPhotos: () => void;
   clearSelection: () => void;
@@ -487,6 +490,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             contextualizedAt: data.contextualizedAt || null,
             contextualizedBy: data.contextualizedBy || null,
             isContextualized: data.isContextualized || false,
+            evidenceRelationship: data.evidenceRelationship || null,
           };
         })
         .filter((p) => !p.deleted) as any;
@@ -767,6 +771,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       prev.map((p) => (p.id === id ? { ...p, ...meta } : p))
     );
   }, [isReadOnly]);
+
+  const updatePhotoRelationship = useCallback(async (id: string, relationship: EvidenceRelationship) => {
+    if (isReadOnly) return;
+    if (!project) return;
+    try {
+      const firestore = getDb();
+      const photoRef = doc(firestore, "projects", project.id, "photos", id);
+      await updateDoc(photoRef, {
+        evidenceRelationship: relationship
+      });
+
+      setAlbum((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, evidenceRelationship: relationship } : p))
+      );
+    } catch (err) {
+      console.error("[ProjectContext] Error updating photo relationship:", err);
+    }
+  }, [isReadOnly, project]);
 
   const updatePhotoCoordinates = useCallback(async (id: string, lat: number, lng: number) => {
     if (isReadOnly) return;
@@ -1467,6 +1489,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       removeAllPhotosFromAlbum,
       updatePhotoMeta,
       updatePhotoCoordinates,
+      updatePhotoRelationship,
       togglePhotoSelection,
       selectAllPhotos,
       clearSelection,
@@ -1508,6 +1531,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       removeAllPhotosFromAlbum,
       updatePhotoMeta,
       updatePhotoCoordinates,
+      updatePhotoRelationship,
       togglePhotoSelection,
       selectAllPhotos,
       clearSelection,

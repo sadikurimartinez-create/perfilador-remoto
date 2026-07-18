@@ -833,16 +833,37 @@ export const buildIntelligenceEditorialPayload = async (
   });
   console.log("=========================================\n");
 
-  // Photos Sanitized Mapping
+  // Photos Sanitized Mapping (FASE 7.12.6)
   const photoEvidence = visualMatrix.analystPhotos.map((p, idx) => {
+    const originalPhoto = (album || []).find(
+      (item) => item.previewUrl === p.image || item.url === p.image
+    );
+    const rel = originalPhoto?.evidenceRelationship;
+
+    let locationStr = "Sector perimetral de estudio";
+    if (rel?.geography) {
+      const geoType = rel.geography.type === "POLYGON" ? "POLÍGONO" : rel.geography.type === "LINE" ? "LÍNEA / CORREDOR" : "PUNTO";
+      locationStr = `Contexto Territorial: ${geoType} - ${rel.geography.area || "Zona de Estudio"}`;
+    }
+
+    let factorStr = "Vulnerabilidad Física / Infraestructura";
+    if (rel?.criminogenicFactors && rel.criminogenicFactors.length > 0) {
+      factorStr = `Facilitador territorial: ${rel.criminogenicFactors.join(", ")}`;
+    }
+
+    let relationStr = p.operationalImpact;
+    if (rel?.hypothesisLinks && rel.hypothesisLinks.length > 0) {
+      relationStr = `Relación analítica - Hipótesis: ${rel.hypothesisLinks.join(". ")}`;
+    }
+
     return {
       id: `photo-${idx}`,
       dataUrl: p.image,
       caption: p.title,
-      location: "Sector perimetral", // Sanitizado: sin coordenadas geográficas numéricas
-      factor: "Vulnerabilidad Física / Infraestructura",
+      location: locationStr,
+      factor: factorStr,
       criminologicalInterpretation: p.finding,
-      relation: p.operationalImpact,
+      relation: relationStr,
       riskLevel: "Alto",
       lat: 0,
       lng: 0,

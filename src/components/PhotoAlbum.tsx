@@ -6,6 +6,7 @@ import React, { Fragment, useRef, useState, useEffect, useCallback, useMemo } fr
 import html2canvas from "html2canvas";
 import { useAuth } from "@/context/AuthContext";
 import { useProject, AlbumPhoto } from "@/context/ProjectContext";
+import { EvidenceRelationship, EvidenceRelationshipEngine } from "@/utils/evidenceRelationshipEngine";
 import { TacticalCharts } from "./TacticalCharts";
 import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
@@ -510,6 +511,8 @@ export function PhotoAlbum({
     clearSelection,
     setAnalysisResult,
     updatePhotoMeta,
+    updatePhotoCoordinates,
+    updatePhotoRelationship,
     removePhotoFromAlbum,
     removeAllPhotosFromAlbum,
     documents,
@@ -524,7 +527,6 @@ export function PhotoAlbum({
     softDeleteDoc,
     savePhotoContextualization,
     updateProjectDetails,
-    updatePhotoCoordinates,
     loadProject,
     registerSweep,
     updateSweep,
@@ -2558,6 +2560,186 @@ const hasMinimumPhotos =
                       </>
                     )}
                   </select>
+
+                  {/* NUEVA SECCIÓN: RELACIÓN ANALÍTICA (FASE 7.12.4) */}
+                  <div className="mt-3 p-3 bg-slate-950/40 rounded-xl border border-slate-800/80 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-slate-850 pb-1.5">
+                      <span className="text-xs">🕸️</span>
+                      <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Relación Analítica</h4>
+                    </div>
+
+                    {/* Evidencia & Territorio (FASE 7.12.1) */}
+                    <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-400">
+                      <div className="bg-slate-900/60 p-2 rounded border border-slate-850">
+                        <span className="text-slate-500 font-bold block text-[8px] uppercase tracking-wider">Evidencia</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-xs">📷</span>
+                          <span className="font-semibold text-slate-300 truncate">{(p as any).source || (p.tipo === "STREET_VIEW" ? "STREET_VIEW" : "FIELD_CAPTURE")}</span>
+                        </div>
+                      </div>
+                      <div className="bg-slate-900/60 p-2 rounded border border-slate-850">
+                        <span className="text-slate-500 font-bold block text-[8px] uppercase tracking-wider">Territorio (📍 Ubicación)</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-xs">📍</span>
+                          <span className="font-semibold text-slate-300 truncate">
+                            {project?.geometryType === "poligono" ? "POLÍGONO" : project?.geometryType === "lineal" ? "LÍNEA / CORREDOR" : "PUNTO"}
+                          </span>
+                        </div>
+                        {p.lat && p.lng && (
+                          <p className="text-[7.5px] text-sky-400 font-semibold truncate leading-none mt-1">
+                            Región: {project?.nombre || "Zona del Proyecto"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Factores Criminógenos (FASE 7.12.2) */}
+                    <div className="space-y-1.5">
+                      <span className="text-slate-500 font-bold block text-[8px] uppercase tracking-wider">Factores Criminógenos Asociados</span>
+                      
+                      {/* Factores Actuales */}
+                      <div className="flex flex-wrap gap-1">
+                        {(!p.evidenceRelationship?.criminogenicFactors || p.evidenceRelationship.criminogenicFactors.length === 0) ? (
+                          <span className="text-[9px] text-slate-600 italic">Ningún factor asociado</span>
+                        ) : (
+                          p.evidenceRelationship.criminogenicFactors.map((f: string, idx: number) => (
+                            <span key={idx} className="bg-slate-850 text-slate-300 text-[8.5px] px-1.5 py-0.5 rounded border border-slate-750 font-medium">
+                              {f}
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      {/* IA Sugerencias de Factores (FASE 7.12.5 - Lenguaje Probabilístico) */}
+                      <div className="bg-slate-900/40 p-2 rounded border border-slate-850/80 space-y-1">
+                        <span className="text-[7.5px] text-sky-400 font-bold uppercase tracking-wider">Sugerencias IA (Probabilístico)</span>
+                        <div className="flex flex-wrap gap-1">
+                          {EvidenceRelationshipEngine.suggestCriminogenicFactors({
+                            tipo: p.tipo || "",
+                            comentario: p.comentario || ""
+                          }).map((sug: any, sIdx: number) => {
+                            const isAdded = p.evidenceRelationship?.criminogenicFactors?.includes(sug.description) || false;
+                            return (
+                              <button
+                                key={sIdx}
+                                type="button"
+                                disabled={isReadOnly}
+                                onClick={async () => {
+                                  if (isReadOnly) return;
+                                  const currentFactors = p.evidenceRelationship?.criminogenicFactors || [];
+                                  const newFactors = isAdded 
+                                    ? currentFactors.filter((f: string) => f !== sug.description)
+                                    : [...currentFactors, sug.description];
+
+                                  const updatedRel: EvidenceRelationship = {
+                                    id: p.evidenceRelationship?.id || `rel-${p.id}-${Date.now()}`,
+                                    evidenceId: p.id,
+                                    projectId: projectId || "N/A",
+                                    source: (p as any).source || (p.tipo === "STREET_VIEW" ? "STREET_VIEW" : "FIELD_CAPTURE"),
+                                    geography: {
+                                      type: project?.geometryType === "poligono" ? "POLYGON" : project?.geometryType === "lineal" ? "LINE" : "POINT",
+                                      latitude: p.lat || undefined,
+                                      longitude: p.lng || undefined,
+                                      area: project?.nombre || "Área General"
+                                    },
+                                    criminogenicFactors: newFactors,
+                                    hypothesisLinks: p.evidenceRelationship?.hypothesisLinks || [],
+                                    confidence: p.evidenceRelationship?.confidence || "MEDIUM",
+                                    createdAt: p.evidenceRelationship?.createdAt || new Date().toISOString()
+                                  };
+
+                                  if (updatePhotoRelationship) {
+                                    await updatePhotoRelationship(p.id, updatedRel);
+                                  }
+                                }}
+                                className={`text-[8.5px] px-1.5 py-0.5 rounded transition duration-150 flex items-center gap-1 ${
+                                  isAdded 
+                                    ? "bg-emerald-950/80 text-emerald-400 border border-emerald-850/50 hover:bg-emerald-900/40"
+                                    : "bg-slate-900 text-slate-400 border border-slate-850 hover:bg-slate-800 hover:text-slate-300"
+                                }`}
+                              >
+                                {isAdded ? "✓" : "+"} {sug.description}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hipótesis Relacionadas (FASE 7.12.3) */}
+                    <div className="space-y-1.5">
+                      <span className="text-slate-500 font-bold block text-[8px] uppercase tracking-wider">Hipótesis Relacionadas</span>
+                      
+                      {/* Vínculos Actuales */}
+                      <div className="flex flex-wrap gap-1">
+                        {(!p.evidenceRelationship?.hypothesisLinks || p.evidenceRelationship.hypothesisLinks.length === 0) ? (
+                          <span className="text-[9px] text-slate-600 italic">Ninguna hipótesis vinculada</span>
+                        ) : (
+                          p.evidenceRelationship.hypothesisLinks.map((h: string, idx: number) => (
+                            <span key={idx} className="bg-sky-950/40 text-sky-400 text-[8.5px] px-1.5 py-0.5 rounded border border-sky-900/40 font-medium">
+                              {h}
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      {/* IA Sugerencias de Hipótesis (FASE 7.12.5 - Lenguaje Probabilístico) */}
+                      <div className="bg-slate-900/40 p-2 rounded border border-slate-850/80 space-y-1">
+                        <span className="text-[7.5px] text-sky-400 font-bold uppercase tracking-wider">Vincular Hipótesis IA (Sugerido)</span>
+                        <div className="flex flex-col gap-1">
+                          {EvidenceRelationshipEngine.suggestHypothesisLinks({
+                            tipo: p.tipo || "",
+                            comentario: p.comentario || ""
+                          }).map((sugHyp: any, hIdx: number) => {
+                            const isAdded = p.evidenceRelationship?.hypothesisLinks?.includes(sugHyp.description) || false;
+                            return (
+                              <button
+                                key={hIdx}
+                                type="button"
+                                disabled={isReadOnly}
+                                onClick={async () => {
+                                  if (isReadOnly) return;
+                                  const currentLinks = p.evidenceRelationship?.hypothesisLinks || [];
+                                  const newLinks = isAdded 
+                                    ? currentLinks.filter((l: string) => l !== sugHyp.description)
+                                    : [...currentLinks, sugHyp.description];
+
+                                  const updatedRel: EvidenceRelationship = {
+                                    id: p.evidenceRelationship?.id || `rel-${p.id}-${Date.now()}`,
+                                    evidenceId: p.id,
+                                    projectId: projectId || "N/A",
+                                    source: (p as any).source || (p.tipo === "STREET_VIEW" ? "STREET_VIEW" : "FIELD_CAPTURE"),
+                                    geography: {
+                                      type: project?.geometryType === "poligono" ? "POLYGON" : project?.geometryType === "lineal" ? "LINE" : "POINT",
+                                      latitude: p.lat || undefined,
+                                      longitude: p.lng || undefined,
+                                      area: project?.nombre || "Área General"
+                                    },
+                                    criminogenicFactors: p.evidenceRelationship?.criminogenicFactors || [],
+                                    hypothesisLinks: newLinks,
+                                    confidence: p.evidenceRelationship?.confidence || "MEDIUM",
+                                    createdAt: p.evidenceRelationship?.createdAt || new Date().toISOString()
+                                  };
+
+                                  if (updatePhotoRelationship) {
+                                    await updatePhotoRelationship(p.id, updatedRel);
+                                  }
+                                }}
+                                className={`text-[8.5px] p-1.5 rounded transition duration-150 text-left flex items-start gap-1.5 leading-normal ${
+                                  isAdded 
+                                    ? "bg-sky-950/80 text-sky-400 border border-sky-850/50 hover:bg-sky-900/40"
+                                    : "bg-slate-900 text-slate-400 border border-slate-850 hover:bg-slate-800 hover:text-slate-300"
+                                }`}
+                              >
+                                <span className="mt-0.5">{isAdded ? "✓" : "+"}</span>
+                                <span>{sugHyp.hypothesisId}: {sugHyp.description}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
           </div>
