@@ -1,4 +1,5 @@
 import { VisualEvidenceInternal } from "./models/visualEvidenceTypes";
+import { isValidStreetViewImage } from "../streetViewValidator";
 
 export class StreetViewCollector {
   /**
@@ -14,13 +15,15 @@ export class StreetViewCollector {
 
     // Filtrar candidatos explícitos que representen Street View
     const svRaw = rawImages.filter(
-      img =>
-        img.tipo?.toLowerCase().includes("street") ||
-        img.url?.toLowerCase().includes("street") ||
-        img.comentario?.toLowerCase().includes("street") ||
-        img.description?.toLowerCase().includes("street") ||
-        img.evidenceType === "VIRTUAL_STREET_VIEW" ||
-        img.fuente === "Google Street View"
+      img => {
+        const matchesSv = img.tipo?.toLowerCase().includes("street") ||
+          img.url?.toLowerCase().includes("street") ||
+          img.comentario?.toLowerCase().includes("street") ||
+          img.description?.toLowerCase().includes("street") ||
+          img.evidenceType === "VIRTUAL_STREET_VIEW" ||
+          img.fuente === "Google Street View";
+        return matchesSv && isValidStreetViewImage(img);
+      }
     );
 
     // Mapear cada uno a VisualEvidenceInternal

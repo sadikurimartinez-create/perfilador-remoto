@@ -14,6 +14,7 @@ import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
 import { HypothesisConfidenceAssessment } from './hypothesisConfidenceCalibrationEngine';
 import { OperationalDecisionObject } from './hypothesisDecisionIntelligenceEngine';
 import { PhotoEvidenceGovernanceEngine } from './photoEvidenceGovernanceEngine';
+import { isValidStreetViewImage } from './streetViewValidator';
 
 
 import {
@@ -776,7 +777,10 @@ export const buildIntelligenceEditorialPayload = async (
   
   // ==================== GOBERNANZA FOTOGRÁFICA DE EVIDENCIA (ADR-011) ====================
   const analystRaw = (album || []).filter(p => !p.tipo?.toLowerCase().includes("street") && !p.url?.toLowerCase().includes("street"));
-  const streetViewRaw = (album || []).filter(p => p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street"));
+  const streetViewRaw = (album || []).filter(p => {
+    const isSv = p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street");
+    return isSv && isValidStreetViewImage(p);
+  });
   
   const governedAnalyst = PhotoEvidenceGovernanceEngine.process(analystRaw);
   const governedAlbum = [
