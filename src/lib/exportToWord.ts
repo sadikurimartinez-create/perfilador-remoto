@@ -1332,6 +1332,83 @@ export async function exportToWord(
     }
   }
 
+  // Si existen fotos preservadas digitalmente bajo Soft Governance, inyectar el Anexo de Evidencia Digital Preservada (ADR-011)
+  if (payload.governedEvidence?.summary?.preserved > 0) {
+    elements.push(
+      new Paragraph({
+        spacing: { before: 180, after: 120 }
+      }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 8, color: "BDC3C7" },
+          bottom: { style: BorderStyle.SINGLE, size: 8, color: "BDC3C7" },
+          left: { style: BorderStyle.SINGLE, size: 36, color: "1F4E79" }, // Borde izquierdo azul grueso tipo callout
+          right: { style: BorderStyle.SINGLE, size: 8, color: "BDC3C7" }
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                shading: { fill: "F8F9FA", type: ShadingType.CLEAR },
+                margins: { top: 200, bottom: 200, left: 240, right: 200 },
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: "📷 ANEXO DIGITAL DE EVIDENCIA PRESERVADA",
+                        bold: true,
+                        size: 18,
+                        color: "1F4E79",
+                        font: "Calibri"
+                      })
+                    ],
+                    spacing: { after: 120 }
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `El expediente oficial de geointeligencia delictiva contiene `,
+                        size: 16,
+                        font: "Calibri"
+                      }),
+                      new TextRun({
+                        text: `${payload.governedEvidence.summary.preserved} registros fotográficos adicionales `,
+                        bold: true,
+                        size: 16,
+                        color: "1F4E79",
+                        font: "Calibri"
+                      }),
+                      new TextRun({
+                        text: "preservados e integrados de forma segura en la base de datos digital del Perfilador Remoto CEIPOL para fines de consulta interactiva de campo, auditoría policial y ampliación táctica de la investigación.\n\n",
+                        size: 16,
+                        font: "Calibri"
+                      }),
+                      new TextRun({
+                        text: "Nota de Gobernanza: ",
+                        bold: true,
+                        size: 15,
+                        color: "0D2B52",
+                        font: "Calibri"
+                      }),
+                      new TextRun({
+                        text: "De acuerdo con el protocolo de Soft Governance del Quality Gate de la SSPE, se prioriza el Top 12 de evidencia visual en el cuerpo imprimible del reporte para optimizar la síntesis del análisis estratégico. El remanente completo de capturas tácticas queda resguardado de forma inalterable para garantizar la cadena de custodia táctica.",
+                        italics: true,
+                        size: 15,
+                        color: "5D6B7C",
+                        font: "Calibri"
+                      })
+                    ]
+                  })
+                ]
+              })
+            ]
+          })
+        ]
+      })
+    );
+  }
+
   // ================= PÁGINA 7: CAPÍTULO 6 - ANÁLISIS TERRITORIAL OPERACIONAL =================
   elements.push(createTitle("CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD"));
   

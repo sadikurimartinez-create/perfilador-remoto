@@ -13,6 +13,8 @@ import { InvestigationHypothesis, GeneralHypothesis, SecondaryAnalyticalFactor, 
 import { IntelligenceEvidenceObject } from './evidenceGovernanceEngine';
 import { HypothesisConfidenceAssessment } from './hypothesisConfidenceCalibrationEngine';
 import { OperationalDecisionObject } from './hypothesisDecisionIntelligenceEngine';
+import { PhotoEvidenceGovernanceEngine } from './photoEvidenceGovernanceEngine';
+
 
 import {
   renderDensityMap,
@@ -407,6 +409,7 @@ export interface IntelligenceReportPayload {
   confidenceAssessment?: HypothesisConfidenceAssessment;
   evidenceConflicts?: any[];
   operationalDecision?: OperationalDecisionObject;
+  governedEvidence?: any;
 }
 
 /**
@@ -771,10 +774,20 @@ export const buildIntelligenceEditorialPayload = async (
   const storedFirestore = svCaptured.length; 
   const receivedByEngine = (album || []).length;
   
-  // 1. Ejecutar el Motor de Evidencia Visual Operacional
+  // ==================== GOBERNANZA FOTOGRÁFICA DE EVIDENCIA (ADR-011) ====================
+  const analystRaw = (album || []).filter(p => !p.tipo?.toLowerCase().includes("street") && !p.url?.toLowerCase().includes("street"));
+  const streetViewRaw = (album || []).filter(p => p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street"));
+  
+  const governedAnalyst = PhotoEvidenceGovernanceEngine.process(analystRaw);
+  const governedAlbum = [
+    ...governedAnalyst.primaryPhotos,
+    ...streetViewRaw
+  ];
+
+  // 1. Ejecutar el Motor de Evidencia Visual Operacional con el álbum gobernado (máx 12 fotos primarias)
   const visualMatrix = VisualEvidenceEngine.process(
     projectId || "PR-001",
-    album || [],
+    governedAlbum,
     lat,
     lng,
     radius,
@@ -1094,7 +1107,8 @@ export const buildIntelligenceEditorialPayload = async (
     sieData: stats,
     semData: sem,
     visualEvidenceMatrix: visualMatrix,
-    hypothesisLifecycle
+    hypothesisLifecycle,
+    governedEvidence: governedAnalyst
   };
 };
 
@@ -1196,6 +1210,17 @@ export const buildIntelligenceBriefing = (
       title: `CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA (PARTE ${Math.floor(i / 2) + 1})`,
       mode: 'double',
       visuals
+    });
+  }
+
+  // Si existen fotos preservadas digitalmente bajo Soft Governance, inyectar el Anexo de Evidencia Digital Preservada
+  if (payload.governedEvidence?.summary?.preserved > 0) {
+    pages.push({
+      id: "page-visual-photo-digital-annex",
+      title: "CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA - ANEXO DIGITAL",
+      mode: "executive",
+      visuals: [],
+      interpretation: `ANEXO DIGITAL DE EVIDENCIA PRESERVADA\n\nEl expediente oficial contiene ${payload.governedEvidence.summary.preserved} registros fotográficos adicionales preservados de forma íntegra en el repositorio digital del Perfilador Remoto CEIPOL para consulta operativa, auditoría ambiental y ampliación investigativa de campo.\n\nEsta medida de gobernanza analítica inteligente previene la redundancia documental, optimiza el tamaño de los informes y garantiza que el dictamen ejecutivo represente análisis estratégico enfocado en la mitigación del riesgo.`
     });
   }
 

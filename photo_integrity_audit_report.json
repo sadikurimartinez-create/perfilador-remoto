@@ -1,0 +1,125 @@
+{
+  "timestamp": "2026-07-18T00:09:11.127Z",
+  "totalProjects": 14,
+  "totalPhotos": 197,
+  "averagePhotos": 14.1,
+  "maximumPhotos": 56,
+  "maximumPhotosProject": "Hacienda San Marcos Lineal",
+  "projectsOver40": 3,
+  "totalDuplicates": 14,
+  "totalMissingMetadata": 0,
+  "details": [
+    {
+      "id": "39bR997kB709hcaOkKtT",
+      "name": "Geronimo lineal",
+      "photoCount": 45,
+      "duplicates": 3,
+      "missingMetadata": 0,
+      "status": "EXCESSIVE"
+    },
+    {
+      "id": "7d4VuZCXuUJXQ5UcN7ng",
+      "name": "Polígono Guadalupe Peralta",
+      "photoCount": 5,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "933hR2qQzKxuDtpLdL1M",
+      "name": "UNPOL3",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "GyWFcMs5m4Rd0gy8tiWC",
+      "name": "VILLAS1",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "H6jWzuHhO6RMwGJLue5c",
+      "name": "Lineal Guadalupe Peralta",
+      "photoCount": 11,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "Lwh3M1QJGc9HucZTwtWo",
+      "name": "Polígono Paseos",
+      "photoCount": 26,
+      "duplicates": 2,
+      "missingMetadata": 0,
+      "status": "HIGH"
+    },
+    {
+      "id": "QjoOPCf01JeWjarRUGvt",
+      "name": "Comisaría móvil Villa Montaña",
+      "photoCount": 3,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "SdTUOZl87kiRQoH63gB5",
+      "name": "Polígono Sec. Estación",
+      "photoCount": 51,
+      "duplicates": 4,
+      "missingMetadata": 0,
+      "status": "EXCESSIVE"
+    },
+    {
+      "id": "WhDh1GOQtcVtfQj2ugLx",
+      "name": "Guadalupe Peralta individual",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "WtYMmqiPn9oJMUOHHGaf",
+      "name": "Polígono Villa Montaña",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "XLeeM0Xz5bemDlwgn8eP",
+      "name": "Hacienda San Marcos Lineal",
+      "photoCount": 56,
+      "duplicates": 5,
+      "missingMetadata": 0,
+      "status": "EXCESSIVE"
+    },
+    {
+      "id": "aB0Ql0ACfeOZ3WEof4Of",
+      "name": "CEIPOL",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "bLjjiQvgwheiEY3FVRxX",
+      "name": "UNPOL2",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    },
+    {
+      "id": "hNVlwnWbIGlK7W0wmvcH",
+      "name": "UNPOL",
+      "photoCount": 0,
+      "duplicates": 0,
+      "missingMetadata": 0,
+      "status": "NORMAL"
+    }
+  ]
+}
