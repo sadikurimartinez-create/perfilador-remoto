@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
+import { ImageDeletionGovernanceService } from "@/utils/imageDeletionGovernanceService";
 
 import {
   createContext,
@@ -703,19 +704,47 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       if (!project) return;
       const firestore = getDb();
+      const photoToId = album.find((p) => p.id === id);
+      if (!photoToId) return;
+
+      // Invocar el ImageDeletionGovernanceService para procesar la lógica transversal
+      const { updatedAlbum, auditLog } = ImageDeletionGovernanceService.deleteImage(
+        photoToId,
+        project.id,
+        user?.username || "Usuario Local",
+        album,
+        project.geometryType || "polígono"
+      );
+
+      // 1. Eliminar referencia de Firestore y Storage
       const photoRef = doc(firestore, "projects", project.id, "photos", id);
-      // Aquí necesitaríamos el storagePath para borrar de Storage, lo agregaré al modelo.
-      // Por ahora, solo borramos de Firestore y el contador.
       await deleteDoc(photoRef);
+
+      // Decrementar contador
       const projectRef = doc(firestore, "projects", project.id);
       await updateDoc(projectRef, { photoCount: increment(-1) });
 
-      setAlbum((prev) => prev.filter((p) => p.id !== id));
+      // Guardar la bitácora de trazabilidad única en Firestore en una colección dedicada
+      const deletionCol = collection(firestore, "image_deletion_logs");
+      await addDoc(deletionCol, auditLog);
+
+      // Registrar acción en la bitácora general de auditoría
+      await logAuditAction({
+        action: "IMAGE_DELETED",
+        module: "PHOTO_ALBUM",
+        projectId: project.id,
+        projectName: project.ceipolId || project.nombre,
+        result: "ÉXITO",
+        details: `Imagen ${id} (${auditLog.source}) eliminada definitivamente del expediente por solicitud del usuario.`
+      });
+
+      // Actualizar estado reactivo
+      setAlbum(updatedAlbum);
       setSelectedIds((prev) => prev.filter((x) => x !== id));
     } catch (err) {
       console.error("[ProjectContext] Error al eliminar foto:", err);
     }
-  }, [project]);
+  }, [project, isReadOnly, album, user, logAuditAction]);
 
   const removeAllPhotosFromAlbum = useCallback(async (projectId: string) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura.");

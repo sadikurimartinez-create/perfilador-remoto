@@ -723,6 +723,11 @@ export function PhotoAlbum({
     projectId?: string;
   } | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
+  const [imageDeleteFlow, setImageDeleteFlow] = useState<{
+    isOpen: boolean;
+    photo: any;
+    step: 1 | 2;
+  } | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -2264,24 +2269,23 @@ const hasMinimumPhotos =
                       className="w-full h-auto max-h-[75vh] object-contain"
                     />
                   </div>
-                  {!isReadOnly && (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+                  {!isReadOnly && (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         setClickCoords({ x: e.clientX, y: e.clientY });
-                        setDeleteModal({
+                        setImageDeleteFlow({
                           isOpen: true,
-                          type: "Fotografía",
-                          id: p.id,
-                          projectId: projectId || project?.id
+                          photo: p,
+                          step: 1
                         });
                       }}
-                      className="absolute top-0 right-0 rounded p-1 bg-red-600/90 text-white hover:bg-red-500"
-                      title="Eliminar fotografía (Controlado)"
-                      aria-label="Eliminar fotografía"
+                      className="absolute top-2 right-2 rounded-lg p-2 bg-red-600/90 text-white hover:bg-red-500 shadow-lg border border-red-500/20 transition-all duration-150 backdrop-blur-sm"
+                      title="🗑️ Eliminar imagen"
+                      aria-label="Eliminar imagen"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                         <line x1="10" y1="11" x2="10" y2="17" />
@@ -5090,6 +5094,118 @@ const hasMinimumPhotos =
           </CEIPOLButton>
         </div>
       </DynamicPopup>
+
+      {/* FASE 7.11-A: DOBLE CONFIRMACIÓN DE ELIMINACIÓN DE EVIDENCIA FOTOGRÁFICA */}
+      {imageDeleteFlow?.isOpen && imageDeleteFlow.photo && (
+        <DynamicPopup
+          open={imageDeleteFlow.isOpen}
+          anchorPosition={clickCoords}
+          onClose={() => setImageDeleteFlow(null)}
+          className="max-w-md w-full border-red-500/50 bg-slate-950/95"
+        >
+          {imageDeleteFlow.step === 1 ? (
+            <div className="space-y-4">
+              <h3 className="text-sm font-black text-red-500 flex items-center gap-2 uppercase tracking-wider">
+                🗑️ Advertencia de eliminación
+              </h3>
+              
+              <blockquote className="border-l-4 border-red-500 bg-red-950/20 p-3 rounded-r-xl">
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
+                  "Está a punto de eliminar esta imagen del expediente. Esta acción eliminará la evidencia visual y toda la contextualización asociada dentro del sistema."
+                </p>
+              </blockquote>
+
+              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-800 space-y-2">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pb-1.5 border-b border-slate-800">
+                  Detalles de la Evidencia Digital:
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-sans">
+                  <div>
+                    <span className="text-slate-500 block uppercase font-bold tracking-wide">Origen de imagen:</span>
+                    <span className="text-slate-200 font-medium">
+                      {imageDeleteFlow.photo.tipo?.toLowerCase().includes("street") || imageDeleteFlow.photo.url?.toLowerCase().includes("street") || imageDeleteFlow.photo.evidenceType === "VIRTUAL_STREET_VIEW" || imageDeleteFlow.photo.fuente === "Google Street View"
+                        ? "Street View / Virtual"
+                        : "Captura de Campo"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block uppercase font-bold tracking-wide">Fecha de registro:</span>
+                    <span className="text-slate-200 font-medium">
+                      {imageDeleteFlow.photo.fecha ? new Date(imageDeleteFlow.photo.fecha).toLocaleDateString("es-MX") : "N/D"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block uppercase font-bold tracking-wide">Clasificación actual:</span>
+                    <span className="text-slate-200 font-medium">
+                      {imageDeleteFlow.photo.tipo || imageDeleteFlow.photo.classification || "PRIMARY"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block uppercase font-bold tracking-wide">Relación Geográfica:</span>
+                    <span className="text-slate-200 font-medium truncate" title={imageDeleteFlow.photo.lat ? `${imageDeleteFlow.photo.lat}, ${imageDeleteFlow.photo.lng}` : "Sin coordenadas"}>
+                      {imageDeleteFlow.photo.lat != null ? `Georreferenciada (${Number(imageDeleteFlow.photo.lat).toFixed(4)}, ${Number(imageDeleteFlow.photo.lng).toFixed(4)})` : "Sin coordenadas"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
+                <CEIPOLButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setImageDeleteFlow(null)}
+                >
+                  CANCELAR
+                </CEIPOLButton>
+                <CEIPOLButton
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setImageDeleteFlow(prev => prev ? { ...prev, step: 2 } : null)}
+                >
+                  CONTINUAR
+                </CEIPOLButton>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <h3 className="text-sm font-black text-amber-500 flex items-center gap-2 uppercase tracking-wider">
+                ⚠️ Confirmación irreversible
+              </h3>
+
+              <blockquote className="border-l-4 border-amber-500 bg-amber-950/20 p-3 rounded-r-xl">
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
+                  "Esta acción no puede deshacerse. Al confirmar se perderá permanentemente la imagen, su contextualización territorial, clasificación analítica y vínculos dentro del expediente."
+                </p>
+              </blockquote>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
+                <CEIPOLButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setImageDeleteFlow(prev => prev ? { ...prev, step: 1 } : null)}
+                >
+                  REGRESAR
+                </CEIPOLButton>
+                <CEIPOLButton
+                  variant="danger"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await removePhotoFromAlbum(imageDeleteFlow.photo.id);
+                      setImageDeleteFlow(null);
+                      alert("Evidencia visual eliminada definitivamente de forma exitosa.");
+                    } catch (err: any) {
+                      alert("Error al eliminar la evidencia visual: " + err.message);
+                    }
+                  }}
+                >
+                  ELIMINAR DEFINITIVAMENTE
+                </CEIPOLButton>
+              </div>
+            </div>
+          )}
+        </DynamicPopup>
+      )}
 
       {/* CONFIRMACIÓN DE HIPÓTESIS DEMOGRÁFICA (SCINCE) */}
       <DynamicPopup
