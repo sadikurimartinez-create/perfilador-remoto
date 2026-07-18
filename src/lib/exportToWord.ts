@@ -31,6 +31,34 @@ import {
 import { saveAs } from "file-saver";
 import { TCE_DEFAULT_FALLBACK } from "../utils/territorialContextEngine";
 import { EditorialStructureEngine } from "@/utils/editorialStructureEngine";
+import { AIOutputSanitizerEngine } from "@/utils/aiOutputSanitizerEngine";
+import { 
+  EvidenceImageValidationEngine,
+  EvidenceFallbackReason,
+  EVIDENCE_FALLBACK_CATALOG
+} from "@/utils/evidenceImageValidationEngine";
+import { ImageFingerprintService } from "@/utils/imageFingerprintService";
+import { EvidenceNarrativeMapper } from "@/utils/evidenceNarrativeMapper";
+import { ReportCoherenceValidator } from "@/utils/reportCoherenceValidator";
+import { ReportCertificationGate } from "@/utils/reportCertificationGate";
+import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
+import { renderMarkdownTable } from "@/utils/documentTableRenderer";
+import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
+import {
+  PageFormatManager,
+  HeaderFooterManager,
+  FlowControlManager,
+  VisualDensityManager,
+  InstitutionalBrandManager
+} from "@/utils/documentCompositionEngine";
+import { PhotoEvidenceGovernanceEngine } from "@/utils/photoEvidenceGovernanceEngine";
+import {
+  EvidenceContext,
+  EvidenceContextValidator,
+  EvidenceGeoshield,
+  EvidenceLayoutBuilder,
+  EvidenceFallbackFactory
+} from "@/utils/documentEvidenceIntegrationEngine";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -48,10 +76,133 @@ async function fetchLocalImageBuffer(path: string): Promise<ArrayBuffer | null> 
   }
 }
 
+async function renderGovernanceFallbackCanvas(
+  reasonType: EvidenceFallbackReason,
+  evidenceId: string,
+  maxWidth: number,
+  maxHeight: number
+): Promise<{ data: ArrayBuffer; width: number; height: number }> {
+  if (typeof document === "undefined") {
+    return { data: new ArrayBuffer(0), width: maxWidth, height: maxHeight };
+  }
+  const fCanvas = document.createElement("canvas");
+  fCanvas.width = 600;
+  fCanvas.height = 380;
+  const fCtx = fCanvas.getContext("2d");
+  if (fCtx) {
+    // 1. Fondo elegante Slate 50 (neutro institucional)
+    fCtx.fillStyle = "#f8fafc";
+    fCtx.fillRect(0, 0, 600, 380);
+
+    // 2. Líneas sutiles de cuadrícula decorativa gris claro
+    fCtx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+    fCtx.lineWidth = 1;
+    for (let x = 0; x < 600; x += 30) {
+      fCtx.beginPath();
+      fCtx.moveTo(x, 0);
+      fCtx.lineTo(x, 380);
+      fCtx.stroke();
+    }
+    for (let y = 0; y < 380; y += 30) {
+      fCtx.beginPath();
+      fCtx.moveTo(0, y);
+      fCtx.lineTo(600, y);
+      fCtx.stroke();
+    }
+
+    // 3. Borde elegante Slate 400
+    fCtx.strokeStyle = "#94a3b8";
+    fCtx.lineWidth = 2;
+    fCtx.strokeRect(15, 15, 570, 350);
+
+    // 4. Doble borde interior Slate 200 sutil
+    fCtx.strokeStyle = "#cbd5e1";
+    fCtx.lineWidth = 1;
+    fCtx.strokeRect(20, 20, 560, 340);
+
+    // 5. Encabezado institucional
+    fCtx.fillStyle = "#475569"; // Slate 600
+    fCtx.font = "bold 13px Arial, sans-serif";
+    fCtx.textAlign = "center";
+    fCtx.fillText("SSPE - CEIPOL", 300, 50);
+
+    // Línea separadora sutil superior
+    fCtx.strokeStyle = "#cbd5e1";
+    fCtx.lineWidth = 1;
+    fCtx.beginPath();
+    fCtx.moveTo(200, 65);
+    fCtx.lineTo(400, 65);
+    fCtx.stroke();
+
+    // 6. Título Principal (Azul oscuro premium Slate 900)
+    fCtx.fillStyle = "#0f172a"; // Slate 900
+    fCtx.font = "bold 18px Arial, sans-serif";
+    fCtx.fillText("EVIDENCIA VISUAL CONTROLADA", 300, 95);
+
+    // 7. Subtítulo
+    fCtx.fillStyle = "#334155"; // Slate 700
+    fCtx.font = "13px Arial, sans-serif";
+    fCtx.fillText("Imagen no publicada por validación automática.", 300, 125);
+
+    // 8. Sección de Motivo
+    fCtx.fillStyle = "#64748b"; // Slate 500
+    fCtx.font = "bold 12px Arial, sans-serif";
+    fCtx.fillText("Motivo:", 300, 165);
+
+    const motivoText = EVIDENCE_FALLBACK_CATALOG[reasonType] || "Validación automática no satisfactoria.";
+    fCtx.fillStyle = "#0f172a"; // Slate 900
+    fCtx.font = "bold 14px Arial, sans-serif";
+    fCtx.fillText(motivoText, 300, 190);
+
+    // 9. Nota de conservación analítica
+    fCtx.fillStyle = "#475569"; // Slate 600
+    fCtx.font = "italic 12px Arial, sans-serif";
+    fCtx.fillText("Referencia analítica conservada.", 300, 230);
+
+    // 10. Código de evidencia
+    fCtx.fillStyle = "#64748b"; // Slate 500
+    fCtx.font = "bold 11px Arial, sans-serif";
+    fCtx.fillText("Código de evidencia:", 300, 265);
+
+    fCtx.fillStyle = "#1e293b"; // Slate 800
+    fCtx.font = "bold 13px Courier New, monospace";
+    fCtx.fillText(evidenceId || "N/D", 300, 285);
+
+    // Línea separadora sutil inferior
+    fCtx.strokeStyle = "#cbd5e1";
+    fCtx.lineWidth = 1;
+    fCtx.beginPath();
+    fCtx.moveTo(220, 310);
+    fCtx.lineTo(380, 310);
+    fCtx.stroke();
+
+    // 11. Clasificación
+    fCtx.fillStyle = "#64748b"; // Slate 500
+    fCtx.font = "11px Arial, sans-serif";
+    fCtx.fillText("Clasificación: CONFIDENCIAL", 300, 335);
+
+    const fallbackBuffer: ArrayBuffer = await new Promise((resolve) => {
+      fCanvas.toBlob(async (blob) => {
+        resolve(await blob!.arrayBuffer());
+      }, "image/png");
+    });
+
+    const ratio = Math.min(maxWidth / 600, maxHeight / 380);
+    return {
+      data: fallbackBuffer,
+      width: Math.round(600 * ratio),
+      height: Math.round(380 * ratio)
+    };
+  }
+  return { data: new ArrayBuffer(0), width: maxWidth, height: maxHeight };
+}
+
 async function getImageDimensionsAndBuffer(
   imageUrl: string, 
   maxWidth = 500, 
-  maxHeight = 320
+  maxHeight = 320,
+  narrative = "",
+  evidenceId = ""
 ): Promise<{ data: ArrayBuffer; width: number; height: number } | null> {
   if (!imageUrl || typeof imageUrl !== "string") return null;
   let objectUrl: string | null = null;
@@ -169,6 +320,33 @@ async function getImageDimensionsAndBuffer(
         "image/png"
       );
     });
+
+    if (narrative) {
+      // 1. Validar integridad de imagen, peso, formato y coincidencia semántica
+      const validation = EvidenceImageValidationEngine.validateImage(stampedBuffer, imageUrl, narrative);
+      if (!validation.valid) {
+        console.warn(`[EvidenceImageValidationEngine] Imagen invalidada. Razón: ${validation.reason}`);
+        const fallbackReason = validation.fallbackReason || "IMAGE_CORRUPTED";
+        return await renderGovernanceFallbackCanvas(
+          fallbackReason,
+          evidenceId || "N/D",
+          maxWidth,
+          maxHeight
+        );
+      }
+
+      // 2. Control de duplicados usando doble fingerprint (SHA256 + pHash)
+      const dupCheck = ImageFingerprintService.registerAndCheckDuplicate(imageUrl, stampedBuffer);
+      if (dupCheck.duplicate) {
+        console.warn(`[ImageFingerprintService] Duplicado detectado (${dupCheck.type}). Excluyendo de compilación.`);
+        return await renderGovernanceFallbackCanvas(
+          "IMAGE_DUPLICATED",
+          evidenceId || "N/D",
+          maxWidth,
+          maxHeight
+        );
+      }
+    }
 
     return { data: stampedBuffer, width: scaledWidth, height: scaledHeight };
   } catch (err) {
@@ -457,12 +635,84 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
   }
 }
 
+function getPrimaryInitialHypothesis(payload: any): string {
+  // 1. ADR-011 Hypothesis Ledger
+  if (payload.hypothesisLifecycle?.hipotesisInicial && payload.hypothesisLifecycle.hipotesisInicial.trim().length > 0) {
+    return payload.hypothesisLifecycle.hipotesisInicial.trim();
+  }
+  if (payload.hypothesisLedger?.hipotesisInicial && payload.hypothesisLedger.hipotesisInicial.trim().length > 0) {
+    return payload.hypothesisLedger.hipotesisInicial.trim();
+  }
+  // 3. Legacy hipotesisPrincipal
+  if (payload.hipotesisPrincipal?.queOcurre && payload.hipotesisPrincipal.queOcurre.trim().length > 0) {
+    return payload.hipotesisPrincipal.queOcurre.trim();
+  }
+  if (typeof payload.hipotesisPrincipal === "string" && payload.hipotesisPrincipal.trim().length > 0) {
+    return payload.hipotesisPrincipal.trim();
+  }
+  // 4. Fallback exploratorio / finalHypothesis
+  if (payload.finalHypothesis && payload.finalHypothesis.trim().length > 15) {
+    const lines = payload.finalHypothesis.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+    if (lines.length > 0) {
+      return lines[0];
+    }
+  }
+  return "Actividad delictiva disonante bajo investigación territorial.";
+}
+
+function assertHypothesisConsistency(portadaHyp: string, cap0Hyp: string) {
+  const normPortada = portadaHyp.trim().toLowerCase().replace(/[^a-z0-9áéíóúñ]/g, "");
+  const normCap0 = cap0Hyp.trim().toLowerCase().replace(/[^a-z0-9áéíóúñ]/g, "");
+  
+  if (normPortada === normCap0) {
+    console.log("[HYPOTHESIS CONSISTENCY] MATCH");
+  } else {
+    console.error(`[HYPOTHESIS CONSISTENCY] CRITICAL INCONSISTENCY:\nPortada: "${portadaHyp}"\nCapítulo 0: "${cap0Hyp}"`);
+    throw new Error(`CRITICAL INCONSISTENCY: La hipótesis inicial en portada no coincide con la trayectoria del Capítulo 0.`);
+  }
+}
+
 export async function exportToWord(
   payload: any,
   projectName: string,
   reportNumber?: string,
   user?: any
 ) {
+  // --- CAPA DE GOBERNANZA DE CALIDAD DE REPORTES CEIPOL v1.0 ---
+  // Resetear registro de huellas dactilares para esta corrida de exportación
+  ImageFingerprintService.clearRegistry();
+
+  // 1. Evidence Normalizer & Mapper
+  if (payload.photoEvidence) {
+    payload.photoEvidence = EvidenceNarrativeMapper.mapEvidenceList(payload.photoEvidence);
+  }
+  if (payload.streetViewAnalysis) {
+    payload.streetViewAnalysis = EvidenceNarrativeMapper.mapEvidenceList(payload.streetViewAnalysis);
+  }
+
+  // Ejecutar el motor de gobernanza en caliente de evidencias fotográficas (ADR-011)
+  const governedPhotoResult = PhotoEvidenceGovernanceEngine.process(payload.photoEvidence || []);
+  payload.governedEvidence = governedPhotoResult;
+
+  // 2. AI Sanitizer Engine (modo DOCUMENT_PUBLICATION)
+  payload = AIOutputSanitizerEngine.sanitizeObject(payload, "DOCUMENT_PUBLICATION");
+
+  // 3. Coherence Validator & Certification Gate Status Control
+  const certResult = ReportCertificationGate.certify(payload, true);
+  payload.certificationGateResult = certResult;
+
+  if (certResult.status === "NOT_CERTIFIED") {
+    const errMsg = "Informe no certificado: Cadena analítica incompleta.\n\n" + certResult.messages.join("\n");
+    if (typeof window !== "undefined") {
+      alert(errMsg);
+    }
+    throw new Error(errMsg);
+  } else if (certResult.status === "CERTIFIED_WITH_WARNINGS") {
+    if (typeof window !== "undefined") {
+      alert("⚠️ Advertencia de Certificación CEIPOL:\n\n" + certResult.messages.join("\n"));
+    }
+  }
+
   // --- FASE 4: EXPORT VALIDATION LOGS DEFENSIVOS ---
   console.log("================= [EXPORT VALIDATION] =================");
   const criticalFields = [
@@ -500,8 +750,8 @@ export async function exportToWord(
     payload.photoEvidence = payload.photoEvidence.map((p: any) => ({
       ...p,
       caption: p.caption ? p.caption.slice(0, 180) : "",
-      criminologicalInterpretation: p.criminologicalInterpretation ? p.criminologicalInterpretation.slice(0, 300) : "",
-      relation: p.relation ? p.relation.slice(0, 180) : ""
+      criminologicalInterpretation: p.criminologicalInterpretation || "",
+      relation: p.relation || ""
     }));
   }
 
@@ -576,53 +826,63 @@ export async function exportToWord(
     alignment: AlignmentType.JUSTIFIED
   });
 
-  const renderEditorialText = (text: string, isChapter4 = false): Paragraph[] => {
+  const renderEditorialText = (text: string, isChapter4 = false): any[] => {
     if (!text) return [];
+    VisualDensityController.reset();
+    VisualDensityManager.reset();
+    FlowControlManager.reset();
+
     const blocks = EditorialStructureEngine.parse(text, isChapter4);
-    const paragraphs: Paragraph[] = [];
+    const documentElements: any[] = [];
+    let blockIndex = 0;
 
     for (const block of blocks) {
       switch (block.type) {
         case "TITLE":
-          paragraphs.push(
-            new Paragraph({
-              keepWithNext: true,
-              children: [
-                new TextRun({
-                  text: block.text?.toUpperCase(),
-                  bold: true,
-                  size: 24,
-                  color: "0D2B52",
-                  font: "Calibri"
-                })
-              ],
-              spacing: { before: 240, after: 120 }
-            })
+          documentElements.push(
+            new Paragraph(
+              FlowControlManager.applyFlowRules({
+                children: [
+                  new TextRun({
+                    text: block.text?.toUpperCase(),
+                    bold: true,
+                    size: 24,
+                    color: "0D2B52",
+                    font: "Calibri"
+                  })
+                ],
+                spacing: { before: 240, after: 120 }
+              }, "TITLE")
+            )
           );
+          VisualDensityManager.registerNonTableBlock();
           break;
 
         case "SUBTITLE":
-          paragraphs.push(
-            new Paragraph({
-              keepWithNext: true,
-              children: [
-                new TextRun({
-                  text: block.text,
-                  bold: true,
-                  size: 20,
-                  color: "1F4E79",
-                  font: "Calibri"
-                })
-              ],
-              spacing: { before: 180, after: 80 }
-            })
+          documentElements.push(
+            new Paragraph(
+              FlowControlManager.applyFlowRules({
+                children: [
+                  new TextRun({
+                    text: block.text,
+                    bold: true,
+                    size: 20,
+                    color: "1F4E79",
+                    font: "Calibri"
+                  })
+                ],
+                spacing: { before: 180, after: 80 }
+              }, "SUBTITLE")
+            )
           );
+          VisualDensityManager.registerNonTableBlock();
           break;
 
         case "BULLET":
+          VisualDensityManager.registerNonTableBlock();
           if (block.items) {
             block.items.forEach(item => {
-              paragraphs.push(
+              documentElements.push(
                 new Paragraph({
                   children: [
                     new TextRun({ text: "• ", bold: true, color: "0D2B52", size: 20 }),
@@ -637,10 +897,11 @@ export async function exportToWord(
           break;
 
         case "NUMBERED_LIST":
+          VisualDensityManager.registerNonTableBlock();
           const prefix = block.isStatistical 
             ? `${block.level}. ` 
             : `☐ ${block.level}. `;
-          paragraphs.push(
+          documentElements.push(
             new Paragraph({
               children: [
                 new TextRun({ text: prefix, bold: !block.isStatistical, color: "0D2B52", size: 18, font: "Calibri" }),
@@ -653,6 +914,7 @@ export async function exportToWord(
           break;
 
         case "ANALYTICAL_BLOCK":
+          VisualDensityManager.registerNonTableBlock();
           let categoryLabel = "ANÁLISIS";
           let categoryColor = "1F4E79";
           if (block.category === "HECHO_OBSERVADO") { categoryLabel = "HECHO OBSERVADO"; categoryColor = "A51D24"; }
@@ -662,7 +924,7 @@ export async function exportToWord(
           else if (block.category === "RECOMMENDATION") { categoryLabel = "RECOMENDACIÓN"; categoryColor = "1565C0"; }
 
           const cleanContent = block.text?.replace(new RegExp(`^\\[?${categoryLabel}\\]?:?\\s*`, "i"), "") || "";
-          paragraphs.push(
+          documentElements.push(
             new Paragraph({
               children: [
                 new TextRun({ text: `[${categoryLabel}] `, bold: true, color: categoryColor, size: 18, font: "Calibri" }),
@@ -674,20 +936,38 @@ export async function exportToWord(
           );
           break;
 
+        case "TABLE":
+          if (block.text) {
+            VisualDensityManager.registerTableBlock();
+            documentElements.push(renderMarkdownTable(block.text) as any);
+          }
+          break;
+
+        case "VISUAL_BLOCK":
+          VisualDensityManager.registerNonTableBlock();
+          if (block.text) {
+            documentElements.push(renderVisualBlock(block.text, blockIndex) as any);
+          }
+          break;
+
         case "PARAGRAPH":
         default:
-          paragraphs.push(
-            new Paragraph({
-              children: [new TextRun({ text: block.text, size: 20, font: "Calibri", color: "222222" })],
-              spacing: { after: 120 },
-              alignment: AlignmentType.JUSTIFIED
-            })
+          VisualDensityManager.registerNonTableBlock();
+          documentElements.push(
+            new Paragraph(
+              FlowControlManager.applyFlowRules({
+                children: [new TextRun({ text: block.text, size: 20, font: "Calibri", color: "222222" })],
+                spacing: { after: 120 },
+                alignment: AlignmentType.JUSTIFIED
+              }, "PARAGRAPH")
+            )
           );
           break;
       }
+      blockIndex++;
     }
 
-    return paragraphs;
+    return documentElements;
   };
 
   const createBullet = (boldPrefix: string, text: string, color = "222222") => new Paragraph({
@@ -789,6 +1069,63 @@ export async function exportToWord(
       spacing: { before: 100, after: 200 }
     })
   );
+
+  // --- FASE 1: BOX DE HIPÓTESIS INICIAL EN PORTADA ---
+  const certGate = payload.certificationGateResult;
+  const hypothesisText = getPrimaryInitialHypothesis(payload);
+  const initialHypothesisBlock = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            shading: { fill: "F8FAFC", type: ShadingType.CLEAR },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+              bottom: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" },
+              left: { style: BorderStyle.SINGLE, size: 24, color: "0D2B52" },
+              right: { style: BorderStyle.SINGLE, size: 8, color: "0D2B52" }
+            },
+            margins: { left: 180, right: 180, top: 120, bottom: 120 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "📋 HIPÓTESIS INICIAL DE INVESTIGACIÓN (HIE/ADR-011)", bold: true, size: 20, color: "0D2B52", font: "Calibri" })
+                ],
+                spacing: { after: 100 }
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Pregunta Analítica: ", bold: true, size: 16, color: "1F4E79" }),
+                  new TextRun({ text: "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?\n", size: 16 }),
+                  new TextRun({ text: "Hipótesis de Trabajo: ", bold: true, size: 16, color: "1F4E79" }),
+                  new TextRun({ text: `${hypothesisText.substring(0, 250)}...\n`, size: 16, italics: true }),
+                  new TextRun({ text: "Variables Evaluadas: ", bold: true, size: 16, color: "1F4E79" }),
+                  new TextRun({ text: "• Territorio (Criminología Ambiental)  • Incidencia Delictiva (911)  • Actores Locales (Dossier)  • Oportunidad Física\n", size: 16 }),
+                  new TextRun({ text: "Objetivo de Validación: ", bold: true, size: 16, color: "1F4E79" }),
+                  new TextRun({ text: "Determinar puntos críticos de intervención y coordinar la remediación urbana táctica.", size: 16 })
+                ],
+                alignment: AlignmentType.JUSTIFY,
+                spacing: { after: 120 }
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `CEIPOL CERTIFICATION ID: `, bold: true, size: 15, color: "0D2B52" }),
+                  new TextRun({ text: `${certGate?.certificationId || "PENDING"}  |  `, size: 15 }),
+                  new TextRun({ text: "ESTADO: ", bold: true, size: 15, color: certGate?.status === "CERTIFIED" ? "10B981" : "D97706" }),
+                  new TextRun({ text: `${certGate?.status === "CERTIFIED" ? "✅ CERTIFICADO" : "⚠️ CERTIFICADO CON ADVERTENCIAS"}`, bold: true, size: 15, color: certGate?.status === "CERTIFIED" ? "10B981" : "D97706" })
+                ]
+              })
+            ]
+          })
+        ]
+      })
+    ],
+    spacing: { after: 240 }
+  });
+
+  elements.push(initialHypothesisBlock);
+  elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
 
   // Caja de Síntesis Ejecutiva en Portada
   elements.push(
@@ -938,18 +1275,133 @@ export async function exportToWord(
     elements.push(aceTable);
   }
 
+  // ================= SÍNTESIS EJECUTIVA DE ALTA DIRECCIÓN v1.0.9 [NUEVO] =================
+  if (payload.executiveSummaryReport && payload.executiveSummaryReport.isValid) {
+    const report = payload.executiveSummaryReport;
+    elements.push(new Paragraph({ pageBreakBefore: true }));
+    elements.push(createTitle("SÍNTESIS EJECUTIVA DE ALTA DIRECCIÓN (v1.0.9)"));
+    
+    // 1. Situación Identificada
+    elements.push(createSubtitle("1. Situación Identificada"));
+    elements.push(createBodyText(report.situation));
+    
+    // 2. Hallazgos Principales (Top 5)
+    elements.push(createSubtitle("2. Hallazgos Principales (Prioritarios)"));
+    report.primaryFindings.forEach((f: any, idx: number) => {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `📍 [Hallazgo #${idx + 1}] `, bold: true, color: "0D2B52", size: 18, font: "Calibri" }),
+            new TextRun({ text: `${f.title}: `, bold: true, size: 16, font: "Calibri" }),
+            new TextRun({ text: f.finding, size: 16, font: "Calibri" })
+          ],
+          spacing: { after: 80 },
+          indent: { left: 240 }
+        })
+      );
+    });
+
+    // Hallazgos Secundarios (Supporting Findings - Ajuste 2: No eliminar)
+    if (report.supportingFindings && report.supportingFindings.length > 0) {
+      elements.push(createSubtitle("Hallazgos de Soporte Secundarios (Auditoría)"));
+      report.supportingFindings.forEach((f: any, idx: number) => {
+        elements.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `🔍 [Soporte #${idx + 1}] `, bold: true, color: "5B6573", size: 16, font: "Calibri" }),
+              new TextRun({ text: `${f.title}: `, bold: true, size: 14, font: "Calibri" }),
+              new TextRun({ text: f.finding, size: 14, font: "Calibri" })
+            ],
+            spacing: { after: 60 },
+            indent: { left: 240 }
+          })
+        );
+      });
+    }
+    
+    // 3. Factores de Riesgo
+    elements.push(createSubtitle("3. Factores de Riesgo"));
+    report.risks.forEach((r: any) => {
+      let riskColor = "10B981"; // GREEN
+      if (r.level === "HIGH") riskColor = "B91C1C"; // RED
+      else if (r.level === "MEDIUM") riskColor = "D97706"; // AMBER
+
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `⚠️ [Riesgo: ${r.level}] `, bold: true, color: riskColor, size: 18, font: "Calibri" }),
+            new TextRun({ text: `Estado: ${r.status}  |  `, bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${r.risk}\n`, size: 16, font: "Calibri" }),
+            new TextRun({ text: `Fundamento: `, bold: true, size: 14, color: "5B6573", font: "Calibri" }),
+            new TextRun({ text: r.basis, size: 14, font: "Calibri", italic: true })
+          ],
+          spacing: { after: 100 },
+          indent: { left: 240 }
+        })
+      );
+    });
+    
+    // 4. Hipótesis Vigente
+    elements.push(createSubtitle("4. Estado de Hipótesis"));
+    let stateColor = "D97706"; // AMBER
+    if (report.hypothesisState.state === "CONFIRMADA") stateColor = "10B981"; // GREEN
+    else if (report.hypothesisState.state === "LIMITADA") stateColor = "B91C1C"; // RED
+
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `📋 Hipótesis Actual: `, bold: true, color: "0D2B52", size: 18, font: "Calibri" }),
+          new TextRun({ text: `[${report.hypothesisState.state}] `, bold: true, color: stateColor, size: 18, font: "Calibri" }),
+          new TextRun({ text: `Score de Confianza: ${report.hypothesisState.confidenceScore}/100\n`, size: 16, font: "Calibri" }),
+          new TextRun({ text: report.hypothesisState.statement, size: 16, font: "Calibri", italic: true })
+        ],
+        spacing: { after: 120 },
+        indent: { left: 240 }
+      })
+    );
+    
+    // 5. Recomendaciones Operativas Ordenadas por Prioridad
+    elements.push(createSubtitle("5. Recomendaciones Operativas Prioritarias"));
+    report.recommendations.forEach((rec: any, idx: number) => {
+      let priorityColor = "10B981";
+      if (rec.priority === "HIGH") priorityColor = "B91C1C";
+      else if (rec.priority === "MEDIUM") priorityColor = "D97706";
+
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `⚡ [Acción #${idx + 1}] [Prioridad: ${rec.priority}] `, bold: true, color: priorityColor, size: 18, font: "Calibri" }),
+            new TextRun({ text: `${rec.action}\n`, size: 16, font: "Calibri" }),
+            new TextRun({ text: `Objetivo Táctico: `, bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
+            new TextRun({ text: `${rec.objective}\n`, size: 14, font: "Calibri" }),
+            new TextRun({ text: `Sustento de Campo: `, bold: true, size: 14, color: "5B6573", font: "Calibri" }),
+            new TextRun({ text: rec.supportingFindings.join(", "), size: 14, font: "Calibri", italic: true })
+          ],
+          spacing: { after: 100 },
+          indent: { left: 240 }
+        })
+      );
+    });
+  }
+
   // ================= PÁGINA: CAPÍTULO 0 - TRAYECTORIA DE LA HIPÓTESIS DE INVESTIGACIÓN =================
-  const hl = payload.hypothesisLifecycle || {
-    hipotesisInicial: payload.hipotesisPrincipal?.queOcurre || (payload.finalHypothesis && payload.finalHypothesis.length > 10 ? payload.finalHypothesis.split("\n")[0] : "Actividad delictiva disonante bajo investigación territorial."),
-    hipotesisActual: payload.finalHypothesis || "Análisis en desarrollo.",
-    variablesIniciales: ["territorio", "oportunidad", "incidencia"],
-    estadoActual: "EN_ANALISIS",
-    evidenciaConfirmatoria: [],
-    evidenciaContradictoria: [],
-    nivelConfianza: "MEDIO",
-    justificacionActual: "Análisis preliminar fundamentado en expediente geocriminológico.",
-    historialEvolucion: []
+
+  const rawHl = payload.hypothesisLifecycle || {};
+  
+  const cap0Hl = {
+    hipotesisInicial: getPrimaryInitialHypothesis(payload),
+    hipotesisActual: rawHl.hipotesisActual || payload.finalHypothesis || "Análisis en desarrollo.",
+    variablesIniciales: rawHl.variablesIniciales || [], // AJUSTE 1: No fallbacks variables que "inventen"
+    estadoActual: rawHl.estadoActual || "INICIAL",
+    evidenciaConfirmatoria: rawHl.evidenciaConfirmatoria || [],
+    evidenciaContradictoria: rawHl.evidenciaContradictoria || [],
+    nivelConfianza: rawHl.nivelConfianza || "MEDIO",
+    justificacionActual: rawHl.justificacionActual || "Análisis preliminar fundamentado en expediente geocriminológico.",
+    historialEvolucion: rawHl.historialEvolucion || []
   };
+
+  // AJUSTE 2: Validación de consistencia entre hipótesis de portada y Capítulo 0
+  assertHypothesisConsistency(hypothesisText, cap0Hl.hipotesisInicial);
 
   elements.push(new Paragraph({ pageBreakBefore: true }));
   elements.push(createTitle("CAPÍTULO 0: TRAYECTORIA DE LA HIPÓTESIS DE INVESTIGACIÓN"));
@@ -960,167 +1412,48 @@ export async function exportToWord(
     ],
     spacing: { before: 200, after: 100 }
   }));
-  
-  // 0.1 Planteamiento inicial
-  elements.push(new Paragraph({
-    children: [
-      new TextRun({ text: "0.1 PLANTEAMIENTO INICIAL FORMULADO POR EL ANALISTA", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
-    ],
-    spacing: { before: 150, after: 80 }
-  }));
-  elements.push(new Paragraph({
-    children: [
-      new TextRun({ text: hl.hipotesisInicial, font: "Calibri", italic: true, size: 22 })
-    ],
-    spacing: { before: 80, after: 150 }
-  }));
 
-  // 0.2 Variables iniciales
-  elements.push(new Paragraph({
-    children: [
-      new TextRun({ text: "0.2 VARIABLES INICIALES DE EVALUACIÓN", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
-    ],
-    spacing: { before: 150, after: 80 }
-  }));
-  
-  (hl.variablesIniciales || ["territorio", "oportunidad", "incidencia"]).forEach((v: string) => {
-    elements.push(new Paragraph({
-      text: `• ${v.toUpperCase()}`,
-      spacing: { before: 40, after: 40 },
-      indent: { left: 360 }
-    }));
-  });
+  // Mapear variables para el renderer
+  const mappedVariables = (cap0Hl.variablesIniciales.length > 0)
+    ? cap0Hl.variablesIniciales.map((v: string) => {
+        let desc = "Variable analítica asociada.";
+        let src = "HIE / ADR-011";
+        if (v.toLowerCase().includes("territorio")) desc = "Análisis espacial del polígono y sus fronteras físicas.";
+        else if (v.toLowerCase().includes("oportunidad")) desc = "Facilitadores ambientales (iluminación, maleza, predios).";
+        else if (v.toLowerCase().includes("incidencia")) desc = "Histórico de llamados de auxilio 911 y carpetas.";
+        else if (v.toLowerCase().includes("actores")) desc = "Grupos o dinámicas de pandillas/actores locales.";
+        return { variable: v, description: desc, source: src };
+      })
+    : [];
 
-  // 0.3 Evidencia incorporada
-  elements.push(new Paragraph({
-    children: [
-      new TextRun({ text: "0.3 EVIDENCIA INCORPORADA DURANTE EL ANÁLISIS", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
-    ],
-    spacing: { before: 150, after: 80 }
-  }));
-
-  const evidenceRows = [
-    new TableRow({
-      children: [
-        new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: "Categoría de Evidencia", bold: true, color: "FFFFFF" })] })],
-          shading: { fill: "0B1F3A" },
-          width: { size: 3000, type: WidthType.DXA }
-        }),
-        new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: "Impacto Metodológico / Tipo", bold: true, color: "FFFFFF" })] })],
-          shading: { fill: "0B1F3A" },
-          width: { size: 5000, type: WidthType.DXA }
-        })
-      ]
-    })
+  // Mapear evidencias para el renderer
+  const mappedEvidenceLinks = [
+    ...(payload.photoEvidence || []).map((p: any) => ({
+      evidence: p.id || p.code || "FOTO_ND",
+      type: "Registro Fotográfico de Campo",
+      result: p.criminologicalInterpretation ? p.criminologicalInterpretation.slice(0, 80) + "..." : "Análisis visual de terreno realizado."
+    })),
+    ...(payload.streetViewAnalysis || []).map((s: any) => ({
+      evidence: s.id || "SV_ND",
+      type: "Street View Intelligence",
+      result: s.inferenciaAnalitica ? s.inferenciaAnalitica.slice(0, 80) + "..." : "Análisis visual de entorno realizado."
+    }))
   ];
 
-  const confList = hl.evidenciaConfirmatoria || [];
-  const contraList = hl.evidenciaContradictoria || [];
-  
-  if (confList.length === 0 && contraList.length === 0) {
-    evidenceRows.push(
-      new TableRow({
-        children: [
-          new TableCell({ children: [new Paragraph({ text: "Registro de Incidencia" })] }),
-          new TableCell({ children: [new Paragraph({ text: "Fortalece análisis espacial e histórico (CONFIRMACIÓN)" })] })
-        ]
-      })
-    );
-  } else {
-    confList.forEach((e: string) => {
-      evidenceRows.push(
-        new TableRow({
-          children: [
-            new TableCell({ children: [new Paragraph({ text: e })] }),
-            new TableCell({ children: [new Paragraph({ text: "Aporta sustento empírico verificable (CONFIRMACIÓN)" })] })
-          ]
-        })
-      );
-    });
-    contraList.forEach((e: string) => {
-      evidenceRows.push(
-        new TableRow({
-          children: [
-            new TableCell({ children: [new Paragraph({ text: e })] }),
-            new TableCell({ children: [new Paragraph({ text: "Presenta disonancia o refutación de patrón (REFUTACIÓN)" })] })
-          ]
-        })
-      );
-    });
-  }
-
-  const evidenceTable = new Table({
-    rows: evidenceRows,
-    width: { size: 8000, type: WidthType.DXA }
+  const trajectoryDocElements = renderHypothesisTrajectory({
+    hypothesisInitial: cap0Hl.hipotesisInicial,
+    analyticalQuestion: payload.analyticalQuestion || "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?",
+    analyticalVariables: mappedVariables,
+    evidenceLinks: mappedEvidenceLinks,
+    validationStatus: cap0Hl.estadoActual, // AJUSTE 4: validationResults mapeado a estado analítico real, no del gate
+    confidenceLevel: cap0Hl.nivelConfianza,
+    hypothesisEvolution: cap0Hl.historialEvolucion,
+    evidenciaConfirmatoria: cap0Hl.evidenciaConfirmatoria,
+    evidenciaContradictoria: cap0Hl.evidenciaContradictoria,
+    justificacionActual: cap0Hl.justificacionActual
   });
-  elements.push(evidenceTable);
-  elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
 
-  // 0.4 Evolución de la hipótesis
-  elements.push(new Paragraph({
-    children: [
-      new TextRun({ text: "0.4 TRAYECTORIA DE EVOLUCIÓN HISTÓRICA", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
-    ],
-    spacing: { before: 150, after: 80 }
-  }));
-
-  const events = hl.historialEvolucion || [];
-  if (events.length === 0) {
-    elements.push(new Paragraph({
-      children: [
-        new TextRun({ text: "LÍNEA BASE: [INICIAL] -> EN_ANÁLISIS (Sin transiciones adicionales registradas)", font: "Calibri", size: 20 })
-      ],
-      spacing: { before: 50, after: 100 },
-      indent: { left: 180 }
-    }));
-  } else {
-    events.forEach((ev: any, index: number) => {
-      const dateStr = new Date(ev.fecha).toLocaleDateString() || "16/07/2026";
-      elements.push(new Paragraph({
-        children: [
-          new TextRun({ text: `Evento ${index + 1} (${dateStr}) - Tipo: ${ev.tipoChange || ev.tipoCambio || "AMPLIACIÓN"}\n`, bold: true, color: "0B1F3A" }),
-          new TextRun({ text: `Estado Anterior: ${ev.estadoAnterior} → Estado Nuevo: ${ev.estadoNuevo}\n`, italic: true }),
-          new TextRun({ text: `Justificación: ${ev.justificacionAnalitica}\n` }),
-          new TextRun({ text: `Generado por: ${ev.motorQueGeneroCambio || "Analista"} (Usuario: ${ev.usuarioResponsable || "Analista Responsable"})`, size: 18, color: "555555" })
-        ],
-        spacing: { before: 80, after: 150 },
-        indent: { left: 180 }
-      }));
-    });
-  }
-
-  // 0.5 Resultado final y 0.6 Nivel de confianza
-  elements.push(new Paragraph({
-    children: [
-      new TextRun({ text: "0.5 ESTADO FINAL Y NIVEL DE CONFIANZA", bold: true, color: "1F4E79", font: "Calibri", size: 20 })
-    ],
-    spacing: { before: 150, after: 80 }
-  }));
-
-  const stateBox = new Table({
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({ text: `ESTADO FINAL DE HIPÓTESIS: ${hl.estadoActual}\n`, bold: true, color: "FFFFFF" }),
-                  new TextRun({ text: `NIVEL DE CONFIANZA: ${hl.nivelConfianza}\n`, bold: true, color: "FFFFFF" }),
-                  new TextRun({ text: `JUSTIFICACIÓN INTEGRAL: ${hl.justificacionActual}`, color: "FFFFFF" })
-                ]
-              })
-            ],
-            shading: { fill: "1F4E79" },
-            width: { size: 8000, type: WidthType.DXA }
-          })
-        ]
-      })
-    ]
-  });
-  elements.push(stateBox);
+  elements.push(...trajectoryDocElements);
   elements.push(new Paragraph({ spacing: { before: 150, after: 150 } }));
 
   elements.push(new Paragraph({ pageBreakBefore: true }));
@@ -1257,80 +1590,32 @@ export async function exportToWord(
   if (payload.photoEvidence && payload.photoEvidence.length > 0) {
     for (let i = 0; i < payload.photoEvidence.length; i++) {
       const photo = payload.photoEvidence[i];
-      const dims = PageBalanceEngine.calculateDimensions(photo.caption.length, 'photo');
-      const imgRes = await getImageDimensionsAndBuffer(photo.dataUrl, dims.width, dims.height);
+      const dims = PageBalanceEngine.calculateDimensions(photo.caption ? photo.caption.length : 100, 'photo');
+      const imgRes = await getImageDimensionsAndBuffer(photo.dataUrl, dims.width, dims.height, photo.caption, photo.id);
       
-      const cardChildren: any[] = [
-        // Encabezado
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text: `EVIDENCIA FOTOGRÁFICA No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
-          spacing: { after: 120 }
-        })
-      ];
+      const context: EvidenceContext = {
+        evidenceId: photo.id || `IMG-0${i + 1}`,
+        source: "FIELD_PHOTO",
+        analyticalPurpose: photo.analyticalPurpose || photo.relation || photo.criminologicalInterpretation || "",
+        relatedHypothesis: photo.relatedHypothesis || photo.hypothesis || undefined,
+        evidenceClass: photo.governanceClass || "PRIMARY",
+        confidence: photo.confidence || photo.relevanceScore || 100,
+        capturedAt: photo.capturedAt || photo.date || undefined
+      };
 
-      if (imgRes) {
-        // Foto Grande si cargó exitosamente
-        cardChildren.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-            spacing: { after: 140 }
-          })
-        );
-      } else {
-        // Marcador de posición profesional si falló la carga (CORS, red, etc.)
-        cardChildren.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: "📷 [EVIDENCIA FOTOGRÁFICA ADJUNTA EN PLATAFORMA DIGITAL - REGISTRO DE CAMPO PRESERVADO]", italics: true, color: "7F8C8D", size: 16, font: "Calibri" })],
-            spacing: { after: 140 }
-          })
-        );
+      // Evaluación editorial: si es SUPPORTING, determinamos si debe moverse al anexo
+      const moveToAnnex = EvidenceLayoutBuilder.shouldMoveToAnnex(context, photo);
+      if (moveToAnnex) {
+        // Se preserva digitalmente en el anexo, omitiéndose del cuerpo principal
+        continue;
       }
 
-      // Lista de Metadatos estructurados de CCAV para Fotos (v13.0)
-      cardChildren.push(
-        new Paragraph({
-          children: [
-            new TextRun({ text: "Observación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${(photo.caption || "Se observan elementos del entorno sin cerramiento y baja iluminación.").slice(0, 180)}\n\n`, size: 16, font: "Calibri" }),
-            
-            new TextRun({ text: "Análisis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${(photo.criminologicalInterpretation || "El análisis táctico identifica facilitadores físicos que aumentan la vulnerabilidad del sector por pérdida de vigilancia natural.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
-            
-            new TextRun({ text: "Relación con hipótesis: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${(photo.relation || "Sustenta la hipótesis de oportunidad criminológica ambiental.").slice(0, 180)}`, size: 16, font: "Calibri" })
-          ],
-          spacing: { after: 120 }
-        })
-      );
-
-      // FlexibleChapterFlow: No pageBreakBefore here to let cards flow naturally
-      elements.push(
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: {
-            top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-            bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-            left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-            right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
-          },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({
-                  shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
-                  margins: { top: 180, bottom: 180, left: 180, right: 180 },
-                  children: cardChildren
-                })
-              ]
-            })
-          ]
-        })
-      );
+      // De lo contrario, renderizamos la tarjeta premium nativa en el cuerpo principal de Capítulo 5
+      const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, photo, context);
+      elements.push(tableCard);
     }
   }
+
 
   // Si existen fotos preservadas digitalmente bajo Soft Governance, inyectar el Anexo de Evidencia Digital Preservada (ADR-011)
   if (payload.governedEvidence?.summary?.preserved > 0) {
@@ -1436,84 +1721,24 @@ export async function exportToWord(
       if (!sv.dataUrl) continue;
       
       const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
-      const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height);
+      const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height, sv.observed || "Se aprecian condiciones físicas del entorno.", sv.id);
       
-      const cardChildren: any[] = [
-        // Encabezado de Evidencia
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text: `EVIDENCIA VIRTUAL STREET VIEW No. 0${i + 1}`, bold: true, size: 20, color: "0D2B52", font: "Calibri" })],
-          spacing: { after: 120 }
-        })
-      ];
+      const context: EvidenceContext = {
+        evidenceId: sv.id || `SV-0${i + 1}`,
+        source: "STREET_VIEW",
+        analyticalPurpose: sv.analyticalPurpose || sv.observed || sv.indicadorCriminologico || "",
+        relatedHypothesis: sv.relatedHypothesis || sv.hypothesis || undefined,
+        evidenceClass: "PRIMARY",
+        confidence: sv.confidence || 100,
+        capturedAt: sv.capturedAt || sv.date || undefined
+      };
 
-      if (imgRes) {
-        // Imagen de Street View si cargó exitosamente
-        cardChildren.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
-            spacing: { after: 140 }
-          })
-        );
-      } else {
-        // Marcador de posición profesional si falló la carga (CORS, red, etc.)
-        cardChildren.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: "📷 [EVIDENCIA VIRTUAL STREET VIEW ADJUNTA EN PLATAFORMA DIGITAL - REGISTRO DE BARRIDO PRESERVADO]", italics: true, color: "7F8C8D", size: 16, font: "Calibri" })],
-            spacing: { after: 140 }
-          })
-        );
-      }
-
-      // Metadatos y análisis criminológico formal (Cero fuga de coordenadas)
-      cardChildren.push(
-        new Paragraph({
-          children: [
-            new TextRun({ text: "Fuente Primaria: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${sv.fuentePrimaria || "Google Street View"}\n\n`, size: 16, font: "Calibri" }),
-
-            new TextRun({ text: "Ubicación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${sv.location || "Sector de estudio perimetral (coordenadas geográficas omitidas para resguardo de confidencialidad)"}\n\n`, size: 16, font: "Calibri" }),
-
-            new TextRun({ text: "Elemento Observado: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.observed || "Se aprecian condiciones físicas del entorno del perímetro estudiado.").slice(0, 250)}\n\n`, size: 16, font: "Calibri" }),
-
-            new TextRun({ text: "Indicador Criminológico: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.indicadorCriminologico || sv.observed || "El análisis físico-ambiental identifica vulnerabilidades tácticas de oportunidad criminológica ambiental.").slice(0, 300)}\n\n`, size: 16, font: "Calibri" }),
-
-            new TextRun({ text: "Inferencia Analítica: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${ReportIntelligenceNormalizer.normalize(sv.inferenciaAnalitica || sv.relation || "Sustenta la necesidad de implementar medidas de control informal en el entorno.")}`, size: 16, font: "Calibri" })
-          ],
-          spacing: { after: 120 }
-        })
-      );
-
-      elements.push(
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: {
-            top: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-            bottom: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-            left: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" },
-            right: { style: BorderStyle.SINGLE, size: 12, color: "0D2B52" }
-          },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({
-                  shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
-                  margins: { top: 180, bottom: 180, left: 180, right: 180 },
-                  children: cardChildren
-                })
-              ]
-            })
-          ]
-        })
-      );
+      // Maquetar la tarjeta mediante el builder de evidencias
+      const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, sv, context);
+      elements.push(tableCard);
     }
   }
+
 
   // ================= PÁGINA 8: CAPÍTULO 7 - INTELIGENCIA OSINT =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
@@ -1840,10 +2065,362 @@ export async function exportToWord(
     }
   }
 
+  // ================= ANEXO TÉCNICO C: CONTROL DE CALIDAD DE REPORTES =================
+  if (payload.qualityAssessment) {
+    const qa = payload.qualityAssessment;
+    elements.push(new Paragraph({ text: "", pageBreakBefore: true }));
+    elements.push(createTitle("ANEXO TÉCNICO C: CONTROL DE CALIDAD Y ASEGURAMIENTO DE CALIDAD"));
+    elements.push(createBodyText("En cumplimiento con el estándar de Report Quality Governance v1.1.0, se despliega el panel oficial de aseguramiento de calidad de inteligencia de este dictamen:"));
+
+    // Tabla de Métricas de Calidad
+    const qaBorders = {
+      top: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+      left: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+      right: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
+    };
+
+    const createQACell = (text: string, isHeader = false, customColor?: string) => new TableCell({
+      borders: qaBorders,
+      shading: { fill: isHeader ? "0D2B52" : "F5F7FA", type: ShadingType.CLEAR },
+      margins: { top: 80, bottom: 80, left: 100, right: 100 },
+      children: [
+        new Paragraph({
+          alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
+          children: [
+            new TextRun({
+              text,
+              bold: isHeader,
+              size: 16,
+              color: isHeader ? "FFFFFF" : (customColor || "222222"),
+              font: "Calibri"
+            })
+          ]
+        })
+      ]
+    });
+
+    const metricsTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            createQACell("Dimensión Evaluada", true),
+            createQACell("Calificación (0-100)", true),
+            createQACell("Estatus Métrico", true)
+          ]
+        }),
+        new TableRow({
+          children: [
+            createQACell("Coherencia Analítica (Contradicciones)"),
+            createQACell(`${qa.coherence}%`),
+            createQACell(qa.coherence >= 80 ? "CONFORME (PASS)" : "REQUIERE REVISIÓN", false, qa.coherence >= 80 ? "2E7D32" : "C62828")
+          ]
+        }),
+        new TableRow({
+          children: [
+            createQACell("Trazabilidad Metodológica (Fidelidad HIE / ADR-011)"),
+            createQACell(`${qa.traceability}%`),
+            createQACell(qa.traceability >= 80 ? "CONFORME (PASS)" : "REQUIERE REVISIÓN", false, qa.traceability >= 80 ? "2E7D32" : "C62828")
+          ]
+        }),
+        new TableRow({
+          children: [
+            createQACell("Alineación de Evidencias de Campo (Soporte Físico)"),
+            createQACell(`${qa.evidenceAlignment}%`),
+            createQACell(qa.evidenceAlignment >= 80 ? "CONFORME (PASS)" : "REQUIERE REVISIÓN", false, qa.evidenceAlignment >= 80 ? "2E7D32" : "C62828")
+          ]
+        }),
+        new TableRow({
+          children: [
+            createQACell("Integridad Estructural de Capítulos (Flujo Editorial)"),
+            createQACell(`${qa.structuralIntegrity}%`),
+            createQACell(qa.structuralIntegrity >= 80 ? "CONFORME (PASS)" : "REQUIERE REVISIÓN", false, qa.structuralIntegrity >= 80 ? "2E7D32" : "C62828")
+          ]
+        }),
+        new TableRow({
+          children: [
+            createQACell("Consistencia Ejecutiva (Resumen vs Detalle)"),
+            createQACell(`${qa.executiveConsistency}%`),
+            createQACell(qa.executiveConsistency >= 80 ? "CONFORME (PASS)" : "REQUIERE REVISIÓN", false, qa.executiveConsistency >= 80 ? "2E7D32" : "C62828")
+          ]
+        }),
+        new TableRow({
+          children: [
+            createQACell("SCORE GLOBAL DE CALIDAD", true),
+            createQACell(`${qa.qualityScore}%`, true),
+            createQACell(qa.status === "PASS" ? "DICTAMEN CONFORME" : "DICTAMEN OBSERVADO", true)
+          ]
+        })
+      ]
+    });
+
+    elements.push(metricsTable);
+    elements.push(new Paragraph({ spacing: { before: 120 } }));
+
+    // Desplegar recomendación de certificación formal
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Recomendación del Auditor de Calidad:\n", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+          new TextRun({
+            text: qa.certificationRecommendation === "READY_FOR_CERTIFICATION" 
+              ? "APTO PARA CERTIFICACIÓN INSTITUCIONAL: El expediente no posee desviaciones, contradicciones ni desvíos de hipótesis críticas. Listo para firma digital v1.1.1." 
+              : "REVISIÓN REQUERIDA ANTES DE FIRMAR: Se identificaron anomalías o contradicciones que ameritan remediación técnica.",
+            size: 16,
+            bold: true,
+            color: qa.certificationRecommendation === "READY_FOR_CERTIFICATION" ? "2E7D32" : "C62828",
+            font: "Calibri"
+          })
+        ],
+        spacing: { after: 120 }
+      })
+    );
+
+    // Listar Alertas/Issues detectados
+    if (qa.issues && qa.issues.length > 0) {
+      elements.push(createSubtitle("Alertas de Calidad Identificadas:"));
+      
+      const issuesTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createQACell("ID / Tipo", true),
+              createQACell("Severidad", true),
+              createQACell("Capítulo", true),
+              createQACell("Detalle de la Alerta", true),
+              createQACell("Recomendación de Remediación", true)
+            ]
+          }),
+          ...qa.issues.map((issue: any) => new TableRow({
+            children: [
+              createQACell(`${issue.id}\n[${issue.type}]`),
+              createQACell(issue.severity, false, issue.severity === "HIGH" ? "C62828" : "F57C00"),
+              createQACell(issue.chapter),
+              createQACell(issue.message),
+              createQACell(issue.remedyRecommendation)
+            ]
+          }))
+        ]
+      });
+
+      elements.push(issuesTable);
+    } else {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "✓ No se identificaron anomalías de consistencia, contradicciones de capítulos ni desvíos de hipótesis. Trazabilidad completa garantizada.",
+              size: 16,
+              italic: true,
+              color: "2E7D32",
+              font: "Calibri"
+            })
+          ],
+          spacing: { after: 120 }
+        })
+      );
+    }
+
+    // ================= INTEGRACIÓN VISUAL REPORT CERTIFICATION ENGINE v1.1.1 =================
+    if (payload.certificationRecord) {
+      const cert = payload.certificationRecord;
+      elements.push(new Paragraph({ spacing: { before: 200 } }));
+
+      if (cert.status === "CERTIFIED") {
+        // --- SELLO VERDE ESMERALDA DE CERTIFICACIÓN ---
+        const certBorders = {
+          top: { style: BorderStyle.SINGLE, size: 12, color: "2E7D32" },
+          bottom: { style: BorderStyle.SINGLE, size: 12, color: "2E7D32" },
+          left: { style: BorderStyle.SINGLE, size: 12, color: "2E7D32" },
+          right: { style: BorderStyle.SINGLE, size: 12, color: "2E7D32" }
+        };
+
+        const certTable = new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  borders: certBorders,
+                  shading: { fill: "E8F5E9", type: ShadingType.CLEAR },
+                  margins: { top: 120, bottom: 120, left: 150, right: 150 },
+                  children: [
+                    new Paragraph({
+                      alignment: AlignmentType.LEFT,
+                      children: [
+                        new TextRun({
+                          text: "🛡️ SELLO DIGITAL DE CERTIFICACIÓN OFICIAL CEIPOL",
+                          bold: true,
+                          size: 20,
+                          color: "2E7D32",
+                          font: "Calibri"
+                        })
+                      ],
+                      spacing: { after: 120 }
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: "Identificador Único: ", bold: true, size: 16, font: "Calibri" }),
+                        new TextRun({ text: cert.certificationId, bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+                        new TextRun({ text: "\nEstatus de Firma: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: "CERTIFICADO (APROBADO)", bold: true, size: 14, color: "2E7D32", font: "Calibri" }),
+                        new TextRun({ text: "\nVersión de Certificado: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: cert.certificateVersion || "CEIPOL-CERT-v1", size: 14, font: "Calibri" }),
+                        new TextRun({ text: " | Versión del Motor de Calidad: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: cert.engineVersion || "1.1.1", size: 14, font: "Calibri" }),
+                        new TextRun({ text: "\nFirma Criptográfica SHA-256: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: cert.hash, italic: true, size: 14, color: "424242", font: "Calibri" }),
+                        new TextRun({ text: "\nFecha de Certificación: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: cert.createdAt || new Date().toLocaleString("es-MX"), size: 14, font: "Calibri" }),
+                        new TextRun({ text: "\nAlgoritmo de Firma: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: cert.algorithm || "SHA-256", size: 14, font: "Calibri" }),
+                        new TextRun({ text: "\nScore Global de Calidad: ", bold: true, size: 14, font: "Calibri" }),
+                        new TextRun({ text: `${cert.qualityScore}%`, bold: true, size: 14, color: "2E7D32", font: "Calibri" })
+                      ],
+                      spacing: { after: 180 }
+                    }),
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      children: [
+                        new TextRun({
+                          text: "--- CÓDIGO QR INSTITUCIONAL PARA VERIFICACIÓN DE CAMPO ---",
+                          bold: true,
+                          size: 14,
+                          color: "0D2B52",
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: `\n{\n  "certificationId": "${cert.certificationId}",\n  "hash": "${cert.hash}",\n  "algorithm": "${cert.algorithm}",\n  "version": "${cert.certificateVersion}",\n  "status": "CERTIFIED"\n}`,
+                          size: 14,
+                          font: "Consolas",
+                          color: "2E7D32"
+                        }),
+                        new TextRun({
+                          text: "\n[ Escanee este cuadro en el portal de validación oficial para confirmar autenticidad y prevenir alteración de datos analíticos ]",
+                          italic: true,
+                          size: 12,
+                          color: "616161",
+                          font: "Calibri"
+                        })
+                      ]
+                    })
+                  ]
+                })
+              ]
+            })
+          ]
+        });
+
+        elements.push(certTable);
+      } else {
+        // --- FRANJA ROJA DE VETO DE CERTIFICACIÓN ---
+        const blockBorders = {
+          top: { style: BorderStyle.SINGLE, size: 16, color: "C62828" },
+          bottom: { style: BorderStyle.SINGLE, size: 16, color: "C62828" },
+          left: { style: BorderStyle.SINGLE, size: 16, color: "C62828" },
+          right: { style: BorderStyle.SINGLE, size: 16, color: "C62828" }
+        };
+
+        const blockTable = new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  borders: blockBorders,
+                  shading: { fill: "FFEBEE", type: ShadingType.CLEAR },
+                  margins: { top: 120, bottom: 120, left: 150, right: 150 },
+                  children: [
+                    new Paragraph({
+                      alignment: AlignmentType.LEFT,
+                      children: [
+                        new TextRun({
+                          text: "❌ VETO DE CERTIFICACIÓN DE CALIDAD CEIPOL",
+                          bold: true,
+                          size: 20,
+                          color: "C62828",
+                          font: "Calibri"
+                        })
+                      ],
+                      spacing: { after: 120 }
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: "ADVERTENCIA DE SEGURIDAD DOCUMENTAL:\n",
+                          bold: true,
+                          size: 16,
+                          color: "C62828",
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: "ESTE EXPEDIENTE HA SIDO VETADO POR EL MOTOR DE ASEGURAMIENTO DE CALIDAD Y NO SE LE ASIGNA CÓDIGO QR NI ID DE CERTIFICADO INSTITUCIONAL.",
+                          bold: true,
+                          size: 16,
+                          color: "C62828",
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: "\n\nMotivo del Veto: ",
+                          bold: true,
+                          size: 14,
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: "El reporte contiene contradicciones lógicas críticas, desvíos de hipótesis críticas (drift) o una baja consistencia general en las conclusiones que violan las directrices rígidas de la SSPE.",
+                          size: 14,
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: "\nEstatus del Certificado: ",
+                          bold: true,
+                          size: 14,
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: "CERTIFICATION_BLOCKED",
+                          bold: true,
+                          size: 14,
+                          color: "C62828",
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: " | Versión del Motor: ",
+                          bold: true,
+                          size: 14,
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: cert.engineVersion || "1.1.1",
+                          size: 14,
+                          font: "Calibri"
+                        }),
+                        new TextRun({
+                          text: "\n\nEste documento NO posee validez legal ni operativa en comandancia ni en procesos de toma de decisión estratégica hasta que las alertas marcadas en el scorecard sean solventadas y remediadas por el analista supervisor.",
+                          italic: true,
+                          size: 14,
+                          color: "C62828",
+                          font: "Calibri"
+                        })
+                      ]
+                    })
+                  ]
+                })
+              ]
+            })
+          ]
+        });
+
+        elements.push(blockTable);
+      }
+    }
+  }
+
+
   // 6. ENSAMBLAJE DEL DOCUMENTO WORD CON DOCX
-  const headerFooterTabs = [
-    { type: TabStopType.RIGHT, position: 9350 }
-  ];
+  const watermarkBuffer = InstitutionalBrandManager.generateWatermarkBuffer();
 
   const doc = new Document({
     styles: {
@@ -1857,47 +2434,23 @@ export async function exportToWord(
     sections: [
       {
         properties: {
+          differentFirstPageHeaderFooter: true,
           page: {
-            size: { orientation: PageOrientation.PORTRAIT },
-            margin: { top: 1417, bottom: 1134, left: 1417, right: 1134 },
+            size: {
+              width: PageFormatManager.width,
+              height: PageFormatManager.height,
+              orientation: PageOrientation.PORTRAIT
+            },
+            margin: PageFormatManager.margins,
           },
         },
         headers: {
-          default: new Header({
-            children: [
-              new Paragraph({
-                tabStops: headerFooterTabs,
-                children: [
-                  new TextRun({ text: "CEIPOL - SSPE", bold: true, color: "5B6573", size: 16, font: "Calibri" }),
-                  new TextRun({ text: "\tDICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", color: "5B6573", size: 16, font: "Calibri" }),
-                  new TextRun({ text: "\tCONFIDENCIAL | EXCLUSIVO", bold: true, color: "5B6573", size: 16, font: "Calibri" }),
-                ],
-                border: { bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
-                spacing: { after: 200 }
-              }),
-            ],
-          }),
+          default: HeaderFooterManager.createDefaultHeader(watermarkBuffer),
+          first: HeaderFooterManager.createFirstPageHeader(),
         },
         footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                tabStops: headerFooterTabs,
-                border: { top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
-                spacing: { before: 80 },
-                children: [
-                  new TextRun({ text: `${payload.date} | `, color: "5B6573", size: 14, font: "Calibri" }),
-                  new TextRun({ 
-                    children: ["Página ", PageNumber.CURRENT || "1"],
-                    color: "5B6573", 
-                    size: 14,
-                    font: "Calibri" 
-                  }),
-                  new TextRun({ text: ` | EXP: ${safeName.slice(0, 40)}`, color: "5B6573", size: 14, font: "Calibri" }),
-                ],
-              }),
-            ],
-          }),
+          default: HeaderFooterManager.createDefaultFooter(payload.date, safeName),
+          first: HeaderFooterManager.createFirstPageFooter(),
         },
         children: elements,
       },

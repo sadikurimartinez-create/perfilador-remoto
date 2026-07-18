@@ -1,5 +1,5 @@
 export interface EditorialBlock {
-  type: "TITLE" | "SUBTITLE" | "PARAGRAPH" | "BULLET" | "NUMBERED_LIST" | "ANALYTICAL_BLOCK";
+  type: "TITLE" | "SUBTITLE" | "PARAGRAPH" | "BULLET" | "NUMBERED_LIST" | "ANALYTICAL_BLOCK" | "TABLE" | "VISUAL_BLOCK";
   text?: string;
   level?: number;
   category?: "HECHO_OBSERVADO" | "INFERENCIA_ANALITICA" | "EVIDENCIA" | "IMPACTO_OPERACIONAL" | "RECOMMENDATION";
@@ -12,6 +12,32 @@ export interface EditorialBlock {
  * Reestructura el contenido plano conservando de forma absoluta la fidelidad del texto.
  */
 export class EditorialStructureEngine {
+  /**
+   * Determina de manera aislada si el conjunto de líneas a partir del índice actual
+   * representa una estructura de tabla Markdown válida (Observación #2).
+   */
+  public static isMarkdownTableCandidate(lines: string[], startIndex: number): boolean {
+    if (startIndex + 1 >= lines.length) return false;
+    const line1 = lines[startIndex].trim();
+    const line2 = lines[startIndex + 1].trim();
+
+    // Línea 1: Debe comenzar y contener pipes para ser una tabla de markdown válida
+    if (!line1.startsWith("|") || !line1.includes("|")) return false;
+
+    // Línea 2: Debe ser el separador con guiones, dos puntos y pipes
+    const isSeparator = /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(line2);
+    return isSeparator;
+  }
+
+  /**
+   * Determina de manera aislada si el conjunto de líneas a partir del índice actual
+   * representa un bloque visual delimitado.
+   */
+  public static isVisualBlockCandidate(lines: string[], startIndex: number): boolean {
+    const line = lines[startIndex].trim();
+    return line === ":::VISUAL_BLOCK";
+  }
+
   /**
    * Divide y analiza semánticamente el texto plano convirtiéndolo en EditorialBlocks tipados.
    */
@@ -36,6 +62,53 @@ export class EditorialStructureEngine {
       const line = lines[i].trim();
       if (!line) {
         flushBulletList();
+        continue;
+      }
+
+      // 0. Interceptar bloque de tabla Markdown de forma estricta (Observación #2)
+      if (this.isMarkdownTableCandidate(lines, i)) {
+        flushBulletList();
+        const tableLines: string[] = [];
+        let j = i;
+        while (j < lines.length) {
+          const currentTableLine = lines[j].trim();
+          // La tabla termina si la línea está vacía o no contiene pipes
+          if (!currentTableLine || !currentTableLine.includes("|")) {
+            break;
+          }
+          tableLines.push(lines[j]);
+          j++;
+        }
+
+        blocks.push({
+          type: "TABLE",
+          text: tableLines.join("\n")
+        });
+
+        i = j - 1; // Avanzar el cursor de bucle al final de la tabla
+        continue;
+      }
+
+      // 0.1 Interceptar bloque de Inteligencia Visual de forma estricta (Ajuste #3)
+      if (this.isVisualBlockCandidate(lines, i)) {
+        flushBulletList();
+        const visualLines: string[] = [];
+        let j = i;
+        while (j < lines.length) {
+          const currentLine = lines[j].trim();
+          visualLines.push(lines[j]);
+          j++;
+          if (currentLine === ":::") {
+            break;
+          }
+        }
+
+        blocks.push({
+          type: "VISUAL_BLOCK",
+          text: visualLines.join("\n")
+        });
+
+        i = j - 1; // Avanzar el cursor de bucle al final del bloque visual
         continue;
       }
 

@@ -9,6 +9,15 @@ import { StatisticalIntelligenceEngineV2 } from "@/utils/statisticalIntelligence
 import { StatisticalEvidenceMatrixManager } from "@/utils/statisticalEvidenceMatrix";
 import { HIEValidationVectorAdapter } from "@/utils/analyticalConsistencyEngine/hieValidationVectorAdapter";
 import { AnalyticalConsistencyEngine } from "@/utils/analyticalConsistencyEngine";
+import { IntelligenceNarrativeSynthesisEngine } from "@/utils/intelligenceNarrativeSynthesisEngine";
+import { IntelligenceReportStructureEngine } from "@/utils/intelligenceReportStructureEngine";
+import { ExecutiveIntelligenceSummaryEngine } from "@/utils/executiveIntelligenceSummaryEngine";
+import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
+import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
+
+
+
+
 
 
 type FinalizeOptions = {
@@ -634,6 +643,77 @@ export class ReportEngineKernelClass {
 
         // Adjuntar el IntelligenceIntegrationContext unificado para los exportadores subsiguientes
         editorialPayload.intelligenceContext = this.context.intelligenceContext;
+
+        // Aplicar la capa de Síntesis Narrativa de Inteligencia v1.0.7 de forma limpia y no invasiva
+        const synthContext = {
+          album: this.context.album || [],
+          hieLedger: editorialPayload.hieData,
+          projectName: this.context.project.nombre || this.context.project.name || 'Expediente',
+          hasActorsEvidence: (editorialPayload.sweepsData || []).length > 0,
+          hasOsintEvidence: !!(editorialPayload as any).includeOsintAppendix || (editorialPayload.sweepsData || []).some((s: any) => s.engine?.toLowerCase().includes("osint"))
+        };
+
+        editorialPayload.contextoTerritorial = IntelligenceNarrativeSynthesisEngine.synthesizeChapter(
+          editorialPayload.contextoTerritorial || "",
+          "contextoTerritorial",
+          synthContext
+        );
+        editorialPayload.finalHypothesis = IntelligenceNarrativeSynthesisEngine.synthesizeChapter(
+          editorialPayload.finalHypothesis || "",
+          "finalHypothesis",
+          synthContext
+        );
+        editorialPayload.osintSynthesized = IntelligenceNarrativeSynthesisEngine.synthesizeChapter(
+          editorialPayload.osintSynthesized || "",
+          "osintSynthesized",
+          synthContext
+        );
+        editorialPayload.pandillasAnalysis = IntelligenceNarrativeSynthesisEngine.synthesizeChapter(
+          editorialPayload.pandillasAnalysis || "",
+          "pandillasAnalysis",
+          synthContext
+        );
+        editorialPayload.conclusionesText = IntelligenceNarrativeSynthesisEngine.synthesizeChapter(
+          editorialPayload.conclusionesText || "",
+          "conclusionesText",
+          synthContext
+        );
+
+        // Invocación de la Capa de Estructura de Calidad de Reportes v1.0.8 [NUEVO]
+        const structureAudit = IntelligenceReportStructureEngine.auditReportStructure(
+          editorialPayload,
+          this.context.album || []
+        );
+        (editorialPayload as any).structureAudit = structureAudit;
+
+        // Invocación de la Capa del Resumen Ejecutivo de Alta Dirección v1.0.9 [NUEVO]
+        const executiveSummaryReport = ExecutiveIntelligenceSummaryEngine.generateSummary(
+          editorialPayload,
+          this.context.album || []
+        );
+        (editorialPayload as any).executiveSummaryReport = executiveSummaryReport;
+
+        // Invocación del Motor de Aseguramiento de Calidad v1.1.0 [NUEVO]
+        const qualityAssessment = QualityAssuranceEngine.audit(
+          editorialPayload,
+          this.context.album || []
+        );
+        (editorialPayload as any).qualityAssessment = qualityAssessment;
+
+        // INYECCIÓN REPORT CERTIFICATION ENGINE v1.1.1 [NUEVO]
+        const certRecord = ReportCertificationEngine.certify(
+          this.context.reportNumber || this.context.project.id || "EXP-UNKNOWN",
+          this.context.project.id || "PROJ-UNKNOWN",
+          (this.context as any).expedienteId || this.context.project.id || "EXP-UNKNOWN",
+          editorialPayload,
+          qualityAssessment
+        );
+        (editorialPayload as any).certificationRecord = certRecord;
+
+
+
+
+
 
         const briefing = buildIntelligenceBriefing(
           {
