@@ -5,19 +5,32 @@ let schemaEnsured = false;
 
 async function ensureSchema(pool: Pool) {
   try {
-    // 1. Asegurar columnas necesarias en la tabla users
+    // 1. Crear la tabla users si no existe (robusto para bases de datos nuevas/vacías)
     await pool.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB;
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'USER',
+        name VARCHAR(255) NOT NULL,
+        profile JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 2. Asegurar columnas adicionales por si la tabla ya existía
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB DEFAULT '{}'::jsonb;
     `);
     
-    // 2. Seeding del usuario admin si la tabla está vacía o no existe el admin
+    // 3. Seeding del usuario admin si la tabla está vacía o no existe el admin
     const { rows } = await pool.query(
       "SELECT id FROM users WHERE username = $1 LIMIT 1",
       ["admin"]
     );
     
+    const bcrypt = require("bcryptjs");
     if (rows.length === 0) {
-      const bcrypt = require("bcryptjs");
       const salt = bcrypt.genSaltSync(10);
       const hash = bcrypt.hashSync("Admin2026!", salt);
       
@@ -27,6 +40,28 @@ async function ensureSchema(pool: Pool) {
       `, ["admin", hash, "ADMIN", "Administrador Unificado"]);
       
       console.log("PostgreSQL auto-migration: Seeded default admin user successfully.");
+    }
+
+    // 4. Migración transparente de contraseñas de texto plano a hashes de Bcrypt
+    const { rows: allUsers } = await pool.query(
+      "SELECT id, username, password_hash FROM users"
+    );
+    
+    for (const u of allUsers) {
+      if (
+        u.password_hash && 
+        !u.password_hash.startsWith("$2a$") && 
+        !u.password_hash.startsWith("$2b$") && 
+        !u.password_hash.startsWith("$2y$")
+      ) {
+        console.log(`[Migration] Encriptando contraseña de texto plano para el usuario: ${u.username}`);
+        const salt = bcrypt.genSaltSync(10);
+        const hashed = bcrypt.hashSync(u.password_hash, salt);
+        await pool.query(
+          "UPDATE users SET password_hash = $1 WHERE id = $2",
+          [hashed, u.id]
+        );
+      }
     }
   } catch (err: any) {
     console.error("PostgreSQL auto-migration error:", err.message);
