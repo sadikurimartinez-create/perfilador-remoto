@@ -136,39 +136,38 @@ export class HeaderFooterManager {
 
   public static createDefaultHeader(watermarkBuffer: ArrayBuffer): Header {
     const children: any[] = [];
+    const runs: any[] = [];
 
-    // Inyectar marca de agua flotante de fondo si está activa
+    // Inyectar marca de agua flotante de fondo si está activa (mismo párrafo para evitar bloque/cuadro vacío)
     if (DEFAULT_COMPOSITION_CONFIG.watermarkEnabled) {
       try {
-        children.push(
-          new Paragraph({
-            children: [
-              new ImageRun({
-                data: watermarkBuffer,
-                transformation: { width: 500, height: 500 },
-                floating: {
-                  horizontalPosition: { offset: 1000 },
-                  verticalPosition: { offset: 1200 },
-                  wrap: { type: 1 } // TextWrappingType.NONE
-                }
-              } as any)
-            ]
-          })
+        runs.push(
+          new ImageRun({
+            data: watermarkBuffer,
+            transformation: { width: 500, height: 500 },
+            floating: {
+              horizontalPosition: { offset: 1000 },
+              verticalPosition: { offset: 1200 },
+              wrap: { type: 1 } // TextWrappingType.NONE
+            }
+          } as any)
         );
       } catch (err) {
         console.warn("[HeaderFooterManager] No se pudo inyectar watermark flotante en Header. Usando fallback de imagen tenue.");
       }
     }
 
+    runs.push(
+      new TextRun({ text: "CEIPOL - SSPE | ", bold: true, color: "5B6573", size: 15, font: "Calibri" }),
+      new TextRun({ text: "DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", color: "5B6573", size: 15, font: "Calibri" })
+    );
+
     // Cabecera institucional limpia
     const headerAlign = this.getAlignment(DEFAULT_COMPOSITION_CONFIG.headerAlignment);
     children.push(
       new Paragraph({
         alignment: headerAlign,
-        children: [
-          new TextRun({ text: "CEIPOL - SSPE | ", bold: true, color: "5B6573", size: 15, font: "Calibri" }),
-          new TextRun({ text: "DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", color: "5B6573", size: 15, font: "Calibri" })
-        ],
+        children: runs,
         border: { bottom: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
         spacing: { after: 120 }
       })
