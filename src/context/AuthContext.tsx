@@ -8,8 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where, addDoc } from "firebase/firestore";
-import { getDb } from "@/lib/firebase";
 
 type AuthUser = {
   id: number | string;
@@ -18,6 +16,7 @@ type AuthUser = {
   name: string;
   fotografia?: string;
   perfilCompleto?: boolean;
+  profile?: any;
   [key: string]: any;
 };
 
@@ -26,6 +25,7 @@ type AuthContextValue = {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser?: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -35,126 +35,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const refreshUser = async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        const mergedUser = {
+          ...data,
+          ...(data.profile || {}),
+        };
+        setUser(mergedUser);
+        window.localStorage.setItem("perfilador.currentUser", JSON.stringify(mergedUser));
+      } else {
+        setUser(null);
+        window.localStorage.removeItem("perfilador.currentUser");
+      }
+    } catch (err) {
+      console.error("Error refreshing session from backend:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    let unsubscribe: (() => void) | null = null;
-
-    (async () => {
-      try {
-        const stored =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem("perfilador.currentUser")
-            : null;
-        if (stored) {
-          const parsed = JSON.parse(stored) as AuthUser;
-          if (!cancelled) {
-            setUser(parsed);
-
-            // Set up a real-time listener for the current user's profile in Firestore
-            const { getDb } = await import("@/lib/firebase");
-            const { doc, onSnapshot } = await import("firebase/firestore");
-            const db = getDb();
-
-            unsubscribe = onSnapshot(doc(db, "users", String(parsed.id)), (snapshot) => {
-              if (snapshot.exists() && !cancelled) {
-                const data = snapshot.data();
-                setUser((prev) => {
-                  if (!prev) return null;
-                  const updated = {
-                    ...prev,
-                    ...data,
-                    id: snapshot.id,
-                  };
-                  if (typeof window !== "undefined") {
-                    window.localStorage.setItem("perfilador.currentUser", JSON.stringify(updated));
-                  }
-                  return updated;
-                });
-              }
-            });
-          }
-        }
-      } catch (err) {
-        console.error("Error setting up real-time profile listener:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    // Sincronizar de inmediato contra el repositorio único PostgreSQL
+    refreshUser();
   }, []);
 
   const login = async (username: string, password: string) => {
     setLoading(true);
     try {
-      // Usuarios creados por el admin en Firestore
-      const db = getDb();
-      const q = query(
-        collection(db, "users"),
-        where("username", "==", username.trim())
-      );
-      const snap = await getDocs(q);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-      // BOOTSTRAP: Si la base de datos no tiene a "admin", lo creamos como SUPER_ADMIN oficial
-      if (snap.empty && username.trim() === "admin" && password === "Admin2026!") {
-        const newDocRef = await addDoc(collection(db, "users"), {
-          username: "admin",
-          passwordHash: "Admin2026!",
-          role: "SUPER_ADMIN",
-          name: "Super Administrador",
-          createdAt: Date.now()
-        });
-        const authUser: AuthUser = {
-          id: newDocRef.id,
-          username: "admin",
-          role: "SUPER_ADMIN",
-          name: "Super Administrador",
-        };
-        window.localStorage.setItem("perfilador.currentUser", JSON.stringify(authUser));
-        setUser(authUser);
-        router.push("/");
-        return;
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Usuario o contraseña incorrectos");
       }
 
-      const docSnap = snap.docs[0];
-      if (docSnap) {
-        const data = docSnap.data() as { passwordHash?: string; role?: string; name?: string };
-        if (data.passwordHash === password) {
-          const authUser: AuthUser = {
-            id: docSnap.id,
-            username: username.trim(),
-            role: (data.role as "SUPER_ADMIN" | "ADMIN" | "USER") || "USER",
-            name: (data.name as string) || username.trim(),
-          };
-          window.localStorage.setItem(
-            "perfilador.currentUser",
-            JSON.stringify(authUser)
-          );
-          setUser(authUser);
-          router.push("/");
-          return;
-        }
-      }
-
-      throw new Error("Usuario o contraseña incorrectos");
+      const data = await res.json();
+      const mergedUser = {
+        ...data,
+        ...(data.profile || {}),
+      };
+      
+      window.localStorage.setItem("perfilador.currentUser", JSON.stringify(mergedUser));
+      setUser(mergedUser);
+      router.push("/");
     } finally {
       setLoading(false);
     }
   };
 
   const logout = async () => {
-    window.localStorage.removeItem("perfilador.currentUser");
-    setUser(null);
-    router.push("/login");
+    setLoading(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("Error on api logout call:", err);
+    } finally {
+      window.localStorage.removeItem("perfilador.currentUser");
+      setUser(null);
+      setLoading(false);
+      router.push("/login");
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -167,3 +118,4 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
+

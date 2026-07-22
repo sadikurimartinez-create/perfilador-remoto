@@ -998,8 +998,8 @@ export class ReportEngineKernelClass {
         }
 
         // --- VALIDACIÓN DE INTEGRACIÓN MEDIANTE EL CONTRATO UNIFICADO (IIC) ---
-        // Auto-construcción resiliente en caliente si el contexto no fue proveído por el frontend legacy
-        if (!this.context.intelligenceContext) {
+        // Auto-construcción resiliente en caliente si el contexto no fue proveído por el frontend legacy (undefined)
+        if (this.context.intelligenceContext === undefined) {
           console.warn("[ReportEngine] IntelligenceContext no proveído. Inicializando capa de resiliencia IIC (ADR-007.3)...");
           
           const autoAceReport = {

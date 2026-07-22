@@ -54,6 +54,14 @@ CONTRATO DE TRAYECTORIA DE HIPÓTESIS (ADR-011 - HLIE):
 - Toda la narrativa y análisis criminológico de cada capítulo debe conectarse de forma explícita o implícita con el origen investigativo del expediente.
 - Al evaluar evidencias, factores territoriales o hallazgos OSINT, el modelo responderá rigurosamente a la directiva: "¿Esta evidencia fortalece (CONFIRMACIÓN), debilita (REFUTACIÓN), amplía (AMPLIACIÓN) o reorienta (REORIENTACIÓN) la hipótesis inicial formulada?"
 - Garantizar que la hipótesis inicial nunca se elimine y se mantenga la trazabilidad de su evolución y conclusiones resultantes.
+
+REGLAS EDITORIALES Y DE GOBERNANZA ADICIONALES:
+1. REGLA DE HIPÓTESIS INICIAL: La hipótesis inicial analizada debe extraerse de forma inalterada del texto del investigador (provisto en "executiveSummary.motivoAnalisis" o "centralHypothesis.summary") sin agregar jerga del sistema ni especulaciones.
+2. REGLA DE EXCLUSIÓN DE IMÁGENES INEXISTENTES ("SIN IMAGEN = SIN BLOQUE"): Queda estrictamente prohibido analizar, interpretar, mencionar o referenciar cualquier imagen, fotografía, archivo o elemento multimedia que no esté explícitamente listado y presente en el expediente.
+3. REGLA DE EVITAR BLOQUES VACÍOS: El modelo no generará tablas, secciones, cuadros, tarjetas o bloques vacíos de información. Si no hay datos suficientes, se omitirá la sección o se indicará de forma directa la ausencia de información.
+4. REGLA DE LIMITACIÓN DE EXTENSIÓN Y EVITAR AUTORREFERENCIAS: Cada capítulo o sección redactada tendrá un límite estricto de entre 3 y 5 párrafos como máximo. Queda estrictamente prohibido que el modelo haga referencias a sí mismo (ej. "como modelo de lenguaje", "como IA", "este asistente") o use jerga técnica interna de la IA.
+5. REGLA DE PROHIBICIÓN DE RECOMENDACIONES EN CAPÍTULOS PREVIOS: Todas las propuestas operativas, acciones policiales, recomendaciones de patrullaje o sugerencias de diseño ambiental deben confinarse STRICTAMENTE al Capítulo 10 ("CONCLUSIONES OPERATIVAS"). Queda estrictamente prohibido incluir cualquier recomendación o sugerencia operativa en los Capítulos 1 al 9.
+6. REGLA DE EXCLUSIÓN DE MÉTRICAS DE CONTROL DE CALIDAD EN TEXTO NARRATIVO: Queda estrictamente prohibido inyectar puntuaciones numéricas (scores), porcentajes de confianza cuantitativos del sistema, sellos de auditoría o alertas de calidad técnica dentro del cuerpo de texto narrativo principal de los capítulos.
 `.trim();
 
 /**
@@ -75,17 +83,17 @@ ${GLOBAL_CONTEXT_RULE}
 --- INICIO MÓDULO: RESUMEN EJECUTIVO (PORTADA) ---
 Genera el Resumen Ejecutivo del "Informe de Geointeligencia Operativa" para el expediente "${projectName}" (Número de Expediente: ${projectId}).
 
-El resumen ejecutivo debe ser sumamente analítico y formal, con un máximo de 350 palabras, y estructurarse bajo los siguientes apartados explícitos:
+El resumen ejecutivo debe ser sumamente analítico y formal, con un máximo de 250 palabras, y estructurarse bajo los siguientes cuatro apartados explícitos de forma exclusiva, sin incluir recomendaciones operativas o acciones a tomar:
 
-1. ¿Qué ocurre?: Descripción del fenómeno territorial delictivo o de desorden analizado.
+1. ¿Qué ocurre?: Descripción objetiva y directa del fenómeno de desorden, delincuencia o vulnerabilidad territorial detectado en el polígono.
 2. ¿Dónde ocurre?: Ubicación exacta y delimitación geoespacial del área (Radio: ${analysisRadius}m, Cobertura: ${geometryType}).
-3. ¿Qué evidencia lo sostiene?: Fuentes utilizadas para sostener el análisis (secciones de incidencia, mapas, fotografías, OSINT, Street View, pandillas, DENUE y SCINCE).
-4. ¿Cuál es el riesgo?: Clasificación formal de riesgo (BAJO, MEDIO, ALTO).
-5. ¿Qué debe hacerse?: Tres acciones prioritarias recomendadas en terreno.
+3. Hallazgo principal: Síntesis ejecutiva del hallazgo de geointeligencia y criminología ambiental más relevante sustentado en el expediente.
+4. Riesgo principal: Clasificación cualitativa formal del riesgo identificado (Bajo, Medio, Alto) con su correspondiente justificación analítica.
 
 Reglas:
+- Queda ABSOLUTAMENTE PROHIBIDO incluir recomendaciones operativas, patrullajes o sugerencias de acciones en este resumen. Es una sección puramente descriptiva e interpretativa.
 - Evita lenguaje técnico informal o marcas internas de sistemas.
-- Sé ejecutivo y conciso.
+- Sé sumamente ejecutivo y conciso.
 - Todo elemento visual o tabla debe llevar la marca de agua: SSPE-CEIPOL.
 --- FIN MÓDULO ---
 `.trim();
@@ -160,7 +168,7 @@ REGLAS DE GENERACIÓN DE TEXTO:
 3. Si la evidencia es suficiente, deberás estructurar el capítulo obligatoriamente con los siguientes apartados y subtítulos exactos:
 
 ## Hipótesis:
-- Redactar de forma fluida y coherente la síntesis de la hipótesis del campo "centralHypothesis.summary". Debe ser un párrafo formal de tono técnico-institucional.
+- Deberás COPIAR TEXTUALMENTE la hipótesis formulada por el investigador contenida en el campo "centralHypothesis.summary". Si dicho texto supera la extensión equivalente a una página completa de Word (aproximadamente 500 palabras), realiza únicamente un resumen fiel de la misma que conserve intacto su significado criminológico, sin alterar la intención original del investigador.
 
 ## Matriz de Evidencia:
 - Clasificar y listar ordenadamente los elementos de soporte con su peso técnico reportados en el JSON:
@@ -174,8 +182,9 @@ REGLAS DE GENERACIÓN DE TEXTO:
 - Listar los orígenes de datos, motores, variables y fechas reportados en "traceability".
 
 ## Nivel de confianza:
-- Especificar el nivel de confianza cuantitativo y cualitativo según el campo "confidence" (ej: "Confianza: ALTO (Score: 75/100). Descripción: ...").
-- Detallar los factores cuantitativos: calidad de la evidencia (qualityScore), cantidad de la evidencia (quantityScore), convergencia (convergenceScore), y consistencia (consistencyScore) reportados en "confidenceFactors".
+- Especificar de manera puramente cualitativa el nivel de confianza del campo "confidence" (ej: "Confianza: ALTO", "Confianza: MEDIO" o "Confianza: BAJO") y su correspondiente descripción o justificación metodológica.
+- Queda ESTRICTAMENTE PROHIBIDO incluir cualquier puntuación numérica, porcentaje o score cuantitativo (como "75/100", "Score: ...", u otros similares) en este apartado o en cualquier texto redactado.
+- Detallar cualitativamente los factores de confianza: calidad de la evidencia (qualityScore), cantidad de la evidencia (quantityScore), convergencia (convergenceScore), y consistencia (consistencyScore) reportados en "confidenceFactors", traduciéndolos a descripciones narrativas formales en lugar de porcentajes o puntuaciones.
 
 ## Matriz de Evidencia Contradictoria y Faltante:
 - Listar los elementos que debilitan la hipótesis reportados en "contradictoryEvidence" (si existen).
@@ -186,6 +195,7 @@ REGLAS DE GENERACIÓN DE TEXTO:
 
 REGLAS EDITORIALES:
 - Sé directo, depurado e institucional. Evita narrativas genéricas introductorias y explicaciones de relleno.
+- Queda estrictamente prohibido redactar cualquier tipo de recomendación operativa o propuesta de patrullaje en esta sección.
 --- FIN MÓDULO ---
 `.trim();
 };
@@ -432,9 +442,13 @@ Genera el Capítulo 5: "EVIDENCIA VISUAL OPERACIONAL Y CONTEXTO TERRITORIAL".
 
 Instrucciones Generales de Redacción:
 - Sigue la Regla Institucional de Diseño: "La construcción analítica debe ser profunda, determinista y auditable; la materialización documental debe ser ejecutiva, breve y orientada a la toma de decisiones."
-- Prohibición Absoluta de Alucinación Visual: Analiza únicamente las evidencias visuales proporcionadas a continuación. No agregues elementos no observados en los metadatos ni infieras tipos de delitos específicos o conclusiones criminales subjetivas a partir de fotos (ej. no afirmes "venta de drogas" o "zona de asaltantes" en base a una foto deteriorada).
-- No incluyas coordenadas geográficas (latitud, longitud), identificadores de fotos internos (ej., uuid, file paths) ni nombres de motores estadísticos o variables de sistema.
+- Prohibición Absoluta de Alucinación Visual: Analiza únicamente las evidencias visuales proporcionadas a continuación. No agregues elementos no observados en los metadatos ni infieras tipos de delitos específicos o conclusiones criminales subjetivas a partir de fotos.
+- Queda ESTRICTAMENTE PROHIBIDO incluir cualquier tipo de metadatos internos, identificadores de archivos, nombres de archivo de imagen, UUIDs, rutas de archivo (e.g., photo_01.jpg, b59fcab...) o marcas de motores de base de datos.
 - Redacte de forma directa, ejecutiva e institucional.
+- Para cada fotografía analizada en los apartados 5.2, 5.3 y 5.4, debes estructurar el análisis utilizando obligatoria y exclusivamente el siguiente formato textual lineal, limitando el análisis a un máximo de 5 líneas de texto:
+
+  IMAGEN: [Título de la imagen, ej: "Fachada de baldío con matorrales"]
+  Análisis criminológico asociado: [Análisis profundo de la vulnerabilidad física/ambiental de la imagen y su relación con el riesgo, estrictamente máximo 5 líneas de texto]
 
 Estructura del Capítulo:
 
@@ -442,19 +456,19 @@ Estructura del Capítulo:
 Redacte un párrafo de síntesis ejecutiva (máximo 150 palabras) describiendo de forma agregada el entorno territorial analizado, resumiendo los principales riesgos observados y su influencia en la vigilancia natural o el control social. Apóyate en este resumen base: "${matrix.executiveAbstract}"
 
 ## 5.2 Evidencia Fotográfica de Campo (Analista)
-Redacte una narrativa integrada para las siguientes fotografías tomadas por el investigador en el terreno, explicando de forma ejecutiva cómo las condiciones físicas observadas inciden en las vulnerabilidades operativas:
+Redacte el análisis de las siguientes fotografías tomadas por el investigador en el terreno, respetando de manera estricta el formato obligatorio (IMAGEN + Análisis criminológico asociado con un límite de 5 líneas por imagen) y evitando cualquier mención a metadatos internos:
 ${analystPhotosStr}
 
 ## 5.3 Evidencia de Barrido Vial (Google Street View)
-Redacte un análisis táctico detallado y conciso sobre las siguientes imágenes de Street View seleccionadas por su alta relevancia criminógena y cercanía con hotspots:
+Redacte el análisis de las siguientes imágenes de Google Street View, respetando el formato obligatorio (IMAGEN + Análisis criminológico asociado con un límite de 5 líneas por imagen):
 ${streetViewStr}
 
 ## 5.4 Indicadores Visuales de Grafiti Territorial
-Si está activo, analice de forma espacial el patrón repetitivo de grafitis en el sector como un indicador físico de apropiación de espacios y posible deterioro de la vigilancia natural:
+Si está activo, analice el patrón repetitivo de grafitis en el sector como un indicador físico de apropiación de espacios, respetando de manera estricta el formato obligatorio (IMAGEN + Análisis criminológico asociado con un límite de 5 líneas por imagen):
 ${graffitiStr}
 
-## 5.5 Conclusión Operacional
-Redacte una conclusión de carácter táctico-operativo orientada a directivas de patrullaje policial, patrullas dinámicas y remediación física ambiental de las anomalías observadas (alumbrado, cerramientos, matorrales, etc.) en un máximo de 3 párrafos.
+## 5.5 Conclusión de Contexto Visual
+Redacte un párrafo conclusivo descriptivo de carácter de geointeligencia y situacional que resuma la interconectividad de los facilitadores detectados (máximo 150 palabras). Queda estrictamente prohibido redactar propuestas operativas, sugerencias de patrullaje o acciones directas en esta sección.
 
 --- FIN MÓDULO ---
 `.trim();
@@ -625,24 +639,26 @@ ${GLOBAL_CONTEXT_RULE}
 Genera el Capítulo 10: "CONCLUSIONES OPERATIVAS".
 
 Instrucciones:
-- Genera recomendaciones y conclusiones operativas específicas derivadas del análisis territorial.
-- Estructura las acciones de forma obligatoria en tres plazos:
+- Genera recomendaciones y conclusiones operativas específicas derivadas exclusivamente del análisis territorial del expediente.
+- Estructura las acciones de forma obligatoria en tres plazos bien definidos:
   
   ## Acción inmediata (0 a 30 días)
   [Recomendaciones inmediatas tácticas en campo]
   
   ## Acción preventiva (30 a 90 días)
-  [Recomendaciones de prevención y diseño ambiental]
+  [Recomendaciones de prevención y diseño ambiental situacional]
   
   ## Acción estratégica (90 días o más)
-  [Recomendaciones a mediano y largo plazo]
+  [Recomendaciones estratégicas a mediano y largo plazo]
 
-- Para cada recomendación o acción redactada, debes responder explícitamente:
-  - ¿Qué hacer?
-  - ¿Dónde?
-  - ¿Por qué?
-  - ¿Con qué evidencia?
-- Sé directo, imperativo y sumamente formal.
+- Cada una de las recomendaciones, propuestas o acciones tácticas que redactes bajo cualquiera de los tres plazos DEBERÁ estructurarse de forma obligatoria respetando exactamente el siguiente formato lineal de cuatro prefijos textuales, sin omitir ninguno y sin usar viñetas u otros encabezados:
+
+  ACCIÓN: [Descripción imperativa y concisa del patrullaje táctico, intervención o remoción que se recomienda realizar]
+  OBJETIVO: [Meta o justificación criminológica de la acción en terreno]
+  HALLAZGO RELACIONADO: [Ubicación, calles, tramos, colonias o áreas exactas de vulnerabilidad vinculadas en el expediente]
+  EVIDENCIA: [Mapeo de la fuente de evidencia que lo sustenta, ej: Mapa 2 de Densidad, Foto 03 de baldío, reporte de incidencias SEM, etc.]
+
+- Redacte de manera directa, imperativa y sumamente formal.
 --- FIN MÓDULO ---
 `.trim();
 };

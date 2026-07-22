@@ -9,7 +9,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { ImiDashboard } from "@/components/ImiDashboard";
 
 export default function PerfilPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const router = useRouter();
   
   const [activeTab, setActiveTab] = useState<"registro" | "imi">("registro");
@@ -100,21 +100,27 @@ export default function PerfilPage() {
     setMessage("");
 
     try {
-      const { getDb } = await import("@/lib/firebase");
-      const { doc, setDoc } = await import("firebase/firestore");
-      const db = getDb();
-      
-      const fullName = `${formData.nombre.trim()} ${formData.apellidoPaterno.trim()} ${formData.apellidoMaterno.trim()}`.trim();
-      
-      await setDoc(doc(db, "users", String((user as any).id)), {
-        ...formData,
-        name: fullName,
-        perfilCompleto: true
-      }, { merge: true });
+      // Guardar el perfil del analista de forma segura en PostgreSQL a través de la API
+      const res = await fetch("/api/auth/profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "No se pudo guardar el perfil.");
+      }
 
       setMessage("Perfil guardado correctamente.");
-      // El AuthContext se actualizará automáticamente gracias al listener de Firestore.
-      // Navegamos al Lobby después de un momento para que el usuario vea el mensaje.
+      
+      // Sincronizar el estado global del usuario con los datos frescos de PostgreSQL
+      if (refreshUser) {
+        await refreshUser();
+      }
+
       setTimeout(() => {
         window.location.href = "/";
       }, 1000);

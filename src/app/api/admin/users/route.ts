@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
+import { hashPassword } from "@/utils/authCrypto";
 
 export async function GET() {
   try {
@@ -36,13 +37,16 @@ export async function POST(req: Request) {
       );
     }
 
+    // Hashear la contraseña de forma irreversible antes de guardarla en PostgreSQL
+    const securePasswordHash = await hashPassword(password);
+
     const pool = getPool();
     await pool.query(
       `
       INSERT INTO users (username, password_hash, role, name)
       VALUES ($1, $2, 'USER', $3)
     `,
-      [username, password, name]
+      [username, securePasswordHash, name]
     );
 
     return NextResponse.json({ ok: true });
@@ -61,4 +65,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
 
