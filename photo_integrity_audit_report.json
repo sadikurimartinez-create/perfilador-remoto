@@ -1,6 +1,6 @@
 {
   "expedienteId": "EXP-2026-HACIENDA-SM",
-  "auditedAt": "2026-07-18T00:32:52.871Z",
+  "auditedAt": "2026-07-22T20:23:54.690Z",
   "verdict": "INTEGRIDAD_CERTIFICADA",
   "checksumMatch": true,
   "totalEvidenceAudited": 13,
@@ -9,7 +9,7 @@
   "duplicatesAudited": 2,
   "streetViewAudited": 2,
   "metrics": {
-    "totalTimeMs": 6,
-    "latenciaPorItemMs": 0.462
+    "totalTimeMs": 34,
+    "latenciaPorItemMs": 2.615
   }
 }

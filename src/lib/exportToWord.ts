@@ -675,6 +675,28 @@ function assertHypothesisConsistency(portadaHyp: string, cap0Hyp: string) {
 function sanitizeEditorialPayload(payload: any) {
   if (!payload) return payload;
 
+  const hasFieldEvidence = payload.photoEvidence && payload.photoEvidence.length > 0;
+  const hasStreetViewEvidence = payload.streetViewAnalysis && payload.streetViewAnalysis.some((sv: any) => sv.dataUrl);
+  const hasEvidence = hasFieldEvidence || hasStreetViewEvidence;
+
+  const preventSpeculation = (text: string): string => {
+    if (!text) return text;
+    if (!hasEvidence) {
+      const speculativeKeywords = [
+        "alto flujo peatonal",
+        "acecho",
+        "vulnerabilidad",
+        "deterioro",
+        "riesgo"
+      ];
+      const lower = text.toLowerCase();
+      if (speculativeKeywords.some(kw => lower.includes(kw))) {
+        return "Sin evidencia suficiente para determinar este elemento.";
+      }
+    }
+    return text;
+  };
+
   const sanitizeText = (text: any): string => {
     if (typeof text !== "string") return "";
     let cleaned = text;
@@ -690,6 +712,8 @@ function sanitizeEditorialPayload(payload: any) {
     cleaned = cleaned.replace(/\[\s*Escriba.*?\s*\]/gi, "");
     cleaned = cleaned.replace(/\[\s*PLACEHOLDER.*?\s*\]/gi, "");
     cleaned = cleaned.replace(/\[\s*Complete.*?\s*\]/gi, "");
+
+    cleaned = preventSpeculation(cleaned);
 
     return cleaned.trim();
   };
@@ -714,6 +738,18 @@ function sanitizeEditorialPayload(payload: any) {
       payload[field] = sanitizeText(payload[field]);
     }
   });
+
+  // Sanitizar executiveSummaryReport
+  if (payload.executiveSummaryReport) {
+    const r = payload.executiveSummaryReport;
+    if (r.situation) r.situation = preventSpeculation(sanitizeText(r.situation));
+    if (Array.isArray(r.primaryFindings)) {
+      r.primaryFindings.forEach((f: any) => {
+        if (f.finding) f.finding = preventSpeculation(sanitizeText(f.finding));
+        if (f.title) f.title = preventSpeculation(sanitizeText(f.title));
+      });
+    }
+  }
 
   // Validar anexos obligatorios bajo includeAnnex === true
   if (payload.includeAnnex !== true) {
@@ -1225,103 +1261,74 @@ export async function exportToWord(
     elements.push(createSubtitle("1. Situación Identificada"));
     elements.push(createBodyText(report.situation));
     
-    // 2. Hallazgos Principales (Top 5)
-    elements.push(createSubtitle("2. Hallazgos Principales (Prioritarios)"));
-    report.primaryFindings.forEach((f: any, idx: number) => {
-      elements.push(
-        new Paragraph({
-          children: [
-            new TextRun({ text: `📍 [Hallazgo #${idx + 1}] `, bold: true, color: "0D2B52", size: 18, font: "Calibri" }),
-            new TextRun({ text: `${f.title}: `, bold: true, size: 16, font: "Calibri" }),
-            new TextRun({ text: f.finding, size: 16, font: "Calibri" })
-          ],
-          spacing: { after: 80 },
-          indent: { left: 240 }
-        })
-      );
-    });
-
-    // Hallazgos Secundarios (Supporting Findings - Ajuste 2: No eliminar)
-    if (report.supportingFindings && report.supportingFindings.length > 0) {
-      elements.push(createSubtitle("Hallazgos de Soporte Secundarios (Auditoría)"));
-      report.supportingFindings.forEach((f: any, idx: number) => {
-        elements.push(
-          new Paragraph({
-            children: [
-              new TextRun({ text: `🔍 [Soporte #${idx + 1}] `, bold: true, color: "5B6573", size: 16, font: "Calibri" }),
-              new TextRun({ text: `${f.title}: `, bold: true, size: 14, font: "Calibri" }),
-              new TextRun({ text: f.finding, size: 14, font: "Calibri" })
-            ],
-            spacing: { after: 60 },
-            indent: { left: 240 }
-          })
-        );
-      });
-    }
-    
-    // 3. Factores de Riesgo
-    elements.push(createSubtitle("3. Factores de Riesgo"));
-    report.risks.forEach((r: any) => {
-      let riskColor = "10B981"; // GREEN
-      if (r.level === "HIGH") riskColor = "B91C1C"; // RED
-      else if (r.level === "MEDIUM") riskColor = "D97706"; // AMBER
-
-      elements.push(
-        new Paragraph({
-          children: [
-            new TextRun({ text: `⚠️ [Riesgo: ${r.level}] `, bold: true, color: riskColor, size: 18, font: "Calibri" }),
-            new TextRun({ text: `Estado: ${r.status}  |  `, bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${r.risk}\n`, size: 16, font: "Calibri" }),
-            new TextRun({ text: `Fundamento: `, bold: true, size: 14, color: "5B6573", font: "Calibri" }),
-            new TextRun({ text: r.basis, size: 14, font: "Calibri", italic: true })
-          ],
-          spacing: { after: 100 },
-          indent: { left: 240 }
-        })
-      );
-    });
-    
-    // 4. Hipótesis Vigente
-    elements.push(createSubtitle("4. Estado de Hipótesis"));
-    let stateColor = "D97706"; // AMBER
-    if (report.hypothesisState.state === "CONFIRMADA") stateColor = "10B981"; // GREEN
-    else if (report.hypothesisState.state === "LIMITADA") stateColor = "B91C1C"; // RED
-
+    // 2. Hallazgo Principal
+    elements.push(createSubtitle("2. Hallazgo Principal"));
+    const primaryFinding = report.primaryFindings?.[0] || { title: "Sin hallazgos principales registrados", finding: "Sin evidencia suficiente." };
     elements.push(
       new Paragraph({
         children: [
-          new TextRun({ text: `📋 Hipótesis Actual: `, bold: true, color: "0D2B52", size: 18, font: "Calibri" }),
-          new TextRun({ text: `[${report.hypothesisState.state}] `, bold: true, color: stateColor, size: 18, font: "Calibri" }),
-          new TextRun({ text: `Score de Confianza: ${report.hypothesisState.confidenceScore}/100\n`, size: 16, font: "Calibri" }),
-          new TextRun({ text: report.hypothesisState.statement, size: 16, font: "Calibri", italic: true })
+          new TextRun({ text: `📍 ${primaryFinding.title}: `, bold: true, color: "0D2B52", size: 16, font: "Calibri" }),
+          new TextRun({ text: primaryFinding.finding, size: 16, font: "Calibri" })
+        ],
+        spacing: { after: 120 },
+        indent: { left: 240 }
+      })
+    );
+
+    // 3. Ubicación
+    elements.push(createSubtitle("3. Ubicación del Proyecto"));
+    const prjName = payload.projectName || payload.project?.nombre || "Ubicación no especificada";
+    const prjLat = payload.project?.lat ?? payload.lat ?? "N/D";
+    const prjLng = payload.project?.lng ?? payload.lng ?? "N/D";
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `🗺️ Entorno / Polígono: `, bold: true, color: "0D2B52", size: 16, font: "Calibri" }),
+          new TextRun({ text: `${prjName} `, size: 16, font: "Calibri" }),
+          new TextRun({ text: `(Coordenadas: Lat ${prjLat}, Lng ${prjLng})`, size: 16, italic: true, font: "Calibri", color: "5B6573" })
         ],
         spacing: { after: 120 },
         indent: { left: 240 }
       })
     );
     
-    // 5. Recomendaciones Operativas Ordenadas por Prioridad
-    elements.push(createSubtitle("5. Recomendaciones Operativas Prioritarias"));
-    report.recommendations.forEach((rec: any, idx: number) => {
-      let priorityColor = "10B981";
-      if (rec.priority === "HIGH") priorityColor = "B91C1C";
-      else if (rec.priority === "MEDIUM") priorityColor = "D97706";
-
-      elements.push(
-        new Paragraph({
-          children: [
-            new TextRun({ text: `⚡ [Acción #${idx + 1}] [Prioridad: ${rec.priority}] `, bold: true, color: priorityColor, size: 18, font: "Calibri" }),
-            new TextRun({ text: `${rec.action}\n`, size: 16, font: "Calibri" }),
-            new TextRun({ text: `Objetivo Táctico: `, bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
-            new TextRun({ text: `${rec.objective}\n`, size: 14, font: "Calibri" }),
-            new TextRun({ text: `Sustento de Campo: `, bold: true, size: 14, color: "5B6573", font: "Calibri" }),
-            new TextRun({ text: rec.supportingFindings.join(", "), size: 14, font: "Calibri", italic: true })
-          ],
-          spacing: { after: 100 },
-          indent: { left: 240 }
-        })
-      );
-    });
+    // 4. Estado de Hipótesis
+    elements.push(createSubtitle("4. Estado de Hipótesis"));
+    let stateColor = "D97706"; // AMBER
+    if (report.hypothesisState?.state === "CONFIRMADA") stateColor = "10B981"; // GREEN
+    else if (report.hypothesisState?.state === "LIMITADA") stateColor = "B91C1C"; // RED
+    const hState = report.hypothesisState?.state || "N/A";
+    const hConf = report.hypothesisState?.confidenceScore ?? 0;
+    const hStmt = report.hypothesisState?.statement || "Sin hipótesis formulada.";
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `📋 Hipótesis Actual: `, bold: true, color: "0D2B52", size: 16, font: "Calibri" }),
+          new TextRun({ text: `[${hState}] `, bold: true, color: stateColor, size: 16, font: "Calibri" }),
+          new TextRun({ text: `(Score de Confianza: ${hConf}/100)\n`, size: 14, font: "Calibri", color: "5B6573" }),
+          new TextRun({ text: hStmt, size: 16, font: "Calibri", italic: true })
+        ],
+        spacing: { after: 120 },
+        indent: { left: 240 }
+      })
+    );
+    
+    // 5. Implicación Ejecutiva
+    elements.push(createSubtitle("5. Implicación Ejecutiva"));
+    const firstRec = report.recommendations?.[0];
+    const executiveImplicationText = firstRec 
+      ? `Dirección Operativa sugerida: ${firstRec.action}. Objetivo: ${firstRec.objective}`
+      : "Sin directivas operativas adicionales requeridas en esta fase.";
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `⚡ Directiva: `, bold: true, color: "0D2B52", size: 16, font: "Calibri" }),
+          new TextRun({ text: executiveImplicationText, size: 16, font: "Calibri" })
+        ],
+        spacing: { after: 120 },
+        indent: { left: 240 }
+      })
+    );
   }
 
   // ================= PÁGINA: CAPÍTULO 0 - TRAYECTORIA DE LA HIPÓTESIS DE INVESTIGACIÓN =================
@@ -1684,11 +1691,6 @@ export async function exportToWord(
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 7: INTELIGENCIA OSINT"));
 
-  const osintFindings: any[] = buildOsintFindingsFromSweeps(payload.sweepsData || []);
-
-  // Sin barridos reales: no inyectar datos ficticios
-  const hasOsintFindings = osintFindings.length > 0;
-
   const cellBorders = {
     top: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
     bottom: { style: BorderStyle.SINGLE, size: 4, color: "0D2B52" },
@@ -1716,82 +1718,164 @@ export async function exportToWord(
     ]
   });
 
-  const osintTable = hasOsintFindings ? new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      new TableRow({
-        children: [
-          createCell("Fuente", true),
-          createCell("Referencia / Fecha", true),
-          createCell("Información Obtenida", true),
-          createCell("Valor Analítico", true),
-          createCell("Relación Hipótesis", true)
-        ]
-      }),
-      ...osintFindings.map(f => new TableRow({
-        children: [
-          createCell(f.fuente),
-          createCell(f.referencia),
-          createCell(f.info),
-          createCell(f.valor),
-          createCell(f.relacion)
-        ]
-      }))
-    ]
-  }) : null;
+  const units: any[] = [];
 
-  // Render synthesized OSINT Analysis instead of raw lists or tables
-  if (payload.osintSynthesized) {
-    const lines = payload.osintSynthesized.split("\n");
-    for (const line of lines) {
-      const cleanLine = line.trim();
-      if (!cleanLine) continue;
-      
-      if (cleanLine.startsWith("##")) {
-        const titleText = cleanLine.replace(/^##\s*/, "");
-        elements.push(new Paragraph({
+  // 1. Check payload.economicAttractors
+  const rawAttractors = payload.economicAttractors || payload.territorialEvidence?.economicAttractors || [];
+  if (Array.isArray(rawAttractors)) {
+    rawAttractors.forEach((a: any) => {
+      units.push({
+        nombre: a.name || "N/D",
+        giro: a.category || a.activityCode || "Comercial / Servicios",
+        direccion: a.address || "Área de influencia",
+        distancia: a.distanceToHotspotMeters !== undefined ? `${a.distanceToHotspotMeters} metros` : "En radio de análisis",
+        relevancia: a.situationalInfluenceLevel || "Alta",
+        interpretacion: a.criminologicalRole || "Atractor que incrementa la movilidad en el sector."
+      });
+    });
+  }
+
+  // 2. Check sweepsData for DENUE units
+  const sweeps = payload.sweepsData || [];
+  if (Array.isArray(sweeps)) {
+    sweeps.forEach((s: any) => {
+      const isDenue = s.engine && (s.engine.toLowerCase().includes("denue") || s.engine.toLowerCase().includes("inegi"));
+      if (isDenue) {
+        const dataStr = s.data || "";
+        const contextStr = s.context || "";
+        
+        const nombreMatch = dataStr.match(/Nombre:\s*([^,\n;]+)/i);
+        const giroMatch = dataStr.match(/Giro:\s*([^,\n;]+)/i);
+        const dirMatch = dataStr.match(/Direcci[oó]n:\s*([^,\n;]+)/i);
+        const distMatch = dataStr.match(/Distancia:\s*([^,\n;]+)/i);
+        const relevanceMatch = dataStr.match(/Relevancia:\s*([^,\n;]+)/i) || contextStr.match(/Relevancia:\s*([^,\n;]+)/i);
+        const interpMatch = contextStr.match(/Interpretaci[oó]n:\s*([^,\n;]+)/i) || contextStr.match(/Rol:\s*([^,\n;]+)/i);
+        
+        const nombre = nombreMatch ? nombreMatch[1].trim() : (dataStr.split(",")[0]?.replace("Nombre:", "")?.trim() || "Establecimiento registrado");
+        const giro = giroMatch ? giroMatch[1].trim() : "Atractor de oportunidad";
+        const direccion = dirMatch ? dirMatch[1].trim() : "Sector de estudio";
+        const distancia = distMatch ? distMatch[1].trim() : "En radio de análisis";
+        const relevancia = relevanceMatch ? relevanceMatch[1].trim() : "Media";
+        const interpretacion = interpMatch ? interpMatch[1].trim() : (contextStr || "Atractor comercial que genera flujo peatonal y de personas.");
+        
+        if (!units.some(u => u.nombre.toLowerCase() === nombre.toLowerCase())) {
+          units.push({ nombre, giro, direccion, distancia, relevancia, interpretacion });
+        }
+      }
+    });
+  }
+
+  // Render individual economic units as independent tables
+  if (units.length > 0) {
+    units.slice(0, 10).forEach((unit, idx) => {
+      elements.push(
+        new Paragraph({
+          keepNext: true,
           children: [
             new TextRun({
-              text: titleText,
+              text: `Unidad Económica #${idx + 1}`,
               bold: true,
-              size: 22,
+              size: 18,
               color: "0D2B52",
               font: "Calibri"
             })
           ],
           spacing: { before: 180, after: 80 }
-        }));
-      } else if (cleanLine.startsWith("-") || cleanLine.startsWith("*")) {
-        const itemText = cleanLine.replace(/^[-*]\s*/, "");
-        elements.push(new Paragraph({
-          bullet: { level: 0 },
-          children: [
-            new TextRun({
-              text: itemText,
-              size: 19,
-              font: "Calibri"
-            })
-          ],
-          spacing: { after: 60 }
-        }));
-      } else {
-        elements.push(new Paragraph({
-          alignment: AlignmentType.JUSTIFY,
-          children: [
-            new TextRun({
-              text: cleanLine,
-              size: 19,
-              font: "Calibri"
-            })
-          ],
-          spacing: { after: 120, line: 240 }
-        }));
-      }
-    }
+        })
+      );
+      
+      const table = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              createCell("Campo", true),
+              createCell("Detalle Registrado", true)
+            ]
+          }),
+          new TableRow({
+            children: [
+              createCell("Nombre:"),
+              createCell(unit.nombre)
+            ]
+          }),
+          new TableRow({
+            children: [
+              createCell("Giro:"),
+              createCell(unit.giro)
+            ]
+          }),
+          new TableRow({
+            children: [
+              createCell("Dirección:"),
+              createCell(unit.direccion)
+            ]
+          }),
+          new TableRow({
+            children: [
+              createCell("Distancia:"),
+              createCell(unit.distancia)
+            ]
+          }),
+          new TableRow({
+            children: [
+              createCell("Relevancia territorial:"),
+              createCell(unit.relevancia)
+            ]
+          }),
+          new TableRow({
+            children: [
+              createCell("Interpretación analítica:"),
+              createCell(unit.interpretacion)
+            ]
+          })
+        ]
+      });
+      elements.push(table);
+      elements.push(new Paragraph({ spacing: { after: 120 } }));
+    });
   } else {
-    elements.push(createBodyText("No se dispone de síntesis OSINT operativa para este expediente. Ejecute barridos DENUE, incidencia o fuentes abiertas antes de exportar."));
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "Sin evidencia suficiente para determinar este elemento.",
+            size: 20,
+            font: "Calibri",
+            color: "B91C1C",
+            bold: true
+          })
+        ],
+        spacing: { after: 120 }
+      })
+    );
   }
-  elements.push(new Paragraph({ text: "", spacing: { after: 120 } }));
+
+  // Construct osintTable variable to satisfy potential references down the file
+  const hasOsintFindings = units.length > 0;
+  const osintTable = hasOsintFindings ? new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          createCell("Nombre", true),
+          createCell("Giro", true),
+          createCell("Dirección", true),
+          createCell("Distancia", true),
+          createCell("Relevancia", true)
+        ]
+      }),
+      ...units.slice(0, 10).map(u => new TableRow({
+        children: [
+          createCell(u.nombre),
+          createCell(u.giro),
+          createCell(u.direccion),
+          createCell(u.distancia),
+          createCell(u.relevancia)
+        ]
+      }))
+    ]
+  }) : null;
 
   // ================= PÁGINA 9: CAPÍTULO 8 - ACTORES TERRITORIALES Y PANDILLAS =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
