@@ -27,13 +27,10 @@ const GCP_PRIVATE_KEY = process.env.GCP_PRIVATE_KEY ? process.env.GCP_PRIVATE_KE
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 export const buscarEnWebOSINT = async (query: string) => {
-  if (!DISCOVERY_PROJECT_ID || !DISCOVERY_LOCATION || !DISCOVERY_ENGINE_ID || !DISCOVERY_API_KEY) {
+  if (!DISCOVERY_PROJECT_ID || !DISCOVERY_LOCATION || !DISCOVERY_ENGINE_ID) {
     console.warn("Configuración de Vertex AI Search (Discovery Engine) incompleta. Omitiendo búsqueda OSINT web. El semáforo debe estar en rojo o amarillo.");
     return { resultadosWeb: [], analisisInteligencia: null };
   }
-
-  // La API Key se pasa como parámetro `key` en la URL, que es el método estándar para REST APIs de Google.
-  const url = `https://discoveryengine.googleapis.com/v1/projects/${DISCOVERY_PROJECT_ID}/locations/${DISCOVERY_LOCATION}/engines/${DISCOVERY_ENGINE_ID}/servingConfigs/default_search:search?key=${DISCOVERY_API_KEY}`;
 
   const payload = {
     query,
@@ -47,8 +44,39 @@ export const buscarEnWebOSINT = async (query: string) => {
   };
 
   try {
+    console.log(`[WEB OSINT] 🚀 Generando token de acceso para Discovery Engine...`);
+    
+    // Autenticación con Google Cloud para Vertex AI Search
+    const authOptions: any = {
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    };
+    if (GCP_CLIENT_EMAIL && GCP_PRIVATE_KEY) {
+      authOptions.credentials = {
+        client_email: GCP_CLIENT_EMAIL,
+        private_key: GCP_PRIVATE_KEY,
+      };
+      authOptions.projectId = GCP_PROJECT_ID;
+    }
+
+    const auth = new GoogleAuth(authOptions);
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    const token = tokenResponse.token;
+
+    if (!token) {
+      throw new Error("No se pudo obtener el token de acceso OAuth2.");
+    }
+
+    // Ruta REST oficial corregida (incluye /collections/default_collection/)
+    const url = `https://discoveryengine.googleapis.com/v1/projects/${DISCOVERY_PROJECT_ID}/locations/${DISCOVERY_LOCATION}/collections/default_collection/engines/${DISCOVERY_ENGINE_ID}/servingConfigs/default_search:search`;
+
     console.log(`[WEB OSINT] 🚀 Buscando en Discovery Engine: "${query}"`);
-    const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' } });
+    const response = await axios.post(url, payload, { 
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json' 
+      } 
+    });
 
     const results = response.data?.results || [];
     console.log(`[WEB OSINT] ✅ Búsqueda completada. ${results.length} resultados obtenidos. El semáforo se puede poner en verde.`);

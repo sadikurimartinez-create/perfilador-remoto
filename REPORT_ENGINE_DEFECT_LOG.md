@@ -4,7 +4,7 @@
 
 * **Expediente Evaluado:** GERONIMO_LINEAL
 * **Ronda de Auditoría:** E2E Report Quality Governance v1.0.1
-* **Fecha:** 18/7/2026
+* **Fecha:** 22/7/2026
 
 ---
 

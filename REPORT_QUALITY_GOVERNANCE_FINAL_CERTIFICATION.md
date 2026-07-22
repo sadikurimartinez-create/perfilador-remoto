@@ -5,7 +5,7 @@
 * **Expediente de Certificación:** GERONIMO_LINEAL
 * **ID Único de Proyecto (Firestore):** `39bR997kB709hcaOkKtT`
 * **ID de Registro Nacional:** `CEIPOL/000009/02/07/2026`
-* **Fecha de Emisión de Certificado:** 18/7/2026
+* **Fecha de Emisión de Certificado:** 22/7/2026
 * **Código de Certificado de Gobernanza:** `CERTIFICATION_BLOCKED`
 * **Firma Criptográfica SHA-256:** `439423c8faaf2b0ec60e9da2585f386bb43cbf299512b59fcab17e643fe26558`
 * **Score de Calidad Analítica:** `86%`

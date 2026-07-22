@@ -508,7 +508,7 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
 
   for (const ch of requiredChapters) {
     const text = payload[ch.key];
-    if (!text || text.trim().length === 0 || text.includes("Información no disponible")) {
+    if (!text || text.trim().length === 0) {
       console.warn(`[WARNING] El capítulo ${ch.name} estaba vacío o no disponible. Aplicando fallback profesional.`);
       payload[ch.key] = defaultChapterFallbacks[ch.key];
     }
@@ -672,12 +672,70 @@ function assertHypothesisConsistency(portadaHyp: string, cap0Hyp: string) {
   }
 }
 
+function sanitizeEditorialPayload(payload: any) {
+  if (!payload) return payload;
+
+  const sanitizeText = (text: any): string => {
+    if (typeof text !== "string") return "";
+    let cleaned = text;
+
+    // 1. Eliminar Markdown residual
+    cleaned = cleaned.replace(/###\s*/g, "");
+    cleaned = cleaned.replace(/##\s*/g, "");
+    cleaned = cleaned.replace(/#\s*/g, "");
+    cleaned = cleaned.replace(/\*\*/g, "");
+
+    // 2. Eliminar placeholders de LLMs
+    cleaned = cleaned.replace(/\[\s*Inserta aquí.*?\s*\]/gi, "");
+    cleaned = cleaned.replace(/\[\s*Escriba.*?\s*\]/gi, "");
+    cleaned = cleaned.replace(/\[\s*PLACEHOLDER.*?\s*\]/gi, "");
+    cleaned = cleaned.replace(/\[\s*Complete.*?\s*\]/gi, "");
+
+    return cleaned.trim();
+  };
+
+  // Sanitizar campos clave de texto del payload
+  const textFields = [
+    "contextoTerritorial",
+    "finalHypothesis",
+    "mapsText",
+    "statsText",
+    "evidenceText",
+    "streetViewText",
+    "osintSynthesized",
+    "pandillasAnalysis",
+    "graphText",
+    "conclusionesText",
+    "executiveSummary"
+  ];
+
+  textFields.forEach(field => {
+    if (payload[field]) {
+      payload[field] = sanitizeText(payload[field]);
+    }
+  });
+
+  // Validar anexos obligatorios bajo includeAnnex === true
+  if (payload.includeAnnex !== true) {
+    payload.includeOsintAppendix = false;
+    payload.qualityAssessment = null;
+    if (payload.governedEvidence) {
+      payload.governedEvidence.summary.preserved = 0;
+    }
+  }
+
+  return payload;
+}
+
 export async function exportToWord(
   payload: any,
   projectName: string,
   reportNumber?: string,
   user?: any
 ) {
+  // Sanitizar payload previo a la maquetación
+  payload = sanitizeEditorialPayload(payload);
+
   // --- CAPA DE GOBERNANZA DE CALIDAD DE REPORTES CEIPOL v1.0 ---
   // Resetear registro de huellas dactilares para esta corrida de exportación
   ImageFingerprintService.clearRegistry();
@@ -1154,126 +1212,8 @@ export async function exportToWord(
   );
 
   // --- COMPACT CONTROL DE CONSISTENCIA ANALÍTICA (ACE) CALLOUT ---
-  if (payload.intelligenceContext) {
-    const iic = payload.intelligenceContext;
-    const ace = iic.evidenceSources.ACE;
-    const readiness = iic.analysisReadiness;
-
-    const boxColor = readiness === "READY_WITH_LIMITATIONS" ? "D97706" : "10B981";
-    const boxTitle = readiness === "READY_WITH_LIMITATIONS" ? "⚠️ ADVERTENCIA: EXPEDIENTE CON LIMITACIONES OPERATIVAS" : "✅ EXPEDIENTE VALIDADO SIN RESTRICCIONES";
-
-    const alertsCount = ace?.alerts?.length ?? 0;
-    const observation = readiness === "READY_WITH_LIMITATIONS"
-      ? "Expediente integrado con algunas limitaciones de datos en terreno (como ausencia de registros fotográficos o módulos opcionales). Se autoriza su despliegue bajo los términos de responsabilidad institucional definidos en el perfil de geointeligencia."
-      : "Expediente de inteligencia táctica validado e integrado plenamente con consistencia analítica y certidumbre metodológica.";
-
-    const aceTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              shading: { fill: "F9FAFB", type: ShadingType.CLEAR },
-              borders: {
-                left: { color: boxColor, space: 1, style: BorderStyle.SINGLE, size: 24 },
-                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }
-              },
-              margins: { left: 180, right: 180, top: 120, bottom: 120 },
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: boxTitle, bold: true, size: 18, color: boxColor, font: "Calibri" })
-                  ],
-                  spacing: { after: 100 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: "Estatus de Integración: ", bold: true, size: 16 }),
-                    new TextRun({ text: `${readiness}     `, size: 16 }),
-                    new TextRun({ text: "Nivel de Confianza: ", bold: true, size: 16 }),
-                    new TextRun({ text: `${ace?.overallConfidence ?? 100}%     `, size: 16 }),
-                    new TextRun({ text: "Alertas Detectadas: ", bold: true, size: 16 }),
-                    new TextRun({ text: `${alertsCount}`, size: 16 })
-                  ],
-                  spacing: { after: 100 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: "OBSERVACIÓN METODOLÓGICA INSTITUCIONAL:", bold: true, size: 16, color: "0D2B52" })
-                  ],
-                  spacing: { after: 60 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: `"${observation}"`, italic: true, size: 16 })
-                  ]
-                })
-              ]
-            })
-          ]
-        })
-      ],
-      spacing: { before: 200, after: 200 }
-    });
-    elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
-    elements.push(aceTable);
-  } else if (payload.aceReport) {
-    const ace = payload.aceReport;
-    const observation = ace.globalStatus === "WARNING"
-      ? (ace.alerts.find((a: any) => a.severity === "HIGH" || a.severity === "MEDIUM")?.message || ace.alerts[0]?.message || "Bajo ajuste estadístico detectado en el modelo.")
-      : "No se identificaron inconsistencias técnicas ni analíticas en los datos auditados.";
-
-    const aceTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              shading: { fill: "F9FAFB", type: ShadingType.CLEAR },
-              borders: {
-                left: { color: ace.globalStatus === "WARNING" ? "D97706" : "10B981", space: 1, style: BorderStyle.SINGLE, size: 24 },
-                top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }
-              },
-              margins: { left: 180, right: 180, top: 120, bottom: 120 },
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: "⚠️ CONTROL DE CONSISTENCIA ANALÍTICA (ACE)", bold: true, size: 18, color: ace.globalStatus === "WARNING" ? "D97706" : "10B981", font: "Calibri" })
-                  ],
-                  spacing: { after: 100 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: "Estatus de Calidad: ", bold: true, size: 16 }),
-                    new TextRun({ text: `${ace.globalStatus === "WARNING" ? "ADVERTENCIA (WARN)" : "VALIDADO (PASS)"}     `, size: 16 }),
-                    new TextRun({ text: "Nivel de Confianza: ", bold: true, size: 16 }),
-                    new TextRun({ text: `${ace.overallConfidence}%     `, size: 16 }),
-                    new TextRun({ text: "Alertas Detectadas: ", bold: true, size: 16 }),
-                    new TextRun({ text: `${ace.alerts.length}`, size: 16 })
-                  ],
-                  spacing: { after: 100 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: "OBSERVACIÓN METODOLÓGICA INSTITUCIONAL:", bold: true, size: 16, color: "0D2B52" })
-                  ],
-                  spacing: { after: 60 }
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({ text: `"${observation}"`, italic: true, size: 16 })
-                  ]
-                })
-              ]
-            })
-          ]
-        })
-      ],
-      spacing: { before: 200, after: 200 }
-    });
-    elements.push(new Paragraph({ spacing: { before: 100, after: 100 } }));
-    elements.push(aceTable);
-  }
+  // --- CAMBIO 2: Se elimina la inyección automática de la OBSERVACIÓN METODOLÓGICA INSTITUCIONAL de los elementos visuales ---
+  // Se conserva como metadata interna de certificación en payload.aceReport
 
   // ================= SÍNTESIS EJECUTIVA DE ALTA DIRECCIÓN v1.0.9 [NUEVO] =================
   if (payload.executiveSummaryReport && payload.executiveSummaryReport.isValid) {
