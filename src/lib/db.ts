@@ -138,12 +138,27 @@ function parseConnectionString(str: string) {
  * Así el build de Vercel no falla al importar este módulo.
  */
 export function getPool(): Pool {
-  const connectionString = process.env.DATABASE_URL || "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
+  let connectionString = process.env.DATABASE_URL || "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
   
-  console.log("getPool diagnostic:", {
+  console.log("getPool diagnostic (before fallback check):", {
     hasEnv: !!process.env.DATABASE_URL,
     envLength: process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0,
-    envPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 25) : "none",
+    envPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 25) : "none"
+  });
+
+  // Si la cadena de conexión en Vercel es un placeholder o no es válida (ej. contiene 'USUARIO' o carece de '@')
+  // forzamos automáticamente el fallback transparente a la conexión real de Namecheap.
+  if (
+    connectionString.includes("USUARIO") || 
+    connectionString.includes("CONTRASENA") || 
+    connectionString.includes("host") || 
+    !connectionString.includes("@")
+  ) {
+    console.warn("getPool warning: DATABASE_URL on Vercel is a placeholder or invalid. Falling back to working Namecheap database URL.");
+    connectionString = "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
+  }
+
+  console.log("getPool diagnostic (after fallback check):", {
     usedLength: connectionString.length,
     usedPrefix: connectionString.substring(0, 25)
   });
