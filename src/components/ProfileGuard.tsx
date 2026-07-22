@@ -19,7 +19,13 @@ export function ProfileGuard({ children }: { children: React.ReactNode }) {
       }
 
       const u = user as any;
-      // Verificar campos obligatorios del expediente de analista en PostgreSQL
+      // Los administradores de sistema (SUPER_ADMIN) no requieren completar campos operativos de analista
+      if (u.role === "SUPER_ADMIN") {
+        setIsProfileComplete(true);
+        return;
+      }
+
+      // Verificar campos obligatorios del expediente de analista en PostgreSQL/Firestore
       const complete = !!(u.nombre && u.apellidoPaterno && u.apellidoMaterno && u.grado && u.id_empleado);
       setIsProfileComplete(complete);
     }
