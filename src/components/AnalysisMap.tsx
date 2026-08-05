@@ -344,6 +344,38 @@ export function AnalysisMap({
     [album]
   );
 
+  // Compute dispersed positions for marker rendering to prevent stacked pins in analysis map
+  const photosWithDispersion = useMemo(() => {
+    const coordCounts: Record<string, number> = {};
+    return photosWithCoords.map((photo) => {
+      const lat = Number(photo.lat);
+      const lng = Number(photo.lng);
+      const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      if (coordCounts[key] === undefined) {
+        coordCounts[key] = 0;
+      }
+      const count = coordCounts[key];
+      coordCounts[key] += 1;
+      if (count === 0) {
+        return {
+          ...photo,
+          displayLat: lat,
+          displayLng: lng,
+        };
+      } else {
+        const angle = (count * 2 * Math.PI) / 8; // Max 8 points per ring
+        const ring = Math.floor((count - 1) / 8) + 1;
+        const baseRadius = 0.000035; // ~3-4 meters
+        const radius = baseRadius * ring;
+        return {
+          ...photo,
+          displayLat: lat + radius * Math.sin(angle),
+          displayLng: lng + radius * Math.cos(angle),
+        };
+      }
+    });
+  }, [photosWithCoords]);
+
   // El centro geográfico del mapa se calcula de forma dinámica y secuencial priorizando evidencias reales,
   // polígonos dibujados, POIs y, de forma secundaria, los centroides de incidentes históricos de análisis.
   // Evitamos por completo centrar en Aguascalientes Centro si existe cualquier dato espacial en el análisis.
@@ -1254,12 +1286,12 @@ export function AnalysisMap({
           ))}
 
           {/* FOTOS DE ARCHIVO (Fotógrafos u otros marcadores iniciales) */}
-          {(viewMode === "TOPOGRAPHY" || viewMode === "MOBILITY" || isPreliminary) && photosWithCoords.map((p) => {
+          {(viewMode === "TOPOGRAPHY" || viewMode === "MOBILITY" || isPreliminary) && photosWithDispersion.map((p) => {
             const pinColor = getMarkerColor(p.tipo);
             return (
               <Marker
                 key={p.id}
-                position={{ lat: p.lat, lng: p.lng }}
+                position={{ lat: p.displayLat, lng: p.displayLng }}
                 title={`${p.tipo} - ${p.comentario ?? ""}`}
                 icon={{
                   path: 0 as any, // CIRCLE

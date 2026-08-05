@@ -152,6 +152,38 @@ export function ProjectMap({
     });
   }, [album]);
 
+  // Compute dispersed positions for marker rendering to prevent stacked pins
+  const markersWithDispersion = useMemo(() => {
+    const coordCounts: Record<string, number> = {};
+    return georeferencedPhotos.map((photo) => {
+      const lat = Number(photo.lat);
+      const lng = Number(photo.lng);
+      const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      if (coordCounts[key] === undefined) {
+        coordCounts[key] = 0;
+      }
+      const count = coordCounts[key];
+      coordCounts[key] += 1;
+      if (count === 0) {
+        return {
+          ...photo,
+          displayLat: lat,
+          displayLng: lng,
+        };
+      } else {
+        const angle = (count * 2 * Math.PI) / 8; // Max 8 points per ring
+        const ring = Math.floor((count - 1) / 8) + 1;
+        const baseRadius = 0.000035; // ~3-4 meters
+        const radius = baseRadius * ring;
+        return {
+          ...photo,
+          displayLat: lat + radius * Math.sin(angle),
+          displayLng: lng + radius * Math.cos(angle),
+        };
+      }
+    });
+  }, [georeferencedPhotos]);
+
   const isFallback = useMemo(() => {
     const hasProjectCoords = project?.latitude != null && project?.longitude != null;
     const isProjectDefault = hasProjectCoords && 
@@ -311,12 +343,12 @@ export function ProjectMap({
         )}
 
         {/* Georeferenced Evidence markers */}
-        {georeferencedPhotos.map((photo) => {
+        {markersWithDispersion.map((photo) => {
           const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente" || photo.tipo?.startsWith("Barrido");
           return (
             <Marker
               key={photo.id}
-              position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
+              position={{ lat: Number(photo.displayLat), lng: Number(photo.displayLng) }}
               onClick={() => setHoveredPhoto(photo)}
               draggable={true}
               onDragEnd={async (e) => {
@@ -369,7 +401,7 @@ export function ProjectMap({
         {/* Hover info window containing the preview and full metadata of the georeferenced evidence */}
         {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (
           <InfoWindow
-            position={{ lat: Number(hoveredPhoto.lat), lng: Number(hoveredPhoto.lng) }}
+            position={{ lat: Number(hoveredPhoto.displayLat ?? hoveredPhoto.lat), lng: Number(hoveredPhoto.displayLng ?? hoveredPhoto.lng) }}
             options={{
               pixelOffset: new window.google.maps.Size(0, -35),
             }}

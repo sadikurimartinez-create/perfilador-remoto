@@ -496,6 +496,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             streetViewSource: data.streetViewSource || null,
             analysisType: data.analysisType || null,
             fuente: data.fuente || "Inspección de Campo",
+            validado: data.validado === true,
+            gpsLat: data.gpsLat || null,
+            gpsLng: data.gpsLng || null,
+            gpsAccuracy: data.gpsAccuracy || null,
+            gpsTimestamp: data.gpsTimestamp || null,
+            diagnosticLogs: data.diagnosticLogs || null,
           };
         })
         .filter((p) => !p.deleted) as any;
