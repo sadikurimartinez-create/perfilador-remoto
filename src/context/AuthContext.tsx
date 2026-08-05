@@ -76,88 +76,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     setLoading(true);
     try {
-      // 1. Intentar primero con PostgreSQL (Repositorio único prioritario)
-      try {
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        });
+      // Toda la autenticación está unificada del lado del servidor (/api/auth/login).
+      // El backend se encarga de consultar PostgreSQL y, si es necesario, realizar el fallback a Firebase.
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-        if (res.ok) {
-          const data = await res.json();
-          const mergedUser = {
-            ...data,
-            ...(data.profile || {}),
-          };
-          
-          window.localStorage.setItem("perfilador.currentUser", JSON.stringify(mergedUser));
-          setUser(mergedUser);
-          router.push("/");
-          return;
-        }
-      } catch (backendErr) {
-        console.warn("[AuthContext] PostgreSQL auth endpoint failed or was unreachable. Continuing to Firebase fallback...", backendErr);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Usuario o contraseña incorrectos");
       }
 
-      // 2. Fallback transparente y auto-recuperable a Firebase Firestore (exactamente como funcionaba ayer)
-      console.warn("[AuthContext] Activating self-healing Firebase Firestore fallback for user login...");
+      const data = await res.json();
+      const mergedUser = {
+        ...data,
+        ...(data.profile || {}),
+      };
       
-      const { getDb } = await import("@/lib/firebase");
-      const { collection, query, where, getDocs, addDoc } = await import("firebase/firestore");
-      const db = getDb();
-      
-      const q = query(
-        collection(db, "users"),
-        where("username", "==", username.trim())
-      );
-      const snap = await getDocs(q);
-
-      // Bootstrap automático de admin
-      if (snap.empty && username.trim() === "admin" && password === "Admin2026!") {
-        const newDocRef = await addDoc(collection(db, "users"), {
-          username: "admin",
-          passwordHash: "Admin2026!",
-          role: "SUPER_ADMIN",
-          name: "Super Administrador",
-          createdAt: Date.now()
-        });
-        const authUser: AuthUser = {
-          id: newDocRef.id,
-          username: "admin",
-          role: "SUPER_ADMIN",
-          name: "Super Administrador",
-        };
-        window.localStorage.setItem("perfilador.currentUser", JSON.stringify(authUser));
-        setUser(authUser);
-        router.push("/");
-        return;
-      }
-
-      const docSnap = snap.docs[0];
-      if (docSnap) {
-        const data = docSnap.data() as { passwordHash?: string; role?: string; name?: string; [key: string]: any };
-        if (data.passwordHash === password) {
-          const { role: rawRole, ...restData } = data;
-          const authUser: AuthUser = {
-            id: docSnap.id,
-            username: username.trim(),
-            role: (rawRole as "SUPER_ADMIN" | "ADMIN" | "USER") || "USER",
-            name: (data.name as string) || username.trim(),
-            profile: data,
-            // Copiar atributos obligatorios para evitar ProfileGuard si ya están en Firestore
-            ...restData
-          };
-          window.localStorage.setItem("perfilador.currentUser", JSON.stringify(authUser));
-          setUser(authUser);
-          router.push("/");
-          return;
-        }
-      }
-
-      throw new Error("Usuario o contraseña incorrectos");
+      // REGLA DE SEGURIDAD EXPLICITA: 'perfilador.currentUser' en localStorage sirve ÚNICAMENTE como 
+      // caché visual para optimizar la interfaz y renderizados resilientes del lado del cliente.
+      // NUNCA concede permisos ni actúa como fuente de autorización, ya que todos los endpoints del servidor
+      // y controladores de API validan de forma estricta la cookie HttpOnly segura 'ceipol_session'.
+      window.localStorage.setItem("perfilador.currentUser", JSON.stringify(mergedUser));
+      setUser(mergedUser);
+      router.push("/");
     } catch (err: any) {
-      console.error("[AuthContext] Login failed (including fallbacks):", err);
+      console.error("[AuthContext] Login failed:", err);
       throw new Error(err.message || "Usuario o contraseña incorrectos");
     } finally {
       setLoading(false);

@@ -65,7 +65,19 @@ export function verifySession(token: string): any {
   
   try {
     const dataStr = Buffer.from(payloadBase64, "base64url").toString("utf8");
-    return JSON.parse(dataStr);
+    const payload = JSON.parse(dataStr);
+    
+    // Validar expiración criptográfica basada en createdAt + maxAge (2 horas)
+    const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 horas en ms
+    if (payload && payload.createdAt) {
+      const elapsed = Date.now() - payload.createdAt;
+      if (elapsed > SESSION_MAX_AGE_MS) {
+        console.warn("[authCrypto] Token de sesión expirado por firma temporal.");
+        return null;
+      }
+    }
+    
+    return payload;
   } catch (err) {
     return null;
   }
