@@ -140,7 +140,17 @@ export async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
     doc.text(caption, x + 3, y + height - 10);
   };
 
-  briefing.pages.forEach((page, idx) => {
+  const activePages = briefing.pages.filter(page => {
+    if (page.mode === 'cover') return true;
+    const hasText = !!(page.interpretation && page.interpretation.trim() !== "");
+    const hasBullets = !!(page.bullets && page.bullets.length > 0 && page.bullets.some(b => b && b.trim() !== ""));
+    const hasConclusions = !!(page.conclusions && page.conclusions.length > 0 && page.conclusions.some(c => c && c.trim() !== ""));
+    const hasVisuals = !!(page.visuals && page.visuals.length > 0 && page.visuals.some(v => v.dataUrl && v.dataUrl.trim() !== ""));
+    const hasSweeps = !!(page.sweeps && page.sweeps.length > 0);
+    return hasText || hasBullets || hasConclusions || hasVisuals || hasSweeps;
+  });
+
+  activePages.forEach((page, idx) => {
     if (idx > 0) doc.addPage();
 
     if (page.mode === 'cover') {

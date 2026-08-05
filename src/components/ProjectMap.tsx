@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
+import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
 
 interface ProjectMapProps {
   geometryType: "individual" | "lineal" | "poligono" | string;
@@ -17,6 +18,7 @@ interface ProjectMapProps {
     longitude?: number | null;
     radius?: number | null;
     locationName?: string;
+    sweeps?: any[];
   };
 }
 
@@ -129,6 +131,103 @@ export function ProjectMap({
 
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
   const [subMode, setSubMode] = useState<"vertex" | "poi">("poi");
+
+  const [showPhotos, setShowPhotos] = useState(true);
+  const [showOsint, setShowOsint] = useState(true);
+  const [showGeoint, setShowGeoint] = useState(true);
+  const [showAreas, setShowAreas] = useState(true);
+
+  const [selectedOsintSingle, setSelectedOsintSingle] = useState<any | null>(null);
+  const [selectedOsintGroup, setSelectedOsintGroup] = useState<any | null>(null);
+
+  // Mapear y decodificar los barridos OSINT
+  const parsedSweeps = useMemo(() => {
+    const sweepsList = project?.sweeps || [];
+    return sweepsList
+      .filter((s: any) => s.status === "Integrado" || s.status === "Completado")
+      .map((s: any) => {
+        const coords = extractSweepCoordinates(s);
+        return {
+          ...s,
+          coordsInfo: coords
+        };
+      });
+  }, [project?.sweeps]);
+
+  // Barridos OSINT con georreferencia
+  const sweepsWithCoords = useMemo(() => {
+    return parsedSweeps.filter((s) => s.coordsInfo.hasCoordinates);
+  }, [parsedSweeps]);
+
+  // Barridos OSINT sin georreferencia
+  const sweepsWithoutCoords = useMemo(() => {
+    return parsedSweeps.filter((s) => !s.coordsInfo.hasCoordinates);
+  }, [parsedSweeps]);
+
+  // Clusterización OSINT independiente
+  const osintClusters = useMemo(() => {
+    const totalCount = sweepsWithCoords.length;
+    if (totalCount === 0) return [];
+
+    if (totalCount > 20) {
+      const avgLat = sweepsWithCoords.reduce((sum, s) => sum + s.coordsInfo.lat!, 0) / totalCount;
+      const avgLng = sweepsWithCoords.reduce((sum, s) => sum + s.coordsInfo.lng!, 0) / totalCount;
+      return [{
+        type: "SUPER",
+        lat: avgLat,
+        lng: avgLng,
+        count: totalCount,
+        sweeps: sweepsWithCoords,
+        label: `◉ [${totalCount}] Barridos OSINT`
+      }];
+    }
+
+    if (totalCount >= 6) {
+      const groups: Record<string, any[]> = {};
+      sweepsWithCoords.forEach((s) => {
+        const gridLat = Math.round(s.coordsInfo.lat! * 1000) / 1000;
+        const gridLng = Math.round(s.coordsInfo.lng! * 1000) / 1000;
+        const gridKey = `${gridLat},${gridLng}`;
+        if (!groups[gridKey]) {
+          groups[gridKey] = [];
+        }
+        groups[gridKey].push(s);
+      });
+
+      return Object.entries(groups).map(([key, groupSweeps]) => {
+        const [latStr, lngStr] = key.split(",");
+        const centerLat = parseFloat(latStr);
+        const centerLng = parseFloat(lngStr);
+        if (groupSweeps.length === 1) {
+          return {
+            type: "SINGLE",
+            lat: groupSweeps[0].coordsInfo.lat!,
+            lng: groupSweeps[0].coordsInfo.lng!,
+            count: 1,
+            sweeps: groupSweeps,
+            label: groupSweeps[0].engine
+          };
+        }
+        return {
+          type: "GROUP",
+          lat: centerLat,
+          lng: centerLng,
+          count: groupSweeps.length,
+          sweeps: groupSweeps,
+          label: `🔎 [${groupSweeps.length}] Barridos`
+        };
+      });
+    }
+
+    return sweepsWithCoords.map((s) => ({
+      type: "SINGLE",
+      lat: s.coordsInfo.lat!,
+      lng: s.coordsInfo.lng!,
+      count: 1,
+      sweeps: [s],
+      label: s.engine
+    }));
+  }, [sweepsWithCoords]);
 
   const mapOptions = useMemo(() => ({
     styles: darkMapStyles,
@@ -294,6 +393,61 @@ export function ProjectMap({
         </div>
       )}
 
+      {/* Panel de Capas Flotante Estilo Glassmorphism */}
+      <div className="absolute top-3 right-3 z-[10] bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-3 text-slate-100 shadow-2xl flex flex-col gap-2 font-sans min-w-[190px]">
+        <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase border-b border-slate-800 pb-1.5 mb-1 flex items-center gap-1.5">
+          <span>🛡️</span> CAPAS DE INTELIGENCIA
+        </div>
+        
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
+          <input
+            type="checkbox"
+            checked={showPhotos}
+            onChange={(e) => setShowPhotos(e.target.checked)}
+            className="rounded border-slate-800 bg-slate-950 text-cyan-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+          />
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
+            <span className="text-cyan-400">📷</span> Evidencia fotográfica
+          </span>
+        </label>
+
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
+          <input
+            type="checkbox"
+            checked={showOsint}
+            onChange={(e) => setShowOsint(e.target.checked)}
+            className="rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+          />
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
+            <span className="text-emerald-400">🔎</span> Barridos OSINT
+          </span>
+        </label>
+
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
+          <input
+            type="checkbox"
+            checked={showGeoint}
+            onChange={(e) => setShowGeoint(e.target.checked)}
+            className="rounded border-slate-800 bg-slate-950 text-orange-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+          />
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
+            <span className="text-orange-400">🌐</span> Inteligencia GEOINT
+          </span>
+        </label>
+
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
+          <input
+            type="checkbox"
+            checked={showAreas}
+            onChange={(e) => setShowAreas(e.target.checked)}
+            className="rounded border-slate-800 bg-slate-950 text-purple-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+          />
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
+            <span className="text-purple-400">⭕</span> Áreas analíticas
+          </span>
+        </label>
+      </div>
+
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
@@ -301,8 +455,8 @@ export function ProjectMap({
         options={mapOptions}
         onClick={handleMapClick}
       >
-        {/* Draw circle for individual type projects */}
-        {geometryType === "individual" && project?.latitude && project?.longitude && !isFallback && (
+        {/* Draw circle for individual type projects (Controlled by showAreas) */}
+        {showAreas && geometryType === "individual" && project?.latitude && project?.longitude && !isFallback && (
           <Circle
             center={{ lat: project.latitude, lng: project.longitude }}
             radius={Number(project.radius || 500)}
@@ -316,8 +470,8 @@ export function ProjectMap({
           />
         )}
 
-        {/* Draw polyline for lineal (corridor) type projects */}
-        {(geometryType === "lineal" || geometryType === "corredor") && geoShapePath.length > 1 && (
+        {/* Draw polyline for lineal (corridor) type projects (Controlled by showAreas) */}
+        {showAreas && (geometryType === "lineal" || geometryType === "corredor") && geoShapePath.length > 1 && (
           <Polyline
             path={geoShapePath}
             options={{
@@ -328,8 +482,8 @@ export function ProjectMap({
           />
         )}
 
-        {/* Draw polygon for shape area type projects */}
-        {geometryType === "poligono" && geoShapePath.length > 2 && (
+        {/* Draw polygon for shape area type projects (Controlled by showAreas) */}
+        {showAreas && geometryType === "poligono" && geoShapePath.length > 2 && (
           <Polygon
             paths={geoShapePath}
             options={{
@@ -343,8 +497,12 @@ export function ProjectMap({
         )}
 
         {/* Georeferenced Evidence markers */}
-        {markersWithDispersion.map((photo) => {
-          const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente" || photo.tipo?.startsWith("Barrido");
+        {showPhotos && markersWithDispersion.map((photo) => {
+          const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente";
+          if (photo.tipo?.startsWith("Barrido")) return null; // Los barridos se manejan por separado en showOsint
+          if (isPoi && !showGeoint) return null; // Las POIs se controlan mediante Inteligencia GEOINT
+          if (!isPoi && !showPhotos) return null; // Las fotos normales se controlan mediante Evidencia fotográfica
+
           return (
             <Marker
               key={photo.id}
@@ -397,6 +555,146 @@ export function ProjectMap({
             />
           );
         })}
+
+        {/* OSINT Sweeps Clusterized Rendering */}
+        {showOsint && osintClusters.map((cluster, idx) => {
+          if (cluster.type === "SUPER") {
+            return (
+              <Marker
+                key={`osint-super-${idx}`}
+                position={{ lat: cluster.lat, lng: cluster.lng }}
+                title={`Súper-cluster: ${cluster.count} Barridos OSINT`}
+                label={{
+                  text: `◉ ${cluster.count}`,
+                  color: "#ffffff",
+                  fontSize: "12px",
+                  fontWeight: "bold"
+                }}
+                icon={{
+                  path: 0, // Circle
+                  scale: 18,
+                  fillColor: "#10b981", // Verde esmeralda
+                  fillOpacity: 0.9,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 2,
+                }}
+                onClick={() => setSelectedOsintGroup(cluster)}
+              />
+            );
+          }
+
+          if (cluster.type === "GROUP") {
+            return (
+              <Marker
+                key={`osint-group-${idx}`}
+                position={{ lat: cluster.lat, lng: cluster.lng }}
+                title={`Grupo: ${cluster.count} Barridos OSINT`}
+                label={{
+                  text: `${cluster.count}`,
+                  color: "#ffffff",
+                  fontSize: "10px",
+                  fontWeight: "bold"
+                }}
+                icon={{
+                  path: 0, // Circle
+                  scale: 13,
+                  fillColor: "#059669",
+                  fillOpacity: 0.85,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 1.5,
+                }}
+                onClick={() => setSelectedOsintGroup(cluster)}
+              />
+            );
+          }
+
+          // Single OSINT sweep with coordinates
+          const sweep = cluster.sweeps[0];
+          return (
+            <Marker
+              key={`osint-single-${idx}`}
+              position={{ lat: cluster.lat, lng: cluster.lng }}
+              title={`${sweep.engine} - ${sweep.status}`}
+              icon={{
+                path: 0, // Circle
+                scale: 8,
+                fillColor: "#10b981",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 1.5,
+              }}
+              onClick={() => setSelectedOsintSingle(sweep)}
+            />
+          );
+        })}
+
+        {/* OSINT Sweeps Circular Areas of Influence (Sweeps without explicit coordinates) */}
+        {showOsint && sweepsWithoutCoords.map((s, idx) => (
+          <Circle
+            key={`osint-area-influence-${idx}`}
+            center={center}
+            radius={250}
+            options={{
+              fillColor: "#a855f7",
+              fillOpacity: 0.12,
+              strokeColor: "#a855f7",
+              strokeOpacity: 0.4,
+              strokeWeight: 1.5,
+              clickable: true,
+            }}
+            onClick={() => setSelectedOsintSingle(s)}
+          />
+        ))}
+
+        {/* OSINT InfoWindows */}
+        {selectedOsintSingle && (
+          <InfoWindow
+            position={
+              selectedOsintSingle.coordsInfo?.hasCoordinates
+                ? { lat: selectedOsintSingle.coordsInfo.lat!, lng: selectedOsintSingle.coordsInfo.lng! }
+                : center
+            }
+            onCloseClick={() => setSelectedOsintSingle(null)}
+          >
+            <div className="p-3 text-slate-800 font-sans max-w-[280px]">
+              <div className="font-bold border-b pb-1 mb-1.5 text-slate-900 flex items-center gap-1">
+                <span>🔎</span> {selectedOsintSingle.engine || "BARRIDO OSINT"}
+              </div>
+              <div className="text-xs space-y-1">
+                <p><span className="font-semibold text-slate-600">Estado:</span> {selectedOsintSingle.status}</p>
+                {selectedOsintSingle.description && (
+                  <p><span className="font-semibold text-slate-600">Descripción:</span> {selectedOsintSingle.description}</p>
+                )}
+                {selectedOsintSingle.coordsInfo?.hasCoordinates ? (
+                  <p><span className="font-semibold text-slate-600">Posición:</span> {selectedOsintSingle.coordsInfo.lat?.toFixed(5)}, {selectedOsintSingle.coordsInfo.lng?.toFixed(5)}</p>
+                ) : (
+                  <p className="text-[10px] text-purple-600 italic">⚠️ Representación de área de influencia (250m)</p>
+                )}
+              </div>
+            </div>
+          </InfoWindow>
+        )}
+
+        {selectedOsintGroup && (
+          <InfoWindow
+            position={{ lat: selectedOsintGroup.lat, lng: selectedOsintGroup.lng }}
+            onCloseClick={() => setSelectedOsintGroup(null)}
+          >
+            <div className="p-3 text-slate-800 font-sans max-w-[300px] max-h-[220px] overflow-y-auto">
+              <div className="font-bold border-b pb-1 mb-1.5 text-slate-900 flex items-center gap-1">
+                <span>📂</span> {selectedOsintGroup.count} Barridos Concentrados
+              </div>
+              <div className="space-y-2 text-xs">
+                {selectedOsintGroup.sweeps.map((s: any, idx: number) => (
+                  <div key={idx} className="border-b border-slate-100 pb-1.5 last:border-0 last:pb-0">
+                    <p className="font-bold text-slate-700">{s.engine}</p>
+                    <p className="text-[11px] text-slate-500 line-clamp-2">{s.description || "Sin descripción."}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </InfoWindow>
+        )}
 
         {/* Hover info window containing the preview and full metadata of the georeferenced evidence */}
         {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (

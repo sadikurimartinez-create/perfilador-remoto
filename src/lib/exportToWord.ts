@@ -933,6 +933,7 @@ export async function exportToWord(
     for (const block of blocks) {
       switch (block.type) {
         case "TITLE":
+          if (!block.text || block.text.trim() === "") break;
           documentElements.push(
             new Paragraph(
               FlowControlManager.applyFlowRules({
@@ -953,6 +954,7 @@ export async function exportToWord(
           break;
 
         case "SUBTITLE":
+          if (!block.text || block.text.trim() === "") break;
           documentElements.push(
             new Paragraph(
               FlowControlManager.applyFlowRules({
@@ -975,7 +977,9 @@ export async function exportToWord(
         case "BULLET":
           VisualDensityManager.registerNonTableBlock();
           if (block.items) {
-            block.items.forEach(item => {
+            const activeItems = block.items.filter(item => item && item.trim() !== "");
+            if (activeItems.length === 0) break;
+            activeItems.forEach(item => {
               documentElements.push(
                 new Paragraph({
                   children: [
@@ -991,6 +995,7 @@ export async function exportToWord(
           break;
 
         case "NUMBERED_LIST":
+          if (!block.text || block.text.trim() === "") break;
           VisualDensityManager.registerNonTableBlock();
           const prefix = block.isStatistical 
             ? `${block.level}. ` 
@@ -1008,6 +1013,7 @@ export async function exportToWord(
           break;
 
         case "ANALYTICAL_BLOCK":
+          if (!block.text || block.text.trim() === "") break;
           VisualDensityManager.registerNonTableBlock();
           let categoryLabel = "ANÁLISIS";
           let categoryColor = "1F4E79";
@@ -1046,6 +1052,7 @@ export async function exportToWord(
 
         case "PARAGRAPH":
         default:
+          if (!block.text || block.text.trim() === "") break;
           VisualDensityManager.registerNonTableBlock();
           documentElements.push(
             new Paragraph(
@@ -1540,6 +1547,10 @@ export async function exportToWord(
       const dims = PageBalanceEngine.calculateDimensions(photo.caption ? photo.caption.length : 100, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(photo.dataUrl, dims.width, dims.height, photo.caption, photo.id);
       
+      if (!imgRes || !imgRes.buffer) {
+        continue;
+      }
+      
       const context: EvidenceContext = {
         evidenceId: photo.id || `IMG-0${i + 1}`,
         source: "FIELD_PHOTO",
@@ -1669,6 +1680,10 @@ export async function exportToWord(
       
       const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height, sv.observed || "Se aprecian condiciones físicas del entorno.", sv.id);
+      
+      if (!imgRes || !imgRes.buffer) {
+        continue;
+      }
       
       const context: EvidenceContext = {
         evidenceId: sv.id || `SV-0${i + 1}`,

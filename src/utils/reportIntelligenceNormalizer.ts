@@ -92,7 +92,58 @@ export class ReportIntelligenceNormalizer {
     // 4. Limpieza absoluta de cualquier caracter de formato Markdown residual (*, _, `)
     cleaned = cleaned.replace(/[\*_`]/g, "");
 
+    // 5. Eliminar redundancias consecutivas de IA con similitud > 95%
+    cleaned = this.removeConsecutiveRedundancies(cleaned);
+
     // Limpieza de espacios y saltos de línea repetidos
     return cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  /**
+   * Calcula la similitud de Jaccard entre dos cadenas (basado en palabras únicas).
+   */
+  private static calculateSimilarity(s1: string, s2: string): number {
+    const cleanWords = (str: string) => 
+      str.toLowerCase()
+         .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+         .split(/\s+/)
+         .filter(w => w.length > 2);
+
+    const w1 = new Set(cleanWords(s1));
+    const w2 = new Set(cleanWords(s2));
+
+    if (w1.size === 0 && w2.size === 0) return 1;
+    if (w1.size === 0 || w2.size === 0) return 0;
+
+    const intersection = new Set([...w1].filter(x => w2.has(x)));
+    const union = new Set([...w1, ...w2]);
+
+    return intersection.size / union.size;
+  }
+
+  /**
+   * Depura redundancia consecutiva de párrafos que superan el 95% de similitud.
+   */
+  public static removeConsecutiveRedundancies(text: string): string {
+    if (!text) return "";
+    const paragraphs = text.split(/\n+/);
+    const uniqueParagraphs: string[] = [];
+
+    for (let i = 0; i < paragraphs.length; i++) {
+      const current = paragraphs[i].trim();
+      if (!current) continue;
+
+      if (uniqueParagraphs.length > 0) {
+        const last = uniqueParagraphs[uniqueParagraphs.length - 1];
+        const sim = this.calculateSimilarity(last, current);
+        if (sim > 0.95) {
+          // Omitir por ser duplicado redundante (>95% coincidencia)
+          continue;
+        }
+      }
+      uniqueParagraphs.push(current);
+    }
+
+    return uniqueParagraphs.join("\n\n");
   }
 }
