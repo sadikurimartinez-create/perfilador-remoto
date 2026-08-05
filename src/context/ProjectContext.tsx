@@ -491,6 +491,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             contextualizedBy: data.contextualizedBy || null,
             isContextualized: data.isContextualized || false,
             evidenceRelationship: data.evidenceRelationship || null,
+            evidenceType: data.evidenceType || "ANALYST_PHOTO",
+            streetViewCategory: data.streetViewCategory || null,
+            streetViewSource: data.streetViewSource || null,
+            analysisType: data.analysisType || null,
+            fuente: data.fuente || "Inspección de Campo",
           };
         })
         .filter((p) => !p.deleted) as any;

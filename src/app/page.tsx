@@ -5,8 +5,6 @@ import { ProjectList } from "@/components/ProjectList";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { getDb } from "@/lib/firebase";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -20,29 +18,17 @@ export default function HomePage() {
       return;
     }
 
-    const checkProfile = async () => {
-      try {
-        const db = getDb();
-        const snap = await getDoc(doc(db, "users", String((user as any).id)));
-        if (snap.exists()) {
-          const data = snap.data();
-          if (!data.nombre || !data.apellidoPaterno || !data.apellidoMaterno || !data.grado || !data.id_empleado) {
-            setProfileIncomplete(true);
-          } else {
-            setProfileIncomplete(false);
-          }
-        } else {
-          setProfileIncomplete(true);
-        }
-      } catch (err) {
-        console.error("Error verificando perfil:", err);
-        setProfileIncomplete(false);
-      } finally {
-        setIsChecking(false);
-      }
-    };
-    
-    checkProfile();
+    const u = user as any;
+    // Los administradores de sistema (SUPER_ADMIN) no requieren completar campos operativos de analista
+    if (u.role === "SUPER_ADMIN") {
+      setProfileIncomplete(false);
+      setIsChecking(false);
+      return;
+    }
+
+    const complete = !!(u.nombre && u.apellidoPaterno && u.apellidoMaterno && u.grado && u.id_empleado);
+    setProfileIncomplete(!complete);
+    setIsChecking(false);
   }, [user]);
 
   useEffect(() => {

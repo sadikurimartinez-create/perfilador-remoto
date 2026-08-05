@@ -7,6 +7,9 @@ import { collection, query, where, getDocs, addDoc } from "firebase/firestore";
 
 export async function POST(req: Request) {
   try {
+    const protocol = req.headers.get("x-forwarded-proto");
+    const isSecure = protocol === "https";
+
     const { username, password } = (await req.json()) as {
       username?: string;
       password?: string;
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
         name: "ceipol_session",
         value: sessionToken,
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isSecure,
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 2, // 2 horas de expiración
@@ -112,7 +115,7 @@ export async function POST(req: Request) {
           name: "ceipol_session",
           value: sessionToken,
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
+          secure: isSecure,
           sameSite: "lax",
           path: "/",
           maxAge: 60 * 60 * 2,
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
       name: "ceipol_session",
       value: sessionToken,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 2,
