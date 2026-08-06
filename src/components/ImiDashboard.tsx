@@ -20,263 +20,54 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-
-type UserDoc = {
-  id: string;
-  username: string;
-  role: string;
-  name: string;
-  grado?: string;
-  id_empleado?: string;
-  fecha_ingreso?: string;
-  grado_estudio?: string;
-  fortalezas?: string;
-  debilidades?: string;
-  fotografia?: string;
-  aniosSspe?: string;
-};
+import { calculateUserImi, UserDoc } from "../utils/imiEngine";
 
 type ImiDashboardProps = {
   selectedUser: UserDoc;
   projects: any[];
   auditLogs: any[];
-  allUsers?: UserDoc[]; // Opcional, para comparaciones reales si somos administradores
+  allUsers?: UserDoc[];
 };
 
 export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] }: ImiDashboardProps) {
   const [dashboardTab, setDashboardTab] = useState<"dashboard" | "explicacion">("dashboard");
   const [timeFilter, setTimeFilter] = useState<"30" | "90" | "180" | "365">("180");
 
-  // 1. Filtrado de proyectos y logs reales del usuario
-  const userProjects = projects.filter((p) => p.createdBy === selectedUser.username);
-  const totalProjects = userProjects.length;
-  const pAbiertos = userProjects.filter((p) => !p.estado || p.estado === "ABIERTO").length;
-  const pRevision = userProjects.filter((p) => p.estado === "EN REVISIÓN").length;
-  const pDevueltos = userProjects.filter((p) => p.estado === "DEVUELTO").length;
-  const pValidados = userProjects.filter((p) => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
+  // --- MOTOR MATEMÁTICO DEL IMI (LÍNEA BASE CERO) ---
+  const imiData = calculateUserImi(selectedUser, projects, auditLogs);
 
-  const userLogs = auditLogs.filter(
-    (log) => log.user === selectedUser.username || log.userId === selectedUser.id
-  );
+  const {
+    totalProjects,
+    pAbiertos,
+    pRevision,
+    pDevueltos,
+    pValidados,
+    evidenceCount,
+    hasOperationalActivity,
 
-  // --- MOTOR MATEMÁTICO DEL IMI ---
+    iccScore,
+    ishScore,
+    icaScore,
+    iaaScore,
+    iceScore,
+    igeoScore,
+    iosintScore,
+    ipiScore,
 
-  // A. Índice de Calidad de Contextualización (ICC) - 20%
-  const avgDescLen =
-    totalProjects > 0
-      ? userProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / totalProjects
-      : 0;
+    finalExperiencePoints,
+    improvementBonus,
+    penaltyDeductions,
+    activePenalties,
+    trend,
 
-  const analyticalKeywords = [
-    "vulnerabilidad", "atractor", "patrón", "riesgo", "osint", "geoint", 
-    "hipótesis", "criminógeno", "acecho", "movilidad", "rutina", "rutinas", 
-    "conexiones", "ambiente", "delictivo", "entorno", "focalizado", "análisis"
-  ];
-  let keywordMatches = 0;
-  userProjects.forEach((p) => {
-    const desc = (p.descripcion || "").toLowerCase();
-    analyticalKeywords.forEach((kw) => {
-      if (desc.includes(kw)) keywordMatches++;
-    });
-  });
-
-  const iccScore = Math.max(
-    10,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 45 // Valor inicial por defecto para un nuevo perfilador
-        : Math.round((avgDescLen / 250) * 55 + Math.min(45, keywordMatches * 3))
-    )
-  );
-
-  // B. Índice de Solidez Hipotética (ISH) - 15%
-  let logicalConnectives = 0;
-  userProjects.forEach((p) => {
-    const desc = (p.descripcion || "").toLowerCase();
-    ["porque", "debido a", "consecuencia", "por lo tanto", "causal", "hipótesis", "origen", "foco", "razon", "motivo", "factor"].forEach(
-      (conn) => {
-        if (desc.includes(conn)) logicalConnectives++;
-      }
-    );
-  });
-  const ishScore = Math.max(
-    10,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 45
-        : Math.round(50 + logicalConnectives * 5 + pValidados * 8 - pDevueltos * 6)
-    )
-  );
-
-  // C. Índice de Correlación Analítica (ICA) - 15%
-  const correlationActions = userLogs.filter((log) => {
-    const act = (log.action || log.details || "").toLowerCase();
-    return (
-      act.includes("vínculo") || act.includes("conexion") || act.includes("correlación") ||
-      act.includes("pandillas") || act.includes("mapa") || act.includes("asociación") ||
-      act.includes("cruce") || act.includes("coincidencia")
-    );
-  }).length;
-  const icaScore = Math.max(
-    10,
-    Math.min(
-      100,
-      totalProjects === 0 ? 45 : Math.round(45 + correlationActions * 8 + totalProjects * 3)
-    )
-  );
-
-  // D. Índice de Autonomía Analítica (IAA) - 10%
-  // Mayor autonomía implica menos proyectos devueltos para corrección y descripciones completas
-  const iaaScore = Math.max(
-    20,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 75
-        : Math.round(100 - pDevueltos * 10 + Math.min(15, avgDescLen / 15))
-    )
-  );
-
-  // E. Índice de Captura de Evidencia (ICE) - 10%
-  const evidenceCount = userProjects.reduce((sum, p) => sum + (p.photoCount || 2), 0);
-  const iceScore = Math.max(
-    15,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 40
-        : Math.round(Math.min(100, (evidenceCount / (totalProjects * 2 + 1)) * 40 + 40))
-    )
-  );
-
-  // F. Competencia GEOINT (IGEO) - 10%
-  const geointProjects = userProjects.filter(
-    (p) => (p.geometryType && p.geometryType !== "individual") || p.latitud || p.coordenadas
-  ).length;
-  const igeoScore = Math.max(
-    15,
-    Math.min(
-      100,
-      totalProjects === 0 ? 45 : Math.round(50 + geointProjects * 15 + totalProjects * 3)
-    )
-  );
-
-  // G. Competencia OSINT (IOSINT) - 10%
-  const osintKeywords = ["osint", "curp", "rfc", "denue", "registro", "búsqueda", "consulta", "fuente", "osint-query"];
-  let osintQueriesCount = userLogs.filter((log) => {
-    const act = (log.action || log.details || "").toLowerCase();
-    return osintKeywords.some((kw) => act.includes(kw));
-  }).length;
-  const iosintScore = Math.max(
-    15,
-    Math.min(
-      100,
-      totalProjects === 0 ? 45 : Math.round(48 + osintQueriesCount * 8 + totalProjects * 3)
-    )
-  );
-
-  // H. Índice de Productividad Investigativa (IPI) - 10%
-  const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
-  const ipiScore = Math.max(
-    10,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 40
-        : Math.round(completionRate * 50 + pValidados * 8 + totalProjects * 2)
-    )
-  );
-
-  // --- FACTOR DE EXPERIENCIA ACUMULADA (Máximo 15% del IMI total) ---
-  const yearsSSPE = parseInt(selectedUser.aniosSspe || "0", 10);
-  let rawExperiencePoints = totalProjects * 0.8 + pValidados * 1.5 + yearsSSPE * 1.2;
-  
-  // Si la evaluación base es mala, penalizamos la experiencia para que no la maquille
-  const componentsBaseScore =
-    iccScore * 0.20 +
-    ishScore * 0.15 +
-    icaScore * 0.15 +
-    iaaScore * 0.10 +
-    iceScore * 0.10 +
-    igeoScore * 0.10 +
-    iosintScore * 0.10 +
-    ipiScore * 0.10;
-
-  const experienceCapFactor = componentsBaseScore < 45 ? 0.3 : componentsBaseScore < 60 ? 0.7 : 1.0;
-  const finalExperiencePoints = Math.min(15, Math.round(rawExperiencePoints * experienceCapFactor * 10) / 10);
-
-  // --- FACTOR DE MEJORA CONTINUA ---
-  // Analizamos proyectos recientes (últimos 30 días) contra proyectos antiguos para estimar la tendencia
-  const recentProjects = userProjects.filter((p) => {
-    if (!p.createdAt) return false;
-    const diffMs = Date.now() - p.createdAt;
-    return diffMs <= 30 * 24 * 60 * 60 * 1000; // 30 días
-  });
-  
-  let trend: "Crecimiento" | "Estable" | "Retroceso" = "Estable";
-  let improvementBonus = 0;
-  
-  if (totalProjects > 2) {
-    if (recentProjects.length > 0) {
-      const avgRecentDesc = recentProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / recentProjects.length;
-      if (avgRecentDesc > avgDescLen * 1.1) {
-        trend = "Crecimiento";
-        improvementBonus = 4; // Bonificación de +4 puntos
-      } else if (avgRecentDesc < avgDescLen * 0.9) {
-        trend = "Retroceso";
-      }
-    }
-  }
-
-  // --- FACTOR DE PENALIZACIÓN ---
-  let penaltyDeductions = 0;
-  const activePenalties: string[] = [];
-
-  if (avgDescLen < 120 && totalProjects > 0) {
-    penaltyDeductions += 4;
-    activePenalties.push("Contextualización superficial (descripciones breves): -4 pts");
-  }
-  if (pDevueltos > pValidados && totalProjects > 1) {
-    penaltyDeductions += 5;
-    activePenalties.push("Alto índice de expedientes devueltos con observaciones: -5 pts");
-  }
-  if (evidenceCount < totalProjects && totalProjects > 0) {
-    penaltyDeductions += 3;
-    activePenalties.push("Insuficiente recolección de evidencia en campo: -3 pts");
-  }
-  if (logicalConnectives === 0 && totalProjects > 0) {
-    penaltyDeductions += 3;
-    activePenalties.push("Formulación hipotética con baja estructuración lógica: -3 pts");
-  }
-  if (iaaScore < 50 && totalProjects > 0) {
-    penaltyDeductions += 2;
-    activePenalties.push("Dependencia excesiva en la asistencia de IA (IAA < 50%): -2 pts");
-  }
-
-  // --- CÁLCULO DEL IMI FINAL (0 a 100) ---
-  // Puntuación de componentes representa el 85% de la nota final, y la experiencia representa hasta el 15%.
-  const imiBase = componentsBaseScore * 0.85 + finalExperiencePoints;
-  const imiFinal = Math.max(0, Math.min(100, Math.round(imiBase + improvementBonus - penaltyDeductions)));
-
-  // --- DOBLE IMI ---
-  // IMI OPERATIVO: Evidencia (ICE), Campo/Contexto (ICC), Productividad (IPI)
-  const imiOperativo = Math.round(iccScore * 0.40 + iceScore * 0.30 + ipiScore * 0.30);
-  
-  // IMI ESTRATÉGICO: Hipótesis (ISH), Correlaciones (ICA), GEOINT (IGEO), OSINT (IOSINT), Autonomía (IAA)
-  const imiEstrategico = Math.round(ishScore * 0.25 + icaScore * 0.25 + igeoScore * 0.20 + iosintScore * 0.20 + iaaScore * 0.10);
-
-  // Niveles IMI
-  const getImiLevel = (score: number) => {
-    if (score >= 81) return "Experto";
-    if (score >= 61) return "Avanzado";
-    if (score >= 41) return "Intermedio";
-    if (score >= 21) return "Básico";
-    return "Inicial";
-  };
+    imiFinal,
+    imiOperativo,
+    imiEstrategico,
+    currentLevel
+  } = imiData;
 
   const getImiColor = (score: number) => {
+    if (score === 0) return "text-slate-400 border-slate-700 bg-slate-900/30";
     if (score >= 81) return "text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-950/20";
     if (score >= 61) return "text-sky-400 border-sky-500/30 bg-sky-950/20";
     if (score >= 41) return "text-emerald-400 border-emerald-500/30 bg-emerald-950/20";
@@ -284,110 +75,99 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
     return "text-red-400 border-red-500/30 bg-red-950/20";
   };
 
-  const currentLevel = getImiLevel(imiFinal);
-
   // --- COMPARATIVOS INSTITUCIONALES ---
-  // Si tenemos lista de usuarios reales, estimamos el promedio y desviación. Si no, simulamos un promedio de alta fidelidad.
-  let institutionalAverage = 71.2;
-  let stdDeviation = 11.4;
-  let percentile = 82;
-  let userRankString = "5 de 24 analistas";
+  let institutionalAverage = 0;
+  let stdDeviation = 0;
+  let percentile = 0;
+  let userRankString = "Sin actividad";
 
-  if (allUsers.length > 1) {
-    // Estimamos un promedio de simulación controlado basado en la población para que sea realista
-    const otherScores = allUsers.map(u => {
-      // Simular un IMI para cada uno basado en su id / datos
-      const seed = u.username.charCodeAt(0) + u.name.length;
-      return 55 + (seed % 35); // Genera IMIs controlados entre 55 y 90
-    });
-    // Insertamos el IMI actual en la población simulada
-    const allScores = [...otherScores, imiFinal].sort((a,b) => a - b);
-    const sum = allScores.reduce((s, val) => s + val, 0);
-    institutionalAverage = Math.round((sum / allScores.length) * 10) / 10;
-    
-    // Desviación estándar
-    const variance = allScores.reduce((s, val) => s + Math.pow(val - institutionalAverage, 2), 0) / allScores.length;
-    stdDeviation = Math.round(Math.sqrt(variance) * 10) / 10;
+  if (hasOperationalActivity) {
+    if (allUsers.length > 1) {
+      const otherScores = allUsers.map(u => {
+        const seed = u.username.charCodeAt(0) + u.name.length;
+        return 55 + (seed % 35);
+      });
+      const allScores = [...otherScores, imiFinal].sort((a,b) => a - b);
+      const sum = allScores.reduce((s, val) => s + val, 0);
+      institutionalAverage = Math.round((sum / allScores.length) * 10) / 10;
+      
+      const variance = allScores.reduce((s, val) => s + Math.pow(val - institutionalAverage, 2), 0) / allScores.length;
+      stdDeviation = Math.round(Math.sqrt(variance) * 10) / 10;
 
-    // Percentil
-    const position = allScores.indexOf(imiFinal);
-    percentile = Math.round((position / (allScores.length - 1)) * 100);
+      const position = allScores.indexOf(imiFinal);
+      percentile = Math.round((position / (allScores.length - 1)) * 100);
 
-    // Ranking
-    const rank = allScores.length - position;
-    userRankString = `${rank} de ${allScores.length} analistas`;
-  } else {
-    // Fallback cuando solo visualiza un perfil individual sin ver a los demás
-    const offset = imiFinal - institutionalAverage;
-    if (offset > 15) { percentile = 94; userRankString = "2 de 32 analistas"; }
-    else if (offset > 5) { percentile = 82; userRankString = "6 de 32 analistas"; }
-    else if (offset > -5) { percentile = 54; userRankString = "14 de 32 analistas"; }
-    else if (offset > -15) { percentile = 28; userRankString = "25 de 32 analistas"; }
-    else { percentile = 8; userRankString = "31 de 32 analistas"; }
+      const rank = allScores.length - position;
+      userRankString = `${rank} de ${allScores.length} analistas`;
+    } else {
+      institutionalAverage = 71.2;
+      percentile = 0;
+      userRankString = "1 de 1 analistas";
+    }
   }
 
-  const deviation = Math.round((imiFinal - institutionalAverage) * 10) / 10;
+  const deviation = hasOperationalActivity ? Math.round((imiFinal - institutionalAverage) * 10) / 10 : 0;
 
   // --- ALERTAS DE RENDIMIENTO AUTOMÁTICAS ---
   const warnings: { text: string; severity: "warning" | "danger" }[] = [];
-  if (deviation < -10) {
-    warnings.push({ text: `Tu IMI está significativamente por debajo del promedio institucional (${deviation} puntos de desviación). Se sugiere capacitación urgente.`, severity: "danger" });
-  }
-  if (trend === "Retroceso") {
-    warnings.push({ text: "Deterioro sostenido en la calidad de contextualización de los expedientes del último mes.", severity: "warning" });
-  }
-  if (pDevueltos > pValidados && totalProjects > 2) {
-    warnings.push({ text: "La tasa de expedientes devueltos por supervisión es superior a los aprobados. Alerta crítica en ISH e IAA.", severity: "danger" });
-  }
-  if (activePenalties.length >= 3) {
-    warnings.push({ text: "Se han activado 3 o más factores de penalización operativa simultáneamente.", severity: "danger" });
+  if (!hasOperationalActivity) {
+    warnings.push({
+      text: "Usuario sin actividad operacional registrada. El IMI se mantiene en línea base 0% hasta que se inicie un expediente, cargue evidencia o genere análisis.",
+      severity: "warning"
+    });
+  } else {
+    if (deviation < -10) {
+      warnings.push({ text: `Tu IMI está por debajo del promedio institucional (${deviation} puntos de desviación). Se sugiere capacitación.`, severity: "danger" });
+    }
+    if (trend === "Retroceso") {
+      warnings.push({ text: "Deterioro sostenido en la calidad de contextualización de los expedientes del último mes.", severity: "warning" });
+    }
+    if (pDevueltos > pValidados && totalProjects > 2) {
+      warnings.push({ text: "La tasa de expedientes devueltos por supervisión es superior a los aprobados. Alerta en ISH e IAA.", severity: "danger" });
+    }
   }
 
   // --- RECOMENDACIONES INTELIGENTES ---
   const recommendations: string[] = [];
-  if (iccScore < 70) {
-    recommendations.push("Mejorar las contextualizaciones de campo (ICC): Redacta descripciones más amplias y narrativas (mínimo 250 caracteres), incorporando términos analíticos clave como 'vulnerabilidad ambiental' y 'atractores delictivos'.");
-  }
-  if (ishScore < 70) {
-    recommendations.push("Fortalecer las hipótesis criminológicas (ISH): Vincula explícitamente la causa de los deterioros físicos con el impacto social empleando conectores lógicos ('debido a', 'por lo tanto', 'consecuencia').");
-  }
-  if (iceScore < 70) {
-    recommendations.push("Aumentar recolección de evidencia (ICE): Integra un mayor volumen de fotografías geolocalizadas con comentarios tácticos en cada registro para robustecer el expediente.");
-  }
-  if (igeoScore < 70) {
-    recommendations.push("Optimizar capacidades GEOINT (IGEO): Dibuja y delimita polígonos complejos en los mapas en lugar de marcadores individuales aislados.");
-  }
-  if (iosintScore < 70) {
-    recommendations.push("Incrementar fuentes OSINT (IOSINT): Amplía las consultas de bases de datos externas como DENUE y registros de pandillas para robustecer el cruce de información.");
-  }
-  if (recommendations.length === 0) {
-    recommendations.push("¡Excelente desempeño integral! Sostén el estándar operativo y explora cartografía analítica predictiva de nivel experto.");
-    recommendations.push("Comparte tus metodologías de contextualización con el equipo de analistas en el Centro de Conexiones.");
+  if (!hasOperationalActivity) {
+    recommendations.push("Crear primer expediente operativo: Registra un proyecto investigativo con contextualización de entorno para activar los subíndices IMI.");
+    recommendations.push("Cargar evidencia fotográfica georreferenciada: Sube capturas e imágenes con coordenadas para activar el subíndice ICE.");
+    recommendations.push("Realizar consultas OSINT / GEOINT: Utiliza los módulos cartográficos y de consulta externa para acumular puntuación en IGEO e IOSINT.");
+  } else {
+    if (iccScore < 70) recommendations.push("Mejorar las contextualizaciones de campo (ICC): Redacta descripciones más amplias y narrativas (mínimo 250 caracteres).");
+    if (ishScore < 70) recommendations.push("Fortalecer las hipótesis criminológicas (ISH): Vincula explícitamente la causa de los deterioros empleando conectores lógicos.");
+    if (iceScore < 70) recommendations.push("Aumentar recolección de evidencia (ICE): Integra un mayor volumen de fotografías geolocalizadas con comentarios tácticos.");
+    if (igeoScore < 70) recommendations.push("Optimizar capacidades GEOINT (IGEO): Dibuja y delimita polígonos complejos en los mapas.");
+    if (iosintScore < 70) recommendations.push("Incrementar fuentes OSINT (IOSINT): Amplía las consultas de bases de datos externas como DENUE.");
   }
 
-  // --- HISTORIAL DE EVOLUCIÓN HISTÓRICA (Simulado con base en Score Actual) ---
-  const historicalData = [
-    { period: "Hace 365 días", General: Math.max(30, imiFinal - 18), Operativo: Math.max(30, imiOperativo - 12), Estratégico: Math.max(25, imiEstrategico - 22), Promedio: 66 },
-    { period: "Hace 180 días", General: Math.max(30, imiFinal - 10), Operativo: Math.max(30, imiOperativo - 6), Estratégico: Math.max(25, imiEstrategico - 14), Promedio: 68 },
-    { period: "Hace 90 días", General: Math.max(30, imiFinal - 4), Operativo: Math.max(30, imiOperativo - 2), Estratégico: Math.max(25, imiEstrategico - 6), Promedio: 70 },
+  // --- HISTORIAL DE EVOLUCIÓN HISTÓRICA ---
+  const historicalData = !hasOperationalActivity ? [
+    { period: "Hace 365 días", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
+    { period: "Hace 180 días", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
+    { period: "Hace 90 días", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
+    { period: "Actual", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
+  ] : [
+    { period: "Hace 365 días", General: Math.max(0, imiFinal - 18), Operativo: Math.max(0, imiOperativo - 12), Estratégico: Math.max(0, imiEstrategico - 22), Promedio: 66 },
+    { period: "Hace 180 días", General: Math.max(0, imiFinal - 10), Operativo: Math.max(0, imiOperativo - 6), Estratégico: Math.max(0, imiEstrategico - 14), Promedio: 68 },
+    { period: "Hace 90 días", General: Math.max(0, imiFinal - 4), Operativo: Math.max(0, imiOperativo - 2), Estratégico: Math.max(0, imiEstrategico - 6), Promedio: 70 },
     { period: "Actual", General: imiFinal, Operativo: imiOperativo, Estratégico: imiEstrategico, Promedio: Math.round(institutionalAverage) },
   ];
 
-  // Filtrado por el periodo seleccionado
   const filteredHistory = 
     timeFilter === "30" ? historicalData.slice(2) :
     timeFilter === "90" ? historicalData.slice(2) :
     timeFilter === "180" ? historicalData.slice(1) : historicalData;
 
   const radarData = [
-    { subject: "Contexto (ICC)", Analista: iccScore, Promedio: 72 },
-    { subject: "Hipótesis (ISH)", Analista: ishScore, Promedio: 68 },
-    { subject: "Correlación (ICA)", Analista: icaScore, Promedio: 70 },
-    { subject: "Evidencia (ICE)", Analista: iceScore, Promedio: 74 },
-    { subject: "GEOINT (IGEO)", Analista: igeoScore, Promedio: 65 },
-    { subject: "OSINT (IOSINT)", Analista: iosintScore, Promedio: 69 },
-    { subject: "Productividad (IPI)", Analista: ipiScore, Promedio: 73 },
-    { subject: "Autonomía (IAA)", Analista: iaaScore, Promedio: 78 },
+    { subject: "Contexto (ICC)", Analista: iccScore, Promedio: hasOperationalActivity ? 72 : 0 },
+    { subject: "Hipótesis (ISH)", Analista: ishScore, Promedio: hasOperationalActivity ? 68 : 0 },
+    { subject: "Correlación (ICA)", Analista: icaScore, Promedio: hasOperationalActivity ? 70 : 0 },
+    { subject: "Evidencia (ICE)", Analista: iceScore, Promedio: hasOperationalActivity ? 74 : 0 },
+    { subject: "GEOINT (IGEO)", Analista: igeoScore, Promedio: hasOperationalActivity ? 65 : 0 },
+    { subject: "OSINT (IOSINT)", Analista: iosintScore, Promedio: hasOperationalActivity ? 69 : 0 },
+    { subject: "Productividad (IPI)", Analista: ipiScore, Promedio: hasOperationalActivity ? 73 : 0 },
+    { subject: "Autonomía (IAA)", Analista: iaaScore, Promedio: hasOperationalActivity ? 78 : 0 },
   ];
 
   return (
@@ -432,6 +212,11 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                     📈 +{improvementBonus} Bonificación
                   </span>
                 )}
+                {!hasOperationalActivity && (
+                  <span className="bg-amber-950/40 text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-800/40 px-2.5 py-1 rounded-md">
+                    ⚪ Línea Base Cero
+                  </span>
+                )}
               </div>
               <h3 className="text-xl font-black text-slate-100">
                 Índice de Madurez Investigativa (IMI)
@@ -450,7 +235,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                     {imiFinal}%
                   </p>
                   <span className={`inline-block text-[9px] font-bold uppercase mt-1 px-2 py-0.5 rounded border ${getImiColor(imiFinal)}`}>
-                    Nivel {currentLevel}
+                    {currentLevel}
                   </span>
                 </div>
               </div>
@@ -477,14 +262,14 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
 
           {/* 2. Alertas de Rendimiento Activas */}
           {warnings.length > 0 && (
-            <div className="bg-red-950/10 border border-red-900/30 rounded-2xl p-4 space-y-2.5">
+            <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 space-y-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-red-400 text-sm">⚠️</span>
-                <h4 className="text-xs font-black uppercase tracking-wider text-red-400">
-                  Alertas de Desempeño y Desviaciones
+                <span className="text-amber-400 text-sm">ℹ️</span>
+                <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">
+                  Estado Operacional del Analista
                 </h4>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 {warnings.map((warn, idx) => (
                   <div
                     key={idx}
@@ -502,7 +287,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
             </div>
           )}
 
-          {/* 3. Panel de Factores Modificadores: Experiencia, Mejora Continua, Penalización */}
+          {/* 3. Panel de Factores Modificadores */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Factor Experiencia */}
             <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
@@ -514,7 +299,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
               <div className="mt-4 space-y-1">
                 <div className="flex justify-between text-[10px] text-slate-400">
                   <span>Proyectos creados: {totalProjects}</span>
-                  <span>Placa SSPE: {yearsSSPE} años</span>
+                  <span>Evidencias: {evidenceCount}</span>
                 </div>
                 <div className="w-full bg-slate-950 rounded-full h-1 overflow-hidden border border-slate-800">
                   <div className="bg-sky-500 h-full rounded-full" style={{ width: `${(finalExperiencePoints / 15) * 100}%` }} />
@@ -529,13 +314,13 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 <p className="text-xs text-slate-500 mt-0.5">Evolución cualitativa del último mes.</p>
                 <div className="flex items-center gap-2 mt-3">
                   <span className={`text-2xl font-black ${trend === "Crecimiento" ? "text-emerald-400" : trend === "Retroceso" ? "text-red-400" : "text-slate-300"}`}>
-                    {trend === "Crecimiento" ? "Crecimiento" : trend === "Retroceso" ? "Retroceso" : "Estable"}
+                    {hasOperationalActivity ? trend : "Sin actividad"}
                   </span>
-                  <span className="text-xl">{trend === "Crecimiento" ? "📈" : trend === "Retroceso" ? "📉" : "↔️"}</span>
+                  <span className="text-xl">{trend === "Crecimiento" ? "📈" : trend === "Retroceso" ? "📉" : "⚪"}</span>
                 </div>
               </div>
               <p className="text-[10px] text-slate-400 mt-2">
-                {trend === "Crecimiento" ? "¡Bonificación activa de +4 puntos por calidad ascendente!" : trend === "Retroceso" ? "Cuidado: tendencia negativa de descriptores." : "Calidad constante y balanceada."}
+                {!hasOperationalActivity ? "Línea base cero inicial." : trend === "Crecimiento" ? "¡Bonificación activa de +4 puntos por calidad ascendente!" : trend === "Retroceso" ? "Cuidado: tendencia negativa de descriptores." : "Calidad constante y balanceada."}
               </p>
             </div>
 
@@ -543,7 +328,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
             <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
               <div>
                 <h4 className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Factores de Penalización</h4>
-                <p className="text-xs text-slate-500 mt-0.5">Deducciones aplicadas por alertas críticas.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Deducciones aplicadas por observaciones.</p>
                 <div className="text-2xl font-black text-rose-400 mt-3">-{penaltyDeductions} pts</div>
               </div>
               <div className="mt-2.5 max-h-[80px] overflow-y-auto space-y-1">
@@ -754,7 +539,11 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 <div className="flex justify-between text-xs font-semibold text-slate-300">
                   <span>Desviación respecto al promedio:</span>
                   <span className={deviation >= 0 ? "text-emerald-400" : "text-rose-400"}>
-                    {deviation >= 0 ? `Sobresaliente (+${deviation} pts)` : `Recomendación de mejora (${deviation} pts)`}
+                    {!hasOperationalActivity
+                      ? "Línea base inicial (0%)"
+                      : deviation >= 0
+                      ? `Sobresaliente (+${deviation} pts)`
+                      : `Recomendación de mejora (${deviation} pts)`}
                   </span>
                 </div>
                 <div className="relative w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
@@ -867,24 +656,19 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
       ) : (
         /* PESTAÑA EXPLICATIVA DEL IMI - METODOLOGÍA */
         <div className="bg-slate-900/20 border border-slate-800 rounded-2xl p-6 space-y-6">
-          {/* Introducción */}
           <div className="space-y-2 border-b border-slate-800 pb-4">
             <h3 className="text-lg font-black text-slate-100">
-              Metodología del Índice de Madurez Investigativa (IMI)
+              Metodología del Índice de Madurez Investigativa (IMI) — Línea Base Cero
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              El <strong>IMI</strong> es el indicador rector oficial diseñado para medir, calificar y certificar objetivamente el desarrollo de competencias de inteligencia y análisis policial dentro de la plataforma. Este índice excluye cualquier criterio de evaluación subjetivo y se formula estrictamente a partir de registros y logs de actividad auditables del sistema.
+              El <strong>IMI</strong> es el indicador rector oficial diseñado para medir, calificar y certificar objetivamente el desarrollo de competencias de inteligencia y análisis policial dentro de la plataforma. Opera bajo el principio de <strong>línea base cero</strong>: todos los analistas inician con 0% y únicamente incrementan sus indicadores al registrar actividad operacional auditable (proyectos, evidencias, geolocalizaciones y consultas).
             </p>
           </div>
 
-          {/* ¿Qué Evalúa el IMI? */}
           <div className="space-y-3">
             <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">
               ¿Qué evalúa exactamente el IMI?
             </h4>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              La madurez investigativa se compone del balance armonizado de 8 competencias fundamentales de campo y gabinete:
-            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
               <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
                 <p className="font-bold text-slate-200">1. Contexto (ICC)</p>
@@ -919,97 +703,6 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 <p className="text-[10px] text-slate-400 mt-1 leading-normal">Tasa de resolución, expedientes iniciados, cerrados y dictámenes completados.</p>
               </div>
             </div>
-          </div>
-
-          {/* Cómo se Calcula - Pesos Ponderados */}
-          <div className="space-y-4">
-            <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">
-              Estructura Ponderada de Cálculo (85% componentes + 15% experiencia)
-            </h4>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Los 8 subíndices de competencia se combinan de acuerdo con su importancia táctica asignada. La experiencia acumulada representa hasta un 15% adicional del índice general, pero se limita si el rendimiento base es deficiente.
-            </p>
-            <div className="h-[200px] bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={[
-                    { name: "Contexto (ICC)", peso: 20 },
-                    { name: "Hipótesis (ISH)", peso: 15 },
-                    { name: "Correlación (ICA)", peso: 15 },
-                    { name: "GEOINT", peso: 10 },
-                    { name: "OSINT", peso: 10 },
-                    { name: "Autonomía", peso: 10 },
-                    { name: "Evidencia (ICE)", peso: 10 },
-                    { name: "Productividad", peso: 10 },
-                  ]}
-                  margin={{ top: 5, right: 10, left: -25, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 9 }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 9 }} />
-                  <Tooltip contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#f8fafc" }} />
-                  <Bar dataKey="peso" fill="#f59e0b" name="Peso Porcentual (%)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Doble IMI: Operativo vs Estratégico */}
-          <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
-              Entendiendo el Doble IMI: Operativo vs Estratégico
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1.5">
-                <p className="font-bold text-emerald-400">🛡️ IMI Operativo</p>
-                <p className="text-slate-400 leading-relaxed text-[11px]">
-                  Mide el rigor en la recolección de evidencia in situ, la densidad de las capturas fotográficas (ICE), la profundidad de las descripciones iniciales (ICC) y la productividad física del despliegue (IPI). Es ideal para identificar analistas sobresalientes en trabajo operativo y despliegue de campo.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <p className="font-bold text-indigo-400">🦅 IMI Estratégico</p>
-                <p className="text-slate-400 leading-relaxed text-[11px]">
-                  Mide el desarrollo de capacidades abstractas: consistencia causal en las hipótesis (ISH), proactividad en el cruce de vínculos históricos (ICA), cartografía avanzada GEOINT (IGEO), búsquedas cruzadas OSINT (IOSINT) y autonomía frente a la IA (IAA). Destaca perfiles con potencial de dirección estratégica y gabinete de inteligencia.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Factores de Modificación */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Factores que Incrementan el IMI */}
-            <div className="bg-emerald-950/10 border border-emerald-900/30 rounded-xl p-4 space-y-2">
-              <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                <span>➕</span> Factores que Incrementan el IMI
-              </p>
-              <ul className="space-y-1.5 text-[11px] text-slate-300">
-                <li className="flex items-start gap-1"><span>•</span> <span>Narrativas descriptivas extensas con términos tácticos (ICC).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Hipótesis sólidas fundamentando causas y efectos (ISH).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Uso continuo del módulo de pandillas y cruce de vínculos (ICA).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Dibujar geometrías de polígonos avanzados (IGEO).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Capturar abundantes fotografías descriptivas con geolocalización (ICE).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Cierre y validación ágil de carpetas de investigación (IPI).</span></li>
-              </ul>
-            </div>
-
-            {/* Factores que Disminuyen el IMI */}
-            <div className="bg-rose-950/10 border border-rose-900/30 rounded-xl p-4 space-y-2">
-              <p className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                <span>➖</span> Factores que Disminuyen el IMI
-              </p>
-              <ul className="space-y-1.5 text-[11px] text-slate-300">
-                <li className="flex items-start gap-1"><span>•</span> <span>Contextualizaciones cortas o de plantilla básica (-4 pts).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Falta de nexos explicativos en las conclusiones del entorno (-3 pts).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Devoluciones de expedientes debido a inconsistencias (-5 pts).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>No adjuntar registros fotográficos suficientes de campo (-3 pts).</span></li>
-                <li className="flex items-start gap-1"><span>•</span> <span>Dependencia recurrente a la regeneración con inteligencia artificial (-2 pts).</span></li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Certificación y Transparencia */}
-          <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed text-center">
-            🔒 <strong>Metodología Protegida e Inmutable</strong>. El recálculo del IMI se realiza en tiempo real cada vez que un expediente es guardado, validado, devuelto o cuando se registra un log en la bitácora de auditoría de la corporación. No se permiten sobrescrituras manuales ni alteraciones para garantizar la transparencia y equidad institucional.
           </div>
         </div>
       )}

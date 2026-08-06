@@ -17,6 +17,7 @@ import {
 import { getDb } from "@/lib/firebase";
 import { jsPDF } from "jspdf";
 import { ImiDashboard } from "@/components/ImiDashboard";
+import { calculateUserImi } from "@/utils/imiEngine";
 
 type UserDoc = {
   id: string;
@@ -309,190 +310,8 @@ export default function AdminPage() {
     users.forEach((u) => {
       if (y > 275) { doc.addPage(); y = 20; drawHeaders(y); y += 13; }
       
-      const userProjs = projects.filter(p => p.createdBy === u.username);
-      const totalProjects = userProjs.length;
-      const pAbiertos = userProjs.filter(p => !p.estado || p.estado === "ABIERTO").length;
-      const pRevision = userProjs.filter(p => p.estado === "EN REVISIÓN").length;
-      const pDevueltos = userProjs.filter(p => p.estado === "DEVUELTO").length;
-      const pValidados = userProjs.filter(p => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
-
-      const userLogs = auditLogs.filter(
-        (log) => log.user === u.username || log.userId === u.id
-      );
-
-      // MOTOR DE METRICAS
-      const avgDescLen = totalProjects > 0
-        ? userProjs.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / totalProjects
-        : 0;
-
-      const analyticalKeywords = [
-        "vulnerabilidad", "atractor", "patrón", "riesgo", "osint", "geoint", 
-        "hipótesis", "criminógeno", "acecho", "movilidad", "rutina", "rutinas", 
-        "conexiones", "ambiente", "delictivo", "entorno", "focalizado", "análisis"
-      ];
-      let keywordMatches = 0;
-      userProjs.forEach((p) => {
-        const desc = (p.descripcion || "").toLowerCase();
-        analyticalKeywords.forEach((kw) => {
-          if (desc.includes(kw)) keywordMatches++;
-        });
-      });
-
-      const iccScore = Math.max(
-        10,
-        Math.min(
-          100,
-          totalProjects === 0
-            ? 45
-            : Math.round((avgDescLen / 250) * 55 + Math.min(45, keywordMatches * 3))
-        )
-      );
-
-      let logicalConnectives = 0;
-      userProjs.forEach((p) => {
-        const desc = (p.descripcion || "").toLowerCase();
-        ["porque", "debido a", "consecuencia", "por lo tanto", "causal", "hipótesis", "origen", "foco", "razon", "motivo", "factor"].forEach(
-          (conn) => {
-            if (desc.includes(conn)) logicalConnectives++;
-          }
-        );
-      });
-      const ishScore = Math.max(
-        10,
-        Math.min(
-          100,
-          totalProjects === 0
-            ? 45
-            : Math.round(50 + logicalConnectives * 5 + pValidados * 8 - pDevueltos * 6)
-        )
-      );
-
-      const correlationActions = userLogs.filter((log) => {
-        const act = (log.action || log.details || "").toLowerCase();
-        return (
-          act.includes("vínculo") || act.includes("conexion") || act.includes("correlación") ||
-          act.includes("pandillas") || act.includes("mapa") || act.includes("asociación") ||
-          act.includes("cruce") || act.includes("coincidencia")
-        );
-      }).length;
-      const icaScore = Math.max(
-        10,
-        Math.min(
-          100,
-          totalProjects === 0 ? 45 : Math.round(45 + correlationActions * 8 + totalProjects * 3)
-        )
-      );
-
-      const iaaScore = Math.max(
-        20,
-        Math.min(
-          100,
-          totalProjects === 0
-            ? 75
-            : Math.round(100 - pDevueltos * 10 + Math.min(15, avgDescLen / 15))
-        )
-      );
-
-      const evidenceCount = userProjs.reduce((sum, p) => sum + (p.photoCount || 2), 0);
-      const iceScore = Math.max(
-        15,
-        Math.min(
-          100,
-          totalProjects === 0
-            ? 40
-            : Math.round(Math.min(100, (evidenceCount / (totalProjects * 2 + 1)) * 40 + 40))
-        )
-      );
-
-      const geointProjects = userProjs.filter(
-        (p) => (p.geometryType && p.geometryType !== "individual") || p.latitud || p.coordenadas
-      ).length;
-      const igeoScore = Math.max(
-        15,
-        Math.min(
-          100,
-          totalProjects === 0 ? 45 : Math.round(50 + geointProjects * 15 + totalProjects * 3)
-        )
-      );
-
-      const osintKeywords = ["osint", "curp", "rfc", "denue", "registro", "búsqueda", "consulta", "fuente", "osint-query"];
-      let osintQueriesCount = userLogs.filter((log) => {
-        const act = (log.action || log.details || "").toLowerCase();
-        return osintKeywords.some((kw) => act.includes(kw));
-      }).length;
-      const iosintScore = Math.max(
-        15,
-        Math.min(
-          100,
-          totalProjects === 0 ? 45 : Math.round(48 + osintQueriesCount * 8 + totalProjects * 3)
-        )
-      );
-
-      const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
-      const ipiScore = Math.max(
-        10,
-        Math.min(
-          100,
-          totalProjects === 0
-            ? 40
-            : Math.round(completionRate * 50 + pValidados * 8 + totalProjects * 2)
-        )
-      );
-
-      const yearsSSPE = parseInt(u.aniosSspe || "0", 10);
-      let rawExperiencePoints = totalProjects * 0.8 + pValidados * 1.5 + yearsSSPE * 1.2;
-      const componentsBaseScore =
-        iccScore * 0.20 +
-        ishScore * 0.15 +
-        icaScore * 0.15 +
-        iaaScore * 0.10 +
-        iceScore * 0.10 +
-        igeoScore * 0.10 +
-        iosintScore * 0.10 +
-        ipiScore * 0.10;
-      const experienceCapFactor = componentsBaseScore < 45 ? 0.3 : componentsBaseScore < 60 ? 0.7 : 1.0;
-      const finalExperiencePoints = Math.min(15, Math.round(rawExperiencePoints * experienceCapFactor * 10) / 10);
-
-      const recentProjects = userProjs.filter((p) => {
-        if (!p.createdAt) return false;
-        const diffMs = Date.now() - p.createdAt;
-        return diffMs <= 30 * 24 * 60 * 60 * 1000;
-      });
-      let trend: "Crecimiento" | "Estable" | "Retroceso" = "Estable";
-      let improvementBonus = 0;
-      if (totalProjects > 2) {
-        if (recentProjects.length > 0) {
-          const avgRecentDesc = recentProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / recentProjects.length;
-          if (avgRecentDesc > avgDescLen * 1.1) {
-            trend = "Crecimiento";
-            improvementBonus = 4;
-          } else if (avgRecentDesc < avgDescLen * 0.9) {
-            trend = "Retroceso";
-          }
-        }
-      }
-
-      let penaltyDeductions = 0;
-      if (avgDescLen < 120 && totalProjects > 0) penaltyDeductions += 4;
-      if (pDevueltos > pValidados && totalProjects > 1) penaltyDeductions += 5;
-      if (evidenceCount < totalProjects && totalProjects > 0) penaltyDeductions += 3;
-      if (logicalConnectives === 0 && totalProjects > 0) penaltyDeductions += 3;
-      if (iaaScore < 50 && totalProjects > 0) penaltyDeductions += 2;
-
-      const imiBase = componentsBaseScore * 0.85 + finalExperiencePoints;
-      const imiFinal = Math.max(0, Math.min(100, Math.round(imiBase + improvementBonus - penaltyDeductions)));
-
-      const imiOperativo = Math.round(iccScore * 0.40 + iceScore * 0.30 + ipiScore * 0.30);
-      const imiEstrategico = Math.round(ishScore * 0.25 + icaScore * 0.25 + igeoScore * 0.20 + iosintScore * 0.20 + iaaScore * 0.10);
-
-      const getImiLevel = (score: number) => {
-        if (score >= 81) return "Experto";
-        if (score >= 61) return "Avanzado";
-        if (score >= 41) return "Intermedio";
-        if (score >= 21) return "Básico";
-        return "Inicial";
-      };
-      const currentLevel = getImiLevel(imiFinal);
+      const imiRes = calculateUserImi(u, projects, auditLogs);
+      const { totalProjects, imiFinal, imiOperativo, imiEstrategico, currentLevel } = imiRes;
 
       const name = (u.name || u.username).substring(0, 24);
       doc.text(name, 16, y);
@@ -513,7 +332,7 @@ export default function AdminPage() {
 
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text("Nota: El IMI se calcula a partir de 8 subíndices ponderados (85%) y experiencia histórica de campo (15%).", 14, y + 4);
+    doc.text("Nota: El IMI se calcula a partir de 8 subíndices ponderados (85%) y experiencia histórica de campo (15%). Línea base cero activa.", 14, y + 4);
 
     doc.save(`Desempeño_IMI_Analistas_${new Date().getTime()}.pdf`);
   };
