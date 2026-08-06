@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow, HeatmapLayer } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
 
 interface ProjectMapProps {
@@ -341,21 +341,52 @@ export function ProjectMap({
       .map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
   }, [georeferencedPhotos]);
 
-  // Carga de puntos para Heatmap Analítico (GEO-ENH-01)
-  const heatmapData = useMemo(() => {
-    if (typeof window === "undefined" || !window.google || !window.google.maps) return [];
-    const points: google.maps.LatLng[] = [];
+  // Carga y cálculo de densidad analítica de calor compatible con Google Maps JS v3.65+ (GEO-ENH-01 v1.1)
+  const heatmapDensityClusters = useMemo(() => {
+    const rawPoints: { lat: number; lng: number }[] = [];
     georeferencedPhotos.forEach((p) => {
       if (p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))) {
-        points.push(new google.maps.LatLng(Number(p.lat), Number(p.lng)));
+        rawPoints.push({ lat: Number(p.lat), lng: Number(p.lng) });
       }
     });
     sweepsWithCoords.forEach((s: any) => {
       if (s.coordsInfo?.lat != null && s.coordsInfo?.lng != null) {
-        points.push(new google.maps.LatLng(Number(s.coordsInfo.lat), Number(s.coordsInfo.lng)));
+        rawPoints.push({ lat: Number(s.coordsInfo.lat), lng: Number(s.coordsInfo.lng) });
       }
     });
-    return points;
+
+    if (rawPoints.length === 0) return [];
+
+    // Agrupar en celdas de cuadrícula de densidad de ~100m (precisión 0.001 deg)
+    const densityMap: Record<string, { lat: number; lng: number; count: number }> = {};
+    rawPoints.forEach((pt) => {
+      const gridLat = Math.round(pt.lat * 1000) / 1000;
+      const gridLng = Math.round(pt.lng * 1000) / 1000;
+      const key = `${gridLat.toFixed(3)},${gridLng.toFixed(3)}`;
+      if (!densityMap[key]) {
+        densityMap[key] = { lat: gridLat, lng: gridLng, count: 0 };
+      }
+      densityMap[key].count += 1;
+    });
+
+    // Mapear cada celda a un halo de densidad dinámico multinivel
+    return Object.entries(densityMap).map(([key, cell]) => {
+      const count = cell.count;
+      const color = count >= 5 ? "#f43f5e" : count >= 3 ? "#fb923c" : "#facc15";
+      const baseRadius = Math.min(120 + count * 25, 400);
+      const opacity = Math.min(0.20 + count * 0.08, 0.55);
+
+      return {
+        id: key,
+        lat: cell.lat,
+        lng: cell.lng,
+        count,
+        radius: baseRadius,
+        innerRadius: Math.round(baseRadius * 0.45),
+        color,
+        opacity,
+      };
+    });
   }, [georeferencedPhotos, sweepsWithCoords]);
 
   // Carga de conos de visión 2D (POV) para Street View (GEO-ENH-02)
@@ -582,17 +613,39 @@ export function ProjectMap({
         options={mapOptions}
         onClick={handleMapClick}
       >
-        {/* Renderizado de Heatmap Layer (GEO-ENH-01) */}
-        {showHeatmap && heatmapData.length > 0 && (
-          <HeatmapLayer
-            data={heatmapData}
-            options={{
-              radius: 30,
-              opacity: 0.75,
-              dissipating: true,
-            }}
-          />
-        )}
+        {/* Renderizado de Capa de Densidad Analítica de Calor v1.1 (GEO-ENH-01) */}
+        {showHeatmap && heatmapDensityClusters.map((density) => (
+          <React.Fragment key={`heatmap-cell-${density.id}`}>
+            {/* Outer soft halo */}
+            <Circle
+              center={{ lat: density.lat, lng: density.lng }}
+              radius={density.radius}
+              options={{
+                strokeColor: density.color,
+                strokeOpacity: 0.4,
+                strokeWeight: 1,
+                fillColor: density.color,
+                fillOpacity: density.opacity * 0.45,
+                clickable: false,
+                zIndex: 1,
+              }}
+            />
+            {/* Inner hot core */}
+            <Circle
+              center={{ lat: density.lat, lng: density.lng }}
+              radius={density.innerRadius}
+              options={{
+                strokeColor: density.color,
+                strokeOpacity: 0.8,
+                strokeWeight: 1.5,
+                fillColor: density.color,
+                fillOpacity: density.opacity,
+                clickable: false,
+                zIndex: 2,
+              }}
+            />
+          </React.Fragment>
+        ))}
 
         {/* Renderizado de Conos de Visión POV Street View (GEO-ENH-02) */}
         {showPovCones && povConePaths.map((cone) => (
