@@ -41,6 +41,31 @@ export const TIPOS_IMAGEN = [
 
 export type TipoImagen = (typeof TIPOS_IMAGEN)[number];
 
+export type EvidenceOrigin = "FIELD" | "REMOTE";
+export type CollectionMethod = "IN_PERSON" | "DESKTOP_ANALYSIS" | "VIRTUAL_SWEEP";
+export type EvidenceCategoryClass = "FIELD_CAPTURE" | "REMOTE_VISUAL" | "DESKTOP_ANALYSIS";
+export type EvidenceConfidenceLevel = "HIGH" | "MEDIUM" | "LOW";
+export type SourceProvider = "GOOGLE_STREET_VIEW" | "MAPILLARY" | "BING_STREET_SIDE" | "OTHER";
+
+export type StreetViewMetadata = {
+  panoramaLat: number;
+  panoramaLng: number;
+  heading: number;
+  pitch: number;
+  fov: number;
+  panoId?: string;
+  captureDate?: string;
+  provider: string;
+  captureTimestamp?: number;
+};
+
+export type ConfidenceFactors = {
+  imageryAgeScore: number;
+  geographicPrecision: number;
+  sourceReliability: number;
+  analystValidation: number;
+};
+
 export type AlbumPhoto = {
   id: string;
   previewUrl: string;
@@ -64,6 +89,18 @@ export type AlbumPhoto = {
   validado?: boolean;
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
+
+  // Extensión de Gobernanza Street View Evidence v2.1
+  evidenceOrigin?: EvidenceOrigin;
+  collectionMethod?: CollectionMethod;
+  evidenceCategoryClass?: EvidenceCategoryClass;
+  confidenceLevel?: EvidenceConfidenceLevel;
+  confidencePercentage?: number;
+  sourceProvider?: SourceProvider;
+  streetViewMetadata?: StreetViewMetadata;
+  confidenceFactors?: ConfidenceFactors;
+  streetViewCategory?: string;
+  streetViewSource?: string;
 };
 
 export type SweepIntegrationItem = {

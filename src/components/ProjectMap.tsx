@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow, HeatmapLayer } from "@react-google-maps/api";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
 
 interface ProjectMapProps {
@@ -11,6 +11,7 @@ interface ProjectMapProps {
   onAddPoint?: (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => Promise<void>;
   onMoveMarker?: (id: string, lat: number, lng: number) => Promise<void>;
   onCandidateCapture?: (lat: number, lng: number, context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }) => void;
+  onPoiSelect?: (lat: number, lng: number) => void;
   album: any[];
   project: {
     id: string;
@@ -119,7 +120,8 @@ export function ProjectMap({
   onAddPoint,
   onMoveMarker,
   onCandidateCapture,
-  album,
+  onPoiSelect,
+  album = [],
   project,
 }: ProjectMapProps) {
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
@@ -130,12 +132,18 @@ export function ProjectMap({
   });
 
   const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
+  const [activePhoto, setActivePhoto] = useState<any | null>(null);
   const [subMode, setSubMode] = useState<"vertex" | "poi">("poi");
 
   const [showPhotos, setShowPhotos] = useState(true);
   const [showOsint, setShowOsint] = useState(true);
   const [showGeoint, setShowGeoint] = useState(true);
   const [showAreas, setShowAreas] = useState(true);
+
+  // --- ENHANCEMENTS GEOINT & OSINT v1.0 ---
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showPovCones, setShowPovCones] = useState(true);
+  const [osintProviderFilter, setOsintProviderFilter] = useState<"ALL" | "TELEGRAM" | "INEGI" | "GOOGLE" | "SOCIAL">("ALL");
 
   const [selectedOsintSingle, setSelectedOsintSingle] = useState<any | null>(null);
   const [selectedOsintGroup, setSelectedOsintGroup] = useState<any | null>(null);
@@ -154,15 +162,28 @@ export function ProjectMap({
       });
   }, [project?.sweeps]);
 
+  // Filtrado dinámico por proveedor OSINT (OSINT-ENH-01)
+  const filteredParsedSweeps = useMemo(() => {
+    if (osintProviderFilter === "ALL") return parsedSweeps;
+    return parsedSweeps.filter((sweep: any) => {
+      const engine = (sweep.engine || sweep.source || sweep.type || "").toUpperCase();
+      if (osintProviderFilter === "TELEGRAM") return engine.includes("TELEGRAM");
+      if (osintProviderFilter === "INEGI") return engine.includes("INEGI") || engine.includes("DENUE") || engine.includes("SCINCE");
+      if (osintProviderFilter === "GOOGLE") return engine.includes("GOOGLE") || engine.includes("PLACES");
+      if (osintProviderFilter === "SOCIAL") return engine.includes("X") || engine.includes("FACEBOOK") || engine.includes("INSTAGRAM") || engine.includes("REDDIT");
+      return true;
+    });
+  }, [parsedSweeps, osintProviderFilter]);
+
   // Barridos OSINT con georreferencia
   const sweepsWithCoords = useMemo(() => {
-    return parsedSweeps.filter((s) => s.coordsInfo.hasCoordinates);
-  }, [parsedSweeps]);
+    return filteredParsedSweeps.filter((s: any) => s.coordsInfo.hasCoordinates);
+  }, [filteredParsedSweeps]);
 
   // Barridos OSINT sin georreferencia
   const sweepsWithoutCoords = useMemo(() => {
-    return parsedSweeps.filter((s) => !s.coordsInfo.hasCoordinates);
-  }, [parsedSweeps]);
+    return filteredParsedSweeps.filter((s: any) => !s.coordsInfo.hasCoordinates);
+  }, [filteredParsedSweeps]);
 
   // Clusterización OSINT independiente
   const osintClusters = useMemo(() => {
@@ -320,17 +341,75 @@ export function ProjectMap({
       .map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
   }, [georeferencedPhotos]);
 
+  // Carga de puntos para Heatmap Analítico (GEO-ENH-01)
+  const heatmapData = useMemo(() => {
+    if (typeof window === "undefined" || !window.google || !window.google.maps) return [];
+    const points: google.maps.LatLng[] = [];
+    georeferencedPhotos.forEach((p) => {
+      if (p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))) {
+        points.push(new google.maps.LatLng(Number(p.lat), Number(p.lng)));
+      }
+    });
+    sweepsWithCoords.forEach((s: any) => {
+      if (s.coordsInfo?.lat != null && s.coordsInfo?.lng != null) {
+        points.push(new google.maps.LatLng(Number(s.coordsInfo.lat), Number(s.coordsInfo.lng)));
+      }
+    });
+    return points;
+  }, [georeferencedPhotos, sweepsWithCoords]);
+
+  // Carga de conos de visión 2D (POV) para Street View (GEO-ENH-02)
+  const povConePaths = useMemo(() => {
+    return georeferencedPhotos
+      .filter((photo) => photo.streetViewMetadata || photo.heading != null)
+      .map((photo) => {
+        const meta = photo.streetViewMetadata || {};
+        const lat = Number(photo.lat);
+        const lng = Number(photo.lng);
+        const heading = meta.heading ?? photo.heading ?? 0;
+        const fov = meta.fov ?? photo.fov ?? 90;
+        const radius = 0.00025; // ~25 metros
+
+        const halfFov = fov / 2;
+        const startAngle = (heading - 90 - halfFov) * (Math.PI / 180);
+        const endAngle = (heading - 90 + halfFov) * (Math.PI / 180);
+
+        const path = [{ lat, lng }];
+        const steps = 7;
+        for (let i = 0; i <= steps; i++) {
+          const angle = startAngle + (i * (endAngle - startAngle)) / steps;
+          const latOffset = radius * Math.sin(angle);
+          const lngOffset = (radius * Math.cos(angle)) / Math.cos(lat * (Math.PI / 180));
+          path.push({ lat: lat + latOffset, lng: lng + lngOffset });
+        }
+        path.push({ lat, lng });
+
+        return {
+          id: photo.id,
+          path,
+          heading,
+          fov,
+        };
+      });
+  }, [georeferencedPhotos]);
+
   const handleMapClick = async (e: google.maps.MapMouseEvent) => {
-    if (!e.latLng || !onAddPoint) return;
+    if (!e.latLng) return;
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
 
     if (geometryType === "individual") {
+      if (onPoiSelect) {
+        onPoiSelect(lat, lng);
+        return;
+      }
+      if (!onAddPoint) return;
       const name = window.prompt("Ingrese el nombre o comentario para esta evidencia / POI:", "Evidencia de Campo");
       if (name === null) return;
       await onAddPoint(lat, lng, { name, isIndependentPoi: true, isVertex: false });
     } else {
       if (subMode === "vertex") {
+        if (!onAddPoint) return;
         // Modalidad 1: Ampliar / Modificar Trazado
         if (onCandidateCapture) {
           onCandidateCapture(lat, lng, {
@@ -341,6 +420,11 @@ export function ProjectMap({
         await onAddPoint(lat, lng, { name: "Vértice de trazado", isIndependentPoi: false, isVertex: true });
       } else {
         // Modalidad 2: Evidencia / POI Independiente
+        if (onPoiSelect) {
+          onPoiSelect(lat, lng);
+          return;
+        }
+        if (!onAddPoint) return;
         const name = window.prompt("Ingrese el comentario para esta evidencia independiente:", "POI Independiente");
         if (name === null) return;
         await onAddPoint(lat, lng, { name, isIndependentPoi: true, isVertex: false });
@@ -388,14 +472,14 @@ export function ProjectMap({
             onClick={() => setSubMode("poi")}
             className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition active:scale-95 ${subMode === "poi" ? "bg-cyan-650 text-white shadow-lg" : "bg-slate-900 text-slate-400 hover:text-white"}`}
           >
-            📍 Modalidad 2: POI / Evidencia Independiente
+            📍 Modalidad 2: POI / Evidencia
           </button>
         </div>
       )}
 
-      {/* Panel de Capas Flotante Estilo Glassmorphism */}
-      <div className="absolute top-3 right-3 z-[10] bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-3 text-slate-100 shadow-2xl flex flex-col gap-2 font-sans min-w-[190px]">
-        <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase border-b border-slate-800 pb-1.5 mb-1 flex items-center gap-1.5">
+      {/* Floating Layer Controls Widget */}
+      <div className="absolute top-3 right-3 z-[10] bg-slate-950/90 border border-slate-800 p-3 rounded-xl shadow-2xl backdrop-blur-md font-sans text-xs flex flex-col gap-2 min-w-[200px]">
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-800/80 pb-1.5 flex items-center gap-1.5">
           <span>🛡️</span> CAPAS DE INTELIGENCIA
         </div>
         
@@ -423,6 +507,22 @@ export function ProjectMap({
           </span>
         </label>
 
+        {showOsint && (
+          <div className="pl-5 -mt-1 mb-1">
+            <select
+              value={osintProviderFilter}
+              onChange={(e) => setOsintProviderFilter(e.target.value as any)}
+              className="w-full bg-slate-900 text-slate-200 border border-slate-750 text-[10px] font-semibold rounded px-2 py-1 outline-none focus:border-emerald-500"
+            >
+              <option value="ALL">🌐 Todos los Proveedores</option>
+              <option value="TELEGRAM">💬 Telegram OSINT</option>
+              <option value="INEGI">📊 INEGI (DENUE/SCINCE)</option>
+              <option value="GOOGLE">📍 Google Places</option>
+              <option value="SOCIAL">📲 Redes (X, FB, IG)</option>
+            </select>
+          </div>
+        )}
+
         <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
           <input
             type="checkbox"
@@ -446,6 +546,33 @@ export function ProjectMap({
             <span className="text-purple-400">⭕</span> Áreas analíticas
           </span>
         </label>
+
+        {/* CONTROLES AVANZADOS ENHANCEMENT GEOINT v1.0 */}
+        <div className="pt-1 border-t border-slate-800/80 flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
+            <input
+              type="checkbox"
+              checked={showHeatmap}
+              onChange={(e) => setShowHeatmap(e.target.checked)}
+              className="rounded border-slate-800 bg-slate-950 text-rose-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+            />
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
+              <span className="text-rose-400">🔥</span> Heatmap Analítico
+            </span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
+            <input
+              type="checkbox"
+              checked={showPovCones}
+              onChange={(e) => setShowPovCones(e.target.checked)}
+              className="rounded border-slate-800 bg-slate-950 text-amber-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+            />
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
+              <span className="text-amber-400">📐</span> Conos POV Street View
+            </span>
+          </label>
+        </div>
       </div>
 
       <GoogleMap
@@ -455,6 +582,34 @@ export function ProjectMap({
         options={mapOptions}
         onClick={handleMapClick}
       >
+        {/* Renderizado de Heatmap Layer (GEO-ENH-01) */}
+        {showHeatmap && heatmapData.length > 0 && (
+          <HeatmapLayer
+            data={heatmapData}
+            options={{
+              radius: 30,
+              opacity: 0.75,
+              dissipating: true,
+            }}
+          />
+        )}
+
+        {/* Renderizado de Conos de Visión POV Street View (GEO-ENH-02) */}
+        {showPovCones && povConePaths.map((cone) => (
+          <Polygon
+            key={`pov-cone-${cone.id}`}
+            paths={cone.path}
+            options={{
+              strokeColor: "#f59e0b",
+              strokeOpacity: 0.85,
+              strokeWeight: 1.5,
+              fillColor: "#f59e0b",
+              fillOpacity: 0.25,
+              zIndex: 5,
+            }}
+          />
+        ))}
+
         {/* Draw circle for individual type projects (Controlled by showAreas) */}
         {showAreas && geometryType === "individual" && project?.latitude && project?.longitude && !isFallback && (
           <Circle

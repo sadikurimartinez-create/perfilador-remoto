@@ -638,7 +638,14 @@ export class ReportEngineKernelClass {
         );
 
         // BLOQUE F: Separar fotos de Street View por su streetViewCategory para reportes estructurados
-        const svPhotos = (this.context.album || []).filter((p: any) => p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW");
+        const svPhotos = (this.context.album || []).filter((p: any) =>
+          p.evidenceOrigin === "REMOTE" ||
+          p.evidenceCategoryClass === "REMOTE_VISUAL" ||
+          p.evidenceCategoryClass === "REMOTE_STREET_VIEW" ||
+          p.tipo === "REMOTE_STREET_VIEW" ||
+          p.tipo === "STREET_VIEW" ||
+          p.evidenceType === "VIRTUAL_STREET_VIEW"
+        );
         (editorialPayload as any).streetViewTerritorial = svPhotos
           .filter((p: any) => p.streetViewCategory === "hideout")
           .map((p: any) => ({ url: p.previewUrl || p.url, comment: p.comentario }));

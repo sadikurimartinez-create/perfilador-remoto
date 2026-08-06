@@ -16,7 +16,11 @@ export class StreetViewCollector {
     // Filtrar candidatos explícitos que representen Street View
     const svRaw = rawImages.filter(
       img => {
-        const matchesSv = img.tipo?.toLowerCase().includes("street") ||
+        const matchesSv = img.evidenceOrigin === "REMOTE" ||
+          img.evidenceCategoryClass === "REMOTE_VISUAL" ||
+          img.evidenceCategoryClass === "REMOTE_STREET_VIEW" ||
+          img.tipo === "REMOTE_STREET_VIEW" ||
+          img.tipo?.toLowerCase().includes("street") ||
           img.url?.toLowerCase().includes("street") ||
           img.comentario?.toLowerCase().includes("street") ||
           img.description?.toLowerCase().includes("street") ||
@@ -33,7 +37,7 @@ export class StreetViewCollector {
         id: item.id || `candidate-sv-${i}`,
         source: "STREET_VIEW",
         image: item.previewUrl || item.url || "",
-        category: "VULNERABILIDAD_FISICA",
+        category: item.streetViewCategory ? item.streetViewCategory.toUpperCase().replace(/_/g, " ") : "VULNERABILIDAD_FISICA",
         observation: item.comentario || item.description || "Punto de observación de entorno vial.",
         riskLevel: (item.riskLevel || "MEDIO").toUpperCase() as any,
         lat: item.lat || projectLat,

@@ -19,6 +19,11 @@ import { GangGeoSweepPanel } from "./GangGeoSweepPanel";
 import { CrimeCharts } from "./CrimeCharts";
 import dynamic from "next/dynamic";
 
+import { StreetViewConfirmationModal } from "@/modules/streetView/StreetViewConfirmationModal";
+import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDisclaimerModal";
+import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
+import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
+
 const NetworkDashboard = dynamic(() => import("./NetworkDashboard").then((mod) => mod.NetworkDashboard), { ssr: false });
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
@@ -758,6 +763,63 @@ export function PhotoAlbum({
   const [mapConfirmModal, setMapConfirmModal] = useState<{
     isOpen: boolean;
   } | null>(null);
+
+  // --- MÓDULO STREET VIEW EVIDENCE GOVERNANCE v2.1 ---
+  const [svFlowTarget, setSvFlowTarget] = useState<{ lat: number; lng: number } | null>(null);
+  const [isSvModal1Open, setIsSvModal1Open] = useState(false);
+  const [isSvModal2Open, setIsSvModal2Open] = useState(false);
+  const [isSvPickerOpen, setIsSvPickerOpen] = useState(false);
+
+  const handleStartStreetViewFlow = useCallback((lat: number, lng: number) => {
+    setSvFlowTarget({ lat, lng });
+    setIsSvModal1Open(true);
+  }, []);
+
+  const handleConfirmSvModal1 = useCallback(() => {
+    setIsSvModal1Open(false);
+    setIsSvModal2Open(true);
+  }, []);
+
+  const handleAcceptSvModal2 = useCallback((acceptance: { acceptedTerms: boolean; acceptedAt: number; acceptedBy: string }) => {
+    setIsSvModal2Open(false);
+    setIsSvPickerOpen(true);
+  }, []);
+
+  const handleCompleteStreetViewCapture = useCallback(async (payload: StreetViewCapturePayload) => {
+    setIsSvPickerOpen(false);
+    try {
+      const albumPhoto = mapStreetViewToAlbumPhoto(payload);
+      if (uploadAndAddPhoto) {
+        const blobRes = await fetch(albumPhoto.previewUrl);
+        const blob = await blobRes.blob();
+        const file = new File([blob], `Remote_StreetView_${Date.now()}.jpg`, { type: "image/jpeg" });
+
+        await uploadAndAddPhoto(file, albumPhoto.lat!, albumPhoto.lng!, {
+          tipo: albumPhoto.tipo,
+          comentario: albumPhoto.comentario,
+          gpsSource: albumPhoto.gpsSource,
+          validado: true,
+          isIndependentPoi: true,
+          evidenceOrigin: albumPhoto.evidenceOrigin,
+          collectionMethod: albumPhoto.collectionMethod,
+          evidenceCategoryClass: albumPhoto.evidenceCategoryClass,
+          sourceProvider: albumPhoto.sourceProvider,
+          confidenceLevel: albumPhoto.confidenceLevel,
+          confidencePercentage: albumPhoto.confidencePercentage,
+          confidenceFactors: albumPhoto.confidenceFactors,
+          streetViewCategory: albumPhoto.streetViewCategory,
+          streetViewSource: albumPhoto.streetViewSource,
+          streetViewMetadata: albumPhoto.streetViewMetadata,
+        } as any);
+        alert("Evidencia remota Street View v2.1 incorporada exitosamente al expediente.");
+      }
+    } catch (err: any) {
+      console.error("[PhotoAlbum] Error al incorporar evidencia Street View v2.1:", err);
+      alert("Error al incorporar evidencia remota: " + err.message);
+    } finally {
+      setSvFlowTarget(null);
+    }
+  }, [uploadAndAddPhoto]);
 
   const handleCandidateCapture = useCallback((
     lat: number,
@@ -2444,6 +2506,27 @@ const hasMinimumPhotos =
                     </div>
                   </div>
 
+                  {/* BADGE DE GOBERNANZA DE EVIDENCIA REMOTE GABINETE v2.1 */}
+                  {(p.evidenceCategoryClass === "REMOTE_VISUAL" || p.evidenceOrigin === "REMOTE" || p.tipo === "REMOTE_STREET_VIEW") && (
+                    <div className="mt-2 mb-2 p-2 bg-amber-950/40 border border-amber-500/40 rounded-lg space-y-1 text-left font-sans">
+                      <div className="flex items-center justify-between gap-1 flex-wrap">
+                        <span className="px-1.5 py-0.5 text-[8px] font-black uppercase bg-amber-500 text-slate-950 rounded tracking-wider">
+                          🌐 TRABAJO DE GABINETE
+                        </span>
+                        <span className="text-[9px] font-bold text-amber-400">
+                          {p.confidencePercentage || 100}% ({p.confidenceLevel || "HIGH"})
+                        </span>
+                      </div>
+                      <div className="text-[8px] text-slate-300 font-mono leading-tight space-y-0.5">
+                        <div>Fuente: <strong className="text-slate-200">{p.streetViewSource || p.sourceProvider || "Google Street View"}</strong></div>
+                        <div>Fecha Toma Google: <strong className="text-slate-200">{p.streetViewMetadata?.captureDate || "N/D"}</strong></div>
+                        {p.streetViewMetadata && (
+                          <div>POV: HDG <strong className="text-cyan-400">{p.streetViewMetadata.heading}°</strong> | PITCH <strong className="text-cyan-400">{p.streetViewMetadata.pitch}°</strong> | FOV <strong className="text-cyan-400">{p.streetViewMetadata.fov}°</strong></div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* BOTÓN Y ESTADO DE GUARDAR CONTEXTUALIZACIÓN (REQUERIMIENTO 1) */}
                   <div className="mt-2.5 mb-2.5 bg-slate-900/50 p-2 rounded-lg border border-slate-800/40 flex flex-col gap-2">
                     {p.evidenceId ? (
@@ -3232,6 +3315,7 @@ const hasMinimumPhotos =
                   lat: Number(photo.lat),
                   lng: Number(photo.lng),
                 }))}
+                onPoiSelect={handleStartStreetViewFlow}
                 onAddPoint={handleAddMapPoint}
                 onMoveMarker={updatePhotoCoordinates}
                 onCandidateCapture={handleCandidateCapture}
@@ -6027,6 +6111,44 @@ const hasMinimumPhotos =
           message={toast.message}
           onClose={() => setToast(null)}
         />
+      )}
+
+      {/* MÓDULO DE FLUJOS Y VISOR STREET VIEW EVIDENCE GOVERNANCE v2.1 */}
+      {svFlowTarget && (
+        <>
+          <StreetViewConfirmationModal
+            isOpen={isSvModal1Open}
+            lat={svFlowTarget.lat}
+            lng={svFlowTarget.lng}
+            onCancel={() => {
+              setIsSvModal1Open(false);
+              setSvFlowTarget(null);
+            }}
+            onConfirm={handleConfirmSvModal1}
+          />
+
+          <StreetViewDisclaimerModal
+            isOpen={isSvModal2Open}
+            onCancel={() => {
+              setIsSvModal2Open(false);
+              setSvFlowTarget(null);
+            }}
+            onAccept={handleAcceptSvModal2}
+            analystName={user?.displayName || "Analista CEIPOL"}
+          />
+
+          <StreetViewPanoramaPicker
+            isOpen={isSvPickerOpen}
+            lat={svFlowTarget.lat}
+            lng={svFlowTarget.lng}
+            onClose={() => {
+              setIsSvPickerOpen(false);
+              setSvFlowTarget(null);
+            }}
+            onCapture={handleCompleteStreetViewCapture}
+            analystName={user?.displayName || "Analista CEIPOL"}
+          />
+        </>
       )}
     </>
   );

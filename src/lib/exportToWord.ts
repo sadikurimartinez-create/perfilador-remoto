@@ -1685,13 +1685,22 @@ export async function exportToWord(
         continue;
       }
       
+      const isRemoteGabinete = sv.evidenceCategoryClass === "REMOTE_VISUAL" || sv.evidenceOrigin === "REMOTE" || sv.source === "STREET_VIEW";
+      const disclaimerText = isRemoteGabinete
+        ? "[TRABAJO DE GABINETE] Evidencia obtenida mediante análisis remoto utilizando fuente visual georreferenciada. No corresponde a inspección física en campo."
+        : "";
+
+      const povText = sv.streetViewMetadata
+        ? ` (Cobertura Google: ${sv.streetViewMetadata.captureDate || "N/D"} | POV: HDG ${sv.streetViewMetadata.heading}° Pitch ${sv.streetViewMetadata.pitch}° FOV ${sv.streetViewMetadata.fov}°)`
+        : "";
+
       const context: EvidenceContext = {
         evidenceId: sv.id || `SV-0${i + 1}`,
         source: "STREET_VIEW",
-        analyticalPurpose: sv.analyticalPurpose || sv.observed || sv.indicadorCriminologico || "",
+        analyticalPurpose: `${disclaimerText} ${sv.analyticalPurpose || sv.observed || sv.indicadorCriminologico || ""}${povText}`.trim(),
         relatedHypothesis: sv.relatedHypothesis || sv.hypothesis || undefined,
         evidenceClass: "PRIMARY",
-        confidence: sv.confidence || 100,
+        confidence: sv.confidencePercentage || sv.confidence || 100,
         capturedAt: sv.capturedAt || sv.date || undefined
       };
 
