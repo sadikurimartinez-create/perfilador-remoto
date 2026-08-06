@@ -1,3 +1,9 @@
+/**
+ * IMPLEMENTACIÓN ADR-IMI-001
+ * Línea Base Cero y Evaluación Basada en Evidencia Operacional
+ * Perfilador Remoto SSPE-CEIPOL v2.4
+ */
+
 export type UserDoc = {
   id: string;
   username: string;
@@ -22,9 +28,10 @@ export type ImiResult = {
   evidenceCount: number;
   geointProjects: number;
   osintQueriesCount: number;
+  correlationActions: number;
   hasOperationalActivity: boolean;
 
-  // Subíndices
+  // Subíndices (0% si no existe evidencia)
   iccScore: number;
   ishScore: number;
   icaScore: number;
@@ -34,18 +41,18 @@ export type ImiResult = {
   iosintScore: number;
   ipiScore: number;
 
-  // Modificadores
+  // Modificadores operacionales
   finalExperiencePoints: number;
   improvementBonus: number;
   penaltyDeductions: number;
   activePenalties: string[];
   trend: "Crecimiento" | "Estable" | "Retroceso";
 
-  // IMI Generales
+  // IMI Finales (0% si no existe evidencia)
   imiFinal: number;
   imiOperativo: number;
   imiEstrategico: number;
-  currentLevel: string;
+  currentLevel: "SIN EVALUACIÓN" | "Básico" | "Inicial" | "Intermedio" | "Avanzado" | "Experto";
 };
 
 export function calculateUserImi(
@@ -56,7 +63,7 @@ export function calculateUserImi(
   const username = selectedUser.username || "";
   const userId = selectedUser.id || "";
 
-  // 1. Filtrado estricto de proyectos pertenecientes al usuario
+  // 1. Filtrado de proyectos pertenecientes al usuario
   const userProjects = projects.filter(
     (p) => p.createdBy === username || p.author === username || p.createdById === userId
   );
@@ -97,7 +104,7 @@ export function calculateUserImi(
       p.hasGeoint === true
   ).length;
 
-  // 5. Consultas OSINT en logs de auditoría
+  // 5. Consultas OSINT en logs
   const osintKeywords = [
     "osint",
     "curp",
@@ -129,10 +136,16 @@ export function calculateUserImi(
     );
   }).length;
 
-  // Verificación de actividad operacional comprobable
-  const hasOperationalActivity = totalProjects > 0 || userLogs.length > 0;
+  // DETERMINACIÓN DE ACTIVIDAD OPERACIONAL COMPROBABLE (ADR-IMI-001)
+  const hasOperationalActivity =
+    totalProjects > 0 ||
+    evidenceCount > 0 ||
+    geointProjects > 0 ||
+    osintQueriesCount > 0 ||
+    correlationActions > 0 ||
+    userLogs.length > 0;
 
-  // REGLA ABSOLUTA: Si no existe actividad operática comprobable, todo inicia en CERO (0)
+  // REGLA OBLIGATORIA ADR-IMI-001: Si NO tiene evidencia operacional -> TODO ES 0%
   if (!hasOperationalActivity) {
     return {
       totalProjects: 0,
@@ -143,9 +156,10 @@ export function calculateUserImi(
       evidenceCount: 0,
       geointProjects: 0,
       osintQueriesCount: 0,
+      correlationActions: 0,
       hasOperationalActivity: false,
 
-      // Subíndices = 0%
+      // Subíndices en línea base cero (0%)
       iccScore: 0,
       ishScore: 0,
       icaScore: 0,
@@ -155,24 +169,24 @@ export function calculateUserImi(
       iosintScore: 0,
       ipiScore: 0,
 
-      // Modificadores = 0
+      // Modificadores en cero
       finalExperiencePoints: 0,
       improvementBonus: 0,
       penaltyDeductions: 0,
       activePenalties: [],
       trend: "Estable",
 
-      // IMI Finales = 0%
+      // IMI General/Operativo/Estratégico en 0%
       imiFinal: 0,
       imiOperativo: 0,
       imiEstrategico: 0,
-      currentLevel: "Sin evaluación"
+      currentLevel: "SIN EVALUACIÓN"
     };
   }
 
-  // --- CÁLCULO BASADO EN EVIDENCIA REAL (Cuando SÍ existe actividad) ---
+  // --- CÁLCULO BASADO ÚNICAMENTE EN EVIDENCIA OPERACIONAL DEMOSTRADA ---
 
-  // A. ICC - Contexto (20%)
+  // A. ICC - Contexto (20%) - Basado en longitud descriptiva y terminología
   const avgDescLen =
     totalProjects > 0
       ? userProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / totalProjects
@@ -196,7 +210,7 @@ export function calculateUserImi(
       ? Math.min(100, Math.max(0, Math.round((avgDescLen / 250) * 50 + Math.min(50, keywordMatches * 5))))
       : 0;
 
-  // B. ISH - Hipótesis (15%)
+  // B. ISH - Hipótesis (15%) - Conectores causales en descripciones
   let logicalConnectives = 0;
   userProjects.forEach((p) => {
     const desc = (p.descripcion || "").toLowerCase();
@@ -208,62 +222,52 @@ export function calculateUserImi(
   });
 
   const ishScore =
-    totalProjects > 0
-      ? Math.min(100, Math.max(0, Math.round((logicalConnectives > 0 ? 30 : 0) + logicalConnectives * 10 + pValidados * 15 - pDevueltos * 10)))
+    totalProjects > 0 && logicalConnectives > 0
+      ? Math.min(100, Math.max(0, Math.round(logicalConnectives * 15 + pValidados * 20 - pDevueltos * 10)))
       : 0;
 
-  // C. ICA - Correlación (15%)
+  // C. ICA - Correlación (15%) - Vínculos y cruces en logs/proyectos
   const icaScore =
-    totalProjects > 0 || correlationActions > 0
-      ? Math.min(100, Math.max(0, Math.round(correlationActions * 20 + totalProjects * 10)))
+    correlationActions > 0 || totalProjects > 1
+      ? Math.min(100, Math.max(0, Math.round(correlationActions * 25 + totalProjects * 10)))
       : 0;
 
-  // D. IAA - Autonomía IA (10%)
+  // D. IAA - Autonomía IA (10%) - Proyectos sin devoluciones por observaciones
   const iaaScore =
     totalProjects > 0
-      ? Math.min(100, Math.max(0, Math.round(100 - pDevueltos * 20 + pValidados * 5)))
+      ? Math.min(100, Math.max(0, Math.round(100 - pDevueltos * 25)))
       : 0;
 
-  // E. ICE - Evidencia (10%)
+  // E. ICE - Evidencia (10%) - Fotografías y documentos georreferenciados reales
   const iceScore =
     totalProjects > 0 && evidenceCount > 0
       ? Math.min(100, Math.max(0, Math.round((evidenceCount / (totalProjects * 2)) * 100)))
       : 0;
 
-  // F. IGEO - GEOINT (10%)
+  // F. IGEO - GEOINT (10%) - Polígonos y mapas trazados
   const igeoScore =
     geointProjects > 0
-      ? Math.min(100, Math.max(0, Math.round(geointProjects * 25 + totalProjects * 10)))
+      ? Math.min(100, Math.max(0, Math.round(geointProjects * 30 + totalProjects * 10)))
       : 0;
 
-  // G. IOSINT - OSINT (10%)
+  // G. IOSINT - OSINT (10%) - Consultas en registros externos
   const iosintScore =
     osintQueriesCount > 0
-      ? Math.min(100, Math.max(0, Math.round(osintQueriesCount * 25 + totalProjects * 5)))
+      ? Math.min(100, Math.max(0, Math.round(osintQueriesCount * 30 + totalProjects * 5)))
       : 0;
 
-  // H. IPI - Productividad (10%)
+  // H. IPI - Productividad (10%) - Expedientes cerrados y validados
   const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
   const ipiScore =
     totalProjects > 0
       ? Math.min(100, Math.max(0, Math.round(completionRate * 60 + pValidados * 20 + totalProjects * 5)))
       : 0;
 
-  // --- EXPERIENCIA Y MODIFICADORES ---
-  const componentsBaseScore =
-    iccScore * 0.20 +
-    ishScore * 0.15 +
-    icaScore * 0.15 +
-    iaaScore * 0.10 +
-    iceScore * 0.10 +
-    igeoScore * 0.10 +
-    iosintScore * 0.10 +
-    ipiScore * 0.10;
-
+  // --- MODIFICADORES BASADOS ÚNICAMENTE EN VOLUMEN DE TRABAJO OPERATIVO (SIN ANTIGÜEDAD) ---
   const rawExperiencePoints = totalProjects * 1.5 + pValidados * 2.5;
   const finalExperiencePoints = Math.min(15, Math.round(rawExperiencePoints * 10) / 10);
 
-  // Tendencia
+  // Tendencia de calidad
   const recentProjects = userProjects.filter((p) => {
     if (!p.createdAt) return false;
     const diffMs = Date.now() - p.createdAt;
@@ -284,7 +288,7 @@ export function calculateUserImi(
     }
   }
 
-  // Penalizaciones
+  // Penalizaciones por trabajo de baja calidad
   let penaltyDeductions = 0;
   const activePenalties: string[] = [];
 
@@ -301,6 +305,16 @@ export function calculateUserImi(
     activePenalties.push("Insuficiente recolección de evidencia en campo: -3 pts");
   }
 
+  const componentsBaseScore =
+    iccScore * 0.20 +
+    ishScore * 0.15 +
+    icaScore * 0.15 +
+    iaaScore * 0.10 +
+    iceScore * 0.10 +
+    igeoScore * 0.10 +
+    iosintScore * 0.10 +
+    ipiScore * 0.10;
+
   const imiBase = componentsBaseScore * 0.85 + finalExperiencePoints;
   const imiFinal = Math.max(0, Math.min(100, Math.round(imiBase + improvementBonus - penaltyDeductions)));
 
@@ -309,8 +323,8 @@ export function calculateUserImi(
     ishScore * 0.25 + icaScore * 0.25 + igeoScore * 0.20 + iosintScore * 0.20 + iaaScore * 0.10
   );
 
-  const getImiLevel = (score: number) => {
-    if (score === 0) return "Sin evaluación";
+  const getImiLevel = (score: number): "SIN EVALUACIÓN" | "Básico" | "Inicial" | "Intermedio" | "Avanzado" | "Experto" => {
+    if (score === 0) return "SIN EVALUACIÓN";
     if (score >= 81) return "Experto";
     if (score >= 61) return "Avanzado";
     if (score >= 41) return "Intermedio";
@@ -327,6 +341,7 @@ export function calculateUserImi(
     evidenceCount,
     geointProjects,
     osintQueriesCount,
+    correlationActions,
     hasOperationalActivity: true,
 
     iccScore,
