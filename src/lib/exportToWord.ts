@@ -1547,7 +1547,7 @@ export async function exportToWord(
       const dims = PageBalanceEngine.calculateDimensions(photo.caption ? photo.caption.length : 100, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(photo.dataUrl, dims.width, dims.height, photo.caption, photo.id);
       
-      if (!imgRes || !imgRes.buffer) {
+      if (!imgRes || !imgRes.data) {
         continue;
       }
       
@@ -1681,7 +1681,7 @@ export async function exportToWord(
       const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
       const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height, sv.observed || "Se aprecian condiciones físicas del entorno.", sv.id);
       
-      if (!imgRes || !imgRes.buffer) {
+      if (!imgRes || !imgRes.data) {
         continue;
       }
       
