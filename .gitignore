@@ -37,3 +37,6 @@ user_performance_inventory.json
 performance_source_audit_report.json
 purge_log.json
 scriptspurge_firestore_projects.js
+*_audit.json
+*AUDIT_REPORT.json
+scripts/audit_*.js
