@@ -5,6 +5,8 @@ import { getPool } from "@/lib/db";
 import { getFirebaseServerDb } from "@/lib/firebaseServer";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const cookieStore = cookies();

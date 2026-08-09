@@ -762,13 +762,24 @@ export const buildIntelligenceEditorialPayload = async (
   ];
 
   // ==================== STREET VIEW TRACE ====================
-  const svCaptured = (album || []).filter(p => 
-    p.tipo?.toLowerCase().includes("street") || 
-    p.url?.toLowerCase().includes("street") || 
-    p.comentario?.toLowerCase().includes("street") || 
+  const isStructuredStreetViewEvidence = (p: any) =>
+    p.evidenceOrigin === "REMOTE" ||
+    p.collectionMethod === "DESKTOP_ANALYSIS" ||
+    p.evidenceCategoryClass === "REMOTE_VISUAL" ||
+    p.sourceProvider === "GOOGLE_STREET_VIEW" ||
+    !!p.streetViewMetadata;
+
+  const isLegacyStreetViewEvidence = (p: any) =>
+    p.tipo?.toLowerCase().includes("street") ||
+    p.url?.toLowerCase().includes("street") ||
+    p.previewUrl?.toLowerCase().includes("street") ||
+    p.comentario?.toLowerCase().includes("street") ||
     p.description?.toLowerCase().includes("street") ||
     p.evidenceType === "VIRTUAL_STREET_VIEW" ||
-    p.fuente === "Google Street View"
+    p.fuente === "Google Street View";
+
+  const svCaptured = (album || []).filter(p =>
+    isStructuredStreetViewEvidence(p) || isLegacyStreetViewEvidence(p)
   );
   
   const tacticalSVs = project?.tacticalStreetViews || [];
@@ -776,9 +787,11 @@ export const buildIntelligenceEditorialPayload = async (
   const receivedByEngine = (album || []).length;
   
   // ==================== GOBERNANZA FOTOGRÁFICA DE EVIDENCIA (ADR-011) ====================
-  const analystRaw = (album || []).filter(p => !p.tipo?.toLowerCase().includes("street") && !p.url?.toLowerCase().includes("street"));
+  const analystRaw = (album || []).filter(p =>
+    !isStructuredStreetViewEvidence(p) && !isLegacyStreetViewEvidence(p)
+  );
   const streetViewRaw = (album || []).filter(p => {
-    const isSv = p.tipo?.toLowerCase().includes("street") || p.url?.toLowerCase().includes("street");
+    const isSv = isStructuredStreetViewEvidence(p) || isLegacyStreetViewEvidence(p);
     return isSv && isValidStreetViewImage(p);
   });
   
@@ -816,7 +829,7 @@ export const buildIntelligenceEditorialPayload = async (
     console.log(`  fuente: ${item.fuente || "Google Street View"}`);
     console.log(`  URL/dataUrl: ${item.previewUrl || item.url || ""}`);
     console.log(`  thumbnail: ${item.previewUrl || item.url || ""}`);
-    console.log(`  coordenadas: Lat ${item.lat}, Lng ${item.lng}`);
+    console.log(`  coordenadas: Lat ${item.lat ?? item.gpsLat ?? item.streetViewMetadata?.panoramaLat}, Lng ${item.lng ?? item.gpsLng ?? item.streetViewMetadata?.panoramaLng}`);
     console.log(`  timestamp: ${item.createdAt || item.fecha || ""}`);
   });
 
@@ -873,23 +886,36 @@ export const buildIntelligenceEditorialPayload = async (
 
   // Street View Sanitized Mapping
   const streetViewAnalysis = visualMatrix.streetViewEvidence.map((s, idx) => {
+    const originalPhoto = (album || []).find(
+      (item) => item.previewUrl === s.image || item.url === s.image
+    );
+    const svMeta = originalPhoto?.streetViewMetadata;
+    const heading = svMeta?.heading ?? originalPhoto?.heading ?? 0;
+    const pitch = svMeta?.pitch ?? originalPhoto?.pitch ?? 0;
+    const fov = svMeta?.fov ?? originalPhoto?.fov ?? 90;
+    const captureDate = svMeta?.captureDate || originalPhoto?.captureDate || new Date().toLocaleDateString("es-MX");
+    const confidenceLevel = originalPhoto?.confidenceLevel || "Alto";
+    const confidencePercentage = originalPhoto?.confidencePercentage;
+
     return {
       id: `SV-00${idx + 1}`,
       title: s.title,
       dataUrl: s.image,
       location: "Sector perimetral", // Sanitizado: sin coordenadas geográficas numéricas
-      fuentePrimaria: "Google Street View",
-      fechaCaptura: new Date().toLocaleDateString("es-MX"),
+      fuentePrimaria: originalPhoto?.sourceProvider || svMeta?.provider || "Google Street View",
+      fechaCaptura: captureDate,
       direccion: areaGeografica,
-      orientacion: "Norte (0°)",
+      orientacion: `Heading ${heading}° / Pitch ${pitch}° / FOV ${fov}°`,
       observed: s.description,
       indicadorCriminologico: s.finding,
       inferenciaAnalitica: s.operationalImpact,
-      confianza: "Alto",
+      confianza: confidencePercentage != null ? `${confidenceLevel} (${confidencePercentage}%)` : confidenceLevel,
       impactoHipotesis: "Fortalece",
       recomendacion: "Coordinar remediación física situacional del entorno.",
       criminologicalAnalysis: s.operationalImpact,
-      relation: "Coordinar remediación física situacional del entorno."
+      relation: "Coordinar remediación física situacional del entorno.",
+      streetViewMetadata: svMeta,
+      confidencePercentage
     };
   });
 

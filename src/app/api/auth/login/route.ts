@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { getFirebaseServerDb } from "@/lib/firebaseServer";
 import { collection, query, where, getDocs, addDoc } from "firebase/firestore";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const protocol = req.headers.get("x-forwarded-proto");

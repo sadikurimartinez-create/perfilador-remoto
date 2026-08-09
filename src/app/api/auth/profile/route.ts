@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 // GET: Recuperar el perfil del usuario autenticado
 export async function GET() {
   try {
