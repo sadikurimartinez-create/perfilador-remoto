@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_NARRATIVE_RUNTIME_INTEGRATION",
+  "source": "OSINTIntelligenceOutput",
+  "target": "OSINTNarrativeIntelligenceLayer",
+  "testFile": "scripts/osintNarrativeRuntimeTest.mjs",
+  "validation": [
+    "OSINT execution",
+    "Intelligence output generation",
+    "Narrative block creation"
+  ],
+  "status": "READY_FOR_RUNTIME_TEST",
+  "createdAt": "2026-08-09T04:12:47.576Z"
+}

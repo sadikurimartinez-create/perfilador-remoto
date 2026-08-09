@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_INTELLIGENCE_OUTPUT_CONTRACT",
+  "version": "1.0",
+  "purpose": "Contrato estable entre OSINT Dual Engine V4 y módulos consumidores",
+  "consumers": [
+    "Report Engine",
+    "Intelligence Narrative Engine",
+    "GeoInt Module",
+    "Evidence Governance Engine"
+  ],
+  "status": "READY",
+  "createdAt": "2026-08-09T03:47:30.119Z"
+}

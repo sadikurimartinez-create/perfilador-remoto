@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_REPORT_ENGINE_ADAPTER",
+  "source": "OSINTIntelligenceOutput",
+  "target": "Report Engine",
+  "output": [
+    "Executive Summary",
+    "Territorial Analysis",
+    "Network Findings",
+    "Risk Indicators"
+  ],
+  "status": "READY_FOR_INTEGRATION",
+  "createdAt": "2026-08-09T04:01:42.437Z"
+}

@@ -1,0 +1,25 @@
+{
+  "engine": "OSINT Dual Execution Engine",
+  "version": "1.0",
+  "executionMode": "DUAL_VALIDATION",
+  "legacy": {
+    "enabled": true,
+    "source": "src/utils/osintEngine.ts"
+  },
+  "adapter": {
+    "enabled": true,
+    "source": "src/utils/osintEngineBridge.ts"
+  },
+  "validation": {
+    "compareResults": true,
+    "minimumConfidence": 70,
+    "requireAudit": true,
+    "requireIntegrity": true
+  },
+  "failurePolicy": {
+    "adapterFailure": "fallback_to_legacy",
+    "legacyFailure": "block_execution"
+  },
+  "status": "READY_FOR_DUAL_EXECUTION",
+  "createdAt": "2026-08-09T02:56:10.937Z"
+}

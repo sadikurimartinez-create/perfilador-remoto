@@ -1,0 +1,15 @@
+{
+  "engine": "Change Certificate Generator",
+  "version": "1.0",
+  "certificateSchema": {
+    "changeId": "unique migration identifier",
+    "timestamp": "execution date",
+    "risk": "migration risk level",
+    "files": "affected files",
+    "backup": "backup status",
+    "integrity": "hash validation status",
+    "audit": "audit registration status",
+    "status": "final certification status"
+  },
+  "status": "ready"
+}

@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "engine": "Change Impact Analyzer",
+  "rules": [
+    {
+      "pattern": "src/components",
+      "impact": "frontend",
+      "risk": "medium"
+    },
+    {
+      "pattern": "src/app/api",
+      "impact": "backend-api",
+      "risk": "high"
+    },
+    {
+      "pattern": "src/lib/providers",
+      "impact": "provider-layer",
+      "risk": "high"
+    },
+    {
+      "pattern": "src/utils",
+      "impact": "logic-engine",
+      "risk": "medium"
+    },
+    {
+      "pattern": "firebase",
+      "impact": "database",
+      "risk": "critical"
+    }
+  ]
+}

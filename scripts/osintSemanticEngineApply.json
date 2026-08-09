@@ -1,0 +1,12 @@
+{
+  "engine": "OSINT_SEMANTIC_ENGINE_APPLY",
+  "target": "src/utils/osintDualExecutionEngine.ts",
+  "changes": [
+    "Semantic Comparison Engine imported",
+    "Semantic evaluation activated",
+    "Engine upgraded to V4",
+    "Semantic decision exposed"
+  ],
+  "status": "APPLIED_READY_FOR_RUNTIME",
+  "createdAt": "2026-08-09T03:40:12.005Z"
+}

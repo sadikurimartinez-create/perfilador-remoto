@@ -1,0 +1,5 @@
+{
+  "status": "EXECUTION_ERROR",
+  "error": "Cannot find module 'C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\src\\utils\\osintEngineBridge' imported from C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\src\\utils\\osintDualExecutionEngine.ts",
+  "timestamp": "2026-08-09T03:17:58.214Z"
+}

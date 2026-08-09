@@ -1,0 +1,20 @@
+{
+  "status": "RUNTIME_EXECUTION_ATTEMPTED",
+  "engine": "OSINT_DUAL_EXECUTION_ENGINE_V3",
+  "project": {
+    "locationName": "Aguascalientes",
+    "latitude": 21.8818,
+    "longitude": -102.2915,
+    "query": "criminalidad"
+  },
+  "legacy": {
+    "status": "CONNECTED"
+  },
+  "adapter": {
+    "status": "CONNECTED"
+  },
+  "comparison": {
+    "status": "PENDING_RESULT_CAPTURE"
+  },
+  "timestamp": "2026-08-09T03:14:11.109Z"
+}

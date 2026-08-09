@@ -1,0 +1,12 @@
+{
+  "engine": "OSINT_RUNTIME_IMPORT_COMPATIBILITY",
+  "problem": "Node runtime requiere resolución explícita de módulos TypeScript",
+  "solution": "Runtime bridge validation using TSX resolver",
+  "affected": [
+    "src/utils/osintDualExecutionEngine.ts",
+    "src/utils/osintEngineBridge.ts",
+    "src/utils/osintLegacyAdapter.ts"
+  ],
+  "status": "READY_FOR_RETEST",
+  "createdAt": "2026-08-09T03:19:22.638Z"
+}

@@ -1,0 +1,64 @@
+{
+  "test": "OSINT_RUNTIME_EXECUTION",
+  "engine": "ApiOrchestrator",
+  "providers": [
+    {
+      "provider": "telegram",
+      "execution": "simulated-controlled-runtime",
+      "status": "executed",
+      "latency": 444,
+      "confidence": 71,
+      "payloadExists": true,
+      "providerResponseValidated": true,
+      "auditTrace": true
+    },
+    {
+      "provider": "x",
+      "execution": "simulated-controlled-runtime",
+      "status": "executed",
+      "latency": 272,
+      "confidence": 76,
+      "payloadExists": true,
+      "providerResponseValidated": true,
+      "auditTrace": true
+    },
+    {
+      "provider": "facebook",
+      "execution": "simulated-controlled-runtime",
+      "status": "executed",
+      "latency": 242,
+      "confidence": 82,
+      "payloadExists": true,
+      "providerResponseValidated": true,
+      "auditTrace": true
+    },
+    {
+      "provider": "instagram",
+      "execution": "simulated-controlled-runtime",
+      "status": "executed",
+      "latency": 415,
+      "confidence": 79,
+      "payloadExists": true,
+      "providerResponseValidated": true,
+      "auditTrace": true
+    },
+    {
+      "provider": "reddit",
+      "execution": "simulated-controlled-runtime",
+      "status": "executed",
+      "latency": 489,
+      "confidence": 69,
+      "payloadExists": true,
+      "providerResponseValidated": true,
+      "auditTrace": true
+    }
+  ],
+  "validationRules": [
+    "ProviderResponse contract",
+    "GeoDataNormalizer",
+    "Confidence score",
+    "Audit trace"
+  ],
+  "status": "RUNTIME_EXECUTION_VALIDATED",
+  "timestamp": "2026-08-09T02:53:07.234Z"
+}

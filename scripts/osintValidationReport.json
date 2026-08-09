@@ -1,0 +1,19 @@
+{
+  "test": "OSINT_PIPELINE_VALIDATION",
+  "legacy": {
+    "records": 5,
+    "source": "osintEngine.ts"
+  },
+  "adapter": {
+    "records": 5,
+    "source": "osintAdapter.ts"
+  },
+  "difference": 0,
+  "status": "VALIDATED",
+  "validation": {
+    "backup": true,
+    "audit": true,
+    "integrity": true
+  },
+  "timestamp": "2026-08-09T02:49:10.765Z"
+}

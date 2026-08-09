@@ -1,0 +1,42 @@
+{
+  "test": "OSINT_DUAL_RUNTIME_CERTIFICATION",
+  "engine": "OSINT_DUAL_EXECUTION_ENGINE_V3",
+  "project": {
+    "locationName": "Aguascalientes",
+    "latitude": 21.8818,
+    "longitude": -102.2915,
+    "query": "criminalidad"
+  },
+  "execution": {
+    "legacy": {
+      "engine": "osintEngine.ts",
+      "status": "READY",
+      "records": null
+    },
+    "adapter": {
+      "engine": "osintEngineBridge.ts",
+      "status": "READY",
+      "records": null
+    }
+  },
+  "comparison": {
+    "engine": "osintComparisonEngine.ts",
+    "status": "READY",
+    "legacyRecords": null,
+    "adapterRecords": null,
+    "difference": null,
+    "averageConfidence": null,
+    "decision": "PENDING_RUNTIME"
+  },
+  "integrity": {
+    "backup": true,
+    "hashValidation": true,
+    "audit": true
+  },
+  "rollback": {
+    "available": true,
+    "strategy": "RETURN_TO_LEGACY"
+  },
+  "status": "CERTIFICATION_EXECUTION_READY",
+  "createdAt": "2026-08-09T03:13:10.808Z"
+}

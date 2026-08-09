@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_REPORT_ENGINE_RUNTIME_INTEGRATION",
+  "source": "OSINT_DUAL_EXECUTION_ENGINE_V4",
+  "adapter": "OSINT_REPORT_ENGINE_ADAPTER",
+  "testFile": "scripts/osintReportRuntimeTest.mjs",
+  "validation": [
+    "OSINT execution",
+    "Intelligence output creation",
+    "Report section generation"
+  ],
+  "status": "READY_FOR_RUNTIME_TEST",
+  "createdAt": "2026-08-09T04:04:13.531Z"
+}

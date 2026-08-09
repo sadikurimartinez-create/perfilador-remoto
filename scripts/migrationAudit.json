@@ -1,0 +1,574 @@
+{
+  "migrations": [
+    {
+      "migration": "005-audit-test",
+      "date": "2026-08-09T02:04:51.469Z",
+      "risk": "low",
+      "description": "Prueba auditoria automatica",
+      "files": [
+        "scripts/migrationAudit.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "006-integrity-engine",
+      "date": "2026-08-09T02:14:11.955Z",
+      "risk": "low",
+      "description": "Implementa registro de integridad criptográfica de migraciones",
+      "files": [
+        "scripts/migrationIntegrity.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "007-integrity-test",
+      "date": "2026-08-09T02:15:51.323Z",
+      "risk": "low",
+      "description": "Prueba del motor SHA256 de integridad",
+      "files": [
+        "scripts/integrity-test.txt"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "008-integrity-runner-test",
+      "date": "2026-08-09T02:30:35.756Z",
+      "risk": "low",
+      "description": "Prueba del motor automático de integridad del Migration Runner",
+      "files": [
+        "scripts/integrity-runner-test.txt"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "009-change-impact-engine",
+      "date": "2026-08-09T02:32:30.791Z",
+      "risk": "medium",
+      "description": "Implementa motor de análisis de impacto de cambios",
+      "files": [
+        "scripts/changeImpactRegistry.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "010-auto-impact-scanner",
+      "date": "2026-08-09T02:34:14.589Z",
+      "risk": "medium",
+      "description": "Implementa motor automático de análisis de impacto de archivos modificados",
+      "files": [
+        "scripts/autoImpactReport.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "011-migration-guard",
+      "date": "2026-08-09T02:35:49.614Z",
+      "risk": "high",
+      "description": "Implementa sistema de bloqueo y autorización según nivel de riesgo de cambios",
+      "files": [
+        "scripts/migrationGuard.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "012-change-execution-pipeline",
+      "date": "2026-08-09T02:37:32.153Z",
+      "risk": "high",
+      "description": "Implementa pipeline automático de ejecución controlada de cambios",
+      "files": [
+        "scripts/changeExecutionPipeline.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "013-change-certificate-generator",
+      "date": "2026-08-09T02:39:19.505Z",
+      "risk": "medium",
+      "description": "Implementa generador automático de certificados de cambios",
+      "files": [
+        "scripts/changeCertificates.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "014-osint-migration-preparation",
+      "date": "2026-08-09T02:41:02.571Z",
+      "risk": "high",
+      "description": "Preparación controlada para modernización del OSINT Engine",
+      "files": [
+        "src/utils/osintEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "015-osint-dependency-map",
+      "date": "2026-08-09T02:42:12.927Z",
+      "risk": "high",
+      "description": "Genera mapa de dependencias del OSINT Engine antes de modernización",
+      "files": [
+        "src/utils/osintEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "016-osint-adapter-layer",
+      "date": "2026-08-09T02:43:42.460Z",
+      "risk": "high",
+      "description": "Crea capa adaptadora entre OSINT Engine y proveedores reales",
+      "files": [
+        "src/utils/osintAdapter.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "017-osint-engine-bridge",
+      "date": "2026-08-09T02:45:02.189Z",
+      "risk": "high",
+      "description": "Crea puente controlado entre OSINT Engine actual y OSINT Adapter",
+      "files": [
+        "src/utils/osintEngineBridge.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "018-osint-comparison-engine",
+      "date": "2026-08-09T02:46:27.920Z",
+      "risk": "high",
+      "description": "Implementa motor comparativo entre OSINT legacy y nuevo adapter",
+      "files": [
+        "src/utils/osintComparisonEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "019-osint-validation-runner",
+      "date": "2026-08-09T02:47:57.344Z",
+      "risk": "high",
+      "description": "Crea ejecutor de validación comparativa del OSINT Engine",
+      "files": [
+        "src/utils/osintValidationRunner.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "020-osint-validation-test",
+      "date": "2026-08-09T02:49:10.772Z",
+      "risk": "medium",
+      "description": "Ejecuta prueba controlada del pipeline OSINT Legacy vs Adapter",
+      "files": [
+        "scripts/osintValidationReport.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "021-osint-provider-validation",
+      "date": "2026-08-09T02:50:45.550Z",
+      "risk": "medium",
+      "description": "Genera registro de validación operativa de proveedores OSINT",
+      "files": [
+        "scripts/osintProviderValidation.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "022-osint-provider-runtime-validator",
+      "date": "2026-08-09T02:51:53.887Z",
+      "risk": "high",
+      "description": "Ejecuta validación operacional del runtime de proveedores OSINT",
+      "files": [
+        "scripts/osintProviderRuntimeReport.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "023-osint-runtime-execution-engine",
+      "date": "2026-08-09T02:53:07.237Z",
+      "risk": "high",
+      "description": "Ejecuta prueba controlada real del ApiOrchestrator con proveedores OSINT",
+      "files": [
+        "scripts/osintProviderRuntimeExecution.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "024-osint-migration-controller",
+      "date": "2026-08-09T02:54:57.382Z",
+      "risk": "high",
+      "description": "Crea controlador de migración progresiva entre OSINT Legacy y OSINT Adapter",
+      "files": [
+        "scripts/osintMigrationControl.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "025-osint-dual-execution-engine",
+      "date": "2026-08-09T02:56:10.940Z",
+      "risk": "high",
+      "description": "Implementa motor de ejecución dual OSINT Legacy vs Adapter para validación progresiva",
+      "files": [
+        "scripts/osintDualExecutionConfig.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "026-osint-dual-execution-engine",
+      "date": "2026-08-09T02:57:31.066Z",
+      "risk": "high",
+      "description": "Crea motor operativo de ejecución dual OSINT Legacy vs Adapter",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "027-osint-legacy-adapter",
+      "date": "2026-08-09T02:58:43.026Z",
+      "risk": "high",
+      "description": "Crea adaptador seguro para consumo del OSINT Engine Legacy",
+      "files": [
+        "src/utils/osintLegacyAdapter.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "028-osint-dual-engine-integration",
+      "date": "2026-08-09T02:59:49.929Z",
+      "risk": "high",
+      "description": "Integra OSINT Legacy Adapter dentro del Dual Execution Engine",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "029-osint-dual-validation-certificate",
+      "date": "2026-08-09T03:01:34.073Z",
+      "risk": "medium",
+      "description": "Implementa certificado operacional para ejecuciones duales OSINT",
+      "files": [
+        "scripts/osintDualValidationCertificate.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "030-osint-dual-execution-test",
+      "date": "2026-08-09T03:02:43.243Z",
+      "risk": "high",
+      "description": "Ejecuta prueba operacional del motor dual OSINT Legacy vs Adapter",
+      "files": [
+        "scripts/osintDualExecutionTestReport.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "031-osint-dual-runtime-execution",
+      "date": "2026-08-09T03:05:05.364Z",
+      "risk": "high",
+      "description": "Ejecuta prueba runtime del motor dual OSINT con Legacy y Adapter",
+      "files": [
+        "scripts/osintDualRuntimeExecutionReport.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "032-osint-normalization-layer",
+      "date": "2026-08-09T03:06:24.013Z",
+      "risk": "high",
+      "description": "Crea capa de normalizacion para resultados OSINT Legacy y Adapter",
+      "files": [
+        "src/utils/osintNormalizationLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "033-osint-normalized-dual-engine",
+      "date": "2026-08-09T03:07:37.347Z",
+      "risk": "high",
+      "description": "Integra OSINT Normalization Layer dentro del Dual Execution Engine",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "034-osint-intelligent-comparison-engine",
+      "date": "2026-08-09T03:09:52.428Z",
+      "risk": "high",
+      "description": "Actualiza OSINT Comparison Engine con evaluación inteligente de confianza y decisiones operacionales",
+      "files": [
+        "src/utils/osintComparisonEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "035-osint-dual-engine-v3",
+      "date": "2026-08-09T03:11:11.985Z",
+      "risk": "high",
+      "description": "Actualiza Dual Execution Engine para consumir Intelligent Comparison Engine",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "036-osint-dual-runtime-certification-test",
+      "date": "2026-08-09T03:13:10.814Z",
+      "risk": "high",
+      "description": "Ejecuta prueba certificable del OSINT Dual Engine V3",
+      "files": [
+        "scripts/osintDualRuntimeCertification.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "037-osint-dual-runtime-executor",
+      "date": "2026-08-09T03:14:11.126Z",
+      "risk": "high",
+      "description": "Ejecuta runtime real del OSINT Dual Engine V3 y genera evidencia operacional",
+      "files": [
+        "scripts/osintDualRuntimeExecutionResult.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "038-osint-runtime-bridge",
+      "date": "2026-08-09T03:15:56.345Z",
+      "risk": "high",
+      "description": "Crea puente de ejecución Node hacia OSINT Dual Engine TypeScript",
+      "files": [
+        "scripts/osintRuntimeBridge.js"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "039-osint-dual-real-execution",
+      "date": "2026-08-09T03:17:58.219Z",
+      "risk": "high",
+      "description": "Ejecuta prueba real del OSINT Dual Engine V3 con runtime TypeScript",
+      "files": [
+        "scripts/osintDualRealExecutionResult.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "040-osint-runtime-import-fix",
+      "date": "2026-08-09T03:19:22.641Z",
+      "risk": "medium",
+      "description": "Corrige compatibilidad de imports TypeScript para ejecución runtime OSINT",
+      "files": [
+        "scripts/osintRuntimeImportCompatibility.json"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "041-osint-tsx-runtime-executor",
+      "date": "2026-08-09T03:20:36.093Z",
+      "risk": "high",
+      "description": "Crea ejecutor TSX para pruebas reales del OSINT Dual Engine",
+      "files": [
+        "scripts/osintTSXRuntimeExecutor.mjs"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "042-osint-legacy-normalization-fix",
+      "date": "2026-08-09T03:24:58.903Z",
+      "risk": "high",
+      "description": "Corrige normalización de registros del OSINT Legacy Engine para comparación dual",
+      "files": [
+        "src/utils/osintNormalizationLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "043-osint-legacy-normalizer-implementation",
+      "date": "2026-08-09T03:26:21.326Z",
+      "risk": "high",
+      "description": "Implementa cálculo inteligente de registros del OSINT Legacy Engine",
+      "files": [
+        "src/utils/osintNormalizationLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "044-osint-legacy-normalizer-integration",
+      "date": "2026-08-09T03:28:11.925Z",
+      "risk": "high",
+      "description": "Integra cálculo inteligente de registros dentro del OSINT Normalization Layer",
+      "files": [
+        "src/utils/osintNormalizationLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "045-osint-legacy-normalizer-apply",
+      "date": "2026-08-09T03:30:13.484Z",
+      "risk": "high",
+      "description": "Aplica cálculo inteligente de registros al OSINT Legacy Normalizer",
+      "files": [
+        "src/utils/osintNormalizationLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "046-osint-semantic-comparison-layer",
+      "date": "2026-08-09T03:33:04.642Z",
+      "risk": "high",
+      "description": "Crea capa semántica de comparación OSINT Legacy vs Adapter",
+      "files": [
+        "src/utils/osintSemanticComparisonEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "047-osint-semantic-engine-integration",
+      "date": "2026-08-09T03:34:35.319Z",
+      "risk": "high",
+      "description": "Integra Semantic Comparison Engine dentro del OSINT Dual Engine",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "048-osint-semantic-engine-activation",
+      "date": "2026-08-09T03:36:42.707Z",
+      "risk": "high",
+      "description": "Activa evaluación semántica dentro del OSINT Dual Engine V3",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "049-osint-semantic-runtime-integration",
+      "date": "2026-08-09T03:37:54.430Z",
+      "risk": "high",
+      "description": "Integra Semantic Comparison Engine en runtime del OSINT Dual Engine",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "050-osint-semantic-engine-apply",
+      "date": "2026-08-09T03:40:12.009Z",
+      "risk": "high",
+      "description": "Aplica integración real del Semantic Comparison Engine en OSINT Dual Execution Engine V4",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "051-osint-semantic-decision-authority",
+      "date": "2026-08-09T03:43:14.653Z",
+      "risk": "high",
+      "description": "Establece Semantic Comparison Engine como autoridad de decisión operacional del OSINT Dual Engine V4",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "052-osint-dual-engine-v4-certification",
+      "date": "2026-08-09T03:45:33.607Z",
+      "risk": "medium",
+      "description": "Genera certificado operacional del OSINT Dual Engine V4",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts",
+        "src/utils/osintSemanticComparisonEngine.ts",
+        "src/utils/osintNormalizationLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "053-osint-intelligence-output-contract",
+      "date": "2026-08-09T03:47:30.126Z",
+      "risk": "medium",
+      "description": "Crea contrato estándar de salida de inteligencia OSINT Dual Engine V4",
+      "files": [
+        "src/utils/osintIntelligenceOutputContract.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "054-osint-output-contract-integration",
+      "date": "2026-08-09T03:49:59.975Z",
+      "risk": "high",
+      "description": "Integra OSINT Intelligence Output Contract dentro del Dual Engine V4",
+      "files": [
+        "src/utils/osintDualExecutionEngine.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "055-osint-report-engine-adapter",
+      "date": "2026-08-09T04:01:42.442Z",
+      "risk": "high",
+      "description": "Crea adaptador entre OSINT Intelligence Output Contract y Report Engine",
+      "files": [
+        "src/utils/osintReportEngineAdapter.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "056-osint-report-engine-runtime-integration",
+      "date": "2026-08-09T04:04:13.535Z",
+      "risk": "high",
+      "description": "Ejecuta integración runtime entre OSINT Dual Engine V4 y Report Engine Adapter",
+      "files": [
+        "scripts/osintReportRuntimeTest.mjs"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "057-osint-narrative-intelligence-layer",
+      "date": "2026-08-09T04:07:03.898Z",
+      "risk": "high",
+      "description": "Crea capa narrativa de inteligencia OSINT para generación de informes",
+      "files": [
+        "src/utils/osintNarrativeIntelligenceLayer.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "058-osint-narrative-runtime-integration",
+      "date": "2026-08-09T04:12:47.580Z",
+      "risk": "high",
+      "description": "Ejecuta integración runtime entre OSINT Intelligence Output y Narrative Intelligence Layer",
+      "files": [
+        "scripts/osintNarrativeRuntimeTest.mjs"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "059-osint-narrative-report-connector",
+      "date": "2026-08-09T04:14:44.404Z",
+      "risk": "high",
+      "description": "Crea conector entre OSINT Narrative Intelligence Layer y Report Engine Chapter Builder",
+      "files": [
+        "src/utils/osintNarrativeReportConnector.ts"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "060-osint-narrative-report-connector-runtime-test",
+      "date": "2026-08-09T04:16:19.703Z",
+      "risk": "high",
+      "description": "Ejecuta prueba runtime del OSINT Narrative Report Connector",
+      "files": [
+        "scripts/osintNarrativeReportConnectorTest.mjs"
+      ],
+      "status": "success"
+    },
+    {
+      "migration": "061-osint-dual-engine-v4-final-certification",
+      "date": "2026-08-09T04:18:18.647Z",
+      "risk": "medium",
+      "description": "Genera certificación final del OSINT Dual Engine V4",
+      "files": [],
+      "status": "success"
+    }
+  ]
+}

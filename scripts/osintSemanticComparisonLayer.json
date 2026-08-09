@@ -1,0 +1,16 @@
+{
+  "engine": "OSINT_SEMANTIC_COMPARISON_LAYER",
+  "purpose": "Comparación basada en equivalencia de inteligencia y no únicamente volumen",
+  "inputs": [
+    "OSINT Legacy Normalized",
+    "OSINT Adapter Normalized"
+  ],
+  "metrics": [
+    "coverage",
+    "confidence",
+    "geospatial relevance",
+    "intelligence depth"
+  ],
+  "status": "READY",
+  "createdAt": "2026-08-09T03:33:04.637Z"
+}

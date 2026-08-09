@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_SEMANTIC_RUNTIME_INTEGRATION",
+  "target": "src/utils/osintDualExecutionEngine.ts",
+  "integrationSteps": [
+    "Import compareOSINTSemantics",
+    "Execute semantic comparison",
+    "Expose semanticComparison output",
+    "Upgrade engine version"
+  ],
+  "newVersion": "OSINT_DUAL_EXECUTION_ENGINE_V4",
+  "status": "READY_FOR_RUNTIME_TEST",
+  "createdAt": "2026-08-09T03:37:54.424Z"
+}

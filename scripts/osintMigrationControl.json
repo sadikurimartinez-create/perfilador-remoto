@@ -1,0 +1,32 @@
+{
+  "engine": "OSINT Migration Controller",
+  "version": "1.0",
+  "currentMode": "LEGACY",
+  "modes": {
+    "legacy": {
+      "enabled": true,
+      "source": "src/utils/osintEngine.ts",
+      "description": "Motor OSINT actual con datos heredados y mocks controlados"
+    },
+    "adapter": {
+      "enabled": false,
+      "source": "src/utils/osintEngineBridge.ts",
+      "description": "Nuevo flujo mediante OSINT Adapter y ApiOrchestrator"
+    }
+  },
+  "migrationStrategy": {
+    "phase1": "Validation",
+    "phase2": "Dual execution",
+    "phase3": "Adapter activation",
+    "phase4": "Legacy retirement"
+  },
+  "protections": [
+    "Rollback available",
+    "Backup mandatory",
+    "Hash validation required",
+    "Audit registration required"
+  ],
+  "rollbackAvailable": true,
+  "status": "READY_FOR_CONTROLLED_MIGRATION",
+  "createdAt": "2026-08-09T02:54:57.378Z"
+}

@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_OUTPUT_CONTRACT_INTEGRATION",
+  "target": "OSINT_DUAL_EXECUTION_ENGINE_V4",
+  "contract": "OSINTIntelligenceOutput",
+  "consumerReady": [
+    "Report Engine",
+    "Intelligence Narrative Engine",
+    "GeoInt Module",
+    "Evidence Governance Engine"
+  ],
+  "status": "INTEGRATED_READY_FOR_REPORT_ENGINE",
+  "createdAt": "2026-08-09T03:49:59.970Z"
+}

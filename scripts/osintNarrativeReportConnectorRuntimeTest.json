@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_NARRATIVE_REPORT_CONNECTOR_RUNTIME_TEST",
+  "source": "OSINTNarrativeIntelligenceLayer",
+  "target": "Report Engine Chapter Builder",
+  "testFile": "scripts/osintNarrativeReportConnectorTest.mjs",
+  "validation": [
+    "Narrative generation",
+    "Chapter creation",
+    "Report compatibility"
+  ],
+  "status": "READY_FOR_EXECUTION",
+  "createdAt": "2026-08-09T04:16:19.683Z"
+}

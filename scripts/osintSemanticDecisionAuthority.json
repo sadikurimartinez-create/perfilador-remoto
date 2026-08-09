@@ -1,0 +1,9 @@
+{
+  "engine": "OSINT_SEMANTIC_DECISION_AUTHORITY",
+  "change": "Operational decision now controlled by Semantic Comparison Engine",
+  "previous": "comparison.decision",
+  "new": "semanticComparison.decision",
+  "secondaryEvidence": "numeric comparison retained as audit evidence",
+  "status": "APPLIED_READY_FOR_CERTIFICATION",
+  "createdAt": "2026-08-09T03:43:14.649Z"
+}

@@ -1,0 +1,53 @@
+{
+  "test": "OSINT_PROVIDER_RUNTIME_VALIDATION",
+  "providers": [
+    {
+      "provider": "telegram",
+      "status": "READY_FOR_RUNTIME_TEST",
+      "latency": null,
+      "confidence": null,
+      "errors": [],
+      "validation": "pending"
+    },
+    {
+      "provider": "x",
+      "status": "READY_FOR_RUNTIME_TEST",
+      "latency": null,
+      "confidence": null,
+      "errors": [],
+      "validation": "pending"
+    },
+    {
+      "provider": "facebook",
+      "status": "READY_FOR_RUNTIME_TEST",
+      "latency": null,
+      "confidence": null,
+      "errors": [],
+      "validation": "pending"
+    },
+    {
+      "provider": "instagram",
+      "status": "READY_FOR_RUNTIME_TEST",
+      "latency": null,
+      "confidence": null,
+      "errors": [],
+      "validation": "pending"
+    },
+    {
+      "provider": "reddit",
+      "status": "READY_FOR_RUNTIME_TEST",
+      "latency": null,
+      "confidence": null,
+      "errors": [],
+      "validation": "pending"
+    }
+  ],
+  "rules": [
+    "Execute through ApiOrchestrator",
+    "Validate ProviderResponse",
+    "Measure latency",
+    "Register confidence"
+  ],
+  "status": "RUNTIME_VALIDATION_READY",
+  "timestamp": "2026-08-09T02:51:53.871Z"
+}

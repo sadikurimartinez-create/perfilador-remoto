@@ -1,0 +1,35 @@
+{
+  "engine": "Auto Impact Scanner",
+  "version": "1.0",
+  "analysisDate": "2026-08-09T02:34:14.583Z",
+  "changes": [
+    {
+      "file": "src/utils/osintEngine.ts",
+      "impact": "logic-engine",
+      "risk": "medium",
+      "requiresBackup": true,
+      "requiresAudit": true
+    },
+    {
+      "file": "src/components/OsintEnginePanel.tsx",
+      "impact": "frontend",
+      "risk": "medium",
+      "requiresBackup": true,
+      "requiresAudit": true
+    },
+    {
+      "file": "src/lib/providers/orchestrator.ts",
+      "impact": "provider-layer",
+      "risk": "high",
+      "requiresBackup": true,
+      "requiresAudit": true
+    },
+    {
+      "file": "firebase/config.ts",
+      "impact": "database",
+      "risk": "critical",
+      "requiresBackup": true,
+      "requiresAudit": true
+    }
+  ]
+}

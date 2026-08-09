@@ -1,0 +1,22 @@
+{
+  "migration": "014-osint-migration-preparation",
+  "component": "OSINT Engine",
+  "targetFile": "src/utils/osintEngine.ts",
+  "currentHash": "53a85f0da2b9cd3b12436973d9fcfa18575b53e573ac2a8daf2ebdd3e0e0ac8f",
+  "impact": {
+    "layer": "logic-engine",
+    "risk": "high",
+    "backupRequired": true,
+    "auditRequired": true,
+    "approvalRequired": true
+  },
+  "dependencies": [
+    "ApiOrchestrator",
+    "ProviderResponse",
+    "GeoDataNormalizerEngine",
+    "OSINT Territorial V2",
+    "Report Engine"
+  ],
+  "status": "READY_FOR_MODERNIZATION",
+  "createdAt": "2026-08-09T02:41:02.568Z"
+}

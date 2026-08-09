@@ -1,0 +1,13 @@
+{
+  "engine": "OSINT_NARRATIVE_INTELLIGENCE_LAYER",
+  "source": "OSINTIntelligenceOutput",
+  "purpose": "Transformación de datos OSINT estructurados en narrativa analítica",
+  "output": [
+    "Executive Narrative",
+    "Key Findings",
+    "Confidence Statement",
+    "Operational Assessment"
+  ],
+  "status": "READY_FOR_INTEGRATION",
+  "createdAt": "2026-08-09T04:07:03.893Z"
+}

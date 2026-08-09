@@ -1,0 +1,43 @@
+{
+  "test": "OSINT_PROVIDER_OPERATIONAL_VALIDATION",
+  "providers": [
+    {
+      "id": "telegram",
+      "layer": "social-osint",
+      "status": "READY_FOR_TEST",
+      "validation": "pending"
+    },
+    {
+      "id": "x",
+      "layer": "social-osint",
+      "status": "READY_FOR_TEST",
+      "validation": "pending"
+    },
+    {
+      "id": "facebook",
+      "layer": "social-osint",
+      "status": "READY_FOR_TEST",
+      "validation": "pending"
+    },
+    {
+      "id": "instagram",
+      "layer": "social-osint",
+      "status": "READY_FOR_TEST",
+      "validation": "pending"
+    },
+    {
+      "id": "reddit",
+      "layer": "social-osint",
+      "status": "READY_FOR_TEST",
+      "validation": "pending"
+    }
+  ],
+  "rules": [
+    "ProviderResponse contract required",
+    "GeoDataNormalizer required",
+    "Confidence score required",
+    "Audit trace required"
+  ],
+  "status": "PROVIDERS_VALIDATION_READY",
+  "timestamp": "2026-08-09T02:50:45.546Z"
+}

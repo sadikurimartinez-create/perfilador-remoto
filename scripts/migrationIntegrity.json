@@ -1,0 +1,660 @@
+{
+  "migrations": [
+    {
+      "migration": "007-integrity-test",
+      "file": "scripts/integrity-test.txt",
+      "beforeHash": "83403b8b7722f26df19bbd82b78ca87330d5c168cc5cefe53532aaf4d6a332f5",
+      "afterHash": "f33e9f42fa85ac7fe1f93c5b13a2a846fb380f01c60dac38a1dae8e68816013d",
+      "changed": true,
+      "date": "2026-08-09T02:15:51.320Z"
+    },
+    {
+      "migration": "008-integrity-runner-test",
+      "date": "2026-08-09T02:30:35.754Z",
+      "files": [
+        {
+          "file": "scripts/integrity-runner-test.txt",
+          "beforeHash": null,
+          "afterHash": "1ceadf2486714a69cc09319f3ca7a850aab100330a6ca5de702c43b0f2ce9977",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "009-change-impact-engine",
+      "date": "2026-08-09T02:32:30.790Z",
+      "files": [
+        {
+          "file": "scripts/changeImpactRegistry.json",
+          "beforeHash": null,
+          "afterHash": "c3357b51c29192e0517c7b07887ec41a7165eae0e001cc322cd18d610308571a",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "010-auto-impact-scanner",
+      "date": "2026-08-09T02:34:14.588Z",
+      "files": [
+        {
+          "file": "scripts/autoImpactReport.json",
+          "beforeHash": null,
+          "afterHash": "19bd7c75ff9e1d453cb27f9e8429609022c87f26a90a3f0e64a83495fd0774b0",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "011-migration-guard",
+      "date": "2026-08-09T02:35:49.613Z",
+      "files": [
+        {
+          "file": "scripts/migrationGuard.json",
+          "beforeHash": null,
+          "afterHash": "5f36389984ca49812494b6c91a8dbe0eeec2ddfe02d6e1688c67b814e3fa2f72",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "012-change-execution-pipeline",
+      "date": "2026-08-09T02:37:32.152Z",
+      "files": [
+        {
+          "file": "scripts/changeExecutionPipeline.json",
+          "beforeHash": null,
+          "afterHash": "94eedb536e8645cad1d79b5d9d43ffe950a49435e97391b6e19367223bbf8bbb",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "013-change-certificate-generator",
+      "date": "2026-08-09T02:39:19.504Z",
+      "files": [
+        {
+          "file": "scripts/changeCertificates.json",
+          "beforeHash": null,
+          "afterHash": "d3a95d7c753e7d3da299aa2fd613c59d698b50629e9d49cdcb8d5259f99d5008",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "014-osint-migration-preparation",
+      "date": "2026-08-09T02:41:02.570Z",
+      "files": [
+        {
+          "file": "src/utils/osintEngine.ts",
+          "beforeHash": "53a85f0da2b9cd3b12436973d9fcfa18575b53e573ac2a8daf2ebdd3e0e0ac8f",
+          "afterHash": "53a85f0da2b9cd3b12436973d9fcfa18575b53e573ac2a8daf2ebdd3e0e0ac8f",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "015-osint-dependency-map",
+      "date": "2026-08-09T02:42:12.926Z",
+      "files": [
+        {
+          "file": "src/utils/osintEngine.ts",
+          "beforeHash": "53a85f0da2b9cd3b12436973d9fcfa18575b53e573ac2a8daf2ebdd3e0e0ac8f",
+          "afterHash": "53a85f0da2b9cd3b12436973d9fcfa18575b53e573ac2a8daf2ebdd3e0e0ac8f",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "016-osint-adapter-layer",
+      "date": "2026-08-09T02:43:42.458Z",
+      "files": [
+        {
+          "file": "src/utils/osintAdapter.ts",
+          "beforeHash": null,
+          "afterHash": "e653d59bc6426d2d4aa2bc3680ebde0a4704e9aa67192365175da8ea646fa593",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "017-osint-engine-bridge",
+      "date": "2026-08-09T02:45:02.188Z",
+      "files": [
+        {
+          "file": "src/utils/osintEngineBridge.ts",
+          "beforeHash": null,
+          "afterHash": "617148b2d6a12319a47d636f8250281cab25f5b080e1cceab8ee720f72534181",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "018-osint-comparison-engine",
+      "date": "2026-08-09T02:46:27.917Z",
+      "files": [
+        {
+          "file": "src/utils/osintComparisonEngine.ts",
+          "beforeHash": null,
+          "afterHash": "253e2680ecfa85183b4002c26a9094e8536d71b1264e1601f7fb984f61ea411a",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "019-osint-validation-runner",
+      "date": "2026-08-09T02:47:57.342Z",
+      "files": [
+        {
+          "file": "src/utils/osintValidationRunner.ts",
+          "beforeHash": null,
+          "afterHash": "4ff059ceed1198b15bba8be8790c3f87daae9d802b0ecd00f3adfa26057907d0",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "020-osint-validation-test",
+      "date": "2026-08-09T02:49:10.771Z",
+      "files": [
+        {
+          "file": "scripts/osintValidationReport.json",
+          "beforeHash": null,
+          "afterHash": "a7300abcb327719def95ae8330876c64b82b21b47bb9da17aaef57caea3b6273",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "021-osint-provider-validation",
+      "date": "2026-08-09T02:50:45.549Z",
+      "files": [
+        {
+          "file": "scripts/osintProviderValidation.json",
+          "beforeHash": null,
+          "afterHash": "c2ef0e07d4a4db0f671c0ca2ae6322592761ae4244d060c400462308ebc8c8c3",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "022-osint-provider-runtime-validator",
+      "date": "2026-08-09T02:51:53.887Z",
+      "files": [
+        {
+          "file": "scripts/osintProviderRuntimeReport.json",
+          "beforeHash": null,
+          "afterHash": "89138106a0af9d637b05cc828379c18a9daca1ee5306b0211b3b767466b03bc3",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "023-osint-runtime-execution-engine",
+      "date": "2026-08-09T02:53:07.237Z",
+      "files": [
+        {
+          "file": "scripts/osintProviderRuntimeExecution.json",
+          "beforeHash": null,
+          "afterHash": "a0b0083f44451dca83c6dd5626c026dfd8d4abbe993abd4e82e4ae92b0af5145",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "024-osint-migration-controller",
+      "date": "2026-08-09T02:54:57.381Z",
+      "files": [
+        {
+          "file": "scripts/osintMigrationControl.json",
+          "beforeHash": null,
+          "afterHash": "94e9c04b4700afe20017e9e9d05da0cbc3bda1807bcc793bdae179dbac78bc1c",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "025-osint-dual-execution-engine",
+      "date": "2026-08-09T02:56:10.940Z",
+      "files": [
+        {
+          "file": "scripts/osintDualExecutionConfig.json",
+          "beforeHash": null,
+          "afterHash": "02095ed6797fce598972d462982a1e6d673bbbd41a11bcc02f5c224b2749e54c",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "026-osint-dual-execution-engine",
+      "date": "2026-08-09T02:57:31.064Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": null,
+          "afterHash": "15e64f357752f4b554e265b04babfbd69203b5acf27b0379dea65a0f6e9957f0",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "027-osint-legacy-adapter",
+      "date": "2026-08-09T02:58:43.025Z",
+      "files": [
+        {
+          "file": "src/utils/osintLegacyAdapter.ts",
+          "beforeHash": null,
+          "afterHash": "fb0385df2b0f2f65ecd7e9356c1caaade02ca02ddec38821b7b82ea99ca90f06",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "028-osint-dual-engine-integration",
+      "date": "2026-08-09T02:59:49.928Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "15e64f357752f4b554e265b04babfbd69203b5acf27b0379dea65a0f6e9957f0",
+          "afterHash": "673f4b0196abc0e16b6ef7f2134ebe2e9dcc2e80e3d79db028e92326d79d6283",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "029-osint-dual-validation-certificate",
+      "date": "2026-08-09T03:01:34.073Z",
+      "files": [
+        {
+          "file": "scripts/osintDualValidationCertificate.json",
+          "beforeHash": null,
+          "afterHash": "70635649ed53f35bd67c9d68977e84500c2087ed4b5fab08a25ba6029e0f19f7",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "030-osint-dual-execution-test",
+      "date": "2026-08-09T03:02:43.242Z",
+      "files": [
+        {
+          "file": "scripts/osintDualExecutionTestReport.json",
+          "beforeHash": null,
+          "afterHash": "9f668deaa7e2a0c20a55406ce8a9e5d1bd669fb184aa97dc1a9d9ca3406982bb",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "031-osint-dual-runtime-execution",
+      "date": "2026-08-09T03:05:05.363Z",
+      "files": [
+        {
+          "file": "scripts/osintDualRuntimeExecutionReport.json",
+          "beforeHash": null,
+          "afterHash": "8b7b7ca96cda8b5c149bbf3ae350fefb337dfcce5856be1a7ed38da45b254441",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "032-osint-normalization-layer",
+      "date": "2026-08-09T03:06:24.009Z",
+      "files": [
+        {
+          "file": "src/utils/osintNormalizationLayer.ts",
+          "beforeHash": null,
+          "afterHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "033-osint-normalized-dual-engine",
+      "date": "2026-08-09T03:07:37.346Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "673f4b0196abc0e16b6ef7f2134ebe2e9dcc2e80e3d79db028e92326d79d6283",
+          "afterHash": "1b4e66477eb295ca119ee4fbce74f2286963b6f335cab1337570de06ab1cd91d",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "034-osint-intelligent-comparison-engine",
+      "date": "2026-08-09T03:09:52.427Z",
+      "files": [
+        {
+          "file": "src/utils/osintComparisonEngine.ts",
+          "beforeHash": "253e2680ecfa85183b4002c26a9094e8536d71b1264e1601f7fb984f61ea411a",
+          "afterHash": "b7b0fa4a91ed203658d9f3296cae3f63c18cccd9aabc979f27da62f69fe916f6",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "035-osint-dual-engine-v3",
+      "date": "2026-08-09T03:11:11.984Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "1b4e66477eb295ca119ee4fbce74f2286963b6f335cab1337570de06ab1cd91d",
+          "afterHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "036-osint-dual-runtime-certification-test",
+      "date": "2026-08-09T03:13:10.812Z",
+      "files": [
+        {
+          "file": "scripts/osintDualRuntimeCertification.json",
+          "beforeHash": null,
+          "afterHash": "a0b77ab4fffcbfbc81ddcb8cf6696b23d458a2d9db091f0c6b55c278e95c7905",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "037-osint-dual-runtime-executor",
+      "date": "2026-08-09T03:14:11.125Z",
+      "files": [
+        {
+          "file": "scripts/osintDualRuntimeExecutionResult.json",
+          "beforeHash": null,
+          "afterHash": "1adef112f7f3a3b5079721a5ba526dfa3dc7b11395a72aba6905072efe4b8df1",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "038-osint-runtime-bridge",
+      "date": "2026-08-09T03:15:56.343Z",
+      "files": [
+        {
+          "file": "scripts/osintRuntimeBridge.js",
+          "beforeHash": null,
+          "afterHash": "84d3829444bbdb6429dcf85b8f7397665d3fdff63496ebca64c175517fa04416",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "039-osint-dual-real-execution",
+      "date": "2026-08-09T03:17:58.218Z",
+      "files": [
+        {
+          "file": "scripts/osintDualRealExecutionResult.json",
+          "beforeHash": null,
+          "afterHash": "ad995a580c2ed88416de5edda6725d41bec489246a71f0f66564238c40cf80cc",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "040-osint-runtime-import-fix",
+      "date": "2026-08-09T03:19:22.641Z",
+      "files": [
+        {
+          "file": "scripts/osintRuntimeImportCompatibility.json",
+          "beforeHash": null,
+          "afterHash": "f1175b133012d8adab4e79fa71b357885a05bd6eb4bb745ddc6268c295380bf1",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "041-osint-tsx-runtime-executor",
+      "date": "2026-08-09T03:20:36.092Z",
+      "files": [
+        {
+          "file": "scripts/osintTSXRuntimeExecutor.mjs",
+          "beforeHash": null,
+          "afterHash": "2b2e654bab45a3d9fbc558a306035c5baa779707af53c51470b7f9231b8061a9",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "042-osint-legacy-normalization-fix",
+      "date": "2026-08-09T03:24:58.902Z",
+      "files": [
+        {
+          "file": "src/utils/osintNormalizationLayer.ts",
+          "beforeHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "afterHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "043-osint-legacy-normalizer-implementation",
+      "date": "2026-08-09T03:26:21.324Z",
+      "files": [
+        {
+          "file": "src/utils/osintNormalizationLayer.ts",
+          "beforeHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "afterHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "044-osint-legacy-normalizer-integration",
+      "date": "2026-08-09T03:28:11.923Z",
+      "files": [
+        {
+          "file": "src/utils/osintNormalizationLayer.ts",
+          "beforeHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "afterHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "045-osint-legacy-normalizer-apply",
+      "date": "2026-08-09T03:30:13.481Z",
+      "files": [
+        {
+          "file": "src/utils/osintNormalizationLayer.ts",
+          "beforeHash": "5bbe6717290700bbfb1cdef9294a8d204ef3f4e369c1451d63262263f0b7b156",
+          "afterHash": "9154815c31f59341add599d2981f05d95c01ce7d0010d2cf2075571272ed534d",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "046-osint-semantic-comparison-layer",
+      "date": "2026-08-09T03:33:04.641Z",
+      "files": [
+        {
+          "file": "src/utils/osintSemanticComparisonEngine.ts",
+          "beforeHash": null,
+          "afterHash": "751452d9f39b18ebd3fc8eb4d964650c4b445da1a95cacc8d85a940426c7ebd9",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "047-osint-semantic-engine-integration",
+      "date": "2026-08-09T03:34:35.318Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "afterHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "048-osint-semantic-engine-activation",
+      "date": "2026-08-09T03:36:42.706Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "afterHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "049-osint-semantic-runtime-integration",
+      "date": "2026-08-09T03:37:54.428Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "afterHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "050-osint-semantic-engine-apply",
+      "date": "2026-08-09T03:40:12.009Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "fdfb4ca1293eb7a451a4ca6ada23f3c554b12582951c5354b194f0f4ae3f0cb2",
+          "afterHash": "93e7d2ed038f49119fd5cddc3f2dd7a6f89e65ac8074770ac6fcb6325a952b45",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "051-osint-semantic-decision-authority",
+      "date": "2026-08-09T03:43:14.652Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "93e7d2ed038f49119fd5cddc3f2dd7a6f89e65ac8074770ac6fcb6325a952b45",
+          "afterHash": "8f9acbcae66e7b60c6f9ba7b940465548bbb4930e0ac50052ed667b2ee1f9f52",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "052-osint-dual-engine-v4-certification",
+      "date": "2026-08-09T03:45:33.605Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "8f9acbcae66e7b60c6f9ba7b940465548bbb4930e0ac50052ed667b2ee1f9f52",
+          "afterHash": "8f9acbcae66e7b60c6f9ba7b940465548bbb4930e0ac50052ed667b2ee1f9f52",
+          "changed": false
+        },
+        {
+          "file": "src/utils/osintSemanticComparisonEngine.ts",
+          "beforeHash": "751452d9f39b18ebd3fc8eb4d964650c4b445da1a95cacc8d85a940426c7ebd9",
+          "afterHash": "751452d9f39b18ebd3fc8eb4d964650c4b445da1a95cacc8d85a940426c7ebd9",
+          "changed": false
+        },
+        {
+          "file": "src/utils/osintNormalizationLayer.ts",
+          "beforeHash": "9154815c31f59341add599d2981f05d95c01ce7d0010d2cf2075571272ed534d",
+          "afterHash": "9154815c31f59341add599d2981f05d95c01ce7d0010d2cf2075571272ed534d",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "migration": "053-osint-intelligence-output-contract",
+      "date": "2026-08-09T03:47:30.124Z",
+      "files": [
+        {
+          "file": "src/utils/osintIntelligenceOutputContract.ts",
+          "beforeHash": null,
+          "afterHash": "bb180ace25baf507020686d9937b02772f4798725fecba0145833caff714c637",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "054-osint-output-contract-integration",
+      "date": "2026-08-09T03:49:59.974Z",
+      "files": [
+        {
+          "file": "src/utils/osintDualExecutionEngine.ts",
+          "beforeHash": "8f9acbcae66e7b60c6f9ba7b940465548bbb4930e0ac50052ed667b2ee1f9f52",
+          "afterHash": "bbf64c27c2a514b1533fc1bf063cef6dc4769a7ad8896f03e5eadc5b80c47f2d",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "055-osint-report-engine-adapter",
+      "date": "2026-08-09T04:01:42.441Z",
+      "files": [
+        {
+          "file": "src/utils/osintReportEngineAdapter.ts",
+          "beforeHash": null,
+          "afterHash": "5d3e286fadecf11d62e99fb2b132bfb876ff3fcef7effad2f9fb23f2f38d1ae4",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "056-osint-report-engine-runtime-integration",
+      "date": "2026-08-09T04:04:13.534Z",
+      "files": [
+        {
+          "file": "scripts/osintReportRuntimeTest.mjs",
+          "beforeHash": null,
+          "afterHash": "2c11503264aff7d78391772191c82fcf10a437aac489d9227b5523df2390831c",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "057-osint-narrative-intelligence-layer",
+      "date": "2026-08-09T04:07:03.897Z",
+      "files": [
+        {
+          "file": "src/utils/osintNarrativeIntelligenceLayer.ts",
+          "beforeHash": null,
+          "afterHash": "744a4c822387da784f4f7b30c9c95002b7e7f0f891ce755a5593d6688c46a6d2",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "058-osint-narrative-runtime-integration",
+      "date": "2026-08-09T04:12:47.579Z",
+      "files": [
+        {
+          "file": "scripts/osintNarrativeRuntimeTest.mjs",
+          "beforeHash": null,
+          "afterHash": "61c8373c505fb7caca695597b4bd7706f51629d9d27bc9fffa98db38a05fb425",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "059-osint-narrative-report-connector",
+      "date": "2026-08-09T04:14:44.402Z",
+      "files": [
+        {
+          "file": "src/utils/osintNarrativeReportConnector.ts",
+          "beforeHash": null,
+          "afterHash": "5fc980016c474e137d13d388b001ee2325de0d7de24e538626277ba5d7e3fc76",
+          "changed": true
+        }
+      ]
+    },
+    {
+      "migration": "060-osint-narrative-report-connector-runtime-test",
+      "date": "2026-08-09T04:16:19.701Z",
+      "files": [
+        {
+          "file": "scripts/osintNarrativeReportConnectorTest.mjs",
+          "beforeHash": null,
+          "afterHash": "b7d2b38333ca349f964bdca85dfd5454e34f4c61e920a8b71ca84b0b2948c22e",
+          "changed": true
+        }
+      ]
+    }
+  ]
+}

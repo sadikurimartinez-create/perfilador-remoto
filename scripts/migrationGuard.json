@@ -1,0 +1,55 @@
+{
+  "engine": "Migration Guard",
+  "version": "1.0",
+  "rules": [
+    {
+      "risk": "low",
+      "action": "ALLOW",
+      "requirements": []
+    },
+    {
+      "risk": "medium",
+      "action": "ALLOW_WITH_AUDIT",
+      "requirements": [
+        "backup",
+        "hash",
+        "audit"
+      ]
+    },
+    {
+      "risk": "high",
+      "action": "REQUIRE_APPROVAL",
+      "requirements": [
+        "backup",
+        "hash",
+        "audit",
+        "manual_confirmation"
+      ]
+    },
+    {
+      "risk": "critical",
+      "action": "BLOCK",
+      "requirements": [
+        "security_review",
+        "administrator_approval"
+      ]
+    }
+  ],
+  "decisionExamples": [
+    {
+      "file": "src/utils/osintEngine.ts",
+      "risk": "medium",
+      "decision": "ALLOW_WITH_AUDIT"
+    },
+    {
+      "file": "src/lib/providers/orchestrator.ts",
+      "risk": "high",
+      "decision": "REQUIRE_APPROVAL"
+    },
+    {
+      "file": "firebase/config.ts",
+      "risk": "critical",
+      "decision": "BLOCK"
+    }
+  ]
+}
