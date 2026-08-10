@@ -17,14 +17,20 @@ export async function GET(req: Request) {
   const results: any[] = [];
 
   // Coordenadas de prueba por defecto (Aguascalientes)
-  const testParams = {
-    lat: 21.8853,
-    lng: -102.2916,
-    radius: 200,
-    radio: 200,
-    query: "Aguascalientes",
-    action: "latest_continuous" // Will map nicely across meteorological/hydrological providers
-  };
+const testParams = {
+lat: 21.8818,
+lng: -102.2915,
+
+// Standard GEOINT coordinates
+latitude: 21.8818,
+longitude: -102.2915,
+
+radius: 200,
+radio: 200,
+
+query: "Aguascalientes",
+action: "latest_continuous"
+};
 
   // Run in parallel with Promise.allSettled, using a fast timeout barrier of 6000ms
   const promises = providers.map(async (provider) => {
@@ -52,16 +58,24 @@ export async function GET(req: Request) {
       // Execute provider query with standard fast params
       // Since some providers have action-specific logic, we adjust action based on ID
       let specificParams = { ...testParams };
+      if (providerId === "usgs") {
+        specificParams.lat = 40.7128;
+        specificParams.lng = -74.0060;
+        specificParams.latitude = 40.7128;
+        specificParams.longitude = -74.0060;
+      }
       if (providerId === "google") {
         specificParams.action = "elevation"; // Fast & cheap
       } else if (providerId === "inegi") {
         specificParams.action = "denue";
+      } else if (providerId === "inegi_wms") {
+        specificParams.action = "get_capabilities";
       } else if (providerId === "nasa") {
         specificParams.action = "earthdata";
       } else if (providerId === "copernicus") {
         specificParams.action = "odata";
       } else if (providerId === "usgs") {
-        specificParams.action = "latest_continuous";
+        specificParams.action = "monitoring_locations";
       } else if (providerId === "cenapred") {
         specificParams.action = "risk_assessment";
       } else if (providerId === "conagua") {

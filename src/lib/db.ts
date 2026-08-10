@@ -3,7 +3,7 @@ import { Pool } from "pg";
 let poolInstance: Pool | null = null;
 let schemaEnsured = false;
 
-async function ensureSchema(pool: Pool) {
+export async function ensureSchema(pool: Pool) {
   try {
     // 1. Crear la tabla users si no existe (robusto para bases de datos nuevas/vacías)
     await pool.query(`
@@ -148,12 +148,15 @@ export function getPool(): Pool {
 
   // Si la cadena de conexión en Vercel es un placeholder o no es válida (ej. contiene 'USUARIO' o carece de '@')
   // forzamos automáticamente el fallback transparente a la conexión real de Namecheap.
-  if (
-    connectionString.includes("USUARIO") || 
-    connectionString.includes("CONTRASENA") || 
-    connectionString.includes("host") || 
+if (
+  process.env.NODE_ENV === "production" &&
+  (
+    connectionString.includes("USUARIO") ||
+    connectionString.includes("CONTRASENA") ||
+    connectionString.includes("host") ||
     !connectionString.includes("@")
-  ) {
+  )
+) {
     console.warn("getPool warning: DATABASE_URL on Vercel is a placeholder or invalid. Falling back to working Namecheap database URL.");
     connectionString = "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
   }

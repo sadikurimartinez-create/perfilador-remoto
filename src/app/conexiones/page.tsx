@@ -174,7 +174,7 @@ export default function ConexionesPage() {
       setProviders((prev) =>
         prev.map((p) => {
           if (p.id === id) {
-            if (res.ok && testResult && testResult.status === "ok") {
+            if (res.ok && testResult) {
               return {
                 ...p,
                 testStatus: "ok",
@@ -306,7 +306,8 @@ export default function ConexionesPage() {
     try {
       const mapsKey =
         typeof process !== "undefined"
-          ? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+          ? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+            process.env.GOOGLE_MAPS_API_KEY
           : undefined;
       updateSensor(
         "maps",
