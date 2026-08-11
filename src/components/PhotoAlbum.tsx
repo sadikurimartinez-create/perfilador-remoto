@@ -676,47 +676,101 @@ export function PhotoAlbum({
   useEffect(() => {
     let active = true;
     const initStreetView = () => {
-      if (typeof window === "undefined" || !window.google || !window.google.maps || !window.google.maps.StreetViewService || !svContainerRef.current) {
-        if (active) {
-          setTimeout(initStreetView, 1000);
+  if (
+    typeof window === "undefined" ||
+    !window.google ||
+    !window.google.maps ||
+    !window.google.maps.StreetViewService ||
+    !svContainerRef.current
+  ) {
+    if (active) {
+      setTimeout(initStreetView, 1000);
+    }
+    return;
+  }
+
+  const selectedPhotos = album.filter(
+    p =>
+      p.lat != null &&
+      p.lng != null &&
+      Number.isFinite(Number(p.lat)) &&
+      Number.isFinite(Number(p.lng)) &&
+      selectedIds.includes(p.id)
+  );
+
+  const photosToUse =
+    selectedPhotos.length > 0
+      ? selectedPhotos
+      : album.filter(
+          p =>
+            p.lat != null &&
+            p.lng != null &&
+            Number.isFinite(Number(p.lat)) &&
+            Number.isFinite(Number(p.lng))
+        );
+
+  if (photosToUse.length === 0) return;
+
+  const centerLat =
+    photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) /
+    photosToUse.length;
+
+  const centerLng =
+    photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) /
+    photosToUse.length;
+
+  try {
+    const svService = new window.google.maps.StreetViewService();
+
+    svService.getPanorama(
+      {
+        location: { lat: centerLat, lng: centerLng },
+        radius: 150
+      },
+      (data, status) => {
+        if (!active) return;
+
+        if (
+          status === window.google.maps.StreetViewStatus.OK &&
+          data &&
+          data.location &&
+          data.location.latLng
+        ) {
+          setSvError(null);
+
+          const pano =
+            new window.google.maps.StreetViewPanorama(
+              svContainerRef.current!,
+              {
+                position: data.location.latLng,
+                pov: {
+                  heading: 34,
+                  pitch: 10
+                },
+                zoom: 1,
+                addressControl: true,
+                linksControl: true,
+                panControl: true,
+                enableCloseButton: false
+              }
+            );
+
+          setActivePanorama(pano);
+        } else {
+          setSvError(
+            "No se encontraron panoramas de Street View en un radio de 150 metros de esta ubicación."
+          );
         }
-        return;
       }
-      const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
-      const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
-      if (photosToUse.length === 0) return;
-      const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
-      const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
+    );
 
-      try {
-        const svService = new window.google.maps.StreetViewService();
-        svService.getPanorama({
-          location: { lat: centerLat, lng: centerLng },
-          radius: 150
-        }, (data, status) => {
-          if (!active) return;
-          if (status === window.google.maps.StreetViewStatus.OK && data && data.location && data.location.latLng) {
-            setSvError(null);
-            const pano = new window.google.maps.StreetViewPanorama(svContainerRef.current!, {
-              position: data.location.latLng,
-              pov: { heading: 34, pitch: 10 },
-              zoom: 1,
-              addressControl: true,
-              linksControl: true,
-              panControl: true,
-              enableCloseButton: false
-            });
-            setActivePanorama(pano);
-          } else {
-            setSvError("No se encontraron panoramas de Street View en un radio de 150 metros de esta ubicación.");
-          }
-        });
-      } catch (e) {
-        console.error("Error loading Street View panorama:", e);
-      }
-    };
-
-    initStreetView();
+  } catch (e) {
+    console.error(
+      "Error loading Street View panorama:",
+      e
+    );
+  }
+};
     return () => {
       active = false;
     };

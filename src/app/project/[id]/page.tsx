@@ -25,7 +25,6 @@ import {
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { exportToWord } from "@/lib/exportToWord";
-import { generatePdfProgrammatic } from "@/lib/reportEngine";
 
 type CloudAnalysis = {
   id: string;
@@ -476,6 +475,8 @@ export default function ProjectWorkspacePage() {
                             alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
                             return;
                           }
+                          const { generatePdfProgrammatic } = await import("@/lib/reportEngine");
+
                           await generatePdfProgrammatic(a.briefing);
                         } catch (err: any) {
                           alert("Error al generar PDF: " + err.message);

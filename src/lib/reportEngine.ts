@@ -11,6 +11,7 @@ import { HIEValidationVectorAdapter } from "@/utils/analyticalConsistencyEngine/
 import { AnalyticalConsistencyEngine } from "@/utils/analyticalConsistencyEngine";
 import { IntelligenceNarrativeSynthesisEngine } from "@/utils/intelligenceNarrativeSynthesisEngine";
 import { IntelligenceReportStructureEngine } from "@/utils/intelligenceReportStructureEngine";
+import { DocumentEngine } from "@/utils/documentEngine";
 import { ExecutiveIntelligenceSummaryEngine } from "@/utils/executiveIntelligenceSummaryEngine";
 import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
 import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
@@ -1146,11 +1147,45 @@ export class ReportEngineKernelClass {
             if (this.context.editorialPayload) {
               this.context.editorialPayload.includeOsintAppendix = this.context.includeOsintAppendix;
             }
+            const documentEngine = new DocumentEngine();
+
+            const documentPackage =
+              documentEngine.buildDocumentPackage({
+
+                editorialPayload: this.context.editorialPayload,
+
+                briefing: this.context.briefing,
+
+                projectName:
+                  this.context.project.nombre ||
+                  this.context.project.name ||
+                  "Expediente",
+
+                projectId:
+                  this.context.project.id ||
+                  "EXPEDIENTE_TACTICO",
+
+                user: this.context.user,
+
+                certification:
+                  this.validationResults
+
+              });
+
+            console.log("[DOCUMENT ENGINE v1.0]", {
+              metadata: documentPackage.metadata,
+              projectId: documentPackage.projectId,
+              hasEditorialPayload: !!documentPackage.editorialPayload,
+              hasBriefing: !!documentPackage.briefing,
+              hasCertification: !!documentPackage.certification
+            });
+
+
             await exportToWord(
-              this.context.editorialPayload,
-              this.context.project.nombre || this.context.project.name || 'Expediente',
-              this.context.project.id || 'EXPEDIENTE_TACTICO',
-              this.context.user
+              documentPackage.editorialPayload,
+              documentPackage.projectName,
+              documentPackage.projectId,
+              documentPackage.user
             );
           }
           if (format === "PDF" || format === "ALL") {
@@ -1267,3 +1302,4 @@ export const ReportEngine = {
     }
   }
 };
+
