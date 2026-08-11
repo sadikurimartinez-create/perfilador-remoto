@@ -40,13 +40,14 @@ export interface DocumentEvidence {
 
 
 function isValidDataUrl(
-  value: unknown
+value: unknown
 ): boolean {
 
-  return (
-    typeof value === "string" &&
-    value.length > 20
-  );
+return (
+typeof value === "string" &&
+value.startsWith("data:image") &&
+value.length > 100
+);
 
 }
 

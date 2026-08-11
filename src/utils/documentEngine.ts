@@ -1,5 +1,5 @@
 /**
- * Document Engine v1.0.1
+ * Document Engine v1.0.2
  * ADR-013
  *
  * Capa de orquestación documental.
@@ -9,6 +9,7 @@
  * en paquetes documentales listos para renderización.
  *
  * No modifica:
+ *
  * - HIE Engine
  * - ACE Engine
  * - Evidence Governance Engine
@@ -18,20 +19,33 @@
 import { buildDocumentChapters } from "@/utils/chapterAssembler";
 import { buildDocumentEvidences } from "@/utils/evidenceAssembler";
 import { buildDocumentVisuals } from "@/utils/visualAssembler";
+import { validateDocumentPackage } from "@/utils/documentPackageValidator";
+
 
 export interface DocumentPackageMetadata {
+
   title: string;
+
   institution: string;
+
   version: string;
+
   generatedAt: string;
+
 }
+
 
 
 export interface DocumentChapter {
+
   id: string;
+
   title: string;
+
   blocks: unknown[];
+
 }
+
 
 
 export interface DocumentPackage {
@@ -56,16 +70,15 @@ export interface DocumentPackage {
 
   certification?: unknown;
 
+  audit?: unknown;
+
 }
 
 
-/**
- * Entrada certificada proveniente
- * del pipeline de inteligencia.
- */
+
 export interface DocumentEngineInput {
 
-  editorialPayload: unknown;
+  editorialPayload: any;
 
   briefing: unknown;
 
@@ -82,15 +95,16 @@ export interface DocumentEngineInput {
 }
 
 
+
 /**
  * Document Engine
  *
  * Primera versión:
- * Solo prepara el contrato documental.
+ * Construcción y validación del paquete documental.
  *
- * Los renderizadores serán integrados
- * posteriormente.
+ * Los renderizadores permanecen desacoplados.
  */
+
 export class DocumentEngine {
 
 
@@ -99,47 +113,92 @@ export class DocumentEngine {
   ): DocumentPackage {
 
 
-    return {
+    const documentPackage: DocumentPackage = {
+
 
       metadata: {
-        title: "Informe de Inteligencia Criminal",
-        institution: "SSPE-CEIPOL",
-        version: "1.0",
-        generatedAt: new Date().toISOString()
+
+        title:
+          "Informe de Inteligencia Criminal",
+
+        institution:
+          "SSPE-CEIPOL",
+
+        version:
+          "1.0.2",
+
+        generatedAt:
+          new Date().toISOString()
+
       },
 
 
-      editorialPayload: input.editorialPayload,
-
-      briefing: input.briefing,
-
-      projectName: input.projectName,
-
-      projectId: input.projectId,
-
-      user: input.user,
+      editorialPayload:
+        input.editorialPayload,
 
 
-  chapters:
-    buildDocumentChapters(
-      input.editorialPayload
-    ),
+      briefing:
+        input.briefing,
 
-  evidences:
-    buildDocumentEvidences(
-      input.editorialPayload
-    ),
 
-  visuals:
-    buildDocumentVisuals(
-      input.editorialPayload
-    ),
+      projectName:
+        input.projectName,
+
+
+      projectId:
+        input.projectId,
+
+
+      user:
+        input.user,
+
+
+      chapters:
+        buildDocumentChapters(
+          input.editorialPayload
+        ) as DocumentChapter[],
+
+
+      evidences:
+        buildDocumentEvidences(
+          input.editorialPayload
+        ),
+
+
+      visuals:
+        buildDocumentVisuals(
+          input.editorialPayload
+        ),
 
 
       certification:
         input.certification ?? null
 
+
     };
+
+
+
+    const audit =
+      validateDocumentPackage(
+        documentPackage
+      );
+
+
+
+    documentPackage.audit =
+      audit;
+
+
+
+    console.log(
+      "[DOCUMENT PACKAGE AUDIT]",
+      audit
+    );
+
+
+
+    return documentPackage;
 
   }
 

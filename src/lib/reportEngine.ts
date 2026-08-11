@@ -12,6 +12,7 @@ import { AnalyticalConsistencyEngine } from "@/utils/analyticalConsistencyEngine
 import { IntelligenceNarrativeSynthesisEngine } from "@/utils/intelligenceNarrativeSynthesisEngine";
 import { IntelligenceReportStructureEngine } from "@/utils/intelligenceReportStructureEngine";
 import { DocumentEngine } from "@/utils/documentEngine";
+import { adaptDocumentPackageForWord } from "@/utils/documentRenderAdapter";
 import { ExecutiveIntelligenceSummaryEngine } from "@/utils/executiveIntelligenceSummaryEngine";
 import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
 import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
@@ -1172,17 +1173,22 @@ export class ReportEngineKernelClass {
 
               });
 
-            console.log("[DOCUMENT ENGINE v1.0]", {
-              metadata: documentPackage.metadata,
-              projectId: documentPackage.projectId,
-              hasEditorialPayload: !!documentPackage.editorialPayload,
-              hasBriefing: !!documentPackage.briefing,
-              hasCertification: !!documentPackage.certification
-            });
+                console.log("[DOCUMENT ENGINE v1.0.2 - PACKAGE GOVERNANCE]", {
+                  metadata: documentPackage.metadata,
+                  projectId: documentPackage.projectId,
+                  hasEditorialPayload: !!documentPackage.editorialPayload,
+                  hasBriefing: !!documentPackage.briefing,
+                  hasCertification: !!documentPackage.certification,
+                  audit: documentPackage.audit
+                });
+
+
+            const wordPayload =
+              adaptDocumentPackageForWord(documentPackage);
 
 
             await exportToWord(
-              documentPackage.editorialPayload,
+              wordPayload,
               documentPackage.projectName,
               documentPackage.projectId,
               documentPackage.user

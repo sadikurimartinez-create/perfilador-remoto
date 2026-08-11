@@ -13,6 +13,8 @@
  * - Evidence Governance Engine
  */
 
+import { hasDocumentContent } from "@/utils/documentValidator";
+
 export interface DocumentChapterBlock {
   type: 
     | "TITLE"
@@ -167,14 +169,12 @@ export function buildDocumentChapters(
   });
 
 
-  return chapters.filter(
-    chapter =>
-      chapter.blocks.some(
-        block =>
-          block.content !== undefined &&
-          block.content !== null &&
-          block.content !== ""
-      )
-  );
+return chapters.filter(
+  chapter =>
+    chapter.blocks.some(
+      block =>
+        hasDocumentContent(block.content)
+    )
+);
 
 }
