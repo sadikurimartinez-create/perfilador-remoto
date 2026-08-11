@@ -138,24 +138,9 @@ export class HeaderFooterManager {
     const children: any[] = [];
     const runs: any[] = [];
 
-    // Inyectar marca de agua flotante de fondo si está activa (mismo párrafo para evitar bloque/cuadro vacío)
-    if (DEFAULT_COMPOSITION_CONFIG.watermarkEnabled) {
-      try {
-        runs.push(
-          new ImageRun({
-            data: watermarkBuffer,
-            transformation: { width: 500, height: 500 },
-            floating: {
-              horizontalPosition: { offset: 1000 },
-              verticalPosition: { offset: 1200 },
-              wrap: { type: 1 } // TextWrappingType.NONE
-            }
-          } as any)
-        );
-      } catch (err) {
-        console.warn("[HeaderFooterManager] No se pudo inyectar watermark flotante en Header. Usando fallback de imagen tenue.");
-      }
-    }
+    // La marca de agua flotante NO se inserta en el Header.
+    // Se mantiene únicamente la cabecera institucional.
+    // Esto evita bloques vacíos y espacios fantasma en Word.
 
     runs.push(
       new TextRun({ text: "CEIPOL - SSPE | ", bold: true, color: "5B6573", size: 15, font: "Calibri" }),
