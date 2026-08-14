@@ -274,6 +274,20 @@ export function ProjectMap({
 
   // Compute dispersed positions for marker rendering to prevent stacked pins
   const markersWithDispersion = useMemo(() => {
+    console.log("[GEOINT DEBUG] georeferencedPhotos:", georeferencedPhotos);
+    console.log("[GEOINT DEBUG] markersWithDispersion input:", georeferencedPhotos.length);
+    console.log(
+      "[GEOINT DEBUG] Coordenadas reales:",
+      JSON.stringify(
+        georeferencedPhotos.slice(0,5).map((p)=>({
+          id:p.id,
+          lat:p.lat,
+          lng:p.lng
+        })),
+        null,
+        2
+      )
+    );
     const coordCounts: Record<string, number> = {};
     return georeferencedPhotos.map((photo) => {
       const lat = Number(photo.lat);
@@ -622,10 +636,10 @@ export function ProjectMap({
               radius={density.radius}
               options={{
                 strokeColor: density.color,
-                strokeOpacity: 0.4,
+                strokeOpacity: 0.15,
                 strokeWeight: 1,
                 fillColor: density.color,
-                fillOpacity: density.opacity * 0.45,
+                fillOpacity: density.opacity * 0.20,
                 clickable: false,
                 zIndex: 1,
               }}
@@ -636,10 +650,10 @@ export function ProjectMap({
               radius={density.innerRadius}
               options={{
                 strokeColor: density.color,
-                strokeOpacity: 0.8,
+                strokeOpacity: 0.45,
                 strokeWeight: 1.5,
                 fillColor: density.color,
-                fillOpacity: density.opacity,
+                fillOpacity: density.opacity * 0.35,
                 clickable: false,
                 zIndex: 2,
               }}
@@ -670,10 +684,10 @@ export function ProjectMap({
             radius={Number(project.radius || 500)}
             options={{
               strokeColor: "#38bdf8",
-              strokeOpacity: 0.8,
+              strokeOpacity: 0.35,
               strokeWeight: 2,
-              fillColor: "#0284c7",
-              fillOpacity: 0.15,
+              fillColor: "#38bdf8",
+              fillOpacity: 0.8,
             }}
           />
         )}
@@ -696,7 +710,7 @@ export function ProjectMap({
             paths={geoShapePath}
             options={{
               strokeColor: "#10b981",
-              strokeOpacity: 0.8,
+              strokeOpacity: 0.45,
               strokeWeight: 3,
               fillColor: "#10b981",
               fillOpacity: 0.15,
@@ -706,6 +720,18 @@ export function ProjectMap({
 
         {/* Georeferenced Evidence markers */}
         {showPhotos && markersWithDispersion.map((photo) => {
+
+          console.log(
+            "[GEOINT DEBUG] Marker render:",
+            {
+              id: photo.id,
+              displayLat: photo.displayLat,
+              displayLng: photo.displayLng,
+              lat: photo.lat,
+              lng: photo.lng
+            }
+          );
+
           const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente";
           if (photo.tipo?.startsWith("Barrido")) return null; // Los barridos se manejan por separado en showOsint
           if (isPoi && !showGeoint) return null; // Las POIs se controlan mediante Inteligencia GEOINT
@@ -715,6 +741,8 @@ export function ProjectMap({
             <Marker
               key={photo.id}
               position={{ lat: Number(photo.displayLat), lng: Number(photo.displayLng) }}
+              zIndex={isPoi ? 100 : 200}
+              title={`Evidencia ${photo.id}`}
               onClick={() => setHoveredPhoto(photo)}
               draggable={true}
               onDragEnd={async (e) => {
@@ -753,12 +781,12 @@ export function ProjectMap({
                 }
               }}
               icon={{
-                path: 0, // circle
-                fillColor: isPoi ? "#c084fc" : "#22d3ee",
-                fillOpacity: 0.9,
-                strokeWeight: 2,
+                path: 0,
+                fillColor: isPoi ? "#c084fc" : "#06b6d4",
+                fillOpacity: 1,
+                strokeWeight: 3,
                 strokeColor: "#ffffff",
-                scale: isPoi ? 8 : 6,
+                scale: isPoi ? 10 : 10,
               }}
             />
           );
@@ -841,12 +869,12 @@ export function ProjectMap({
           <Circle
             key={`osint-area-influence-${idx}`}
             center={center}
-            radius={250}
+            radius={showOsint ? 250 : 0}
             options={{
               fillColor: "#a855f7",
-              fillOpacity: 0.12,
+              fillOpacity: 0.05,
               strokeColor: "#a855f7",
-              strokeOpacity: 0.4,
+              strokeOpacity: 0.15,
               strokeWeight: 1.5,
               clickable: true,
             }}

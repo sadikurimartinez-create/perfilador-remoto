@@ -33,7 +33,13 @@ export function ProjectManager() {
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
-  const validPhotos = album.filter((photo) => photo.lat != null && photo.lng != null);
+  const validPhotos = album.filter(
+  (photo) =>
+    photo.lat != null &&
+    photo.lng != null &&
+    Number.isFinite(Number(photo.lat)) &&
+    Number.isFinite(Number(photo.lng))
+);
 
   const requiredPhotos = project?.geometryType === 'poligono' ? 3 : project?.geometryType === 'lineal' ? 2 : 1;
   const hasMinimumPhotos = album.length >= requiredPhotos;
@@ -676,8 +682,8 @@ export function ProjectManager() {
           album={validPhotos}
           geometryType={project.geometryType}
           coordinates={validPhotos.map((photo) => ({
-            lat: photo.lat as number,
-            lng: photo.lng as number,
+            lat: Number(photo.lat),
+            lng: Number(photo.lng),
           }))}
           onUpdateCoordinates={(newCoords) => {
             newCoords.forEach((coord, idx) => {

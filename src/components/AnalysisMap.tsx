@@ -1864,10 +1864,8 @@ export function AnalysisMap({
               center={center}
               radius={250}
               options={{
-                fillColor: "#a855f7",
-                fillOpacity: 0.12,
-                strokeColor: "#a855f7",
-                strokeOpacity: 0.4,
+            fillOpacity: 0.05,
+            strokeOpacity: 0.15,
                 strokeWeight: 1.5,
                 clickable: true,
               }}
@@ -1979,3 +1977,6 @@ export function AnalysisMap({
     </div>
   );
 }
+
+
+

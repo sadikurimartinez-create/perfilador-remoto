@@ -81,120 +81,13 @@ async function renderGovernanceFallbackCanvas(
   evidenceId: string,
   maxWidth: number,
   maxHeight: number
-): Promise<{ data: ArrayBuffer; width: number; height: number }> {
-  if (typeof document === "undefined") {
-    return { data: new ArrayBuffer(0), width: maxWidth, height: maxHeight };
-  }
-  const fCanvas = document.createElement("canvas");
-  fCanvas.width = 600;
-  fCanvas.height = 380;
-  const fCtx = fCanvas.getContext("2d");
-  if (fCtx) {
-    // 1. Fondo elegante Slate 50 (neutro institucional)
-    fCtx.fillStyle = "#f8fafc";
-    fCtx.fillRect(0, 0, 600, 380);
+): Promise<{ data: ArrayBuffer; width: number; height: number } | null> {
 
-    // 2. Líneas sutiles de cuadrícula decorativa gris claro
-    fCtx.strokeStyle = "rgba(148, 163, 184, 0.08)";
-    fCtx.lineWidth = 1;
-    for (let x = 0; x < 600; x += 30) {
-      fCtx.beginPath();
-      fCtx.moveTo(x, 0);
-      fCtx.lineTo(x, 380);
-      fCtx.stroke();
-    }
-    for (let y = 0; y < 380; y += 30) {
-      fCtx.beginPath();
-      fCtx.moveTo(0, y);
-      fCtx.lineTo(600, y);
-      fCtx.stroke();
-    }
+  console.warn(
+    `[ADR-013.3] Evidencia visual excluida. Motivo: ${reasonType}. ID: ${evidenceId}`
+  );
 
-    // 3. Borde elegante Slate 400
-    fCtx.strokeStyle = "#94a3b8";
-    fCtx.lineWidth = 2;
-    fCtx.strokeRect(15, 15, 570, 350);
-
-    // 4. Doble borde interior Slate 200 sutil
-    fCtx.strokeStyle = "#cbd5e1";
-    fCtx.lineWidth = 1;
-    fCtx.strokeRect(20, 20, 560, 340);
-
-    // 5. Encabezado institucional
-    fCtx.fillStyle = "#475569"; // Slate 600
-    fCtx.font = "bold 13px Arial, sans-serif";
-    fCtx.textAlign = "center";
-    fCtx.fillText("SSPE - CEIPOL", 300, 50);
-
-    // Línea separadora sutil superior
-    fCtx.strokeStyle = "#cbd5e1";
-    fCtx.lineWidth = 1;
-    fCtx.beginPath();
-    fCtx.moveTo(200, 65);
-    fCtx.lineTo(400, 65);
-    fCtx.stroke();
-
-    // 6. Título Principal (Azul oscuro premium Slate 900)
-    fCtx.fillStyle = "#0f172a"; // Slate 900
-    fCtx.font = "bold 18px Arial, sans-serif";
-    fCtx.fillText("EVIDENCIA VISUAL CONTROLADA", 300, 95);
-
-    // 7. Subtítulo
-    fCtx.fillStyle = "#334155"; // Slate 700
-    fCtx.font = "13px Arial, sans-serif";
-    fCtx.fillText("Imagen no publicada por validación automática.", 300, 125);
-
-    // 8. Sección de Motivo
-    fCtx.fillStyle = "#64748b"; // Slate 500
-    fCtx.font = "bold 12px Arial, sans-serif";
-    fCtx.fillText("Motivo:", 300, 165);
-
-    const motivoText = EVIDENCE_FALLBACK_CATALOG[reasonType] || "Validación automática no satisfactoria.";
-    fCtx.fillStyle = "#0f172a"; // Slate 900
-    fCtx.font = "bold 14px Arial, sans-serif";
-    fCtx.fillText(motivoText, 300, 190);
-
-    // 9. Nota de conservación analítica
-    fCtx.fillStyle = "#475569"; // Slate 600
-    fCtx.font = "italic 12px Arial, sans-serif";
-    fCtx.fillText("Referencia analítica conservada.", 300, 230);
-
-    // 10. Código de evidencia
-    fCtx.fillStyle = "#64748b"; // Slate 500
-    fCtx.font = "bold 11px Arial, sans-serif";
-    fCtx.fillText("Código de evidencia:", 300, 265);
-
-    fCtx.fillStyle = "#1e293b"; // Slate 800
-    fCtx.font = "bold 13px Courier New, monospace";
-    fCtx.fillText(evidenceId || "N/D", 300, 285);
-
-    // Línea separadora sutil inferior
-    fCtx.strokeStyle = "#cbd5e1";
-    fCtx.lineWidth = 1;
-    fCtx.beginPath();
-    fCtx.moveTo(220, 310);
-    fCtx.lineTo(380, 310);
-    fCtx.stroke();
-
-    // 11. Clasificación
-    fCtx.fillStyle = "#64748b"; // Slate 500
-    fCtx.font = "11px Arial, sans-serif";
-    fCtx.fillText("Clasificación: CONFIDENCIAL", 300, 335);
-
-    const fallbackBuffer: ArrayBuffer = await new Promise((resolve) => {
-      fCanvas.toBlob(async (blob) => {
-        resolve(await blob!.arrayBuffer());
-      }, "image/png");
-    });
-
-    const ratio = Math.min(maxWidth / 600, maxHeight / 380);
-    return {
-      data: fallbackBuffer,
-      width: Math.round(600 * ratio),
-      height: Math.round(380 * ratio)
-    };
-  }
-  return { data: new ArrayBuffer(0), width: maxWidth, height: maxHeight };
+  return null;
 }
 
 async function getImageDimensionsAndBuffer(
@@ -1568,6 +1461,15 @@ export async function exportToWord(
         continue;
       }
 
+      // ADR-013.2 Evidence Publication Strict Mode
+      // Una evidencia sin imagen real no debe generar bloque documental.
+      if (!imgRes || !imgRes.data || imgRes.data.byteLength === 0) {
+        console.warn(
+          `[ADR-013.2] Evidencia fotográfica excluida sin imagen válida: ${photo.id || "SIN_ID"}`
+        );
+        continue;
+      }
+
       // De lo contrario, renderizamos la tarjeta premium nativa en el cuerpo principal de Capítulo 5
       const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, photo, context);
       elements.push(tableCard);
@@ -1703,6 +1605,15 @@ export async function exportToWord(
         confidence: sv.confidencePercentage || sv.confidence || 100,
         capturedAt: sv.capturedAt || sv.date || undefined
       };
+
+      // ADR-013.2 Evidence Publication Strict Mode
+      // Una captura Street View sin imagen real no debe generar bloque documental.
+      if (!imgRes || !imgRes.data || imgRes.data.byteLength === 0) {
+        console.warn(
+          `[ADR-013.2] Street View excluido sin captura válida: ${sv.id || "SIN_ID"}`
+        );
+        continue;
+      }
 
       // Maquetar la tarjeta mediante el builder de evidencias
       const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, sv, context);
