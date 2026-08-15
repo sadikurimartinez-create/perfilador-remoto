@@ -743,7 +743,18 @@ export function ProjectMap({
               position={{ lat: Number(photo.displayLat), lng: Number(photo.displayLng) }}
               zIndex={isPoi ? 100 : 200}
               title={`Evidencia ${photo.id}`}
-              onClick={() => setHoveredPhoto(photo)}
+              onClick={() => {
+                setActivePhoto(photo);
+                setHoveredPhoto(null);
+              }}
+              onMouseOver={() => {
+                if (activePhoto?.id !== photo.id) {
+                  setHoveredPhoto(photo);
+                }
+              }}
+              onMouseOut={() => {
+                setHoveredPhoto(null);
+              }}
               draggable={true}
               onDragEnd={async (e) => {
                 if (e.latLng && onMoveMarker) {
@@ -932,7 +943,7 @@ export function ProjectMap({
           </InfoWindow>
         )}
 
-        {/* Hover info window containing the preview and full metadata of the georeferenced evidence */}
+        {/* Hover info window containing the preview and limited metadata of the georeferenced evidence */}
         {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (
           <InfoWindow
             position={{ lat: Number(hoveredPhoto.displayLat ?? hoveredPhoto.lat), lng: Number(hoveredPhoto.displayLng ?? hoveredPhoto.lng) }}
@@ -941,37 +952,86 @@ export function ProjectMap({
             }}
             onCloseClick={() => setHoveredPhoto(null)}
           >
-            <div className="bg-slate-950/95 text-slate-200 p-4 rounded-xl border border-slate-800 shadow-2xl flex flex-col gap-2.5 w-72 pointer-events-none font-sans text-xs">
+            <div className="bg-slate-950/95 text-slate-200 p-3 rounded-xl border border-slate-800 shadow-2xl flex flex-col gap-2 w-64 pointer-events-none font-sans text-xs">
               <img
                 src={hoveredPhoto.previewUrl || "/no-image.png"}
                 alt={hoveredPhoto.tipo || "Evidencia"}
-                className="w-full h-36 object-cover rounded-lg border border-slate-800 bg-slate-900"
+                className="w-full h-28 object-cover rounded-lg border border-slate-800 bg-slate-900"
               />
-              <div className="w-full space-y-1.5">
+              <div className="w-full space-y-1">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-1">
                   <span className="font-black text-cyan-400 uppercase tracking-wide">
                     {hoveredPhoto.evidenceId || `EVI-${hoveredPhoto.id.slice(0, 6).toUpperCase()}`}
                   </span>
-                  <span className={`px-2 py-0.5 text-[8px] font-bold rounded-full ${hoveredPhoto.validado ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
-                    {hoveredPhoto.validado ? "VALIDADA" : "PENDIENTE"}
+                </div>
+                
+                <div className="grid grid-cols-1 gap-y-0.5 text-[9px] text-slate-400">
+                  <div><span className="text-slate-500 font-bold">Tipo:</span> {hoveredPhoto.tipo || "Fotografía"}</div>
+                  <div><span className="text-slate-500 font-bold">Fecha:</span> {hoveredPhoto.contextualizedAt ? new Date(hoveredPhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
+                  <div><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(hoveredPhoto.lat).toFixed(3)}, {Number(hoveredPhoto.lng).toFixed(3)}</div>
+                </div>
+              </div>
+            </div>
+          </InfoWindow>
+        )}
+
+        {/* Action-oriented selection InfoWindow for depth analysis and street view activation */}
+        {activePhoto && activePhoto.lat != null && activePhoto.lng != null && (
+          <InfoWindow
+            position={{ lat: Number(activePhoto.displayLat ?? activePhoto.lat), lng: Number(activePhoto.displayLng ?? activePhoto.lng) }}
+            options={{
+              pixelOffset: new window.google.maps.Size(0, -35),
+            }}
+            onCloseClick={() => setActivePhoto(null)}
+          >
+            <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2.5 w-80 font-sans text-xs">
+              <img
+                src={activePhoto.previewUrl || "/no-image.png"}
+                alt={activePhoto.tipo || "Evidencia"}
+                className="w-full h-36 object-cover rounded-lg border border-slate-700 bg-slate-950"
+              />
+              <div className="w-full space-y-2">
+                <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
+                  <span className="font-black text-cyan-400 uppercase tracking-wide">
+                    {activePhoto.evidenceId || `EVI-${activePhoto.id.slice(0, 6).toUpperCase()}`}
+                  </span>
+                  <span className={`px-2 py-0.5 text-[8px] font-bold rounded-full ${activePhoto.validado ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
+                    {activePhoto.validado ? "VALIDADA" : "PENDIENTE"}
                   </span>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-400">
-                  <div><span className="text-slate-500 font-bold">Tipo:</span> {hoveredPhoto.tipo || "Fotografía"}</div>
-                  <div><span className="text-slate-500 font-bold">Fuente:</span> {hoveredPhoto.gpsSource || "Analista"}</div>
-                  <div><span className="text-slate-500 font-bold">Fecha:</span> {hoveredPhoto.contextualizedAt ? new Date(hoveredPhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
-                  <div><span className="text-slate-500 font-bold">Usuario:</span> {hoveredPhoto.contextualizedBy || "Analista CEIPOL"}</div>
-                  <div className="col-span-2"><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(hoveredPhoto.lat).toFixed(5)}, {Number(hoveredPhoto.lng).toFixed(5)}</div>
-                  <div className="col-span-2"><span className="text-slate-500 font-bold">Confianza:</span> {hoveredPhoto.gpsAccuracy ? `${hoveredPhoto.gpsAccuracy}m` : "Alto"}</div>
-                  <div className="col-span-2"><span className="text-slate-500 font-bold">Relación Hipótesis:</span> Factor ambiental y delictivo</div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-300 font-sans">
+                  <div><span className="text-slate-500 font-bold">Tipo:</span> {activePhoto.tipo || "Fotografía"}</div>
+                  <div><span className="text-slate-500 font-bold">Fuente:</span> {activePhoto.gpsSource || "Analista"}</div>
+                  <div><span className="text-slate-500 font-bold">Fecha:</span> {activePhoto.contextualizedAt ? new Date(activePhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
+                  <div><span className="text-slate-500 font-bold">Usuario:</span> {activePhoto.contextualizedBy || "Analista CEIPOL"}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(activePhoto.lat).toFixed(5)}, {Number(activePhoto.lng).toFixed(5)}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Relación Hipótesis:</span> Factor de riesgo territorial</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Clasificación:</span> Evidencia táctica georreferenciada</div>
                 </div>
 
-                {hoveredPhoto.comentario && (
-                  <p className="text-[10px] text-slate-300 leading-normal border-t border-slate-900 pt-1.5 italic">
-                    "{hoveredPhoto.comentario}"
+                {activePhoto.comentario && (
+                  <p className="text-[10px] text-slate-300 leading-normal border-t border-slate-800 pt-1.5 italic">
+                    "{activePhoto.comentario}"
                   </p>
                 )}
+
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-800">
+                  <button
+                    onClick={() => {
+                      if (onPoiSelect) {
+                        onPoiSelect(activePhoto.lat, activePhoto.lng);
+                      }
+                      setActivePhoto(null);
+                    }}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-1.5 px-3 rounded-lg transition-colors text-center text-[10px] flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                  >
+                    Activar análisis remoto Street View
+                  </button>
+                  <div className="text-[9px] text-slate-400 text-center">
+                    Arrastre el pin para ajustar posición geográfica en el mapa
+                  </div>
+                </div>
               </div>
             </div>
           </InfoWindow>

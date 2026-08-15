@@ -1,4 +1,5 @@
 import { VisualEvidenceInternal, VisualEvidenceMatrix } from "./models/visualEvidenceTypes";
+import { resolveImageExtension } from "../documentEvidenceIntegrationEngine";
 import { StreetViewCollector } from "./streetViewCollector";
 import { StreetViewAnalyzer } from "./streetViewAnalyzer";
 import { StreetViewSelector } from "./streetViewSelector";
@@ -17,8 +18,47 @@ export class VisualEvidenceEngine {
     radiusMeters: number,
     hotspots: any[]
   ): VisualEvidenceMatrix {
+    // Regla determinística del Evidence Governance Engine: Pre-normalizar capturas de Street View
+    const normalizedRawPhotos = (rawPhotos || []).map(p => {
+      if (!p) return p;
+
+      // Determinar clase de categoría y tipo de proveedor de fuente
+      const isStreetView = p.tipo === "REMOTE_STREET_VIEW" || p.tipo === "STREET_VIEW" || p.isStreetView;
+      const isPhotoField = p.tipo === "PHOTO_FIELD" || p.tipo === "PHOTO" || p.category === "VULNERABILIDAD_FISICA" || p.classification === "PHOTO_FIELD";
+
+      let resolvedImage = p.previewUrl || p.dataUrl || p.imageUrl || p.url || p.capturaPanoramica || p.panoramaUrl || p.streetViewMetadata?.staticUrl || "";
+
+      // Solo realizamos resolución de extensión para recursos de imagen reales (REMOTE_VISUAL o PHOTO_FIELD)
+      if (isStreetView || isPhotoField || p.evidenceCategoryClass === "REMOTE_VISUAL" || p.evidenceCategoryClass === "PHOTO_FIELD") {
+        if (resolvedImage && typeof resolvedImage === "string") {
+          const extension = resolveImageExtension(p.mimeType, resolvedImage, p.buffer);
+          if (resolvedImage.includes(".undefined")) {
+            console.warn(`[AUDITORÍA VISUAL ENGINE] Corrigiendo URL con extensión inválida .undefined para ID: ${p.id}`);
+            resolvedImage = resolvedImage.replace(".undefined", extension);
+          }
+        }
+      }
+
+      if (isStreetView) {
+        return {
+          ...p,
+          tipo: "REMOTE_STREET_VIEW",
+          category: "STREET_VIEW",
+          classification: "REMOTE_VISUAL",
+          evidenceCategoryClass: "REMOTE_VISUAL",
+          sourceProvider: "GOOGLE_STREET_VIEW",
+          isStreetView: true,
+          previewUrl: resolvedImage,
+          dataUrl: resolvedImage,
+          imageUrl: resolvedImage,
+          url: resolvedImage
+        };
+      }
+      return p;
+    });
+
     // 1. Clasificar y mapear las fotos del analista (sin límites)
-    const analystInternal: VisualEvidenceInternal[] = rawPhotos
+    const analystInternal: VisualEvidenceInternal[] = normalizedRawPhotos
       .filter(p => !p.tipo?.toLowerCase().includes("street") && !p.url?.toLowerCase().includes("street"))
       .map((p, idx) => {
         let category = "VULNERABILIDAD_FISICA";

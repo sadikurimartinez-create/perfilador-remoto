@@ -360,6 +360,47 @@ export class ReportQualityGate {
     }
     console.log(`====================================================================\n`);
 
+    // ------------------------------------------------------------------------
+    // REGLA 7: VALIDACIÓN DE INTEGRIDAD DE EVIDENCIA TERRITORIAL (REPORT QUALITY GOVERNANCE)
+    // ------------------------------------------------------------------------
+    const validateTerritorialEvidence = (ev: any, label: string) => {
+      const missing: string[] = [];
+      
+      // 1. Imagen / Fotografía o REMOTE_STREET_VIEW
+      const hasImage = !!(ev.dataUrl || ev.url || ev.previewUrl || ev.image);
+      if (!hasImage) missing.push("imagen/fotografía");
+
+      // 2. Coordenada válida
+      const hasCoords = ev.lat != null && ev.lng != null && Number(ev.lat) !== 0 && Number(ev.lng) !== 0;
+      if (!hasCoords) missing.push("coordenadas georreferenciadas válidas");
+
+      // 3. Fuente identificada
+      const hasSource = !!(ev.gpsSource || ev.sourceProvider || ev.streetViewSource || ev.fuente || ev.fuentePrimaria || ev.source);
+      if (!hasSource) missing.push("identificación de la fuente");
+
+      // 4. Relación con expediente
+      const hasExpedienteRelation = !!(ev.projectId || ev.evidenceId || ev.id);
+      if (!hasExpedienteRelation) missing.push("relación directa con el expediente");
+
+      // 5. Clasificación correcta
+      const hasClassification = !!(ev.tipo || ev.classification || ev.evidenceCategoryClass || ev.category);
+      if (!hasClassification) missing.push("clasificación o categoría operacional");
+
+      if (missing.length > 0) {
+        console.warn(`[SOFT GOVERNANCE] [ADVISORY] Evidencia territorial parcial detectada en ${label} (ID: ${ev.id || "N/D"}). Faltan elementos críticos: ${missing.join(", ")}.`);
+      }
+    };
+
+    if (payload.photoEvidence && Array.isArray(payload.photoEvidence)) {
+      payload.photoEvidence.forEach((ev, idx) => validateTerritorialEvidence(ev, `Foto de Campo #${idx + 1}`));
+    }
+    if (payload.streetViewAnalysis && Array.isArray(payload.streetViewAnalysis)) {
+      payload.streetViewAnalysis.forEach((ev, idx) => validateTerritorialEvidence(ev, `Análisis Street View #${idx + 1}`));
+    }
+    if (payload.evidenceRegistry && Array.isArray(payload.evidenceRegistry)) {
+      payload.evidenceRegistry.forEach((ev, idx) => validateTerritorialEvidence(ev, `Registro de Evidencia #${idx + 1}`));
+    }
+
     // Registramos las recomendaciones en el payload para visualización sin bloquear nada
     if (narrativeResult.idsScore < 70) {
       if (!payload.conclusiones) {

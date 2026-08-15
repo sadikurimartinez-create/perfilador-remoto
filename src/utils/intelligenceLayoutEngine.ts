@@ -520,6 +520,21 @@ export const buildIntelligenceEditorialPayload = async (
   reportNumber?: string,
   analystName?: string
 ): Promise<IntelligenceReportPayload> => {
+  // Aplicar regla determinista del Evidence Governance Engine (EGE Contract Rules)
+  album = (album || []).map(p => {
+    if (p && (p.tipo === "REMOTE_STREET_VIEW" || p.tipo === "STREET_VIEW" || p.isStreetView)) {
+      return {
+        ...p,
+        tipo: "REMOTE_STREET_VIEW",
+        category: "STREET_VIEW",
+        classification: "REMOTE_VISUAL",
+        sourceProvider: "GOOGLE_STREET_VIEW",
+        isStreetView: true
+      };
+    }
+    return p;
+  });
+
   const rawExecSummary = extractSection(rawContent, 1);
   const rawHypothesis = extractSection(rawContent, 3);
   const rawMapsText = extractSection(rawContent, 4);
@@ -915,7 +930,17 @@ export const buildIntelligenceEditorialPayload = async (
       criminologicalAnalysis: s.operationalImpact,
       relation: "Coordinar remediación física situacional del entorno.",
       streetViewMetadata: svMeta,
-      confidencePercentage
+      confidencePercentage,
+
+      // Contrato Determinista Evidence Governance Engine
+      tipo: "REMOTE_STREET_VIEW",
+      category: "STREET_VIEW",
+      classification: "REMOTE_VISUAL",
+      sourceProvider: "GOOGLE_STREET_VIEW",
+      isStreetView: true,
+      evidenceOrigin: "REMOTE",
+      evidenceCategoryClass: "REMOTE_VISUAL",
+      source: "STREET_VIEW"
     };
   });
 

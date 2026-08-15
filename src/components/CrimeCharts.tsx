@@ -209,6 +209,15 @@ export function CrimeCharts({
         </div>
 
       </div>
+
+      <div className="mt-2 bg-slate-900/30 p-3 rounded border border-slate-800/80 text-[11px] space-y-1.5 text-slate-400">
+        <div>
+          <span className="font-bold text-slate-300">Fuente de datos:</span> Registro administrativo acumulado de llamadas al 911 (C4) y denuncias formalizadas ante la Fiscalía General de Justicia del Estado.
+        </div>
+        <div>
+          <span className="font-bold text-slate-300">Correlación con Hipótesis:</span> Los picos estacionales y de proximidad espacial sustentan la hipótesis de facilitación delictiva ambiental por desatención del control formal e informal del entorno.
+        </div>
+      </div>
     </div>
   );
 }

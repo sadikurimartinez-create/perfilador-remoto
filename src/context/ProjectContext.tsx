@@ -90,7 +90,7 @@ export type AlbumPhoto = {
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
 
-  // Extensión de Gobernanza Street View Evidence v2.1
+  // Extensión de Gobernanza Street View Evidence v2.1 y Contrato Determinista
   evidenceOrigin?: EvidenceOrigin;
   collectionMethod?: CollectionMethod;
   evidenceCategoryClass?: EvidenceCategoryClass;
@@ -101,6 +101,11 @@ export type AlbumPhoto = {
   confidenceFactors?: ConfidenceFactors;
   streetViewCategory?: string;
   streetViewSource?: string;
+
+  // Campos adicionales del contrato determinístico Evidence Governance Engine
+  category?: string;
+  classification?: string;
+  isStreetView?: boolean;
 };
 
 export type SweepIntegrationItem = {
@@ -634,7 +639,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     let photoDocId = photoId;
 
-    const isStreetView = defaultTipo === "STREET_VIEW" || metadata?.gpsSource === "STREET_VIEW" || (metadata as any)?.evidenceType === "VIRTUAL_STREET_VIEW";
+    const isStreetView = defaultTipo === "STREET_VIEW" || 
+                         defaultTipo === "REMOTE_STREET_VIEW" || 
+                         metadata?.gpsSource === "STREET_VIEW" || 
+                         (metadata as any)?.evidenceType === "VIRTUAL_STREET_VIEW" || 
+                         (metadata as any)?.tipo === "REMOTE_STREET_VIEW" || 
+                         (metadata as any)?.tipo === "STREET_VIEW";
+
+    const resolvedTipo = (metadata as any)?.tipo || (isStreetView ? "REMOTE_STREET_VIEW" : defaultTipo);
 
     // 3. Guardar metadatos en Firestore (con fallback local ante cuotas agotadas)
     try {
@@ -647,7 +659,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         lng,
         projectId: project.id,
         createdAt: Date.now(),
-        tipo: isStreetView ? "STREET_VIEW" : defaultTipo,
+        tipo: resolvedTipo,
         fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
         evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : ((metadata as any)?.evidenceType || "ANALYST_PHOTO"),
         comentario: metadata?.comentario || "",
@@ -663,7 +675,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         validado: metadata?.validado ?? false,
         streetViewCategory: (metadata as any)?.streetViewCategory || null,
         streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
-        analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null)
+        analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
+
+        // Regla gobernada por contrato determinista (EGE Contract Rules)
+        ...(isStreetView || resolvedTipo === "REMOTE_STREET_VIEW" ? {
+          category: "STREET_VIEW",
+          classification: "REMOTE_VISUAL",
+          sourceProvider: "GOOGLE_STREET_VIEW",
+          isStreetView: true
+        } : {})
       };
       const photoDocRef = await addDoc(photosColRef, photoDocData);
       photoDocId = photoDocRef.id;
@@ -682,7 +702,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       previewUrl: downloadURL,
       lat,
       lng,
-      tipo: isStreetView ? "STREET_VIEW" : defaultTipo,
+      tipo: resolvedTipo,
       fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
       evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : ((metadata as any)?.evidenceType || "ANALYST_PHOTO"),
       comentario: metadata?.comentario || "",
@@ -699,7 +719,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       validado: metadata?.validado ?? false,
       streetViewCategory: (metadata as any)?.streetViewCategory || null,
       streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
-      analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null)
+      analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
+
+      // Regla gobernada por contrato determinista (EGE Contract Rules)
+      ...(isStreetView || resolvedTipo === "REMOTE_STREET_VIEW" ? {
+        category: "STREET_VIEW",
+        classification: "REMOTE_VISUAL",
+        sourceProvider: "GOOGLE_STREET_VIEW",
+        isStreetView: true
+      } : {})
     } as any, photoDocId);
 
     // Auto-seleccionar la foto en la lista activa para asegurar su exportación

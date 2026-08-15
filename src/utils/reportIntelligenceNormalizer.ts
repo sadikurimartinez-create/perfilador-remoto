@@ -65,6 +65,22 @@ export class ReportIntelligenceNormalizer {
     cleaned = cleaned.replace(/_{2,}/g, "");            // Quitar rayas horizontales __
 
     // 3. Traducir texto IA a lenguaje institucional formal y descriptivo
+    cleaned = cleaned.replace(/BARRIDO DE INCIDENCIA DELICTIVA GEOINT/gi, "Análisis territorial de incidencia delictiva");
+    cleaned = cleaned.replace(/BARRIDO DE INCIDENCIA GEOINT/gi, "Análisis territorial de incidencia delictiva");
+    cleaned = cleaned.replace(/Evidencia generada automáticamente/gi, "Resultado del análisis geoespacial aplicado al área de estudio");
+    cleaned = cleaned.replace(/Evidencia generada automaticamente/gi, "Resultado del análisis geoespacial aplicado al área de estudio");
+    
+    // Quitar nombres de motores y variables técnicas o de depuración
+    cleaned = cleaned.replace(/\bGEOINT\b/g, "Análisis Geoespacial");
+    cleaned = cleaned.replace(/\bOSINT\b/g, "Análisis de Fuentes Abiertas");
+    cleaned = cleaned.replace(/\bBARRIDO\b/g, "Búsqueda y Análisis");
+    cleaned = cleaned.replace(/\bDATOS CLAVE\b/gi, "Indicadores Clave");
+    cleaned = cleaned.replace(/\bpayload\.[a-zA-Z0-9_.]+/gi, "");
+    cleaned = cleaned.replace(/\bprojectId\b/gi, "Identificador del área");
+    cleaned = cleaned.replace(/\banalysisRadius\b/gi, "Radio de influencia");
+    cleaned = cleaned.replace(/\bstreetViewAnalysis\b/gi, "Análisis de entorno virtual");
+    cleaned = cleaned.replace(/\bphotoEvidence\b/gi, "Evidencia fotográfica");
+    
     cleaned = cleaned.replace(/deterioro urbano y la desorganización ambiental/gi, "una convergencia de factores ambientales asociados a pérdida de vigilancia natural, deterioro físico y reducción del control social informal, condiciones que incrementan la oportunidad criminológica");
     cleaned = cleaned.replace(/deterioro urbano y desorganización ambiental/gi, "una convergencia de factores ambientales asociados a pérdida de vigilancia natural, deterioro físico y reducción del control social informal, condiciones que incrementan la oportunidad criminológica");
     cleaned = cleaned.replace(/deterioro urbano/gi, "factores de vulnerabilidad en la infraestructura urbana y pérdida de mantenimiento del entorno");

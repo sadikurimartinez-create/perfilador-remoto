@@ -57,7 +57,8 @@ import {
   EvidenceContextValidator,
   EvidenceGeoshield,
   EvidenceLayoutBuilder,
-  EvidenceFallbackFactory
+  EvidenceFallbackFactory,
+  resolveImageExtension
 } from "@/utils/documentEvidenceIntegrationEngine";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
@@ -96,7 +97,7 @@ async function getImageDimensionsAndBuffer(
   maxHeight = 320,
   narrative = "",
   evidenceId = ""
-): Promise<{ data: ArrayBuffer; width: number; height: number } | null> {
+): Promise<{ data: ArrayBuffer; width: number; height: number; type: string } | null> {
   if (!imageUrl || typeof imageUrl !== "string") return null;
   let objectUrl: string | null = null;
   try {
@@ -241,7 +242,9 @@ async function getImageDimensionsAndBuffer(
       }
     }
 
-    return { data: stampedBuffer, width: scaledWidth, height: scaledHeight };
+    const resolvedExt = resolveImageExtension(undefined, imageUrl, stampedBuffer);
+    const resolvedType = resolvedExt.replace(".", "");
+    return { data: stampedBuffer, width: scaledWidth, height: scaledHeight, type: resolvedType };
   } catch (err) {
     console.error("Watermark/dimension calc failed, aplicando fallback de placeholder táctico institucional local:", err);
     
@@ -251,50 +254,85 @@ async function getImageDimensionsAndBuffer(
       fCanvas.height = 380;
       const fCtx = fCanvas.getContext("2d");
       if (fCtx) {
-        // Fondo azul institucional oscuro elegante
-        fCtx.fillStyle = "#0f172a"; // Slate 900
-        fCtx.fillRect(0, 0, 600, 380);
-        
-        // Dibujar cuadrícula táctica de fondo de precisión
-        fCtx.strokeStyle = "rgba(51, 65, 85, 0.35)"; // Slate 700
-        fCtx.lineWidth = 1;
-        for (let x = 0; x < 600; x += 30) {
-          fCtx.beginPath();
-          fCtx.moveTo(x, 0);
-          fCtx.lineTo(x, 380);
-          fCtx.stroke();
+        const isStreetView = (evidenceId && (evidenceId.startsWith("SV") || evidenceId.toLowerCase().includes("street"))) || 
+          (narrative && narrative.toLowerCase().includes("street view")) || 
+          (imageUrl && imageUrl.toLowerCase().includes("street"));
+
+        if (isStreetView) {
+          // Fondo azul institucional oscuro elegante (sin grilla cartográfica)
+          fCtx.fillStyle = "#0b1329"; // Slate oscuro para fotos
+          fCtx.fillRect(0, 0, 600, 380);
+          
+          // Borde táctico cyan de precisión de entorno virtual
+          fCtx.strokeStyle = "#38bdf8"; // Sky 400
+          fCtx.lineWidth = 2;
+          fCtx.strokeRect(15, 15, 570, 350);
+          
+          // Texto de título
+          fCtx.fillStyle = "#f8fafc";
+          fCtx.font = "bold 13px Arial, sans-serif";
+          fCtx.textAlign = "center";
+          fCtx.fillText("EVIDENCIA VISUAL REMOTA (REMOTE_STREET_VIEW)", 300, 160);
+          
+          fCtx.fillStyle = "#38bdf8"; // Sky 400
+          fCtx.font = "bold 11px Arial, sans-serif";
+          fCtx.fillText("ANÁLISIS DE ENTORNO VIRTUAL INTEGRADO", 300, 190);
+          
+          fCtx.fillStyle = "#94a3b8"; // Slate 400
+          fCtx.font = "10px Arial, sans-serif";
+          fCtx.fillText("La imagen y los metadatos panorámicos se encuentran registrados en el expediente digital.", 300, 225);
+          fCtx.fillText("Las coordenadas y georreferenciaciones exactas se detallan en el cuerpo del dictamen.", 300, 240);
+          
+          // Logotipo de fondo
+          fCtx.fillStyle = "rgba(56, 189, 248, 0.08)";
+          fCtx.font = "bold 56px Arial, sans-serif";
+          fCtx.fillText("STREET VIEW", 300, 100);
+        } else {
+          // Fondo azul institucional oscuro elegante para mapas
+          fCtx.fillStyle = "#0f172a"; // Slate 900
+          fCtx.fillRect(0, 0, 600, 380);
+          
+          // Dibujar cuadrícula táctica de fondo de precisión
+          fCtx.strokeStyle = "rgba(51, 65, 85, 0.35)"; // Slate 700
+          fCtx.lineWidth = 1;
+          for (let x = 0; x < 600; x += 30) {
+            fCtx.beginPath();
+            fCtx.moveTo(x, 0);
+            fCtx.lineTo(x, 380);
+            fCtx.stroke();
+          }
+          for (let y = 0; y < 380; y += 30) {
+            fCtx.beginPath();
+            fCtx.moveTo(0, y);
+            fCtx.lineTo(600, y);
+            fCtx.stroke();
+          }
+          
+          // Borde dorado táctico
+          fCtx.strokeStyle = "#94a3b8"; // Slate 400
+          fCtx.lineWidth = 2;
+          fCtx.strokeRect(15, 15, 570, 350);
+          
+          // Texto de título
+          fCtx.fillStyle = "#f8fafc";
+          fCtx.font = "bold 13px Arial, sans-serif";
+          fCtx.textAlign = "center";
+          fCtx.fillText("DIAGNOSIS Y CARTOGRAFÍA DE CONTROL TÁCTICO", 300, 160);
+          
+          fCtx.fillStyle = "#38bdf8"; // Sky 400
+          fCtx.font = "bold 11px Arial, sans-serif";
+          fCtx.fillText("EVIDENCIA DIGITAL INTEGRADA — COORDENADAS REGISTRADAS", 300, 190);
+          
+          fCtx.fillStyle = "#94a3b8"; // Slate 400
+          fCtx.font = "10px Arial, sans-serif";
+          fCtx.fillText("El mapa estático de red se encuentra en proceso de sincronización con el servidor central.", 300, 225);
+          fCtx.fillText("Las coordenadas y georreferenciaciones exactas se detallan en el cuerpo del dictamen.", 300, 240);
+          
+          // Logotipo / Sello institucional
+          fCtx.fillStyle = "rgba(255, 255, 255, 0.08)";
+          fCtx.font = "bold 56px Arial, sans-serif";
+          fCtx.fillText("SSPE-CEIPOL", 300, 100);
         }
-        for (let y = 0; y < 380; y += 30) {
-          fCtx.beginPath();
-          fCtx.moveTo(0, y);
-          fCtx.lineTo(600, y);
-          fCtx.stroke();
-        }
-        
-        // Borde dorado táctico
-        fCtx.strokeStyle = "#94a3b8"; // Slate 400
-        fCtx.lineWidth = 2;
-        fCtx.strokeRect(15, 15, 570, 350);
-        
-        // Texto de título
-        fCtx.fillStyle = "#f8fafc";
-        fCtx.font = "bold 13px Arial, sans-serif";
-        fCtx.textAlign = "center";
-        fCtx.fillText("DIAGNOSIS Y CARTOGRAFÍA DE CONTROL TÁCTICO", 300, 160);
-        
-        fCtx.fillStyle = "#38bdf8"; // Sky 400
-        fCtx.font = "bold 11px Arial, sans-serif";
-        fCtx.fillText("EVIDENCIA DIGITAL INTEGRADA — COORDENADAS REGISTRADAS", 300, 190);
-        
-        fCtx.fillStyle = "#94a3b8"; // Slate 400
-        fCtx.font = "10px Arial, sans-serif";
-        fCtx.fillText("El mapa estático de red se encuentra en proceso de sincronización con el servidor central.", 300, 225);
-        fCtx.fillText("Las coordenadas y georreferenciaciones exactas se detallan en el cuerpo del dictamen.", 300, 240);
-        
-        // Logotipo / Sello institucional
-        fCtx.fillStyle = "rgba(255, 255, 255, 0.08)";
-        fCtx.font = "bold 56px Arial, sans-serif";
-        fCtx.fillText("SSPE-CEIPOL", 300, 100);
         
         const fallbackBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
           fCanvas.toBlob(
@@ -310,7 +348,7 @@ async function getImageDimensionsAndBuffer(
         });
         
         const ratio = Math.min(maxWidth / 600, maxHeight / 380);
-        return { data: fallbackBuffer, width: Math.round(600 * ratio), height: Math.round(380 * ratio) };
+        return { data: fallbackBuffer, width: Math.round(600 * ratio), height: Math.round(380 * ratio), type: "png" };
       }
     } catch (innerErr) {
       console.error("Fallo crítico en el generador de fallback:", innerErr);
@@ -786,11 +824,11 @@ export async function exportToWord(
   const logoChildren: any[] = [];
 
   if (sspLogoBuffer) {
-    logoChildren.push(new ImageRun({ data: sspLogoBuffer, transformation: { width: 50, height: 50 } } as any));
+    logoChildren.push(new ImageRun({ data: sspLogoBuffer, type: "png", transformation: { width: 50, height: 50 } } as any));
     logoChildren.push(new TextRun({ text: "                " })); // espacio
   }
   if (ceipolLogoBuffer) {
-    logoChildren.push(new ImageRun({ data: ceipolLogoBuffer, transformation: { width: 50, height: 50 } } as any));
+    logoChildren.push(new ImageRun({ data: ceipolLogoBuffer, type: "png", transformation: { width: 50, height: 50 } } as any));
   }
 
   // HELPER PARAGRAPH CREATORS (ChapterLayoutManager logic: keepWithNext: true)
@@ -1317,8 +1355,31 @@ export async function exportToWord(
   elements.push(createTitle("CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO"));
   elements.push(...renderEditorialText(payload.mapsText || "", true));
 
-  if (payload.maps && payload.maps.length > 0) {
-    for (const map of payload.maps) {
+  // Regla de Gobernanza de Mapas: Los mapas solamente deben aparecer cuando el capítulo requiere análisis espacial,
+  // existe relación narrativa legítima y existe un dato cartográfico certificado. Se eliminan decorativos, repetidos y sin explicación analítica.
+  const certifiedMaps: any[] = [];
+  const seenMapUrls = new Set<string>();
+
+  if (payload.maps && Array.isArray(payload.maps)) {
+    payload.maps.forEach((map: any) => {
+      if (!map.dataUrl || map.dataUrl.trim().length < 100) return;
+      if (seenMapUrls.has(map.dataUrl)) return;
+
+      const hasNarrativeRelation = map.spatialFinding && map.spatialFinding.trim().length > 15;
+      const hasAnalyticalExplanation = map.interpretation && map.interpretation.trim().length > 15;
+      const isDecorative = (map.title || "").toLowerCase().includes("decorativo") || (map.spatialFinding || "").toLowerCase().includes("decorativo");
+
+      if (hasNarrativeRelation && hasAnalyticalExplanation && !isDecorative) {
+        seenMapUrls.add(map.dataUrl);
+        certifiedMaps.push(map);
+      } else {
+        console.warn(`[MAP GOVERNANCE] Mapa '${map.title || "Sin título"}' excluido por considerarse decorativo, repetido o carecer de explicación analítica certificada.`);
+      }
+    });
+  }
+
+  if (certifiedMaps.length > 0) {
+    for (const map of certifiedMaps) {
       const imgRes = await getImageDimensionsAndBuffer(map.dataUrl, 520, 340);
       if (imgRes) {
         // Título del mapa centrado e institucional
@@ -1342,7 +1403,7 @@ export async function exportToWord(
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: imgRes.data, transformation: { width: 500, height: 320 } })],
+            children: [new ImageRun({ data: imgRes.data, type: imgRes.type || "png", transformation: { width: 500, height: 320 } })],
             spacing: { after: 140 }
           })
         );
@@ -1371,8 +1432,65 @@ export async function exportToWord(
   elements.push(createTitle("CAPÍTULO 4: ANÁLISIS ESTADÍSTICO"));
   elements.push(...renderEditorialText(payload.statsText || "", true));
 
+  // Filtrado y certificación analítica de gráficos (Reglas de Calidad de Auditoría)
+  const certifiedGraphs: any[] = [];
   if (payload.graphs && payload.graphs.length > 0) {
-    for (const graph of payload.graphs) {
+    const seenUrls = new Set<string>();
+    const seenTitles = new Set<string>();
+
+    for (const g of payload.graphs) {
+      if (!g || !g.dataUrl) continue;
+
+      // 1. Título descriptivo sustancial (Evitar genéricos o técnicos internos)
+      const title = g.title || "";
+      if (title.length < 8) continue;
+      const lowerTitle = title.toLowerCase();
+      if (
+        lowerTitle.includes("temp") || 
+        lowerTitle.includes("placeholder") || 
+        lowerTitle.includes("graph_") || 
+        lowerTitle.includes("chart_") || 
+        lowerTitle.includes("test")
+      ) {
+        continue; // Elimina nombres técnicos internos o de prueba
+      }
+
+      // 2. Fuente de datos identificada
+      const sourceText = g.source || g.fuente || "Registro oficial de incidencia delictiva, SSPE-CEIPOL.";
+
+      // 3. Interpretación narrativa (finding e interpretation/explanation mínimos)
+      const finding = g.finding || "";
+      const interpretation = g.interpretation || g.explanation || "";
+      if (finding.length < 12 || interpretation.length < 15) {
+        continue; // Descarta gráficos decorativos sin análisis sustancial
+      }
+
+      // 4. Relación con hipótesis criminológica
+      const relation = g.relation || g.hypothesis || "";
+      if (relation.length < 12) {
+        continue; // Descarta gráficos sin implicación táctica/criminológica clara
+      }
+
+      // 5. Control estricto de duplicados
+      if (seenUrls.has(g.dataUrl) || seenTitles.has(title)) {
+        continue;
+      }
+      seenUrls.add(g.dataUrl);
+      seenTitles.add(title);
+
+      certifiedGraphs.push({
+        ...g,
+        title,
+        source: sourceText,
+        finding,
+        interpretation,
+        relation
+      });
+    }
+  }
+
+  if (certifiedGraphs.length > 0) {
+    for (const graph of certifiedGraphs) {
       const imgRes = await getImageDimensionsAndBuffer(graph.dataUrl, 420, 240);
       if (imgRes) {
         // Título de la Gráfica
@@ -1396,31 +1514,38 @@ export async function exportToWord(
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new ImageRun({ data: imgRes.data, transformation: { width: 420, height: 240 } })],
+            children: [new ImageRun({ data: imgRes.data, type: imgRes.type || "png", transformation: { width: 420, height: 240 } })],
             spacing: { after: 140 }
           })
         );
         
-        // Formato estructurado del Capítulo 4 (v13.0 - Hallazgo, Interpretación, Implicación)
+        // Formato estructurado del Capítulo 4 (v13.0 - Hallazgo, Interpretación, Implicación, Fuente)
         elements.push(
           new Paragraph({
             children: [
               new TextRun({ text: "Hallazgo: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: (graph.finding || "").slice(0, 180), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.finding.slice(0, 180), size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Interpretación: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: (graph.interpretation || graph.explanation || "").slice(0, 240), size: 16, font: "Calibri" })
+              new TextRun({ text: "Interpretación Narrativa: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
+              new TextRun({ text: graph.interpretation.slice(0, 240), size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "Implicación: ", bold: true, size: 16, color: "1F4E79", font: "Calibri" }),
-              new TextRun({ text: (graph.relation || "").slice(0, 120), size: 16, font: "Calibri" })
+              new TextRun({ text: "Relación con Hipótesis Criminológica: ", bold: true, size: 16, color: "1F4E79", font: "Calibri" }),
+              new TextRun({ text: graph.relation.slice(0, 120), size: 16, font: "Calibri" })
+            ],
+            spacing: { after: 40 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Fuente de Datos: ", bold: true, size: 16, color: "5B6573", font: "Calibri" }),
+              new TextRun({ text: graph.source, size: 16, font: "Calibri" })
             ],
             spacing: { after: 180 }
           })
@@ -1429,9 +1554,9 @@ export async function exportToWord(
     }
   }
 
-  // ================= PÁGINA 6: CAPÍTULO 5 - EVIDENCIA FOTOGRÁFICA =================
+  // ================= PÁGINA 6: CAPÍTULO 5 - EVIDENCIA FOTOGRÁFICA DE CAMPO (PHOTO_FIELD) =================
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
-  elements.push(createTitle("CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA"));
+  elements.push(createTitle("CAPÍTULO 5: EVIDENCIA FOTOGRÁFICA DE CAMPO (PHOTO_FIELD)"));
   elements.push(...renderEditorialText(payload.evidenceText || ""));
 
   if (payload.photoEvidence && payload.photoEvidence.length > 0) {
@@ -1554,8 +1679,8 @@ export async function exportToWord(
     );
   }
 
-  // ================= PÁGINA 7: CAPÍTULO 6 - ANÁLISIS TERRITORIAL OPERACIONAL =================
-  elements.push(createTitle("CAPÍTULO 6: ANÁLISIS TERRITORIAL OPERACIONAL Y CONTEXTO DE OPORTUNIDAD"));
+  // ================= PÁGINA 7: CAPÍTULO 6 - ANÁLISIS REMOTO Y EVIDENCIA VISUAL (REMOTE_STREET_VIEW) =================
+  elements.push(createTitle("CAPÍTULO 6: ANÁLISIS REMOTO Y EVIDENCIA VISUAL (REMOTE_STREET_VIEW)"));
   
   let sanitizedStreetViewText = payload.streetViewText || "Análisis territorial táctico no disponible.";
   
@@ -1578,6 +1703,16 @@ export async function exportToWord(
   if (hasStreetViewImages) {
     for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
       const sv = payload.streetViewAnalysis[i];
+      
+      // Regla determinística: Priorizar imagen real capturada para REMOTE_STREET_VIEW o STREET_VIEW
+      if (sv.tipo === "REMOTE_STREET_VIEW" || sv.tipo === "STREET_VIEW" || sv.isStreetView || sv.source === "STREET_VIEW") {
+        const resolvedImage = sv.previewUrl || sv.dataUrl || sv.imageUrl || sv.url || sv.capturaPanoramica || sv.panoramaUrl || sv.streetViewMetadata?.staticUrl || "";
+        sv.dataUrl = resolvedImage;
+        sv.previewUrl = resolvedImage;
+        sv.imageUrl = resolvedImage;
+        sv.url = resolvedImage;
+      }
+
       if (!sv.dataUrl) continue;
       
       const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
@@ -1937,7 +2072,7 @@ export async function exportToWord(
       elements.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
-          children: [new ImageRun({ data: imgRes.data, transformation: { width: imgRes.width, height: imgRes.height } })],
+          children: [new ImageRun({ data: imgRes.data, type: imgRes.type || "png", transformation: { width: imgRes.width, height: imgRes.height } })],
           spacing: { before: 120, after: 120 }
         })
       );

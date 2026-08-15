@@ -2,6 +2,72 @@ import { Table, TableRow, TableCell, Paragraph, TextRun, AlignmentType, ShadingT
 import { CEIPOL_DOCUMENT_THEME } from "./documentTableRenderer";
 
 /**
+ * resolveImageExtension - Punto único de resolución de extensiones de imagen según los lineamientos CEIPOL.
+ * Entrada: mimeType, dataUrl, buffer.
+ * Salida: extensión correcta (.jpg, .png, .webp). Prohíbe .undefined, unknown y sin extensión.
+ */
+export function resolveImageExtension(
+  mimeType?: string,
+  dataUrl?: string,
+  buffer?: ArrayBuffer
+): string {
+  // 1. Mime type explícito
+  if (mimeType) {
+    const mime = mimeType.toLowerCase();
+    if (mime === "image/jpeg" || mime === "image/jpg") return ".jpg";
+    if (mime === "image/png") return ".png";
+    if (mime === "image/webp") return ".webp";
+  }
+
+  // 2. dataUrl (Base64 o URL estructurada)
+  if (dataUrl) {
+    const lower = dataUrl.toLowerCase();
+    if (lower.startsWith("data:image/")) {
+      const match = lower.match(/^data:image\/([a-zA-Z+]+);base64,/);
+      if (match && match[1]) {
+        const ext = match[1];
+        if (ext === "jpeg" || ext === "jpg") return ".jpg";
+        if (ext === "png") return ".png";
+        if (ext === "webp") return ".webp";
+      }
+    }
+    // Detección por extensión en string de URL
+    if (lower.includes(".jpg") || lower.includes(".jpeg")) return ".jpg";
+    if (lower.includes(".png")) return ".png";
+    if (lower.includes(".webp")) return ".webp";
+  }
+
+  // 3. Buffer magic bytes
+  if (buffer && buffer.byteLength > 4) {
+    const arr = new Uint8Array(buffer);
+    // PNG: 89 50 4E 47
+    if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) {
+      return ".png";
+    }
+    // JPEG: FF D8 FF
+    if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) {
+      return ".jpg";
+    }
+    // WEBP: RIFF ... WEBP
+    if (
+      arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
+      arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50
+    ) {
+      return ".webp";
+    }
+  }
+
+  // 4. Fallback seguro con baja confianza (No silencioso, deja trazabilidad)
+  console.warn("[AUDITORÍA MIME IMÁGENES] Fallback de baja confianza aplicado: .png", {
+    extension: ".png",
+    confidence: "LOW",
+    inputs: { mimeType, hasDataUrl: !!dataUrl, bufferLength: buffer?.byteLength }
+  });
+  return ".png";
+}
+
+
+/**
  * EvidenceContext - Interfaz de trazabilidad expandida e institucional para v1.0.6 (ADR-011)
  */
 export interface EvidenceContext {
@@ -144,12 +210,27 @@ export class EvidenceLayoutBuilder {
    * Construye una tarjeta premium nativa de Word para fotos de evidencia o capturas de Street View.
    */
   public static buildEvidenceCard(
-    imgRes: { data: ArrayBuffer; width: number; height: number } | null,
+    imgRes: { data: ArrayBuffer; width: number; height: number; type?: string } | null,
     meta: any,
     context: EvidenceContext
   ): Table {
     const contextValidation = EvidenceContextValidator.validateContext(context);
     const hasValidContext = contextValidation.valid;
+
+    // Regla determinística: Evitar que evidencias REMOTE_STREET_VIEW sean interpretadas o renderizadas como mapas
+    if (context.source === "STREET_VIEW" || meta.tipo === "REMOTE_STREET_VIEW" || meta.tipo === "STREET_VIEW" || meta.isStreetView) {
+      // Prioridad: 1. Imagen real capturada, 2. Metadatos StreetView, 3. Coordenadas como información secundaria
+      const resolvedImage = meta.previewUrl || meta.dataUrl || meta.imageUrl || meta.url || meta.capturaPanoramica || meta.panoramaUrl || meta.streetViewMetadata?.staticUrl || "";
+      meta.previewUrl = resolvedImage;
+      meta.dataUrl = resolvedImage;
+      meta.imageUrl = resolvedImage;
+      meta.url = resolvedImage;
+      
+      // Forzar que nunca se interprete como mapa o snapshot cartográfico
+      meta.isMap = false;
+      meta.isTile = false;
+      meta.snapshotCartografico = false;
+    }
 
     // Metadatos sanitizados contra fugas de coordenadas GPS
     const originalCaption = meta.observed || meta.comentario || meta.description || meta.caption || "Se observan elementos del entorno.";
@@ -178,10 +259,10 @@ export class EvidenceLayoutBuilder {
     // Componentes visuales de la tarjeta
     const cardChildren: any[] = [];
 
-    // Título de la tarjeta institucional
+    // Título de la tarjeta institucional según origen
     const titleText = context.source === "STREET_VIEW" 
-      ? `EVIDENCIA VIRTUAL STREET VIEW No. ${context.evidenceId}`
-      : `EVIDENCIA FOTOGRÁFICA No. ${context.evidenceId}`;
+      ? `EVIDENCIA VISUAL REMOTA (REMOTE_STREET_VIEW) No. ${context.evidenceId}`
+      : `EVIDENCIA FOTOGRÁFICA DE CAMPO (PHOTO_FIELD) No. ${context.evidenceId}`;
 
     cardChildren.push(
       new Paragraph({
@@ -207,6 +288,7 @@ export class EvidenceLayoutBuilder {
           children: [
             new ImageRun({
               data: imgRes.data,
+              type: imgRes.type || "png",
               transformation: { width: imgRes.width, height: imgRes.height }
             } as any)
 

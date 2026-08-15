@@ -19,13 +19,15 @@ export interface StreetViewCapturePayload {
   fov: number;
   panoId?: string;
   captureDate?: string;
-  category?: string; // e.g., "hideout", "graffiti", "denue_interest", "vulnerabilidad_fisica", "other"
+  category?: string; // e.g., "hideout", "graffiti", "denue_interest", "vulnerabilidad_fisica", "other", "RUTA_ACCESO", "RUTA_ESCAPE", "PUNTO_ACECHO"
   comentario?: string;
   analystName?: string;
+  tipo_origen?: "STREETVIEW_MANUAL" | "STREETVIEW_AUTOMATICO";
+  estado_revision?: "PENDIENTE_REVISION" | "APROBADO" | "IGNORADO";
 }
 
 /**
- * SSPE-CEIPOL - STREET VIEW MAPPER v2.1
+ * SSPE-CEIPOL - STREET VIEW MAPPER v2.1 (CONTRATO MODERNO DE BARRIDO)
  * Mapea una captura congelada de visor panorámico a la estructura fuertemente tipada de AlbumPhoto.
  */
 export function mapStreetViewToAlbumPhoto(
@@ -47,7 +49,9 @@ export function mapStreetViewToAlbumPhoto(
     captureDate: payload.captureDate || "N/D",
     provider: "Google Maps Street View Panorama v3",
     captureTimestamp: timestamp,
-  };
+    tipo_origen: payload.tipo_origen || "STREETVIEW_MANUAL",
+    estado_revision: payload.estado_revision || "PENDIENTE_REVISION"
+  } as any;
 
   const categoryLabel = payload.category
     ? payload.category.toUpperCase().replace(/_/g, " ")
@@ -74,7 +78,7 @@ export function mapStreetViewToAlbumPhoto(
     validado: true,
     isIndependentPoi: true,
 
-    // Estructura de Gobernanza v2.1
+    // Estructura de Gobernanza v2.1 y Contrato Determinístico de Evidencia
     evidenceOrigin: "REMOTE" as EvidenceOrigin,
     collectionMethod: "DESKTOP_ANALYSIS" as CollectionMethod,
     evidenceCategoryClass: "REMOTE_VISUAL" as EvidenceCategoryClass,
@@ -85,6 +89,11 @@ export function mapStreetViewToAlbumPhoto(
     streetViewCategory: payload.category || "vulnerabilidad_fisica",
     streetViewSource: "Google Maps Street View Panorama v3",
     streetViewMetadata: metadata,
+
+    // Campos deterministas del contrato Evidence Governance Engine
+    category: "STREET_VIEW",
+    classification: "REMOTE_VISUAL",
+    isStreetView: true,
   };
 }
 

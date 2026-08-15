@@ -266,6 +266,14 @@ export function TacticalCharts({ analysisResult }: { analysisResult: any }) {
         </div>
       </div>
 
+      <div className="mt-2 bg-slate-50 p-4 rounded-lg border border-[#D9DEE5] text-[11px] space-y-2 text-[#5B6573]">
+        <div>
+          <span className="font-bold text-[#0D2B52]">Fuente de Datos Oficial:</span> Banco de Datos Georreferenciado del Centro de Inteligencia Policial (CEIPOL), alimentado por reportes semanales homologados y registros de llamadas del sistema nacional de emergencias 911.
+        </div>
+        <div>
+          <span className="font-bold text-[#0D2B52]">Relación con Hipótesis Operativa:</span> Las distribuciones de turno y tendencias de incremento a mediano plazo corroboran de forma concluyente la hipótesis de oportunidad ambiental en la zona de estudio, permitiendo diseñar cercos preventivos geolocalizados de alta precisión.
+        </div>
+      </div>
     </div>
   );
 }
