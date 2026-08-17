@@ -23,6 +23,7 @@ import { StreetViewConfirmationModal } from "@/modules/streetView/StreetViewConf
 import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDisclaimerModal";
 import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
+import { StreetViewCaptureService } from "@/services/streetViewCaptureService";
 
 const NetworkDashboard = dynamic(() => import("./NetworkDashboard").then((mod) => mod.NetworkDashboard), { ssr: false });
 
@@ -739,8 +740,15 @@ export function PhotoAlbum({
     try {
       const albumPhoto = mapStreetViewToAlbumPhoto(payload);
       if (uploadAndAddPhoto) {
-        const blobRes = await fetch(albumPhoto.previewUrl);
-        const blob = await blobRes.blob();
+        const metadata = (albumPhoto.streetViewMetadata || {}) as any;
+        const blob = await StreetViewCaptureService.captureStreetViewImage({
+          lat: albumPhoto.lat!,
+          lng: albumPhoto.lng!,
+          heading: metadata.heading || 0,
+          pitch: metadata.pitch || 0,
+          fov: metadata.fov || 90,
+          size: "800x600"
+        });
         const file = new File([blob], `Remote_StreetView_${Date.now()}.jpg`, { type: "image/jpeg" });
 
         await uploadAndAddPhoto(file, albumPhoto.lat!, albumPhoto.lng!, {
@@ -763,8 +771,14 @@ export function PhotoAlbum({
         alert("Evidencia remota Street View v2.1 incorporada exitosamente al expediente.");
       }
     } catch (err: any) {
-      console.error("[PhotoAlbum] Error al incorporar evidencia Street View v2.1:", err);
-      alert("Error al incorporar evidencia remota: " + err.message);
+      console.error("STREETVIEW_CAPTURE_ERROR", err);
+      const code = err?.code || "SV_CAPTURE_001";
+      const component = err?.component || "PhotoAlbum";
+      const endpoint = err?.endpoint || "/api/proxy-image";
+      const message = err?.message || "Google rechazó la imagen solicitada";
+      alert(
+        `ERROR STREET VIEW\n\nCódigo: ${code}\nComponente: ${component}\nEndpoint: ${endpoint}\nDetalle: ${message}`
+      );
     } finally {
       setSvFlowTarget(null);
     }
@@ -777,8 +791,15 @@ export function PhotoAlbum({
       for (const payload of payloads) {
         const albumPhoto = mapStreetViewToAlbumPhoto(payload);
         if (uploadAndAddPhoto) {
-          const blobRes = await fetch(albumPhoto.previewUrl);
-          const blob = await blobRes.blob();
+          const metadata = (albumPhoto.streetViewMetadata || {}) as any;
+          const blob = await StreetViewCaptureService.captureStreetViewImage({
+            lat: albumPhoto.lat!,
+            lng: albumPhoto.lng!,
+            heading: metadata.heading || 0,
+            pitch: metadata.pitch || 0,
+            fov: metadata.fov || 90,
+            size: "800x600"
+          });
           const file = new File([blob], `Remote_StreetView_${Date.now()}_${savedCount}.jpg`, { type: "image/jpeg" });
 
           await uploadAndAddPhoto(file, albumPhoto.lat!, albumPhoto.lng!, {
@@ -803,8 +824,14 @@ export function PhotoAlbum({
       }
       alert(`Barrido Asistido Multicapa completado con éxito: ${savedCount} imágenes incorporadas al expediente.`);
     } catch (err: any) {
-      console.error("[PhotoAlbum] Error al incorporar barrido Street View:", err);
-      alert("Error al incorporar barrido de imágenes: " + err.message);
+      console.error("STREETVIEW_CAPTURE_ERROR", err);
+      const code = err?.code || "SV_CAPTURE_001";
+      const component = err?.component || "PhotoAlbum";
+      const endpoint = err?.endpoint || "/api/proxy-image";
+      const message = err?.message || "Google rechazó la imagen solicitada";
+      alert(
+        `ERROR STREET VIEW\n\nCódigo: ${code}\nComponente: ${component}\nEndpoint: ${endpoint}\nDetalle: ${message}`
+      );
     } finally {
       setSvFlowTarget(null);
     }
@@ -1739,12 +1766,30 @@ const hasMinimumPhotos =
             
             if (!exists && uploadAndAddPhoto) {
               try {
-                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(sv.streetViewUrl)}`;
-                const svRes = await fetch(proxyUrl);
-                if (svRes.ok) {
-                  const blob = await svRes.blob();
-                  const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
-                  const category = sv.streetViewCategory || "hideout";
+                let heading = 0;
+                let pitch = 0;
+                let fov = 90;
+                if (sv.streetViewUrl) {
+                  try {
+                    const urlObj = new URL(sv.streetViewUrl);
+                    heading = parseFloat(urlObj.searchParams.get("heading") || "0") || 0;
+                    pitch = parseFloat(urlObj.searchParams.get("pitch") || "0") || 0;
+                    fov = parseFloat(urlObj.searchParams.get("fov") || "90") || 90;
+                  } catch (ue) {
+                    console.warn("[PhotoAlbum] Fallo al parsear URL de StreetView para metadata:", ue);
+                  }
+                }
+
+                const blob = await StreetViewCaptureService.captureStreetViewImage({
+                  lat: svLat,
+                  lng: svLng,
+                  heading,
+                  pitch,
+                  fov,
+                  size: "800x600"
+                });
+                const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
+                const category = sv.streetViewCategory || "hideout";
                   await uploadAndAddPhoto(file, svLat, svLng, {
                     tipo: "STREET_VIEW",
                     gpsSource: "STREET_VIEW",
@@ -1781,9 +1826,6 @@ const hasMinimumPhotos =
                       console.warn("[PhotoAlbum] No se pudo escribir extra metadata en Firestore (pero el archivo ya se subió):", fsErr);
                     }
                   }
-                } else {
-                  console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
-                }
               } catch (err) {
                 console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);
               }

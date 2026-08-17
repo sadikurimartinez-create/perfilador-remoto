@@ -153,7 +153,31 @@ async function getImageDimensionsAndBuffer(
 
     if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
       const isExternal = typeof window !== "undefined" && !imgSrc.includes(window.location.host);
-      const fetchUrl = isExternal ? `/api/proxy-image?url=${encodeURIComponent(imgSrc)}` : imgSrc;
+      let fetchUrl = imgSrc;
+      
+      if (isExternal) {
+        if (imgSrc.includes("maps.googleapis.com/maps/api/streetview")) {
+          try {
+            const u = new URL(imgSrc);
+            const loc = u.searchParams.get("location") || "";
+            const [lat, lng] = loc.split(",");
+            if (lat && lng) {
+              const heading = u.searchParams.get("heading") || "0";
+              const pitch = u.searchParams.get("pitch") || "0";
+              const fov = u.searchParams.get("fov") || "90";
+              const size = u.searchParams.get("size") || "800x600";
+              fetchUrl = `/api/proxy-image?lat=${lat}&lng=${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&size=${size}`;
+            } else {
+              fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+            }
+          } catch (e) {
+            console.warn("[Document Engine] Error parsing streetview URL, fallback to direct proxy url parameter", e);
+            fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+          }
+        } else {
+          fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+        }
+      }
       
       const response = await fetch(fetchUrl, { cache: "no-cache" });
       if (!response.ok) return null;
