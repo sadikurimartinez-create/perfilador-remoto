@@ -46,6 +46,10 @@ export const RSS_FEEDS = [
   { nombre: "El Sol de Irapuato", url: "https://www.elsoldeirapuato.com.mx/rss.xml" },
   { nombre: "Periódico Correo", url: "https://periodicocorreo.com.mx/feed/" },
   { nombre: "Zona Franca", url: "https://zonafranca.mx/feed/" },
+  // Querétaro
+  { nombre: "Diario de Querétaro", url: "https://www.diariodequeretaro.com.mx/rss.xml" },
+  { nombre: "Códice Informativo", url: "https://codiceinformativo.com/feed/" },
+  { nombre: "Plaza de Armas QRO", url: "https://plazadearmas.com.mx/feed/" },
   // Foros y Redes Sociales (Reddit)
   { nombre: "Reddit México", url: "https://www.reddit.com/r/mexico/new/.rss" },
   { nombre: "Reddit CDMX", url: "https://www.reddit.com/r/MexicoCity/new/.rss" },
