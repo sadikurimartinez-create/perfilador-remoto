@@ -60,6 +60,8 @@ import {
   EvidenceFallbackFactory,
   resolveImageExtension
 } from "@/utils/documentEvidenceIntegrationEngine";
+import { EvidenceAdapterEngine } from "@/utils/evidence/EvidenceAdapterEngine";
+import { EvidenceFallbackRenderer } from "@/document-engine/renderers/EvidenceFallbackRenderer";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -1723,59 +1725,49 @@ export async function exportToWord(
 
   elements.push(...renderEditorialText(sanitizedStreetViewText));
 
-  // Renderizar las Tarjetas de Evidencia Virtual de Street View
-  if (hasStreetViewImages) {
-    for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
-      const sv = payload.streetViewAnalysis[i];
-      
-      // Regla determinística: Priorizar imagen real capturada para REMOTE_STREET_VIEW o STREET_VIEW
-      if (sv.tipo === "REMOTE_STREET_VIEW" || sv.tipo === "STREET_VIEW" || sv.isStreetView || sv.source === "STREET_VIEW") {
-        const resolvedImage = sv.previewUrl || sv.dataUrl || sv.imageUrl || sv.url || sv.capturaPanoramica || sv.panoramaUrl || sv.streetViewMetadata?.staticUrl || "";
-        sv.dataUrl = resolvedImage;
-        sv.previewUrl = resolvedImage;
-        sv.imageUrl = resolvedImage;
-        sv.url = resolvedImage;
+  // Renderizar las Tarjetas de Evidencia Virtual de Street View (Garantizando Trazabilidad Absoluta sin Pérdidas)
+  if ((payload.streetViewAnalysis && payload.streetViewAnalysis.length > 0) || hasStreetViewImages) {
+    const svList = payload.streetViewAnalysis || [];
+    for (let i = 0; i < svList.length; i++) {
+      const rawSv = svList[i];
+      const sv = EvidenceAdapterEngine.adapt(rawSv, i);
+
+      let imgRes: any = null;
+      if (sv.image) {
+        const dims = PageBalanceEngine.calculateDimensions(sv.metadata.description ? sv.metadata.description.length : 100, 'photo');
+        imgRes = await getImageDimensionsAndBuffer(sv.image, dims.width, dims.height, sv.metadata.description || "Se aprecian condiciones físicas del entorno.", sv.id);
       }
 
-      if (!sv.dataUrl) continue;
-      
-      const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
-      const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height, sv.observed || "Se aprecian condiciones físicas del entorno.", sv.id);
-      
-      if (!imgRes || !imgRes.data) {
+      // Regla Institucional Obligatoria: Si la imagen falla o no tiene buffer, NUNCA eliminar. Renderizar Ficha Fallback.
+      if (!imgRes || !imgRes.data || imgRes.data.byteLength === 0) {
+        console.warn(`[REGLA INSTITUCIONAL 8.2.1] Falla/Ausencia de imagen en evidencia ${sv.id}. Generando Ficha de Evidencia Remota.`);
+        const fallbackCard = EvidenceFallbackRenderer.renderFallbackCard(
+          sv,
+          sv.duplicateOf ? `Imagen similar a evidencia ${sv.duplicateOf}` : "Imagen no disponible durante renderizado documental."
+        );
+        elements.push(fallbackCard);
         continue;
       }
-      
-      const isRemoteGabinete = sv.evidenceCategoryClass === "REMOTE_VISUAL" || sv.evidenceOrigin === "REMOTE" || sv.source === "STREET_VIEW";
+
+      const isRemoteGabinete = sv.metadata.evidenceCategoryClass === "REMOTE_VISUAL" || sv.source === "GOOGLE_STREET_VIEW";
       const disclaimerText = isRemoteGabinete
         ? "[TRABAJO DE GABINETE] Evidencia obtenida mediante análisis remoto utilizando fuente visual georreferenciada. No corresponde a inspección física en campo."
         : "";
 
-      const povText = sv.streetViewMetadata
-        ? ` (Cobertura Google: ${sv.streetViewMetadata.captureDate || "N/D"} | POV: HDG ${sv.streetViewMetadata.heading}° Pitch ${sv.streetViewMetadata.pitch}° FOV ${sv.streetViewMetadata.fov}°)`
-        : "";
+      const povText = ` (Cobertura Google: ${sv.metadata.captureDate || "N/D"} | POV: HDG ${sv.metadata.heading}° Pitch ${sv.metadata.pitch}° FOV ${sv.metadata.fov}°)`;
 
       const context: EvidenceContext = {
-        evidenceId: sv.id || `SV-0${i + 1}`,
+        evidenceId: sv.id,
         source: "STREET_VIEW",
-        analyticalPurpose: `${disclaimerText} ${sv.analyticalPurpose || sv.observed || sv.indicadorCriminologico || ""}${povText}`.trim(),
-        relatedHypothesis: sv.relatedHypothesis || sv.hypothesis || undefined,
+        analyticalPurpose: `${disclaimerText} ${sv.metadata.criminologicalInterpretation || sv.metadata.description || ""}${povText}`.trim(),
+        relatedHypothesis: sv.metadata.relatedHypothesis || undefined,
         evidenceClass: "PRIMARY",
-        confidence: sv.confidencePercentage || sv.confidence || 100,
-        capturedAt: sv.capturedAt || sv.date || undefined
+        confidence: sv.metadata.confidence || 100,
+        capturedAt: sv.timestamp
       };
 
-      // ADR-013.2 Evidence Publication Strict Mode
-      // Una captura Street View sin imagen real no debe generar bloque documental.
-      if (!imgRes || !imgRes.data || imgRes.data.byteLength === 0) {
-        console.warn(
-          `[ADR-013.2] Street View excluido sin captura válida: ${sv.id || "SIN_ID"}`
-        );
-        continue;
-      }
-
       // Maquetar la tarjeta mediante el builder de evidencias
-      const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, sv, context);
+      const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, rawSv, context);
       elements.push(tableCard);
     }
   }

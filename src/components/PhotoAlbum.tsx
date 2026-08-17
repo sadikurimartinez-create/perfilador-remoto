@@ -588,10 +588,10 @@ export function PhotoAlbum({
       (p: any) => p.tipo !== "STREET_VIEW" && p.evidenceType !== "VIRTUAL_STREET_VIEW"
     );
 
-    // Fotos de Street View gobernadas (Máximo visual de 4 por categoría)
-    const hideouts = streetViewValidation.hideout.photos.slice(0, 4);
-    const graffitis = streetViewValidation.graffiti.photos.slice(0, 4);
-    const denues = streetViewValidation.denue_interest.photos.slice(0, 4);
+    // Fotos de Street View gobernadas (Sin límites artificiales de exportación)
+    const hideouts = streetViewValidation.hideout.photos;
+    const graffitis = streetViewValidation.graffiti.photos;
+    const denues = streetViewValidation.denue_interest.photos;
 
     // Otras fotos Street View que no pertenezcan a las categorías principales
     const otherSvs = rawAlbum.filter((p: any) => 
@@ -2044,10 +2044,10 @@ const hasMinimumPhotos =
         return true;
       });
 
-      const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps].slice(0, 8);
-      let photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
+      const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
+      let photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
       if (photosToExport.length === 0) {
-        photosToExport = album.filter((p) => p.previewUrl).slice(0, 8);
+        photosToExport = album.filter((p) => p.previewUrl);
       }
 
       const photosToExportData = photosToExport.map((p) => ({

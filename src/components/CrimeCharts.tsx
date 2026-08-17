@@ -103,7 +103,18 @@ export function CrimeCharts({
     }));
   }, [probabilityStats]);
 
-  if (crimes.length === 0) return null;
+  if (crimes.length === 0) {
+    return (
+      <div className="bg-slate-900/50 p-6 rounded-lg border border-slate-700 text-center space-y-2">
+        <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+          ⚠️ Información insuficiente para cálculo estadístico.
+        </p>
+        <p className="text-[11px] text-slate-400 max-w-xl mx-auto">
+          No se registran datos de incidencia delictiva formal suficientes en este polígono para calcular porcentajes de probabilidad de comisión ni proyecciones de riesgo sin sesgo estadístico.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 text-slate-200">

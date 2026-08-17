@@ -29,7 +29,7 @@ export interface ValidationResult {
 }
 
 export class EvidenceImageValidationEngine {
-  private static MIN_SIZE_BYTES = 10240; // 10 KB
+  private static MIN_SIZE_BYTES = 1024; // 1 KB para no invalidar capturas comprimidas válidas
   private static ALLOWED_FORMATS = ["PNG", "JPEG", "JPG", "WEBP"];
 
   /**

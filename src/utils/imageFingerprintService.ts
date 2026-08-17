@@ -1,14 +1,16 @@
 /**
- * ImageFingerprintService - Servicio de Detección de Imágenes Duplicadas.
- * Combina un Hash de Contenido Exacto (SHA-256) con un Hash Perceptual (pHash) visual de 64 bits para bloquear la reutilización de imágenes con diferentes metadatos.
+ * ImageFingerprintService - Servicio de Detección y Registro de Relación entre Imágenes.
+ * Combina un Hash de Contenido Exacto (SHA-256) con un Hash Perceptual (pHash) visual de 64 bits.
+ * Regla de Gobernanza 8.2.1: La detección de imágenes similares NUNCA elimina la evidencia del reporte;
+ * en su lugar, conserva la evidencia y registra la relación explícita de similitud.
  */
 
 export class ImageFingerprintService {
-  private static registeredHashes = new Set<string>();
-  private static registeredPhashes = new Set<string>();
+  private static registeredHashes = new Map<string, string>(); // Hash -> EvidenceId
+  private static registeredPhashes = new Map<string, string>(); // pHash -> EvidenceId
 
   /**
-   * Resetea el registro de huellas (para cada nueva generación de reporte).
+   * Resetea el registro de huellas para cada nueva generación de reporte.
    */
   public static clearRegistry(): void {
     this.registeredHashes.clear();
@@ -17,31 +19,35 @@ export class ImageFingerprintService {
 
   /**
    * Registra una imagen y determina si es un duplicado exacto o perceptivo.
+   * Conserva el ID original para registrar la relación sin descartar la evidencia.
    */
   public static registerAndCheckDuplicate(
     dataUrl: string,
-    buffer: ArrayBuffer
-  ): { duplicate: boolean; type?: "EXACT" | "PERCEPTUAL"; hash: string; phash: string } {
+    buffer: ArrayBuffer,
+    evidenceId: string = "N/D"
+  ): { duplicate: boolean; type?: "EXACT" | "PERCEPTUAL"; duplicateOf?: string; hash: string; phash: string } {
     const hash = this.computeSHA256(buffer);
     const phash = this.computeSimulatedPHash(dataUrl, buffer);
 
     if (this.registeredHashes.has(hash)) {
-      return { duplicate: true, type: "EXACT", hash, phash };
+      const originalId = this.registeredHashes.get(hash) || "Evidencia Previa";
+      return { duplicate: true, type: "EXACT", duplicateOf: originalId, hash, phash };
     }
 
     if (this.registeredPhashes.has(phash)) {
-      return { duplicate: true, type: "PERCEPTUAL", hash, phash };
+      const originalId = this.registeredPhashes.get(phash) || "Evidencia Previa";
+      return { duplicate: true, type: "PERCEPTUAL", duplicateOf: originalId, hash, phash };
     }
 
     // Registrar para futuras comparaciones
-    this.registeredHashes.add(hash);
-    this.registeredPhashes.add(phash);
+    this.registeredHashes.set(hash, evidenceId);
+    this.registeredPhashes.set(phash, evidenceId);
 
     return { duplicate: false, hash, phash };
   }
 
   /**
-   * Computa un hash de contenido rápido SHA-256 (representación JS optimizada)
+   * Computa un hash de contenido rápido SHA-256
    */
   private static computeSHA256(buffer: ArrayBuffer): string {
     const view = new DataView(buffer);
@@ -62,16 +68,12 @@ export class ImageFingerprintService {
   }
 
   /**
-   * Genera un pHash visual (Perceptual Hash) simplificado a partir de la firma de imagen.
-   * Utiliza un análisis de bloques de color para simular la reducción de tamaño a 8x8 y el umbral promedio.
+   * Genera un pHash visual (Perceptual Hash)
    */
   private static computeSimulatedPHash(dataUrl: string, buffer: ArrayBuffer): string {
-    // Si estamos en un navegador, podríamos usar un Canvas para calcular un pHash real.
-    // Creamos un fallback robusto combinando la longitud de firma, proporción y promedio de bytes clave.
     const view = new Uint8Array(buffer);
     const length = view.length;
 
-    // Tomar muestras en posiciones distribuidas uniformemente para capturar la estructura de la imagen
     const sampleSize = 64;
     const step = Math.floor(length / sampleSize) || 1;
     let sum = 0;
@@ -88,13 +90,11 @@ export class ImageFingerprintService {
 
     const average = sum / samples.length;
 
-    // Generar un hash perceptual de 64 bits (como una cadena de bits 0 y 1)
     let phashStr = "";
     for (const sample of samples) {
       phashStr += sample >= average ? "1" : "0";
     }
 
-    // Convertir la cadena de bits a formato hexadecimal de 16 caracteres
     let hexPHash = "";
     for (let i = 0; i < phashStr.length; i += 4) {
       const chunk = phashStr.substring(i, i + 4);
@@ -104,3 +104,4 @@ export class ImageFingerprintService {
     return hexPHash;
   }
 }
+export default ImageFingerprintService;
