@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { buildStreetViewUrl } from "@/lib/googleStreetView";
+import { buildStreetViewUrl } from "@/lib/legacy/googleStreetView";
 import { StreetViewCapturePayload } from "./streetViewMapper";
 
 interface StreetViewPanoramaPickerProps {

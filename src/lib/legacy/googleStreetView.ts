@@ -1,3 +1,12 @@
+/**
+ * LEGACY MODULE — FASE 7.3.1 (AISLAMIENTO LEGACY)
+ *
+ * Frozen.
+ * Do not extend.
+ * This module is kept purely as a reference for metadata builder URL strings.
+ * All actual production image downloads flow through StreetViewCaptureService.
+ */
+
 export type StreetViewComparison = {
   streetViewImageUrl: string | null;
 };

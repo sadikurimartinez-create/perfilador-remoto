@@ -7,7 +7,7 @@ import {
   buildIrregularBusinesses
 } from "@/lib/environmentProfile";
 import { getPool } from "@/lib/db";
-import { buildStreetViewUrl } from "@/lib/googleStreetView";
+import { buildStreetViewUrl } from "@/lib/legacy/googleStreetView";
 
 type PhotoPayload = {
   id: string;
