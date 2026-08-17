@@ -1,4 +1,4 @@
-import { generateTraceabilityHash } from "../osintTerritorialV2";
+import { generateTraceabilityHash } from "../traceability";
 
 export interface UnifiedEvidence {
   id: string;
