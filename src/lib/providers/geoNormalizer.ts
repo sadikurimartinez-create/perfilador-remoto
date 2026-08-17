@@ -27,6 +27,7 @@ export interface UnifiedGeoDataset {
     source_url?: string;
     license?: string;
     is_simulated?: boolean;
+    origin_type?: "REAL" | "SIMULATED" | "UNAVAILABLE";
     [key: string]: any;
   };
 }

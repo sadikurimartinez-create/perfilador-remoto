@@ -30,6 +30,7 @@ export interface NormalizedOSINTEvent {
   neighborhood?: string; // Colonia asociada por contenido semántico
   url?: string;
   traceabilityHash: string; // SHA-256 inmutable de la evidencia
+  origin_type: "REAL" | "SIMULATED" | "UNAVAILABLE"; // Clasificación de procedencia real para evitar falsos positivos
 }
 
 export function generateTraceabilityHash(content: string, timestamp: string, url?: string): string {
