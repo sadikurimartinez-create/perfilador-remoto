@@ -40,13 +40,6 @@ export function StreetViewPanoramaPicker({
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [noImagery, setNoImagery] = useState<boolean>(false);
 
-  // NUEVO: Estados para Barrido Asistido Multicapa (Fase 1)
-  const [selectedSweepCategories, setSelectedSweepCategories] = useState<string[]>([
-    "RUTA_ACCESO", "RUTA_ESCAPE", "PUNTO_ACECHO", "GRAFITI"
-  ]);
-  const [isSweeping, setIsSweeping] = useState<boolean>(false);
-  const [sweepProgress, setSweepMsg] = useState<string>("");
-
   // Inicialización del visor StreetViewPanorama interactivo
   useEffect(() => {
     if (!isOpen || !containerRef.current) return;
@@ -195,108 +188,6 @@ export function StreetViewPanoramaPicker({
     }
   }, [panoLat, panoLng, lat, lng, heading, pitch, fov, panoId, captureDate, category, comentario, analystName, onCapture]);
 
-  // NUEVO: Implementación de la Lógica de Barrido Asistido Multicapa (Fase 1)
-  const handleRunBarridoAsistido = useCallback(async () => {
-    if (selectedSweepCategories.length === 0) {
-      alert("⚠️ Seleccione al menos una categoría de exploración visual para el barrido asistido.");
-      return;
-    }
-
-    setIsSweeping(true);
-    setSweepMsg("Iniciando barrido asistido...");
-    const payloads: StreetViewCapturePayload[] = [];
-
-    try {
-      let globalCount = 0;
-      for (const cat of selectedSweepCategories) {
-        setSweepMsg(`Explorando entorno para categoría: ${cat}...`);
-        
-        // Generar hasta 3 imágenes por categoría
-        for (let i = 0; i < 3; i++) {
-          if (globalCount >= 12) break; // Límite máximo global
-
-          // Determinación determinista de coordenadas alrededor del centro (fórmula geoespacial simple)
-          const angle = (i * 2 * Math.PI) / 3 + (cat.charCodeAt(0) % 10);
-          const r = 0.0003 * (i + 1); // Radio creciente (aprox 30m, 60m, 90m)
-          const offsetLat = r * Math.sin(angle);
-          const offsetLng = r * Math.cos(angle);
-          const sweepLat = lat + offsetLat;
-          const sweepLng = lng + offsetLng;
-
-          const sweepHeading = (i * 120 + 45) % 360;
-          const sweepPitch = 10.0;
-          const sweepFov = 90.0;
-
-          const staticUrl = buildStreetViewUrl(sweepLat, sweepLng, {
-            size: "800x600",
-            heading: sweepHeading,
-            pitch: sweepPitch,
-            fov: sweepFov,
-          });
-
-          if (!staticUrl) continue;
-
-          // Convertir a Data URL usando el Proxy Seguro del Backend
-          const proxyUrl = `/api/proxy-image?lat=${sweepLat}&lng=${sweepLng}&heading=${sweepHeading}&pitch=${sweepPitch}&fov=${sweepFov}&size=800x600`;
-          let dataUrl = staticUrl;
-
-          try {
-            const res = await fetch(proxyUrl);
-            if (res.ok) {
-              const blob = await res.blob();
-              dataUrl = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-              });
-            }
-          } catch (e) {
-            console.warn("[StreetViewPanoramaPicker] Proxy fallback para barrido:", e);
-          }
-
-          const payload: StreetViewCapturePayload = {
-            dataUrl,
-            poiLat: lat,
-            poiLng: lng,
-            panoramaLat: sweepLat,
-            panoramaLng: sweepLng,
-            heading: sweepHeading,
-            pitch: sweepPitch,
-            fov: sweepFov,
-            category: cat,
-            comentario: `[BARRIDO ASISTIDO - ${cat}] Punto de interés periférico ${i + 1}. Evaluación de entorno y factores situacionales.`,
-            analystName,
-            tipo_origen: "STREETVIEW_AUTOMATICO",
-            estado_revision: "PENDIENTE_REVISION"
-          };
-
-          payloads.push(payload);
-          globalCount++;
-        }
-      }
-
-      if (onCaptureMultiple) {
-        onCaptureMultiple(payloads);
-      } else {
-        // Fallback si no está implementado el receptor múltiple
-        for (const p of payloads) {
-          onCapture(p);
-        }
-      }
-    } catch (err: any) {
-      alert("Error durante la ejecución del barrido asistido: " + err.message);
-    } finally {
-      setIsSweeping(false);
-      setSweepMsg("");
-    }
-  }, [lat, lng, selectedSweepCategories, analystName, onCapture, onCaptureMultiple]);
-
-  const handleToggleCategory = (cat: string) => {
-    setSelectedSweepCategories(prev =>
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    );
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -408,47 +299,6 @@ export function StreetViewPanoramaPicker({
                   placeholder="Describa el hallazgo visual observado en la orientación seleccionada..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none resize-none"
                 />
-              </div>
-
-              {/* NUEVO: Panel de Barrido Asistido Multicapa */}
-              <div className="border border-slate-800 bg-slate-950/50 p-3.5 rounded-xl space-y-2.5">
-                <div className="text-[10px] font-black text-cyan-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>⚡ BARRIDO ASISTIDO MULTICAPA</span>
-                  <span className="text-[8px] bg-cyan-950 border border-cyan-800 text-cyan-300 px-1.5 py-0.5 rounded">
-                    Max 12 imgs
-                  </span>
-                </div>
-                
-                <p className="text-[10px] text-slate-400 leading-normal">
-                  Genera automáticamente un barrido periférico radial de Street View para las capas seleccionadas:
-                </p>
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {["RUTA_ACCESO", "RUTA_ESCAPE", "PUNTO_ACECHO", "GRAFITI"].map(catName => (
-                    <label key={catName} className="flex items-center gap-2 text-[10px] font-bold text-slate-300 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={selectedSweepCategories.includes(catName)}
-                        onChange={() => handleToggleCategory(catName)}
-                        className="rounded accent-cyan-500 h-3.5 w-3.5 bg-slate-950 border-slate-800"
-                      />
-                      <span>{catName.replace("_", " ")}</span>
-                    </label>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleRunBarridoAsistido}
-                  disabled={isSweeping || selectedSweepCategories.length === 0}
-                  className={`w-full mt-2.5 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider transition border flex items-center justify-center gap-1.5 cursor-pointer ${
-                    isSweeping || selectedSweepCategories.length === 0
-                      ? "bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed"
-                      : "bg-cyan-650 hover:bg-cyan-600 text-slate-100 border-cyan-500/30"
-                  }`}
-                >
-                  📡 Ejecutar Barrido Asistido
-                </button>
               </div>
 
               {/* Telemetría Físico-Criminológica */}

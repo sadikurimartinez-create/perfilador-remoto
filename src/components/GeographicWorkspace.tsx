@@ -70,20 +70,48 @@ export function GeographicWorkspace() {
   const [captures, setCaptures] = useState<any[]>(INITIAL_SV_AUTOMATIC);
   const [findings, setFindings] = useState<StreetViewFinding[]>([]);
 
-  // Sincronizar hallazgos del expediente desde el backend al cargar
+  // Sincronizar hallazgos y capturas automáticas del expediente desde el backend al cargar
   useEffect(() => {
-    async function fetchFindings() {
+    async function fetchData() {
       try {
-        const res = await fetch("/api/expedientes/EXP-2026/streetview/findings");
-        if (res.ok) {
-          const data = await res.json();
+        const resFindings = await fetch("/api/expedientes/EXP-2026/streetview/findings");
+        if (resFindings.ok) {
+          const data = await resFindings.json();
           setFindings(data);
         }
+
+        const resExp = await fetch("/api/expedientes/EXP-2026");
+        if (resExp.ok) {
+          const expData = await resExp.json();
+          if (expData.ok && expData.expediente && Array.isArray(expData.expediente.evidencias)) {
+            const backendCaptures = expData.expediente.evidencias
+              .filter((ev: any) => ev.tipo_origen === "STREETVIEW_AUTOMATICO" || ev.origen === "STREET_VIEW")
+              .map((ev: any) => ({
+                id: ev.id || ev.hash_md5 || ev.filename || `sv-${Math.random().toString(36).substring(2,7)}`,
+                latitude: ev.latitude ?? ev.lat ?? (ev.geolocalizacion?.latitude) ?? 21.885,
+                longitude: ev.longitude ?? ev.lng ?? (ev.geolocalizacion?.longitude) ?? -102.291,
+                tipo_origen: ev.tipo_origen || "STREETVIEW_AUTOMATICO",
+                categoria_exploracion: ev.categoria_exploracion || "RUTA_ACCESO",
+                file_url: ev.file_url || ev.archivo_url || ev.url || "",
+                geolocalizacion: ev.geolocalizacion || { heading: ev.heading || 0, pitch: ev.pitch || 0, fov: ev.fov || 90 },
+                estado_revision: ev.estado_revision || "PENDIENTE_REVISION"
+              }));
+
+            setCaptures((prev) => {
+              const map = new Map();
+              [...INITIAL_SV_AUTOMATIC, ...backendCaptures, ...prev].forEach((c) => {
+                const key = c.id || `${c.latitude}_${c.longitude}`;
+                map.set(key, c);
+              });
+              return Array.from(map.values());
+            });
+          }
+        }
       } catch (err) {
-        console.error("Error cargando hallazgos:", err);
+        console.error("Error cargando datos de StreetView:", err);
       }
     }
-    fetchFindings();
+    fetchData();
   }, []);
 
   const handlePoiSelect = (poi: any) => {

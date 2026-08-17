@@ -16,7 +16,7 @@ const THENEWS_KEY =
   process.env.PGP_THE_NEWS_API_KEY || "";
 
 const DENUE_KEY =
-  process.env.PGP_INEGI_DENUE_TOKEN || "";
+  process.env.PGP_INEGI_DENUE_TOKEN || process.env.INEGI_DENUE_TOKEN || "";
 
 
 export const searchSerpAPI = async (

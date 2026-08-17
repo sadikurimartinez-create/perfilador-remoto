@@ -4,13 +4,13 @@ import axios from 'axios';
 import { GoogleAuth } from 'google-auth-library';
 
 const REDDIT_USER_AGENT =
-  process.env.PGP_REDDIT_USER_AGENT || "";
+  process.env.PGP_REDDIT_USER_AGENT || process.env.REDDIT_USER_AGENT || "";
 
 const X_BEARER =
-  process.env.PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || "";
+  process.env.PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
 
 const TELEGRAM_TOKEN =
-  process.env.PGP_TELEGRAM_BOT_TOKEN || "";
+  process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "";
 
 // Claves para Vertex AI Search (Discovery Engine)
 const DISCOVERY_PROJECT_ID = process.env.PGP_DISCOVERY_PROJECT_ID || "";
