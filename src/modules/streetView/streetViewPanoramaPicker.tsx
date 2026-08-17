@@ -248,15 +248,6 @@ export function StreetViewPanoramaPicker({
               <div><span className="text-slate-500 font-bold">COBER:</span> <span className="text-emerald-400 font-bold">{captureDate || "N/D"}</span></div>
             </div>
 
-            {/* Floating Sweep Progress overlay */}
-            {isSweeping && (
-              <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-25 space-y-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent" />
-                <p className="text-sm font-black text-cyan-400 uppercase tracking-widest animate-pulse font-mono">
-                  {sweepProgress}
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Panel Lateral de Calificación & Controles */}
