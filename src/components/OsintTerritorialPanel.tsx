@@ -176,7 +176,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
           setIsCached(false);
           setFrozenAt(snapshot.frozenAt);
           
-          const mockResponse = reconstructOSINTResponse(snapshot.events as NormalizedOSINTEvent[]);
+          const mockResponse = reconstructOSINTResponse(snapshot.events as unknown as NormalizedOSINTEvent[]);
           setResults(mockResponse);
           if (onUpdateMapResults) {
             onUpdateMapResults(mockResponse);
@@ -191,7 +191,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
           setIsCached(true);
           setFrozenAt(null);
           
-          const mockResponse = reconstructOSINTResponse(cachedEvents as NormalizedOSINTEvent[]);
+          const mockResponse = reconstructOSINTResponse(cachedEvents as unknown as NormalizedOSINTEvent[]);
           setResults(mockResponse);
           if (onUpdateMapResults) {
             onUpdateMapResults(mockResponse);
