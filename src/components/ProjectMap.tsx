@@ -290,14 +290,31 @@ export function ProjectMap({
         2
       )
     );
+    const coordCounts: Record<string, number> = {};
     return georeferencedPhotos.map((photo) => {
       const lat = Number(photo.lat);
       const lng = Number(photo.lng);
-      return {
-        ...photo,
-        displayLat: lat,
-        displayLng: lng,
-      };
+      const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      coordCounts[key] = (coordCounts[key] || 0) + 1;
+      const count = coordCounts[key] - 1;
+
+      if (count === 0) {
+        return {
+          ...photo,
+          displayLat: lat,
+          displayLng: lng,
+        };
+      } else {
+        // Dispersión micro (~3.5m) únicamente para fotos apiladas en la misma coordenada
+        const angle = (count * 2 * Math.PI) / 8;
+        const ring = Math.floor((count - 1) / 8) + 1;
+        const radius = 0.000035 * ring;
+        return {
+          ...photo,
+          displayLat: lat + radius * Math.sin(angle),
+          displayLng: lng + radius * Math.cos(angle),
+        };
+      }
     });
   }, [georeferencedPhotos]);
 
@@ -931,7 +948,14 @@ export function ProjectMap({
           >
             <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2.5 w-80 font-sans text-xs">
               <img
-                src={activePhoto.previewUrl || "/no-image.png"}
+                src={(() => {
+                  if (!activePhoto) return "/no-image.png";
+                  const url = activePhoto.previewUrl || activePhoto.url || "";
+                  if ((url.includes("staticmap") || url.includes("cartocdn") || url.includes("openstreetmap")) && activePhoto.lat != null && activePhoto.lng != null) {
+                    return `/api/proxy-image?lat=${activePhoto.lat}&lng=${activePhoto.lng}&heading=0&pitch=0&fov=90&size=600x400`;
+                  }
+                  return url || "/no-image.png";
+                })()}
                 alt={activePhoto.tipo || "Evidencia"}
                 className="w-full h-36 object-cover rounded-lg border border-slate-700 bg-slate-950"
               />

@@ -2468,7 +2468,13 @@ const hasMinimumPhotos =
                   <div className="w-full relative rounded overflow-hidden bg-black">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={p.previewUrl}
+                      src={(() => {
+                        const url = p.previewUrl || p.url || "";
+                        if ((url.includes("staticmap") || url.includes("cartocdn") || url.includes("openstreetmap")) && p.lat != null && p.lng != null) {
+                          return `/api/proxy-image?lat=${p.lat}&lng=${p.lng}&heading=0&pitch=0&fov=90&size=600x400`;
+                        }
+                        return url || "/no-image.png";
+                      })()}
                       alt=""
                       className="w-full h-auto max-h-[75vh] object-contain"
                     />
@@ -3380,11 +3386,27 @@ const hasMinimumPhotos =
 
       {/* PASO 2: MAPA INTERACTIVO */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">📍 Mapa Interactivo de Evidencias (Paso 2)</h4>
-          <p className="text-xs text-slate-400">
-            Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
-          </p>
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200 flex items-center gap-2">
+              <span>📍</span> Mapa Interactivo de Evidencias (Paso 2)
+            </h4>
+            <p className="text-xs text-slate-400">
+              Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const firstGeo = album.find(p => p.lat != null && p.lng != null);
+              const targetLat = project?.latitude ? Number(project.latitude) : (firstGeo?.lat ? Number(firstGeo.lat) : 21.8853);
+              const targetLng = project?.longitude ? Number(project.longitude) : (firstGeo?.lng ? Number(firstGeo.lng) : -102.2916);
+              handleStartStreetViewFlow(targetLat, targetLng);
+            }}
+            className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer border border-cyan-400/40 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span className="text-base">📸</span> Incorporar Imágenes de Street View al Expediente
+          </button>
         </header>
         <div className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-950/20">
           {album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))).length === 0 ? (
