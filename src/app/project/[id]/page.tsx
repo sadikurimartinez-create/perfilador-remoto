@@ -25,6 +25,7 @@ import {
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { exportToWord } from "@/lib/exportToWord";
+import { CEIPOLToast } from "@/components/ui/CEIPOLToast";
 
 type CloudAnalysis = {
   id: string;
@@ -55,6 +56,7 @@ export default function ProjectWorkspacePage() {
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
+  const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
 
   const handleExitWorkspace = (e: React.MouseEvent, targetUrl: string) => {
     if (project && project.sweeps) {
@@ -450,7 +452,7 @@ export default function ProjectWorkspacePage() {
                       onClick={async () => {
                         try {
                           if (!a.editorialPayload) {
-                            alert("Este expediente histórico no contiene el dictamen de Word para regenerar.");
+                            setToast({ type: "warning", message: "Este expediente histórico no contiene el dictamen de Word para regenerar." });
                             return;
                           }
                           await exportToWord(
@@ -459,8 +461,9 @@ export default function ProjectWorkspacePage() {
                             a.editorialPayload.projectId || project?.id || 'EXP',
                             user
                           );
+                          setToast({ type: "success", message: "Documento Word generado exitosamente." });
                         } catch (err: any) {
-                          alert("Error al generar Word: " + err.message);
+                          setToast({ type: "error", message: "Error al generar Word: " + err.message });
                         }
                       }}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-md transition active:scale-95"
@@ -472,14 +475,15 @@ export default function ProjectWorkspacePage() {
                       onClick={async () => {
                         try {
                           if (!a.briefing) {
-                            alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
+                            setToast({ type: "warning", message: "Este expediente histórico no contiene el dictamen de PDF para regenerar." });
                             return;
                           }
                           const { generatePdfProgrammatic } = await import("@/lib/reportEngine");
 
                           await generatePdfProgrammatic(a.briefing);
+                          setToast({ type: "success", message: "Documento PDF generado exitosamente." });
                         } catch (err: any) {
-                          alert("Error al generar PDF: " + err.message);
+                          setToast({ type: "error", message: "Error al generar PDF: " + err.message });
                         }
                       }}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 px-3.5 py-2 text-xs font-bold text-white shadow-md transition active:scale-95"
@@ -602,6 +606,13 @@ export default function ProjectWorkspacePage() {
       )}
       <CopilotOverlay />
       <SweepIntegrationModal />
+      {toast && (
+        <CEIPOLToast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
