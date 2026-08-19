@@ -3407,7 +3407,13 @@ const hasMinimumPhotos =
                 onDeletePhoto={async (id) => {
                   const item = album.find(p => p.id === id);
                   if (item) {
-                    setPhotoToDelete(item);
+                    setImageDeleteFlow({
+                      isOpen: true,
+                      photo: item,
+                      step: 1
+                    });
+                  } else if (onDeletePhoto) {
+                    onDeletePhoto(id);
                   } else if (removePhotoFromAlbum) {
                     await removePhotoFromAlbum(id);
                   }
