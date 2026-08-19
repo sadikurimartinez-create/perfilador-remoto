@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Polygon, Polyline } from "@react-google-maps/api";
+import { Polygon, Polyline, Circle } from "@react-google-maps/api";
 
 interface RectorGeometryLayerProps {
   visible: boolean;
@@ -7,6 +7,7 @@ interface RectorGeometryLayerProps {
     polygonCoords?: { lat: number; lng: number }[];
     lineCoords?: { lat: number; lng: number }[];
     center?: { lat: number; lng: number };
+    radiusKm?: number;
     hasCoordinates?: boolean;
   };
 }
@@ -21,17 +22,51 @@ export const RectorGeometryLayer: React.FC<RectorGeometryLayerProps> = ({
 }) => {
   if (!visible || !geografiaRectora) return null;
 
+  // Auto-generate polygon if center exists but polygonCoords is missing/empty
+  const activePolygon = React.useMemo(() => {
+    if (geografiaRectora.polygonCoords && geografiaRectora.polygonCoords.length >= 3) {
+      return geografiaRectora.polygonCoords;
+    }
+    if (geografiaRectora.center && geografiaRectora.center.lat && geografiaRectora.center.lng) {
+      const c = geografiaRectora.center;
+      const d = 0.008; // ~800m bounding box
+      return [
+        { lat: c.lat + d, lng: c.lng - d },
+        { lat: c.lat + d, lng: c.lng + d },
+        { lat: c.lat - d, lng: c.lng + d },
+        { lat: c.lat - d, lng: c.lng - d },
+      ];
+    }
+    return null;
+  }, [geografiaRectora]);
+
+  const radiusMeters = (geografiaRectora.radiusKm || 1.5) * 1000;
+
   return (
     <>
-      {geografiaRectora.polygonCoords && geografiaRectora.polygonCoords.length > 0 && (
+      {activePolygon && (
         <Polygon
-          paths={geografiaRectora.polygonCoords}
+          paths={activePolygon}
           options={{
             fillColor: "#06b6d4",
-            fillOpacity: 0.12,
+            fillOpacity: 0.18,
             strokeColor: "#06b6d4",
-            strokeOpacity: 0.85,
-            strokeWeight: 2,
+            strokeOpacity: 0.9,
+            strokeWeight: 2.5,
+            clickable: false,
+          }}
+        />
+      )}
+      {geografiaRectora.center && (
+        <Circle
+          center={geografiaRectora.center}
+          radius={radiusMeters}
+          options={{
+            fillColor: "#38bdf8",
+            fillOpacity: 0.08,
+            strokeColor: "#38bdf8",
+            strokeOpacity: 0.6,
+            strokeWeight: 1.5,
             clickable: false,
           }}
         />

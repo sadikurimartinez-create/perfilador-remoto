@@ -161,10 +161,15 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
       await new Promise(resolve => setTimeout(resolve, 800));
       setProgressMsg("Consolidando registros de inteligencia...");
       const result = await GangGeoSweepEngine.executeSweep(
-        [],
+        uploadedFiles,
         narrative,
-        "",
-        dbGangs
+        softPrompt,
+        dbGangs,
+        {
+          lat: project?.latitude || 21.8853,
+          lng: project?.longitude || -102.2916,
+          radiusKm: project?.radiusKm || 5
+        }
       );
 
       setSweepResult(result);

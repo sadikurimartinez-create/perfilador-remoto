@@ -18,6 +18,8 @@ import StreetViewConeLayer from "./layers/StreetViewConeLayer";
 
 // Contexto de Filtros
 import { useAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
+import { useProject } from "@/context/ProjectContext";
+import { EvidenceDeleteConfirmModal } from "../modals/EvidenceDeleteConfirmModal";
 
 interface ProfessionalGeoMapProps {
   geografiaRectora?: {
@@ -85,6 +87,15 @@ export function ProfessionalGeoMap({
   const [layers, setLayers] = useState<MapLayersState>(layerManager.getState());
   const [forceFallback, setForceFallback] = useState(false);
   const [selectedMarkerForCone, setSelectedMarkerForCone] = useState<any | null>(null);
+  const [photoToDelete, setPhotoToDelete] = useState<any | null>(null);
+
+  let removePhotoFromAlbum: ((id: string) => Promise<void>) | null = null;
+  try {
+    const projectCtx = useProject();
+    removePhotoFromAlbum = projectCtx.removePhotoFromAlbum;
+  } catch (err) {
+    // Fallback silencioso si se renderiza de forma aislada
+  }
 
   // Intentar obtener el contexto de forma segura por si se renderiza de forma aislada
   let analyticsContext: any = null;
@@ -271,7 +282,11 @@ export function ProfessionalGeoMap({
         
         <PoiLayer visible={layers.pois} pois={pois} selectedPoiId={selectedPoiId} onPoiSelect={onPoiSelect} />
         
-        <PhotoEvidenceLayer visible={layers.photos} photographs={photographs} />
+        <PhotoEvidenceLayer
+          visible={layers.photos}
+          photographs={photographs}
+          onSelectPhoto={(photo) => setPhotoToDelete(photo)}
+        />
         
         <StreetViewManualLayer
           visible={layers.streetViewManual}
@@ -308,6 +323,19 @@ export function ProfessionalGeoMap({
           fov={activeConeData?.fov || 90}
         />
       </GoogleMap>
+
+      {/* Modal de Borrado con Secuencia Preventiva de 2 Pasos */}
+      <EvidenceDeleteConfirmModal
+        isOpen={!!photoToDelete}
+        evidence={photoToDelete}
+        onClose={() => setPhotoToDelete(null)}
+        onConfirmDelete={async (evidenceId) => {
+          if (removePhotoFromAlbum) {
+            await removePhotoFromAlbum(evidenceId);
+          }
+          setPhotoToDelete(null);
+        }}
+      />
     </div>
   );
 }
