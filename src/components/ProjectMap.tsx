@@ -920,6 +920,47 @@ export function ProjectMap({
           </InfoWindow>
         )}
 
+        {/* Action-oriented selection InfoWindow for depth analysis and street view activation */}
+        {activePhoto && activePhoto.lat != null && activePhoto.lng != null && (
+          <InfoWindow
+            position={{ lat: Number(activePhoto.displayLat ?? activePhoto.lat), lng: Number(activePhoto.displayLng ?? activePhoto.lng) }}
+            options={{
+              pixelOffset: new window.google.maps.Size(0, -35),
+            }}
+            onCloseClick={() => setActivePhoto(null)}
+          >
+            <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2.5 w-80 font-sans text-xs">
+              <img
+                src={activePhoto.previewUrl || "/no-image.png"}
+                alt={activePhoto.tipo || "Evidencia"}
+                className="w-full h-36 object-cover rounded-lg border border-slate-700 bg-slate-950"
+              />
+              <div className="w-full space-y-2">
+                <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
+                  <span className="font-black text-cyan-400 uppercase tracking-wide">
+                    {activePhoto.evidenceId || `EVI-${activePhoto.id.slice(0, 6).toUpperCase()}`}
+                  </span>
+                  <span className={`px-2 py-0.5 text-[8px] font-bold rounded-full ${activePhoto.validado ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
+                    {activePhoto.validado ? "VALIDADA" : "PENDIENTE"}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-300 font-sans">
+                  <div><span className="text-slate-500 font-bold">Tipo:</span> {activePhoto.tipo || "Fotografía"}</div>
+                  <div><span className="text-slate-500 font-bold">Fuente:</span> {activePhoto.gpsSource || "Analista"}</div>
+                  <div><span className="text-slate-500 font-bold">Fecha:</span> {activePhoto.contextualizedAt ? new Date(activePhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
+                  <div><span className="text-slate-500 font-bold">Usuario:</span> {activePhoto.contextualizedBy || "Analista CEIPOL"}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(activePhoto.lat).toFixed(5)}, {Number(activePhoto.lng).toFixed(5)}</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Relación Hipótesis:</span> Factor de riesgo territorial</div>
+                  <div className="col-span-2"><span className="text-slate-500 font-bold">Clasificación:</span> Evidencia táctica georreferenciada</div>
+                </div>
+
+                {activePhoto.comentario && (
+                  <p className="text-[10px] text-slate-300 leading-normal border-t border-slate-800 pt-1.5 italic">
+                    "{activePhoto.comentario}"
+                  </p>
+                )}
+
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-800">
                   <button
                     onClick={() => {
