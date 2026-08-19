@@ -3395,18 +3395,6 @@ const hasMinimumPhotos =
               Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const firstGeo = album.find(p => p.lat != null && p.lng != null);
-              const targetLat = project?.latitude ? Number(project.latitude) : (firstGeo?.lat ? Number(firstGeo.lat) : 21.8853);
-              const targetLng = project?.longitude ? Number(project.longitude) : (firstGeo?.lng ? Number(firstGeo.lng) : -102.2916);
-              handleStartStreetViewFlow(targetLat, targetLng);
-            }}
-            className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer border border-cyan-400/40 hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <span className="text-base">📸</span> Incorporar Imágenes de Street View al Expediente
-          </button>
         </header>
         <div className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-950/20">
           {album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))).length === 0 ? (
@@ -3421,7 +3409,7 @@ const hasMinimumPhotos =
                 project={project}
                 album={album}
                 geometryType={project.geometryType || "individual"}
-                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
+                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI" && p.tipo !== "Punto Independiente" && !p.tipo?.startsWith("Barrido")).map((photo) => ({
                   lat: Number(photo.lat),
                   lng: Number(photo.lng),
                 }))}

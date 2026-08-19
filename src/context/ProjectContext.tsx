@@ -1395,23 +1395,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       await updateDoc(projectRef, updateData);
 
       // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
-      let latVal: number | null = null;
-      let lngVal: number | null = null;
+      let latVal: number | null = (params as any).lat ?? null;
+      let lngVal: number | null = (params as any).lng ?? null;
       
-      // Parse coordinates from sweep data text
-      const coordsMatch = params.data.match(/(?:lat|lng|coordenadas|coords|posicion)[:\s]+(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/i);
-      if (coordsMatch) {
-        latVal = parseFloat(coordsMatch[1]);
-        lngVal = parseFloat(coordsMatch[2]);
-      } else {
-        const selectedPhotos = album.filter(p => p.lat && p.lng);
-        if (selectedPhotos.length > 0) {
-          latVal = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
-          lngVal = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
+      // Parse coordinates from sweep data text if not explicitly provided
+      if (latVal == null || lngVal == null) {
+        const coordsMatch = params.data.match(/(?:lat|lng|coordenadas|coords|posicion)[:\s]+(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/i);
+        if (coordsMatch) {
+          latVal = parseFloat(coordsMatch[1]);
+          lngVal = parseFloat(coordsMatch[2]);
         } else {
-          const geoValidation = validateGeoIntegrity((project as any).latitude, (project as any).longitude);
-          latVal = geoValidation.latitude;
-          lngVal = geoValidation.longitude;
+          const selectedPhotos = album.filter(p => p.lat && p.lng && !p.tipo?.startsWith("Barrido"));
+          if (selectedPhotos.length > 0) {
+            latVal = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
+            lngVal = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
+          } else {
+            const geoValidation = validateGeoIntegrity((project as any).latitude, (project as any).longitude);
+            latVal = geoValidation.latitude;
+            lngVal = geoValidation.longitude;
+          }
         }
       }
 
@@ -1419,13 +1421,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         try {
           const photoId = `EVI-SWEEP-${Date.now()}`;
           const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+          
+          let heading = 0;
+          const engineLower = (params.engine || "").toLowerCase();
+          if (engineLower.includes("denue") || engineLower.includes("comercial") || engineLower.includes("giros")) {
+            heading = 0; // Norte (Comercial)
+          } else if (engineLower.includes("delictiv") || engineLower.includes("geoint") || engineLower.includes("delito")) {
+            heading = 90; // Este (Incidencia Delictiva)
+          } else if (engineLower.includes("scince") || engineLower.includes("poblac") || engineLower.includes("vivienda")) {
+            heading = 180; // Sur (Demográfico)
+          } else {
+            heading = 270; // Oeste (Otros)
+          }
+
           let previewUrl = "";
           if (apiKey) {
             console.log("[ProjectContext] Creando vista panorámica de Street View para barrido con Google Maps API...");
-            previewUrl = `https://maps.googleapis.com/maps/api/streetview?size=600x400&location=${latVal},${lngVal}&heading=0&pitch=0&fov=90&key=${apiKey}`;
+            previewUrl = `https://maps.googleapis.com/maps/api/streetview?size=600x400&location=${latVal},${lngVal}&heading=${heading}&pitch=0&fov=90&key=${apiKey}`;
           } else {
             console.log("[ProjectContext] Usando proxy seguro de Street View...");
-            previewUrl = `/api/proxy-image?lat=${latVal}&lng=${lngVal}&heading=0&pitch=0&fov=90&size=600x400`;
+            previewUrl = `/api/proxy-image?lat=${latVal}&lng=${lngVal}&heading=${heading}&pitch=0&fov=90&size=600x400`;
           }
           const photosColRef = collection(firestore, "projects", project.id, "photos");
           const photoDocData = {
