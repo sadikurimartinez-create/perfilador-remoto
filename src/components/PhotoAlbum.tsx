@@ -2469,7 +2469,7 @@ const hasMinimumPhotos =
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={(() => {
-                        const url = p.previewUrl || p.url || "";
+                        const url = p.previewUrl || (p as any).url || "";
                         if ((url.includes("staticmap") || url.includes("cartocdn") || url.includes("openstreetmap")) && p.lat != null && p.lng != null) {
                           return `/api/proxy-image?lat=${p.lat}&lng=${p.lng}&heading=0&pitch=0&fov=90&size=600x400`;
                         }
