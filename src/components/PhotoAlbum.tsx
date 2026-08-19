@@ -842,12 +842,11 @@ export function PhotoAlbum({
     lng: number,
     context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }
   ) => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA";
-    const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=17&size=600x400&maptype=hybrid&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
+    const svUrl = `/api/proxy-image?lat=${lat}&lng=${lng}&heading=0&pitch=0&fov=90&size=600x400`;
 
     const newCapture = {
       id: `temp-map-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      url: staticUrl,
+      url: svUrl,
       lat,
       lng,
       geometryType: context.geometryType,
@@ -3405,6 +3404,14 @@ const hasMinimumPhotos =
                   lng: Number(photo.lng),
                 }))}
                 onPoiSelect={handleStartStreetViewFlow}
+                onDeletePhoto={async (id) => {
+                  const item = album.find(p => p.id === id);
+                  if (item) {
+                    setPhotoToDelete(item);
+                  } else if (removePhotoFromAlbum) {
+                    await removePhotoFromAlbum(id);
+                  }
+                }}
                 onAddPoint={handleAddMapPoint}
                 onMoveMarker={updatePhotoCoordinates}
                 onCandidateCapture={handleCandidateCapture}
