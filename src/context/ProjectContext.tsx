@@ -1394,7 +1394,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       
       await updateDoc(projectRef, updateData);
 
-      // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
+      // Toda evidencia generada por barridos crea automáticamente un elemento geográfico con trazabilidad propia
       let latVal: number | null = (params as any).lat ?? null;
       let lngVal: number | null = (params as any).lng ?? null;
       
@@ -1422,16 +1422,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           const photoId = `EVI-SWEEP-${Date.now()}`;
           const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
           
-          let heading = 0;
-          const engineLower = (params.engine || "").toLowerCase();
-          if (engineLower.includes("denue") || engineLower.includes("comercial") || engineLower.includes("giros")) {
-            heading = 0; // Norte (Comercial)
-          } else if (engineLower.includes("delictiv") || engineLower.includes("geoint") || engineLower.includes("delito")) {
-            heading = 90; // Este (Incidencia Delictiva)
-          } else if (engineLower.includes("scince") || engineLower.includes("poblac") || engineLower.includes("vivienda")) {
-            heading = 180; // Sur (Demográfico)
-          } else {
-            heading = 270; // Oeste (Otros)
+          let heading = (params as any).heading ?? 0;
+          if ((params as any).heading == null) {
+            const engineLower = (params.engine || "").toLowerCase();
+            if (engineLower.includes("denue") || engineLower.includes("comercial") || engineLower.includes("giros")) {
+              heading = 0; // Norte (Comercial / DENUE)
+            } else if (engineLower.includes("delictiv") || engineLower.includes("geoint") || engineLower.includes("delito")) {
+              heading = 90; // Este (Incidencia Delictiva)
+            } else if (engineLower.includes("scince") || engineLower.includes("poblac") || engineLower.includes("vivienda")) {
+              heading = 180; // Sur (Demográfico / SCINCE)
+            } else {
+              heading = 270; // Oeste (Multimodal / Otros)
+            }
           }
 
           let previewUrl = "";
@@ -1453,7 +1455,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             tipo: `Barrido ${params.engine}`,
             comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
             validado: true,
-            isIndependentPoi: true
+            isIndependentPoi: true,
+            streetViewMetadata: {
+              heading,
+              pitch: 0,
+              fov: 90,
+              source: params.engine
+            }
           };
           await setDoc(doc(photosColRef, photoId), photoDocData);
           

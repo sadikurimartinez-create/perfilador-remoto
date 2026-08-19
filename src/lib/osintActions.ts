@@ -50,7 +50,19 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
     if (!Array.isArray(data)) return { exito: true, total: 0, resumen: "No se encontraron negocios." };
     const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
-    return { exito: true, total: data.length, resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno." };
+    const items = data.map((n: any) => ({
+      name: n.Nombre,
+      activity: n.Clase_actividad,
+      lat: Number(n.Latitud),
+      lng: Number(n.Longitud)
+    })).filter((i: any) => Number.isFinite(i.lat) && Number.isFinite(i.lng));
+
+    return {
+      exito: true,
+      total: data.length,
+      resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno.",
+      items
+    };
   } catch (error: any) {
     return { exito: false, error: error.message || "Error interno del servidor al consultar DENUE." };
   }

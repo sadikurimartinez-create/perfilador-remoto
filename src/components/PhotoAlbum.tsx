@@ -884,6 +884,8 @@ export function PhotoAlbum({
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [scinceDataConfirm, setScinceDataConfirm] = useState<string | null>(null);
   const [denueDataConfirm, setDenueDataConfirm] = useState<string | null>(null);
+  const [scinceTargetCoords, setScinceTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [denueTargetCoords, setDenueTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
     if (!clickCoords) return {};
@@ -3409,10 +3411,25 @@ const hasMinimumPhotos =
                 project={project}
                 album={album}
                 geometryType={project.geometryType || "individual"}
-                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI" && p.tipo !== "Punto Independiente" && !p.tipo?.startsWith("Barrido")).map((photo) => ({
-                  lat: Number(photo.lat),
-                  lng: Number(photo.lng),
-                }))}
+                coordinates={(() => {
+                  if (Array.isArray((project as any)?.coordinates) && (project as any).coordinates.length > 0) {
+                    return (project as any).coordinates.map((c: any) => ({ lat: Number(c.lat), lng: Number(c.lng) }));
+                  }
+                  return album
+                    .filter((p) => {
+                      if (p.lat == null || p.lng == null || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return false;
+                      const isSweep = p.tipo?.startsWith("Barrido");
+                      const isPoi = p.isIndependentPoi || p.tipo === "POI" || p.tipo === "Punto Independiente";
+                      const isExplicitVertex = p.gpsSource === "VERTICE_MAPA" || (p as any).isVertex === true;
+                      const isShapeType = p.tipo === "Polígono" || p.tipo === "Corredor";
+                      
+                      return !isSweep && !isPoi && (isExplicitVertex || isShapeType);
+                    })
+                    .map((photo) => ({
+                      lat: Number(photo.lat),
+                      lng: Number(photo.lng),
+                    }));
+                })()}
                 onPoiSelect={handleStartStreetViewFlow}
                 onDeletePhoto={async (id) => {
                   const item = album.find(p => p.id === id);
@@ -3609,6 +3626,7 @@ const hasMinimumPhotos =
 
                   const data = await getScinceData(centerLat, centerLng);
                   if (data.exito) {
+                    setScinceTargetCoords({ lat: centerLat, lng: centerLng });
                     const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
                     setScinceDataConfirm(newContext);
                   } else {
@@ -3668,6 +3686,11 @@ const hasMinimumPhotos =
 
                   const data = await getDenueData(centerLat, centerLng, 500);
                   if (data.exito) {
+                    const firstBusiness = (data as any).items && (data as any).items.length > 0 ? (data as any).items[0] : null;
+                    const targetLat = firstBusiness ? firstBusiness.lat : centerLat;
+                    const targetLng = firstBusiness ? firstBusiness.lng : centerLng;
+                    setDenueTargetCoords({ lat: targetLat, lng: targetLng });
+
                     const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
                     setDenueDataConfirm(newContext);
                   } else {
@@ -5864,8 +5887,11 @@ const hasMinimumPhotos =
                   source: "INEGI SCINCE",
                   type: "Directa",
                   relevance: "Medio",
-                  data: scinceDataConfirm
-                });
+                  data: scinceDataConfirm,
+                  lat: scinceTargetCoords?.lat,
+                  lng: scinceTargetCoords?.lng,
+                  heading: 180 // Sur (Demográfico)
+                } as any);
                 setScinceDataConfirm(null);
                 setToast({ type: "success", message: "✓ Datos sociodemográficos agregados a la hipótesis correctamente" });
               } catch (err: any) {
@@ -5913,8 +5939,11 @@ const hasMinimumPhotos =
                   source: "OSINT",
                   type: "Directa",
                   relevance: "Medio",
-                  data: denueDataConfirm
-                });
+                  data: denueDataConfirm,
+                  lat: denueTargetCoords?.lat,
+                  lng: denueTargetCoords?.lng,
+                  heading: 0 // Norte (Comercial / DENUE)
+                } as any);
                 setDenueDataConfirm(null);
                 setToast({ type: "success", message: "✓ Datos comerciales agregados a la hipótesis correctamente" });
               } catch (err: any) {

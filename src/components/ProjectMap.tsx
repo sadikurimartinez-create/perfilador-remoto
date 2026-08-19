@@ -348,15 +348,27 @@ export function ProjectMap({
     return { lat: 21.8853, lng: -102.2916 }; // Default Aguascalientes (sólo para cargar mapa base, pero oculto tras isFallback)
   }, [project, coordinates, georeferencedPhotos]);
 
-  // Group coordinates of evidences for corridor polyline or polygon drawing (excl. independent POIs)
+  // Group coordinates strictly for rector geometry (corridor polyline or polygon shape)
   const geoShapePath = useMemo(() => {
-    if (coordinates && coordinates.length >= 3) {
+    const minRequired = (geometryType === "lineal" || geometryType === "corredor") ? 2 : 3;
+    if (coordinates && coordinates.length >= minRequired) {
       return coordinates;
     }
-    return georeferencedPhotos
-      .filter((p) => !p.isIndependentPoi && p.tipo !== "POI" && p.tipo !== "Punto Independiente" && !p.tipo?.startsWith("Barrido"))
-      .map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
-  }, [coordinates, georeferencedPhotos]);
+    const vertexPhotos = georeferencedPhotos.filter((p) => {
+      const isSweep = p.tipo?.startsWith("Barrido");
+      const isPoi = p.isIndependentPoi || p.tipo === "POI" || p.tipo === "Punto Independiente";
+      const isExplicitVertex = p.gpsSource === "VERTICE_MAPA" || (p as any).isVertex === true;
+      const isShapeType = p.tipo === "Polígono" || p.tipo === "Corredor";
+      
+      return !isSweep && !isPoi && (isExplicitVertex || isShapeType);
+    });
+
+    if (vertexPhotos.length >= minRequired) {
+      return vertexPhotos.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+    }
+
+    return [];
+  }, [coordinates, georeferencedPhotos, geometryType]);
 
   // Carga y cálculo de densidad analítica de calor compatible con Google Maps JS v3.65+ (GEO-ENH-01 v1.1)
   const heatmapDensityClusters = useMemo(() => {
