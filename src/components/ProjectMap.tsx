@@ -692,20 +692,7 @@ export function ProjectMap({
           />
         ))}
 
-        {/* Draw circle for individual type projects (Controlled by showAreas) */}
-        {showAreas && geometryType === "individual" && project?.latitude && project?.longitude && !isFallback && (
-          <Circle
-            center={{ lat: project.latitude, lng: project.longitude }}
-            radius={Number(project.radius || 500)}
-            options={{
-              strokeColor: "#38bdf8",
-              strokeOpacity: 0.35,
-              strokeWeight: 2,
-              fillColor: "#38bdf8",
-              fillOpacity: 0.8,
-            }}
-          />
-        )}
+        {/* Individual point geometry rendered as frozen point (Gobernanza GEOINT v2.5.1: POI != Circle) */}
 
         {/* Draw polyline for lineal (corridor) type projects (Controlled by showAreas) */}
         {showAreas && (geometryType === "lineal" || geometryType === "corredor") && geoShapePath.length > 1 && (
