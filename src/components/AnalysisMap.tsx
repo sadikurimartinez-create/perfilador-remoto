@@ -1283,7 +1283,7 @@ export function AnalysisMap({
           }}
         >
           {/* LÍMITES / BUFFER (Controlled by showAreas) */}
-          {showAreas && activeLayers.buffer && !isPreliminary && geometryType !== "lineal" && geometryType !== "poligono" && (
+          {showAreas && activeLayers.buffer && !isPreliminary && geometryType !== "lineal" && geometryType !== "poligono" && (!analysisPolygon || analysisPolygon.length === 0) && (
             <Circle
               center={center}
               radius={analysisRadius}
@@ -1293,6 +1293,20 @@ export function AnalysisMap({
                 strokeWeight: 2,
                 fillColor: "#ef4444",
                 fillOpacity: 0.12,
+              }}
+            />
+          )}
+
+          {/* POLÍGONO DE ANÁLISIS DIRECTO (Gobernanza GEOINT) */}
+          {showAreas && analysisPolygon && analysisPolygon.length >= 3 && (
+            <Polygon
+              paths={analysisPolygon}
+              options={{
+                strokeWeight: 3,
+                strokeColor: "#8b5cf6",
+                strokeOpacity: 0.9,
+                fillColor: "#8b5cf6",
+                fillOpacity: 0.25,
               }}
             />
           )}
