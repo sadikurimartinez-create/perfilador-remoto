@@ -527,12 +527,7 @@ function ExecutiveReportQualityGate(payload: any) {
     (!m.recommendation || m.recommendation.length <= 300)
   );
   if (!mapCheck) {
-    console.warn("[WARNING] El Capítulo 3 excede los límites de síntesis del formato operacional. Aplicando límites.");
-    for (const m of payload.maps) {
-      if (m.spatialFinding) m.spatialFinding = m.spatialFinding.slice(0, 180);
-      if (m.interpretation) m.interpretation = m.interpretation.slice(0, 300);
-      if (m.recommendation) m.recommendation = m.recommendation.slice(0, 180);
-    }
+    console.warn("[WARNING] El Capítulo 3 excede los límites de síntesis del formato operacional. (Conservando texto completo bajo ADR-015).");
   }
 
   const graphCheck = !payload.graphs || payload.graphs.every((g: any) =>
@@ -540,11 +535,7 @@ function ExecutiveReportQualityGate(payload: any) {
     (!g.relation || g.relation.length <= 250)
   );
   if (!graphCheck && payload.graphs) {
-    console.warn("[WARNING] El Capítulo 4 excede los límites de síntesis estadística. Aplicando límites.");
-    for (const g of payload.graphs) {
-      if (g.finding) g.finding = g.finding.slice(0, 180);
-      if (g.relation) g.relation = g.relation.slice(0, 120);
-    }
+    console.warn("[WARNING] El Capítulo 4 excede los límites de síntesis estadística. (Conservando texto completo bajo ADR-015).");
   }
 
   const photoCheck = !payload.photoEvidence || payload.photoEvidence.every((p: any) =>
@@ -553,12 +544,7 @@ function ExecutiveReportQualityGate(payload: any) {
     (!p.relation || p.relation.length <= 300)
   );
   if (!photoCheck && payload.photoEvidence) {
-    console.warn("[WARNING] El Capítulo 5 excede los límites de síntesis de evidencia fotográfica. Aplicando límites.");
-    for (const p of payload.photoEvidence) {
-      if (p.caption) p.caption = p.caption.slice(0, 180);
-      if (p.criminologicalInterpretation) p.criminologicalInterpretation = p.criminologicalInterpretation.slice(0, 300);
-      if (p.relation) p.relation = p.relation.slice(0, 180);
-    }
+    console.warn("[WARNING] El Capítulo 5 excede los límites de síntesis de evidencia fotográfica. (Conservando texto completo bajo ADR-015).");
   }
 
   console.log("[QUALITY GATE] ExecutiveReportQualityGate: PASSED");
@@ -791,23 +777,23 @@ export async function exportToWord(
   if (payload.maps) {
     payload.maps = payload.maps.map((m: any) => ({
       ...m,
-      spatialFinding: m.spatialFinding ? m.spatialFinding.slice(0, 180) : "",
-      interpretation: m.interpretation ? m.interpretation.slice(0, 300) : "",
-      recommendation: m.recommendation ? m.recommendation.slice(0, 180) : ""
+      spatialFinding: m.spatialFinding || "",
+      interpretation: m.interpretation || "",
+      recommendation: m.recommendation || ""
     }));
   }
   if (payload.graphs) {
     payload.graphs = payload.graphs.map((g: any) => ({
       ...g,
-      finding: g.finding ? g.finding.slice(0, 180) : "",
-      relation: g.relation ? g.relation.slice(0, 120) : "",
-      interpretation: g.interpretation ? g.interpretation.slice(0, 240) : (g.explanation ? g.explanation.slice(0, 240) : "")
+      finding: g.finding || "",
+      relation: g.relation || "",
+      interpretation: g.interpretation || g.explanation || ""
     }));
   }
   if (payload.photoEvidence) {
     payload.photoEvidence = payload.photoEvidence.map((p: any) => ({
       ...p,
-      caption: p.caption ? p.caption.slice(0, 180) : "",
+      caption: p.caption || "",
       criminologicalInterpretation: p.criminologicalInterpretation || "",
       relation: p.relation || ""
     }));
@@ -1164,7 +1150,7 @@ export async function exportToWord(
                   new TextRun({ text: "Pregunta Analítica: ", bold: true, size: 16, color: "1F4E79" }),
                   new TextRun({ text: "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?\n", size: 16 }),
                   new TextRun({ text: "Hipótesis de Trabajo: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: `${hypothesisText.substring(0, 250)}...\n`, size: 16, italics: true }),
+                  new TextRun({ text: `${hypothesisText}\n`, size: 16, italics: true }),
                   new TextRun({ text: "Variables Evaluadas: ", bold: true, size: 16, color: "1F4E79" }),
                   new TextRun({ text: "• Territorio (Criminología Ambiental)  • Incidencia Delictiva (911)  • Actores Locales (Dossier)  • Oportunidad Física\n", size: 16 }),
                   new TextRun({ text: "Objetivo de Validación: ", bold: true, size: 16, color: "1F4E79" }),
@@ -1344,17 +1330,16 @@ export async function exportToWord(
       })
     : [];
 
-  // Mapear evidencias para el renderer
   const mappedEvidenceLinks = [
     ...(payload.photoEvidence || []).map((p: any) => ({
       evidence: p.id || p.code || "FOTO_ND",
       type: "Registro Fotográfico de Campo",
-      result: p.criminologicalInterpretation ? p.criminologicalInterpretation.slice(0, 80) + "..." : "Análisis visual de terreno realizado."
+      result: p.criminologicalInterpretation || "Análisis visual de terreno realizado."
     })),
     ...(payload.streetViewAnalysis || []).map((s: any) => ({
       evidence: s.id || "SV_ND",
       type: "Street View Intelligence",
-      result: s.inferenciaAnalitica ? s.inferenciaAnalitica.slice(0, 80) + "..." : "Análisis visual de entorno realizado."
+      result: s.inferenciaAnalitica || "Análisis visual de entorno realizado."
     }))
   ];
 
@@ -1447,11 +1432,11 @@ export async function exportToWord(
             children: [
               new TextRun({ text: "Interpretación operacional:\n", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
               new TextRun({ text: "• Hallazgo territorial: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: `${(map.spatialFinding || "").slice(0, 180)}\n`, size: 14, font: "Calibri" }),
+              new TextRun({ text: `${map.spatialFinding || ""}\n`, size: 14, font: "Calibri" }),
               new TextRun({ text: "• Interpretación criminológica: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: `${(map.interpretation || "").slice(0, 300)}\n`, size: 14, font: "Calibri" }),
+              new TextRun({ text: `${map.interpretation || ""}\n`, size: 14, font: "Calibri" }),
               new TextRun({ text: "• Implicación operativa: ", bold: true, size: 14, color: "B91C1C", font: "Calibri" }),
-              new TextRun({ text: `${(map.recommendation || "").slice(0, 180)}`, size: 14, font: "Calibri" })
+              new TextRun({ text: `${map.recommendation || ""}`, size: 14, font: "Calibri" })
             ],
             spacing: { after: 180 }
           })
@@ -1557,21 +1542,21 @@ export async function exportToWord(
           new Paragraph({
             children: [
               new TextRun({ text: "Hallazgo: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: graph.finding.slice(0, 180), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.finding, size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
               new TextRun({ text: "Interpretación Narrativa: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: graph.interpretation.slice(0, 240), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.interpretation, size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
               new TextRun({ text: "Relación con Hipótesis Criminológica: ", bold: true, size: 16, color: "1F4E79", font: "Calibri" }),
-              new TextRun({ text: graph.relation.slice(0, 120), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.relation, size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),

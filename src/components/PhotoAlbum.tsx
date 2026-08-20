@@ -583,23 +583,35 @@ export function PhotoAlbum({
   const normalizedAlbum = useMemo(() => {
     if (!rawAlbum) return [];
 
-    // Conservar todas las fotos de usuario intactas
-    const userPhotos = rawAlbum.filter(
-      (p: any) => p.tipo !== "STREET_VIEW" && p.evidenceType !== "VIRTUAL_STREET_VIEW"
-    );
+    // Exclusión robusta de Street View y Barridos para las fotos normales cargadas por el usuario
+    const userPhotos = rawAlbum.filter((p: any) => {
+      const isSv = p.tipo === "STREET_VIEW" || 
+                   p.tipo === "REMOTE_STREET_VIEW" || 
+                   p.evidenceType === "VIRTUAL_STREET_VIEW";
+      const isSweep = p.tipo?.startsWith("Barrido");
+      return !isSv && !isSweep; // PRINCIPIO: BARRIDO ANALÍTICO ≠ EVIDENCIA VISUAL
+    });
 
-    // Fotos de Street View gobernadas (Sin límites artificiales de exportación)
     const hideouts = streetViewValidation.hideout.photos;
     const graffitis = streetViewValidation.graffiti.photos;
     const denues = streetViewValidation.denue_interest.photos;
 
-    // Otras fotos Street View que no pertenezcan a las categorías principales
-    const otherSvs = rawAlbum.filter((p: any) => 
-      (p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW") &&
-      !["hideout", "graffiti", "denue_interest"].includes(p.streetViewCategory)
-    );
+    const otherSvs = rawAlbum.filter((p: any) => {
+      const isSvType = p.tipo === "STREET_VIEW" || 
+                       p.tipo === "REMOTE_STREET_VIEW" || 
+                       p.evidenceType === "VIRTUAL_STREET_VIEW";
+      return isSvType && !["hideout", "graffiti", "denue_interest"].includes(p.streetViewCategory);
+    });
 
-    return [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs];
+    // Deduplicación estricta utilizando un mapa inmutable por ID único para evitar repeticiones
+    const combined = [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs];
+    const uniqueMap = new Map();
+    combined.forEach((photo) => {
+      if (photo && photo.id) {
+        uniqueMap.set(photo.id, photo);
+      }
+    });
+    return Array.from(uniqueMap.values());
   }, [rawAlbum, streetViewValidation]);
 
   // Sobrescribir "album" local para que todo el componente herede las reglas gobernadas
@@ -720,9 +732,24 @@ export function PhotoAlbum({
   const [isSvModal2Open, setIsSvModal2Open] = useState(false);
   const [isSvPickerOpen, setIsSvPickerOpen] = useState(false);
 
-  const handleStartStreetViewFlow = useCallback((lat: number, lng: number) => {
-    setSvFlowTarget({ lat, lng });
-    setIsSvModal1Open(true);
+  const handleStartStreetViewFlow = useCallback((poiOrLat: any, legacyLng?: number) => {
+    let targetLat = 0;
+    let targetLng = 0;
+    if (poiOrLat && typeof poiOrLat === "object" && typeof poiOrLat.lat === "number") {
+      targetLat = poiOrLat.lat;
+      targetLng = poiOrLat.lng;
+    } else if (typeof poiOrLat === "number" && typeof legacyLng === "number") {
+      targetLat = poiOrLat;
+      targetLng = legacyLng;
+    } else if (poiOrLat && typeof poiOrLat.lat === "number") {
+      targetLat = Number(poiOrLat.lat);
+      targetLng = Number(poiOrLat.lng);
+    }
+
+    if (targetLat !== 0 && targetLng !== 0) {
+      setSvFlowTarget({ lat: targetLat, lng: targetLng });
+      setIsSvModal1Open(true);
+    }
   }, []);
 
   const handleConfirmSvModal1 = useCallback(() => {

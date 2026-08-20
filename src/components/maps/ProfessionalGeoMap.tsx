@@ -88,6 +88,7 @@ export function ProfessionalGeoMap({
   const [forceFallback, setForceFallback] = useState(false);
   const [selectedMarkerForCone, setSelectedMarkerForCone] = useState<any | null>(null);
   const [photoToDelete, setPhotoToDelete] = useState<any | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
   let removePhotoFromAlbum: ((id: string) => Promise<void>) | null = null;
   try {
@@ -124,6 +125,28 @@ export function ProfessionalGeoMap({
     });
     return unsubscribe;
   }, [layerManager]);
+
+  useEffect(() => {
+    if (!mapInstance || typeof window === "undefined" || typeof ResizeObserver === "undefined") return;
+    const div = mapInstance.getDiv();
+    if (!div) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (mapInstance) {
+        google.maps.event.trigger(mapInstance, "resize");
+      }
+    });
+
+    resizeObserver.observe(div);
+    const parent = div.parentElement;
+    if (parent) {
+      resizeObserver.observe(parent);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [mapInstance]);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
@@ -275,6 +298,7 @@ export function ProfessionalGeoMap({
         center={mapCenter}
         zoom={15}
         options={mapOptions}
+        onLoad={(map) => setMapInstance(map)}
       >
         <BaseMapLayer />
         

@@ -545,6 +545,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             gpsAccuracy: data.gpsAccuracy ?? null,
             gpsTimestamp: data.gpsTimestamp ?? null,
             diagnosticLogs: data.diagnosticLogs ?? null,
+            gpsSource: data.gpsSource ?? "SOLO_EXIF",
+            isVertex: data.isVertex === true || data.gpsSource === "VERTICE_MAPA"
           };
         })
         .filter((p) => !p.deleted) as any;

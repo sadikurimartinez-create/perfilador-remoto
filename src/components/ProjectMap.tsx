@@ -11,7 +11,7 @@ interface ProjectMapProps {
   onAddPoint?: (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => Promise<void>;
   onMoveMarker?: (id: string, lat: number, lng: number) => Promise<void>;
   onCandidateCapture?: (lat: number, lng: number, context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }) => void;
-  onPoiSelect?: (lat: number, lng: number) => void;
+  onPoiSelect?: (poi: any) => void;
   onDeletePhoto?: (id: string) => Promise<void>;
   album: any[];
   project: {
@@ -968,7 +968,14 @@ export function ProjectMap({
                   <button
                     onClick={() => {
                       if (onPoiSelect) {
-                        onPoiSelect(activePhoto.lat, activePhoto.lng);
+                        onPoiSelect({
+                          id: activePhoto.id,
+                          name: activePhoto.tipo || "POI remoto",
+                          lat: Number(activePhoto.lat),
+                          lng: Number(activePhoto.lng),
+                          comentario: activePhoto.comentario || "Análisis remoto Street View",
+                          category: "Google Street View"
+                        });
                       }
                       setActivePhoto(null);
                     }}

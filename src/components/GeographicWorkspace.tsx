@@ -100,8 +100,29 @@ export function GeographicWorkspace() {
     fetchData();
   }, []);
 
-  const handlePoiSelect = (poi: any) => {
-    setSelectedPoi(poi);
+  const handlePoiSelect = (poi: any, legacyLng?: number) => {
+    if (!poi) return;
+    let normalizedPoi: any;
+    if (typeof poi === "object" && poi.lat) {
+      normalizedPoi = poi;
+    } else if (typeof poi === "number" && typeof legacyLng === "number") {
+      normalizedPoi = {
+        id: `poi-legacy-${Date.now()}`,
+        name: "Punto de Interés",
+        lat: poi,
+        lng: legacyLng,
+        comentario: "Información táctica seleccionada"
+      };
+    } else {
+      normalizedPoi = {
+        id: `poi-fallback-${Date.now()}`,
+        name: "Punto de Interés",
+        lat: Number(poi.lat || 0),
+        lng: Number(poi.lng || 0),
+        comentario: "Información táctica seleccionada"
+      };
+    }
+    setSelectedPoi(normalizedPoi);
     setSelectedSv(null);
     setSelectedFinding(null);
   };
