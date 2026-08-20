@@ -3876,7 +3876,8 @@ const hasMinimumPhotos =
                       source: "GEOINT",
                       type: "Directa",
                       relevance: "Alto",
-                      data: summaryContext
+                      data: summaryContext,
+                      createVisualEvidence: false
                     });
                   } else {
                     setError(data.error || "Error al obtener la incidencia delictiva.");
@@ -4050,7 +4051,8 @@ const hasMinimumPhotos =
                       type: "Contextualizada",
                       relevance: "Alto",
                       data: newContext,
-                      initialContext: plateContext
+                      initialContext: plateContext,
+                      createVisualEvidence: false
                     });
                     setPlateQuery("");
                     setPlateContext("");
@@ -4133,7 +4135,8 @@ const hasMinimumPhotos =
                       type: "Contextualizada",
                       relevance: "Medio",
                       data: newContext,
-                      initialContext: rnpdnoContext
+                      initialContext: rnpdnoContext,
+                      createVisualEvidence: false
                     });
                     setRnpdnoContext("");
                   } else {
@@ -4275,7 +4278,8 @@ const hasMinimumPhotos =
                       source: "GEOINT",
                       type: "Directa",
                       relevance: "Alto",
-                      data: newContext
+                      data: newContext,
+                      createVisualEvidence: false
                     });
                     setGeoQueries([]);
                   }
@@ -5890,7 +5894,8 @@ const hasMinimumPhotos =
                   data: scinceDataConfirm,
                   lat: scinceTargetCoords?.lat,
                   lng: scinceTargetCoords?.lng,
-                  heading: 180 // Sur (Demográfico)
+                  heading: 180, // Sur (Demográfico)
+                  createVisualEvidence: false
                 } as any);
                 setScinceDataConfirm(null);
                 setToast({ type: "success", message: "✓ Datos sociodemográficos agregados a la hipótesis correctamente" });
@@ -5942,7 +5947,8 @@ const hasMinimumPhotos =
                   data: denueDataConfirm,
                   lat: denueTargetCoords?.lat,
                   lng: denueTargetCoords?.lng,
-                  heading: 0 // Norte (Comercial / DENUE)
+                  heading: 0, // Norte (Comercial / DENUE)
+                  createVisualEvidence: false
                 } as any);
                 setDenueDataConfirm(null);
                 setToast({ type: "success", message: "✓ Datos comerciales agregados a la hipótesis correctamente" });

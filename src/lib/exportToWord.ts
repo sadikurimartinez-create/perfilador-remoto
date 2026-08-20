@@ -452,23 +452,30 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
     { key: "pandillasAnalysis", name: "Capítulo 8" },
     { key: "conclusionesText", name: "Capítulo 10" }
   ];
-  const defaultChapterFallbacks: Record<string, string> = {
-    contextoTerritorial: TCE_DEFAULT_FALLBACK,
-    finalHypothesis: "Se hipotetiza un patrón delictivo recurrente facilitado por la vulnerabilidad física del entorno urbano (falta de luminarias y presencia de lotes baldíos), que favorece la oportunidad para conductas antisociales.",
-    mapsText: "El análisis cartográfico vectorial revela puntos de interés crítico y zonas calientes con radios de influencia concéntricos donde convergen factores de riesgo físico y social.",
-    statsText: "El análisis estadístico espacial muestra una concentración delictiva focalizada, registrando correlaciones significativas entre el desorden urbano y la incidencia delictiva perimetral.",
-    evidenceText: "La evidencia fotográfica recolectada en campo documenta de forma inequívoca el estado de deterioro de la infraestructura urbana, vandalismo gráfico y pérdida de control territorial en los cuadrantes analizados.",
-    osintSynthesized: "La consulta en fuentes abiertas y bases de datos institucionales (DENUE, SCINCE) corrobora la presencia de atractores comerciales de riesgo y patrones demográficos coincidentes con zonas de vulnerabilidad.",
-    pandillasAnalysis: "La investigación espacial identifica marcas territoriales de agrupaciones juveniles locales (grafitis/placas) en los accesos clave al polígono, delimitando fronteras tácticas informales.",
-    conclusionesText: "Se concluye la urgencia de coordinar acciones de recuperación del entorno urbano (iluminación, limpieza de predios) y patrullaje dinámico orientado a resolver las causas raíz identificadas en el presente análisis."
-  };
+
+  const emptyChaptersAlerts: string[] = [];
 
   for (const ch of requiredChapters) {
     const text = payload[ch.key];
     if (!text || text.trim().length === 0) {
-      console.warn(`[WARNING] El capítulo ${ch.name} estaba vacío o no disponible. Aplicando fallback profesional.`);
-      payload[ch.key] = defaultChapterFallbacks[ch.key];
+      console.warn(`[WARNING] El capítulo ${ch.name} (${ch.key}) estaba vacío o no disponible.`);
+      
+      // En lugar de sobreescribir destructivamente, registramos la alerta de calidad
+      emptyChaptersAlerts.push(`- El capítulo ${ch.name} (${ch.key}) se encuentra vacío de narrativa.`);
+      
+      // Se inyecta un marcador visible pero no intrusivo en el capítulo analítico correspondiente
+      payload[ch.key] = `[PRESTACIÓN REQUERIDA: Narrativa analítica pendiente de carga para el ${ch.name}]`;
     }
+  }
+
+  // Inyectar alertas en el Capítulo 10 de forma no obstructiva (ADR-015)
+  if (emptyChaptersAlerts.length > 0) {
+    const validationHeader = "\n\n=== APÉNDICE DE AUDITORÍA Y CERTIFICACIÓN DE CALIDAD ===\n" +
+      "Se identificaron las siguientes insuficiencias analíticas durante la validación del reporte:\n" +
+      emptyChaptersAlerts.join("\n") + "\n" +
+      "========================================================\n";
+    
+    payload.conclusionesText = (payload.conclusionesText || "") + validationHeader;
   }
 
   // 3. Mapas

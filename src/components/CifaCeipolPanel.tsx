@@ -130,7 +130,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         source: "OSINT",
         type: "Directa",
         relevance: "Alto",
-        data: text
+        data: text,
+        createVisualEvidence: false
       });
       setCifaDataConfirm(null);
       setToast({ type: "success", message: "✓ Hipótesis OSINT guardada correctamente en el expediente" });

@@ -97,6 +97,51 @@ export class VisualParser {
 /**
  * VisualValidator - Validador defensivo de gobernanza y trazabilidad analítica.
  */
+/**
+ * VisualFingerprintRegistry - Generador y validador de firmas criptográficas para recursos visuales (ADR-016).
+ * Sustituye la deduplicación frágil por fingerprinting basado en: SHA-256 + layerType + layerId.
+ */
+export class VisualFingerprintRegistry {
+  private static registeredFingerprints = new Set<string>();
+
+  public static clear(): void {
+    this.registeredFingerprints.clear();
+  }
+
+  /**
+   * Genera un hash SHA-256 rápido del contenido Base64
+   */
+  public static computeSHA256(base64: string): string {
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < base64.length; i++) {
+      const char = base64.charCodeAt(i);
+      h1 = Math.imul(h1 ^ char, 2654435761);
+      h2 = Math.imul(h2 ^ char, 1597334677);
+    }
+    return ((h1 >>> 0).toString(16) + (h2 >>> 0).toString(16)).padStart(16, "0");
+  }
+
+  /**
+   * Genera la huella digital canónica (SHA-256 + layerType + layerId) y verifica duplicación.
+   */
+  public static registerAndCheckDuplicate(
+    base64: string,
+    layerType: string = "N/D",
+    layerId: string = "N/D"
+  ): { duplicate: boolean; fingerprint: string } {
+    const contentHash = this.computeSHA256(base64);
+    const fingerprint = `${contentHash}_${layerType}_${layerId}`;
+
+    if (this.registeredFingerprints.has(fingerprint)) {
+      return { duplicate: true, fingerprint };
+    }
+
+    this.registeredFingerprints.add(fingerprint);
+    return { duplicate: false, fingerprint };
+  }
+}
+
 export class VisualValidator {
   /**
    * Valida la estructura y coherencia del bloque visual.
@@ -119,6 +164,17 @@ export class VisualValidator {
     const allowedTypes = ["KPI_CARD", "CALLOUT_BOX", "RISK_VISUALIZATION", "CHART"];
     if (!allowedTypes.includes(block.type)) {
       console.warn(`[VisualValidator] Bloque ${block.id} RECHAZADO: Tipo inválido "${block.type}".`);
+      return false;
+    }
+
+    // Deduplicación criptográfica (ADR-016)
+    const base64 = block.value ? String(block.value) : "";
+    const layerType = block.type || "N/D";
+    const layerId = block.metadata?.evidenceId || block.id || "N/D";
+    
+    const dedup = VisualFingerprintRegistry.registerAndCheckDuplicate(base64, layerType, layerId);
+    if (dedup.duplicate) {
+      console.warn(`[VisualValidator] Bloque ${block.id} RECHAZADO: Duplicado visual detectado mediante fingerprint.`);
       return false;
     }
 

@@ -119,6 +119,7 @@ export type SweepIntegrationItem = {
   context?: string;
   justification?: string;
   timestamp: number;
+  createVisualEvidence?: boolean;
 };
 
 export type Project = {
@@ -1414,69 +1415,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             latVal = geoValidation.latitude;
             lngVal = geoValidation.longitude;
           }
-        }
-      }
-
-      if (latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
-        try {
-          const photoId = `EVI-SWEEP-${Date.now()}`;
-          const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-          
-          let heading = (params as any).heading ?? 0;
-          if ((params as any).heading == null) {
-            const engineLower = (params.engine || "").toLowerCase();
-            if (engineLower.includes("denue") || engineLower.includes("comercial") || engineLower.includes("giros")) {
-              heading = 0; // Norte (Comercial / DENUE)
-            } else if (engineLower.includes("delictiv") || engineLower.includes("geoint") || engineLower.includes("delito")) {
-              heading = 90; // Este (Incidencia Delictiva)
-            } else if (engineLower.includes("scince") || engineLower.includes("poblac") || engineLower.includes("vivienda")) {
-              heading = 180; // Sur (Demográfico / SCINCE)
-            } else {
-              heading = 270; // Oeste (Multimodal / Otros)
-            }
-          }
-
-          let previewUrl = "";
-          if (apiKey) {
-            console.log("[ProjectContext] Creando vista panorámica de Street View para barrido con Google Maps API...");
-            previewUrl = `https://maps.googleapis.com/maps/api/streetview?size=600x400&location=${latVal},${lngVal}&heading=${heading}&pitch=0&fov=90&key=${apiKey}`;
-          } else {
-            console.log("[ProjectContext] Usando proxy seguro de Street View...");
-            previewUrl = `/api/proxy-image?lat=${latVal}&lng=${lngVal}&heading=${heading}&pitch=0&fov=90&size=600x400`;
-          }
-          const photosColRef = collection(firestore, "projects", project.id, "photos");
-          const photoDocData = {
-            url: previewUrl,
-            storagePath: `sweeps/${photoId}.jpg`,
-            lat: latVal,
-            lng: lngVal,
-            projectId: project.id,
-            createdAt: Date.now(),
-            tipo: `Barrido ${params.engine}`,
-            comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
-            validado: true,
-            isIndependentPoi: true,
-            streetViewMetadata: {
-              heading,
-              pitch: 0,
-              fov: 90,
-              source: params.engine
-            }
-          };
-          await setDoc(doc(photosColRef, photoId), photoDocData);
-          
-          setAlbum(prev => [...prev, {
-            id: photoId,
-            previewUrl,
-            lat: latVal!,
-            lng: lngVal!,
-            tipo: `Barrido ${params.engine}`,
-            comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
-            validado: true,
-            isIndependentPoi: true
-          }]);
-        } catch (photoErr) {
-          console.error("[ProjectContext] Error creating sweep georeferenced photo:", photoErr);
         }
       }
 

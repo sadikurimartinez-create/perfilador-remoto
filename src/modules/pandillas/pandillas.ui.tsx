@@ -1493,7 +1493,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         type: "Contextualizada",
         relevance: "Alto",
         data: resultSummary,
-        initialContext: filterPrompt
+        initialContext: filterPrompt,
+        createVisualEvidence: false
       });
     } catch (err: any) {
       console.error(err);

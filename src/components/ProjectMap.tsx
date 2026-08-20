@@ -459,10 +459,6 @@ export function ProjectMap({
     const lng = e.latLng.lng();
 
     if (geometryType === "individual") {
-      if (onPoiSelect) {
-        onPoiSelect(lat, lng);
-        return;
-      }
       if (!onAddPoint) return;
       const name = window.prompt("Ingrese el nombre o comentario para esta evidencia / POI:", "Evidencia de Campo");
       if (name === null) return;
@@ -480,10 +476,6 @@ export function ProjectMap({
         await onAddPoint(lat, lng, { name: "Vértice de trazado", isIndependentPoi: false, isVertex: true });
       } else {
         // Modalidad 2: Evidencia / POI Independiente
-        if (onPoiSelect) {
-          onPoiSelect(lat, lng);
-          return;
-        }
         if (!onAddPoint) return;
         const name = window.prompt("Ingrese el comentario para esta evidencia independiente:", "POI Independiente");
         if (name === null) return;
@@ -722,18 +714,6 @@ export function ProjectMap({
 
         {/* Georeferenced Evidence markers */}
         {showPhotos && markersWithDispersion.map((photo) => {
-
-          console.log(
-            "[GEOINT DEBUG] Marker render:",
-            {
-              id: photo.id,
-              displayLat: photo.displayLat,
-              displayLng: photo.displayLng,
-              lat: photo.lat,
-              lng: photo.lng
-            }
-          );
-
           const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente";
           if (photo.tipo?.startsWith("Barrido")) return null; // Los barridos se manejan por separado en showOsint
           if (isPoi && !showGeoint) return null; // Las POIs se controlan mediante Inteligencia GEOINT
