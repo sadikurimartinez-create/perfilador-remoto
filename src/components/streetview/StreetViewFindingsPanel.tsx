@@ -6,49 +6,65 @@ import { useState, useEffect } from "react";
 export interface StreetViewFinding {
   id: string;
   expedienteId: string;
-  captureId: string;
-  categoria: "RUTA_ACCESO" | "RUTA_ESCAPE" | "PUNTO_ACECHO" | "GRAFITI";
+  evidenciaId?: string;
+  captureId?: string;
+  categoria: "pendiente_clasificacion" | "acecho" | "graffiti" | "denue" | "sin_hallazgo" | "RUTA_ACCESO" | "PUNTO_ACECHO";
   coordenadas: {
     lat: number;
     lng: number;
   };
-  imagen: string;
-  heading: number;
-  pitch: number;
-  fov: number;
-  estado: "GENERADO" | "PENDIENTE_REVISION" | "APROBADO" | "IGNORADO";
+  imagen?: string;
+  heading?: number;
+  pitch?: number;
+  fov?: number;
+  estado?: "GENERADO" | "PENDIENTE_REVISION" | "APROBADO" | "IGNORADO";
   descripcion?: string;
-  fechaCreacion: string;
+  observaciones_visual?: string;
+  fechaCreacion?: string;
   usuarioRevision?: string;
   origenRevision?: "BARRIDO_AUTOMATICO" | "MANUAL";
 }
 
 interface StreetViewFindingsPanelProps {
   expedienteId: string;
-  captures: any[]; // Capturas automáticas de la Fase 1
+  captures?: any[]; // Capturas automáticas de la Fase 1
   onCaptureStatusChange?: (captureId: string, status: "APROBADO" | "IGNORADO") => void;
   onFindingCreated?: (finding: StreetViewFinding) => void;
 }
 
 export function StreetViewFindingsPanel({
   expedienteId,
-  captures,
+  captures = [],
   onCaptureStatusChange,
   onFindingCreated
 }: StreetViewFindingsPanelProps) {
   const [selectedCapture, setSelectedCapture] = useState<any | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const [pendingCaptures, setPendingCaptures] = useState<any[]>([]);
+  const [governedFindings, setGovernedFindings] = useState<StreetViewFinding[]>([]);
 
   useEffect(() => {
-    // Filtrar únicamente capturas automáticas que están pendientes de revisión
-    const filtered = captures.filter(
+    // 1. Cargar hallazgos gobernados desde la base de datos de FastAPI (db.streetview_findings)
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    if (expedienteId) {
+      fetch(`${backendUrl}/api/expedientes/${expedienteId}/streetview-findings`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setGovernedFindings(data);
+          }
+        })
+        .catch((err) => console.warn("[StreetViewFindingsPanel] Error cargando db.streetview_findings:", err));
+    }
+
+    // 2. Filtrar únicamente capturas automáticas que están pendientes de revisión
+    const filtered = (captures || []).filter(
       (c) =>
         c.tipo_origen === "STREETVIEW_AUTOMATICO" &&
         (c.estado_revision === "PENDIENTE_REVISION" || !c.estado_revision)
     );
     setPendingCaptures(filtered);
-  }, [captures]);
+  }, [expedienteId, captures]);
 
   const handleSelect = (capture: any) => {
     setSelectedCapture(capture);
@@ -136,8 +152,10 @@ export function StreetViewFindingsPanel({
     <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col h-[500px] overflow-hidden shadow-2xl">
       <div className="p-4 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
         <div>
-          <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase">Validación de Evidencia</span>
-          <h2 className="text-sm font-black text-white uppercase tracking-tight">Capturas Pendientes ({pendingCaptures.length})</h2>
+          <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase">AUDITORÍA DE GOBERNANZA: EVIDENCIA STREET VIEW</span>
+          <h2 className="text-sm font-black text-white uppercase tracking-tight">
+            Capturas en el expediente: {governedFindings.length > 0 ? governedFindings.length : pendingCaptures.length} | Pendientes ({pendingCaptures.length})
+          </h2>
         </div>
       </div>
 
