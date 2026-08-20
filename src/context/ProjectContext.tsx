@@ -139,10 +139,20 @@ export type Project = {
   hipotesis?: string;
   reportSummary?: string;
   sweeps?: SweepIntegrationItem[];
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   analysisRadius?: number;
+  locationSource?: LocationSource;
 };
+
+export type LocationSource =
+  | "GPS_EXIF"
+  | "MAP_VERTEX"
+  | "USER_SELECTED"
+  | "STREET_VIEW"
+  | "GEOCODED"
+  | "APPROXIMATE"
+  | "UNKNOWN";
 
 export type PerPhotoFinding = {
   photoId: string;
@@ -192,6 +202,10 @@ type ProjectContextValue = {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    locationSource?: LocationSource;
+    analysisRadius?: number;
   }) => Promise<string>;
 
   closeProject: () => void;
@@ -337,10 +351,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     nombre,
     geometryType,
     descripcion,
+    latitude,
+    longitude,
+    locationSource,
+    analysisRadius,
   }: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    locationSource?: LocationSource;
+    analysisRadius?: number;
   }) => {
     try {
       const firestore = getDb();
@@ -350,6 +372,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       let ceipolId = "";
       
+      const latVal = latitude !== undefined ? latitude : null;
+      const lngVal = longitude !== undefined ? longitude : null;
+      const radiusVal = analysisRadius || 500;
+      const sourceVal: LocationSource = locationSource || (latVal !== null && lngVal !== null ? "USER_SELECTED" : "UNKNOWN");
+
       await runTransaction(firestore, async (transaction) => {
         const counterSnap = await transaction.get(counterRef);
         let currentCount = 0;
@@ -376,6 +403,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           lockedBy: null,
           photoCount: 0,
           estado: "ABIERTO",
+          latitude: latVal,
+          longitude: lngVal,
+          analysisRadius: radiusVal,
+          locationSource: sourceVal,
         });
       });
 
@@ -387,6 +418,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdBy: user?.username || "Usuario Local",
         ceipolId,
         estado: "ABIERTO",
+        latitude: latVal,
+        longitude: lngVal,
+        analysisRadius: radiusVal,
+        locationSource: sourceVal,
       });
 
       setAlbum([]);
@@ -553,9 +588,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       setProject({
         id: projectId,
-        nombre: projectData.name,
+        nombre: projectData.name || projectData.nombre || "Sin nombre",
         geometryType: projectData.geometryType,
         descripcion: projectData.descripcion || "",
+        latitude: projectData.latitude ?? null,
+        longitude: projectData.longitude ?? null,
+        analysisRadius: projectData.analysisRadius ?? 500,
+        locationSource: projectData.locationSource || (projectData.latitude ? "USER_SELECTED" : "UNKNOWN"),
         ...projectData,
       });
       setAlbum(albumPhotos);

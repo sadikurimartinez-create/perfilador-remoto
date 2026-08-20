@@ -8,11 +8,14 @@ export interface GeoIntegrityResult {
   longitude: number | null;
   confidence: "VERIFIED" | "DERIVED" | "UNKNOWN";
   source: "GPS" | "USER" | "MAP" | "IMPORT" | "NONE";
+  status?: "LOCATION_PENDING" | "VERIFIED" | "DESELECTED";
   warning?: string;
 }
 
 const DEFAULT_AGUASCALIENTES_LAT = 21.8853;
 const DEFAULT_AGUASCALIENTES_LNG = -102.2916;
+const PROHIBITED_FALLBACK_LAT = 21.80994922142517;
+const PROHIBITED_FALLBACK_LNG = -102.26811267400397;
 
 /**
  * Valida un par de coordenadas para asegurar su integridad y descartar fallbacks.
@@ -40,7 +43,24 @@ export function validateGeoIntegrity(
       longitude: null,
       confidence: "UNKNOWN",
       source: "NONE",
-      warning: "Ubicación no determinada"
+      status: "LOCATION_PENDING",
+      warning: "Ubicación no determinada / pendiente"
+    };
+  }
+
+  // 1b. Descartar de forma proactiva la coordenada fallback prohibida
+  const isProhibitedFallback =
+    Math.abs(latitude - PROHIBITED_FALLBACK_LAT) < 0.0001 &&
+    Math.abs(longitude - PROHIBITED_FALLBACK_LNG) < 0.0001;
+
+  if (isProhibitedFallback) {
+    return {
+      latitude: null,
+      longitude: null,
+      confidence: "UNKNOWN",
+      source: "NONE",
+      status: "LOCATION_PENDING",
+      warning: "Coordenada fallback artificial descartada por regla de gobernanza v2.6.2"
     };
   }
 
@@ -55,6 +75,7 @@ export function validateGeoIntegrity(
       longitude: null,
       confidence: "UNKNOWN",
       source: "NONE",
+      status: "LOCATION_PENDING",
       warning: "Ubicación por defecto de Aguascalientes descartada para preservar la integridad"
     };
   }
@@ -92,6 +113,7 @@ export function validateGeoIntegrity(
     latitude,
     longitude,
     confidence: "VERIFIED",
-    source: providedSource || "GPS"
+    source: providedSource || "GPS",
+    status: "VERIFIED"
   };
 }

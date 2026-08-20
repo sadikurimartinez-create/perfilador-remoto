@@ -287,7 +287,11 @@ export function ProjectList() {
       const newId = await createProject({
         nombre,
         geometryType,
-        descripcion: ""
+        descripcion: "",
+        latitude: null,
+        longitude: null,
+        locationSource: "UNKNOWN",
+        analysisRadius: 500
       });
       pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);

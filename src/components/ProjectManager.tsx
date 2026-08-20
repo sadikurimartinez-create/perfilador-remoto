@@ -147,6 +147,10 @@ export function ProjectManager() {
           nombre,
           geometryType,
           descripcion: "",
+          latitude: null,
+          longitude: null,
+          locationSource: "UNKNOWN",
+          analysisRadius: 500,
         });
         pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
         setNombreInput("");
