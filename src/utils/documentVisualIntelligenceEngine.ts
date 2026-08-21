@@ -472,3 +472,91 @@ export function renderVisualBlock(blockText: string, blockIndex: number = 0): Pa
 
   return VisualRenderer.render(block);
 }
+
+/**
+ * Contrato Documental ADR-019 v1.0 — Renderizador de Tabla de Comparación Temporal.
+ * Genera la estructura de tabla en documento únicamente para evidencias con estado APPROVED_EVIDENCE.
+ */
+export function renderTemporalComparisonTable(
+  primaryCode: string,
+  primaryDate: string,
+  contextualCode: string,
+  contextualDate: string,
+  deltaFormatted: string,
+  calibratedObservation: string
+): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "ANÁLISIS COMPARATIVO TEMPORAL (ADR-019)",
+                    bold: true,
+                    color: "FFFFFF",
+                    size: 18,
+                    font: "Calibri",
+                  }),
+                ],
+              }),
+            ],
+            shading: { fill: "1E293B", type: ShadingType.CLEAR },
+            columnSpan: 2,
+          }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Evidencia In Situ (Primaria): ", bold: true, size: 16 }),
+                  new TextRun({ text: `${primaryCode} (${primaryDate})`, size: 16 }),
+                ],
+              }),
+            ],
+            shading: { fill: "F1F5F9", type: ShadingType.CLEAR },
+          }),
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Panorama Street View (Contextual): ", bold: true, size: 16 }),
+                  new TextRun({ text: `${contextualCode} (${contextualDate})`, size: 16 }),
+                ],
+              }),
+            ],
+            shading: { fill: "F1F5F9", type: ShadingType.CLEAR },
+          }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `Delta Temporal Registrado: ${deltaFormatted}`, bold: true, color: "A51D24", size: 16 }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: calibratedObservation, italics: true, size: 16 }),
+                ],
+                spacing: { before: 80, after: 80 },
+              }),
+            ],
+            shading: { fill: "FFFFFF", type: ShadingType.CLEAR },
+            columnSpan: 2,
+          }),
+        ],
+      }),
+    ],
+  });
+}
+

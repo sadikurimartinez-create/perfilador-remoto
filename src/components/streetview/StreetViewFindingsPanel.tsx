@@ -43,7 +43,7 @@ export interface StreetViewFinding {
   expedienteId: string;
   evidenciaId?: string;
   captureId?: string;
-  categoria: "pendiente_clasificacion" | "ACECHO_ESCONDITE" | "GRAFFITI_PANDILLA" | "DENUE_POI" | "OSINT_GENERAL" | "acecho" | "graffiti" | "denue" | "sin_hallazgo" | "RUTA_ACCESO" | "PUNTO_ACECHO";
+  categoria: "pendiente_clasificacion" | "COMPARACION_TEMPORAL" | "ACECHO_ESCONDITE" | "GRAFFITI_PANDILLA" | "DENUE_POI" | "OSINT_GENERAL" | "acecho" | "graffiti" | "denue" | "sin_hallazgo" | "RUTA_ACCESO" | "PUNTO_ACECHO";
   coordenadas: {
     lat: number;
     lng: number;
