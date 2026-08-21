@@ -527,6 +527,7 @@ export function PhotoAlbum({
     isReadOnly,
     markAsPrinted,
     uploadAndAddPhoto,
+    createGeographicEntity,
     datosGobMxResult, // <-- Obtener del contexto
     setDatosGobMxResult,
     softDeleteDoc,
@@ -874,20 +875,20 @@ export function PhotoAlbum({
   const handleAddMapPoint = async (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => {
     if (isReadOnly) return;
     try {
-      const fileBlob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")).blob();
-      const file = new File([fileBlob], `${details.isIndependentPoi ? "POI" : "Vertex"}_${Date.now()}.jpg`, { type: "image/jpeg" });
-      
-      if (uploadAndAddPhoto) {
-        await uploadAndAddPhoto(file, lat, lng, {
-          gpsSource: details.isIndependentPoi ? "POI_MAPA" : "VERTICE_MAPA",
-          validado: true,
-          tipo: details.isIndependentPoi ? "POI" : (project?.geometryType === "lineal" ? "Corredor" : "Polígono"),
+      if (createGeographicEntity) {
+        await createGeographicEntity({
+          lat,
+          lng,
+          type: details.isIndependentPoi ? "POI" : "VERTEX",
+          name: details.name,
           comentario: details.name || (details.isIndependentPoi ? "POI creado desde mapa." : "Vértice de trazado."),
-          isIndependentPoi: details.isIndependentPoi
+          isIndependentPoi: details.isIndependentPoi,
+          isVertex: details.isVertex,
         });
       }
     } catch (err: any) {
-      alert("Error al agregar punto geográfico: " + err.message);
+      const errorMsg = err?.message || (typeof err === "string" ? err : err?.code || "Error desconocido al agregar punto geográfico");
+      alert("Error al agregar punto geográfico: " + errorMsg);
     }
   };
   const [reportGenerationMeta, setReportGenerationMeta] = useState<{ date: string; time: string; user: string } | null>(null);

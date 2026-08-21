@@ -19,6 +19,7 @@ import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
+import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -215,6 +216,15 @@ type ProjectContextValue = {
       isIndependentPoi?: boolean;
     }
   ) => Promise<void>;
+  createGeographicEntity?: (params: {
+    lat: number;
+    lng: number;
+    type: "POI" | "VERTEX" | "EVIDENCE_LOCATION";
+    name?: string;
+    comentario?: string;
+    isIndependentPoi?: boolean;
+    isVertex?: boolean;
+  }) => Promise<string>;
   removePhotoFromAlbum: (id: string) => Promise<void>;
   removeAllPhotosFromAlbum: (projectId: string) => Promise<void>;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
@@ -548,6 +558,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         })
         .filter((p) => !p.deleted) as any;
 
+      try {
+        const geoEntities = await getGeographicEntities(projectId);
+        const geoAlbumItems: AlbumPhoto[] = geoEntities.map((geo) => ({
+          id: geo.id!,
+          previewUrl: "",
+          lat: geo.lat,
+          lng: geo.lng,
+          tipo: geo.metadata?.tipo || (geo.metadata?.isIndependentPoi ? "POI" : "Punto Geográfico"),
+          comentario: geo.metadata?.comentario || geo.metadata?.name || "Punto Geográfico",
+          evidenceType: "GEOGRAPHIC_VECTOR",
+          isIndependentPoi: geo.metadata?.isIndependentPoi ?? true,
+          fuente: "Mapa Táctico GEOINT",
+          validado: true,
+          createdAt: geo.createdAt || Date.now(),
+        } as any));
+        albumPhotos.push(...geoAlbumItems);
+      } catch (geoErr) {
+        console.warn("[ProjectContext] No se pudieron cargar entidades geográficas:", geoErr);
+      }
+
       setProject({
         id: projectId,
         nombre: projectData.name,
@@ -737,6 +767,63 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
 
   }, [project, addPhotoToAlbum, isReadOnly, setSelectedIds]);
+
+  const createGeographicEntity = useCallback(
+    async (params: {
+      lat: number;
+      lng: number;
+      type: "POI" | "VERTEX" | "EVIDENCE_LOCATION";
+      name?: string;
+      comentario?: string;
+      isIndependentPoi?: boolean;
+      isVertex?: boolean;
+    }) => {
+      if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
+      if (!project) throw new Error("No hay un proyecto activo para crear el punto geográfico.");
+
+      const entityId = `geo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const comment = params.comentario || params.name || (params.isIndependentPoi ? "POI creado desde mapa." : "Vértice de trazado.");
+      const resolvedTipo = params.isIndependentPoi ? "POI" : (project.geometryType === "lineal" ? "Corredor" : "Polígono");
+
+      await saveGeographicEntity({
+        id: entityId,
+        projectId: project.id,
+        lat: params.lat,
+        lng: params.lng,
+        type: params.type,
+        geometryType: project.geometryType || "individual",
+        source: "MAP_VECTOR",
+        createdAt: Date.now(),
+        metadata: {
+          name: params.name || "",
+          comentario: comment,
+          isIndependentPoi: params.isIndependentPoi ?? true,
+          isVertex: params.isVertex ?? false,
+          tipo: resolvedTipo,
+        },
+      });
+
+      addPhotoToAlbum(
+        {
+          previewUrl: "",
+          lat: params.lat,
+          lng: params.lng,
+          tipo: resolvedTipo,
+          fuente: "Mapa Táctico GEOINT",
+          evidenceType: "GEOGRAPHIC_VECTOR",
+          comentario: comment,
+          isIndependentPoi: params.isIndependentPoi ?? true,
+          gpsSource: params.isIndependentPoi ? "POI_MAPA" : "VERTICE_MAPA",
+          validado: true,
+          createdAt: Date.now(),
+        } as any,
+        entityId
+      );
+
+      return entityId;
+    },
+    [isReadOnly, project, addPhotoToAlbum]
+  );
 
   const uploadDocument = useCallback(async (file: File, context: string) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
@@ -1561,6 +1648,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       loadProject,
       addPhotoToAlbum,
       uploadAndAddPhoto,
+      createGeographicEntity,
       removePhotoFromAlbum,
       removeAllPhotosFromAlbum,
       updatePhotoMeta,
@@ -1603,6 +1691,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       loadProject,
       addPhotoToAlbum,
       uploadAndAddPhoto,
+      createGeographicEntity,
       removePhotoFromAlbum,
       removeAllPhotosFromAlbum,
       updatePhotoMeta,
