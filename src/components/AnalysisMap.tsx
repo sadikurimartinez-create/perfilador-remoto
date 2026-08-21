@@ -195,7 +195,7 @@ const getPoiDetails = (name: string = "", category: string = "", type: string = 
     /vigilancia|polic[ií]a|seguridad|police|security/.test(normCat) ||
     /vigilancia|polic[ií]a|seguridad|police|security/.test(normType)
   ) {
-    return { icon: "🚓", color: "#3b82f6", bg: "bg-blue-600", text: "Vigilancia" }; // Azul institucional de seguridad
+    return { icon: "🚓", color: "#3b82f6", bg: "bg-blue-600", text: "Vigilancia" };
   }
 
   // Gasolineras
@@ -269,12 +269,12 @@ function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolea
 
 const getMarkerColor = (tipo?: string) => {
   switch (tipo) {
-    case "Nodo Inicial": return "#10b981"; // Verde
-    case "Nodo Final": return "#ef4444"; // Rojo
-    case "Corredor": return "#3b82f6"; // Azul
-    case "Perímetro": return "#8b5cf6"; // Morado
-    case "Interior": return "#f97316"; // Naranja
-    default: return "#dc2626"; // Rojo por defecto
+    case "Nodo Inicial": return "#10b981";
+    case "Nodo Final": return "#ef4444";
+    case "Corredor": return "#3b82f6";
+    case "Perímetro": return "#8b5cf6";
+    case "Interior": return "#f97316";
+    default: return "#dc2626";
   }
 };
 
@@ -464,9 +464,9 @@ export function AnalysisMap({
           displayLng: lng,
         };
       } else {
-        const angle = (count * 2 * Math.PI) / 8; // Max 8 points per ring
+        const angle = (count * 2 * Math.PI) / 8;
         const ring = Math.floor((count - 1) / 8) + 1;
-        const baseRadius = 0.000035; // ~3-4 meters
+        const baseRadius = 0.000035;
         const radius = baseRadius * ring;
         return {
           ...photo,
@@ -477,9 +477,6 @@ export function AnalysisMap({
     });
   }, [photosWithCoords]);
 
-  // El centro geográfico del mapa se calcula de forma dinámica y secuencial priorizando evidencias reales,
-  // polígonos dibujados, POIs y, de forma secundaria, los centroides de incidentes históricos de análisis.
-  // Evitamos por completo centrar en Aguascalientes Centro si existe cualquier dato espacial en el análisis.
   const center = useMemo(() => {
     const activeCoords: { lat: number; lng: number }[] = [];
     
@@ -490,13 +487,11 @@ export function AnalysisMap({
     } else if (manualPois && manualPois.length > 0) {
       manualPois.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
     } else if (analysisResult) {
-      // Secundario: Centroide de incidentes históricos
       if (analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0) {
         analysisResult.historicalCrimes.forEach(c => {
           if (hasValidCoords(c)) activeCoords.push({ lat: c.lat as number, lng: c.lng as number });
         });
       }
-      // Terciario: Centroide de POIs detectados
       if (activeCoords.length === 0 && analysisResult.pois && analysisResult.pois.length > 0) {
         analysisResult.pois.forEach(p => {
           if (hasValidCoords(p)) activeCoords.push({ lat: p.lat as number, lng: p.lng as number });
@@ -505,14 +500,13 @@ export function AnalysisMap({
     }
 
     if (activeCoords.length === 0) {
-      return { lat: 21.8853, lng: -102.2916 }; // fallback absoluto de última instancia si nada de nada está definido
+      return { lat: 21.8853, lng: -102.2916 };
     }
     const lat = activeCoords.reduce((a, p) => a + p.lat, 0) / activeCoords.length;
     const lng = activeCoords.reduce((a, p) => a + p.lng, 0) / activeCoords.length;
     return { lat, lng };
   }, [photosWithCoords, analysisPolygon, manualPois, analysisResult]);
 
-  // Validador geoespacial en tiempo real de pertenencia al polígono, radio o corredor activo
   const isPointInActiveGeography = useCallback((point: { lat: number; lng: number }): boolean => {
     if (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) {
       return isPointInPolygon(point, analysisPolygon);
@@ -529,7 +523,7 @@ export function AnalysisMap({
     
     if (geometryType === "lineal" && photosWithCoords.length >= 1) {
       const linePoints = photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }));
-      return isPointNearLine(point, linePoints, 500); // 500m de corredor/área de influencia
+      return isPointNearLine(point, linePoints, 500);
     }
     
     if (photosWithCoords.length > 0 || (manualPois && manualPois.length > 0)) {
@@ -539,7 +533,6 @@ export function AnalysisMap({
     return true;
   }, [isPreliminary, analysisPolygon, geometryType, photosWithCoords, center, analysisRadius, manualPois]);
 
-  // Se filtran los elementos con un estricto validador espacial para asegurar que pertenecen a la geografía activa (Regla Crítica Global)
   const crimesWithCoords = useMemo(() => {
     const raw = (analysisResult?.historicalCrimes ?? []).filter((c) => hasValidCoords(c)) as Array<{ lat: number; lng: number; tipoDelito: string }>;
     const hasActiveGeo = photosWithCoords.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) || (manualPois && manualPois.length > 0);
@@ -554,13 +547,12 @@ export function AnalysisMap({
     return raw.filter(p => isPointInActiveGeography(p));
   }, [analysisResult?.pois, isPointInActiveGeography, photosWithCoords.length, isPreliminary, analysisPolygon, manualPois]);
 
-  // Clusterización automática y robusta en JS (Evita dependencias externas fallidas)
   const clusteredCrimes = useMemo(() => {
     if (!activeLayers.clusters) {
       return crimesWithCoords.map(c => ({ isCluster: false, lat: c.lat, lng: c.lng, count: 1, crimes: [c] }));
     }
     const clusters: { lat: number; lng: number; count: number; crimes: any[] }[] = [];
-    const distanceThreshold = 100; // metros
+    const distanceThreshold = 100;
     
     crimesWithCoords.forEach((crime) => {
       let added = false;
@@ -598,9 +590,7 @@ export function AnalysisMap({
     .slice(0, 5);
   }, [poisWithCoords, crimesWithCoords]);
 
-  // Identificación dinámica de Hotspots de concentración crítica
   const activeHotspots = useMemo(() => {
-    // Tomamos los clusters de crímenes con más de 2 incidentes
     const highDensityClusters = clusteredCrimes.filter(c => c.count >= 2).sort((a, b) => b.count - a.count);
     return highDensityClusters.slice(0, 3).map((h, i) => ({
       id: i + 1,
@@ -618,11 +608,9 @@ export function AnalysisMap({
     }).filter((a: any) => a.lat != null && a.lng != null);
   }, [analysisResult]);
 
-  // Unificación de todos los acechos tácticos (IA y manuales del fotógrafo)
   const allAcechos = useMemo(() => {
     const list: Array<{ id: string; lat: number; lng: number; name: string; url: string; source: "AI" | "MANUAL" }> = [];
     
-    // AI views
     lugaresAcecho.forEach((a: any, idx: number) => {
       list.push({
         id: `ai-acecho-${idx}`,
@@ -634,7 +622,6 @@ export function AnalysisMap({
       });
     });
 
-    // Manual photos de acecho
     photosWithCoords.filter(p => p.tipo === "Lugar de Acecho").forEach((p, idx) => {
       list.push({
         id: `manual-acecho-${idx}`,
@@ -646,11 +633,9 @@ export function AnalysisMap({
       });
     });
 
-    // Validar espacialmente (Regla Crítica Global)
     return list.filter(pt => isPointInActiveGeography(pt));
   }, [lugaresAcecho, photosWithCoords, isPointInActiveGeography]);
 
-  // POIs manuales estrictamente validados
   const filteredManualPois = useMemo(() => {
     if (!manualPois) return [];
     return manualPois.filter(p => isPointInActiveGeography(p));
@@ -702,7 +687,6 @@ export function AnalysisMap({
     mapRef.current.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
   }, [mapReady, boundsPoints]);
 
-  // Trazado de rutas con Directions API recortadas/acopladas dentro del polígono
   useEffect(() => {
     if (viewMode !== "MOBILITY" && viewMode !== "PREDICTIVE") return;
     if (!mapReady || typeof window === "undefined" || !(window as any).google) return;
@@ -717,7 +701,6 @@ export function AnalysisMap({
         ds.route({ origin, destination, travelMode: mode }, (result: any, status: any) => {
           if (status === "OK" && result) {
             const rawPath = result.routes[0].overview_path.map((pt: any) => ({ lat: pt.lat(), lng: pt.lng() }));
-            // Recorte geoespacial de la ruta contra la geografía activa (Regla Crítica Global)
             const clipped = rawPath.filter((pt: any) => isPointInActiveGeography(pt));
             resolve(clipped);
           } else {
@@ -730,15 +713,12 @@ export function AnalysisMap({
     };
 
     const generateRoutes = async () => {
-      // Tomamos hasta los 3 atractores principales para evitar saturar API
       const limit = Math.min(top5Pois.length, 3);
       for (let i = 0; i < limit; i++) {
         const poiLatLng = { lat: top5Pois[i].lat as number, lng: top5Pois[i].lng as number };
         if (i % 2 === 0) {
-          // Rutas de acceso (🔵 Azules, peatonales/tacticas)
           access.push(await fetchRoute(poiLatLng, center, "WALKING"));
         } else {
-          // Rutas de fuga (🔴 Rojas, escape vehicular rápido)
           escape.push(await fetchRoute(center, poiLatLng, "DRIVING"));
         }
         await new Promise(r => setTimeout(r, 200));
@@ -750,18 +730,15 @@ export function AnalysisMap({
     generateRoutes();
   }, [mapReady, viewMode, top5Pois, center, isPointInActiveGeography]);
 
-  // Proyección a 6 meses: Vectores direccionales de expansión criminal radiales
   const predictiveVectors = useMemo(() => {
     if (viewMode !== "PREDICTIVE" || !center || top5Pois.length === 0) return [];
     
-    // Trazamos vectores de expansión partiendo del centro y empujando past de los atractores
     return top5Pois.slice(0, 3).map((poi, idx) => {
       const poiLat = poi.lat as number;
       const poiLng = poi.lng as number;
       const dLat = poiLat - center.lat;
       const dLng = poiLng - center.lng;
       
-      // Expandir 1.8 veces para capturar la proyección táctica
       const endLat = center.lat + dLat * 1.8;
       const endLng = center.lng + dLng * 1.8;
       
@@ -792,1043 +769,289 @@ export function AnalysisMap({
       return [];
     }
     
-    // Construimos una cuadrícula ponderada por gravedad
     const cellSize = 0.0001;
     const grid = new Map<string, { lat: number; lng: number; weight: number }>();
     for (const c of crimesWithCoords) {
       const lat = c.lat;
       const lng = c.lng;
-      const key = `${Math.round(lat / cellSize) * cellSize},${Math.round(lng / cellSize) * cellSize}`;
-      const severity = getSeverityWeight(c.tipoDelito || "");
-      const existing = grid.get(key);
-      if (existing) {
-        existing.weight += severity;
+      const gridLat = Math.round(lat / cellSize) * cellSize;
+      const gridLng = Math.round(lng / cellSize) * cellSize;
+      const key = `${gridLat.toFixed(5)},${gridLng.toFixed(5)}`;
+      const w = getSeverityWeight(c.tipoDelito || "");
+      const current = grid.get(key);
+      if (current) {
+        current.weight += w;
       } else {
-        grid.set(key, { lat, lng, weight: severity });
+        grid.set(key, { lat: gridLat, lng: gridLng, weight: w });
       }
     }
-    return Array.from(grid.values()).map(({ lat, lng, weight }) => ({
-      lat,
-      lng,
-      weight: Math.min(weight, 15), 
+    return Array.from(grid.values()).map((point) => ({
+      location: new (window as any).google.maps.LatLng(point.lat, point.lng),
+      weight: point.weight,
     }));
-  }, [crimesWithCoords, isLoaded]);
-
-  // Factor de escala de riesgo de zona (0-10)
-  const zoneRiskIndex = useMemo(() => {
-    if (crimesWithCoords.length === 0) return "0.0";
-    let score = 0;
-    crimesWithCoords.forEach(c => {
-      score += getSeverityWeight(c.tipoDelito || "");
-    });
-    // Escalar logarítmicamente entre 0 y 10
-    const val = Math.min(10, Math.log10(score * 2 + 1) * 3);
-    return val.toFixed(1);
-  }, [crimesWithCoords]);
-
-  // Texto de Riesgo Descriptivo
-  const zoneRiskLabel = useMemo(() => {
-    const num = parseFloat(zoneRiskIndex);
-    if (num >= 8.0) return { text: "Crítico", color: "text-red-500 border-red-500 bg-red-950/40" };
-    if (num >= 5.0) return { text: "Alto", color: "text-orange-500 border-orange-500 bg-orange-950/40" };
-    if (num >= 2.5) return { text: "Medio", color: "text-yellow-500 border-yellow-500 bg-yellow-950/40" };
-    return { text: "Bajo", color: "text-emerald-500 border-emerald-500 bg-emerald-950/40" };
-  }, [zoneRiskIndex]);
-
-  // Función de captura/exportación rápida de evidencia
-  const handleExportMap = () => {
-    setIsExporting(true);
-    alert("Para exportar, use CTRL+P en su navegador para guardar como PDF, o capture la pantalla del mapa táctico limpio que se presentará a continuación.");
-  };
-
-  if (!apiKey || apiKey.trim() === "") {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-amber-400">
-        <p className="font-semibold text-base">⚠️ Mapa No Disponible</p>
-        <p className="mt-1">Falta la clave de Google Maps en las variables de entorno (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY).</p>
-      </div>
-    );
-  }
+  }, [isLoaded, crimesWithCoords]);
 
   if (loadError) {
     return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-red-400 space-y-2">
-        <p className="font-semibold text-base">❌ Error al cargar Google Maps</p>
-        <p>Asegúrese de que las APIs de JavaScript de Google Maps y de visualización estén activas en la consola de Google Cloud.</p>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-red-400 p-6 rounded-2xl border border-slate-800">
+        <span className="text-2xl mb-2">⚠️</span>
+        <p className="text-xs font-bold uppercase tracking-wider">Error al cargar Google Maps JS API</p>
+        <p className="text-[10px] text-slate-500 mt-1">{loadError.message}</p>
       </div>
     );
   }
 
   if (!isLoaded) {
     return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-400 min-h-[200px] flex flex-col items-center justify-center gap-3">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
-        <span>Iniciando Entorno Cartográfico de Seguridad…</span>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-400 p-6 rounded-2xl border border-slate-800 animate-pulse">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent mb-3"></div>
+        <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">Cargando Cartografía GEOINT...</p>
       </div>
     );
   }
 
   return (
-    <div className={`flex flex-col w-full font-sans transition-all duration-300 ${isExporting ? "fixed inset-0 z-50 bg-slate-950 p-4" : ""}`}>
-      {/* Botón de salida para modo de exportación */}
-      {isExporting && (
-        <div className="flex justify-between items-center mb-2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg">
-          <span className="text-white text-xs font-bold uppercase tracking-wider">SSPE - Vista de Evidencia de Alta Coherencia</span>
-          <button 
-            onClick={() => setIsExporting(false)}
-            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold"
-          >
-            Regresar al Informe
-          </button>
-        </div>
-      )}
+    <div className="relative w-full h-full min-h-[450px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex flex-col">
+      {/* Controles flotantes superiores */}
+      <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-2 items-center bg-slate-900/90 backdrop-blur-md p-2 rounded-xl border border-slate-800 shadow-xl">
+        <button
+          onClick={() => setMapBaseLayer(mapBaseLayer === "standard" ? "satellite" : "standard")}
+          className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition"
+        >
+          {mapBaseLayer === "standard" ? "🛰️ Satélite" : "🗺️ Estándar"}
+        </button>
 
-      <div className="relative w-full h-[650px] overflow-hidden bg-slate-900 rounded-xl border border-slate-800 shadow-xl">
-        
-        {/* Sello de agua oficial de seguridad */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
-          <span className="text-slate-800/15 font-bold text-5xl sm:text-7xl -rotate-45 select-none tracking-[0.2em] drop-shadow-md">
-            SSPE-CEIPOL
-          </span>
-        </div>
+        <div className="h-4 w-px bg-slate-800 my-auto" />
 
-        {/* CONTROLES FLOTANTES PREMIUM (LADO DERECHO) */}
-        <div className="absolute top-4 right-4 z-20 w-80 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-4 text-white max-h-[90%] overflow-y-auto flex flex-col gap-3.5 scrollbar-thin scrollbar-thumb-slate-800">
-          
-          {/* Encabezado e Índice de Riesgo */}
-          <div className="flex justify-between items-start border-b border-slate-800 pb-2.5">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">GEOINT Tactical Board</span>
-              <h3 className="text-xs font-extrabold tracking-tight text-white uppercase mt-0.5">
-                {viewMode === "DENSITY" && "Análisis de Densidad"}
-                {viewMode === "TOPOGRAPHY" && "Estructura del Entorno"}
-                {viewMode === "MOBILITY" && "Corredores & Fugas"}
-                {viewMode === "PREDICTIVE" && "Modelo Predictivo"}
-              </h3>
-            </div>
-            <div className={`px-2 py-1 rounded border text-center flex flex-col items-center shrink-0 min-w-[65px] ${zoneRiskLabel.color}`}>
-              <span className="text-[9px] uppercase font-semibold leading-none">Riesgo</span>
-              <span className="text-sm font-black leading-none mt-1">{zoneRiskIndex}</span>
-              <span className="text-[7.5px] uppercase font-bold mt-0.5 tracking-wider">{zoneRiskLabel.text}</span>
-            </div>
-          </div>
+        <button
+          onClick={() => setShowPhotos(!showPhotos)}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition ${
+            showPhotos ? "bg-cyan-950/80 border-cyan-700 text-cyan-300" : "bg-slate-950/50 border-slate-800 text-slate-500"
+          }`}
+        >
+          📷 Evidencias ({photosWithCoords.length})
+        </button>
 
-          {/* Zoom Controls & Base Layer Switcher */}
-          <div className="border-b border-slate-800 pb-2.5 space-y-2">
-            <span className="text-[9px] uppercase font-bold text-slate-450 tracking-wider">Controles de Mapa</span>
-            <div className="flex gap-1.5 justify-between">
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={handleZoomIn}
-                  className="w-7 h-7 rounded bg-slate-900 hover:bg-slate-850 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center cursor-pointer select-none"
-                  title="Zoom In"
-                >
-                  +
-                </button>
-                <button
-                  type="button"
-                  onClick={handleZoomOut}
-                  className="w-7 h-7 rounded bg-slate-900 hover:bg-slate-850 hover:text-blue-400 text-white font-extrabold text-sm border border-slate-800 flex items-center justify-center cursor-pointer select-none"
-                  title="Zoom Out"
-                >
-                  -
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetView}
-                  className="px-2 h-7 rounded bg-slate-900 hover:bg-slate-850 hover:text-blue-400 text-slate-350 font-bold text-[8px] uppercase border border-slate-800 flex items-center justify-center cursor-pointer select-none"
-                  title="Reset View"
-                >
-                  Reset
-                </button>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setMapBaseLayer("standard")}
-                  className={`py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
-                    mapBaseLayer === "standard"
-                      ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
-                      : "bg-slate-900 border-slate-800 text-slate-500"
-                  }`}
-                >
-                  Mapa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapBaseLayer("satellite")}
-                  className={`py-1 px-2 rounded text-[8px] font-black uppercase border transition-all ${
-                    mapBaseLayer === "satellite"
-                      ? "bg-blue-600/20 text-blue-400 border-blue-500/40"
-                      : "bg-slate-900 border-slate-800 text-slate-500"
-                  }`}
-                >
-                  Satélite
-                </button>
-              </div>
-            </div>
-          </div>
+        <button
+          onClick={() => setShowOsint(!showOsint)}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition ${
+            showOsint ? "bg-purple-950/80 border-purple-700 text-purple-300" : "bg-slate-950/50 border-slate-800 text-slate-500"
+          }`}
+        >
+          🔎 OSINT ({parsedSweeps.length})
+        </button>
 
-          {/* DESCRIPCIÓN TÉCNICA DINÁMICA OBLIGATORIA */}
-          <div className="bg-slate-900/65 border border-slate-800/50 p-2.5 rounded-lg text-[10px] text-slate-300 leading-relaxed">
-            <span className="font-extrabold text-white text-[10.5px] block mb-1 uppercase tracking-wide">🔬 Descripción Técnica:</span>
-            {viewMode === "DENSITY" && (
-              <p>
-                Representación de densidad criminal mediante cuadrículas ponderadas de Kernel. Los incidentes históricos 
-                están ponderados por gravedad penal (homicidio/armas: x5, robos: x4, lesiones: x3). 
-                Los niveles indican la recurrencia e intensidad delictiva local.
-              </p>
-            )}
-            {viewMode === "TOPOGRAPHY" && (
-              <p>
-                Análisis de atractores urbanos que incentivan la criminalidad. Un <strong>Atractor de Riesgo</strong> es un espacio 
-                cuya función o flujo de personas genera vulnerabilidad táctica, facilitando concentraciones 
-                delictivas y disminuyendo el control social formal.
-              </p>
-            )}
-            {viewMode === "MOBILITY" && (
-              <p>
-                Trazado dinámico de movilidad delictiva. <strong>Rutas de Acceso (Azul)</strong> describen aproximación táctica, 
-                <strong> Rutas de Fuga (Rojo)</strong> detallan el escape vehicular, y las <strong>Zonas de Acecho</strong> señalan 
-                puntos con nula visibilidad u ocultamiento.
-              </p>
-            )}
-            {viewMode === "PREDICTIVE" && (
-              <p>
-                Proyección espacial a 6 meses. Modela la dirección natural de expansión del fenómeno a partir de los centroides 
-                activos y los atractores de alta fricción. Las zonas concéntricas indican gradientes de presión delictiva futura.
-              </p>
-            )}
-          </div>
+        <button
+          onClick={() => setShowGeoint(!showGeoint)}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition ${
+            showGeoint ? "bg-emerald-950/80 border-emerald-700 text-emerald-300" : "bg-slate-950/50 border-slate-800 text-slate-500"
+          }`}
+        >
+          📍 Atractores/Hotspots
+        </button>
+      </div>
 
-          {/* ESCALA VISUAL OBLIGATORIA (Simbología Detallada) */}
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">🎨 Escala Visual:</span>
-            <div className="bg-slate-900/50 p-2 rounded-lg space-y-1.5 text-[10px]">
-              {viewMode === "DENSITY" && (
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-emerald-600 shrink-0"></span><span>Verde: Baja</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-yellow-500 shrink-0"></span><span>Amarillo: Media</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-orange-500 shrink-0"></span><span>Naranja: Alta</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-red-600 shrink-0"></span><span>Rojo: Crítico</span></div>
-                  <div className="flex items-center gap-1.5 col-span-2 border-t border-slate-800 pt-1.5 mt-0.5"><span className="text-[11px] shrink-0">❌</span><span>Incidente Delictivo</span></div>
-                </div>
-              )}
-              {viewMode === "TOPOGRAPHY" && (
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-                  <div className="flex items-center gap-1.5"><span>🏠</span><span>Viviendas</span></div>
-                  <div className="flex items-center gap-1.5"><span>🏪</span><span>Comercios</span></div>
-                  <div className="flex items-center gap-1.5"><span>🏦</span><span>Bancos/Financ.</span></div>
-                  <div className="flex items-center gap-1.5"><span>🏫</span><span>Escuelas</span></div>
-                  <div className="flex items-center gap-1.5"><span>⛽</span><span>Gasolineras</span></div>
-                  <div className="flex items-center gap-1.5"><span>🚓</span><span>Vigilancia</span></div>
-                </div>
-              )}
-              {viewMode === "MOBILITY" && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-2 rounded bg-blue-600 border border-blue-400 opacity-80"></span>
-                    <span>Rutas de Acceso</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-2 rounded bg-red-600 border border-red-400 opacity-80"></span>
-                    <span>Rutas de Fuga</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full border border-dashed border-slate-400 bg-slate-950 flex items-center justify-center text-[8px]">⚫</span>
-                    <span>Zona de Acecho (Street View)</span>
-                  </div>
-                </div>
-              )}
-              {viewMode === "PREDICTIVE" && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full border border-red-500 bg-red-500/15"></span>
-                    <span>Presión Crítica (Concéntrica)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full border border-orange-500 bg-orange-500/25"></span>
-                    <span>Presión Focalizada (Atractor)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-0.5 bg-red-600 relative flex items-center justify-end"><span className="w-1.5 h-1.5 bg-red-600 rounded-full"></span></span>
-                    <span>Vector Direccional de Expansión</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+      {/* Controles de Zoom en el mapa */}
+      <div className="absolute bottom-16 right-3 z-10 flex flex-col gap-1.5">
+        <button
+          onClick={handleZoomIn}
+          className="w-8 h-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white font-bold text-sm border border-slate-800 shadow-xl flex items-center justify-center cursor-pointer"
+        >
+          +
+        </button>
+        <button
+          onClick={handleZoomOut}
+          className="w-8 h-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white font-bold text-sm border border-slate-800 shadow-xl flex items-center justify-center cursor-pointer"
+        >
+          -
+        </button>
+        <button
+          onClick={handleResetView}
+          className="w-8 h-8 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-cyan-400 font-bold text-xs border border-slate-800 shadow-xl flex items-center justify-center cursor-pointer"
+          title="Centrar mapa"
+        >
+          🎯
+        </button>
+      </div>
 
-          {/* CAPAS ACTIVABLES / CONTROL DE OPACIDAD */}
-          <div className="space-y-2 border-t border-slate-800 pt-3">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">⚙️ Panel de Control Táctico:</span>
-            
-            {/* Toggles */}
-            <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-300">
-              {viewMode === "DENSITY" && (
-                <>
-                  <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
-                    <input type="checkbox" checked={activeLayers.heatmap} onChange={() => setActiveLayers(p => ({...p, heatmap: !p.heatmap}))} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                    <span>Heatmap</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
-                    <input type="checkbox" checked={activeLayers.clusters} onChange={() => setActiveLayers(p => ({...p, clusters: !p.clusters}))} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                    <span>Clusterización</span>
-                  </label>
-                </>
-              )}
-              {viewMode === "TOPOGRAPHY" && (
-                <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors col-span-2">
-                  <input type="checkbox" checked={activeLayers.atractores} onChange={() => setActiveLayers(p => ({...p, atractores: !p.atractores}))} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                  <span>Ver Atractores Urbanos</span>
-                </label>
-              )}
-              {viewMode === "MOBILITY" && (
-                <>
-                  <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
-                    <input type="checkbox" checked={activeLayers.routes} onChange={() => setActiveLayers(p => ({...p, routes: !p.routes}))} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                    <span>Ver Rutas</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
-                    <input type="checkbox" checked={activeLayers.acechos} onChange={() => setActiveLayers(p => ({...p, acechos: !p.acechos}))} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                    <span>Street View</span>
-                  </label>
-                </>
-              )}
-              <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
-                <input type="checkbox" checked={activeLayers.buffer} onChange={() => setActiveLayers(p => ({...p, buffer: !p.buffer}))} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                <span>Buffer Límite</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors">
-                <input type="checkbox" checked={isOperativoMode} onChange={() => setIsOperativoMode(p => !p)} className="rounded accent-emerald-500 bg-slate-950 border-slate-800" />
-                <span>Modo Operativo</span>
-              </label>
-            </div>
-
-            {/* Sliders de Opacidad */}
-            <div className="space-y-2 mt-2 pt-1 border-t border-slate-800/40">
-              {viewMode === "DENSITY" && activeLayers.heatmap && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8px] text-slate-400">
-                    <span>Opacidad del Heatmap:</span>
-                    <span>{Math.round(heatmapOpacity * 100)}%</span>
-                  </div>
-                  <input type="range" min="0.1" max="1" step="0.05" value={heatmapOpacity} onChange={(e) => setHeatmapOpacity(parseFloat(e.target.value))} className="w-full h-1 bg-slate-800 accent-emerald-500 rounded-lg cursor-pointer" />
-                </div>
-              )}
-              {(viewMode === "MOBILITY" || viewMode === "PREDICTIVE") && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8px] text-slate-400">
-                    <span>Sombreado de Ruta:</span>
-                    <span>{Math.round(corridorOpacity * 100)}%</span>
-                  </div>
-                  <input type="range" min="0.1" max="0.9" step="0.05" value={corridorOpacity} onChange={(e) => setCorridorOpacity(parseFloat(e.target.value))} className="w-full h-1 bg-slate-800 accent-blue-500 rounded-lg cursor-pointer" />
-                </div>
-              )}
-              {viewMode === "PREDICTIVE" && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8px] text-slate-400">
-                    <span>Opacidad de Expansión:</span>
-                    <span>{Math.round(projectionOpacity * 100)}%</span>
-                  </div>
-                  <input type="range" min="0.05" max="0.6" step="0.05" value={projectionOpacity} onChange={(e) => setPredictiveOpacity(parseFloat(e.target.value))} className="w-full h-1 bg-slate-800 accent-red-500 rounded-lg cursor-pointer" />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ACCIONES OPERATIVAS (EXPORTAR EVIDENCIA) */}
-          <div className="border-t border-slate-800 pt-2.5 mt-0.5 flex gap-2">
-            <button 
-              onClick={handleExportMap}
-              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-colors border border-slate-700"
-            >
-              📸 Exportar Evidencia
-            </button>
-          </div>
-        </div>
-
-        {/* MAPA PRELIMINAR - HERRAMIENTAS DE DIBUJO */}
-        {isPreliminary && (
-          <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 shadow-lg">
-            <span className="font-semibold tracking-tight text-emerald-300">
-              Mapa Preliminar
-            </span>
-            {setAnalysisPolygon && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDrawingPolygon((prev) => !prev);
-                  if (isDrawingPolygon && setAnalysisPolygon && (analysisPolygon?.length ?? 0) < 3) {
-                    setAnalysisPolygon([]);
-                  }
-                }}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 border text-[11px] ${
-                  isDrawingPolygon
-                    ? "border-red-400 bg-red-500/20 text-red-200"
-                    : "border-slate-600 bg-slate-800/70 text-slate-200"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-red-400" />
-                Trazar perímetro
-              </button>
-            )}
-            {setManualPois && (
-              <button
-                type="button"
-                onClick={() => setIsPlacingManualPoi((prev) => !prev)}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 border text-[11px] ${
-                  isPlacingManualPoi
-                    ? "border-amber-400 bg-amber-500/20 text-amber-200"
-                    : "border-slate-600 bg-slate-800/70 text-slate-200"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-amber-400" />
-                Fijar POI manual
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Panel de Capas Flotante Estilo Glassmorphism */}
-        <div className="absolute top-3 right-3 z-20 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-xl p-3 text-slate-100 shadow-2xl flex flex-col gap-2 font-sans min-w-[190px]">
-          <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase border-b border-slate-800 pb-1.5 mb-1 flex items-center gap-1.5">
-            <span>🛡️</span> CAPAS DE INTELIGENCIA
-          </div>
-          
-          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
-            <input
-              type="checkbox"
-              checked={showPhotos}
-              onChange={(e) => setShowPhotos(e.target.checked)}
-              className="rounded border-slate-800 bg-slate-950 text-cyan-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
-            />
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
-              <span className="text-cyan-400">📷</span> Evidencia fotográfica
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
-            <input
-              type="checkbox"
-              checked={showOsint}
-              onChange={(e) => setShowOsint(e.target.checked)}
-              className="rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
-            />
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
-              <span className="text-emerald-400">🔎</span> Barridos OSINT
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
-            <input
-              type="checkbox"
-              checked={showGeoint}
-              onChange={(e) => setShowGeoint(e.target.checked)}
-              className="rounded border-slate-800 bg-slate-950 text-orange-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
-            />
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
-              <span className="text-orange-400">🌐</span> Inteligencia GEOINT
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-900/40 p-1 rounded transition select-none">
-            <input
-              type="checkbox"
-              checked={showAreas}
-              onChange={(e) => setShowAreas(e.target.checked)}
-              className="rounded border-slate-800 bg-slate-950 text-purple-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
-            />
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">
-              <span className="text-purple-400">⭕</span> Áreas analíticas
-            </span>
-          </label>
-        </div>
-
+      {/* Mapa Principal de Google Maps */}
+      <div className="flex-1 w-full relative">
         <GoogleMap
           mapContainerStyle={containerStyle}
           center={center}
           zoom={15}
           onLoad={onMapLoad}
-          onClick={(e) => {
-            if (!isPreliminary) return;
-            const latLng = e.latLng;
-            if (!latLng) return;
-            const pt = { lat: latLng.lat(), lng: latLng.lng() };
-            if (isDrawingPolygon && setAnalysisPolygon) {
-              const current = analysisPolygon ?? [];
-              setAnalysisPolygon([...current, pt]);
-              return;
-            }
-            if (setManualPois && isPlacingManualPoi) {
-              const label = window.prompt(
-                "Escriba una clasificación para el punto (ej. Casa de Seguridad, Baldío, Taller):"
-              );
-              setManualPois([
-                ...(manualPois ?? []),
-                { ...pt, label: label || undefined },
-              ]);
-            }
-          }}
-          mapTypeId={mapBaseLayer === "standard" ? "roadmap" : (isOperativoMode ? "terrain" : "hybrid")}
           options={{
-            streetViewControl: false,
-            mapTypeControl: false,
-            fullscreenControl: false,
             styles: mapBaseLayer === "standard" ? darkMapStyles : [],
+            mapTypeId: mapBaseLayer === "standard" ? "roadmap" : "hybrid",
             disableDefaultUI: true,
-            scrollwheel: false,
-            gestureHandling: "cooperative",
+            zoomControl: false,
+            gestureHandling: "greedy",
           }}
         >
-          {/* LÍMITES / BUFFER (Controlled by showAreas) */}
-          {showAreas && activeLayers.buffer && !isPreliminary && geometryType !== "lineal" && geometryType !== "poligono" && (
+          {/* Círculo de Radio de Análisis (Buffer Activo) */}
+          {showAreas && activeLayers.buffer && (
             <Circle
               center={center}
               radius={analysisRadius}
               options={{
-                strokeColor: "#ef4444",
-                strokeOpacity: 0.8,
-                strokeWeight: 2,
-                fillColor: "#ef4444",
-                fillOpacity: 0.12,
-              }}
-            />
-          )}
-
-          {showAreas && !isPreliminary && geometryType === "lineal" && photosWithCoords.length > 1 && (
-            <Polyline
-              path={photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }))}
-              options={{
-                strokeColor: "#3b82f6",
-                strokeOpacity: 0.9,
-                strokeWeight: 6,
-              }}
-            />
-          )}
-
-          {showAreas && !isPreliminary && geometryType === "poligono" && photosWithCoords.length > 2 && (
-            <Polygon
-              paths={
-                photosWithCoords.filter(p => p.tipo === "Perímetro").length >= 3
-                  ? photosWithCoords.filter(p => p.tipo === "Perímetro").map(p => ({ lat: p.lat, lng: p.lng }))
-                  : photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }))
-              }
-              options={{
-                strokeWeight: 4,
-                fillColor: "#8b5cf6",
-                fillOpacity: 0.35,
-              }}
-            />
-          )}
-
-          {/* RUTAS DE ACCESO (Controlled by showAreas) */}
-          {showAreas && !isPreliminary && activeLayers.routes && (viewMode === "MOBILITY" || viewMode === "PREDICTIVE") && accessRoutes.map((path, idx) => (
-            <Fragment key={`acc-route-group-${idx}`}>
-              {/* Sombreado de Corredor amplio */}
-              <Polyline
-                path={path}
-                options={{
-                  strokeColor: "#3b82f6", // Azul 🔵
-                  strokeOpacity: corridorOpacity,
-                  strokeWeight: 14,
-                  zIndex: 8
-                }}
-              />
-              {/* Núcleo Sólido */}
-              <Polyline
-                path={path}
-                options={{
-                  strokeColor: "#1e40af", // Azul marino oscuro para alto contraste
-                  strokeOpacity: 0.9,
-                  strokeWeight: 3.5,
-                  zIndex: 10
-                }}
-              />
-            </Fragment>
-          ))}
-
-          {/* RUTAS DE FUGA (Controlled by showAreas) */}
-          {showAreas && !isPreliminary && activeLayers.routes && (viewMode === "MOBILITY" || viewMode === "PREDICTIVE") && escapeRoutes.map((path, idx) => (
-            <Fragment key={`esc-route-group-${idx}`}>
-              {/* Sombreado de Corredor amplio */}
-              <Polyline
-                path={path}
-                options={{
-                  strokeColor: "#ef4444", // Rojo 🔴
-                  strokeOpacity: corridorOpacity,
-                  strokeWeight: 14,
-                  zIndex: 8
-                }}
-              />
-              {/* Núcleo Sólido */}
-              <Polyline
-                path={path}
-                options={{
-                  strokeColor: "#991b1b", // Rojo sangre para contraste táctico
-                  strokeOpacity: 0.9,
-                  strokeWeight: 3.5,
-                  zIndex: 10
-                }}
-              />
-            </Fragment>
-          ))}
-
-          {/* ZONAS DE ACECHO (Controlled by showGeoint) */}
-          {showGeoint && !isPreliminary && activeLayers.acechos && viewMode === "MOBILITY" && allAcechos.map((acecho, idx) => (
-            <Fragment key={`acecho-zone-group-${idx}`}>
-              {/* Sombreado Territorial de Acecho */}
-              <Circle
-                center={{ lat: acecho.lat, lng: acecho.lng }}
-                radius={45}
-                options={{
-                  fillColor: "#0f172a", // Gris pizarra profundo/negro ⚫
-                  fillOpacity: 0.35,
-                  strokeColor: "#1e293b",
-                  strokeOpacity: 0,
-                  strokeWeight: 0,
-                  zIndex: 15
-                }}
-              />
-              {/* Borde exterior punteado fino */}
-              <Polyline
-                path={getDottedCirclePath(acecho.lat, acecho.lng, 45)}
-                options={{
-                  strokeOpacity: 0,
-                  icons: [{ 
-                    icon: { 
-                      path: "M 0,-1 0,1", 
-                      strokeOpacity: 1, 
-                      scale: 2, 
-                      strokeColor: "#000000" // Negro
-                    }, 
-                    offset: "0", 
-                    repeat: "10px" 
-                  }],
-                  zIndex: 16
-                }}
-              />
-            </Fragment>
-          ))}
-
-          {/* MARCADOR VISUAL AMPLIADO PARA ZONAS DE ACECHO (Controlled by showGeoint) */}
-          {showGeoint && !isPreliminary && activeLayers.acechos && viewMode === "MOBILITY" && allAcechos.map((acecho, idx) => (
-            <OverlayView
-              key={`acecho-overlay-${idx}`}
-              position={{ lat: acecho.lat, lng: acecho.lng }}
-              mapPaneName="overlayMouseTarget"
-              getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height + 15) })}
-            >
-              <div className="bg-slate-950/95 border-2 border-slate-950 rounded-lg p-1.5 shadow-2xl flex flex-col items-center w-36 relative transition-all duration-300 hover:scale-105 hover:border-amber-400 z-50">
-                {/* Imagen StreetView o Referencia */}
-                <div className="w-full h-20 object-cover rounded-md border border-slate-800 overflow-hidden bg-slate-900">
-                  <img src={acecho.url} alt={acecho.name} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex items-center gap-1.5 mt-1.5 w-full justify-center px-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                  <span className="text-[7px] text-red-400 uppercase font-black tracking-wider leading-none">⚠️ ACECHO ACTIVO</span>
-                </div>
-                <span className="text-[8.5px] font-black text-slate-100 uppercase text-center mt-1 leading-tight truncate w-full px-0.5" title={acecho.name}>
-                  {acecho.name}
-                </span>
-                <span className="text-[7px] text-slate-400 font-bold text-center mt-0.5 mb-0.5">
-                  {acecho.source === "AI" ? "Análisis de IA" : "Referencia Fotográfica"}
-                </span>
-                {/* Flecha indicadora */}
-                <div className="absolute -bottom-[10px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-slate-950"></div>
-              </div>
-            </OverlayView>
-          ))}
-
-          {/* FOTOS DE ARCHIVO (Controlled by showPhotos) */}
-          {showPhotos && (viewMode === "TOPOGRAPHY" || viewMode === "MOBILITY" || isPreliminary) && photosWithDispersion.map((p) => {
-            const pinColor = getMarkerColor(p.tipo);
-            return (
-              <Marker
-                key={p.id}
-                position={{ lat: p.displayLat, lng: p.displayLng }}
-                title={`${p.tipo} - ${p.comentario ?? ""}`}
-                icon={{
-                  path: 0 as any, // CIRCLE
-                  scale: 9,
-                  fillColor: pinColor,
-                  fillOpacity: 1,
-                  strokeColor: "#ffffff",
-                  strokeWeight: 1.8,
-                }}
-              />
-            );
-          })}
-
-          {showAreas && photosWithCoords.length > 0 && viewMode !== "DENSITY" && (
-            <Marker
-              position={center}
-              title="Centro de levantamiento fotográfico"
-              icon={{
-                path: 3 as any, // BACKWARD_CLOSED_ARROW
-                scale: 7,
-                fillColor: "#f97316", // Naranja
-                fillOpacity: 1,
-                strokeColor: "#1f2937",
+                fillColor: "#06b6d4",
+                fillOpacity: 0.05,
+                strokeColor: "#0891b2",
+                strokeOpacity: 0.4,
                 strokeWeight: 1.5,
               }}
             />
           )}
 
-          {/* DELITOS HISTÓRICOS (Controlled by showGeoint) */}
-          {showGeoint && viewMode === "DENSITY" && clusteredCrimes.map((cluster, idx) => {
-            if (cluster.count === 1) {
-              const crime = cluster.crimes[0];
-              return (
-                <Marker
-                  key={`crime-single-${idx}`}
-                  position={{ lat: cluster.lat, lng: cluster.lng }}
-                  title={crime.tipoDelito}
-                  label={{
-                    text: "❌",
-                    color: "#fee2e2",
-                    fontSize: "9px",
-                    fontWeight: "700",
-                  }}
-                  icon={{
-                    path: 0 as any, // Circle
-                    fillColor: "#B22222",
-                    fillOpacity: 0.9,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 1.5,
-                    scale: 9,
-                  }}
-                />
-              );
-            } else {
-              // Cluster de Alta Incidencia
-              return (
-                <Marker
-                  key={`crime-cluster-${idx}`}
-                  position={{ lat: cluster.lat, lng: cluster.lng }}
-                  title={`Cluster de ${cluster.count} incidentes delictivos`}
-                  label={{
-                    text: `${cluster.count}`,
-                    color: "#ffffff",
-                    fontSize: "11px",
-                    fontWeight: "900",
-                  }}
-                  icon={{
-                    path: 0 as any, // Circle
-                    fillColor: "#dc2626", // Red
-                    fillOpacity: 0.95,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                    scale: 16,
-                  }}
-                />
-              );
-            }
-          })}
-
-          {/* ETIQUETA DINÁMICA DE HOTSPOTS ACTIVOS EN DENSIDAD CRÍTICA (Controlled by showGeoint) */}
-          {showGeoint && viewMode === "DENSITY" && activeHotspots.map((hs) => (
-            <OverlayView
-              key={`hotspot-label-${hs.id}`}
-              position={{ lat: hs.lat, lng: hs.lng }}
-              mapPaneName="overlayMouseTarget"
-              getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height + 26) })}
-            >
-              <div className="bg-red-950/95 border border-red-500 rounded px-1.5 py-0.5 shadow-lg flex items-center gap-1.5 whitespace-nowrap z-40">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-                <span className="text-[8px] font-black text-red-200 uppercase tracking-widest leading-none">
-                  Foco Crítico #{hs.id} ({hs.count} incidentes)
-                </span>
-              </div>
-            </OverlayView>
-          ))}
-
-          {/* SISTEMA ESTANDARIZADO DE SIMBOLOGÍA ATRACTOR (Controlled by showGeoint) */}
-          {showGeoint && activeLayers.atractores && (viewMode === "TOPOGRAPHY" || viewMode === "MOBILITY") && top5Pois.map((p, idx) => {
-            const details = getPoiDetails(p.name, p.category || p.type);
-            return (
-              <Fragment key={`attr-marker-group-${idx}`}>
-                {/* Radio de Influencia Directa (120 metros de vulnerabilidad del entorno) */}
-                <Circle
-                  center={{ lat: p.lat as number, lng: p.lng as number }}
-                  radius={120}
-                  options={{ 
-                    fillColor: "#1e293b", // Gris oscuro táctico
-                    fillOpacity: 0.12, 
-                    strokeColor: details.color, 
-                    strokeWeight: 1.5, 
-                    strokeOpacity: 0.7 
-                  }}
-                />
-                {/* Marcador Estandarizado Redondo de Alta Legibilidad y Contraste */}
-                <Marker
-                  position={{ lat: p.lat as number, lng: p.lng as number }}
-                  label={{ 
-                    text: details.icon, 
-                    fontSize: "14px",
-                  }}
-                  title={`${p.name} (${details.text})`} 
-                  icon={{ 
-                    path: 0 as any, // Circle
-                    scale: 15, 
-                    fillColor: details.color, 
-                    fillOpacity: 1, 
-                    strokeColor: "#ffffff", 
-                    strokeWeight: 2.2 
-                  }}
-                />
-                {/* Distintivo Numérico de Jerarquía del Atractor */}
-                <OverlayView
-                  position={{ lat: p.lat as number, lng: p.lng as number }}
-                  mapPaneName="overlayMouseTarget"
-                  getPixelPositionOffset={() => ({ x: 10, y: -16 })}
-                >
-                  <span className="bg-slate-950 border border-slate-700 text-white rounded-full w-5 h-5 font-sans font-black text-[9px] flex items-center justify-center shadow-lg px-1 text-center select-none">
-                    #{idx + 1}
-                  </span>
-                </OverlayView>
-              </Fragment>
-            );
-          })}
-
-          {/* MODELO PREDICTIVO A 6 MESES (Controlled by showGeoint) */}
-          {showGeoint && viewMode === "PREDICTIVE" && (
-            <>
-              {/* Gradiente de Crecimiento Territorial Concéntrico Ampliado */}
-              {/* Concentric 1: Radio Primario */}
-              <Circle
-                center={center}
-                radius={analysisRadius}
-                options={{ 
-                  fillColor: "#dc2626", 
-                  fillOpacity: projectionOpacity * 1.5, 
-                  strokeColor: "#dc2626", 
-                  strokeWeight: 2,
-                  strokeOpacity: 0.8
-                }}
-              />
-              {/* Concentric 2: Radio Intermedio */}
-              <Circle
-                center={center}
-                radius={analysisRadius * 1.4}
-                options={{ 
-                  fillColor: "#ea580c", 
-                  fillOpacity: projectionOpacity, 
-                  strokeColor: "#ea580c", 
-                  strokeWeight: 1.5,
-                  strokeOpacity: 0.6
-                }}
-              />
-              {/* Concentric 3: Radio Externo Ampliado */}
-              <Circle
-                center={center}
-                radius={analysisRadius * 1.8}
-                options={{ 
-                  fillColor: "#eab308", 
-                  fillOpacity: projectionOpacity * 0.5, 
-                  strokeColor: "#eab308", 
-                  strokeWeight: 1,
-                  strokeOpacity: 0.4
-                }}
-              />
-
-              {/* Zonas de Presión Futura en Atractores Clave */}
-              {top5Pois.slice(0, 3).map((p, idx) => (
-                <Circle
-                  key={`pred-poi-zone-${idx}`}
-                  center={{ lat: p.lat as number, lng: p.lng as number }}
-                  radius={160}
-                  options={{ 
-                    fillColor: "#ea580c", 
-                    fillOpacity: 0.22, 
-                    strokeColor: "#ea580c", 
-                    strokeWeight: 1.5,
-                    strokeOpacity: 0.7 
-                  }}
-                />
-              ))}
-
-              {/* Vectores Direccionales de Expansión con flechas reales */}
-              {predictiveVectors.map((v) => (
-                <Fragment key={`pred-vector-${v.id}`}>
-                  <Polyline
-                    path={v.path}
-                    options={{
-                      strokeColor: "#ef4444", // Rojo neon
-                      strokeOpacity: 0.95,
-                      strokeWeight: 3.5,
-                      icons: [
-                        {
-                          icon: {
-                            path: 1, // FORWARD_CLOSED_ARROW
-                            scale: 3.8,
-                            fillColor: "#fecaca",
-                            fillOpacity: 1,
-                            strokeColor: "#dc2626",
-                            strokeWeight: 1.5,
-                          },
-                          offset: "100%",
-                        },
-                      ],
-                      zIndex: 30,
-                    }}
-                  />
-                  {/* Etiquetado dinámico de Riesgo Emergente en la punta del vector */}
-                  <OverlayView
-                    position={v.path[1]}
-                    mapPaneName="overlayMouseTarget"
-                    getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height / 2) })}
-                  >
-                    <div className="bg-red-950/95 border border-red-500 rounded px-1.5 py-0.5 shadow-xl flex items-center gap-1 whitespace-nowrap z-40">
-                      <span className="relative flex h-1.5 w-1.5 shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-80"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-                      </span>
-                      <span className="text-[7.5px] font-black text-red-200 uppercase tracking-widest leading-none">
-                        ZONA DE PRESIÓN EMERGENTE #{v.id}
-                      </span>
-                    </div>
-                  </OverlayView>
-                </Fragment>
-              ))}
-            </>
-          )}
-
-          {/* POLÍGONO DE ANÁLISIS DRAWN (Controlled by showAreas) */}
-          {showAreas && isPreliminary && analysisPolygon && analysisPolygon.length > 2 && (
+          {/* Polígono de Análisis dibujado si existe */}
+          {analysisPolygon && analysisPolygon.length >= 3 && (
             <Polygon
               paths={analysisPolygon}
               options={{
-                strokeColor: "#ef4444",
-                strokeOpacity: 1,
+                fillColor: "#3b82f6",
+                fillOpacity: 0.15,
+                strokeColor: "#60a5fa",
+                strokeOpacity: 0.8,
                 strokeWeight: 2,
-                fillColor: "#991b1b",
-                fillOpacity: 0.25,
               }}
             />
           )}
 
-          {/* POIs MANUALES FILTRADOS (Controlled by showGeoint) */}
-          {showGeoint && filteredManualPois.map((p, idx) => {
-            const details = getPoiDetails(p.label || "Otro", "");
+          {/* Marcadores de Evidencia Fotográfica con Dispersión */}
+          {showPhotos && photosWithDispersion.map((photo) => (
+            <Marker
+              key={`photo-${photo.id}`}
+              position={{ lat: photo.displayLat, lng: photo.displayLng }}
+              title={`${photo.tipo}: ${photo.comentario}`}
+              icon={{
+                path: 0,
+                scale: 7,
+                fillColor: getMarkerColor(photo.tipo),
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+              }}
+            />
+          ))}
+
+          {/* Atractores Urbanos TOP 5 */}
+          {showGeoint && activeLayers.atractores && top5Pois.map((poi, idx) => {
+            const details = getPoiDetails(poi.name, poi.category, poi.type);
             return (
               <Marker
-                key={`manual-poi-${idx}`}
-                position={{ lat: p.lat, lng: p.lng }}
-                title={`${p.label || "Punto Fijado Manual"} (Manual)`}
-                label={{ 
-                  text: details.icon, 
-                  fontSize: "12px" 
-                }}
+                key={`poi-${idx}`}
+                position={{ lat: poi.lat as number, lng: poi.lng as number }}
+                title={`${poi.name || "Atractor Urbano"}`}
                 icon={{
-                  path: 0 as any, // CIRCLE
-                  scale: 13,
+                  path: 0,
+                  scale: 6,
                   fillColor: details.color,
-                  fillOpacity: 1,
-                  strokeColor: "#1e293b",
-                  strokeWeight: 1.8,
+                  fillOpacity: 0.9,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 1.5,
                 }}
               />
             );
           })}
 
-          {/* CAPA DE CALOR (Controlled by showGeoint) */}
-          {showGeoint && viewMode === "DENSITY" && activeLayers.heatmap && heatmapCrimeData.length > 0 && (
+          {/* Hotspots de alta concentración criminal */}
+          {showGeoint && activeHotspots.map((hotspot) => (
+            <Circle
+              key={`hotspot-${hotspot.id}`}
+              center={{ lat: hotspot.lat, lng: hotspot.lng }}
+              radius={120}
+              options={{
+                fillColor: "#ef4444",
+                fillOpacity: 0.25,
+                strokeColor: "#f87171",
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+              }}
+            />
+          ))}
+
+          {/* Acechos Tácticos con Círculos Punteados */}
+          {showGeoint && activeLayers.acechos && allAcechos.map((acecho) => (
+            <Fragment key={`acecho-frag-${acecho.id}`}>
+              <Polyline
+                path={getDottedCirclePath(acecho.lat, acecho.lng, 40)}
+                options={{
+                  strokeColor: "#f59e0b",
+                  strokeOpacity: 0.8,
+                  strokeWeight: 1.5,
+                }}
+              />
+              <Marker
+                position={{ lat: acecho.lat, lng: acecho.lng }}
+                title={acecho.name}
+                icon={{
+                  path: 0,
+                  scale: 5,
+                  fillColor: "#f59e0b",
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 1,
+                }}
+              />
+            </Fragment>
+          ))}
+
+          {/* Rutas de Acceso y Fuga (Modo Mobility / Predictive) */}
+          {(viewMode === "MOBILITY" || viewMode === "PREDICTIVE") && activeLayers.routes && (
             <>
-              {heatmapCrimeData.map((pt, idx) => {
-                let color = "#10b981"; // Verde Esmeralda (Bajo)
-                if (pt.weight >= 12) {
-                  color = "#be123c"; // Rojo Carmesí (Crítico)
-                } else if (pt.weight >= 8) {
-                  color = "#f97316"; // Naranja (Alto)
-                } else if (pt.weight >= 4) {
-                  color = "#eab308"; // Amarillo (Medio)
-                }
-                
-                const baseOpacity = heatmapOpacity;
-                
-                return (
-                  <Fragment key={`heatmap-cluster-${idx}`}>
-                    {/* Halo de dispersión exterior */}
-                    <Circle
-                      center={{ lat: pt.lat, lng: pt.lng }}
-                      radius={60 + pt.weight * 14}
-                      options={{
-                        fillColor: color,
-                        fillOpacity: baseOpacity * 0.22,
-                        strokeColor: color,
-                        strokeOpacity: 0,
-                        strokeWeight: 0,
-                        clickable: false,
-                      }}
-                    />
-                    {/* Núcleo del hotspot */}
-                    <Circle
-                      center={{ lat: pt.lat, lng: pt.lng }}
-                      radius={20 + pt.weight * 6}
-                      options={{
-                        fillColor: color,
-                        fillOpacity: baseOpacity * 0.65,
-                        strokeColor: color,
-                        strokeOpacity: 0.1,
-                        strokeWeight: 0.5,
-                        clickable: false,
-                      }}
-                    />
-                  </Fragment>
-                );
-              })}
+              {accessRoutes.map((routePath, idx) => (
+                <Polyline
+                  key={`access-route-${idx}`}
+                  path={routePath}
+                  options={{
+                    strokeColor: "#3b82f6",
+                    strokeOpacity: corridorOpacity,
+                    strokeWeight: 4,
+                  }}
+                />
+              ))}
+              {escapeRoutes.map((routePath, idx) => (
+                <Polyline
+                  key={`escape-route-${idx}`}
+                  path={routePath}
+                  options={{
+                    strokeColor: "#ef4444",
+                    strokeOpacity: corridorOpacity,
+                    strokeWeight: 4,
+                  }}
+                />
+              ))}
             </>
           )}
 
-          {/* OSINT Sweeps Clusterized Rendering */}
-          {showOsint && osintClusters.map((cluster, idx) => {
-            if (cluster.type === "SUPER") {
-              return (
-                <Marker
-                  key={`osint-super-${idx}`}
-                  position={{ lat: cluster.lat, lng: cluster.lng }}
-                  title={`Súper-cluster: ${cluster.count} Barridos OSINT`}
-                  label={{
-                    text: `◉ ${cluster.count}`,
-                    color: "#ffffff",
-                    fontSize: "12px",
-                    fontWeight: "bold"
-                  }}
-                  icon={{
-                    path: 0, // Circle
-                    scale: 18,
-                    fillColor: "#10b981", // Verde esmeralda
-                    fillOpacity: 0.9,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                  }}
-                  onClick={() => setSelectedOsintGroup(cluster)}
-                />
-              );
-            }
+          {/* Vectores de Proyección Criminal Criminológica */}
+          {viewMode === "PREDICTIVE" && predictiveVectors.map((vector) => (
+            <Polyline
+              key={`pred-vec-${vector.id}`}
+              path={vector.path}
+              options={{
+                strokeColor: "#a855f7",
+                strokeOpacity: 0.8,
+                strokeWeight: 3,
+                geodesic: true,
+              }}
+            />
+          ))}
 
-            if (cluster.type === "GROUP") {
+          {/* Marcadores e Influencias de Barridos OSINT */}
+          {showOsint && osintClusters.map((cluster, idx) => {
+            if (cluster.type === "SUPER" || cluster.type === "GROUP") {
               return (
                 <Marker
                   key={`osint-group-${idx}`}
                   position={{ lat: cluster.lat, lng: cluster.lng }}
-                  title={`Grupo: ${cluster.count} Barridos OSINT`}
-                  label={{
-                    text: `${cluster.count}`,
-                    color: "#ffffff",
-                    fontSize: "10px",
-                    fontWeight: "bold"
-                  }}
+                  title={`${cluster.label}`}
                   icon={{
-                    path: 0, // Circle
-                    scale: 13,
-                    fillColor: "#059669",
-                    fillOpacity: 0.85,
+                    path: 0,
+                    scale: 12,
+                    fillColor: "#8b5cf6",
+                    fillOpacity: 0.9,
                     strokeColor: "#ffffff",
                     strokeWeight: 1.5,
                   }}
@@ -1837,7 +1060,6 @@ export function AnalysisMap({
               );
             }
 
-            // Single OSINT sweep with coordinates
             const sweep = cluster.sweeps[0];
             return (
               <Marker
@@ -1845,7 +1067,7 @@ export function AnalysisMap({
                 position={{ lat: cluster.lat, lng: cluster.lng }}
                 title={`${sweep.engine} - ${sweep.status}`}
                 icon={{
-                  path: 0, // Circle
+                  path: 0,
                   scale: 8,
                   fillColor: "#10b981",
                   fillOpacity: 1,
@@ -1857,23 +1079,7 @@ export function AnalysisMap({
             );
           })}
 
-          {/* OSINT Sweeps Circular Areas of Influence (Sweeps without explicit coordinates) */}
-          {showOsint && sweepsWithoutCoords.map((s, idx) => (
-            <Circle
-              key={`osint-area-influence-${idx}`}
-              center={center}
-              radius={250}
-              options={{
-            fillOpacity: 0.05,
-            strokeOpacity: 0.15,
-                strokeWeight: 1.5,
-                clickable: true,
-              }}
-              onClick={() => setSelectedOsintSingle(s)}
-            />
-          ))}
-
-          {/* OSINT InfoWindows */}
+          {/* InfoWindows de Barridos OSINT */}
           {selectedOsintSingle && (
             <InfoWindow
               position={
@@ -1977,6 +1183,3 @@ export function AnalysisMap({
     </div>
   );
 }
-
-
-

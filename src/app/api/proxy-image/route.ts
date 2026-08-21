@@ -2,10 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const url = searchParams.get("url");
+  let url = searchParams.get("url");
+
+  const lat = searchParams.get("lat");
+  const lng = searchParams.get("lng");
+
+  // Si se proveen parámetros individuales, construimos la URL en el servidor de forma segura sin exponer la API Key (ADR-007)
+  if (lat && lng) {
+    const heading = searchParams.get("heading") || "0";
+    const pitch = searchParams.get("pitch") || "0";
+    const fov = searchParams.get("fov") || "90";
+    const size = searchParams.get("size") || "800x600";
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+    
+    url = `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${lat},${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&key=${apiKey}`;
+  }
 
   if (!url) {
-    return new NextResponse("Missing url parameter", { status: 400 });
+    return new NextResponse("Missing url, or lat/lng parameters", { status: 400 });
   }
 
   try {
