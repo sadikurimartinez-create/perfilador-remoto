@@ -67,6 +67,7 @@ interface StreetViewFindingsPanelProps {
   onFindingCreated?: (finding: any) => void;
   validatorId?: string;
   validatorRole?: string;
+  onTriggerTemporalComparison?: (candidate?: any) => void;
 }
 
 export function StreetViewFindingsPanel({
@@ -75,7 +76,8 @@ export function StreetViewFindingsPanel({
   onCaptureStatusChange,
   onFindingCreated,
   validatorId = "US-CEIPOL-ANALISTA",
-  validatorRole = "ANALISTA_GEOINT_SUPERVISOR"
+  validatorRole = "ANALISTA_GEOINT_SUPERVISOR",
+  onTriggerTemporalComparison,
 }: StreetViewFindingsPanelProps) {
   const [selectedCapture, setSelectedCapture] = useState<any | null>(null);
   const [validationComment, setValidationComment] = useState("");
@@ -326,6 +328,15 @@ export function StreetViewFindingsPanel({
                   <p className="text-[9px] font-mono text-slate-400">
                     <span className="text-cyan-400 font-bold">Origen:</span> {selectedCapture.sourceType || "STREETVIEW_AUTOMATICO"}
                   </p>
+                  {onTriggerTemporalComparison && (
+                    <button
+                      type="button"
+                      onClick={() => onTriggerTemporalComparison(selectedCapture)}
+                      className="w-full mt-1 py-1.5 px-2 bg-amber-950/80 hover:bg-amber-900 border border-amber-800/80 text-amber-300 rounded-lg text-[9px] font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>⏳</span> Comparar Evidencia Temporal (ADR-019)
+                    </button>
+                  )}
                 </div>
 
                 <div>

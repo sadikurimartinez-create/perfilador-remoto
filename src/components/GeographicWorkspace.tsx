@@ -6,6 +6,8 @@ import { ProfessionalGeoMap } from "./maps/ProfessionalGeoMap";
 import { StreetViewFindingsPanel, StreetViewFinding } from "./streetview/StreetViewFindingsPanel";
 import { AnalyticsDashboard } from "./analytics/AnalyticsDashboard";
 import { AnalyticsFilterProvider } from "./analytics/AnalyticsFilterContext";
+import { GeointControlledSweepEngine } from "@/modules/geoint/GeointControlledSweepEngine";
+import { GeointTemporalComparativeEngine } from "@/modules/geoint/GeointTemporalComparativeEngine";
 
 const MOCK_RECTORA = {
   center: { lat: 21.885, lng: -102.291 },
@@ -65,6 +67,10 @@ export function GeographicWorkspace() {
   const [captures, setCaptures] = useState<any[]>(INITIAL_SV_AUTOMATIC);
   const [findings, setFindings] = useState<StreetViewFinding[]>([]);
 
+  // Estados de control modal para motores GEOINT ADR-018 y ADR-019
+  const [isSweepEngineOpen, setIsSweepEngineOpen] = useState(false);
+  const [isTemporalEngineOpen, setIsTemporalEngineOpen] = useState(false);
+
   // Sincronizar hallazgos del expediente desde el backend al cargar
   useEffect(() => {
     async function fetchFindings() {
@@ -122,11 +128,29 @@ export function GeographicWorkspace() {
         <div className="flex flex-1 min-h-0 w-full overflow-hidden">
           {/* Panel de Control Lateral */}
           <div className="w-[420px] bg-slate-900 border-r border-slate-800 flex flex-col h-full shadow-2xl z-20 shrink-0">
-            <div className="p-5 border-b border-slate-800 bg-slate-950 flex flex-col gap-1">
+            <div className="p-5 border-b border-slate-800 bg-slate-950 flex flex-col gap-2">
               <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase">Perfilador Remoto SSPE-CEIPOL</span>
               <h1 className="text-lg font-black tracking-tight text-white uppercase flex items-center gap-2">
                 <span>🗺️</span> Espacio Analítico v1.0
               </h1>
+              
+              {/* Barra de Acciones GEOINT Gobernadas */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setIsSweepEngineOpen(true)}
+                  className="py-2 px-2.5 bg-cyan-950 border border-cyan-800/80 hover:bg-cyan-900 text-cyan-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition shadow-md shadow-cyan-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>🚀</span> Barrido GEOINT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsTemporalEngineOpen(true)}
+                  className="py-2 px-2.5 bg-amber-950 border border-amber-800/80 hover:bg-amber-900 text-amber-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition shadow-md shadow-amber-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>⏳</span> Comparación IA
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -198,6 +222,7 @@ export function GeographicWorkspace() {
                 captures={captures}
                 onCaptureStatusChange={handleCaptureStatusChange}
                 onFindingCreated={handleFindingCreated}
+                onTriggerTemporalComparison={() => setIsTemporalEngineOpen(true)}
               />
             </div>
           </div>
@@ -221,14 +246,41 @@ export function GeographicWorkspace() {
           </div>
         </div>
 
-        {/* Sección Inferior: Dashboard Analítico Modular */}
-        <div className="h-[400px] border-t border-slate-900 p-4 bg-slate-950/80 backdrop-blur-md shrink-0">
-          <AnalyticsDashboard
-            pois={MOCK_POIS}
-            findings={findings}
-            historicalCrimes={MOCK_CRIMES}
+        {/* Modales Gobernados de Motores GEOINT (ADR-018 y ADR-019) */}
+        {isSweepEngineOpen && (
+          <GeointControlledSweepEngine
+            isOpen={isSweepEngineOpen}
+            lat={21.885}
+            lng={-102.291}
+            onClose={() => setIsSweepEngineOpen(false)}
+            onFindingsGenerated={(newCaptures) => {
+              setCaptures((prev) => [...prev, ...newCaptures]);
+            }}
           />
-        </div>
+        )}
+
+        {isTemporalEngineOpen && (
+          <GeointTemporalComparativeEngine
+            isOpen={isTemporalEngineOpen}
+            projectId="EXP-2026"
+            onClose={() => setIsTemporalEngineOpen(false)}
+            onComparisonGenerated={(cmp) => {
+              const newFinding: StreetViewFinding = {
+                id: cmp.comparisonId,
+                expedienteId: cmp.projectId,
+                categoria: "COMPARACION_TEMPORAL",
+                coordenadas: { lat: 21.885, lng: -102.291 },
+                imagen: cmp.primaryEvidence.url,
+                descripcion: cmp.aiAnalysis.calibratedObservation,
+                observaciones_visual: cmp.aiAnalysis.calibratedObservation,
+                estado: "PENDIENTE_REVISION",
+                fechaCreacion: cmp.createdAt,
+                origenRevision: "MANUAL",
+              };
+              handleFindingCreated(newFinding);
+            }}
+          />
+        )}
       </div>
     </AnalyticsFilterProvider>
   );
