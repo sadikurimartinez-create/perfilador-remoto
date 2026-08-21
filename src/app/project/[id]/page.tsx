@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
+import { GeographicWorkspace } from "@/components/GeographicWorkspace";
 import { CopilotOverlay } from "@/components/copilot/CopilotOverlay";
 import { db } from "@/lib/localDb";
 import { useAuth } from "@/context/AuthContext";
@@ -411,6 +412,7 @@ export default function ProjectWorkspacePage() {
               projectId={project.id}
               onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
             />
+            <GeographicWorkspace />
           </>
         )}
         {activeWorkspaceTab === "pandillas" && (
