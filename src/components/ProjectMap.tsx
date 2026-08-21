@@ -673,6 +673,7 @@ export function ProjectMap({
               fillColor: "#f59e0b",
               fillOpacity: 0.25,
               zIndex: 5,
+              clickable: false,
             }}
           />
         ))}
@@ -688,6 +689,7 @@ export function ProjectMap({
               strokeWeight: 2,
               fillColor: "#38bdf8",
               fillOpacity: 0.8,
+              clickable: false,
             }}
           />
         )}
@@ -700,6 +702,7 @@ export function ProjectMap({
               strokeColor: "#f43f5e",
               strokeOpacity: 0.9,
               strokeWeight: 4,
+              clickable: false,
             }}
           />
         )}
@@ -714,6 +717,7 @@ export function ProjectMap({
               strokeWeight: 3,
               fillColor: "#10b981",
               fillOpacity: 0.15,
+              clickable: false,
             }}
           />
         )}
@@ -887,9 +891,8 @@ export function ProjectMap({
               strokeColor: "#a855f7",
               strokeOpacity: 0.15,
               strokeWeight: 1.5,
-              clickable: true,
+              clickable: false,
             }}
-            onClick={() => setSelectedOsintSingle(s)}
           />
         ))}
 
