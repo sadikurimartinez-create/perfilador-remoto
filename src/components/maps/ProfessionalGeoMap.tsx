@@ -64,7 +64,7 @@ const darkMapStyles = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
 ];
 
-const GOOGLE_MAPS_LIBRARIES: any = ["places", "visualization"];
+const GOOGLE_MAPS_LIBRARIES: any = ["places", "visualization", "drawing"];
 
 export function ProfessionalGeoMap({
   geografiaRectora,
@@ -114,8 +114,10 @@ export function ProfessionalGeoMap({
     return unsubscribe;
   }, [layerManager]);
 
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    id: "google-map-script",
+    googleMapsApiKey: apiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
