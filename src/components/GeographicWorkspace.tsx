@@ -46,13 +46,8 @@ const MOCK_SV_MANUAL = [
   { id: "sv-man-2", lat: 21.883, lng: -102.285, streetViewMetadata: { heading: 45 }, contextualizedBy: "Gabinete SSPE" },
 ];
 
-// Capturas de barrido automáticas de la Fase 1
-const INITIAL_SV_AUTOMATIC = [
-  { id: "sv-auto-1", latitude: 21.886, longitude: -102.292, tipo_origen: "STREETVIEW_AUTOMATICO", categoria_exploracion: "RUTA_ACCESO", file_url: "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=300&q=80", geolocalizacion: { heading: 180, pitch: 0, fov: 90 }, estado_revision: "PENDIENTE_REVISION" },
-  { id: "sv-auto-2", latitude: 21.884, longitude: -102.290, tipo_origen: "STREETVIEW_AUTOMATICO", categoria_exploracion: "RUTA_ESCAPE", file_url: "https://images.unsplash.com/photo-1449034446853-66c86144b0ad?auto=format&fit=crop&w=300&q=80", geolocalizacion: { heading: 270, pitch: 0, fov: 90 }, estado_revision: "PENDIENTE_REVISION" },
-  { id: "sv-auto-3", latitude: 21.885, longitude: -102.293, tipo_origen: "STREETVIEW_AUTOMATICO", categoria_exploracion: "PUNTO_ACECHO", file_url: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80", geolocalizacion: { heading: 90, pitch: 0, fov: 90 }, estado_revision: "PENDIENTE_REVISION" },
-  { id: "sv-auto-4", latitude: 21.887, longitude: -102.288, tipo_origen: "STREETVIEW_AUTOMATICO", categoria_exploracion: "GRAFITI", file_url: "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=300&q=80", geolocalizacion: { heading: 0, pitch: 0, fov: 90 }, estado_revision: "PENDIENTE_REVISION" },
-];
+// @deprecated ADR-018: Desactivado para evitar la simulación de barridos automáticos al abrir expedientes
+const INITIAL_SV_AUTOMATIC: any[] = [];
 
 const MOCK_CRIMES = [
   { id: "crime-1", fecha: "2026-08-10", tipo: "Robo de Vehículo" },
