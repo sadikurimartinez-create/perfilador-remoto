@@ -45,6 +45,7 @@ if (typeof global.document === "undefined") {
 import { runMigrationTests } from "./reportEngineIICMigration.test";
 import { runAuthTests } from "./authHardening.test";
 import { runGovernanceTests } from "./testADR01913Governance.test";
+import { runGeointegrityTests } from "./testADR01915Geointegrity.test";
 
 async function runAllTests() {
   console.log("======================================================================");
@@ -61,6 +62,9 @@ async function runAllTests() {
     
     // 3. Ejecutar pruebas de Gobernanza Humana GEOINT ADR-019.13-F4
     await runGovernanceTests();
+    
+    // 4. Ejecutar pruebas de Integridad Geoespacial GEOINT ADR-019.15
+    await runGeointegrityTests();
     
     const durationSec = ((Date.now() - started) / 1000).toFixed(2);
     console.log("\n======================================================================");

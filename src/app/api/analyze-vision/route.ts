@@ -19,14 +19,21 @@ export async function POST(req: Request) {
 
     // Manejo de Comparación Temporal ADR-019 v1.0
     if (mode === "TEMPORAL_COMPARISON") {
-      const pDate = primaryDate || new Date().toISOString().split("T")[0];
-      const cDate = contextualDate || "2023-01-01";
-      const pDateObj = new Date(pDate);
-      const cDateObj = new Date(cDate);
-      const diffTime = Math.abs(pDateObj.getTime() - cDateObj.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const yearsApprox = (diffDays / 365).toFixed(1);
-      const formattedDelta = `${diffDays.toLocaleString()} días (~${yearsApprox} años)`;
+      const pDate = primaryDate && primaryDate !== "FECHA_NO_DISPONIBLE" ? primaryDate : "FECHA_NO_DISPONIBLE";
+      const cDate = contextualDate && contextualDate !== "FECHA_NO_DISPONIBLE" ? contextualDate : "FECHA_NO_DISPONIBLE";
+      let diffDays = 0;
+      let formattedDelta = "FECHA_NO_DISPONIBLE";
+
+      if (pDate !== "FECHA_NO_DISPONIBLE" && cDate !== "FECHA_NO_DISPONIBLE") {
+        const pDateObj = new Date(pDate);
+        const cDateObj = new Date(cDate);
+        if (!isNaN(pDateObj.getTime()) && !isNaN(cDateObj.getTime())) {
+          const diffTime = Math.abs(pDateObj.getTime() - cDateObj.getTime());
+          diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const yearsApprox = (diffDays / 365).toFixed(1);
+          formattedDelta = `${diffDays.toLocaleString()} días (~${yearsApprox} años)`;
+        }
+      }
 
       const calibratedObservation =
         `En la captura Street View disponible con fecha ${cDate} se observa la configuración inicial de la zona. ` +

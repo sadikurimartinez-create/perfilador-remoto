@@ -7,6 +7,7 @@ import {
   GeoIntSweepFindingPayload,
   GEOINT_SWEEP_CATEGORIES,
 } from "@/types/geointSweep";
+import { calculateHaversineDistanceMeters } from "@/utils/geoResolver";
 
 interface GeointControlledSweepEngineProps {
   isOpen: boolean;
@@ -99,6 +100,14 @@ export function GeointControlledSweepEngine({
           const sweepPitch = 5.0;
           const sweepFov = 90.0;
 
+          // Validación de Integridad Geoespacial ADR-019.15: Haversine distance <= radiusMeters (Max 50m para evidencia directa)
+          const distMeters = calculateHaversineDistanceMeters(lat, lng, sweepLat, sweepLng);
+
+          if (distMeters > Math.max(radiusMeters, 50)) {
+            console.warn(`[GeointControlledSweepEngine] Punto de muestreo desalineado a ${distMeters.toFixed(1)}m. Omitiendo.`);
+            continue;
+          }
+
           const staticUrl = buildStreetViewUrl(sweepLat, sweepLng, {
             size: "800x600",
             heading: sweepHeading,
@@ -125,9 +134,15 @@ export function GeointControlledSweepEngine({
             console.warn("[GeointControlledSweepEngine] Fallback a URL pública:", e);
           }
 
+          const panoramaKey = `${sweepLat.toFixed(5)},${sweepLng.toFixed(5)},${sweepHeading}`;
+          if (generatedFindings.some((f) => (f.metadata as any)?.panoramaKey === panoramaKey)) {
+            console.info(`[GeointControlledSweepEngine] Punto ${panoramaKey} duplicado. Omitiendo.`);
+            continue;
+          }
+
           const findingId = `geoint-finding-${Date.now()}-${globalCount + 1}`;
 
-          // Estructura de Datos Obligatoria ADR-018 v1.0
+          // Estructura de Datos Obligatoria ADR-018 v1.0 / ADR-019.15
           const payload: GeoIntSweepFindingPayload = {
             source: "GEOINT_CONTROLLED_SWEEP",
             category: cat,
@@ -142,13 +157,15 @@ export function GeointControlledSweepEngine({
               fov: sweepFov,
             },
             file_url: dataUrl,
-            comentario: `[BARRIDO GEOINT CONTROLADO - ${catMeta.label}] Muestreo espacial periférico R=${radiusMeters}m (Punto ${i + 1}).`,
+            comentario: `[BARRIDO GEOINT CONTROLADO - ${catMeta.label}] Muestreo espacial periférico R=${radiusMeters}m (${distMeters.toFixed(1)}m del centro).`,
             timestamp: new Date().toISOString(),
             metadata: {
               sweepType,
               radiusMeters,
               panoramaLat: sweepLat,
               panoramaLng: sweepLng,
+              panoramaKey,
+              distanceMeters: distMeters,
             },
           };
 

@@ -22,10 +22,7 @@ export interface CreateFindingInput {
     heading?: number;
     [key: string]: any;
   };
-  panoramaResult: StreetViewPanoramaResult & {
-    panoramaLat?: number;
-    panoramaLng?: number;
-  };
+  panoramaResult: StreetViewPanoramaResult;
   temporalComparison: TemporalComparisonResult;
   expedienteId: string;
   index?: number;

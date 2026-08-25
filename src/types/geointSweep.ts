@@ -74,5 +74,7 @@ export interface GeoIntSweepFindingPayload {
     radiusMeters?: number;
     panoramaLat?: number;
     panoramaLng?: number;
+    panoramaKey?: string;
+    distanceMeters?: number;
   };
 }

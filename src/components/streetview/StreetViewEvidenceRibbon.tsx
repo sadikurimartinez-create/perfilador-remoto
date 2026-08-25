@@ -47,12 +47,31 @@ export function StreetViewEvidenceRibbon({
 
   // 1. Unificar y adaptar candidato pool desde props directos o legacy (findings / captures)
   const candidatePool: GeoEvidence[] = useMemo(() => {
-    const list: GeoEvidence[] = [...candidates];
+    const list: GeoEvidence[] = [];
+
+    const isDuplicate = (candidate: GeoEvidence) =>
+      list.some(
+        (existing) =>
+          existing.id === candidate.id ||
+          ((existing.metadata as any)?.panoramaId &&
+            (candidate.metadata as any)?.panoramaId &&
+            (existing.metadata as any).panoramaId === (candidate.metadata as any).panoramaId) ||
+          (existing.imageReference && candidate.imageReference && existing.imageReference === candidate.imageReference) ||
+          (existing.coordinates?.lat === candidate.coordinates?.lat &&
+            existing.coordinates?.lng === candidate.coordinates?.lng &&
+            existing.metadata.heading === candidate.metadata.heading)
+      );
+
+    for (const c of candidates) {
+      if (!isDuplicate(c)) {
+        list.push(c);
+      }
+    }
 
     if (findings && Array.isArray(findings)) {
       for (const f of findings) {
         const adapted = adaptStreetViewFindingToGeoEvidence(f);
-        if (adapted && !list.some((existing) => existing.id === adapted.id)) {
+        if (adapted && !isDuplicate(adapted)) {
           list.push(adapted);
         }
       }
@@ -61,7 +80,7 @@ export function StreetViewEvidenceRibbon({
     if (captures && Array.isArray(captures)) {
       for (const c of captures) {
         const adapted = adaptSweepPayloadToGeoEvidence(c, expedienteId);
-        if (adapted && !list.some((existing) => existing.id === adapted.id)) {
+        if (adapted && !isDuplicate(adapted)) {
           list.push(adapted);
         }
       }

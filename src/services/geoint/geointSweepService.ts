@@ -2,6 +2,7 @@ import type { StreetViewFinding } from "@/components/streetview/StreetViewFindin
 import { fetchStreetViewPanorama } from "./streetViewProviderService";
 import { runTemporalComparison } from "./temporalComparisonService";
 import { buildStreetViewFindingFromAnalysis } from "./findingMapperService";
+import { calculateHaversineDistanceMeters } from "../../utils/geoResolver";
 
 export interface GeointSweepInputPhoto {
   id?: string;
@@ -28,8 +29,8 @@ export interface GeointSweepExecutionResult {
 
 /**
  * Servicio Orquestador del Motor GEOINT Operacional.
- * Ejecuta en serie o paralelo controlado la secuencia:
- * Fotografías georreferenciadas → Panorámicas Street View real → Comparación de visión IA → Mapeo de hallazgos.
+ * ADR-019.15: Ejecuta la secuencia gobernada:
+ * Fotografías georreferenciadas → Metadata real Google Street View (source=outdoor) → Haversine <= 50m → Deduplicación por pano_id → Comparación temporal con fecha real.
  */
 export async function executeAutomaticGeointSweep(
   photos: GeointSweepInputPhoto[],
@@ -39,6 +40,7 @@ export async function executeAutomaticGeointSweep(
 
   const findings: StreetViewFinding[] = [];
   const errors: string[] = [];
+  const processedPanoramaIds = new Set<string>();
   let successCount = 0;
   let errorCount = 0;
 
@@ -59,7 +61,7 @@ export async function executeAutomaticGeointSweep(
     const lat = Number(photo.lat);
     const lng = Number(photo.lng);
 
-    if (isNaN(lat) || isNaN(lng)) {
+    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
       const errMessage = `INVALID_COORDINATES: Foto índice ${idx} id=${photo.id || "sin_id"} sin coordenadas válidas.`;
       console.warn(`[geointSweepService] ${errMessage}`);
       errors.push(errMessage);
@@ -68,28 +70,59 @@ export async function executeAutomaticGeointSweep(
     }
 
     try {
-      // 1. Obtener panorama real de Street View
+      // 1. Obtener panorama real de Street View con metadata real (source=outdoor)
       const panoramaResult = await fetchStreetViewPanorama(lat, lng, {
         heading: photo.heading || (idx * 45) % 360,
         pitch: 5,
         fov: 90,
       });
 
-      if (panoramaResult.error) {
-        errors.push(`PHOTO_${idx}_STREET_VIEW_ERROR: ${panoramaResult.error}`);
+      if (!panoramaResult.isAvailable || !panoramaResult.panoramaId || panoramaResult.error?.includes("NO_VALID_OUTDOOR_PANORAMA")) {
+        const outdoorErr = `NO_VALID_OUTDOOR_PANORAMA: Foto id=${photo.id || idx} no posee panorámica exterior válida de Google Street View. Omitiendo.`;
+        console.warn(`[geointSweepService] ${outdoorErr}`);
+        errors.push(outdoorErr);
+        errorCount++;
+        continue;
       }
 
-      // 2. Ejecutar análisis de comparación temporal e IA
+      const panoLat = panoramaResult.panoramaLat ?? lat;
+      const panoLng = panoramaResult.panoramaLng ?? lng;
+
+      // 2. Validación de Integridad Geoespacial ADR-019.15: Haversine <= 50m
+      const distanceMeters = calculateHaversineDistanceMeters(lat, lng, panoLat, panoLng);
+
+      if (distanceMeters > 50) {
+        const distErr = `EXCEEDS_DISTANCE_TOLERANCE_50M: Panorama para foto id=${photo.id || idx} se encuentra a ${distanceMeters.toFixed(1)}m (Tolerancia max <= 50m). Omitiendo persistencia por desalineación territorial.`;
+        console.warn(`[geointSweepService] ${distErr}`);
+        errors.push(distErr);
+        errorCount++;
+        continue;
+      }
+
+      // 3. Deduplicación Nivel 1 por panoramaId real de Google (pano_id)
+      const realPanoId = panoramaResult.panoramaId;
+      if (processedPanoramaIds.has(realPanoId)) {
+        const dupMsg = `DUPLICATE_PANORAMA: Panorama ${realPanoId} ya fue procesado en este expediente. Omitiendo duplicado.`;
+        console.info(`[geointSweepService] ${dupMsg}`);
+        continue;
+      }
+      processedPanoramaIds.add(realPanoId);
+
+      // 4. Determinar fecha real de captura (prohibido inventar fechas)
+      const realContextualDate = panoramaResult.captureDate || "FECHA_NO_DISPONIBLE";
+
       const photoImageUrl = photo.previewUrl || photo.url || photo.archivo_url || "";
       const panoramaImageUrl = panoramaResult.dataUrl || panoramaResult.url || "";
+
+      const primaryDateStr = photo.gpsTimestamp
+        ? new Date(photo.gpsTimestamp).toISOString().split("T")[0]
+        : "FECHA_NO_DISPONIBLE";
 
       const temporalComparison = await runTemporalComparison({
         primaryUrl: photoImageUrl,
         contextualUrl: panoramaImageUrl,
-        primaryDate: photo.gpsTimestamp
-          ? new Date(photo.gpsTimestamp).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
-        contextualDate: "2023-01-01",
+        primaryDate: primaryDateStr,
+        contextualDate: realContextualDate,
         expedienteId,
       });
 
@@ -97,7 +130,7 @@ export async function executeAutomaticGeointSweep(
         errors.push(`PHOTO_${idx}_AI_VISION_ERROR: ${temporalComparison.error}`);
       }
 
-      // 3. Mapear la salida combinada hacia StreetViewFinding
+      // 5. Mapear la salida combinada hacia StreetViewFinding
       const finding = buildStreetViewFindingFromAnalysis({
         photo,
         panoramaResult,
@@ -130,3 +163,4 @@ export async function executeAutomaticGeointSweep(
     errors,
   };
 }
+

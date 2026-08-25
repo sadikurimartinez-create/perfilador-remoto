@@ -12,55 +12,8 @@ import { GeointTemporalComparativeEngine } from "@/modules/geoint/GeointTemporal
 import { useProject } from "@/context/ProjectContext";
 import { executeAutomaticGeointSweep } from "@/services/geoint/geointSweepService";
 
-const MOCK_RECTORA = {
-  center: { lat: 21.885, lng: -102.291 },
-  polygonCoords: [
-    { lat: 21.892, lng: -102.300 },
-    { lat: 21.892, lng: -102.280 },
-    { lat: 21.878, lng: -102.280 },
-    { lat: 21.878, lng: -102.300 },
-  ],
-  lineCoords: [
-    { lat: 21.885, lng: -102.295 },
-    { lat: 21.885, lng: -102.285 },
-  ],
-  hasCoordinates: true,
-};
-
-const MOCK_POIS = [
-  { id: "poi-1", name: "Cámara Escudo 01", category: "Vigilancia", lat: 21.888, lng: -102.293, comentario: "Punto de monitoreo de accesos" },
-  { id: "poi-2", name: "Estación de Servicio Pemex", category: "Comercio", lat: 21.882, lng: -102.288, comentario: "Frecuentada por halcones" },
-  { id: "poi-3", name: "Cruce Táctico Central", category: "Cruce", lat: 21.885, lng: -102.291, comentario: "Cruce principal de la zona" },
-  ...Array.from({ length: 15 }, (_, i) => ({
-    id: `poi-dense-${i}`,
-    name: `Punto Táctico Adicional ${i + 1}`,
-    category: "Inteligencia",
-    lat: 21.885 + (Math.random() - 0.5) * 0.005,
-    lng: -102.291 + (Math.random() - 0.5) * 0.005,
-    comentario: "Punto secundario de cobertura"
-  }))
-];
-
-const MOCK_PHOTOGRAPHS = [
-  { id: "photo-1", lat: 21.887, lng: -102.290, previewUrl: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=150&q=80", gpsTimestamp: Date.now() - 86400000, comentario: "Evidencia de marcas de pandilla" },
-  { id: "photo-2", lat: 21.881, lng: -102.294, previewUrl: "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?auto=format&fit=crop&w=150&q=80", gpsTimestamp: Date.now() - 172800000, comentario: "Vehículo sospechoso detectado" },
-];
-
-const MOCK_SV_MANUAL = [
-  { id: "sv-man-1", lat: 21.889, lng: -102.295, streetViewMetadata: { heading: 120 }, contextualizedBy: "Analista Ceipol" },
-  { id: "sv-man-2", lat: 21.883, lng: -102.285, streetViewMetadata: { heading: 45 }, contextualizedBy: "Gabinete SSPE" },
-];
-
-// @deprecated ADR-018: Desactivado para evitar la simulación de barridos automáticos al abrir expedientes
+// ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
-
-const MOCK_CRIMES = [
-  { id: "crime-1", fecha: "2026-08-10", tipo: "Robo de Vehículo" },
-  { id: "crime-2", fecha: "2026-08-11", tipo: "Asalto a Transeúnte" },
-  { id: "crime-3", fecha: "2026-08-12", tipo: "Allanamiento" },
-  { id: "crime-4", fecha: "2026-08-13", tipo: "Robo de Vehículo" },
-  { id: "crime-5", fecha: "2026-08-14", tipo: "Daño en Propiedad" },
-];
 
 export function GeographicWorkspace() {
   const { project, album } = useProject();
@@ -90,17 +43,44 @@ export function GeographicWorkspace() {
       });
       if (filtered.length > 0) return filtered;
     }
-    return MOCK_PHOTOGRAPHS;
+    return [];
   }, [album]);
 
-  // Resolución reactiva de Evidencia Primaria In Situ real (Campo)
+  // Centro y Geografía Rectora reactiva basada en el expediente, fotos de campo o hallazgos reales (Sección 8)
+  const activeGeografiaRectora = React.useMemo(() => {
+    if (project?.latitude != null && project?.longitude != null) {
+      return {
+        center: { lat: Number(project.latitude), lng: Number(project.longitude) },
+        hasCoordinates: true,
+      };
+    }
+    if (georeferencedPhotos.length > 0 && georeferencedPhotos[0].lat != null && georeferencedPhotos[0].lng != null) {
+      return {
+        center: { lat: Number(georeferencedPhotos[0].lat), lng: Number(georeferencedPhotos[0].lng) },
+        hasCoordinates: true,
+      };
+    }
+    if (findings.length > 0 && findings[0].coordenadas?.lat != null && findings[0].coordenadas?.lng != null) {
+      return {
+        center: { lat: Number(findings[0].coordenadas.lat), lng: Number(findings[0].coordenadas.lng) },
+        hasCoordinates: true,
+      };
+    }
+    return { center: undefined, hasCoordinates: false };
+  }, [project, georeferencedPhotos, findings]);
+
+  // Resolución reactiva de Evidencia Primaria In Situ real (Campo) sin fallbacks estáticos
   const primaryEvidenceCandidate = React.useMemo(() => {
     const rawPhoto = georeferencedPhotos?.[0] || (album && album.length > 0 ? album[0] : null);
     if (!rawPhoto) return undefined;
     const photo: any = rawPhoto;
 
-    const rawLat = photo.lat ?? photo.latitude ?? photo.gpsLat ?? photo.exifLat ?? photo.coordenadas?.lat ?? 21.885;
-    const rawLng = photo.lng ?? photo.longitude ?? photo.gpsLng ?? photo.exifLng ?? photo.coordenadas?.lng ?? -102.291;
+    const rawLat = photo.lat ?? photo.latitude ?? photo.gpsLat ?? photo.exifLat ?? photo.coordenadas?.lat;
+    const rawLng = photo.lng ?? photo.longitude ?? photo.gpsLng ?? photo.exifLng ?? photo.coordenadas?.lng;
+    if (rawLat == null || rawLng == null || isNaN(Number(rawLat)) || isNaN(Number(rawLng))) {
+      return undefined;
+    }
+
     const url = photo.previewUrl || photo.url || photo.file_url || photo.archivo_url || "";
 
     return {
@@ -113,20 +93,24 @@ export function GeographicWorkspace() {
         ? new Date(photo.gpsTimestamp).toISOString().split("T")[0]
         : photo.fechaCreacion
         ? new Date(photo.fechaCreacion).toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0],
+        : "FECHA_NO_DISPONIBLE",
       lat: Number(rawLat),
       lng: Number(rawLng),
     };
   }, [georeferencedPhotos, album]);
 
-  // Resolución reactiva de Evidencia Contextual Street View real (Panorama)
+  // Resolución reactiva de Evidencia Contextual Street View real (Panorama) sin fallbacks estáticos
   const contextualEvidenceCandidate = React.useMemo(() => {
     const rawTarget = activeTemporalCandidate || selectedFinding || selectedSv || (captures && captures.length > 0 ? captures[0] : null) || (findings && findings.length > 0 ? findings[0] : null);
     if (!rawTarget) return undefined;
     const target: any = rawTarget;
 
-    const rawLat = target.latitude ?? target.lat ?? target.coordenadas?.lat ?? target.geometry?.lat ?? 21.885;
-    const rawLng = target.longitude ?? target.lng ?? target.coordenadas?.lng ?? target.geometry?.lng ?? -102.291;
+    const rawLat = target.latitude ?? target.lat ?? target.coordenadas?.lat ?? target.geometry?.lat;
+    const rawLng = target.longitude ?? target.lng ?? target.coordenadas?.lng ?? target.geometry?.lng;
+    if (rawLat == null || rawLng == null || isNaN(Number(rawLat)) || isNaN(Number(rawLng))) {
+      return undefined;
+    }
+
     const heading = target.geolocalizacion?.heading ?? target.heading ?? target.streetViewMetadata?.heading ?? target.geometry?.heading ?? 180;
     const url = target.file_url || target.archivo_url || target.imagen || target.previewUrl || target.imageReference || "";
 
@@ -140,7 +124,7 @@ export function GeographicWorkspace() {
         ? new Date(target.fechaCreacion).toISOString().split("T")[0]
         : target.validationDate
         ? new Date(target.validationDate).toISOString().split("T")[0]
-        : "2023-03-15",
+        : "FECHA_NO_DISPONIBLE",
       lat: Number(rawLat),
       lng: Number(rawLng),
       heading: Number(heading),
@@ -442,10 +426,10 @@ export function GeographicWorkspace() {
           <div className="flex-1 flex flex-col h-full bg-slate-950 relative overflow-hidden">
             <div className="flex-1 w-full h-full relative">
               <ProfessionalGeoMap
-                geografiaRectora={MOCK_RECTORA}
-                pois={MOCK_POIS}
+                geografiaRectora={activeGeografiaRectora}
+                pois={[]}
                 photographs={georeferencedPhotos}
-                streetViewManual={MOCK_SV_MANUAL}
+                streetViewManual={[]}
                 streetViewAutomatic={captures}
                 findings={findings}
                 onPoiSelect={handlePoiSelect}
@@ -473,8 +457,8 @@ export function GeographicWorkspace() {
         {isSweepEngineOpen && (
           <GeointControlledSweepEngine
             isOpen={isSweepEngineOpen}
-            lat={21.885}
-            lng={-102.291}
+            lat={primaryEvidenceCandidate?.lat ?? activeGeografiaRectora.center?.lat ?? 0}
+            lng={primaryEvidenceCandidate?.lng ?? activeGeografiaRectora.center?.lng ?? 0}
             onClose={() => setIsSweepEngineOpen(false)}
             onFindingsGenerated={(newCaptures) => {
               setCaptures((prev) => [...prev, ...newCaptures]);
@@ -498,8 +482,8 @@ export function GeographicWorkspace() {
                 expedienteId: cmp.projectId,
                 categoria: "COMPARACION_TEMPORAL",
                 coordenadas: {
-                  lat: cmp.contextualEvidence.lat ?? 21.885,
-                  lng: cmp.contextualEvidence.lng ?? -102.291,
+                  lat: cmp.contextualEvidence?.lat ?? cmp.primaryEvidence?.lat ?? 0,
+                  lng: cmp.contextualEvidence?.lng ?? cmp.primaryEvidence?.lng ?? 0,
                 },
                 imagen: cmp.primaryEvidence.url,
                 descripcion: cmp.aiAnalysis.calibratedObservation,

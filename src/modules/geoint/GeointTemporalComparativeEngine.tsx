@@ -12,6 +12,7 @@ import {
 import {
   isSameLocation,
   adaptStreetViewFindingToGeoEvidence,
+  isValidCoordinate,
 } from "../../utils/geoResolver";
 import {
   compareTemporalEvidence,
@@ -59,8 +60,11 @@ export function GeointTemporalComparativeEngine({
       id: `ev-A-${Date.now()}`,
       expedienteId: projectId,
       source: "FIELD_PHOTO",
-      coordinates: { lat: 21.885421, lng: -102.291245 },
-      captureDate: new Date().toISOString().split("T")[0],
+      coordinates: (primaryEvidenceCandidate as any)?.coordinates || {
+        lat: primaryEvidenceCandidate?.lat as number,
+        lng: primaryEvidenceCandidate?.lng as number,
+      },
+      captureDate: primaryEvidenceCandidate?.timestamp || "FECHA_NO_DISPONIBLE",
       imageReference: primaryEvidenceCandidate?.url || "/placeholder-streetview.jpg",
       metadata: { category: "EVIDENCIA_A", sourceProvider: "CEIPOL_FIELD" },
       status: "APPROVED_EVIDENCE",
@@ -78,8 +82,11 @@ export function GeointTemporalComparativeEngine({
       id: `ev-B-${Date.now()}`,
       expedienteId: projectId,
       source: "STREET_VIEW_HISTORICAL",
-      coordinates: { lat: 21.885438, lng: -102.291201 },
-      captureDate: contextualEvidenceCandidate?.panoramaTimestamp || "2023-03-15",
+      coordinates: (contextualEvidenceCandidate as any)?.coordinates || {
+        lat: contextualEvidenceCandidate?.lat as number,
+        lng: contextualEvidenceCandidate?.lng as number,
+      },
+      captureDate: contextualEvidenceCandidate?.panoramaTimestamp || "FECHA_NO_DISPONIBLE",
       imageReference: contextualEvidenceCandidate?.url || "/placeholder-streetview.jpg",
       metadata: { heading: 180, sourceProvider: "GOOGLE_STREET_VIEW" },
       status: "PENDING_REVIEW",
@@ -313,7 +320,9 @@ export function GeointTemporalComparativeEngine({
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
-                  GPS: {evA.coordinates.lat.toFixed(6)}, {evA.coordinates.lng.toFixed(6)}
+                  GPS: {isValidCoordinate(evA.coordinates?.lat, evA.coordinates?.lng)
+                    ? `${evA.coordinates.lat.toFixed(6)}, ${evA.coordinates.lng.toFixed(6)}`
+                    : "SIN COORDENADAS GPS VÁLIDAS"}
                 </div>
               </div>
             </div>
@@ -354,7 +363,9 @@ export function GeointTemporalComparativeEngine({
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
-                  GPS: {evB.coordinates.lat.toFixed(6)}, {evB.coordinates.lng.toFixed(6)}
+                  GPS: {isValidCoordinate(evB.coordinates?.lat, evB.coordinates?.lng)
+                    ? `${evB.coordinates.lat.toFixed(6)}, ${evB.coordinates.lng.toFixed(6)}`
+                    : "SIN COORDENADAS GPS VÁLIDAS"}
                 </div>
               </div>
             </div>

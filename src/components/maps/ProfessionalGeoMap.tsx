@@ -131,8 +131,14 @@ export function ProfessionalGeoMap({
     if (geografiaRectora?.center?.lat && geografiaRectora?.center?.lng) {
       return geografiaRectora.center;
     }
-    return { lat: 21.885, lng: -102.291 }; // Aguascalientes, México
-  }, [geografiaRectora]);
+    const photo = photographs.find((p) => p.lat != null && p.lng != null);
+    if (photo) return { lat: Number(photo.lat), lng: Number(photo.lng) };
+
+    const finding = findings.find((f) => f.coordenadas?.lat != null && f.coordenadas?.lng != null);
+    if (finding) return { lat: Number(finding.coordenadas.lat), lng: Number(finding.coordenadas.lng) };
+
+    return { lat: 23.6345, lng: -102.5528 }; // Centro Geográfico de México (Sin Fallback Fijo)
+  }, [geografiaRectora, photographs, findings]);
 
   const mapOptions = useMemo(() => ({
     styles: darkMapStyles,
