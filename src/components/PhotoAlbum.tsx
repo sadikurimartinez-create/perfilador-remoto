@@ -24,7 +24,25 @@ import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDiscla
 import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 
-const NetworkDashboard = dynamic(() => import("./NetworkDashboard").then((mod) => mod.NetworkDashboard), { ssr: false });
+import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
+import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
+
+const NetworkDashboardFallback = () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" />;
+NetworkDashboardFallback.displayName = "NetworkDashboardFallback";
+
+const NetworkDashboard = dynamic(
+  () =>
+    import("./NetworkDashboard")
+      .then((mod) => mod.NetworkDashboard)
+      .catch((err) => {
+        console.warn("[MODULE FALLBACK] Fallo al cargar chunk de NetworkDashboard (HIG 2.0):", err);
+        return NetworkDashboardFallback;
+      }),
+  {
+    ssr: false,
+    loading: () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" loading={true} />,
+  }
+);
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
@@ -4545,7 +4563,9 @@ const hasMinimumPhotos =
           </p>
         </header>
         <div className="w-full">
-          <NetworkDashboard />
+          <DynamicErrorBoundary moduleName="Hypothesis Intelligence Graph (HIG 2.0)">
+            <NetworkDashboard />
+          </DynamicErrorBoundary>
         </div>
       </div>
     
