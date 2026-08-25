@@ -64,7 +64,7 @@ export function buildStreetViewFindingFromAnalysis(
     ? new Date(photo.gpsTimestamp).toISOString().split("T")[0]
     : new Date().toISOString().split("T")[0];
 
-  const photoImage = photo.previewUrl || photo.url || photo.archivo_url || "/placeholder-streetview.jpg";
+  const photoImage = photo.previewUrl || photo.url || photo.archivo_url || "";
   const panoramaImage = panoramaResult.dataUrl || panoramaResult.url || photoImage;
 
   const rawCategory = photo.tipo || photo.category || "COMPARACION_TEMPORAL";

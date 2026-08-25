@@ -47,17 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(mergedUser);
         window.localStorage.setItem("perfilador.currentUser", JSON.stringify(mergedUser));
       } else {
+        if (res.status === 401) {
+          console.warn("[AUTH] Usuario no autenticado (401).");
+        } else {
+          console.warn(`[AuthContext] Backend session refresh returned status ${res.status}.`);
+        }
         // Fallback resiliente: si el backend no responde o no está autenticado, pero tenemos una sesión en caché, la respetamos
         const stored = typeof window !== "undefined" ? window.localStorage.getItem("perfilador.currentUser") : null;
         if (stored) {
-          console.warn("[AuthContext] Backend session refresh returned non-OK. Preserving cached session for continuity.");
           setUser(JSON.parse(stored));
         } else {
           setUser(null);
         }
       }
     } catch (err) {
-      console.error("[AuthContext] Error refreshing session from backend:", err);
+      console.warn("[AuthContext] Usuario no autenticado o sesión no disponible:", err);
       const stored = typeof window !== "undefined" ? window.localStorage.getItem("perfilador.currentUser") : null;
       if (stored) {
         setUser(JSON.parse(stored));

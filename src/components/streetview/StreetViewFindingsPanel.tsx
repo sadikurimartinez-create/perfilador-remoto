@@ -287,11 +287,17 @@ export function StreetViewFindingsPanel({
                       : "bg-slate-950/50 border-slate-800/80 hover:border-slate-700 hover:bg-slate-950/80"
                   }`}
                 >
-                  <img
-                    src={cap.file_url || cap.archivo_url || cap.imageReference || "/placeholder-streetview.jpg"}
-                    alt="Finding preview"
-                    className="w-12 h-12 object-cover rounded-lg border border-slate-800 shrink-0"
-                  />
+                  {(cap.file_url || cap.archivo_url || cap.imageReference) ? (
+                    <img
+                      src={cap.file_url || cap.archivo_url || cap.imageReference}
+                      alt="Finding preview"
+                      className="w-12 h-12 object-cover rounded-lg border border-slate-800 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-lg text-[8px] font-bold text-slate-500 text-center uppercase leading-tight p-0.5 shrink-0">
+                      SIN VISTA PREVIA
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <span className="text-[9px] font-black tracking-widest text-cyan-500 uppercase block">
                       {cap.sourceType || cap.tipo_origen || "STREETVIEW_AUTOMATICO"}
@@ -315,11 +321,17 @@ export function StreetViewFindingsPanel({
             <div className="h-full flex flex-col justify-between">
               <div className="space-y-3">
                 <div className="relative rounded-xl overflow-hidden border border-slate-800 h-32 bg-black">
-                  <img
-                    src={selectedCapture.file_url || selectedCapture.archivo_url || selectedCapture.imageReference || "/placeholder-streetview.jpg"}
-                    alt="Current finding"
-                    className="w-full h-full object-cover"
-                  />
+                  {(selectedCapture.file_url || selectedCapture.archivo_url || selectedCapture.imageReference) ? (
+                    <img
+                      src={selectedCapture.file_url || selectedCapture.archivo_url || selectedCapture.imageReference}
+                      alt="Current finding"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-slate-950 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      SIN VISTA PREVIA
+                    </div>
+                  )}
                   <div className="absolute bottom-2 left-2 bg-slate-950/80 px-2 py-0.5 rounded text-[8px] font-mono text-cyan-400 border border-slate-800">
                     H: {selectedCapture.geolocalizacion?.heading || selectedCapture.heading || 0}° / P: {selectedCapture.geolocalizacion?.pitch || selectedCapture.pitch || 0}°
                   </div>

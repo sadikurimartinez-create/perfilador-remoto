@@ -318,136 +318,98 @@ export function GeographicWorkspace() {
 
   return (
     <AnalyticsFilterProvider>
-      <div className="flex flex-col h-screen w-full bg-slate-950 text-slate-100 font-sans overflow-hidden">
-        {/* Sección Superior: Mapa y Controles Lateral */}
-        <div className="flex flex-1 min-h-0 w-full overflow-hidden">
-          {/* Panel de Control Lateral */}
-          <div className="w-[420px] bg-slate-900 border-r border-slate-800 flex flex-col h-full shadow-2xl z-20 shrink-0">
-            <div className="p-5 border-b border-slate-800 bg-slate-950 flex flex-col gap-2">
-              <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase">Perfilador Remoto SSPE-CEIPOL</span>
-              <h1 className="text-lg font-black tracking-tight text-white uppercase flex items-center gap-2">
-                <span>🗺️</span> Espacio Analítico v1.0
+      <div className="flex flex-col min-h-screen w-full bg-slate-950 text-slate-100 font-sans overflow-y-auto">
+        {/* Encabezado Operativo GEOINT (Ancho Completo) */}
+        <div className="w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex flex-wrap items-center justify-between gap-4 shadow-2xl z-20 shrink-0">
+          <div className="flex items-center space-x-3">
+            <span className="flex h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
+            <div>
+              <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase block">Perfilador Remoto SSPE-CEIPOL</span>
+              <h1 className="text-base font-black tracking-tight text-white uppercase flex items-center gap-2">
+                <span>MAPA</span> Espacio Analítico v1.0 
+                <span className="text-xs text-slate-400 font-mono">({expedienteId})</span>
               </h1>
-              
-              {/* Barra de Acciones GEOINT Gobernadas */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
-                <button
-                  type="button"
-                  onClick={() => setIsSweepEngineOpen(true)}
-                  className="py-2 px-2.5 bg-cyan-950 border border-cyan-800/80 hover:bg-cyan-900 text-cyan-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition shadow-md shadow-cyan-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>🚀</span> Barrido GEOINT
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTriggerTemporalComparison()}
-                  className="py-2 px-2.5 bg-amber-950 border border-amber-800/80 hover:bg-amber-900 text-amber-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition shadow-md shadow-amber-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>⏳</span> Comparación IA
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              {/* Ficha de Detalles del Elemento Seleccionado */}
-              {selectedPoi && (
-                <div className="bg-slate-950/65 border border-slate-800/80 rounded-2xl p-5 space-y-3 shadow-lg">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-                    <span className="text-[9px] font-black tracking-widest text-cyan-500 uppercase">Punto de Interés</span>
-                    <span className="text-[9px] font-bold bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full uppercase">{selectedPoi.category}</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black text-white uppercase tracking-tight">{selectedPoi.name}</h3>
-                    <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">"{selectedPoi.comentario}"</p>
-                  </div>
-                </div>
-              )}
-
-              {selectedSv && (
-                <div className="bg-slate-950/65 border border-slate-800/80 rounded-2xl p-5 space-y-3 shadow-lg">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-                    <span className="text-[9px] font-black tracking-widest text-amber-500 uppercase">Cámara de Barrido</span>
-                    <span className="text-[9px] font-bold bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full uppercase">PENDIENTE</span>
-                  </div>
-                  <img
-                    src={selectedSv.file_url || selectedSv.archivo_url || selectedSv.previewUrl}
-                    alt="Capture Preview"
-                    className="w-full h-36 object-cover rounded-xl border border-slate-800"
-                  />
-                  <div className="text-[10px] space-y-1.5 font-mono text-slate-400 pt-1">
-                    <p>ORIENTACIÓN: {selectedSv.geolocalizacion?.heading || selectedSv.street_view_session?.heading_final || 0}°</p>
-                    <p>CATEGORÍA: {selectedSv.categoria_exploracion?.replace("_", " ") || "GENERAL"}</p>
-                  </div>
-                </div>
-              )}
-
-              {selectedFinding && (
-                <div className="bg-cyan-950/20 border border-cyan-800/50 rounded-2xl p-5 space-y-3 shadow-lg">
-                  <div className="flex items-center justify-between border-b border-cyan-800/30 pb-2.5">
-                    <span className="text-[9px] font-black tracking-widest text-cyan-400 uppercase">Hallazgo Aprobado</span>
-                    <span className="text-[9px] font-bold bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded-full uppercase">{selectedFinding.categoria}</span>
-                  </div>
-                  <img
-                    src={selectedFinding.imagen}
-                    alt="Finding"
-                    className="w-full h-36 object-cover rounded-xl border border-cyan-800/60 shadow-md shadow-cyan-950/30"
-                  />
-                  <div>
-                    <p className="text-[10px] text-slate-200 leading-relaxed font-semibold">"{selectedFinding.descripcion || "Sin descripción táctica registrada."}"</p>
-                  </div>
-                  <div className="text-[10px] space-y-1 font-mono text-cyan-500/80 pt-1.5 border-t border-cyan-900/30">
-                    <p>HEADING: {selectedFinding.heading}°</p>
-                    <p>FOCAL (FOV): {selectedFinding.fov}°</p>
-                    <p>REVISOR: {selectedFinding.usuarioRevision}</p>
-                  </div>
-                </div>
-              )}
-
-              {!selectedPoi && !selectedSv && !selectedFinding && (
-                <div className="border border-dashed border-slate-800 rounded-2xl p-6 text-center text-slate-500 flex flex-col items-center justify-center h-36">
-                  <span className="text-2xl mb-1.5">🎯</span>
-                  <p className="text-[10px] uppercase font-black tracking-wider text-slate-400">Inspección de Análisis</p>
-                  <p className="text-[9px] text-slate-500 mt-1">Haz clic en cualquier elemento, captura o hallazgo en el mapa.</p>
-                </div>
-              )}
-
-              {/* Panel de Validación de Capturas de Barrido */}
-              <StreetViewFindingsPanel
-                expedienteId="EXP-2026"
-                captures={captures}
-                onCaptureStatusChange={handleCaptureStatusChange}
-                onFindingCreated={handleFindingCreated}
-                onTriggerTemporalComparison={handleTriggerTemporalComparison}
-              />
             </div>
           </div>
 
-          {/* Visor SIG Profesional + Cintilla Inferior GEOINT */}
-          <div className="flex-1 flex flex-col h-full bg-slate-950 relative overflow-hidden">
-            <div className="flex-1 w-full h-full relative">
-              <ProfessionalGeoMap
-                geografiaRectora={activeGeografiaRectora}
-                pois={[]}
-                photographs={georeferencedPhotos}
-                streetViewManual={[]}
-                streetViewAutomatic={captures}
-                findings={findings}
-                onPoiSelect={handlePoiSelect}
-                onStreetViewSelect={handleStreetViewSelect}
-                onFindingSelect={handleFindingSelect}
-                selectedPoiId={selectedPoi?.id}
-                selectedSvId={selectedSv?.id || selectedSv?.hash_md5}
-                selectedFindingId={selectedFinding?.id}
-              />
+          {/* Inspección Rápida del Elemento Seleccionado */}
+          {(selectedPoi || selectedSv || selectedFinding) && (
+            <div className="flex items-center gap-3 bg-slate-950/90 border border-slate-800 rounded-xl px-4 py-1.5 text-xs shadow-inner">
+              {selectedPoi && (
+                <span className="text-cyan-400 font-bold">MAPA</span>
+              )}
+              {selectedSv && (
+                <span className="text-amber-400 font-bold">MAPA</span>
+              )}
+              {selectedFinding && (
+                <span className="text-emerald-400 font-bold">OK Hallazgo: {selectedFinding.categoria}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => { setSelectedPoi(null); setSelectedSv(null); setSelectedFinding(null); }}
+                className="text-[10px] font-bold text-slate-500 hover:text-slate-300 ml-2 cursor-pointer"
+              >
+                X Limpiar
+              </button>
             </div>
+          )}
 
-            {/* ADR-019.11.2: Cintilla Horizontal Inferior de Evidencias GEOINT */}
-            <StreetViewEvidenceRibbon
+          {/* Barra de Acciones GEOINT Gobernadas */}
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => setIsSweepEngineOpen(true)}
+              className="py-2 px-3.5 bg-cyan-950 border border-cyan-800/80 hover:bg-cyan-900 text-cyan-300 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-md shadow-cyan-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>LANZAR</span> Barrido GEOINT
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTriggerTemporalComparison()}
+              className="py-2 px-3.5 bg-amber-950 border border-amber-800/80 hover:bg-amber-900 text-amber-300 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-md shadow-amber-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>RELOJ</span> Comparación IA
+            </button>
+          </div>
+        </div>
+
+        {/* ZONA 1 — MAPA PRINCIPAL (Primero en el DOM, Ancho Completo, min-h-[65vh]) */}
+        <div className="w-full min-h-[65vh] h-[65vh] relative bg-slate-950 border-b border-slate-800 shrink-0">
+          <ProfessionalGeoMap
+            geografiaRectora={activeGeografiaRectora}
+            pois={[]}
+            photographs={georeferencedPhotos}
+            streetViewManual={[]}
+            streetViewAutomatic={captures}
+            findings={findings}
+            onPoiSelect={handlePoiSelect}
+            onStreetViewSelect={handleStreetViewSelect}
+            onFindingSelect={handleFindingSelect}
+            selectedPoiId={selectedPoi?.id}
+            selectedSvId={selectedSv?.id || selectedSv?.hash_md5}
+            selectedFindingId={selectedFinding?.id}
+          />
+        </div>
+
+        {/* ZONA 2 — EVIDENCIAS Y Convalidación HUMANA (Horizontal, Debajo del Mapa) */}
+        <div className="w-full bg-slate-950 p-5 space-y-5">
+          {/* 2.1 Cintilla Inteligente de Evidencias Compatibles (R ≤ 50m) */}
+          <StreetViewEvidenceRibbon
+            expedienteId={expedienteId}
+            findings={findings}
+            captures={captures}
+            selectedFindingId={selectedFinding?.id}
+            onFindingSelect={handleFindingSelect}
+            onTriggerTemporalComparison={handleTriggerTemporalComparison}
+          />
+
+          {/* 2.2 Consola de Convalidación Humana de Hallazgos */}
+          <div className="w-full">
+            <StreetViewFindingsPanel
               expedienteId={expedienteId}
-              findings={findings}
               captures={captures}
-              selectedFindingId={selectedFinding?.id}
-              onFindingSelect={handleFindingSelect}
+              onCaptureStatusChange={handleCaptureStatusChange}
+              onFindingCreated={handleFindingCreated}
               onTriggerTemporalComparison={handleTriggerTemporalComparison}
             />
           </div>
@@ -482,8 +444,8 @@ export function GeographicWorkspace() {
                 expedienteId: cmp.projectId,
                 categoria: "COMPARACION_TEMPORAL",
                 coordenadas: {
-                  lat: cmp.contextualEvidence?.lat ?? cmp.primaryEvidence?.lat ?? 0,
-                  lng: cmp.contextualEvidence?.lng ?? cmp.primaryEvidence?.lng ?? 0,
+                  lat: cmp.contextualEvidence?.lat ?? cmp.primaryEvidence?.lat,
+                  lng: cmp.contextualEvidence?.lng ?? cmp.primaryEvidence?.lng,
                 },
                 imagen: cmp.primaryEvidence.url,
                 descripcion: cmp.aiAnalysis.calibratedObservation,

@@ -65,7 +65,7 @@ export function GeointTemporalComparativeEngine({
         lng: primaryEvidenceCandidate?.lng as number,
       },
       captureDate: primaryEvidenceCandidate?.timestamp || "FECHA_NO_DISPONIBLE",
-      imageReference: primaryEvidenceCandidate?.url || "/placeholder-streetview.jpg",
+      imageReference: primaryEvidenceCandidate?.url || "",
       metadata: { category: "EVIDENCIA_A", sourceProvider: "CEIPOL_FIELD" },
       status: "APPROVED_EVIDENCE",
     };
@@ -87,7 +87,7 @@ export function GeointTemporalComparativeEngine({
         lng: contextualEvidenceCandidate?.lng as number,
       },
       captureDate: contextualEvidenceCandidate?.panoramaTimestamp || "FECHA_NO_DISPONIBLE",
-      imageReference: contextualEvidenceCandidate?.url || "/placeholder-streetview.jpg",
+      imageReference: contextualEvidenceCandidate?.url || "",
       metadata: { heading: 180, sourceProvider: "GOOGLE_STREET_VIEW" },
       status: "PENDING_REVIEW",
     };
