@@ -2,6 +2,10 @@
 
 import * as React from "react";
 import { useState, useEffect } from "react";
+import {
+  adaptStreetViewFindingToGeoEvidence,
+  adaptSweepPayloadToGeoEvidence,
+} from "@/utils/geoResolver";
 
 export interface AnalyticalFinding {
   findingId: string;
@@ -87,14 +91,14 @@ export function StreetViewFindingsPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // 1. Cargar hallazgos gobernados desde el backend
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    // 1. Cargar hallazgos gobernados desde la API interna Next.js (ADR-019.5)
     if (expedienteId) {
-      fetch(`${backendUrl}/api/expedientes/${expedienteId}/streetview-findings`)
+      fetch(`/api/expedientes/${expedienteId}/streetview/findings`)
         .then((res) => (res.ok ? res.json() : []))
         .then((data) => {
-          if (Array.isArray(data)) {
-            setGovernedFindings(data);
+          const items = Array.isArray(data) ? data : (data?.findings || []);
+          if (Array.isArray(items)) {
+            setGovernedFindings(items);
           }
         })
         .catch((err) => console.warn("[StreetViewFindingsPanel] Error cargando db.streetview_findings:", err));
@@ -331,7 +335,13 @@ export function StreetViewFindingsPanel({
                   {onTriggerTemporalComparison && (
                     <button
                       type="button"
-                      onClick={() => onTriggerTemporalComparison(selectedCapture)}
+                      onClick={() => {
+                        const adapted =
+                          adaptStreetViewFindingToGeoEvidence(selectedCapture) ||
+                          adaptSweepPayloadToGeoEvidence(selectedCapture, expedienteId) ||
+                          selectedCapture;
+                        onTriggerTemporalComparison(adapted);
+                      }}
                       className="w-full mt-1 py-1.5 px-2 bg-amber-950/80 hover:bg-amber-900 border border-amber-800/80 text-amber-300 rounded-lg text-[9px] font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <span>⏳</span> Comparar Evidencia Temporal (ADR-019)

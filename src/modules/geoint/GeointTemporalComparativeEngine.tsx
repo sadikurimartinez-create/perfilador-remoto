@@ -1,190 +1,238 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { GeoEvidence, GeoEvidenceSource } from "../../types/geointEvidence";
 import {
-  EvidenceComparison,
+  UniversalEvidenceComparison,
   PrimaryEvidenceRef,
   ContextualEvidenceRef,
   ComparisonType,
-} from "@/types/geointTemporalComparison";
+  AnalystValidationStatus,
+} from "../../types/geointTemporalComparison";
+import {
+  isSameLocation,
+  adaptStreetViewFindingToGeoEvidence,
+} from "../../utils/geoResolver";
+import {
+  compareTemporalEvidence,
+  updateComparisonValidationStatus,
+} from "../../services/geoint/temporalComparisonService";
 
-interface GeointTemporalComparativeEngineProps {
+export interface GeointTemporalComparativeEngineProps {
   isOpen: boolean;
   projectId?: string;
   analystName?: string;
+  evidenceA?: GeoEvidence | null;
+  evidenceB?: GeoEvidence | null;
+  // Soporte legacy retrocompatible
   primaryEvidenceCandidate?: Partial<PrimaryEvidenceRef>;
   contextualEvidenceCandidate?: Partial<ContextualEvidenceRef>;
+  toleranceMeters?: number;
   onClose: () => void;
-  onComparisonGenerated?: (comparison: EvidenceComparison) => void;
+  onComparisonGenerated?: (comparison: UniversalEvidenceComparison | any) => void;
 }
 
 /**
- * ADR-019 v1.0 — GEOINT Temporal Comparative Evidence Engine
- * Motor de comparación temporal entre evidencias in situ de campo y capturas históricas Street View.
- * 
- * Gobernanza Estricta:
- * - Separa EVIDENCIA_PRIMARIA_CAMPO de EVIDENCIA_CONTEXTUAL_TEMPORAL.
- * - Aplica lenguaje temporal condicionado (Prohibido "Actualmente existe...").
- * - Nacimiento en estado PENDING_REVIEW para convalidación humana ADR-016.
+ * ADR-019.13-F3/F4 — Motor de Comparación Temporal Universal GeoEvidence A vs GeoEvidence B
+ * Desacoplado de roles fijos (Campo vs Street View) con Convalidación Humana de Gabinete (ADR-016).
  */
 export function GeointTemporalComparativeEngine({
   isOpen,
   projectId = "EXP-2026",
   analystName = "Analista CEIPOL",
+  evidenceA: initialEvidenceA,
+  evidenceB: initialEvidenceB,
   primaryEvidenceCandidate,
   contextualEvidenceCandidate,
+  toleranceMeters = 50,
   onClose,
   onComparisonGenerated,
 }: GeointTemporalComparativeEngineProps) {
-  // Estado para la Evidencia Primaria In Situ
-  const [primary, setPrimary] = useState<PrimaryEvidenceRef>({
-    id: primaryEvidenceCandidate?.id || `ev-primary-${Date.now()}`,
-    code: primaryEvidenceCandidate?.code || "EV-00123",
-    title: primaryEvidenceCandidate?.title || "Fotografía de Inspección In Situ",
-    url: primaryEvidenceCandidate?.url || "https://images.unsplash.com/photo-1541888946425-d0fbb186a5b3?auto=format&fit=crop&w=600&q=80",
-    evidenceClass: "EVIDENCIA_PRIMARIA_CAMPO",
-    timestamp: primaryEvidenceCandidate?.timestamp || new Date().toISOString().split("T")[0],
-    lat: primaryEvidenceCandidate?.lat || 21.885,
-    lng: primaryEvidenceCandidate?.lng || -102.291,
+  // Estado local para Evidencia A
+  const [evA, setEvA] = useState<GeoEvidence>(() => {
+    if (initialEvidenceA) return initialEvidenceA;
+    if (primaryEvidenceCandidate) {
+      const adapted = adaptStreetViewFindingToGeoEvidence(primaryEvidenceCandidate);
+      if (adapted) return adapted;
+    }
+    return {
+      id: `ev-A-${Date.now()}`,
+      expedienteId: projectId,
+      source: "FIELD_PHOTO",
+      coordinates: { lat: 21.885421, lng: -102.291245 },
+      captureDate: new Date().toISOString().split("T")[0],
+      imageReference: primaryEvidenceCandidate?.url || "/placeholder-streetview.jpg",
+      metadata: { category: "EVIDENCIA_A", sourceProvider: "CEIPOL_FIELD" },
+      status: "APPROVED_EVIDENCE",
+    };
   });
 
-  // Estado para la Evidencia Contextual Street View
-  const [contextual, setContextual] = useState<ContextualEvidenceRef>({
-    id: contextualEvidenceCandidate?.id || `sv-context-${Date.now()}`,
-    code: contextualEvidenceCandidate?.code || "SV-00456",
-    title: contextualEvidenceCandidate?.title || "Captura Panorámica Street View (Archivo)",
-    url: contextualEvidenceCandidate?.url || "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=600&q=80",
-    evidenceClass: "EVIDENCIA_CONTEXTUAL_TEMPORAL",
-    panoramaTimestamp: contextualEvidenceCandidate?.panoramaTimestamp || "2023-03-15",
-    lat: contextualEvidenceCandidate?.lat || 21.885,
-    lng: contextualEvidenceCandidate?.lng || -102.291,
-    heading: contextualEvidenceCandidate?.heading || 180,
+  // Estado local para Evidencia B
+  const [evB, setEvB] = useState<GeoEvidence>(() => {
+    if (initialEvidenceB) return initialEvidenceB;
+    if (contextualEvidenceCandidate) {
+      const adapted = adaptStreetViewFindingToGeoEvidence(contextualEvidenceCandidate);
+      if (adapted) return adapted;
+    }
+    return {
+      id: `ev-B-${Date.now()}`,
+      expedienteId: projectId,
+      source: "STREET_VIEW_HISTORICAL",
+      coordinates: { lat: 21.885438, lng: -102.291201 },
+      captureDate: contextualEvidenceCandidate?.panoramaTimestamp || "2023-03-15",
+      imageReference: contextualEvidenceCandidate?.url || "/placeholder-streetview.jpg",
+      metadata: { heading: 180, sourceProvider: "GOOGLE_STREET_VIEW" },
+      status: "PENDING_REVIEW",
+    };
   });
 
   const [comparisonType, setComparisonType] = useState<ComparisonType>("TEMPORAL_VISUAL_DELTA");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisStatusMsg, setAnalysisStatusMsg] = useState<string>("");
+  const [activeComparison, setActiveComparison] = useState<UniversalEvidenceComparison | null>(null);
+  const [validationComment, setValidationComment] = useState<string>("");
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  /**
-   * Disparador de Análisis Comparativo IA con Reglas de Lenguaje Temporal
-   */
+  // Sincronización reactiva con props
+  useEffect(() => {
+    if (initialEvidenceA) {
+      setEvA(initialEvidenceA);
+    } else if (primaryEvidenceCandidate) {
+      const adapted = adaptStreetViewFindingToGeoEvidence(primaryEvidenceCandidate);
+      if (adapted) setEvA(adapted);
+    }
+  }, [initialEvidenceA, primaryEvidenceCandidate]);
+
+  useEffect(() => {
+    if (initialEvidenceB) {
+      setEvB(initialEvidenceB);
+    } else if (contextualEvidenceCandidate) {
+      const adapted = adaptStreetViewFindingToGeoEvidence(contextualEvidenceCandidate);
+      if (adapted) setEvB(adapted);
+    }
+  }, [initialEvidenceB, contextualEvidenceCandidate]);
+
+  // Validar compatibilidad espacio-geográfica in-memory
+  const spatialCheck = useMemo(() => {
+    return isSameLocation(evA, evB, toleranceMeters);
+  }, [evA, evB, toleranceMeters]);
+
+  // Función de disparo del análisis comparativo universal
   const handleExecuteTemporalComparison = useCallback(async () => {
+    if (!spatialCheck.isCompatible) {
+      alert(`⛔ COMPARACIÓN BLOQUEADA: La distancia entre Evidencia A y Evidencia B (${spatialCheck.distanceMeters}m) supera el límite máximo permitido (${toleranceMeters}m). Prohibido comparar puntos diferentes.`);
+      return;
+    }
+
     setIsAnalyzing(true);
-    setAnalysisStatusMsg("Analizando delta temporal y variaciones físicas...");
+    setAnalysisStatusMsg("Ejecutando validación espacial y análisis comparativo IA...");
+    setValidationError(null);
 
     try {
-      const primaryDate = new Date(primary.timestamp);
-      const contextualDate = new Date(contextual.panoramaTimestamp);
-      const diffTime = Math.abs(primaryDate.getTime() - contextualDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const yearsApprox = (diffDays / 365).toFixed(1);
-      const formattedDelta = `${diffDays.toLocaleString()} días (~${yearsApprox} años)`;
-
-      // Invocar servicio de visión para la comparación
-      let aiObservation = "";
-      let observedChanges: string[] = [];
-      let structuralModifications: string[] = [];
-      let riskDiscrepancies: string[] = [];
-
-      try {
-        const res = await fetch("/api/analyze-vision", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: "TEMPORAL_COMPARISON",
-            primaryUrl: primary.url,
-            contextualUrl: contextual.url,
-            primaryDate: primary.timestamp,
-            contextualDate: contextual.panoramaTimestamp,
-            expedienteId: projectId,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.calibratedObservation) {
-            aiObservation = data.calibratedObservation;
-            observedChanges = data.observedChanges || [];
-            structuralModifications = data.structuralModifications || [];
-            riskDiscrepancies = data.riskDiscrepancies || [];
-          }
-        }
-      } catch (apiErr) {
-        console.warn("[GeointTemporalComparativeEngine] Error consultando /api/analyze-vision, aplicando calibración local:", apiErr);
-      }
-
-      // Fallback local con Regla de Lenguaje Temporal Gobernado (Prohibido "Actualmente existe...")
-      if (!aiObservation) {
-        observedChanges = [
-          `Modificación en el acceso perimetral respecto al registro del ${contextual.panoramaTimestamp}.`,
-          `Simbología visual adicionada entre la captura históricas y la inspección del ${primary.timestamp}.`,
-        ];
-        structuralModifications = [
-          "Barda o elemento divisorio instalado en el lapso temporal.",
-          "Alteración de acabado en muro exterior.",
-        ];
-        riskDiscrepancies = [
-          `Condición observada in situ el ${primary.timestamp} presenta mayor vulnerabilidad que el panorama de ${contextual.panoramaTimestamp}.`,
-        ];
-
-        aiObservation =
-          `En la captura Street View disponible con fecha ${contextual.panoramaTimestamp} se observa un entorno previo con menor restricción perimetral. ` +
-          `Al comparar con la evidencia in situ registrada el día ${primary.timestamp}, se identifican modificaciones estructurales visibles compatibles con ` +
-          `la adición de protecciones y alteraciones en la fachada dentro de un delta de ${formattedDelta}. ` +
-          `Dichas diferencias requieren convalidación operativa de campo.`;
-      }
-
-      const comparisonId = `cmp-temp-${Date.now()}`;
-
-      const comparisonResult: EvidenceComparison = {
-        comparisonId,
-        projectId,
-        primaryEvidence: primary,
-        contextualEvidence: contextual,
+      const result = await compareTemporalEvidence(
+        evA,
+        evB,
+        toleranceMeters,
         comparisonType,
-        createdBy: analystName,
-        createdAt: new Date().toISOString(),
-        aiAnalysis: {
-          temporalDeltaDays: diffDays,
-          temporalDeltaFormatted: formattedDelta,
-          observedChanges,
-          structuralModifications,
-          riskDiscrepancies,
-          confidenceScore: 0.88,
-          calibratedObservation: aiObservation,
-        },
-        analystValidationStatus: "PENDING_REVIEW",
-      };
+        analystName
+      );
+
+      if (!result.isSuccess || result.isSpatialBlocked || !result.comparison) {
+        alert("⚠️ Error en comparación: " + (result.error || "Validación fallida"));
+        return;
+      }
+
+      setActiveComparison(result.comparison);
+      setValidationComment(result.comparison.aiAnalysis.calibratedObservation);
 
       if (onComparisonGenerated) {
-        onComparisonGenerated(comparisonResult);
+        onComparisonGenerated(result.comparison);
       }
-
-      alert(`✅ Análisis Comparativo Temporal registrado con éxito [${comparisonId}]. Estado: PENDING_REVIEW.`);
-      onClose();
     } catch (err: any) {
-      alert("Error ejecutando comparación temporal: " + err.message);
+      alert("Error inesperado en comparación temporal: " + err.message);
     } finally {
       setIsAnalyzing(false);
       setAnalysisStatusMsg("");
     }
-  }, [primary, contextual, comparisonType, projectId, analystName, onComparisonGenerated, onClose]);
+  }, [evA, evB, spatialCheck, toleranceMeters, comparisonType, analystName, onComparisonGenerated]);
+
+  // Función de Convalidación Humana (ADR-016 / ADR-019.13-F4)
+  const handleHumanValidation = async (status: AnalystValidationStatus) => {
+    if (!activeComparison) return;
+
+    if (status === "APPROVED_EVIDENCE" && (!validationComment || validationComment.trim().length === 0)) {
+      setValidationError("⚠️ Justificación/Comentario de convalidación obligatoria para promover a evidencia probatoria.");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setValidationError(null);
+
+    try {
+      const updatedRecord = await updateComparisonValidationStatus(
+        activeComparison.comparisonId,
+        activeComparison.expedienteId,
+        status,
+        validationComment.trim(),
+        analystName
+      );
+
+      const updatedComparison: UniversalEvidenceComparison = {
+        ...activeComparison,
+        analystValidationStatus: status,
+        validationComment: validationComment.trim(),
+        validatedBy: analystName,
+        validatedAt: new Date().toISOString(),
+      };
+
+      if (onComparisonGenerated) {
+        onComparisonGenerated(updatedComparison);
+      }
+
+      alert(
+        status === "APPROVED_EVIDENCE"
+          ? `✅ Evidencia Aprobada e Integrada al Expediente [${activeComparison.comparisonId}]. Status: APPROVED_EVIDENCE.`
+          : `🚫 Comparación Rechazada y Descartada de Informes [${activeComparison.comparisonId}]. Status: REJECTED_FINDING.`
+      );
+      onClose();
+    } catch (err: any) {
+      setValidationError("Error actualizando estado de convalidación: " + err.message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Auxiliar para etiquetas de fuente
+  const getBadgeStyle = (source: GeoEvidenceSource) => {
+    switch (source) {
+      case "FIELD_PHOTO":
+        return { label: "CAMPO IN SITU", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" };
+      case "STREET_VIEW_AUTOMATIC":
+        return { label: "STREET VIEW AUTO", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" };
+      case "STREET_VIEW_MANUAL":
+        return { label: "STREET VIEW MANUAL", color: "bg-blue-500/20 text-blue-300 border-blue-500/40" };
+      case "STREET_VIEW_HISTORICAL":
+        return { label: "STREET VIEW HISTÓRICO", color: "bg-amber-500/20 text-amber-300 border-amber-500/40" };
+      default:
+        return { label: "EVIDENCIA GEOINT", color: "bg-slate-800 text-slate-300 border-slate-700" };
+    }
+  };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-xl border border-amber-500/30 bg-slate-900 text-slate-100 shadow-2xl">
-        {/* Encabezado Gobernado */}
-        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+      <div className="flex max-h-[95vh] w-full max-w-[95vw] flex-col rounded-xl border border-amber-500/30 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden">
+        {/* Encabezado Gobernado Universal */}
+        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-6 py-4">
           <div className="flex items-center space-x-3">
             <span className="rounded bg-amber-500/20 p-2 text-xl font-bold text-amber-400">⏳</span>
             <div>
               <h2 className="text-lg font-bold text-slate-100">
-                GEOINT Temporal Comparative Evidence Engine
+                Motor de Comparación Temporal Universal GEOINT
               </h2>
               <p className="text-xs text-amber-400/80">
-                ADR-019 v1.0 — Análisis Diferencial: Evidencia In Situ vs. Panorama Histórico Street View
+                ADR-019.13-F4 — Gobernanza Humana, Persistencia ADR-019.8 e Integración Forense
               </p>
             </div>
           </div>
@@ -196,157 +244,190 @@ export function GeointTemporalComparativeEngine({
           </button>
         </div>
 
-        {/* Panel Principal Comparativo (Side by Side) */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* LADO A: Evidencia Primaria In Situ */}
-            <div className="rounded-lg border border-emerald-500/30 bg-slate-950/80 p-4">
-              <div className="mb-3 flex items-center justify-between border-b border-emerald-500/20 pb-2">
-                <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-300">
-                  EVIDENCIA_PRIMARIA_CAMPO
+        {/* Panel Principal Comparativo Forense Dual */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          {/* Banner de Validación Espacial */}
+          {!spatialCheck.isCompatible ? (
+            <div className="rounded-lg border border-red-500 bg-red-950/80 p-4 text-red-200 shadow-lg flex items-center gap-3">
+              <span className="text-2xl">⛔</span>
+              <div>
+                <h4 className="font-bold uppercase text-xs text-red-400 tracking-wider">
+                  COMPARACIÓN BLOQUEADA POR INCOMPATIBILIDAD GEOGRÁFICA
+                </h4>
+                <p className="text-xs mt-0.5">
+                  La distancia comprobada entre Evidencia A y Evidencia B (
+                  <strong className="text-white font-mono">
+                    {spatialCheck.distanceMeters === Infinity ? "Sin Coordenadas GPS" : `${spatialCheck.distanceMeters}m`}
+                  </strong>
+                  ) supera la tolerancia máxima (<strong>{toleranceMeters}m</strong>). Prohibido realizar análisis temporal sobre puntos geográficos distintos.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/30 p-3 text-emerald-300 text-xs flex items-center justify-between font-mono">
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <strong>VALIDATED GEO MATCH:</strong> Distancia comprobada: {spatialCheck.distanceMeters.toFixed(2)}m (≤ {toleranceMeters}m).
+              </span>
+              <span className="text-slate-400 text-[10px]">
+                LAT: {evA.coordinates.lat.toFixed(5)} / LNG: {evA.coordinates.lng.toFixed(5)}
+              </span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* PANEL IZQUIERDO: EVIDENCIA A */}
+            <div className="flex flex-col rounded-lg border border-slate-700 bg-slate-950/80 p-5">
+              <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className={`px-2.5 py-1 rounded text-xs font-bold border ${getBadgeStyle(evA.source).color}`}>
+                  EVIDENCIA A: {getBadgeStyle(evA.source).label}
                 </span>
-                <span className="text-xs text-slate-400 font-mono">{primary.code}</span>
+                <span className="text-xs text-slate-400 font-mono">ID: {evA.id}</span>
               </div>
 
-              <div className="aspect-video w-full overflow-hidden rounded border border-slate-800 bg-slate-900 mb-3">
-                <img
-                  src={primary.url}
-                  alt="Evidencia Primaria In Situ"
-                  className="h-full w-full object-cover"
-                />
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <div>
-                  <label className="text-slate-400">Título / Descripción In Situ:</label>
-                  <input
-                    type="text"
-                    value={primary.title}
-                    onChange={(e) => setPrimary({ ...primary, title: e.target.value })}
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"
+              {/* Visor Imagen A */}
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-900 mb-4">
+                {evA.imageReference ? (
+                  <img
+                    src={evA.imageReference}
+                    alt="Evidencia A"
+                    className="h-full w-full object-cover"
                   />
-                </div>
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
+                    Sin Vista Previa
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 text-xs mt-auto bg-slate-900/60 p-3 rounded border border-slate-800">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-slate-400">Fecha de Inspección:</label>
-                    <input
-                      type="date"
-                      value={primary.timestamp}
-                      onChange={(e) => setPrimary({ ...primary, timestamp: e.target.value })}
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"
-                    />
+                    <span className="text-slate-400 font-bold block">Fecha Captura:</span>
+                    <span className="font-mono text-cyan-400">{evA.captureDate || "FECHA_NO_DISPONIBLE"}</span>
                   </div>
                   <div>
-                    <label className="text-slate-400">Código Evidencia:</label>
-                    <input
-                      type="text"
-                      value={primary.code}
-                      onChange={(e) => setPrimary({ ...primary, code: e.target.value })}
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-200"
-                    />
+                    <span className="text-slate-400 font-bold block">Fuente:</span>
+                    <span className="font-mono text-slate-200">{evA.source}</span>
                   </div>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  GPS: {evA.coordinates.lat.toFixed(6)}, {evA.coordinates.lng.toFixed(6)}
                 </div>
               </div>
             </div>
 
-            {/* LADO B: Evidencia Contextual Street View */}
-            <div className="rounded-lg border border-cyan-500/30 bg-slate-950/80 p-4">
-              <div className="mb-3 flex items-center justify-between border-b border-cyan-500/20 pb-2">
-                <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-xs font-bold text-cyan-300">
-                  EVIDENCIA_CONTEXTUAL_TEMPORAL
+            {/* PANEL DERECHO: EVIDENCIA B */}
+            <div className="flex flex-col rounded-lg border border-slate-700 bg-slate-950/80 p-5">
+              <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className={`px-2.5 py-1 rounded text-xs font-bold border ${getBadgeStyle(evB.source).color}`}>
+                  EVIDENCIA B: {getBadgeStyle(evB.source).label}
                 </span>
-                <span className="text-xs text-slate-400 font-mono">{contextual.code}</span>
+                <span className="text-xs text-slate-400 font-mono">ID: {evB.id}</span>
               </div>
 
-              <div className="aspect-video w-full overflow-hidden rounded border border-slate-800 bg-slate-900 mb-3">
-                <img
-                  src={contextual.url}
-                  alt="Captura Panorámica Street View"
-                  className="h-full w-full object-cover"
-                />
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <div>
-                  <label className="text-slate-400">Título Panorama Street View:</label>
-                  <input
-                    type="text"
-                    value={contextual.title}
-                    onChange={(e) => setContextual({ ...contextual, title: e.target.value })}
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"
+              {/* Visor Imagen B */}
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-900 mb-4">
+                {evB.imageReference ? (
+                  <img
+                    src={evB.imageReference}
+                    alt="Evidencia B"
+                    className="h-full w-full object-cover"
                   />
-                </div>
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
+                    Sin Vista Previa
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 text-xs mt-auto bg-slate-900/60 p-3 rounded border border-slate-800">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-amber-400 font-semibold">
-                      Fecha Panorama Disponible:
-                    </label>
-                    <input
-                      type="date"
-                      value={contextual.panoramaTimestamp}
-                      onChange={(e) =>
-                        setContextual({ ...contextual, panoramaTimestamp: e.target.value })
-                      }
-                      className="mt-1 w-full rounded border border-amber-500/50 bg-slate-900 px-2 py-1 text-amber-300"
-                    />
+                    <span className="text-slate-400 font-bold block">Fecha Captura:</span>
+                    <span className="font-mono text-cyan-400">{evB.captureDate || "FECHA_NO_DISPONIBLE"}</span>
                   </div>
                   <div>
-                    <label className="text-slate-400">Código Panorama:</label>
-                    <input
-                      type="text"
-                      value={contextual.code}
-                      onChange={(e) => setContextual({ ...contextual, code: e.target.value })}
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-200"
-                    />
+                    <span className="text-slate-400 font-bold block">Fuente:</span>
+                    <span className="font-mono text-slate-200">{evB.source}</span>
                   </div>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  GPS: {evB.coordinates.lat.toFixed(6)}, {evB.coordinates.lng.toFixed(6)}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Opciones de Comparación */}
-          <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-              Modalidad de Comparación y Muestreo Diferencial
-            </h3>
-            <div className="flex flex-wrap gap-4 text-xs">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="cmpType"
-                  checked={comparisonType === "TEMPORAL_VISUAL_DELTA"}
-                  onChange={() => setComparisonType("TEMPORAL_VISUAL_DELTA")}
-                  className="text-amber-500 focus:ring-amber-500"
-                />
-                <span className="text-slate-200">Delta Visual Temporal (Cambios globales)</span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="cmpType"
-                  checked={comparisonType === "VARIABILITY_STRUCTURAL"}
-                  onChange={() => setComparisonType("VARIABILITY_STRUCTURAL")}
-                  className="text-amber-500 focus:ring-amber-500"
-                />
-                <span className="text-slate-200">Variación Estructural (Estructuras y accesos)</span>
-              </label>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="cmpType"
-                  checked={comparisonType === "ENVIRONMENTAL_CHANGE"}
-                  onChange={() => setComparisonType("ENVIRONMENTAL_CHANGE")}
-                  className="text-amber-500 focus:ring-amber-500"
-                />
-                <span className="text-slate-200">Entorno Urbano y Vegetación</span>
-              </label>
-            </div>
-          </div>
+          {/* Resultado de Análisis IA y Convalidación Humana */}
+          {activeComparison && (
+            <div className="rounded-lg border border-cyan-500/40 bg-slate-950 p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                  <span>🤖</span> Resultado de Análisis Comparativo IA & Delta Temporal
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {activeComparison.analystValidationStatus}
+                </span>
+              </div>
 
-          {/* Advertencia de Gobernanza ADR-019 */}
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-            <span className="font-bold">⚠️ Regla de Gobernanza ADR-019:</span> El resultado de este análisis utilizará estrictamente lenguaje condicionado temporal (ej. <em>"En la captura Street View disponible con fecha X..."</em>). El hallazgo nacerá en estado <strong className="text-amber-400">PENDING_REVIEW</strong> y no se integrará al informe final sin convalidación humana obligatoria.
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-400 font-bold block mb-1">Delta Temporal:</span>
+                  <span className="text-amber-400 font-mono text-sm">{activeComparison.temporalValidation.dateDifferenceFormatted}</span>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-400 font-bold block mb-1">Distancia Comprobada:</span>
+                  <span className="text-emerald-400 font-mono text-sm">{activeComparison.spatialValidation.distanceMeters.toFixed(2)}m</span>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded border border-slate-800">
+                  <span className="text-slate-400 font-bold block mb-1">Confiabilidad IA:</span>
+                  <span className="text-cyan-400 font-mono text-sm">{(activeComparison.aiAnalysis.confidenceScore * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-300 uppercase block mb-1">
+                  Observación Calibrada / Fundamentación del Analista <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={validationComment}
+                  onChange={(e) => {
+                    setValidationComment(e.target.value);
+                    if (e.target.value.trim().length > 0) setValidationError(null);
+                  }}
+                  placeholder="Escriba la fundamentación del análisis comparativo para promover la evidencia..."
+                  className="w-full h-20 bg-slate-900 border border-slate-700 rounded p-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-medium resize-none"
+                />
+              </div>
+
+              {validationError && (
+                <div className="p-2 rounded bg-red-950/60 border border-red-800 text-[10px] text-red-300 font-bold">
+                  {validationError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  disabled={isAnalyzing}
+                  onClick={() => handleHumanValidation("REJECTED_FINDING")}
+                  className="flex-1 py-2 rounded bg-slate-900 hover:bg-red-950/60 text-slate-400 hover:text-red-300 border border-slate-800 text-xs font-bold uppercase tracking-wider transition"
+                >
+                  🚫 Rechazar Comparación (REJECTED_FINDING)
+                </button>
+                <button
+                  type="button"
+                  disabled={isAnalyzing}
+                  onClick={() => handleHumanValidation("APPROVED_EVIDENCE")}
+                  className="flex-1 py-2 rounded bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg transition"
+                >
+                  ✅ Aprobar Evidencia Probatoria (APPROVED_EVIDENCE)
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pie del Modal */}
@@ -360,15 +441,17 @@ export function GeointTemporalComparativeEngine({
               disabled={isAnalyzing}
               className="rounded px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white"
             >
-              Cancelar
+              Cerrar
             </button>
-            <button
-              onClick={handleExecuteTemporalComparison}
-              disabled={isAnalyzing}
-              className="rounded bg-gradient-to-r from-amber-600 to-amber-700 px-5 py-2 text-xs font-bold text-white shadow-lg hover:from-amber-500 hover:to-amber-600 disabled:opacity-50"
-            >
-              {isAnalyzing ? "Ejecutando IA..." : "🚀 Ejecutar Análisis Comparativo IA"}
-            </button>
+            {!activeComparison && (
+              <button
+                onClick={handleExecuteTemporalComparison}
+                disabled={isAnalyzing || !spatialCheck.isCompatible}
+                className="rounded bg-gradient-to-r from-amber-600 to-amber-700 px-5 py-2 text-xs font-bold text-white shadow-lg hover:from-amber-500 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? "Ejecutando IA..." : "🚀 Ejecutar Análisis Comparativo IA"}
+              </button>
+            )}
           </div>
         </div>
       </div>

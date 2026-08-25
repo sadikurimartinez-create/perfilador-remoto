@@ -1,5 +1,3 @@
-"use client";
-
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
@@ -7,7 +5,6 @@ import { getAnalytics, type Analytics } from "firebase/analytics";
 import { getAuth, type Auth } from "firebase/auth";
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCX8sRh4Km8FLFz1XI-LtbkhzdfhXeAVpw",
   authDomain: "perfilador-remoto.firebaseapp.com",
@@ -19,36 +16,66 @@ const firebaseConfig = {
   measurementId: "G-WLKXSYNJJ9"
 };
 
-let app: FirebaseApp;
-let db: Firestore;
-let storage: FirebaseStorage;
-let analytics: Analytics | null = null;
-let auth: Auth;
+let appInstance: FirebaseApp | undefined;
+let dbInstance: Firestore | undefined;
+let storageInstance: FirebaseStorage | undefined;
+let authInstance: Auth | undefined;
+let analyticsInstance: Analytics | null = null;
 
-if (typeof window !== "undefined") {
-  if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApp();
+function initFirebase(): FirebaseApp {
+  if (!appInstance) {
+    if (!getApps().length) {
+      appInstance = initializeApp(firebaseConfig);
+    } else {
+      appInstance = getApp();
+    }
   }
-  db = getFirestore(app);
-  storage = getStorage(app);
-  auth = getAuth(app);
-  if (firebaseConfig.measurementId) {
-    analytics = getAnalytics(app);
-  }
-}
-
-export function getDb(): Firestore {
-  return db;
+  return appInstance;
 }
 
 export function getFirebaseApp(): FirebaseApp {
-  return app;
+  return initFirebase();
+}
+
+export function getDb(): Firestore {
+  if (!dbInstance) {
+    const app = initFirebase();
+    dbInstance = getFirestore(app);
+  }
+  return dbInstance;
+}
+
+export function getStorageInstance(): FirebaseStorage {
+  if (!storageInstance) {
+    const app = initFirebase();
+    storageInstance = getStorage(app);
+  }
+  return storageInstance;
 }
 
 export function getAuthInstance(): Auth {
-  return auth;
+  if (!authInstance) {
+    const app = initFirebase();
+    authInstance = getAuth(app);
+  }
+  return authInstance;
 }
 
-export { app, db, storage, analytics, auth };
+export function getAnalyticsInstance(): Analytics | null {
+  if (
+    typeof window !== "undefined" &&
+    process.env.NODE_ENV === "production" &&
+    firebaseConfig.measurementId
+  ) {
+    if (!analyticsInstance) {
+      try {
+        const app = initFirebase();
+        analyticsInstance = getAnalytics(app);
+      } catch (err) {
+        console.warn("Analytics no disponible:", err);
+      }
+    }
+    return analyticsInstance;
+  }
+  return null;
+}

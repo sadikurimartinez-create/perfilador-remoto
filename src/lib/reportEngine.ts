@@ -567,15 +567,30 @@ export class ReportEngineKernelClass {
         });
         cleanContent = finalLines.join("\n");
 
+        // REGLA GOBERNADA ADR-019.13-F4: El informe únicamente puede consumir evidencias aprobadas (APPROVED_EVIDENCE / APROBADO)
+        // Filtrar estrictamente cualquier evidencia en estado GENERADO, PENDING_REVIEW, o REJECTED_FINDING.
+        const isApprovedEvidence = (item: any) => {
+          if (!item) return false;
+          const status = (item.status || item.estado || item.estado_revision || item.analystValidationStatus || "").toUpperCase();
+          if (status === "REJECTED_FINDING" || status === "RECHAZADO" || status === "IGNORADO" || status === "PENDING_REVIEW" || status === "PENDIENTE_REVISION" || status === "GENERATED" || status === "GENERADO") {
+            return false;
+          }
+          if (status === "APPROVED_EVIDENCE" || status === "APROBADO" || status === "APPROVED") {
+            return true;
+          }
+          if (!status) return true;
+          return false;
+        };
+
         this.context.project = payload.project;
         this.context.content = cleanContent;
-        this.context.album = payload.album || [];
+        this.context.album = (payload.album || []).filter(isApprovedEvidence);
         this.context.mapSnapshots = payload.mapSnapshots || [];
         this.context.riskLevel = payload.riskLevel;
         this.context.reportSummary = payload.reportSummary;
         this.context.user = payload.user;
         this.context.markAsPrinted = payload.markAsPrinted;
-        this.context.sweeps = payload.sweeps || [];
+        this.context.sweeps = (payload.sweeps || []).filter(isApprovedEvidence);
         this.context.powerups = payload.powerups || [];
         this.context.scinceDemographics = payload.scinceDemographics;
         this.context.reportNumber = payload.reportNumber;

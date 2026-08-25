@@ -17,13 +17,59 @@ export const PhotoEvidenceLayer: React.FC<PhotoEvidenceLayerProps> = ({
 }) => {
   const [activePhoto, setActivePhoto] = useState<any | null>(null);
 
+  console.debug("[PHOTO LAYER DEBUG]", {
+    renderedPhotographsCount: photographs.length,
+    firstCoordinateUsed: photographs.length > 0 ? {
+      lat: photographs[0].lat || photographs[0].latitude || 0,
+      lng: photographs[0].lng || photographs[0].longitude || 0,
+    } : null,
+  });
+
   if (!visible || photographs.length === 0) return null;
 
   return (
     <>
       {photographs.map((p, idx) => {
-        const pLat = p.lat || p.latitude || 0;
-        const pLng = p.lng || p.longitude || 0;
+        const rawLat =
+          p.lat ??
+          p.latitude ??
+          p.gpsLat ??
+          p.exifLat ??
+          p.coordenadas?.lat;
+
+        const rawLng =
+          p.lng ??
+          p.longitude ??
+          p.gpsLng ??
+          p.exifLng ??
+          p.coordenadas?.lng;
+
+        const pLat = Number(rawLat);
+        const pLng = Number(rawLng);
+
+        if (
+          !Number.isFinite(pLat) ||
+          !Number.isFinite(pLng) ||
+          (pLat === 0 && pLng === 0)
+        ) {
+          console.warn(
+            "[PHOTO EVIDENCE] Fotografía descartada por coordenadas inválidas:",
+            p
+          );
+          return null;
+        }
+
+        console.debug("[PHOTO EVIDENCE ADR-019.11.8]", {
+          id: p.id,
+          lat: pLat,
+          lng: pLng,
+          source:
+            p.lat || p.latitude
+              ? "direct"
+              : p.gpsLat || p.exifLat
+              ? "metadata"
+              : "coordinates_object"
+        });
 
         return (
           <React.Fragment key={`photo-${p.id || idx}`}>

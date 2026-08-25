@@ -520,8 +520,21 @@ export const buildIntelligenceEditorialPayload = async (
   reportNumber?: string,
   analystName?: string
 ): Promise<IntelligenceReportPayload> => {
-  // Aplicar regla determinista del Evidence Governance Engine (EGE Contract Rules)
-  album = (album || []).map(p => {
+  // REGLA GOBERNADA ADR-019.13-F4: El informe únicamente puede consumir evidencias aprobadas (APPROVED_EVIDENCE / APROBADO)
+  const isApprovedEvidence = (item: any) => {
+    if (!item) return false;
+    const status = (item.status || item.estado || item.estado_revision || item.analystValidationStatus || "").toUpperCase();
+    if (status === "REJECTED_FINDING" || status === "RECHAZADO" || status === "IGNORADO" || status === "PENDING_REVIEW" || status === "PENDIENTE_REVISION" || status === "GENERATED" || status === "GENERADO") {
+      return false;
+    }
+    if (status === "APPROVED_EVIDENCE" || status === "APROBADO" || status === "APPROVED") {
+      return true;
+    }
+    if (!status) return true;
+    return false;
+  };
+
+  album = (album || []).filter(isApprovedEvidence).map(p => {
     if (p && (p.tipo === "REMOTE_STREET_VIEW" || p.tipo === "STREET_VIEW" || p.isStreetView)) {
       return {
         ...p,
@@ -534,6 +547,8 @@ export const buildIntelligenceEditorialPayload = async (
     }
     return p;
   });
+
+  sweeps = (sweeps || []).filter(isApprovedEvidence);
 
   const rawExecSummary = extractSection(rawContent, 1);
   const rawHypothesis = extractSection(rawContent, 3);

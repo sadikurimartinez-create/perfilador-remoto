@@ -80,6 +80,12 @@ export function ProfessionalGeoMap({
   selectedSvId,
   selectedFindingId
 }: ProfessionalGeoMapProps) {
+  console.debug("[MAP INPUT DEBUG]", {
+    photographsReceived: photographs,
+    findingsReceived: findings,
+    streetViewAutomaticReceived: streetViewAutomatic,
+  });
+
   // Inicialización del gestor reactivo de capas
   const layerManager = useMemo(() => new MapLayerManager(), []);
   const [layers, setLayers] = useState<MapLayersState>(layerManager.getState());

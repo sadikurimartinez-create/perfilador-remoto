@@ -1,7 +1,9 @@
 /**
- * ADR-019 v1.0 — GEOINT Temporal Comparative Evidence Engine
- * Contratos de datos y taxonomía oficial de valoración probatoria.
+ * ADR-019 v1.0 / ADR-019.13 — GEOINT Temporal Comparative Evidence Engine
+ * Contratos de datos unificados para la comparación temporal universal GeoEvidence A vs GeoEvidence B y Gobernanza Humana (ADR-019.13-F4).
  */
+
+import { GeoEvidence, GeoEvidenceStatus } from "./geointEvidence";
 
 export type EvidenceClass = "EVIDENCIA_PRIMARIA_CAMPO" | "EVIDENCIA_CONTEXTUAL_TEMPORAL";
 
@@ -9,37 +11,135 @@ export type ComparisonType = "TEMPORAL_VISUAL_DELTA" | "VARIABILITY_STRUCTURAL" 
 
 export type AnalystValidationStatus = "PENDING_REVIEW" | "APPROVED_EVIDENCE" | "REJECTED_FINDING";
 
+/**
+ * Registro de Persistencia de Comparación Temporal ADR-019.8 / ADR-019.13-F4
+ */
+export interface TemporalComparisonRecord {
+  id: string;
+  expedienteId: string;
+
+  evidenceA: {
+    id: string;
+    source: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+    captureDate?: string;
+    imageReference?: string;
+  };
+
+  evidenceB: {
+    id: string;
+    source: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+    captureDate?: string;
+    imageReference?: string;
+  };
+
+  spatialValidation: {
+    compatible: boolean;
+    distanceMeters: number;
+  };
+
+  temporalValidation: {
+    valid: boolean;
+    deltaDays?: number;
+    status: "VALID" | "FECHA_NO_DISPONIBLE";
+  };
+
+  analystValidation: {
+    status: AnalystValidationStatus;
+    reviewerId?: string;
+    reviewedAt?: string;
+    comments?: string;
+  };
+
+  createdAt: string;
+}
+
+/**
+ * Solicitud de comparación temporal universal entre dos entidades GeoEvidence.
+ */
+export interface UniversalTemporalComparisonRequest {
+  evidenceA: GeoEvidence;
+  evidenceB: GeoEvidence;
+  analystId?: string;
+  comparisonType?: ComparisonType;
+  toleranceMeters?: number;
+  metadata?: {
+    expedienteId?: string;
+  };
+}
+
+export interface TemporalComparisonAiAnalysis {
+  temporalDeltaDays?: number;
+  temporalDeltaFormatted?: string; // ej. "1,255 días (~3.4 años)" o "FECHA_NO_DISPONIBLE"
+  observedChanges: string[];
+  structuralModifications: string[];
+  riskDiscrepancies: string[];
+  confidenceScore: number;
+  calibratedObservation: string;
+}
+
+/**
+ * Resultado unificado de comparación temporal entre GeoEvidence A y GeoEvidence B.
+ */
+export interface UniversalEvidenceComparison {
+  comparisonId: string;
+  expedienteId: string;
+  evidenceA: GeoEvidence;
+  evidenceB: GeoEvidence;
+  comparisonType: ComparisonType;
+  spatialValidation: {
+    isCompatible: boolean;
+    distanceMeters: number;
+    reason?: string;
+  };
+  temporalValidation: {
+    isValid: boolean;
+    dateA?: string;
+    dateB?: string;
+    dateDifferenceDays?: number;
+    dateDifferenceFormatted?: string;
+  };
+  createdBy: string;
+  createdAt: string;
+  aiAnalysis: TemporalComparisonAiAnalysis;
+  analystValidationStatus: AnalystValidationStatus;
+  validationComment?: string;
+  validatedBy?: string;
+  validatedAt?: string;
+  persistenceRecord?: TemporalComparisonRecord;
+}
+
+/**
+ * CONTRATOS LEGACY DE ADAPTACIÓN RETROCOMPATIBLE (ADR-019.13)
+ */
 export interface PrimaryEvidenceRef {
   id: string;
-  code: string; // ej. EV-00123
+  code: string;
   title?: string;
   url: string;
   evidenceClass: "EVIDENCIA_PRIMARIA_CAMPO";
-  timestamp: string; // Fecha de inspección en campo
+  timestamp: string;
   lat?: number;
   lng?: number;
 }
 
 export interface ContextualEvidenceRef {
   id: string;
-  code: string; // ej. SV-00456
+  code: string;
   title?: string;
   url: string;
   evidenceClass: "EVIDENCIA_CONTEXTUAL_TEMPORAL";
-  panoramaTimestamp: string; // Fecha disponible del panorama Street View
+  panoramaTimestamp: string;
   lat?: number;
   lng?: number;
   heading?: number;
-}
-
-export interface TemporalComparisonAiAnalysis {
-  temporalDeltaDays: number;
-  temporalDeltaFormatted: string; // ej. "1,255 días (3.4 años)"
-  observedChanges: string[];
-  structuralModifications: string[];
-  riskDiscrepancies: string[];
-  confidenceScore: number;
-  calibratedObservation: string; // Texto redactado con lenguaje temporal gobernado
 }
 
 export interface EvidenceComparison {

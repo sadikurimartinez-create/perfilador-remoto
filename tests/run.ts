@@ -44,6 +44,7 @@ if (typeof global.document === "undefined") {
 
 import { runMigrationTests } from "./reportEngineIICMigration.test";
 import { runAuthTests } from "./authHardening.test";
+import { runGovernanceTests } from "./testADR01913Governance.test";
 
 async function runAllTests() {
   console.log("======================================================================");
@@ -57,6 +58,9 @@ async function runAllTests() {
     
     // 2. Ejecutar pruebas de hardening de autenticación de la Fase 1
     await runAuthTests();
+    
+    // 3. Ejecutar pruebas de Gobernanza Humana GEOINT ADR-019.13-F4
+    await runGovernanceTests();
     
     const durationSec = ((Date.now() - started) / 1000).toFixed(2);
     console.log("\n======================================================================");
