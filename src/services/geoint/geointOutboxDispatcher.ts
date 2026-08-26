@@ -6,29 +6,30 @@ export class GeointOutboxDispatcher {
   private static MAX_RETRIES = 3;
 
   /**
-   * Escanea y procesa todas las entradas pendientes en la outbox.
-   * Retorna un resumen de ejecución.
+   * Escanea y procesa entradas pendientes con control de concurrencia simple.
    */
   static async dispatchPending(): Promise<{
     processed: number;
     success: number;
     failed: number;
   }> {
-    const pending = await GeointEventOutboxService.getPendingEntries();
+    // Usamos el límite definido en el servicio tras la FASE 2.2
+    const pending = await GeointEventOutboxService.getPendingEntries(50);
     let successCount = 0;
     let failedCount = 0;
 
     for (const entry of pending) {
+      // Protección: Si el estado ya es PROCESSING, omitir para evitar colisiones
+      if (entry.status === "PROCESSING") continue;
+
       try {
+        // Transición atómica a PROCESSING
         await GeointEventOutboxService.updateEntryStatus(entry.outboxId, "PROCESSING");
 
-        // Simulación o ejecución de integración asíncrona con el proveedor externo
-        // (Por ejemplo, llamar al proveedor o validar evidencia de Street View)
         if (entry.payload.metadata?.shouldFailForTest) {
-          throw new Error("PROV_ERROR: Proveedor externo no responde o falló la red.");
+          throw new Error("PROV_ERROR: Proveedor externo falló intencionalmente.");
         }
 
-        // Si todo es exitoso, persistimos el evento final en el ledger principal
         await GeointEventLogService.persistGeointEvent({
           eventId: entry.eventId,
           eventType: entry.payload.eventType as any,
@@ -45,7 +46,7 @@ export class GeointOutboxDispatcher {
           },
         });
 
-        // Completar en outbox
+        // Transición final: COMPLETADO
         await GeointEventOutboxService.updateEntryStatus(entry.outboxId, "COMPLETED", {
           processedAt: new Date().toISOString(),
         });
@@ -55,6 +56,7 @@ export class GeointOutboxDispatcher {
         const nextRetry = (entry.retryCount || 0) + 1;
         const finalStatus = nextRetry >= this.MAX_RETRIES ? "FAILED" : "QUEUED";
 
+        // Transición a FALLIDO o RE-ENCOLADO
         await GeointEventOutboxService.updateEntryStatus(entry.outboxId, finalStatus, {
           retryCount: nextRetry,
           errorMessage: err.message || String(err),

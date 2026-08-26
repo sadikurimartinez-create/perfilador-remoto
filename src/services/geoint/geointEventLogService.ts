@@ -74,9 +74,8 @@ export class GeointEventLogService {
         }
       }
 
-      // Si no existe, crearlo dentro de la transacción atómica con un eventId único determinista o basado en UUID/Timestamp único de transacción
-      const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const eventId = `evt-geoint-${uniqueSuffix}`;
+      // Si no existe, crearlo dentro de la transacción atómica usando el fingerprint como base para el eventId
+      const eventId = `evt-${fingerprint.substring(0, 16)}`;
 
       const event: GeointEventLogEntry = {
         eventId,
@@ -90,13 +89,22 @@ export class GeointEventLogService {
         payload: { entityType, entityId, ...metadata }
       };
 
+      // 2. Verificar existencia del evento en el log (doble validación atómica)
       const eventDocRef = doc(db, "geoint_event_logs", event.eventId);
+      const eventSnap = await transaction.get(eventDocRef);
+
+      if (eventSnap.exists()) {
+        resolvedEvent = eventSnap.data() as GeointEventLogEntry;
+        return;
+      }
+
+      // 3. Escribir Log y Fingerprint solo si no existen
       transaction.set(eventDocRef, {
         ...event,
         timestamp: serverTimestamp(),
       });
 
-      const fingerprintRecord: EventFingerprintRecord = {
+      transaction.set(fingerprintRef, {
         fingerprint,
         eventId: event.eventId,
         expedienteId,
@@ -104,11 +112,6 @@ export class GeointEventLogService {
         eventType,
         entityId,
         status,
-        createdAt: event.timestamp,
-      };
-
-      transaction.set(fingerprintRef, {
-        ...fingerprintRecord,
         createdAt: serverTimestamp(),
       });
 

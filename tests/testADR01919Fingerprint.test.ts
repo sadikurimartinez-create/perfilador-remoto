@@ -143,7 +143,7 @@ export async function runADR01919FingerprintTests() {
 
     // CASO 4: Concurrencia simulada. Resultado: una única creación.
     console.log("\n➡️ CASO 4: Concurrencia simulada...");
-    const expId4 = "EXP-01919-CASE4";
+    const expId4 = `EXP-${Date.now()}-CASE4`; // Expediente único para evitar colisiones
     const traceId4 = "trace-concurrent-019";
     const entityId4 = "entity-concurrent";
 
@@ -169,9 +169,10 @@ export async function runADR01919FingerprintTests() {
       "CASO 4: Concurrencia simulada de 5 envíos idénticos retorna siempre el mismo eventId"
     );
 
+    // Verificación final estricta: buscar por el ID generado en esta prueba
     const history4 = await GeointEventLogService.getExpedientEventHistory(expId4);
     assert(
-      history4.length === 1,
+      history4.length === 1 && history4[0].eventId === firstId,
       `CASO 4: Concurrencia simulada resulta en exactamente 1 único registro almacenado (Total: ${history4.length})`
     );
 

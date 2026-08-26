@@ -7,6 +7,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   serverTimestamp,
   runTransaction,
 } from "firebase/firestore";
@@ -112,13 +113,16 @@ export class GeointEventOutboxService {
   }
 
   /**
-   * Obtiene todos los registros pendientes (CREATED, QUEUED, FAILED) de la outbox.
+   * Obtiene los registros pendientes (CREATED, QUEUED, FAILED) de la outbox,
+   * ordenados cronológicamente y limitados para procesamiento seguro.
    */
-  static async getPendingEntries(): Promise<GeointEventOutboxEntry[]> {
+  static async getPendingEntries(limitCount: number = 50): Promise<GeointEventOutboxEntry[]> {
     const db = getFirestoreInstance();
     const q = query(
       collection(db, "geoint_event_outbox"),
-      where("status", "in", ["CREATED", "QUEUED", "FAILED"])
+      where("status", "in", ["CREATED", "QUEUED", "FAILED"]),
+      orderBy("createdAt", "asc"),
+      limit(limitCount)
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => d.data() as GeointEventOutboxEntry);
