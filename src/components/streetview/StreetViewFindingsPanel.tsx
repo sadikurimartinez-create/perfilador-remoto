@@ -6,6 +6,11 @@ import {
   adaptStreetViewFindingToGeoEvidence,
   adaptSweepPayloadToGeoEvidence,
 } from "@/utils/geoResolver";
+import {
+  GeointGovernanceStatus,
+  GeointGovernanceStatusValue,
+  normalizeGeointGovernanceStatus,
+} from "@/types/geointGovernance";
 
 export interface AnalyticalFinding {
   findingId: string;
@@ -21,7 +26,7 @@ export interface AnalyticalFinding {
   imageReference: string;
   generatedBy: string;
   createdAt: string;
-  status: "PENDING_REVIEW" | "APPROVED_EVIDENCE" | "REJECTED_FINDING";
+  status: GeointGovernanceStatusValue;
 }
 
 export interface ApprovedEvidence {
@@ -32,7 +37,7 @@ export interface ApprovedEvidence {
   validatorRole: string;
   validationDate: string;
   validationComment: string;
-  status: "APPROVED_EVIDENCE";
+  status: GeointGovernanceStatus.APPROVED_EVIDENCE;
   geometry?: {
     lat: number;
     lng: number;
@@ -45,6 +50,8 @@ export interface ApprovedEvidence {
 export interface StreetViewFinding {
   id: string;
   expedienteId: string;
+  traceabilityId?: string;
+  sourceEvidenceId?: string;
   evidenciaId?: string;
   captureId?: string;
   categoria: "pendiente_clasificacion" | "COMPARACION_TEMPORAL" | "ACECHO_ESCONDITE" | "GRAFFITI_PANDILLA" | "DENUE_POI" | "OSINT_GENERAL" | "acecho" | "graffiti" | "denue" | "sin_hallazgo" | "RUTA_ACCESO" | "PUNTO_ACECHO";
@@ -56,7 +63,7 @@ export interface StreetViewFinding {
   heading?: number;
   pitch?: number;
   fov?: number;
-  estado?: "GENERADO" | "PENDIENTE_REVISION" | "APROBADO" | "IGNORADO" | "APPROVED_EVIDENCE" | "REJECTED_FINDING";
+  estado?: GeointGovernanceStatusValue;
   descripcion?: string;
   observaciones_visual?: string;
   fechaCreacion?: string;
@@ -67,7 +74,7 @@ export interface StreetViewFinding {
 interface StreetViewFindingsPanelProps {
   expedienteId: string;
   captures?: any[]; // Capturas automáticas / analyticalFindings
-  onCaptureStatusChange?: (captureId: string, status: "APROBADO" | "IGNORADO") => void;
+  onCaptureStatusChange?: (captureId: string, status: GeointGovernanceStatusValue) => void;
   onFindingCreated?: (finding: any) => void;
   validatorId?: string;
   validatorRole?: string;
@@ -108,7 +115,7 @@ export function StreetViewFindingsPanel({
     const filtered = (captures || []).filter(
       (c) =>
         (c.tipo_origen === "STREETVIEW_AUTOMATICO" || c.sourceType === "STREETVIEW_AUTOMATICO" || !c.tipo_origen) &&
-        (c.estado_revision === "PENDIENTE_REVISION" || c.status === "PENDING_REVIEW" || !c.estado_revision)
+        (normalizeGeointGovernanceStatus(c.estado_revision || c.status) === GeointGovernanceStatus.PENDING_REVIEW)
     );
     setPendingCaptures(filtered);
   }, [expedienteId, captures]);
@@ -144,7 +151,7 @@ export function StreetViewFindingsPanel({
       validatorRole: validatorRole,
       validationDate: new Date().toISOString(),
       validationComment: validationComment.trim(),
-      status: "APPROVED_EVIDENCE",
+      status: GeointGovernanceStatus.APPROVED_EVIDENCE,
       geometry: {
         lat,
         lng,
@@ -169,7 +176,7 @@ export function StreetViewFindingsPanel({
           imagen: approvedEvidence.imageReference,
           heading: approvedEvidence.geometry?.heading,
           pitch: approvedEvidence.geometry?.pitch,
-          estado: "APPROVED_EVIDENCE",
+          estado: GeointGovernanceStatus.APPROVED_EVIDENCE,
           descripcion: validationComment.trim(),
           fechaCreacion: approvedEvidence.validationDate,
           usuarioRevision: validatorId,
@@ -182,8 +189,8 @@ export function StreetViewFindingsPanel({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          estado_revision: "APPROVED_EVIDENCE",
-          status: "APPROVED_EVIDENCE",
+          estado_revision: GeointGovernanceStatus.APPROVED_EVIDENCE,
+          status: GeointGovernanceStatus.APPROVED_EVIDENCE,
           validationComment: validationComment.trim(),
           validatedBy: validatorId,
           validationDate: approvedEvidence.validationDate
@@ -191,7 +198,7 @@ export function StreetViewFindingsPanel({
       }).catch((err) => console.warn("Muted patch error:", err));
 
       if (onCaptureStatusChange) {
-        onCaptureStatusChange(captureId, "APROBADO");
+        onCaptureStatusChange(captureId, GeointGovernanceStatus.APPROVED_EVIDENCE);
       }
       if (onFindingCreated) {
         onFindingCreated(approvedEvidence);
@@ -223,8 +230,8 @@ export function StreetViewFindingsPanel({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          estado_revision: "REJECTED_FINDING",
-          status: "REJECTED_FINDING",
+          estado_revision: GeointGovernanceStatus.REJECTED_FINDING,
+          status: GeointGovernanceStatus.REJECTED_FINDING,
           rejectedBy: validatorId,
           rejectionDate: new Date().toISOString(),
           rejectionComment: validationComment.trim() || "Descartado por el analista"
@@ -232,7 +239,7 @@ export function StreetViewFindingsPanel({
       }).catch((err) => console.warn("Muted rejection patch error:", err));
 
       if (onCaptureStatusChange) {
-        onCaptureStatusChange(captureId, "IGNORADO");
+        onCaptureStatusChange(captureId, GeointGovernanceStatus.REJECTED_FINDING);
       }
 
       // Remover de la lista de pendientes local
@@ -414,4 +421,3 @@ export function StreetViewFindingsPanel({
     </div>
   );
 }
-

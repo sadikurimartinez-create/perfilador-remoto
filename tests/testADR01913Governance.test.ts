@@ -35,6 +35,8 @@ export async function runGovernanceTests() {
   const baseEvidenceA: GeoEvidence = {
     id: "ev-A-campo-001",
     expedienteId: testExpediente,
+    traceabilityId: "trace-test-a-001",
+    sourceEvidenceId: "photo-source-a-001",
     source: "FIELD_PHOTO",
     coordinates: { lat: 21.885421, lng: -102.291245 },
     captureDate: "2026-05-10",
@@ -46,6 +48,8 @@ export async function runGovernanceTests() {
   const baseEvidenceB: GeoEvidence = {
     id: "ev-B-sv-002",
     expedienteId: testExpediente,
+    traceabilityId: "trace-test-b-002",
+    sourceEvidenceId: "sv-source-b-002",
     source: "STREET_VIEW_HISTORICAL",
     coordinates: { lat: 21.885438, lng: -102.291201 },
     captureDate: "2022-03-15",

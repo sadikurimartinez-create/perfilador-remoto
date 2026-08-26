@@ -11,10 +11,18 @@ import {
 } from "firebase/firestore";
 import { getFirebaseServerDb } from "@/lib/firebaseServer";
 import { getDb } from "@/lib/firebase";
+import {
+  GeointGovernanceStatus,
+  GeointGovernanceStatusValue,
+  buildGeointTraceabilityId,
+  normalizeGeointGovernanceStatus,
+} from "@/types/geointGovernance";
 
 export interface StreetViewFinding {
   id: string;
   expedienteId: string;
+  traceabilityId: string;
+  sourceEvidenceId: string;
   evidenciaId?: string;
   captureId?: string;
   categoria:
@@ -39,12 +47,7 @@ export interface StreetViewFinding {
   pitch?: number;
   fov?: number;
   estado:
-    | "GENERADO"
-    | "PENDIENTE_REVISION"
-    | "APROBADO"
-    | "IGNORADO"
-    | "APPROVED_EVIDENCE"
-    | "REJECTED_FINDING";
+    GeointGovernanceStatusValue;
   descripcion?: string;
   observaciones_visual?: string;
   fechaCreacion?: string;
@@ -75,6 +78,14 @@ export class StreetViewFindingService {
     const finding: StreetViewFinding = {
       id,
       expedienteId: data.expedienteId,
+      traceabilityId:
+        (data as any).traceabilityId ||
+        buildGeointTraceabilityId("trace-finding", [data.expedienteId, id]),
+      sourceEvidenceId:
+        (data as any).sourceEvidenceId ||
+        data.captureId ||
+        data.evidenciaId ||
+        id,
       evidenciaId: data.evidenciaId || `evi-${Date.now()}`,
       captureId: data.captureId || id,
       categoria: data.categoria || "RUTA_ACCESO",
@@ -86,7 +97,7 @@ export class StreetViewFindingService {
       heading: Number(data.heading || 0),
       pitch: Number(data.pitch || 0),
       fov: Number(data.fov || 90),
-      estado: data.estado || "PENDIENTE_REVISION",
+      estado: normalizeGeointGovernanceStatus(data.estado || GeointGovernanceStatus.PENDING_REVIEW),
       descripcion: data.descripcion || "",
       observaciones_visual: data.observaciones_visual || "",
       fechaCreacion,
@@ -161,10 +172,14 @@ export class StreetViewFindingService {
     updateData: Partial<StreetViewFinding>
   ): Promise<boolean> {
     const db = getFirestoreInstance();
-    const payload = {
+    const payload: Partial<StreetViewFinding> & { updatedAt: string } = {
       ...updateData,
+      estado: updateData.estado ? normalizeGeointGovernanceStatus(updateData.estado) : undefined,
       updatedAt: new Date().toISOString()
     };
+    if (!payload.estado) {
+      delete payload.estado;
+    }
 
     try {
       const subcolRef = doc(db, "projects", expedienteId, "streetview_findings", findingId);
@@ -192,7 +207,7 @@ export class StreetViewFindingService {
     approvalData: { usuarioRevision: string; validationComment: string }
   ): Promise<boolean> {
     return this.updateStreetViewFindingStatus(expedienteId, findingId, {
-      estado: "APPROVED_EVIDENCE",
+      estado: GeointGovernanceStatus.APPROVED_EVIDENCE,
       usuarioRevision: approvalData.usuarioRevision,
       validationComment: approvalData.validationComment
     });

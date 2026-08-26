@@ -1,3 +1,8 @@
+import {
+  GeointGovernanceStatus,
+  GeointGovernanceStatusValue,
+} from "./geointGovernance";
+
 /**
  * ADR-018 v1.0 — GEOINT Controlled Sweep Engine Types
  * Taxonomía oficial y estructura de datos para barridos gobernados CEIPOL.
@@ -56,7 +61,9 @@ export const GEOINT_SWEEP_CATEGORIES: Record<GeoIntSweepCategory, GeoIntSweepCat
 export interface GeoIntSweepFindingPayload {
   source: "GEOINT_CONTROLLED_SWEEP";
   category: GeoIntSweepCategory;
-  status: "PENDING_REVIEW";
+  status: GeointGovernanceStatusValue;
+  traceabilityId: string;
+  sourceEvidenceId: string;
   createdBy: string;
   originalFindingId: string;
   geometry: {
@@ -78,3 +85,5 @@ export interface GeoIntSweepFindingPayload {
     distanceMeters?: number;
   };
 }
+
+export { GeointGovernanceStatus };

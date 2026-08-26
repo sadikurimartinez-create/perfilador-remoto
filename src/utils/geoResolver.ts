@@ -3,6 +3,11 @@ import {
   GeoLocationCompatibilityResult,
   GeoEvidenceSource,
 } from "../types/geointEvidence";
+import {
+  GeointGovernanceStatus,
+  buildGeointTraceabilityId,
+  normalizeGeointGovernanceStatus,
+} from "../types/geointGovernance";
 
 /**
  * Valida si un par de coordenadas es numérica y geográficamente válida.
@@ -132,6 +137,17 @@ export function adaptStreetViewFindingToGeoEvidence(finding: any): GeoEvidence |
   return {
     id: finding.id || `ge-sv-${Date.now()}`,
     expedienteId: finding.expedienteId || "EXP-UNKNOWN",
+    traceabilityId:
+      finding.traceabilityId ||
+      finding.metadata?.traceabilityId ||
+      buildGeointTraceabilityId("trace-sv", [finding.expedienteId, finding.id]),
+    sourceEvidenceId:
+      finding.sourceEvidenceId ||
+      finding.metadata?.sourceEvidenceId ||
+      finding.evidenciaId ||
+      finding.captureId ||
+      finding.id ||
+      "SOURCE_EVIDENCE_UNKNOWN",
     source,
     coordinates: {
       lat: Number(lat),
@@ -149,14 +165,7 @@ export function adaptStreetViewFindingToGeoEvidence(finding: any): GeoEvidence |
       sourceProvider: "GOOGLE_STREET_VIEW",
       originalFindingId: finding.id,
     },
-    status:
-      finding.estado === "APROBADO" || finding.estado === "APPROVED_EVIDENCE"
-        ? "APPROVED_EVIDENCE"
-        : finding.estado === "IGNORADO" || finding.estado === "REJECTED_FINDING"
-        ? "REJECTED_FINDING"
-        : finding.estado === "GENERATED"
-        ? "GENERATED"
-        : "PENDING_REVIEW",
+    status: normalizeGeointGovernanceStatus(finding.estado || finding.status),
   };
 }
 
@@ -173,6 +182,15 @@ export function adaptSweepPayloadToGeoEvidence(payload: any, expedienteId: strin
   return {
     id: payload.originalFindingId || `ge-sweep-${Date.now()}`,
     expedienteId,
+    traceabilityId:
+      payload.traceabilityId ||
+      payload.metadata?.traceabilityId ||
+      buildGeointTraceabilityId("trace-sweep", [expedienteId, payload.originalFindingId]),
+    sourceEvidenceId:
+      payload.sourceEvidenceId ||
+      payload.metadata?.sourceEvidenceId ||
+      payload.originalFindingId ||
+      "SOURCE_EVIDENCE_UNKNOWN",
     source: "STREET_VIEW_AUTOMATIC",
     coordinates: {
       lat: Number(lat),
@@ -191,6 +209,9 @@ export function adaptSweepPayloadToGeoEvidence(payload: any, expedienteId: strin
       sourceProvider: "GOOGLE_STREET_VIEW",
       originalFindingId: payload.originalFindingId,
     },
-    status: payload.status === "APPROVED_EVIDENCE" ? "APPROVED_EVIDENCE" : "PENDING_REVIEW",
+    status:
+      normalizeGeointGovernanceStatus(payload.status) === GeointGovernanceStatus.APPROVED_EVIDENCE
+        ? GeointGovernanceStatus.APPROVED_EVIDENCE
+        : GeointGovernanceStatus.PENDING_REVIEW,
   };
 }

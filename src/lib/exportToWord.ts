@@ -29,7 +29,7 @@ import {
   WidthType,
 } from "docx";
 import { saveAs } from "file-saver";
-import { TCE_DEFAULT_FALLBACK } from "../utils/territorialContextEngine";
+import { logGeointEvent } from "@/services/geoint/logGeointEvent";
 import { EditorialStructureEngine } from "@/utils/editorialStructureEngine";
 import { AIOutputSanitizerEngine } from "@/utils/aiOutputSanitizerEngine";
 import { 
@@ -703,9 +703,34 @@ export async function exportToWord(
   // Sanitizar payload previo a la maquetación
   payload = sanitizeEditorialPayload(payload);
 
-  // --- CAPA DE GOBERNANZA DE CALIDAD DE REPORTES CEIPOL v1.0 ---
-  // Resetear registro de huellas dactilares para esta corrida de exportación
-  ImageFingerprintService.clearRegistry();
+  // Event Log Forense: Registrar consumo de hallazgos por parte del Report Engine (ADR-019.18)
+  const allFindings = [
+    ...(payload.streetViewAnalysis || []),
+    ...(payload.approvedFindings || []),
+    ...(payload.findings || []),
+  ];
+  for (const f of allFindings) {
+    const fId = f.id || f.findingId || f.evidenceId || "FINDING-UNKNOWN";
+    const tId = f.traceabilityId || f.evidenceId || `trace-report-${Date.now()}`;
+    const expId = payload.projectId || payload.expedienteId || projectName || "EXP-2026";
+    
+    logGeointEvent(
+      "REPORT_CONSUMED",
+      expId,
+      tId,
+      user?.name || user?.email || "REPORT_ENGINE_SYSTEM",
+      "exportToWord",
+      "CONSUMED",
+      "REPORT",
+      reportNumber || `report-${Date.now()}`,
+      {
+        reportId: reportNumber || `report-${Date.now()}`,
+        findingId: fId,
+        projectName,
+      }
+    ).catch((err) => console.warn("[exportToWord EventLog] Error registrando REPORT_CONSUMED:", err));
+  }
+
 
   // 1. Evidence Normalizer & Mapper
   if (payload.photoEvidence) {

@@ -1,6 +1,10 @@
 import type { StreetViewFinding } from "@/components/streetview/StreetViewFindingsPanel";
 import type { TemporalComparisonResult } from "./temporalComparisonService";
 import type { StreetViewPanoramaResult } from "./streetViewProviderService";
+import {
+  GeointGovernanceStatus,
+  buildGeointTraceabilityId,
+} from "@/types/geointGovernance";
 
 export interface CreateFindingInput {
   photo: {
@@ -65,7 +69,12 @@ export function buildStreetViewFindingFromAnalysis(
     : new Date().toISOString().split("T")[0];
 
   const photoImage = photo.previewUrl || photo.url || photo.archivo_url || "";
-  const panoramaImage = panoramaResult.dataUrl || panoramaResult.url || photoImage;
+  const panoramaImage = panoramaResult.dataUrl || panoramaResult.url || "";
+  if (!panoramaImage) {
+    throw new Error(
+      `PANORAMA_WITHOUT_IMAGE_REFERENCE: La panorámica id=${panoramaResult.panoramaId || index} no posee recurso visual válido.`
+    );
+  }
 
   const rawCategory = photo.tipo || photo.category || "COMPARACION_TEMPORAL";
   const categoriaValidada: StreetViewFinding["categoria"] =
@@ -96,13 +105,21 @@ export function buildStreetViewFindingFromAnalysis(
   return {
     id: `sv-geoint-${photo.id || index}-${Date.now()}`,
     expedienteId,
+    traceabilityId:
+      photo.traceabilityId ||
+      buildGeointTraceabilityId("trace-geoint", [
+        expedienteId,
+        photo.id,
+        panoramaResult.panoramaId,
+      ]),
+    sourceEvidenceId: photo.sourceEvidenceId || photo.id || `photo-${index}`,
     categoria: categoriaValidada,
     coordenadas: { lat, lng },
     imagen: panoramaImage,
     heading: photo.heading || (index * 45) % 360,
     pitch: 5,
     fov: 90,
-    estado: "PENDIENTE_REVISION",
+    estado: GeointGovernanceStatus.PENDING_REVIEW,
     descripcion,
     observaciones_visual: observacionesVisual,
     fechaCreacion: new Date().toISOString(),

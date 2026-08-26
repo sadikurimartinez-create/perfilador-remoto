@@ -18,6 +18,10 @@ import {
   compareTemporalEvidence,
   updateComparisonValidationStatus,
 } from "../../services/geoint/temporalComparisonService";
+import {
+  GeointGovernanceStatus,
+  buildGeointTraceabilityId,
+} from "../../types/geointGovernance";
 
 export interface GeointTemporalComparativeEngineProps {
   isOpen: boolean;
@@ -59,6 +63,8 @@ export function GeointTemporalComparativeEngine({
     return {
       id: `ev-A-${Date.now()}`,
       expedienteId: projectId,
+      traceabilityId: buildGeointTraceabilityId("trace-eva", [projectId, primaryEvidenceCandidate?.id]),
+      sourceEvidenceId: primaryEvidenceCandidate?.id || "SOURCE_EVIDENCE_A_UNKNOWN",
       source: "FIELD_PHOTO",
       coordinates: (primaryEvidenceCandidate as any)?.coordinates || {
         lat: primaryEvidenceCandidate?.lat as number,
@@ -67,7 +73,7 @@ export function GeointTemporalComparativeEngine({
       captureDate: primaryEvidenceCandidate?.timestamp || "FECHA_NO_DISPONIBLE",
       imageReference: primaryEvidenceCandidate?.url || "",
       metadata: { category: "EVIDENCIA_A", sourceProvider: "CEIPOL_FIELD" },
-      status: "APPROVED_EVIDENCE",
+      status: GeointGovernanceStatus.APPROVED_EVIDENCE,
     };
   });
 
@@ -81,6 +87,8 @@ export function GeointTemporalComparativeEngine({
     return {
       id: `ev-B-${Date.now()}`,
       expedienteId: projectId,
+      traceabilityId: buildGeointTraceabilityId("trace-evb", [projectId, contextualEvidenceCandidate?.id]),
+      sourceEvidenceId: contextualEvidenceCandidate?.id || "SOURCE_EVIDENCE_B_UNKNOWN",
       source: "STREET_VIEW_HISTORICAL",
       coordinates: (contextualEvidenceCandidate as any)?.coordinates || {
         lat: contextualEvidenceCandidate?.lat as number,
@@ -89,7 +97,7 @@ export function GeointTemporalComparativeEngine({
       captureDate: contextualEvidenceCandidate?.panoramaTimestamp || "FECHA_NO_DISPONIBLE",
       imageReference: contextualEvidenceCandidate?.url || "",
       metadata: { heading: 180, sourceProvider: "GOOGLE_STREET_VIEW" },
-      status: "PENDING_REVIEW",
+      status: GeointGovernanceStatus.PENDING_REVIEW,
     };
   });
 

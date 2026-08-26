@@ -1,3 +1,8 @@
+import {
+  GeointGovernanceStatus,
+  GeointGovernanceStatusValue,
+} from "./geointGovernance";
+
 /**
  * ADR-019.13 — Fundación Arquitectónica GEOINT
  * Contratos de datos unificados para evidencias geoespaciales y comparación temporal.
@@ -23,15 +28,15 @@ export interface GeoEvidenceMetadata {
   originalFindingId?: string;
 }
 
-export type GeoEvidenceStatus =
-  | "GENERATED"
-  | "PENDING_REVIEW"
-  | "APPROVED_EVIDENCE"
-  | "REJECTED_FINDING";
+export type GeoEvidenceStatus = GeointGovernanceStatusValue;
+
+export { GeointGovernanceStatus };
 
 export interface GeoEvidence {
   id: string;
   expedienteId: string;
+  traceabilityId: string;
+  sourceEvidenceId: string;
   source: GeoEvidenceSource;
   coordinates: {
     lat: number;

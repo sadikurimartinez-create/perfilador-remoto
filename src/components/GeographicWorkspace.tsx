@@ -11,6 +11,9 @@ import { GeointControlledSweepEngine } from "@/modules/geoint/GeointControlledSw
 import { GeointTemporalComparativeEngine } from "@/modules/geoint/GeointTemporalComparativeEngine";
 import { useProject } from "@/context/ProjectContext";
 import { executeAutomaticGeointSweep } from "@/services/geoint/geointSweepService";
+import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
+import { GeointGovernanceStatus, GeointGovernanceStatusValue } from "@/types/geointGovernance";
+import { buildStreetViewFindingFromTemporalComparison } from "@/services/geoint/temporalComparisonBridge";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
@@ -268,12 +271,12 @@ export function GeographicWorkspace() {
     setSelectedSv(null);
   };
 
-  const handleCaptureStatusChange = (captureId: string, status: "APROBADO" | "IGNORADO") => {
+  const handleCaptureStatusChange = (captureId: string, status: GeointGovernanceStatusValue) => {
     setCaptures((prev) =>
       prev.map((c) => {
         const cId = c.id || c.hash_md5 || c.filename;
         if (cId === captureId) {
-          return { ...c, estado_revision: status };
+          return { ...c, estado_revision: status, status };
         }
         return c;
       })
@@ -423,7 +426,15 @@ export function GeographicWorkspace() {
             lng={primaryEvidenceCandidate?.lng ?? activeGeografiaRectora.center?.lng ?? 0}
             onClose={() => setIsSweepEngineOpen(false)}
             onFindingsGenerated={(newCaptures) => {
-              setCaptures((prev) => [...prev, ...newCaptures]);
+              setCaptures((prev) => [
+                ...prev,
+                ...newCaptures.map((capture) => ({
+                  ...capture,
+                  estado_revision: GeointGovernanceStatus.PENDING_REVIEW,
+                  status: GeointGovernanceStatus.PENDING_REVIEW,
+                  sourceType: "STREETVIEW_AUTOMATICO",
+                })),
+              ]);
             }}
           />
         )}
@@ -438,23 +449,8 @@ export function GeographicWorkspace() {
               setIsTemporalEngineOpen(false);
               setActiveTemporalCandidate(null);
             }}
-            onComparisonGenerated={(cmp) => {
-              const newFinding: StreetViewFinding = {
-                id: cmp.comparisonId,
-                expedienteId: cmp.projectId,
-                categoria: "COMPARACION_TEMPORAL",
-                coordenadas: {
-                  lat: cmp.contextualEvidence?.lat ?? cmp.primaryEvidence?.lat,
-                  lng: cmp.contextualEvidence?.lng ?? cmp.primaryEvidence?.lng,
-                },
-                imagen: cmp.primaryEvidence.url,
-                descripcion: cmp.aiAnalysis.calibratedObservation,
-                observaciones_visual: cmp.aiAnalysis.calibratedObservation,
-                estado: "PENDIENTE_REVISION",
-                fechaCreacion: cmp.createdAt,
-                origenRevision: "MANUAL",
-              };
-              handleFindingCreated(newFinding);
+            onComparisonGenerated={(cmp: UniversalEvidenceComparison) => {
+              handleFindingCreated(buildStreetViewFindingFromTemporalComparison(cmp));
             }}
           />
         )}

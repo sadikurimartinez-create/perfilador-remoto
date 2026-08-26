@@ -46,6 +46,9 @@ import { runMigrationTests } from "./reportEngineIICMigration.test";
 import { runAuthTests } from "./authHardening.test";
 import { runGovernanceTests } from "./testADR01913Governance.test";
 import { runGeointegrityTests } from "./testADR01915Geointegrity.test";
+import { runADR01917ConnectivityTests } from "./testADR01917Connectivity.test";
+import { runADR01918EventLedgerTests } from "./testADR01918EventLedger.test";
+import { runADR01919FingerprintTests } from "./testADR01919Fingerprint.test";
 
 async function runAllTests() {
   console.log("======================================================================");
@@ -65,6 +68,15 @@ async function runAllTests() {
     
     // 4. Ejecutar pruebas de Integridad Geoespacial GEOINT ADR-019.15
     await runGeointegrityTests();
+
+    // 5. Ejecutar pruebas de conectividad de contratos ADR-019.17
+    await runADR01917ConnectivityTests();
+
+    // 6. Ejecutar pruebas de Event Ledger forense operativo ADR-019.18
+    await runADR01918EventLedgerTests();
+
+    // 7. Ejecutar pruebas de Event Fingerprint & Idempotency Core ADR-019.19 Fase 1
+    await runADR01919FingerprintTests();
     
     const durationSec = ((Date.now() - started) / 1000).toFixed(2);
     console.log("\n======================================================================");

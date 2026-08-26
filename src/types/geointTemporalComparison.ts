@@ -4,12 +4,13 @@
  */
 
 import { GeoEvidence, GeoEvidenceStatus } from "./geointEvidence";
+import { GeointGovernanceStatusValue } from "./geointGovernance";
 
 export type EvidenceClass = "EVIDENCIA_PRIMARIA_CAMPO" | "EVIDENCIA_CONTEXTUAL_TEMPORAL";
 
 export type ComparisonType = "TEMPORAL_VISUAL_DELTA" | "VARIABILITY_STRUCTURAL" | "ENVIRONMENTAL_CHANGE";
 
-export type AnalystValidationStatus = "PENDING_REVIEW" | "APPROVED_EVIDENCE" | "REJECTED_FINDING";
+export type AnalystValidationStatus = GeointGovernanceStatusValue;
 
 /**
  * Registro de Persistencia de Comparación Temporal ADR-019.8 / ADR-019.13-F4
@@ -17,9 +18,13 @@ export type AnalystValidationStatus = "PENDING_REVIEW" | "APPROVED_EVIDENCE" | "
 export interface TemporalComparisonRecord {
   id: string;
   expedienteId: string;
+  traceabilityId: string;
+  sourceEvidenceId: string;
 
   evidenceA: {
     id: string;
+    traceabilityId: string;
+    sourceEvidenceId: string;
     source: string;
     coordinates: {
       lat: number;
@@ -31,6 +36,8 @@ export interface TemporalComparisonRecord {
 
   evidenceB: {
     id: string;
+    traceabilityId: string;
+    sourceEvidenceId: string;
     source: string;
     coordinates: {
       lat: number;
@@ -59,6 +66,7 @@ export interface TemporalComparisonRecord {
   };
 
   createdAt: string;
+  updatedAt?: string;
 }
 
 /**
@@ -91,6 +99,8 @@ export interface TemporalComparisonAiAnalysis {
 export interface UniversalEvidenceComparison {
   comparisonId: string;
   expedienteId: string;
+  traceabilityId: string;
+  sourceEvidenceId: string;
   evidenceA: GeoEvidence;
   evidenceB: GeoEvidence;
   comparisonType: ComparisonType;

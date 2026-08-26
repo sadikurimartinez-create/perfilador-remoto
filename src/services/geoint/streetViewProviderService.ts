@@ -52,9 +52,14 @@ export async function fetchStreetViewPanorama(
             error: "NO_VALID_OUTDOOR_PANORAMA: No se encontró panorámica exterior válida de Google Street View.",
           };
         }
+        const mockImageReference =
+          mockMeta.dataUrl ||
+          mockMeta.url ||
+          buildStreetViewUrl(lat, lng, options) ||
+          `mock-streetview://${mockMeta.panoramaId || mockMeta.pano_id || "panorama"}`;
         return {
-          url: mockMeta.url || buildStreetViewUrl(lat, lng, options),
-          dataUrl: mockMeta.dataUrl || mockMeta.url || buildStreetViewUrl(lat, lng, options),
+          url: mockImageReference,
+          dataUrl: mockImageReference,
           isAvailable: true,
           panoramaLat: mockMeta.panoramaLat ?? lat,
           panoramaLng: mockMeta.panoramaLng ?? lng,
@@ -164,4 +169,3 @@ export async function fetchStreetViewPanorama(
     };
   }
 }
-

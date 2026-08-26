@@ -6,6 +6,11 @@ import {
   AnalystValidationStatus,
 } from "../../types/geointTemporalComparison";
 import { isSameLocation } from "../../utils/geoResolver";
+import {
+  GeointGovernanceStatus,
+  buildGeointTraceabilityId,
+  normalizeGeointGovernanceStatus,
+} from "../../types/geointGovernance";
 
 export interface TemporalComparisonParams {
   primaryUrl: string;
@@ -53,8 +58,12 @@ export function buildTemporalComparisonRecord(
   return {
     id: comparison.comparisonId,
     expedienteId: comparison.expedienteId,
+    traceabilityId: comparison.traceabilityId,
+    sourceEvidenceId: comparison.sourceEvidenceId,
     evidenceA: {
       id: comparison.evidenceA.id,
+      traceabilityId: comparison.evidenceA.traceabilityId,
+      sourceEvidenceId: comparison.evidenceA.sourceEvidenceId,
       source: comparison.evidenceA.source,
       coordinates: comparison.evidenceA.coordinates,
       captureDate: comparison.evidenceA.captureDate,
@@ -62,6 +71,8 @@ export function buildTemporalComparisonRecord(
     },
     evidenceB: {
       id: comparison.evidenceB.id,
+      traceabilityId: comparison.evidenceB.traceabilityId,
+      sourceEvidenceId: comparison.evidenceB.sourceEvidenceId,
       source: comparison.evidenceB.source,
       coordinates: comparison.evidenceB.coordinates,
       captureDate: comparison.evidenceB.captureDate,
@@ -77,7 +88,7 @@ export function buildTemporalComparisonRecord(
       status: isDateValid ? "VALID" : "FECHA_NO_DISPONIBLE",
     },
     analystValidation: {
-      status: comparison.analystValidationStatus || "PENDING_REVIEW",
+      status: normalizeGeointGovernanceStatus(comparison.analystValidationStatus),
       reviewerId: comparison.createdBy,
       reviewedAt: comparison.validatedAt || new Date().toISOString(),
       comments: comparison.validationComment || "",
@@ -97,11 +108,18 @@ export async function saveTemporalComparisonRecord(
 
   if (typeof window !== "undefined") {
     try {
-      await fetch(`/api/expedientes/${record.expedienteId}/geoint/temporal-comparisons`, {
+      const res = await fetch(`/api/expedientes/${record.expedienteId}/geoint/temporal-comparisons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(record),
       }).catch((err) => console.warn("[saveTemporalComparisonRecord] Muted POST error:", err));
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data?.comparison) {
+          inMemoryComparisonStore.set(data.comparison.id, data.comparison);
+          return data.comparison;
+        }
+      }
     } catch (err) {
       console.warn("[saveTemporalComparisonRecord] Error al enviar a backend:", err);
     }
@@ -126,7 +144,7 @@ export async function updateComparisonValidationStatus(
 
   if (existing) {
     existing.analystValidation = {
-      status: newStatus,
+      status: normalizeGeointGovernanceStatus(newStatus),
       reviewerId,
       reviewedAt: nowStr,
       comments: comments.trim(),
@@ -137,20 +155,26 @@ export async function updateComparisonValidationStatus(
     existing = {
       id: comparisonId,
       expedienteId,
+      traceabilityId: buildGeointTraceabilityId("trace-cmp-synthetic", [expedienteId, comparisonId]),
+      sourceEvidenceId: "SOURCE_EVIDENCE_UNKNOWN",
       evidenceA: {
         id: "ev-a-unknown",
+        traceabilityId: buildGeointTraceabilityId("trace-eva-synthetic", [expedienteId, comparisonId]),
+        sourceEvidenceId: "SOURCE_EVIDENCE_A_UNKNOWN",
         source: "FIELD_PHOTO",
         coordinates: { lat: 0, lng: 0 },
       },
       evidenceB: {
         id: "ev-b-unknown",
+        traceabilityId: buildGeointTraceabilityId("trace-evb-synthetic", [expedienteId, comparisonId]),
+        sourceEvidenceId: "SOURCE_EVIDENCE_B_UNKNOWN",
         source: "STREET_VIEW_HISTORICAL",
         coordinates: { lat: 0, lng: 0 },
       },
       spatialValidation: { compatible: true, distanceMeters: 0 },
       temporalValidation: { valid: true, status: "VALID" },
       analystValidation: {
-        status: newStatus,
+        status: normalizeGeointGovernanceStatus(newStatus),
         reviewerId,
         reviewedAt: nowStr,
         comments: comments.trim(),
@@ -162,16 +186,23 @@ export async function updateComparisonValidationStatus(
 
   if (typeof window !== "undefined") {
     try {
-      await fetch(`/api/expedientes/${expedienteId}/geoint/temporal-comparisons/${comparisonId}`, {
+      const res = await fetch(`/api/expedientes/${expedienteId}/geoint/temporal-comparisons/${comparisonId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: newStatus,
+          status: normalizeGeointGovernanceStatus(newStatus),
           comments: comments.trim(),
           reviewerId,
           reviewedAt: nowStr,
         }),
       }).catch((err) => console.warn("[updateComparisonValidationStatus] Muted PATCH error:", err));
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data?.comparison) {
+          inMemoryComparisonStore.set(data.comparison.id, data.comparison);
+          return data.comparison;
+        }
+      }
     } catch (err) {
       console.warn("[updateComparisonValidationStatus] Error al actualizar backend:", err);
     }
@@ -191,7 +222,7 @@ export async function getApprovedTemporalComparisons(
   for (const record of inMemoryComparisonStore.values()) {
     if (
       record.expedienteId === expedienteId &&
-      record.analystValidation.status === "APPROVED_EVIDENCE"
+      normalizeGeointGovernanceStatus(record.analystValidation.status) === GeointGovernanceStatus.APPROVED_EVIDENCE
     ) {
       approvedList.push(record);
     }
@@ -199,11 +230,14 @@ export async function getApprovedTemporalComparisons(
 
   if (typeof window !== "undefined") {
     try {
-      const res = await fetch(`/api/expedientes/${expedienteId}/geoint/temporal-comparisons?status=APPROVED_EVIDENCE`);
+      const res = await fetch(`/api/expedientes/${expedienteId}/geoint/temporal-comparisons?status=${GeointGovernanceStatus.APPROVED_EVIDENCE}`);
       if (res.ok) {
         const remoteData = await res.json();
-        if (Array.isArray(remoteData)) {
-          return remoteData.filter((r) => r.analystValidation?.status === "APPROVED_EVIDENCE");
+        const remoteList = Array.isArray(remoteData) ? remoteData : remoteData?.comparisons;
+        if (Array.isArray(remoteList)) {
+          return remoteList.filter(
+            (r) => normalizeGeointGovernanceStatus(r.analystValidation?.status) === GeointGovernanceStatus.APPROVED_EVIDENCE
+          );
         }
       }
     } catch (err) {
@@ -268,6 +302,12 @@ export async function compareTemporalEvidence(
 
   const comparisonId = `cmp-univ-${Date.now()}`;
   const expedienteId = evidenceA.expedienteId || evidenceB.expedienteId || "EXP-2026";
+  const traceabilityId = buildGeointTraceabilityId("trace-cmp", [
+    expedienteId,
+    evidenceA.traceabilityId,
+    evidenceB.traceabilityId,
+  ]);
+  const sourceEvidenceId = evidenceA.sourceEvidenceId || evidenceA.id;
 
   // 3. CONSULTA AL MOTOR DE VISIÓN / ANALISIS COMPARATIVO
   let observedChanges: string[] = [];
@@ -323,6 +363,8 @@ export async function compareTemporalEvidence(
   const comparison: UniversalEvidenceComparison = {
     comparisonId,
     expedienteId,
+    traceabilityId,
+    sourceEvidenceId,
     evidenceA,
     evidenceB,
     comparisonType,
@@ -349,7 +391,7 @@ export async function compareTemporalEvidence(
       confidenceScore: 0.92,
       calibratedObservation,
     },
-    analystValidationStatus: "PENDING_REVIEW",
+    analystValidationStatus: GeointGovernanceStatus.PENDING_REVIEW,
   };
 
   // Crear y guardar el registro inicial de persistencia ADR-019.8 en estado PENDING_REVIEW

@@ -6,8 +6,11 @@ import {
   GeoIntSweepCategory,
   GeoIntSweepFindingPayload,
   GEOINT_SWEEP_CATEGORIES,
+  GeointGovernanceStatus,
 } from "@/types/geointSweep";
 import { calculateHaversineDistanceMeters } from "@/utils/geoResolver";
+import { logGeointEvent } from "@/services/geoint/logGeointEvent";
+import { buildGeointTraceabilityId } from "@/types/geointGovernance";
 
 interface GeointControlledSweepEngineProps {
   isOpen: boolean;
@@ -64,6 +67,20 @@ export function GeointControlledSweepEngine({
     setIsSweeping(true);
     setSweepMsg("Inicializando motor GEOINT Controlled Sweep...");
     const generatedFindings: GeoIntSweepFindingPayload[] = [];
+
+
+    // Event Log Forense: Registrar inicio de barrido (ADR-019.18)
+    logGeointEvent(
+      "GEOINT_SWEEP_STARTED",
+      projectId,
+      `trace-sweep-start-${Date.now()}`,
+      analystName,
+      "GeointControlledSweepEngine",
+      "INITIATED",
+      "SWEEP_SESSION",
+      `sweep-${Date.now()}`,
+      { lat, lng, radiusMeters, sweepType, selectedCategories }
+    );
 
     try {
       let globalCount = 0;
@@ -141,12 +158,19 @@ export function GeointControlledSweepEngine({
           }
 
           const findingId = `geoint-finding-${Date.now()}-${globalCount + 1}`;
+          const traceabilityId = buildGeointTraceabilityId("trace-adr018", [
+            projectId,
+            findingId,
+            panoramaKey,
+          ]);
 
           // Estructura de Datos Obligatoria ADR-018 v1.0 / ADR-019.15
           const payload: GeoIntSweepFindingPayload = {
             source: "GEOINT_CONTROLLED_SWEEP",
             category: cat,
-            status: "PENDING_REVIEW",
+            status: GeointGovernanceStatus.PENDING_REVIEW,
+            traceabilityId,
+            sourceEvidenceId: findingId,
             createdBy: analystName,
             originalFindingId: findingId,
             geometry: {
