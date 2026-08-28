@@ -2,11 +2,64 @@
 
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, EpistemicValidationStatus, IntelligenceSemanticRole } from "@/types/epistemicIntegrity";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
+
+function osintEpistemicIntegrity(params: {
+  sourceId: string;
+  providerId: string;
+  sourceType: string;
+  acquisitionMode: AcquisitionMode;
+  acquisitionStatus: AcquisitionStatus;
+  semanticRole: IntelligenceSemanticRole;
+  validationStatus?: EpistemicValidationStatus;
+  isSimulated?: boolean;
+  isConnectivityOnly?: boolean;
+  observedAt?: string | null;
+  generatedAt?: string | null;
+  sourceReference: string;
+  sourceUrl?: string | null;
+  query?: string | null;
+  geolocationSource?: string | null;
+}): EpistemicIntegrityMetadata {
+  return {
+    sourceId: params.sourceId,
+    providerId: params.providerId,
+    sourceType: params.sourceType,
+    acquisitionMode: params.acquisitionMode,
+    acquisitionStatus: params.acquisitionStatus,
+    semanticRole: params.semanticRole,
+    validationStatus: params.validationStatus || "UNREVIEWED",
+    isSimulated: Boolean(params.isSimulated),
+    isDerived: false,
+    isConnectivityOnly: Boolean(params.isConnectivityOnly),
+    observedAt: params.observedAt ?? null,
+    generatedAt: params.generatedAt ?? null,
+    sourceReference: params.sourceReference,
+    sourceUrl: params.sourceUrl ?? null,
+    query: params.query ?? null,
+    geolocationSource: params.geolocationSource ?? null,
+    traceabilityId: null,
+    lineage: [],
+  };
+}
 
 // Ping silencioso para la telemetría (Centro de Conexiones)
 export async function pingOsint() {
-  return { status: "ok" };
+  return {
+    status: "ok",
+    epistemicIntegrity: osintEpistemicIntegrity({
+      sourceId: "osint-connectivity-ping",
+      providerId: "osintActions.pingOsint",
+      sourceType: "CONNECTIVITY_HEALTHCHECK",
+      acquisitionMode: "CONNECTIVITY_ONLY",
+      acquisitionStatus: "ACQUIRED",
+      semanticRole: "DIAGNOSTIC",
+      isConnectivityOnly: true,
+      generatedAt: new Date().toISOString(),
+      sourceReference: "src/lib/osintActions.ts:pingOsint",
+    }),
+  };
 }
 
 // Obtener la URL de Ngrok rápidamente para conexión directa desde el cliente
@@ -32,9 +85,38 @@ export async function getScinceData(lat: number, lng: number) {
       viviendasTotales: viviendas.toString(),
       viviendasDeshabitadas: deshabitadas.toString(),
       gradoMarginacion: marginacion,
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "inegi-scince-simulator",
+        providerId: "osintActions.getScinceData",
+        sourceType: "LOCAL_SCINCE_DEMOGRAPHIC_SIMULATOR",
+        acquisitionMode: "SIMULATED",
+        acquisitionStatus: "ACQUIRED",
+        semanticRole: "DIAGNOSTIC",
+        isSimulated: true,
+        generatedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getScinceData",
+        query: `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
     };
   } catch (error: any) {
-    return { exito: false, error: error.message || "Error al calcular SCINCE" };
+    return {
+      exito: false,
+      error: error.message || "Error al calcular SCINCE",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "inegi-scince-simulator",
+        providerId: "osintActions.getScinceData",
+        sourceType: "LOCAL_SCINCE_DEMOGRAPHIC_SIMULATOR",
+        acquisitionMode: "SIMULATED",
+        acquisitionStatus: "FAILED",
+        semanticRole: "DIAGNOSTIC",
+        isSimulated: true,
+        generatedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getScinceData",
+        query: `${lat},${lng}`,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
+    };
   }
 }
 
@@ -47,12 +129,65 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
     if (!res.ok) throw new Error(`Error de la API de INEGI: ${res.status}`);
     
     const data = await res.json();
-    if (!Array.isArray(data)) return { exito: true, total: 0, resumen: "No se encontraron negocios." };
+    if (!Array.isArray(data)) {
+      return {
+        exito: true,
+        total: 0,
+        resumen: "No se encontraron negocios.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          sourceId: "inegi-denue-api",
+          providerId: "osintActions.getDenueData",
+          sourceType: "INEGI_DENUE_PUBLIC_API",
+          acquisitionMode: "OBSERVED",
+          acquisitionStatus: "NO_DATA",
+          semanticRole: "SOURCE_FACT",
+          observedAt: new Date().toISOString(),
+          sourceReference: "src/lib/osintActions.ts:getDenueData",
+          sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+          query: `${lat},${lng},${radio}`,
+          geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+        }),
+      };
+    }
     const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
-    return { exito: true, total: data.length, resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno." };
+    return {
+      exito: true,
+      total: data.length,
+      resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno.",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "inegi-denue-api",
+        providerId: "osintActions.getDenueData",
+        sourceType: "INEGI_DENUE_PUBLIC_API",
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: data.length > 0 ? "ACQUIRED" : "NO_DATA",
+        semanticRole: "SOURCE_FACT",
+        observedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getDenueData",
+        sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+        query: `${lat},${lng},${radio}`,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
+    };
   } catch (error: any) {
-    return { exito: false, error: error.message || "Error interno del servidor al consultar DENUE." };
+    return {
+      exito: false,
+      error: error.message || "Error interno del servidor al consultar DENUE.",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "inegi-denue-api",
+        providerId: "osintActions.getDenueData",
+        sourceType: "INEGI_DENUE_PUBLIC_API",
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: "FAILED",
+        semanticRole: "SOURCE_FACT",
+        observedAt: null,
+        generatedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getDenueData",
+        sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+        query: `${lat},${lng},${radio}`,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
+    };
   }
 }
 
@@ -105,8 +240,30 @@ export async function getDatosGobMxData(
 }
 
 export async function getTelegramOsintData(queryTelegram: string) {
+  const baseMetadata = {
+    sourceId: "telegram-gemini-osint-synthesis",
+    providerId: "osintActions.getTelegramOsintData",
+    sourceType: "LLM_SYNTHESIS_NOT_TELEGRAM_OBSERVATION",
+    acquisitionMode: "AI_GENERATED" as const,
+    semanticRole: "SYNTHESIS" as const,
+    sourceReference: "src/lib/osintActions.ts:getTelegramOsintData",
+    query: queryTelegram || null,
+  };
+
   try {
     if (!queryTelegram) throw new Error("Falta la consulta de Telegram OSINT.");
+    if (!GCP_PROJECT_ID || !GCP_LOCATION || !GEMINI_MODEL) {
+      return {
+        success: false,
+        error: "Proveedor Gemini no configurado para barrido OSINT.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          ...baseMetadata,
+          acquisitionStatus: "NOT_CONFIGURED",
+          validationStatus: "UNREVIEWED",
+          generatedAt: new Date().toISOString(),
+        }),
+      };
+    }
 
     const authOptions = GCP_PRIVATE_KEY
       ? {
@@ -129,11 +286,42 @@ Genera un resumen analítico táctico estructurado (OSINT Summary) que describa 
 Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. NO menciones que eres una IA. Escribe el reporte directamente como un hallazgo de inteligencia táctica listo para inyectarse en un dictamen.`;
 
     const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } });
-    const osintSummary = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No se detectaron patrones anómalos en el análisis OSINT de estos conceptos.";
-    return { success: true, osintSummary: osintSummary.trim() };
+    const osintSummary = result.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!osintSummary) {
+      return {
+        success: false,
+        error: "El proveedor Gemini no devolvió contenido OSINT.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          ...baseMetadata,
+          acquisitionStatus: "NO_DATA",
+          validationStatus: "UNREVIEWED",
+          generatedAt: new Date().toISOString(),
+        }),
+      };
+    }
+
+    return {
+      success: true,
+      osintSummary,
+      epistemicIntegrity: osintEpistemicIntegrity({
+        ...baseMetadata,
+        acquisitionStatus: "ACQUIRED",
+        validationStatus: "PENDING_REVIEW",
+        generatedAt: new Date().toISOString(),
+      }),
+    };
   } catch (error: any) {
     console.error("[osintActions.getTelegramOsintData] Error:", error);
-    return { success: false, error: "Error interno del servidor al ejecutar el barrido OSINT." };
+    return {
+      success: false,
+      error: "Error interno del servidor al ejecutar el barrido OSINT.",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        ...baseMetadata,
+        acquisitionStatus: "FAILED",
+        validationStatus: "UNREVIEWED",
+        generatedAt: new Date().toISOString(),
+      }),
+    };
   }
 }
 

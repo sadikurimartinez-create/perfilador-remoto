@@ -1,9 +1,32 @@
 "use server";
 
+import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
+
 export const runOSINTScan = async (project: any) => {
   const location = project?.locationName || 'Aguascalientes';
   const lat = project?.latitude || 21.8818;
   const lng = project?.longitude || -102.2915;
+  const generatedAt = new Date().toISOString();
+  const syntheticEpistemicIntegrity: EpistemicIntegrityMetadata = {
+    sourceId: "osint-engine-mock-fixture",
+    providerId: "osintEngine",
+    sourceType: "OSINT_SYNTHETIC_FIXTURE",
+    acquisitionMode: "MOCK",
+    acquisitionStatus: "ACQUIRED",
+    semanticRole: "DIAGNOSTIC",
+    validationStatus: "UNREVIEWED",
+    isSimulated: true,
+    isDerived: false,
+    isConnectivityOnly: false,
+    observedAt: null,
+    generatedAt,
+    sourceReference: "src/utils/osintEngine.ts",
+    sourceUrl: null,
+    query: location,
+    geolocationSource: "SYNTHETIC_POINT",
+    traceabilityId: project?.traceabilityId || null,
+    lineage: [],
+  };
 
   console.log(`[Auto-OSINT] 🚀 Instant OSINT scan for location: ${location} (coords: ${lat}, ${lng})`);
 
@@ -64,6 +87,7 @@ export const runOSINTScan = async (project: any) => {
   });
 
   return {
+    epistemicIntegrity: syntheticEpistemicIntegrity,
     serp: mockSerp,
     news: mockNews,
     gnews: [],
