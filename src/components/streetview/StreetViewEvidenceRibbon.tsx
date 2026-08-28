@@ -170,7 +170,9 @@ export function StreetViewEvidenceRibbon({
 
         <div className="flex items-center space-x-2 text-[10px] font-mono text-slate-400">
           <span className="rounded bg-slate-900 border border-slate-800 px-2 py-0.5 text-slate-300">
-            📍 Ref: {activeReference.coordinates.lat.toFixed(5)}, {activeReference.coordinates.lng.toFixed(5)}
+            Ref: {activeReference.coordinates.lat != null && activeReference.coordinates.lng != null
+              ? `${activeReference.coordinates.lat.toFixed(5)}, ${activeReference.coordinates.lng.toFixed(5)}`
+              : "Sin georreferencia"}
           </span>
           <span className="text-emerald-400 font-bold">ADR-019.13-F2</span>
         </div>
@@ -291,7 +293,9 @@ export function StreetViewEvidenceRibbon({
                 </div>
 
                 <div className="text-[9px] text-slate-500 font-mono truncate">
-                  LAT: {item.coordinates.lat.toFixed(5)} / LNG: {item.coordinates.lng.toFixed(5)}
+                  {item.coordinates.lat != null && item.coordinates.lng != null
+                    ? `LAT: ${item.coordinates.lat.toFixed(5)} / LNG: ${item.coordinates.lng.toFixed(5)}`
+                    : "SIN GEORREFERENCIA"}
                 </div>
               </div>
             </div>

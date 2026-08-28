@@ -56,9 +56,10 @@ export interface StreetViewFinding {
   captureId?: string;
   categoria: "pendiente_clasificacion" | "COMPARACION_TEMPORAL" | "ACECHO_ESCONDITE" | "GRAFFITI_PANDILLA" | "DENUE_POI" | "OSINT_GENERAL" | "acecho" | "graffiti" | "denue" | "sin_hallazgo" | "RUTA_ACCESO" | "PUNTO_ACECHO";
   coordenadas: {
-    lat: number;
-    lng: number;
+    lat: number | null;
+    lng: number | null;
   };
+  geolocationIntegrity?: any;
   imagen?: string;
   heading?: number;
   pitch?: number;

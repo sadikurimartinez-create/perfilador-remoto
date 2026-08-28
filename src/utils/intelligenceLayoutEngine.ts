@@ -508,6 +508,23 @@ export function extractSection(content: string, secNum: number): string {
   return result.trim();
 }
 
+export function resolveProjectGeolocationForReport(project: any, sourceReference = "intelligenceLayoutEngine.project") {
+  const geoValidation = validateGeoIntegrity({
+    latitude: project?.lat ?? project?.latitude ?? null,
+    longitude: project?.lng ?? project?.longitude ?? null,
+    source: project?.geolocationSource || "PROJECT_GEOMETRY",
+    precision: project?.geolocationPrecision ?? null,
+    observedAt: project?.geolocationObservedAt ?? null,
+    sourceReference,
+  });
+
+  return {
+    latitude: geoValidation.reportableAsObservedGeoint ? geoValidation.latitude : null,
+    longitude: geoValidation.reportableAsObservedGeoint ? geoValidation.longitude : null,
+    geoValidation,
+  };
+}
+
 /**
  * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v9.0)
  */
@@ -568,11 +585,14 @@ export const buildIntelligenceEditorialPayload = async (
   const areaGeografica = project?.areaGeografica || "Aguascalientes, Ags, México";
 
   // Bloque I.1: Contexto territorial
-  const lat = project?.lat ?? project?.latitude ?? 0;
-  const lng = project?.lng ?? project?.longitude ?? 0;
+  const projectGeolocation = resolveProjectGeolocationForReport(project);
+  const lat = projectGeolocation.latitude;
+  const lng = projectGeolocation.longitude;
+  const engineLat = lat ?? Number.NaN;
+  const engineLng = lng ?? Number.NaN;
   const radius = project?.analysisRadius ?? project?.radius ?? 250;
   const incidents = project?.historicalIncidents ?? project?.incidents ?? project?.incidenciaCompleta ?? project?.incidenciaLocal ?? project?.iaAnalysis?.historicalCrimes ?? [];
-  const stats = StatisticalIntelligenceEngineV2.analyze(incidents, lat, lng, radius);
+  const stats = StatisticalIntelligenceEngineV2.analyze(incidents, engineLat, engineLng, radius);
   const semResult = StatisticalEvidenceMatrixManager.process(projectId, incidents, stats);
   const sem = semResult.sem;
 
@@ -714,8 +734,8 @@ export const buildIntelligenceEditorialPayload = async (
   // Instanciar el motor de renderizado vectorial táctico para generar los mapas y gráficas HD directamente
   const vectorInput = {
     projectName: projectName || "Expediente",
-    latitude: lat,
-    longitude: lng,
+    latitude: engineLat,
+    longitude: engineLng,
     geometryType: project?.geometryType || "individual",
     incidents: incidents,
     sweeps: sweeps || [],
@@ -835,8 +855,8 @@ export const buildIntelligenceEditorialPayload = async (
   const visualMatrix = VisualEvidenceEngine.process(
     projectId || "PR-001",
     governedAlbum,
-    lat,
-    lng,
+    engineLat,
+    engineLng,
     radius,
     sem?.spatialEvidence?.hotspots || []
   );
@@ -908,8 +928,8 @@ export const buildIntelligenceEditorialPayload = async (
       criminologicalInterpretation: p.finding,
       relation: relationStr,
       riskLevel: "Alto",
-      lat: 0,
-      lng: 0,
+      lat: null,
+      lng: null,
       fecha: new Date().toLocaleDateString("es-MX")
     };
   });

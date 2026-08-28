@@ -9,6 +9,7 @@ import {
 } from "@/utils/geoActorValidation";
 import { buildOsintFindingsFromSweeps } from "@/utils/osintChapterBuilder";
 import { ReportIntelligenceNormalizer } from "@/utils/reportIntelligenceNormalizer";
+import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import {
   Document,
   ImageRun,
@@ -1978,12 +1979,20 @@ export async function exportToWord(
   elements.push(createTitle("CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS"));
 
   // Estructura de evaluación obligatoria del Capítulo 8 - Matriz inteligente de actores
-  const projectLat = payload.latitude || (payload.maps && payload.maps[0]?.lat) || 21.8853;
-  const projectLng = payload.longitude || (payload.maps && payload.maps[0]?.lng) || -102.2916;
+  const projectGeoValidation = validateGeoIntegrity({
+    latitude: payload.latitude ?? payload.maps?.[0]?.lat ?? null,
+    longitude: payload.longitude ?? payload.maps?.[0]?.lng ?? null,
+    source: payload.geolocationSource || "PROJECT_GEOMETRY",
+    precision: payload.geolocationPrecision ?? null,
+    observedAt: payload.geolocationObservedAt ?? null,
+    sourceReference: "exportToWord.payload",
+  });
+  const projectLat = projectGeoValidation.reportableAsObservedGeoint ? projectGeoValidation.latitude : null;
+  const projectLng = projectGeoValidation.reportableAsObservedGeoint ? projectGeoValidation.longitude : null;
   const maxRadiusMeters = payload.analysisRadius ? Number(payload.analysisRadius) : 500;
   const activeActors: any[] = [];
 
-  if (dossierPandillas && dossierPandillas.dossiers) {
+  if (projectLat !== null && projectLng !== null && dossierPandillas && dossierPandillas.dossiers) {
     for (const d of dossierPandillas.dossiers) {
       for (const member of d.integrantes) {
         const validation = validateTerritorialActor(

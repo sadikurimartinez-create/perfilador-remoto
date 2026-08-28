@@ -89,10 +89,10 @@ export function getEvidenceDistanceDetail(
   }
 
   const distanceMeters = calculateHaversineDistanceMeters(
-    evidenceA.coordinates.lat,
-    evidenceA.coordinates.lng,
-    evidenceB.coordinates.lat,
-    evidenceB.coordinates.lng
+    Number(evidenceA.coordinates.lat),
+    Number(evidenceA.coordinates.lng),
+    Number(evidenceB.coordinates.lat),
+    Number(evidenceB.coordinates.lng)
   );
 
   if (!isFinite(distanceMeters)) {

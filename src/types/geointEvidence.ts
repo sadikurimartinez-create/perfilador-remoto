@@ -39,8 +39,8 @@ export interface GeoEvidence {
   sourceEvidenceId: string;
   source: GeoEvidenceSource;
   coordinates: {
-    lat: number;
-    lng: number;
+    lat: number | null;
+    lng: number | null;
   };
   captureDate?: string;
   imageReference: string;

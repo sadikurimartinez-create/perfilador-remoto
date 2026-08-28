@@ -286,7 +286,9 @@ export function GeointTemporalComparativeEngine({
                 <strong>VALIDATED GEO MATCH:</strong> Distancia comprobada: {spatialCheck.distanceMeters.toFixed(2)}m (≤ {toleranceMeters}m).
               </span>
               <span className="text-slate-400 text-[10px]">
-                LAT: {evA.coordinates.lat.toFixed(5)} / LNG: {evA.coordinates.lng.toFixed(5)}
+                {evA.coordinates.lat != null && evA.coordinates.lng != null
+                  ? `LAT: ${evA.coordinates.lat.toFixed(5)} / LNG: ${evA.coordinates.lng.toFixed(5)}`
+                  : "SIN GEORREFERENCIA"}
               </span>
             </div>
           )}
@@ -329,7 +331,7 @@ export function GeointTemporalComparativeEngine({
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
                   GPS: {isValidCoordinate(evA.coordinates?.lat, evA.coordinates?.lng)
-                    ? `${evA.coordinates.lat.toFixed(6)}, ${evA.coordinates.lng.toFixed(6)}`
+                    ? `${Number(evA.coordinates.lat).toFixed(6)}, ${Number(evA.coordinates.lng).toFixed(6)}`
                     : "SIN COORDENADAS GPS VÁLIDAS"}
                 </div>
               </div>
@@ -372,7 +374,7 @@ export function GeointTemporalComparativeEngine({
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono">
                   GPS: {isValidCoordinate(evB.coordinates?.lat, evB.coordinates?.lng)
-                    ? `${evB.coordinates.lat.toFixed(6)}, ${evB.coordinates.lng.toFixed(6)}`
+                    ? `${Number(evB.coordinates.lat).toFixed(6)}, ${Number(evB.coordinates.lng).toFixed(6)}`
                     : "SIN COORDENADAS GPS VÁLIDAS"}
                 </div>
               </div>

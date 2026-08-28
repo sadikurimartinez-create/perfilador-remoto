@@ -27,8 +27,8 @@ export interface TemporalComparisonRecord {
     sourceEvidenceId: string;
     source: string;
     coordinates: {
-      lat: number;
-      lng: number;
+      lat: number | null;
+      lng: number | null;
     };
     captureDate?: string;
     imageReference?: string;
@@ -40,8 +40,8 @@ export interface TemporalComparisonRecord {
     sourceEvidenceId: string;
     source: string;
     coordinates: {
-      lat: number;
-      lng: number;
+      lat: number | null;
+      lng: number | null;
     };
     captureDate?: string;
     imageReference?: string;

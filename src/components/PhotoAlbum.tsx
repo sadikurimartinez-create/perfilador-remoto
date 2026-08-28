@@ -23,6 +23,7 @@ import { StreetViewConfirmationModal } from "@/modules/streetView/StreetViewConf
 import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDisclaimerModal";
 import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
+import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 
 import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
@@ -43,6 +44,15 @@ const NetworkDashboard = dynamic(
     loading: () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" loading={true} />,
   }
 );
+
+function averagePhotoCoordinate(album: any[], axis: "lat" | "lng"): number | null {
+  const values = (album || [])
+    .map((p) => buildPhotoEvidenceGeoFields(p)[axis])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
@@ -1371,15 +1381,15 @@ const hasMinimumPhotos =
         })
       );
 
-      // Usar el centroide geográfico real de las evidencias seleccionadas, priorizando las coordenadas del proyecto o el polígono de análisis
+      // Usar sólo georreferencias reales disponibles; no fabricar centroide por default.
       const projLat = Number(project?.latitude);
       const projLng = Number(project?.longitude);
       const polyLat = (analysisPolygon && analysisPolygon.length > 0) ? (analysisPolygon.reduce((acc, p) => acc + p.lat, 0) / analysisPolygon.length) : NaN;
       const polyLng = (analysisPolygon && analysisPolygon.length > 0) ? (analysisPolygon.reduce((acc, p) => acc + p.lng, 0) / analysisPolygon.length) : NaN;
       const centerLat = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length) : NaN;
       const centerLng = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length) : NaN;
-      const lat = (!isNaN(projLat) && projLat !== 0) ? projLat : (!isNaN(polyLat) ? polyLat : (!isNaN(centerLat) ? centerLat : 21.8818));
-      const lng = (!isNaN(projLng) && projLng !== 0) ? projLng : (!isNaN(polyLng) ? polyLng : (!isNaN(centerLng) ? centerLng : -102.2915));
+      const lat = (!isNaN(projLat) && projLat !== 0) ? projLat : (!isNaN(polyLat) ? polyLat : (!isNaN(centerLat) ? centerLat : null));
+      const lng = (!isNaN(projLng) && projLng !== 0) ? projLng : (!isNaN(polyLng) ? polyLng : (!isNaN(centerLng) ? centerLng : null));
       // Helper local de fetch con timeout
       const fetchWithTimeout = async (url: string, options: any, timeoutMs = 15000): Promise<Response> => {
         const controller = new AbortController();
@@ -1416,19 +1426,23 @@ const hasMinimumPhotos =
         return null;
       });
 
-      const incidenciaResPromise = fetchWithTimeout("/api/incidencia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng, radius: analysisRadius }), // Forzamos a la BDD a respetar el radio
-      }, 12000).catch(e => {
-        console.warn("[PhotoAlbum] Error /api/incidencia (se continúa sin incidencia local):", e);
-        return null;
-      });
+      const incidenciaResPromise = lat !== null && lng !== null
+        ? fetchWithTimeout("/api/incidencia", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat, lng, radius: analysisRadius }),
+          }, 12000).catch(e => {
+            console.warn("[PhotoAlbum] Error /api/incidencia (se continúa sin incidencia local):", e);
+            return null;
+          })
+        : Promise.resolve(null);
 
-      const osintPromise = runOSINTScan({ ...project, latitude: lat, longitude: lng }).catch(e => {
-        console.warn("[Auto-OSINT] Falló el barrido:", e);
-        return null;
-      });
+      const osintPromise = lat !== null && lng !== null
+        ? runOSINTScan({ ...project, latitude: lat, longitude: lng }).catch(e => {
+            console.warn("[Auto-OSINT] Falló el barrido:", e);
+            return null;
+          })
+        : Promise.resolve(null);
 
       const [mapRes, incidenciaRes, automaticOsintData] = await Promise.all([
         mapResPromise,
@@ -2027,34 +2041,39 @@ const hasMinimumPhotos =
         photosToExport = album.filter((p) => p.previewUrl).slice(0, 8);
       }
 
-      const photosToExportData = photosToExport.map((p) => ({
-        id: p.id,
-        previewUrl: p.previewUrl,
-        url: (p as any).url,
-        tipo: p.tipo || "Evidencia Táctica",
-        comentario: p.comentario || "Sin comentario.",
-        lat: p.lat ?? p.gpsLat ?? null,
-        lng: p.lng ?? p.gpsLng ?? null,
-        gpsLat: p.gpsLat ?? p.lat ?? null,
-        gpsLng: p.gpsLng ?? p.lng ?? null,
-        gpsAccuracy: p.gpsAccuracy ?? null,
-        gpsTimestamp: p.gpsTimestamp ?? null,
-        gpsSource: p.gpsSource,
-        fecha: (p as any).fecha,
-        createdAt: (p as any).createdAt,
-        evidenceId: p.evidenceId,
-        evidenceOrigin: p.evidenceOrigin,
-        collectionMethod: p.collectionMethod,
-        evidenceCategoryClass: p.evidenceCategoryClass,
-        confidenceLevel: p.confidenceLevel,
-        confidencePercentage: p.confidencePercentage,
-        sourceProvider: p.sourceProvider,
-        streetViewMetadata: p.streetViewMetadata,
-        confidenceFactors: p.confidenceFactors,
-        streetViewCategory: p.streetViewCategory,
-        streetViewSource: p.streetViewSource,
-        evidenceRelationship: p.evidenceRelationship
-      }));
+      const photosToExportData = photosToExport.map((p) => {
+        const geoFields = buildPhotoEvidenceGeoFields(p);
+        return {
+          id: p.id,
+          previewUrl: p.previewUrl,
+          url: (p as any).url,
+          tipo: p.tipo || "Evidencia Táctica",
+          comentario: p.comentario || "Sin comentario.",
+          lat: geoFields.lat,
+          lng: geoFields.lng,
+          gpsLat: geoFields.gpsLat,
+          gpsLng: geoFields.gpsLng,
+          gpsAccuracy: p.gpsAccuracy ?? null,
+          gpsTimestamp: p.gpsTimestamp ?? null,
+          gpsSource: p.gpsSource,
+          geolocationSource: geoFields.geolocationSource,
+          geolocationIntegrity: geoFields.geolocationIntegrity,
+          fecha: (p as any).fecha,
+          createdAt: (p as any).createdAt,
+          evidenceId: p.evidenceId,
+          evidenceOrigin: p.evidenceOrigin,
+          collectionMethod: p.collectionMethod,
+          evidenceCategoryClass: p.evidenceCategoryClass,
+          confidenceLevel: p.confidenceLevel,
+          confidencePercentage: p.confidencePercentage,
+          sourceProvider: p.sourceProvider,
+          streetViewMetadata: p.streetViewMetadata,
+          confidenceFactors: p.confidenceFactors,
+          streetViewCategory: p.streetViewCategory,
+          streetViewSource: p.streetViewSource,
+          evidenceRelationship: p.evidenceRelationship
+        };
+      });
 
       const selectedSweeps = (project?.sweeps || []).filter((s: any) => {
         const engineLower = s.engine.toLowerCase();
@@ -2119,18 +2138,8 @@ const hasMinimumPhotos =
       await KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
 
       // 2. LOCK_INPUT
-      const centroidLat = (() => {
-        if (project?.latitude) return project.latitude;
-        const valid = (album || []).filter(p => p.lat != null);
-        if (valid.length === 0) return 21.8853;
-        return valid.reduce((sum, p) => sum + Number(p.lat), 0) / valid.length;
-      })();
-      const centroidLng = (() => {
-        if (project?.longitude) return project.longitude;
-        const valid = (album || []).filter(p => p.lng != null);
-        if (valid.length === 0) return -102.2916;
-        return valid.reduce((sum, p) => sum + Number(p.lng), 0) / valid.length;
-      })();
+      const centroidLat = project?.latitude ?? averagePhotoCoordinate(album, "lat");
+      const centroidLng = project?.longitude ?? averagePhotoCoordinate(album, "lng");
 
       await KernelGuard({
         type: "LOCK_INPUT",
@@ -4183,8 +4192,8 @@ const hasMinimumPhotos =
 
                   const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
                   const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
-                  const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
-                  const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
+                  const centerLat = averagePhotoCoordinate(photosToUse, "lat");
+                  const centerLng = averagePhotoCoordinate(photosToUse, "lng");
 
                   const res = await fetch("/api/refine-context", {
                     method: "POST",
@@ -4192,8 +4201,8 @@ const hasMinimumPhotos =
                     body: JSON.stringify({
                       mode: "multimodal-sweep",
                       queries: itemsPayload,
-                      lat: centerLat || 21.8818,
-                      lng: centerLng || -102.2915,
+                      lat: centerLat,
+                      lng: centerLng,
                       radius: 1000
                     })
                   });

@@ -95,11 +95,15 @@ export function isSameLocation(
     };
   }
 
+  const latA = Number(coordsA.lat);
+  const lngA = Number(coordsA.lng);
+  const latB = Number(coordsB.lat);
+  const lngB = Number(coordsB.lng);
   const distanceMeters = calculateHaversineDistanceMeters(
-    coordsA.lat,
-    coordsA.lng,
-    coordsB.lat,
-    coordsB.lng
+    latA,
+    lngA,
+    latB,
+    lngB
   );
 
   const isCompatible = distanceMeters <= toleranceMeters;

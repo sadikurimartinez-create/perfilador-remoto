@@ -1,6 +1,7 @@
 import { StreetViewFinding } from "@/components/streetview/StreetViewFindingsPanel";
 import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
 import { GeointGovernanceStatus, normalizeGeointGovernanceStatus } from "@/types/geointGovernance";
+import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 
 /**
  * ADR-019.17 — Bridge deterministico UniversalEvidenceComparison -> StreetViewFinding (Función Pura).
@@ -11,7 +12,14 @@ export function UniversalEvidenceComparisonToFinding(
 ): StreetViewFinding {
   const primaryEvidence = comparison.evidenceA || comparison.evidenceB;
   const contextualEvidence = comparison.evidenceB || comparison.evidenceA;
-  const coordinates = contextualEvidence?.coordinates || primaryEvidence?.coordinates || { lat: 0, lng: 0 };
+  const coordinates = contextualEvidence?.coordinates || primaryEvidence?.coordinates || { lat: null, lng: null };
+  const source = contextualEvidence?.source === "STREET_VIEW_HISTORICAL" ? "STREET_VIEW_PANORAMA" : "SOURCE_RECORD";
+  const geoValidation = validateGeoIntegrity({
+    latitude: coordinates.lat,
+    longitude: coordinates.lng,
+    source,
+    sourceReference: `temporalComparison:${comparison.comparisonId}`,
+  });
 
   return {
     id: comparison.comparisonId,
@@ -22,9 +30,10 @@ export function UniversalEvidenceComparisonToFinding(
     captureId: contextualEvidence?.id || primaryEvidence?.id,
     categoria: "COMPARACION_TEMPORAL",
     coordenadas: {
-      lat: Number(coordinates.lat) || 0,
-      lng: Number(coordinates.lng) || 0,
+      lat: geoValidation.latitude,
+      lng: geoValidation.longitude,
     },
+    geolocationIntegrity: geoValidation,
     imagen: contextualEvidence?.imageReference || primaryEvidence?.imageReference || "",
     heading: contextualEvidence?.metadata?.heading ?? primaryEvidence?.metadata?.heading,
     pitch: contextualEvidence?.metadata?.pitch ?? primaryEvidence?.metadata?.pitch,
