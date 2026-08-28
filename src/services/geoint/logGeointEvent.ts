@@ -1,8 +1,9 @@
-import { GeointEventLogEntry, GeointEventType } from "@/types/geointEventLog";
-import { GeointEventLogService } from "./geointEventLogService";
+import { GeointEventType } from "@/types/geointEventLog";
 
 /**
- * Registra eventos en el log forense operativo.
+ * Emite eventos GEOINT de forma confiable mediante Outbox.
+ * ADR-019.19 FASE 2B: el adapter conserva la firma legacy, pero deja
+ * de escribir directamente en el Event Ledger para consumidores productivos.
  */
 export async function logGeointEvent(
   eventType: GeointEventType,
@@ -15,19 +16,41 @@ export async function logGeointEvent(
   entityId: string,
   metadata: Record<string, any> = {}
 ) {
-  try {
-    await GeointEventLogService.createAndPersistEvent(
-      eventType,
-      expedienteId,
-      traceabilityId,
-      actor,
-      source,
-      status,
-      entityType,
-      entityId,
-      metadata
-    );
-  } catch (error) {
-    console.error(`[GeointEventLog] Error registrando evento ${eventType}:`, error);
+  if (typeof window !== "undefined") {
+    const response = await fetch("/api/geoint/events/outbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventType,
+        expedienteId,
+        traceabilityId,
+        actor,
+        source,
+        status,
+        entityType,
+        entityId,
+        metadata,
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`[GeointEventOutbox] Emision fallida (${response.status}): ${detail}`);
+    }
+
+    return;
   }
+
+  const { GeointEventOutboxService } = await import("./geointEventOutboxService");
+  await GeointEventOutboxService.enqueueEvent(
+    eventType,
+    expedienteId,
+    traceabilityId,
+    actor,
+    source,
+    status,
+    entityType,
+    entityId,
+    metadata
+  );
 }

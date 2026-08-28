@@ -4,12 +4,12 @@ import {
   getDoc,
   getDocs,
   query,
-  setDoc,
   where,
+  runTransaction,
 } from "firebase/firestore";
 import { getFirebaseServerDb } from "@/lib/firebaseServer";
-import { logGeointEvent } from "@/services/geoint/logGeointEvent";
 import { getDb } from "@/lib/firebase";
+import { GeointEventOutboxService } from "@/services/geoint/geointEventOutboxService";
 import { TemporalComparisonRecord } from "@/types/geointTemporalComparison";
 import {
   GeointGovernanceStatus,
@@ -37,33 +37,28 @@ export class TemporalComparisonPersistenceService {
       updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(
-      doc(db, "projects", expedienteId, "geoint_temporal_comparisons", normalizedRecord.id),
-      normalizedRecord,
-      { merge: true }
-    );
-    await setDoc(
-      doc(db, "geoint_temporal_comparisons", normalizedRecord.id),
-      normalizedRecord,
-      { merge: true }
-    );
+    const subcolRef = doc(db, "projects", expedienteId, "geoint_temporal_comparisons", normalizedRecord.id);
+    const rootRef = doc(db, "geoint_temporal_comparisons", normalizedRecord.id);
 
-    // Event Log Forense: Registrar creación de comparación temporal (ADR-019.18)
-    await logGeointEvent(
-      "TEMPORAL_COMPARISON_CREATED",
-      expedienteId,
-      normalizedRecord.traceabilityId,
-      normalizedRecord.analystValidation?.reviewerId || "ANALISTA_GEOINT",
-      "TemporalComparisonPersistenceService",
-      normalizedRecord.analystValidation.status,
-      "TEMPORAL_COMPARISON",
-      normalizedRecord.id,
-      {
-        comparisonId: normalizedRecord.id,
-        evidenceA: normalizedRecord.evidenceA,
-        evidenceB: normalizedRecord.evidenceB,
-      }
-    );
+    await runTransaction(db, async (transaction) => {
+      await GeointEventOutboxService.enqueueEventInTransaction(transaction, db, {
+        eventType: "TEMPORAL_COMPARISON_CREATED",
+        expedienteId,
+        traceabilityId: normalizedRecord.traceabilityId,
+        actor: normalizedRecord.analystValidation?.reviewerId || "ANALISTA_GEOINT",
+        source: "TemporalComparisonPersistenceService",
+        status: normalizedRecord.analystValidation.status,
+        entityType: "TEMPORAL_COMPARISON",
+        entityId: normalizedRecord.id,
+        metadata: {
+          comparisonId: normalizedRecord.id,
+          evidenceA: normalizedRecord.evidenceA,
+          evidenceB: normalizedRecord.evidenceB,
+        },
+      });
+      transaction.set(subcolRef, normalizedRecord, { merge: true });
+      transaction.set(rootRef, normalizedRecord, { merge: true });
+    });
 
     return normalizedRecord;
 
@@ -81,45 +76,50 @@ export class TemporalComparisonPersistenceService {
     const normalizedStatus = normalizeGeointGovernanceStatus(status);
     const subcolRef = doc(db, "projects", expedienteId, "geoint_temporal_comparisons", comparisonId);
     const rootRef = doc(db, "geoint_temporal_comparisons", comparisonId);
-    const existingSnap = await getDoc(subcolRef);
-    const existing = existingSnap.exists()
-      ? (existingSnap.data() as TemporalComparisonRecord)
-      : null;
-
-    if (!existing) return null;
-
-    const previousStatus = existing.analystValidation?.status || "PENDING_REVIEW";
-    const updated: TemporalComparisonRecord = {
-      ...existing,
-      analystValidation: {
-        status: normalizedStatus,
-        reviewerId,
-        reviewedAt: now,
-        comments: comments.trim(),
-      },
-      updatedAt: now,
-    };
-
-    await setDoc(subcolRef, updated, { merge: true });
-    await setDoc(rootRef, updated, { merge: true });
-
-    // Event Log Forense: Registrar validación humana (HUMAN_APPROVED o HUMAN_REJECTED) (ADR-019.18)
     const eventType = normalizedStatus === GeointGovernanceStatus.APPROVED_EVIDENCE ? "HUMAN_APPROVED" : "HUMAN_REJECTED";
-    await logGeointEvent(
-      eventType,
-      expedienteId,
-      existing.traceabilityId,
-      reviewerId,
-      "TemporalComparisonPersistenceService",
-      normalizedStatus,
-      "TEMPORAL_COMPARISON",
-      comparisonId,
-      {
-        previousStatus,
-        newStatus: normalizedStatus,
-        comments: comments.trim(),
+    let updated: TemporalComparisonRecord | null = null;
+
+    await runTransaction(db, async (transaction) => {
+      const existingSnap = await transaction.get(subcolRef);
+      const existing = existingSnap.exists()
+        ? (existingSnap.data() as TemporalComparisonRecord)
+        : null;
+
+      if (!existing) {
+        updated = null;
+        return;
       }
-    );
+
+      const previousStatus = existing.analystValidation?.status || "PENDING_REVIEW";
+      updated = {
+        ...existing,
+        analystValidation: {
+          status: normalizedStatus,
+          reviewerId,
+          reviewedAt: now,
+          comments: comments.trim(),
+        },
+        updatedAt: now,
+      };
+
+      await GeointEventOutboxService.enqueueEventInTransaction(transaction, db, {
+        eventType,
+        expedienteId,
+        traceabilityId: existing.traceabilityId,
+        actor: reviewerId,
+        source: "TemporalComparisonPersistenceService",
+        status: normalizedStatus,
+        entityType: "TEMPORAL_COMPARISON",
+        entityId: comparisonId,
+        metadata: {
+          previousStatus,
+          newStatus: normalizedStatus,
+          comments: comments.trim(),
+        },
+      });
+      transaction.set(subcolRef, updated, { merge: true });
+      transaction.set(rootRef, updated, { merge: true });
+    });
 
     return updated;
 

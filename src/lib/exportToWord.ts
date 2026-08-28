@@ -711,10 +711,11 @@ export async function exportToWord(
   ];
   for (const f of allFindings) {
     const fId = f.id || f.findingId || f.evidenceId || "FINDING-UNKNOWN";
-    const tId = f.traceabilityId || f.evidenceId || `trace-report-${Date.now()}`;
     const expId = payload.projectId || payload.expedienteId || projectName || "EXP-2026";
+    const reportId = reportNumber || payload.reportId || payload.id || `report-${expId}`;
+    const tId = f.traceabilityId || f.evidenceId || `trace-report-${expId}-${fId}`;
     
-    logGeointEvent(
+    await logGeointEvent(
       "REPORT_CONSUMED",
       expId,
       tId,
@@ -722,13 +723,13 @@ export async function exportToWord(
       "exportToWord",
       "CONSUMED",
       "REPORT",
-      reportNumber || `report-${Date.now()}`,
+      reportId,
       {
-        reportId: reportNumber || `report-${Date.now()}`,
+        reportId,
         findingId: fId,
         projectName,
       }
-    ).catch((err) => console.warn("[exportToWord EventLog] Error registrando REPORT_CONSUMED:", err));
+    );
   }
 
 

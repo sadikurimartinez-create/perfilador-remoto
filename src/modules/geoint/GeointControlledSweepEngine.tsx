@@ -24,6 +24,32 @@ interface GeointControlledSweepEngineProps {
 
 export type SweepType = "MULTICAPA" | "RADIAL" | "CORREDOR";
 
+export function buildControlledSweepEventIdentity(params: {
+  projectId: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  sweepType: SweepType;
+  selectedCategories: GeoIntSweepCategory[];
+}) {
+  const categoryKey = [...params.selectedCategories].sort().join("-");
+  const latKey = params.lat.toFixed(5);
+  const lngKey = params.lng.toFixed(5);
+  const stableKey = [
+    params.projectId,
+    latKey,
+    lngKey,
+    params.radiusMeters,
+    params.sweepType,
+    categoryKey,
+  ].join("|");
+
+  return {
+    traceabilityId: buildGeointTraceabilityId("trace-sweep-start", [stableKey]),
+    entityId: `sweep-${stableKey}`,
+  };
+}
+
 /**
  * ADR-018 v1.0 — GEOINT Controlled Sweep Engine
  * Motor orquestador único y gobernado para la ejecución de barridos GEOINT / Street View.
@@ -68,21 +94,29 @@ export function GeointControlledSweepEngine({
     setSweepMsg("Inicializando motor GEOINT Controlled Sweep...");
     const generatedFindings: GeoIntSweepFindingPayload[] = [];
 
-
-    // Event Log Forense: Registrar inicio de barrido (ADR-019.18)
-    logGeointEvent(
-      "GEOINT_SWEEP_STARTED",
-      projectId,
-      `trace-sweep-start-${Date.now()}`,
-      analystName,
-      "GeointControlledSweepEngine",
-      "INITIATED",
-      "SWEEP_SESSION",
-      `sweep-${Date.now()}`,
-      { lat, lng, radiusMeters, sweepType, selectedCategories }
-    );
-
     try {
+      const sweepEventIdentity = buildControlledSweepEventIdentity({
+        projectId,
+        lat,
+        lng,
+        radiusMeters,
+        sweepType,
+        selectedCategories,
+      });
+
+      // ADR-019.19 FASE 2B: accion explicita del analista encolada en Outbox.
+      await logGeointEvent(
+        "GEOINT_SWEEP_STARTED",
+        projectId,
+        sweepEventIdentity.traceabilityId,
+        analystName,
+        "GeointControlledSweepEngine",
+        "INITIATED",
+        "SWEEP_SESSION",
+        sweepEventIdentity.entityId,
+        { lat, lng, radiusMeters, sweepType, selectedCategories }
+      );
+
       let globalCount = 0;
       const radiusDegreeApprox = (radiusMeters / 1000) * 0.009;
 
@@ -212,7 +246,7 @@ export function GeointControlledSweepEngine({
       setIsSweeping(false);
       setSweepMsg("");
     }
-  }, [lat, lng, selectedCategories, sweepType, radiusMeters, analystName, onFindingsGenerated, onClose]);
+  }, [projectId, lat, lng, selectedCategories, sweepType, radiusMeters, analystName, onFindingsGenerated, onClose]);
 
   if (!isOpen) return null;
 
