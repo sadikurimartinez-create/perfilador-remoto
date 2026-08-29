@@ -11,11 +11,16 @@ import {
   GeointGovernanceStatusValue,
   normalizeGeointGovernanceStatus,
 } from "@/types/geointGovernance";
+import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
+import { buildStreetViewFindingLineage, validateLineage } from "@/utils/evidenceLineage";
 
 export interface AnalyticalFinding {
   findingId: string;
   projectId: string;
   sourceType: string;
+  sourceEvidenceId?: string;
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
   geometry: {
     lat: number;
     lng: number;
@@ -45,6 +50,9 @@ export interface ApprovedEvidence {
     pitch?: number;
   };
   imageReference?: string;
+  sourceEvidenceId?: string;
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
 }
 
 export interface StreetViewFinding {
@@ -70,6 +78,9 @@ export interface StreetViewFinding {
   fechaCreacion?: string;
   usuarioRevision?: string | null;
   origenRevision?: "BARRIDO_AUTOMATICO" | "MANUAL";
+  supportingEvidenceIds?: string[];
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
 }
 
 interface StreetViewFindingsPanelProps {
@@ -142,12 +153,20 @@ export function StreetViewFindingsPanel({
     const lat = selectedCapture.latitude || selectedCapture.lat || selectedCapture.geometry?.lat || 0;
     const lng = selectedCapture.longitude || selectedCapture.lng || selectedCapture.geometry?.lng || 0;
     const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename || `find-${Date.now()}`;
+    const sourceEvidenceId = selectedCapture.sourceEvidenceId || selectedCapture.evidenceId || selectedCapture.evidenciaId || selectedCapture.captureId || null;
+    const lineage = buildStreetViewFindingLineage({
+      findingId: captureId,
+      evidenceId: sourceEvidenceId,
+      sourceReference: selectedCapture.panoId || selectedCapture.sourceReference || selectedCapture.imageReference || selectedCapture.file_url,
+    });
+    const lineageValidation = validateLineage(lineage);
 
     // Construcción de la nueva entidad approvedEvidence (ADR-016)
     const approvedEvidence: ApprovedEvidence = {
       evidenceId: `evi-approved-${Date.now()}`,
       projectId: expedienteId,
       originalFindingId: captureId,
+      sourceEvidenceId,
       validatedBy: validatorId || null,
       validatorRole: validatorRole,
       validationDate: new Date().toISOString(),
@@ -159,7 +178,9 @@ export function StreetViewFindingsPanel({
         heading: selectedCapture.geolocalizacion?.heading || selectedCapture.heading || 0,
         pitch: selectedCapture.geolocalizacion?.pitch || selectedCapture.pitch || 0
       },
-      imageReference: selectedCapture.file_url || selectedCapture.archivo_url || selectedCapture.imageReference || ""
+      imageReference: selectedCapture.file_url || selectedCapture.archivo_url || selectedCapture.imageReference || "",
+      lineage,
+      lineageStatus: lineageValidation.status,
     };
 
     try {
@@ -172,6 +193,10 @@ export function StreetViewFindingsPanel({
           id: approvedEvidence.evidenceId,
           expedienteId,
           captureId,
+          sourceEvidenceId,
+          supportingEvidenceIds: sourceEvidenceId ? [sourceEvidenceId] : [],
+          lineage,
+          lineageStatus: lineageValidation.status,
           categoria: selectedCapture.categoria_exploracion || "RUTA_ACCESO",
           coordenadas: { lat, lng },
           imagen: approvedEvidence.imageReference,
@@ -196,6 +221,8 @@ export function StreetViewFindingsPanel({
           status: GeointGovernanceStatus.APPROVED_EVIDENCE,
           humanValidationStatus: "APPROVED",
           validationSource: "ADR_020_24_HUMAN_ACTION",
+          lineage,
+          lineageStatus: lineageValidation.status,
           validationComment: validationComment.trim(),
           validatedBy: validatorId || null,
           validationDate: approvedEvidence.validationDate

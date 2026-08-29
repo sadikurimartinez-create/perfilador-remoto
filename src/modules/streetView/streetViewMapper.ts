@@ -7,6 +7,7 @@ import {
   StreetViewMetadata,
 } from "@/context/ProjectContext";
 import { evaluateStreetViewGovernance } from "./streetViewGovernance";
+import { buildStreetViewFindingLineage, validateLineage } from "@/utils/evidenceLineage";
 
 export interface StreetViewCapturePayload {
   dataUrl: string; // Preview/base64 de la captura congelada
@@ -35,6 +36,7 @@ export function mapStreetViewToAlbumPhoto(
 ): AlbumPhoto {
   const timestamp = Date.now();
   const photoId = `remote-sv-${timestamp}-${Math.random().toString(36).substring(2, 7)}`;
+  const evidenceId = `EVI-REM-${timestamp.toString().slice(-6)}`;
 
   // Evaluar gobernanza y confiabilidad v2.1
   const governance = evaluateStreetViewGovernance(payload.captureDate, 5);
@@ -61,6 +63,13 @@ export function mapStreetViewToAlbumPhoto(
     ? payload.comentario
     : `Análisis remoto de entorno vial [Categoría: ${categoryLabel}].`;
 
+  const lineage = buildStreetViewFindingLineage({
+    findingId: photoId,
+    evidenceId,
+    sourceReference: payload.panoId || payload.captureDate || "Google Street View Panorama",
+  });
+  const lineageValidation = validateLineage(lineage);
+
   return {
     id: photoId,
     previewUrl: payload.dataUrl,
@@ -68,7 +77,7 @@ export function mapStreetViewToAlbumPhoto(
     lng: payload.poiLng,
     tipo: "REMOTE_STREET_VIEW",
     comentario: commentText,
-    evidenceId: `EVI-REM-${timestamp.toString().slice(-6)}`,
+    evidenceId,
     contextualizedAt: timestamp,
     contextualizedBy: payload.analystName || "Analista CEIPOL",
     isContextualized: true,
@@ -96,6 +105,9 @@ export function mapStreetViewToAlbumPhoto(
     category: "STREET_VIEW",
     classification: "REMOTE_VISUAL",
     isStreetView: true,
+    sourceEvidenceId: evidenceId,
+    lineage,
+    lineageStatus: lineageValidation.status,
   };
 }
 

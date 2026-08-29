@@ -17,6 +17,7 @@ import { ExecutiveIntelligenceSummaryEngine } from "@/utils/executiveIntelligenc
 import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
 import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
 import { classifyLegacyCompatibility, evaluateIntelligenceEligibility } from "@/utils/syntheticIntelligenceFirewall";
+import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 
 
 
@@ -39,8 +40,37 @@ type FinalizeOptions = {
   selectedAnnexes?: any;
 };
 
+export interface ReportLineageBoundaryResult {
+  lineageStatus: LineageStatus;
+  supportingEvidenceIds: string[];
+  supportingFindingIds: string[];
+  supportingAnalysisIds: string[];
+  canPresentAsSupportedConclusion: boolean;
+}
+
+export function evaluateReportLineageBoundary(item: any): ReportLineageBoundaryResult {
+  const lineage = item?.lineage as CanonicalLineageNode[] | undefined;
+  const validation = validateLineage(lineage);
+  const nodes = lineage || [];
+  const supportingEvidenceIds = Array.from(new Set(nodes.flatMap((node) => node.supportingEvidenceIds || (node.evidenceId ? [node.evidenceId] : []))));
+  const supportingFindingIds = Array.from(new Set(nodes.flatMap((node) => node.supportingFindingIds || (node.findingId ? [node.findingId] : []))));
+  const supportingAnalysisIds = Array.from(new Set(nodes.flatMap((node) => node.supportingAnalysisIds || (node.analysisId ? [node.analysisId] : []))));
+
+  return {
+    lineageStatus: item?.lineageStatus || validation.status,
+    supportingEvidenceIds,
+    supportingFindingIds,
+    supportingAnalysisIds,
+    canPresentAsSupportedConclusion: validation.status === "SUPPORTED" && supportingAnalysisIds.length > 0,
+  };
+}
+
 export function isReportEngineEvidenceEligible(item: any): boolean {
   if (!item) return false;
+  const hasConclusionLineage =
+    Boolean(item.conclusionId || item.supportingAnalysisIds) ||
+    Boolean((item.lineage || []).some((node: CanonicalLineageNode) => node.type === "CONCLUSION"));
+  if (hasConclusionLineage && !evaluateReportLineageBoundary(item).canPresentAsSupportedConclusion) return false;
 
   const eligibility = evaluateIntelligenceEligibility(item);
   if (eligibility.eligibleForReport) return true;

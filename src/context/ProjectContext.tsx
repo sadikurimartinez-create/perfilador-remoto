@@ -22,6 +22,7 @@ import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } 
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
 import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
+import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -78,6 +79,7 @@ export type AlbumPhoto = {
   comentario: string;
   file?: File;
   evidenceId?: string;
+  sourceEvidenceId?: string | null;
   contextualizedAt?: number;
   contextualizedBy?: string;
   isContextualized?: boolean;
@@ -92,6 +94,8 @@ export type AlbumPhoto = {
   validado?: boolean;
   humanValidationStatus?: "UNREVIEWED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "RETURNED_FOR_REANALYSIS" | "LEGACY_UNCLASSIFIED";
   validationSource?: "ADR_020_24_HUMAN_ACTION" | "CANONICAL_FIELD" | "LEGACY_COMPATIBILITY" | "TECHNICAL_BOOLEAN" | "AI_READY" | "ABSENT";
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
 
@@ -544,6 +548,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             comentario: data.comentario,
             deleted: data.deleted === true,
             evidenceId: data.evidenceId || null,
+            sourceEvidenceId: data.sourceEvidenceId || null,
             contextualizedAt: data.contextualizedAt || null,
             contextualizedBy: data.contextualizedBy || null,
             isContextualized: data.isContextualized || false,
@@ -556,6 +561,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             validado: data.validado === true,
             humanValidationStatus: data.humanValidationStatus || null,
             validationSource: data.validationSource || null,
+            lineage: data.lineage || null,
+            lineageStatus: data.lineageStatus || null,
             gpsLat: data.gpsLat ?? null,
             gpsLng: data.gpsLng ?? null,
             gpsAccuracy: data.gpsAccuracy ?? null,

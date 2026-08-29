@@ -2,6 +2,7 @@ import {
   GeointGovernanceStatus,
   GeointGovernanceStatusValue,
 } from "./geointGovernance";
+import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
 
 /**
  * ADR-019.13 — Fundación Arquitectónica GEOINT
@@ -46,6 +47,8 @@ export interface GeoEvidence {
   imageReference: string;
   metadata: GeoEvidenceMetadata;
   status: GeoEvidenceStatus;
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
 }
 
 /**
