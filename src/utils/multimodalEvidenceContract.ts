@@ -1,4 +1,5 @@
 import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
+import type { ForensicFileIntegrity } from "@/utils/forensicFileIntegrity";
 
 export type MultimodalIngestionSource =
   | "USER_UPLOAD"
@@ -59,6 +60,7 @@ export interface MultimodalEvidenceContract {
     username?: string | null;
     name?: string | null;
   } | null;
+  forensicIntegrity?: ForensicFileIntegrity | null;
 }
 
 const EXTRACTABLE_MIME_PREFIXES = ["text/", "image/"];
@@ -86,6 +88,7 @@ export function createStoredRawMultimodalEvidence(input: {
   ingestionSource: MultimodalIngestionSource;
   traceabilityId?: string | null;
   analystContext?: string | null;
+  forensicIntegrity?: ForensicFileIntegrity | null;
 }): MultimodalEvidenceContract {
   const size = typeof input.size === "string" ? Number(input.size) : input.size ?? null;
   const supported = isSupportedForExtraction(input.mimeType);
@@ -113,6 +116,7 @@ export function createStoredRawMultimodalEvidence(input: {
     aiQualityScore: null,
     validatedAt: null,
     validatedBy: null,
+    forensicIntegrity: input.forensicIntegrity ?? null,
   };
 }
 

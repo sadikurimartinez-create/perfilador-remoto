@@ -18,6 +18,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "fire
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
 import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
+import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
 import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
@@ -832,6 +833,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!project) throw new Error("No hay un proyecto activo para subir el anexo.");
     const storage = getStorage();
     const docId = generateId();
+    let forensicIntegrity;
+    try {
+      const rawBytes = await file.arrayBuffer();
+      forensicIntegrity = await createComputedFileIntegrityFromBytes({
+        bytes: rawBytes,
+        declaredMimeType: file.type || null,
+        fileName: file.name,
+      });
+    } catch (err) {
+      console.warn("[ProjectContext] No se pudo calcular SHA-256 real del archivo local.", err);
+      forensicIntegrity = createHashUnavailableIntegrity({
+        declaredMimeType: file.type || null,
+        fileName: file.name,
+      });
+    }
     const storageRef = ref(storage, `projects/${project.id}/documents/${docId}_${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -856,6 +872,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ingestionSource: "USER_UPLOAD",
         traceabilityId: null,
         analystContext: context,
+        forensicIntegrity,
       })
     };
     const docRef = await addDoc(docsColRef, docData);

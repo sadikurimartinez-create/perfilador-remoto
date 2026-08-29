@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { DriveIngestionService, DriveFileRecord } from "./drive-ingestion.service";
@@ -9,6 +10,7 @@ import {
   markReadyForHumanReview,
   type MultimodalEvidenceContract,
 } from "@/utils/multimodalEvidenceContract";
+import { createComputedFileIntegrity, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
 
 export interface ExtractedIntelligence {
   fileId: string;
@@ -121,6 +123,13 @@ export class DriveIngestionEngine {
               storageReference: `drive://${file.id}`,
               ingestionSource: "GOOGLE_DRIVE",
               traceabilityId: file.traceabilityId ?? null,
+              forensicIntegrity: createHashUnavailableIntegrity({
+                providerChecksum: file.md5Checksum ?? null,
+                providerChecksumAlgorithm: file.md5Checksum ? "MD5" : null,
+                fileId: file.id,
+                declaredMimeType: file.mimeType,
+                fileName: file.name,
+              }),
             }),
           });
 
@@ -175,6 +184,7 @@ export class DriveIngestionEngine {
   private static async processSingleFile(file: DriveFileRecord): Promise<void> {
     // 1. Secure download with strict geofencing check
     const { buffer, fileMeta } = await DriveIngestionService.downloadFileContent(file.id);
+    const rawSha256 = createHash("sha256").update(buffer).digest("hex");
     const rawEvidence = createStoredRawMultimodalEvidence({
       evidenceId: fileMeta.id,
       expedienteId: "GOOGLE_DRIVE",
@@ -186,6 +196,15 @@ export class DriveIngestionEngine {
       storageReference: `drive://${fileMeta.id}`,
       ingestionSource: "GOOGLE_DRIVE",
       traceabilityId: fileMeta.traceabilityId ?? null,
+      forensicIntegrity: createComputedFileIntegrity({
+        rawSha256,
+        providerChecksum: fileMeta.md5Checksum ?? null,
+        providerChecksumAlgorithm: fileMeta.md5Checksum ? "MD5" : null,
+        fileId: fileMeta.id,
+        declaredMimeType: fileMeta.mimeType,
+        fileName: fileMeta.name,
+        bytes: buffer,
+      }),
     });
 
     // 2. Invoke Vertex AI Gemini for Multimodal Extraction
@@ -386,6 +405,11 @@ export class DriveIngestionEngine {
                 storageReference: `drive://${row.file_id}`,
                 ingestionSource: "GOOGLE_DRIVE",
                 traceabilityId: null,
+                forensicIntegrity: createHashUnavailableIntegrity({
+                  fileId: row.file_id,
+                  declaredMimeType: "unknown",
+                  fileName: row.file_name,
+                }),
               }),
               `drive_ingested_intelligence/${row.file_id}/extracted_text`
             ),

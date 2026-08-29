@@ -11,6 +11,11 @@ import {
 } from "firebase/firestore";
 import { Evidence } from "../types";
 import { GangService } from "./gangService";
+import {
+  createHashUnavailableIntegrity,
+  createProvidedSha256Integrity,
+  isValidSha256Hex,
+} from "@/utils/forensicFileIntegrity";
 
 const COLLECTION_NAME = "evidencias_pandillas";
 
@@ -22,14 +27,19 @@ export class EvidenceService {
     const db = getDb();
     const timestamp = Date.now();
     
-    // We simulate generating a secure SHA256 string locally if not provided
-    const secureHash = ev.hash || `sha256-mock-${Math.random().toString(36).substring(2, 15)}`;
+    const secureHash = isValidSha256Hex(ev.hash) ? ev.hash.toLowerCase() : null;
+    const forensicIntegrity = ev.forensicIntegrity ?? (
+      secureHash
+        ? createProvidedSha256Integrity({ rawSha256: secureHash })
+        : createHashUnavailableIntegrity()
+    );
 
     const savedData = {
       tipo: ev.tipo || "otro",
       fuente: ev.fuente || "Manual",
       fecha: timestamp,
       hash: secureHash,
+      forensicIntegrity,
       confianza: ev.confianza || "Baja",
       relacion: ev.relacion || null
     };
