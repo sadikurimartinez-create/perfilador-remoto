@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parse } from "csv-parse/sync";
 import { getPool } from "@/lib/db";
+import { classifyCrimeDataset } from "@/utils/crimeIncidenceCanonicalPipeline";
 
 type CsvRow = {
   INCIDENTE: string;
@@ -34,23 +35,16 @@ export async function POST(req: Request) {
       skip_empty_lines: true,
       trim: true,
     }) as CsvRow[];
+    const classified = classifyCrimeDataset(records, file.name);
+    const validRecords = classified.records.filter((record) => record.isValid);
 
     const client = await getPool().connect();
+    let attempted = 0;
+    let inserted = 0;
     try {
       await client.query("BEGIN");
 
-      for (const row of records) {
-        const lat = parseFloat(row.LAT);
-        const lng = parseFloat(row.LONG);
-        if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-
-        // Normalizar hora: aceptar valores como "7" o "07" y convertirlos a "07:00:00"
-        let hora = row.HORA.trim();
-        if (/^\d{1,2}$/.test(hora)) {
-          const hh = hora.padStart(2, "0");
-          hora = `${hh}:00:00`;
-        }
-
+      for (const record of validRecords) {
         await client.query(
           `
           INSERT INTO incidencia_estadistica (
@@ -73,19 +67,21 @@ export async function POST(req: Request) {
           )
         `,
           [
-            row.INCIDENTE,
-            row.FECHA,
-            hora,
-            row.RANGO ?? null,
-            row.NOM_ASEN ?? null,
+            record.incident,
+            record.date,
+            record.time,
+            record.raw.RANGO ?? null,
+            record.raw.NOM_ASEN ?? null,
             file.name,
-            lng,
-            lat,
+            record.lng,
+            record.lat,
           ]
         );
+        attempted++;
       }
 
       await client.query("COMMIT");
+      inserted = attempted;
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("[upload-csv] Error en transacción:", error);
@@ -95,6 +91,13 @@ export async function POST(req: Request) {
             error instanceof Error
               ? `Error al guardar los registros en la base de datos: ${error.message}`
               : "Error al guardar los registros en la base de datos.",
+          received: classified.summary.received,
+          validated: classified.summary.validated,
+          rejected: classified.summary.rejected,
+          inserted: 0,
+          attempted,
+          duplicates: classified.summary.duplicates,
+          persistenceConfirmation: "FAILED",
         },
         { status: 500 }
       );
@@ -103,7 +106,19 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { ok: true, registros: records.length },
+      {
+        ok: true,
+        received: classified.summary.received,
+        validated: classified.summary.validated,
+        rejected: classified.summary.rejected,
+        inserted,
+        attempted,
+        duplicates: classified.summary.duplicates,
+        persistenceConfirmation: "DB_CONFIRMED",
+        persistentDedupConstraint: "PERSISTENT_DEDUP_CONSTRAINT_PENDING",
+        temporalCoverage: classified.temporalCoverage,
+        validationStatus: classified.status,
+      },
       { status: 200 }
     );
   } catch (error) {
