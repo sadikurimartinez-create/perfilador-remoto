@@ -1,5 +1,6 @@
 import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
 import type { ForensicFileIntegrity } from "@/utils/forensicFileIntegrity";
+import { applyHumanValidationAction } from "@/utils/humanValidationPolicy";
 
 export type MultimodalIngestionSource =
   | "USER_UPLOAD"
@@ -30,7 +31,8 @@ export type MultimodalAnalysisStatus =
 export type MultimodalHumanValidationStatus =
   | "PENDING_REVIEW"
   | "APPROVED"
-  | "REJECTED";
+  | "REJECTED"
+  | "RETURNED_FOR_REANALYSIS";
 
 export interface MultimodalEvidenceContract {
   evidenceId: string;
@@ -60,6 +62,7 @@ export interface MultimodalEvidenceContract {
     username?: string | null;
     name?: string | null;
   } | null;
+  validationSource?: "ADR_020_24_HUMAN_ACTION" | null;
   forensicIntegrity?: ForensicFileIntegrity | null;
 }
 
@@ -116,6 +119,7 @@ export function createStoredRawMultimodalEvidence(input: {
     aiQualityScore: null,
     validatedAt: null,
     validatedBy: null,
+    validationSource: null,
     forensicIntegrity: input.forensicIntegrity ?? null,
   };
 }
@@ -166,10 +170,52 @@ export function markHumanApproved(
     validatedBy?: MultimodalEvidenceContract["validatedBy"];
   }
 ): MultimodalEvidenceContract {
+  const action = applyHumanValidationAction({
+    action: "APPROVE",
+    validatedAt: validation?.validatedAt,
+    validatorIdentity: validation?.validatedBy,
+  });
   return {
     ...evidence,
+    ...action,
     humanValidationStatus: "APPROVED",
-    validatedAt: validation?.validatedAt ?? new Date().toISOString(),
-    validatedBy: validation?.validatedBy ?? null,
+  };
+}
+
+export function markHumanRejected(
+  evidence: MultimodalEvidenceContract,
+  validation?: {
+    validatedAt?: string | null;
+    validatedBy?: MultimodalEvidenceContract["validatedBy"];
+  }
+): MultimodalEvidenceContract {
+  const action = applyHumanValidationAction({
+    action: "REJECT",
+    validatedAt: validation?.validatedAt,
+    validatorIdentity: validation?.validatedBy,
+  });
+  return {
+    ...evidence,
+    ...action,
+    humanValidationStatus: "REJECTED",
+  };
+}
+
+export function markReturnedForReanalysis(
+  evidence: MultimodalEvidenceContract,
+  validation?: {
+    validatedAt?: string | null;
+    validatedBy?: MultimodalEvidenceContract["validatedBy"];
+  }
+): MultimodalEvidenceContract {
+  const action = applyHumanValidationAction({
+    action: "RETURN_FOR_REANALYSIS",
+    validatedAt: validation?.validatedAt,
+    validatorIdentity: validation?.validatedBy,
+  });
+  return {
+    ...evidence,
+    ...action,
+    humanValidationStatus: "RETURNED_FOR_REANALYSIS",
   };
 }

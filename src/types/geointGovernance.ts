@@ -6,6 +6,7 @@ export enum GeointGovernanceStatus {
   PENDING_REVIEW = "PENDING_REVIEW",
   APPROVED_EVIDENCE = "APPROVED_EVIDENCE",
   REJECTED_FINDING = "REJECTED_FINDING",
+  RETURNED_FOR_REANALYSIS = "RETURNED_FOR_REANALYSIS",
 }
 
 export type GeointGovernanceStatusValue = `${GeointGovernanceStatus}`;
@@ -18,7 +19,8 @@ export type LegacyGeointGovernanceStatus =
   | "APROBADO"
   | "IGNORADO"
   | "APPROVED"
-  | "RECHAZADO";
+  | "RECHAZADO"
+  | "RETURNED_FOR_REANALYSIS";
 
 export function normalizeGeointGovernanceStatus(
   status?: LegacyGeointGovernanceStatus | string | null
@@ -32,6 +34,8 @@ export function normalizeGeointGovernanceStatus(
     case "IGNORADO":
     case "RECHAZADO":
       return GeointGovernanceStatus.REJECTED_FINDING;
+    case GeointGovernanceStatus.RETURNED_FOR_REANALYSIS:
+      return GeointGovernanceStatus.RETURNED_FOR_REANALYSIS;
     case "GENERATED":
     case "GENERADO":
     case "PENDIENTE_REVISION":

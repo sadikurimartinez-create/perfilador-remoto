@@ -76,6 +76,8 @@ export function mapStreetViewToAlbumPhoto(
     gpsTimestamp: timestamp,
     gpsSource: "GOOGLE_STREET_VIEW_PANORAMA",
     validado: true,
+    humanValidationStatus: "PENDING_REVIEW",
+    validationSource: "CANONICAL_FIELD",
     isIndependentPoi: true,
 
     // Estructura de Gobernanza v2.1 y Contrato Determinístico de Evidencia

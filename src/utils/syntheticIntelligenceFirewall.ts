@@ -6,6 +6,7 @@ import {
   EpistemicValidationStatus,
   IntelligenceSemanticRole,
 } from "@/types/epistemicIntegrity";
+import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 
 export interface IntelligenceEligibility {
   eligibleForAnalysis: boolean;
@@ -68,15 +69,22 @@ function normalizeMode(value: unknown): AcquisitionMode | null {
 function normalizeValidation(
   value: unknown,
   legacyStatus: string,
-  acquisitionMode: AcquisitionMode
+  acquisitionMode: AcquisitionMode,
+  source: EpistemicIntegrityCarrier | null | undefined
 ): EpistemicValidationStatus {
+  const humanValidation = evaluateHumanValidation({
+    ...(source || {}),
+    validationStatus: value,
+  });
   const status = typeof value === "string" ? value.toUpperCase() : "";
   if (status === "APPROVED") return "APPROVED";
   if (status === "REJECTED") return "REJECTED";
+  if (status === "RETURNED_FOR_REANALYSIS") return "RETURNED_FOR_REANALYSIS";
   if (status === "PENDING_REVIEW") return "PENDING_REVIEW";
   if (status === "UNREVIEWED") return "UNREVIEWED";
   if (status === "LEGACY_UNCLASSIFIED") return "LEGACY_UNCLASSIFIED";
-  if (LEGACY_APPROVED_STATUSES.has(legacyStatus)) return "APPROVED";
+  if (humanValidation.source === "LEGACY_COMPATIBILITY") return humanValidation.status === "APPROVED" ? "LEGACY_UNCLASSIFIED" : humanValidation.status;
+  if (humanValidation.source === "TECHNICAL_BOOLEAN") return "LEGACY_UNCLASSIFIED";
   if (LEGACY_BLOCKED_STATUSES.has(legacyStatus)) return legacyStatus.includes("REJECT") || legacyStatus === "RECHAZADO" || legacyStatus === "IGNORADO" ? "REJECTED" : "PENDING_REVIEW";
   if (acquisitionMode === "LEGACY") return "LEGACY_UNCLASSIFIED";
   return "UNREVIEWED";
@@ -130,7 +138,7 @@ export function normalizeEpistemicMetadata(item: EpistemicIntegrityCarrier | nul
     acquisitionMode,
     acquisitionStatus: normalizeAcquisitionStatus(embedded.acquisitionStatus ?? source.acquisitionStatus),
     semanticRole: normalizeSemanticRole(embedded.semanticRole),
-    validationStatus: normalizeValidation(embedded.validationStatus ?? source.validationStatus, legacyStatus, acquisitionMode),
+    validationStatus: normalizeValidation(embedded.validationStatus ?? source.validationStatus ?? (source as any).humanValidationStatus, legacyStatus, acquisitionMode, source),
     isSimulated: Boolean(embedded.isSimulated ?? source.isSimulated ?? (acquisitionMode === "SIMULATED")),
     isDerived: Boolean(embedded.isDerived ?? source.isDerived ?? (acquisitionMode === "DERIVED")),
     isConnectivityOnly: Boolean(embedded.isConnectivityOnly ?? source.isConnectivityOnly ?? (acquisitionMode === "CONNECTIVITY_ONLY")),
@@ -215,8 +223,17 @@ export function evaluateIntelligenceEligibility(
     blockingReasons.push("VALIDATION_REJECTED");
   }
 
+  if (metadata.validationStatus === "RETURNED_FOR_REANALYSIS") {
+    blockingReasons.push("VALIDATION_RETURNED_FOR_REANALYSIS");
+  }
+
   if (metadata.validationStatus === "LEGACY_UNCLASSIFIED") {
     warnings.push("LEGACY_UNCLASSIFIED_COMPATIBILITY_READ_ONLY");
+  }
+
+  const forensicIntegrity = (item as any)?.forensicIntegrity ?? (item as any)?.multimodalEvidence?.forensicIntegrity;
+  if ((item as any)?.requiresFileIntegrity === true && forensicIntegrity?.hashStatus === "HASH_UNAVAILABLE") {
+    blockingReasons.push("FILE_INTEGRITY_REQUIRED_HASH_UNAVAILABLE");
   }
 
   if (metadata.acquisitionMode === "AI_GENERATED" && !REPORTABLE_AI_ROLES.has(metadata.semanticRole || "UNKNOWN")) {

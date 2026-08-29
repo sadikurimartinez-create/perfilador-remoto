@@ -90,6 +90,8 @@ export type AlbumPhoto = {
   gpsLng?: number | null;
   diagnosticLogs?: string;
   validado?: boolean;
+  humanValidationStatus?: "UNREVIEWED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "RETURNED_FOR_REANALYSIS" | "LEGACY_UNCLASSIFIED";
+  validationSource?: "ADR_020_24_HUMAN_ACTION" | "CANONICAL_FIELD" | "LEGACY_COMPATIBILITY" | "TECHNICAL_BOOLEAN" | "AI_READY" | "ABSENT";
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
 
@@ -552,6 +554,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             analysisType: data.analysisType || null,
             fuente: data.fuente || "Inspección de Campo",
             validado: data.validado === true,
+            humanValidationStatus: data.humanValidationStatus || null,
+            validationSource: data.validationSource || null,
             gpsLat: data.gpsLat ?? null,
             gpsLng: data.gpsLng ?? null,
             gpsAccuracy: data.gpsAccuracy ?? null,
@@ -706,6 +710,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         gpsLng: metadata?.gpsLng ?? null,
         diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
         validado: metadata?.validado ?? false,
+        humanValidationStatus: (metadata as any)?.humanValidationStatus || (isStreetView ? "PENDING_REVIEW" : "UNREVIEWED"),
+        validationSource: (metadata as any)?.validationSource || (isStreetView ? "CANONICAL_FIELD" : "ABSENT"),
         streetViewCategory: (metadata as any)?.streetViewCategory || null,
         streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
         analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),

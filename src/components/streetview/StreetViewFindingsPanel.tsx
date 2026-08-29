@@ -33,7 +33,7 @@ export interface ApprovedEvidence {
   evidenceId: string;
   projectId: string;
   originalFindingId: string;
-  validatedBy: string;
+  validatedBy: string | null;
   validatorRole: string;
   validationDate: string;
   validationComment: string;
@@ -68,7 +68,7 @@ export interface StreetViewFinding {
   descripcion?: string;
   observaciones_visual?: string;
   fechaCreacion?: string;
-  usuarioRevision?: string;
+  usuarioRevision?: string | null;
   origenRevision?: "BARRIDO_AUTOMATICO" | "MANUAL";
 }
 
@@ -87,7 +87,7 @@ export function StreetViewFindingsPanel({
   captures = [],
   onCaptureStatusChange,
   onFindingCreated,
-  validatorId = "US-CEIPOL-ANALISTA",
+  validatorId,
   validatorRole = "ANALISTA_GEOINT_SUPERVISOR",
   onTriggerTemporalComparison,
 }: StreetViewFindingsPanelProps) {
@@ -148,7 +148,7 @@ export function StreetViewFindingsPanel({
       evidenceId: `evi-approved-${Date.now()}`,
       projectId: expedienteId,
       originalFindingId: captureId,
-      validatedBy: validatorId,
+      validatedBy: validatorId || null,
       validatorRole: validatorRole,
       validationDate: new Date().toISOString(),
       validationComment: validationComment.trim(),
@@ -178,9 +178,11 @@ export function StreetViewFindingsPanel({
           heading: approvedEvidence.geometry?.heading,
           pitch: approvedEvidence.geometry?.pitch,
           estado: GeointGovernanceStatus.APPROVED_EVIDENCE,
+          humanValidationStatus: "APPROVED",
+          validationSource: "ADR_020_24_HUMAN_ACTION",
           descripcion: validationComment.trim(),
           fechaCreacion: approvedEvidence.validationDate,
-          usuarioRevision: validatorId,
+          usuarioRevision: validatorId || null,
           origenRevision: "BARRIDO_AUTOMATICO"
         })
       }).catch((err) => console.warn("Muted fetch error:", err));
@@ -192,8 +194,10 @@ export function StreetViewFindingsPanel({
         body: JSON.stringify({
           estado_revision: GeointGovernanceStatus.APPROVED_EVIDENCE,
           status: GeointGovernanceStatus.APPROVED_EVIDENCE,
+          humanValidationStatus: "APPROVED",
+          validationSource: "ADR_020_24_HUMAN_ACTION",
           validationComment: validationComment.trim(),
-          validatedBy: validatorId,
+          validatedBy: validatorId || null,
           validationDate: approvedEvidence.validationDate
         })
       }).catch((err) => console.warn("Muted patch error:", err));
@@ -233,7 +237,9 @@ export function StreetViewFindingsPanel({
         body: JSON.stringify({
           estado_revision: GeointGovernanceStatus.REJECTED_FINDING,
           status: GeointGovernanceStatus.REJECTED_FINDING,
-          rejectedBy: validatorId,
+          humanValidationStatus: "REJECTED",
+          validationSource: "ADR_020_24_HUMAN_ACTION",
+          rejectedBy: validatorId || null,
           rejectionDate: new Date().toISOString(),
           rejectionComment: validationComment.trim() || "Descartado por el analista"
         })

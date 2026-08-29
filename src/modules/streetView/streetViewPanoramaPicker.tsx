@@ -177,7 +177,7 @@ export function StreetViewPanoramaPicker({
         comentario: comentario.trim() || undefined,
         analystName,
         tipo_origen: "STREETVIEW_MANUAL",
-        estado_revision: "APROBADO" // Capturas manuales se consideran aprobadas de inmediato
+        estado_revision: "PENDIENTE_REVISION"
       };
 
       onCapture(payload);

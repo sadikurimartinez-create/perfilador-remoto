@@ -22,6 +22,7 @@ export type EpistemicValidationStatus =
   | "PENDING_REVIEW"
   | "APPROVED"
   | "REJECTED"
+  | "RETURNED_FOR_REANALYSIS"
   | "LEGACY_UNCLASSIFIED";
 
 export type IntelligenceSemanticRole =
@@ -75,6 +76,8 @@ export interface EpistemicIntegrityCarrier {
   acquisitionMode?: AcquisitionMode | string | null;
   acquisitionStatus?: AcquisitionStatus | string | null;
   validationStatus?: EpistemicValidationStatus | string | null;
+  humanValidationStatus?: EpistemicValidationStatus | string | null;
+  isAudited?: boolean | null;
   sourceId?: string | null;
   providerId?: string | null;
   providerName?: string | null;
