@@ -35,9 +35,11 @@ export type IntelligenceSemanticRole =
 export interface EpistemicSourceLineage {
   sourceId?: string | null;
   providerId?: string | null;
+  providerName?: string | null;
   sourceType?: string | null;
   sourceReference?: string | null;
   sourceUrl?: string | null;
+  rawSourceReference?: string | null;
   traceabilityId?: string | null;
   acquisitionMode?: AcquisitionMode;
 }
@@ -45,6 +47,7 @@ export interface EpistemicSourceLineage {
 export interface EpistemicIntegrityMetadata {
   sourceId?: string | null;
   providerId?: string | null;
+  providerName?: string | null;
   sourceType?: string | null;
   acquisitionMode: AcquisitionMode;
   acquisitionStatus?: AcquisitionStatus;
@@ -54,10 +57,13 @@ export interface EpistemicIntegrityMetadata {
   isDerived?: boolean;
   isConnectivityOnly?: boolean;
   observedAt?: string | null;
+  acquiredAt?: string | null;
   generatedAt?: string | null;
   sourceReference?: string | null;
   sourceUrl?: string | null;
+  rawSourceReference?: string | null;
   query?: string | null;
+  resultCount?: number | null;
   geolocationSource?: string | null;
   traceabilityId?: string | null;
   lineage?: EpistemicSourceLineage[];
@@ -71,10 +77,13 @@ export interface EpistemicIntegrityCarrier {
   validationStatus?: EpistemicValidationStatus | string | null;
   sourceId?: string | null;
   providerId?: string | null;
+  providerName?: string | null;
   sourceType?: string | null;
   sourceReference?: string | null;
   sourceUrl?: string | null;
+  rawSourceReference?: string | null;
   query?: string | null;
+  resultCount?: number | null;
   geolocationSource?: string | null;
   traceabilityId?: string | null;
   lineage?: EpistemicSourceLineage[] | null;
@@ -82,6 +91,7 @@ export interface EpistemicIntegrityCarrier {
   isDerived?: boolean;
   isConnectivityOnly?: boolean;
   observedAt?: string | null;
+  acquiredAt?: string | null;
   generatedAt?: string | null;
   status?: string | null;
   estado?: string | null;

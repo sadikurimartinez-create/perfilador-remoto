@@ -8,6 +8,7 @@ import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
 function osintEpistemicIntegrity(params: {
   sourceId: string;
   providerId: string;
+  providerName?: string | null;
   sourceType: string;
   acquisitionMode: AcquisitionMode;
   acquisitionStatus: AcquisitionStatus;
@@ -19,12 +20,16 @@ function osintEpistemicIntegrity(params: {
   generatedAt?: string | null;
   sourceReference: string;
   sourceUrl?: string | null;
+  rawSourceReference?: string | null;
   query?: string | null;
+  resultCount?: number | null;
   geolocationSource?: string | null;
+  traceabilityId?: string | null;
 }): EpistemicIntegrityMetadata {
   return {
     sourceId: params.sourceId,
     providerId: params.providerId,
+    providerName: params.providerName ?? null,
     sourceType: params.sourceType,
     acquisitionMode: params.acquisitionMode,
     acquisitionStatus: params.acquisitionStatus,
@@ -34,12 +39,15 @@ function osintEpistemicIntegrity(params: {
     isDerived: false,
     isConnectivityOnly: Boolean(params.isConnectivityOnly),
     observedAt: params.observedAt ?? null,
+    acquiredAt: params.observedAt ?? params.generatedAt ?? new Date().toISOString(),
     generatedAt: params.generatedAt ?? null,
     sourceReference: params.sourceReference,
     sourceUrl: params.sourceUrl ?? null,
+    rawSourceReference: params.rawSourceReference ?? null,
     query: params.query ?? null,
+    resultCount: params.resultCount ?? null,
     geolocationSource: params.geolocationSource ?? null,
-    traceabilityId: null,
+    traceabilityId: params.traceabilityId ?? null,
     lineage: [],
   };
 }
@@ -50,7 +58,8 @@ export async function pingOsint() {
     status: "ok",
     epistemicIntegrity: osintEpistemicIntegrity({
       sourceId: "osint-connectivity-ping",
-      providerId: "osintActions.pingOsint",
+      providerId: "CEIPOL_OSINT_CONNECTIVITY",
+      providerName: "CEIPOL OSINT Connectivity Healthcheck",
       sourceType: "CONNECTIVITY_HEALTHCHECK",
       acquisitionMode: "CONNECTIVITY_ONLY",
       acquisitionStatus: "ACQUIRED",
@@ -58,6 +67,8 @@ export async function pingOsint() {
       isConnectivityOnly: true,
       generatedAt: new Date().toISOString(),
       sourceReference: "src/lib/osintActions.ts:pingOsint",
+      rawSourceReference: "local-healthcheck:osint-actions",
+      resultCount: 0,
     }),
   };
 }
@@ -86,16 +97,19 @@ export async function getScinceData(lat: number, lng: number) {
       viviendasDeshabitadas: deshabitadas.toString(),
       gradoMarginacion: marginacion,
       epistemicIntegrity: osintEpistemicIntegrity({
-        sourceId: "inegi-scince-simulator",
-        providerId: "osintActions.getScinceData",
-        sourceType: "LOCAL_SCINCE_DEMOGRAPHIC_SIMULATOR",
+        sourceId: "SCINCE_LOCAL_SIMULATOR",
+        providerId: "SCINCE_LOCAL_SIMULATOR",
+        providerName: "SCINCE Local Simulator",
+        sourceType: "SCINCE",
         acquisitionMode: "SIMULATED",
         acquisitionStatus: "ACQUIRED",
         semanticRole: "DIAGNOSTIC",
         isSimulated: true,
         generatedAt: new Date().toISOString(),
         sourceReference: "src/lib/osintActions.ts:getScinceData",
+        rawSourceReference: "local-simulator:scince-demographic-seed",
         query: `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`,
+        resultCount: 1,
         geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
       }),
     };
@@ -104,16 +118,19 @@ export async function getScinceData(lat: number, lng: number) {
       exito: false,
       error: error.message || "Error al calcular SCINCE",
       epistemicIntegrity: osintEpistemicIntegrity({
-        sourceId: "inegi-scince-simulator",
-        providerId: "osintActions.getScinceData",
-        sourceType: "LOCAL_SCINCE_DEMOGRAPHIC_SIMULATOR",
+        sourceId: "SCINCE_LOCAL_SIMULATOR",
+        providerId: "SCINCE_LOCAL_SIMULATOR",
+        providerName: "SCINCE Local Simulator",
+        sourceType: "SCINCE",
         acquisitionMode: "SIMULATED",
         acquisitionStatus: "FAILED",
         semanticRole: "DIAGNOSTIC",
         isSimulated: true,
         generatedAt: new Date().toISOString(),
         sourceReference: "src/lib/osintActions.ts:getScinceData",
+        rawSourceReference: "local-simulator:scince-demographic-seed",
         query: `${lat},${lng}`,
+        resultCount: 0,
         geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
       }),
     };
@@ -123,7 +140,30 @@ export async function getScinceData(lat: number, lng: number) {
 export async function getDenueData(lat: number, lng: number, radio: number = 500) {
   try {
     if (!lat || !lng) throw new Error("Faltan coordenadas");
-    const token = process.env.INEGI_DENUE_TOKEN || "dbf9098a-165e-4938-a5fc-841bd476e357";
+    const token = process.env.INEGI_DENUE_TOKEN;
+    if (!token) {
+      return {
+        exito: false,
+        error: "Proveedor INEGI DENUE no configurado.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          sourceId: "inegi-denue-api",
+          providerId: "INEGI_DENUE",
+          providerName: "INEGI DENUE API Publica",
+          sourceType: "DENUE",
+          acquisitionMode: "OBSERVED",
+          acquisitionStatus: "NOT_CONFIGURED",
+          semanticRole: "SOURCE_FACT",
+          observedAt: null,
+          generatedAt: new Date().toISOString(),
+          sourceReference: "src/lib/osintActions.ts:getDenueData",
+          sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+          rawSourceReference: "denue:v1:consulta:Buscar:todos",
+          query: `${lat},${lng},${radio}`,
+          resultCount: 0,
+          geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+        }),
+      };
+    }
     const url = `https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar/todos/${lat},${lng}/${radio}/${token}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Error de la API de INEGI: ${res.status}`);
@@ -136,15 +176,18 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
         resumen: "No se encontraron negocios.",
         epistemicIntegrity: osintEpistemicIntegrity({
           sourceId: "inegi-denue-api",
-          providerId: "osintActions.getDenueData",
-          sourceType: "INEGI_DENUE_PUBLIC_API",
+          providerId: "INEGI_DENUE",
+          providerName: "INEGI DENUE API Publica",
+          sourceType: "DENUE",
           acquisitionMode: "OBSERVED",
           acquisitionStatus: "NO_DATA",
           semanticRole: "SOURCE_FACT",
           observedAt: new Date().toISOString(),
           sourceReference: "src/lib/osintActions.ts:getDenueData",
           sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+          rawSourceReference: "denue:v1:consulta:Buscar:todos",
           query: `${lat},${lng},${radio}`,
+          resultCount: 0,
           geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
         }),
       };
@@ -157,15 +200,18 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
       resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno.",
       epistemicIntegrity: osintEpistemicIntegrity({
         sourceId: "inegi-denue-api",
-        providerId: "osintActions.getDenueData",
-        sourceType: "INEGI_DENUE_PUBLIC_API",
+        providerId: "INEGI_DENUE",
+        providerName: "INEGI DENUE API Publica",
+        sourceType: "DENUE",
         acquisitionMode: "OBSERVED",
         acquisitionStatus: data.length > 0 ? "ACQUIRED" : "NO_DATA",
         semanticRole: "SOURCE_FACT",
         observedAt: new Date().toISOString(),
         sourceReference: "src/lib/osintActions.ts:getDenueData",
         sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+        rawSourceReference: "denue:v1:consulta:Buscar:todos",
         query: `${lat},${lng},${radio}`,
+        resultCount: data.length,
         geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
       }),
     };
@@ -175,8 +221,9 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
       error: error.message || "Error interno del servidor al consultar DENUE.",
       epistemicIntegrity: osintEpistemicIntegrity({
         sourceId: "inegi-denue-api",
-        providerId: "osintActions.getDenueData",
-        sourceType: "INEGI_DENUE_PUBLIC_API",
+        providerId: "INEGI_DENUE",
+        providerName: "INEGI DENUE API Publica",
+        sourceType: "DENUE",
         acquisitionMode: "OBSERVED",
         acquisitionStatus: "FAILED",
         semanticRole: "SOURCE_FACT",
@@ -184,7 +231,9 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
         generatedAt: new Date().toISOString(),
         sourceReference: "src/lib/osintActions.ts:getDenueData",
         sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+        rawSourceReference: "denue:v1:consulta:Buscar:todos",
         query: `${lat},${lng},${radio}`,
+        resultCount: 0,
         geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
       }),
     };
@@ -242,11 +291,13 @@ export async function getDatosGobMxData(
 export async function getTelegramOsintData(queryTelegram: string) {
   const baseMetadata = {
     sourceId: "telegram-gemini-osint-synthesis",
-    providerId: "osintActions.getTelegramOsintData",
-    sourceType: "LLM_SYNTHESIS_NOT_TELEGRAM_OBSERVATION",
+    providerId: "GEMINI",
+    providerName: "Google Vertex AI Gemini",
+    sourceType: "TELEGRAM_CONTEXT",
     acquisitionMode: "AI_GENERATED" as const,
     semanticRole: "SYNTHESIS" as const,
     sourceReference: "src/lib/osintActions.ts:getTelegramOsintData",
+    rawSourceReference: "gemini:generateContent:telegram-context-synthesis",
     query: queryTelegram || null,
   };
 
@@ -261,6 +312,7 @@ export async function getTelegramOsintData(queryTelegram: string) {
           acquisitionStatus: "NOT_CONFIGURED",
           validationStatus: "UNREVIEWED",
           generatedAt: new Date().toISOString(),
+          resultCount: 0,
         }),
       };
     }
@@ -296,6 +348,7 @@ Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. 
           acquisitionStatus: "NO_DATA",
           validationStatus: "UNREVIEWED",
           generatedAt: new Date().toISOString(),
+          resultCount: 0,
         }),
       };
     }
@@ -308,6 +361,7 @@ Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. 
         acquisitionStatus: "ACQUIRED",
         validationStatus: "PENDING_REVIEW",
         generatedAt: new Date().toISOString(),
+        resultCount: 1,
       }),
     };
   } catch (error: any) {
@@ -320,6 +374,7 @@ Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. 
         acquisitionStatus: "FAILED",
         validationStatus: "UNREVIEWED",
         generatedAt: new Date().toISOString(),
+        resultCount: 0,
       }),
     };
   }

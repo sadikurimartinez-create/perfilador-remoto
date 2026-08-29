@@ -2,6 +2,7 @@ import { getScinceData, getDenueData, getTelegramOsintData } from "@/lib/osintAc
 import { PandillasService } from "./pandillas.service";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
+import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
 
 /**
  * Pandillas intelligence orchestration engine.
@@ -19,7 +20,7 @@ export class PandillasEngine {
   static async executeFullSweep(
     gang: GangEntity,
     userContext: string
-  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; isAiGenerated: boolean; warning?: string }> {
+  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; isAiGenerated: boolean; warning?: string }> {
     const geoValidation = validateGeoIntegrity(gang.coordenadas?.lat, gang.coordenadas?.lng);
     const lat = geoValidation.latitude;
     const lng = geoValidation.longitude;
@@ -46,6 +47,9 @@ export class PandillasEngine {
       getDenueData(lat, lng, 350).catch(() => ({ exito: false, error: "Fallo DENUE" })),
       getTelegramOsintData(`Pandilla ${gang.nombre} Colonia ${gang.zonaInfluencia} Aguascalientes`).catch(() => ({ success: false, error: "Fallo OSINT" }))
     ])) as [any, any, any];
+    const externalSourceProvenance = [scinceData, denueData, telegramOsint]
+      .map((item) => item?.epistemicIntegrity)
+      .filter(Boolean) as EpistemicIntegrityMetadata[];
 
     // Build the enriched context
     let enrichmentPrompt = `
@@ -77,6 +81,7 @@ export class PandillasEngine {
       ...result,
       scinceInfo: scinceData.exito ? scinceData : undefined,
       denueInfo: denueData.exito ? denueData : undefined,
+      externalSourceProvenance,
     };
   }
 }

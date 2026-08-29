@@ -32,6 +32,7 @@ describe("ADR-020.17 Fase 2 - Synthetic producer containment", () => {
     mockGcpProjectId = "test-project";
     mockGcpLocation = "us-central1";
     mockGeminiModel = "gemini-test";
+    process.env.INEGI_DENUE_TOKEN = "test-denue-token";
     delete (global as any).fetch;
   });
 
