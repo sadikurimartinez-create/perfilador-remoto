@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { google } from "googleapis";
 import { getPool } from "@/lib/db";
+import type { MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
 
 export interface DriveFileRecord {
   id: string;
@@ -10,6 +11,7 @@ export interface DriveFileRecord {
   size?: string;
   createdTime?: string;
   md5Checksum?: string;
+  traceabilityId?: string;
   logicalCategory: string; // 'Root' or 'Pandillas', 'OSINT', 'Evidencia', 'Desaparecidos', etc.
 }
 
@@ -21,6 +23,10 @@ export interface IngestionStatusLog {
   source: "drive";
   logicalCategory: string;
   errorMessage?: string;
+  metadata?: {
+    multimodalEvidence?: MultimodalEvidenceContract;
+    [key: string]: any;
+  };
 }
 
 /**
@@ -120,7 +126,7 @@ export class DriveIngestionService {
     await this.ensureTrackingTableExists();
     const pool = getPool();
     const res = await pool.query(
-      "SELECT file_id, file_name, status, timestamp, source, logical_category, error_message FROM drive_ingestion_log WHERE file_id = $1",
+      "SELECT file_id, file_name, status, timestamp, source, logical_category, error_message, metadata FROM drive_ingestion_log WHERE file_id = $1",
       [fileId]
     );
 
@@ -135,6 +141,7 @@ export class DriveIngestionService {
       source: row.source,
       logicalCategory: row.logical_category,
       errorMessage: row.error_message || undefined,
+      metadata: row.metadata || undefined,
     };
   }
 
@@ -210,7 +217,7 @@ export class DriveIngestionService {
       do {
         const res: any = await drive.files.list({
           q: `'${parentId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`,
-          fields: "nextPageToken, files(id, name, mimeType, size, createdTime, md5Checksum, parents)",
+          fields: "nextPageToken, files(id, name, mimeType, size, createdTime, md5Checksum, parents, appProperties, properties)",
           pageToken: pageToken,
         });
 
@@ -232,6 +239,7 @@ export class DriveIngestionService {
             size: file.size || undefined,
             createdTime: file.createdTime || undefined,
             md5Checksum: file.md5Checksum || undefined,
+            traceabilityId: file.appProperties?.traceabilityId || file.properties?.traceabilityId || undefined,
             logicalCategory: category,
           });
         }
@@ -253,7 +261,7 @@ export class DriveIngestionService {
     // 1. Fetch metadata first to enforce strict geofencing before downloading!
     const metaRes = await drive.files.get({
       fileId,
-      fields: "id, name, mimeType, parents, size, createdTime, md5Checksum",
+      fields: "id, name, mimeType, parents, size, createdTime, md5Checksum, appProperties, properties",
     });
 
     const fileMetaRaw = metaRes.data;
@@ -293,6 +301,7 @@ export class DriveIngestionService {
       size: fileMetaRaw.size || undefined,
       createdTime: fileMetaRaw.createdTime || undefined,
       md5Checksum: fileMetaRaw.md5Checksum || undefined,
+      traceabilityId: (fileMetaRaw as any).appProperties?.traceabilityId || (fileMetaRaw as any).properties?.traceabilityId || undefined,
       logicalCategory: category,
     };
 

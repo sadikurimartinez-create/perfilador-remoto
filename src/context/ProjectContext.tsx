@@ -17,6 +17,7 @@ import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, o
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
+import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
 import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
@@ -181,6 +182,7 @@ export type ProjectDocument = {
   type: string;
   context: string;
   createdAt: number;
+  multimodalEvidence?: MultimodalEvidenceContract;
 };
 
 type ProjectContextValue = {
@@ -836,12 +838,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const firestore = getDb();
     const docsColRef = collection(firestore, "projects", project.id, "documents");
+    const storagePath = snapshot.ref.fullPath;
     const docData = {
       name: file.name,
       url: downloadURL,
       type: file.type || "unknown",
       context,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      multimodalEvidence: createStoredRawMultimodalEvidence({
+        evidenceId: docId,
+        expedienteId: project.id,
+        documentId: docId,
+        fileName: file.name,
+        mimeType: file.type || "unknown",
+        size: file.size,
+        storageReference: storagePath,
+        ingestionSource: "USER_UPLOAD",
+        traceabilityId: null,
+        analystContext: context,
+      })
     };
     const docRef = await addDoc(docsColRef, docData);
     setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);

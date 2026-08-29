@@ -24,6 +24,7 @@ import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDiscla
 import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
+import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
 
 import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
@@ -166,11 +167,16 @@ function ElapsedTime({ running }: { running: boolean }) {
 
 function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isReadOnly }: any) {
   const { documents, saveCustomDocument, removeDocument } = useProject();
-  const [context, setContext] = useState("");
+  const { user } = useAuth();
+  const [context, setContext] = useState(d.context || "");
   const [suggestions, setSuggestions] = useState("");
   const [auditScore, setAuditScore] = useState<number | null>(null);
   const [isRefining, setIsRefining] = useState(false);
-  const [isAudited, setIsAudited] = useState(false);
+  const [isAudited, setIsAudited] = useState(d.multimodalEvidence?.humanValidationStatus === "APPROVED");
+  const [isReadyForHumanReview, setIsReadyForHumanReview] = useState(
+    d.multimodalEvidence?.analysisStatus === "READY_FOR_HUMAN_REVIEW" ||
+    d.multimodalEvidence?.humanValidationStatus === "APPROVED"
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const parseJSONResponse = (suggestionsVal: string, scoreVal: number) => {
@@ -222,7 +228,7 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
         const { sVal, scVal } = parseJSONResponse(data.suggestions ?? "", data.score ?? 0);
         setSuggestions(sVal);
         setAuditScore(scVal);
-        if (scVal >= 80) setIsAudited(true);
+        if (scVal >= 80) setIsReadyForHumanReview(true);
       } else {
         alert(data.error || "No se pudieron obtener sugerencias.");
       }
@@ -244,6 +250,38 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
       });
     } catch(e: any) {
       alert("Error al guardar: " + e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const buildValidatorIdentity = () => {
+    if (!user) return null;
+    const identity: any = {};
+    if (user.id != null && String(user.id).trim()) identity.id = user.id;
+    if (user.username && user.username.trim()) identity.username = user.username.trim();
+    if (user.name && user.name.trim()) identity.name = user.name.trim();
+    return Object.keys(identity).length > 0 ? identity : null;
+  };
+
+  const handleHumanApproval = async () => {
+    if (isReadOnly || !d.multimodalEvidence) return;
+    setIsSaving(true);
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const { doc, updateDoc } = await import("firebase/firestore");
+      const firestore = getDb();
+      const approvedEvidence = markHumanApproved(d.multimodalEvidence, {
+        validatedAt: new Date().toISOString(),
+        validatedBy: buildValidatorIdentity(),
+      });
+      await updateDoc(doc(firestore, "projects", projectId, "documents", d.id), {
+        multimodalEvidence: approvedEvidence,
+      });
+      d.multimodalEvidence = approvedEvidence;
+      setIsAudited(true);
+    } catch(e: any) {
+      alert("Error al persistir aprobación humana: " + e.message);
     } finally {
       setIsSaving(false);
     }
@@ -325,13 +363,26 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
                    type="button"
                    variant="ghost"
                    size="sm"
-                   onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }}
+                   onClick={() => { setContext((c: string) => c + "\n\n" + suggestions); setSuggestions(""); setIsReadyForHumanReview(true); setIsAudited(false); }}
                  >
                    + Añadir plantilla...
                  </CEIPOLButton>
-                 <button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button>
+                 <button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsReadyForHumanReview(false); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button>
                </div>
            </div>
+       )}
+       {isReadyForHumanReview && !isAudited && (
+         <div className="flex justify-end">
+           <CEIPOLButton
+             type="button"
+             variant="secondary"
+             size="sm"
+             onClick={handleHumanApproval}
+             disabled={isReadOnly || !d.multimodalEvidence || isSaving}
+           >
+             Confirmar revisión humana
+           </CEIPOLButton>
+         </div>
        )}
        <div className="flex justify-end mt-2">
          <CEIPOLButton
