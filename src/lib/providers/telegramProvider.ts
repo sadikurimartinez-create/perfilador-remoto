@@ -72,22 +72,22 @@ export class TelegramProvider implements IProvider {
           data = await getTelegramOsintData(query);
         }
       } else {
-        // Real connection reachability check if bot token is missing
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch("https://api.telegram.org", { method: "GET", signal: controller.signal });
-        clearTimeout(id);
-        
-        if (res.status >= 500) {
-          throw new Error(`Telegram server unreachable, status: ${res.status}`);
-        }
-        data = [
-          {
-            texto: `Conexión de red de Telegram activa. Búsqueda pública de canal simulada para '${query}'.`,
-            chat: "Canal Público de Seguridad",
-            fecha: new Date().toISOString()
-          }
-        ];
+        return {
+          provider: this.getId(),
+          status: "disabled",
+          timestamp: new Date().toISOString(),
+          confidence: 0,
+          payload: null,
+          latency: Date.now() - start,
+          metadata: {
+            version: "2.1.0",
+            sourceFamily: "TELEGRAM",
+            operationalMode: "NOT_CONFIGURED",
+            acquisitionStatus: "NOT_CONFIGURED",
+            authoritative: false,
+          },
+          errors: ["Telegram Bot API token is not configured."]
+        };
       }
 
       const normalized = GeoDataNormalizerEngine.normalize(this.getId(), action, data, lat, lng);

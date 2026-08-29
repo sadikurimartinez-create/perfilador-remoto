@@ -165,7 +165,19 @@ export class InegiProvider implements IProvider {
         };
       }
 
-      const token = process.env.INEGI_DENUE_TOKEN || "dbf9098a-165e-4938-a5fc-841bd476e357";
+      const token = process.env.INEGI_DENUE_TOKEN;
+      if (!token) {
+        return {
+          isHealthy: false,
+          latencyMs: Date.now() - start,
+          details: "Falta INEGI_DENUE_TOKEN en variables de entorno.",
+          timestamp: new Date().toISOString(),
+          authenticationStatus: "invalid",
+          availability: 0,
+          recordsCount: 0
+        };
+      }
+
       const url = `https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar/todos/21.8818,-102.2950/10/${token}`;
       const res = await fetch(url, { headers: { "User-Agent": "PerfiladorRemoto/1.0" } });
       

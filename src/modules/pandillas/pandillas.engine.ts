@@ -3,6 +3,7 @@ import { PandillasService } from "./pandillas.service";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
+import { classifyEpistemicSource, type SourceRouteDescriptor } from "@/lib/providers/sourceRegistry";
 
 /**
  * Pandillas intelligence orchestration engine.
@@ -20,7 +21,7 @@ export class PandillasEngine {
   static async executeFullSweep(
     gang: GangEntity,
     userContext: string
-  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; isAiGenerated: boolean; warning?: string }> {
+  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; sourceRouteClassifications?: SourceRouteDescriptor[]; isAiGenerated: boolean; warning?: string }> {
     const geoValidation = validateGeoIntegrity(gang.coordenadas?.lat, gang.coordenadas?.lng);
     const lat = geoValidation.latitude;
     const lng = geoValidation.longitude;
@@ -50,21 +51,27 @@ export class PandillasEngine {
     const externalSourceProvenance = [scinceData, denueData, telegramOsint]
       .map((item) => item?.epistemicIntegrity)
       .filter(Boolean) as EpistemicIntegrityMetadata[];
+    const sourceRouteClassifications = externalSourceProvenance
+      .map((metadata) => classifyEpistemicSource(metadata))
+      .filter(Boolean) as SourceRouteDescriptor[];
+    const scinceRoute = classifyEpistemicSource(scinceData?.epistemicIntegrity);
+    const denueRoute = classifyEpistemicSource(denueData?.epistemicIntegrity);
+    const telegramRoute = classifyEpistemicSource(telegramOsint?.epistemicIntegrity);
 
     // Build the enriched context
     let enrichmentPrompt = `
 - Información de Entorno Extraída de APIs Internas:
-* Datos Demográficos (INEGI SCINCE): ${
+* Datos Demográficos (SCINCE / ${scinceRoute?.operationalMode || "UNKNOWN"}): ${
       scinceData.exito
-        ? `Población: ${scinceData.poblacionTotal}, Viviendas: ${scinceData.viviendasTotales}, Grado de Marginación: ${scinceData.gradoMarginacion}`
+        ? `Uso diagnostico no autoritativo. Población estimada: ${scinceData.poblacionTotal}, Viviendas: ${scinceData.viviendasTotales}, Grado de Marginación: ${scinceData.gradoMarginacion}`
         : "Sin datos demográficos."
     }
-* Comercios Locales Activos (INEGI DENUE): ${
-      denueData.exito && denueData.total > 0
+* Comercios Locales Activos (DENUE / ${denueRoute?.operationalMode || "UNKNOWN"}): ${
+      denueRoute?.authoritative && denueData.exito && denueData.total > 0
         ? `Total comercios en radio: ${denueData.total}. Muestra de negocios: ${denueData.resumen}`
-        : "Sin comercios reportados."
+        : "Sin adquisición DENUE autoritativa disponible."
     }
-* Análisis OSINT Complementario (CEIPOL Crawler): ${
+* Análisis OSINT Complementario (${telegramRoute?.sourceType || "TELEGRAM_CONTEXT"} / ${telegramRoute?.operationalMode || "UNKNOWN"}): ${
       telegramOsint.success
         ? telegramOsint.osintSummary
         : "Sin correlaciones OSINT adicionales detectadas."
@@ -82,6 +89,7 @@ export class PandillasEngine {
       scinceInfo: scinceData.exito ? scinceData : undefined,
       denueInfo: denueData.exito ? denueData : undefined,
       externalSourceProvenance,
+      sourceRouteClassifications,
     };
   }
 }
