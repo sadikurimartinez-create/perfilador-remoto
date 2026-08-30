@@ -17,6 +17,7 @@ import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, o
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
+import { enqueueSweepLifecycleEventsInTransaction } from "@/services/geoint/geointSweepLifecycleEventService";
 import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
 import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
 import {
@@ -338,6 +339,11 @@ function buildRealValidatorIdentity(user: any): any | null {
   if (typeof user.name === "string" && user.name.trim()) identity.name = user.name.trim();
   if (typeof user.role === "string" && user.role.trim()) identity.role = user.role.trim();
   return Object.keys(identity).length > 0 ? identity : null;
+}
+
+function buildGeointSweepEventActor(user: any): string {
+  const identity = buildRealValidatorIdentity(user);
+  return identity?.username || identity?.name || (identity?.id != null ? String(identity.id) : "UNAVAILABLE");
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
@@ -1594,8 +1600,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (params.type === "Directa") {
         updateData.hipotesis = updatedHypothesis;
       }
-      
-      await updateDoc(projectRef, updateData);
+
+      await runTransaction(firestore, async (transaction) => {
+        transaction.update(projectRef, updateData);
+        await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, lifecycle, {
+          actor: buildGeointSweepEventActor(user),
+          source: "ProjectContext.registerSweep",
+        });
+      });
 
       // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
       let latVal: number | null = null;
@@ -1678,7 +1690,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error registering sweep:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction, album]);
+  }, [project, isReadOnly, logAuditAction, album, user]);
 
   const updateSweep = useCallback(async (sweepId: string, updates: Partial<SweepIntegrationItem>) => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
@@ -1809,6 +1821,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           sweeps: updatedSweeps,
           hipotesis: updatedHypothesis
         });
+        if (updatedSweep.lifecycle) {
+          await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, updatedSweep.lifecycle, {
+            actor: buildGeointSweepEventActor(user),
+            source: "ProjectContext.updateSweep",
+          });
+        }
       });
 
       setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);

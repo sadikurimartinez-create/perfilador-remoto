@@ -36,7 +36,7 @@ export function calculateSweepPreparation(input: {
 }
 
 export function GeographicWorkspace() {
-  const { project, album } = useProject();
+  const { project, album, registerSweep } = useProject();
   const expedienteId = project?.id || "EXP-2026";
 
   const [selectedPoi, setSelectedPoi] = useState<any | null>(null);
@@ -370,6 +370,18 @@ export function GeographicWorkspace() {
                   sourceType: "STREETVIEW_AUTOMATICO",
                 })),
               ]);
+              void registerSweep({
+                engine: "GEOINT_CONTROLLED_SWEEP",
+                source: "GeointControlledSweepEngine",
+                type: "Directa",
+                relevance: "Alto",
+                data: `Barrido GEOINT controlado generado por acción operacional explícita. Hallazgos: ${newCaptures.length}.`,
+                initialContext: "Ejecución manual desde GeographicWorkspace.",
+                outputEvidenceIds: newCaptures.map((capture) => capture.sourceEvidenceId).filter(Boolean),
+                outputFindingIds: newCaptures.map((capture) => capture.originalFindingId).filter(Boolean),
+              }).catch((err) => {
+                console.warn("[GeographicWorkspace] No se pudo registrar lifecycle del barrido GEOINT controlado:", err);
+              });
             }}
           />
         )}

@@ -9,7 +9,6 @@ import {
   GeointGovernanceStatus,
 } from "@/types/geointSweep";
 import { calculateHaversineDistanceMeters } from "@/utils/geoResolver";
-import { logGeointEvent } from "@/services/geoint/logGeointEvent";
 import { buildGeointTraceabilityId } from "@/types/geointGovernance";
 
 interface GeointControlledSweepEngineProps {
@@ -98,28 +97,6 @@ export function GeointControlledSweepEngine({
     const generatedFindings: GeoIntSweepFindingPayload[] = [];
 
     try {
-      const sweepEventIdentity = buildControlledSweepEventIdentity({
-        projectId,
-        lat,
-        lng,
-        radiusMeters,
-        sweepType,
-        selectedCategories,
-      });
-
-      // ADR-019.19 FASE 2B: accion explicita del analista encolada en Outbox.
-      await logGeointEvent(
-        "GEOINT_SWEEP_STARTED",
-        projectId,
-        sweepEventIdentity.traceabilityId,
-        analystName,
-        "GeointControlledSweepEngine",
-        "INITIATED",
-        "SWEEP_SESSION",
-        sweepEventIdentity.entityId,
-        { lat, lng, radiusMeters, sweepType, selectedCategories }
-      );
-
       let globalCount = 0;
       const radiusDegreeApprox = (radiusMeters / 1000) * 0.009;
 
