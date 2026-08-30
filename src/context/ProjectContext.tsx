@@ -22,6 +22,7 @@ import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } 
 import {
   certifyGeointSweepWithHumanApproval,
   createHumanTriggeredRunningSweepLifecycle,
+  isActiveGeointSweepLifecycleStatus,
   markGeointSweepReadyForHumanReview,
   rejectGeointSweepWithHumanDecision,
   transitionGeointSweepLifecycle,
@@ -1520,6 +1521,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const registerSweep = useCallback(async (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+
+    const currentSweeps = project.sweeps || [];
+    const activeDuplicate = currentSweeps.find((s) =>
+      s.engine === params.engine &&
+      s.source === params.source &&
+      s.type === params.type &&
+      isActiveGeointSweepLifecycleStatus(s.lifecycleStatus || s.lifecycle?.status)
+    );
+    if (activeDuplicate) {
+      setActiveSweepForModal(activeDuplicate);
+      return activeDuplicate.id;
+    }
     
     const sweepId = `SWEEP-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const initialStatus = params.type === "Directa" ? "Integrado" : "Pendiente";
@@ -1560,7 +1573,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       lineageStatus: lifecycle.lineageStatus,
     };
 
-    const currentSweeps = project.sweeps || [];
     const updatedSweeps = [...currentSweeps, newSweep];
 
     let updatedHypothesis = project.hipotesis || "";

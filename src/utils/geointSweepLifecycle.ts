@@ -91,6 +91,14 @@ const TERMINAL_NON_PROGRESSING = new Set<GeointSweepLifecycleStatus>([
   "EXPIRED",
 ]);
 
+const ACTIVE_SWEEP_STATUSES = new Set<GeointSweepLifecycleStatus>([
+  "REQUESTED",
+  "RUNNING",
+  "COLLECTING",
+  "ANALYZING",
+  "VALIDATING",
+]);
+
 function isoNow() {
   return new Date().toISOString();
 }
@@ -138,6 +146,10 @@ export function canTransitionGeointSweep(
   }
 
   return { allowed: true };
+}
+
+export function isActiveGeointSweepLifecycleStatus(status: unknown): boolean {
+  return typeof status === "string" && ACTIVE_SWEEP_STATUSES.has(status as GeointSweepLifecycleStatus);
 }
 
 export function createGeointSweepLifecycleRecord(input: {

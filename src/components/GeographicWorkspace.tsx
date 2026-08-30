@@ -10,13 +10,30 @@ import { AnalyticsFilterProvider } from "./analytics/AnalyticsFilterContext";
 import { GeointControlledSweepEngine } from "@/modules/geoint/GeointControlledSweepEngine";
 import { GeointTemporalComparativeEngine } from "@/modules/geoint/GeointTemporalComparativeEngine";
 import { useProject } from "@/context/ProjectContext";
-import { executeAutomaticGeointSweep } from "@/services/geoint/geointSweepService";
 import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
 import { GeointGovernanceStatus, GeointGovernanceStatusValue } from "@/types/geointGovernance";
 import { buildStreetViewFindingFromTemporalComparison } from "@/services/geoint/temporalComparisonBridge";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
+
+export function calculateSweepPreparation(input: {
+  expedienteId: string;
+  georeferencedPhotosCount: number;
+  existingFindingsCount: number;
+}) {
+  return {
+    mode: "PREPARATION" as const,
+    sweepAvailable: input.georeferencedPhotosCount > 0,
+    recommendedReason:
+      input.georeferencedPhotosCount > 0
+        ? "GEOREFERENCED_PHOTOS_AVAILABLE"
+        : "NO_GEOREFERENCED_PHOTOS",
+    expedienteId: input.expedienteId,
+    georeferencedPhotosCount: input.georeferencedPhotosCount,
+    existingFindingsCount: input.existingFindingsCount,
+  };
+}
 
 export function GeographicWorkspace() {
   const { project, album } = useProject();
@@ -139,6 +156,16 @@ export function GeographicWorkspace() {
     setIsTemporalEngineOpen(true);
   };
 
+  const sweepPreparation = React.useMemo(
+    () =>
+      calculateSweepPreparation({
+        expedienteId,
+        georeferencedPhotosCount: georeferencedPhotos.length,
+        existingFindingsCount: findings.length,
+      }),
+    [expedienteId, georeferencedPhotos.length, findings.length]
+  );
+
   // Sincronizar hallazgos del expediente desde el backend al cargar
   useEffect(() => {
     async function fetchFindings() {
@@ -159,99 +186,6 @@ export function GeographicWorkspace() {
     }
     fetchFindings();
   }, [expedienteId]);
-
-  // ADR-019.9.3: Corrección del latch de ejecución GEOINT diferida
-  const sweepScheduledRef = React.useRef(false);
-  const sweepStartedRef = React.useRef(false);
-
-  useEffect(() => {
-    if (sweepStartedRef.current || sweepScheduledRef.current) return;
-    if (!georeferencedPhotos || georeferencedPhotos.length === 0) return;
-
-    sweepScheduledRef.current = true;
-    console.log("[ADR-019.9.1] UI expediente lista");
-
-    const timerId = setTimeout(() => {
-      sweepStartedRef.current = true;
-      console.log("[ADR-019.9.1] Iniciando sweep background");
-      console.log("[AUTO SWEEP ADR-019.7] Fotos recibidas:", georeferencedPhotos.length);
-      console.log(`[AUTO SWEEP ADR-019.7] Motor iniciado: Ejecutando barrido automático GEOINT/StreetView para expediente ${expedienteId}...`);
-
-      async function runAutoSweep() {
-        try {
-          console.log("[ADR-019.8.2 DEBUG] Antes de consultar hallazgos existentes");
-          const fetchStartTime = Date.now();
-          console.log(`[ADR-019.8.3 CLIENT DEBUG] Iniciando fetch a /api/expedientes/${expedienteId}/streetview/findings a las ${new Date().toISOString()}`);
-
-          let checkRes: Response;
-          try {
-            checkRes = await fetch(`/api/expedientes/${expedienteId}/streetview/findings`);
-          } catch (fetchErr: any) {
-            console.error(`[ADR-019.8.3 CLIENT DEBUG] Error de red en fetch de hallazgos tras ${Date.now() - fetchStartTime}ms:`, fetchErr);
-            throw fetchErr;
-          }
-
-          const fetchDuration = Date.now() - fetchStartTime;
-          console.log(`[ADR-019.8.3 CLIENT DEBUG] Fetch completado en ${fetchDuration}ms. Status: ${checkRes.status}`);
-          console.log("[ADR-019.8.2 DEBUG] Respuesta findings:", checkRes.status);
-          let hasRealGeointFindings = false;
-
-          if (checkRes.ok) {
-            const checkData = await checkRes.json();
-            const existingList = Array.isArray(checkData) ? checkData : (checkData?.findings || []);
-            
-            hasRealGeointFindings = existingList.some(
-              (f: any) =>
-                f.analysisSource === "TEMPORAL_COMPARISON_AI" &&
-                (f.origenRevision === "BARRIDO_AUTOMATICO" || f.origenRevision === "AUTOMATICO")
-            );
-          }
-
-          if (hasRealGeointFindings) {
-            console.log(`[AUTO SWEEP ADR-019.7] Persistencia confirmada: Hallazgos reales procesados por ADR-019.7 ya existen en Firestore.`);
-            console.log("[ADR-019.9.1] Sweep terminado (hallazgos existentes)");
-            return;
-          }
-
-          console.log("[AUTO SWEEP ADR-019.7] Motor GEOINT real iniciado");
-          console.log("[AUTO SWEEP ADR-019.7] Fotografías procesadas:", georeferencedPhotos.length);
-
-          console.log("[ADR-019.8.2 DEBUG] Entrando a geointSweepService");
-          const sweepResult = await executeAutomaticGeointSweep(
-            georeferencedPhotos as any,
-            expedienteId
-          );
-          console.log(
-            "[ADR-019.8.2 DEBUG] Resultado GEOINT:",
-            sweepResult.successCount,
-            sweepResult.errorCount
-          );
-
-          const generatedFindings = sweepResult.findings;
-          console.log("[AUTO SWEEP ADR-019.7] Hallazgos persistibles:", generatedFindings.length);
-
-          for (const finding of generatedFindings) {
-            const enrichedFinding = { ...finding, analysisSource: "TEMPORAL_COMPARISON_AI" };
-            await handleFindingCreated(enrichedFinding);
-            console.log("[AUTO SWEEP ADR-019.7] Persistencia confirmada:", finding.id);
-          }
-
-          console.log("[ADR-019.9.1] Sweep terminado");
-        } catch (err) {
-          console.error("[AUTO SWEEP ADR-019.7] Error en barrido automático:", err);
-        }
-      }
-
-      runAutoSweep();
-    }, 1000);
-
-    return () => {
-      clearTimeout(timerId);
-      if (!sweepStartedRef.current) {
-        sweepScheduledRef.current = false;
-      }
-    };
-  }, [georeferencedPhotos, expedienteId]);
 
   const handlePoiSelect = (poi: any) => {
     setSelectedPoi(poi);
@@ -317,6 +251,7 @@ export function GeographicWorkspace() {
     firstGeoreferencedPhoto: georeferencedPhotos?.[0] || null,
     findingsCount: findings?.length || 0,
     firstFindingCoordinates: findings?.[0]?.coordenadas || null,
+    sweepPreparation,
   });
 
   return (

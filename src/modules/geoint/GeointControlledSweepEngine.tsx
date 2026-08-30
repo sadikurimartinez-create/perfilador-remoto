@@ -74,6 +74,7 @@ export function GeointControlledSweepEngine({
   ]);
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
   const [sweepProgressMsg, setSweepMsg] = useState<string>("");
+  const sweepExecutionLockedRef = React.useRef(false);
 
   const handleToggleCategory = (cat: GeoIntSweepCategory) => {
     setSelectedCategories((prev) =>
@@ -85,11 +86,13 @@ export function GeointControlledSweepEngine({
    * Acción Explícita del Analista: Disparador único para ejecutar el barrido gobernado.
    */
   const handleExecuteControlledSweep = useCallback(async () => {
+    if (sweepExecutionLockedRef.current) return;
     if (selectedCategories.length === 0) {
       alert("⚠️ Seleccione al menos una categoría gobernada para ejecutar el barrido GEOINT.");
       return;
     }
 
+    sweepExecutionLockedRef.current = true;
     setIsSweeping(true);
     setSweepMsg("Inicializando motor GEOINT Controlled Sweep...");
     const generatedFindings: GeoIntSweepFindingPayload[] = [];
@@ -243,6 +246,7 @@ export function GeointControlledSweepEngine({
     } catch (err: any) {
       alert("Error durante la ejecución del motor GEOINT Sweep: " + err.message);
     } finally {
+      sweepExecutionLockedRef.current = false;
       setIsSweeping(false);
       setSweepMsg("");
     }
