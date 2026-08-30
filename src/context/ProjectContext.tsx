@@ -42,6 +42,13 @@ import {
   type DraftProjectGeography,
 } from "@/utils/canonicalProjectGeography";
 import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import {
+  adaptLegacyProjectHypothesis,
+  canProceedWithInstitutionalAnalysis,
+  formulateHumanHypothesis,
+  reviseHumanHypothesis,
+  type CanonicalProjectHypothesis,
+} from "@/utils/hypothesisGovernance";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -189,6 +196,8 @@ export type Project = {
   canonicalGeography?: CanonicalProjectGeography | null;
   geographyId?: string | null;
   geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";
+  canonicalHypothesis?: CanonicalProjectHypothesis | null;
+  hypothesisRequirementSatisfied?: boolean;
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;
@@ -317,6 +326,7 @@ type ProjectContextValue = {
     details: string;
   }) => Promise<void>;
   updateProjectDetails: (details: Partial<Project>) => Promise<void>;
+  saveHumanHypothesis: (text: string) => Promise<CanonicalProjectHypothesis>;
   activeSweepForModal: SweepIntegrationItem | null;
   setActiveSweepForModal: (sweep: SweepIntegrationItem | null) => void;
   registerSweep: (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => Promise<string>;
@@ -478,6 +488,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           lockedBy: null,
           photoCount: 0,
           estado: "ABIERTO",
+          canonicalHypothesis: null,
+          hypothesisRequirementSatisfied: false,
           ...geographyPersistence,
         });
       });
@@ -490,6 +502,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdBy: user?.username || "Usuario Local",
         ceipolId,
         estado: "ABIERTO",
+        canonicalHypothesis: null,
+        hypothesisRequirementSatisfied: false,
         ...geographyPersistence,
       });
 
@@ -693,6 +707,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         },
         { geographicEntities: geoEntities }
       );
+      const canonicalHypothesis = adaptLegacyProjectHypothesis({
+        ...projectData,
+        id: projectId,
+        geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
+        canonicalGeography,
+      });
+      const hypothesisGate = canProceedWithInstitutionalAnalysis({ canonicalHypothesis });
 
       setProject({
         id: projectId,
@@ -703,6 +724,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         canonicalGeography,
         geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
         geographyValidationStatus: canonicalGeography?.validationStatus ?? projectData.geographyValidationStatus ?? "INVALID",
+        canonicalHypothesis,
+        hypothesisRequirementSatisfied: hypothesisGate.hypothesisRequirementSatisfied,
       });
       setAlbum(albumPhotos);
       setSelectedIds(albumPhotos.map((p) => p.id));
@@ -1322,6 +1345,46 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       throw err;
     }
   }, [project, isReadOnly, logAuditAction]);
+
+  const saveHumanHypothesis = useCallback(async (text: string): Promise<CanonicalProjectHypothesis> => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const trimmedText = text.trim();
+    if (!trimmedText) throw new Error("La hipótesis humana no puede estar vacía.");
+
+    const realIdentity = buildRealValidatorIdentity(user);
+    const authorId = realIdentity?.username || realIdentity?.name || (realIdentity?.id != null ? String(realIdentity.id) : null);
+    const existing = project.canonicalHypothesis || adaptLegacyProjectHypothesis(project);
+    const geographyId = project.geographyId ?? project.canonicalGeography?.geographyId ?? existing?.geographyId ?? null;
+    const canonicalHypothesis = existing
+      ? reviseHumanHypothesis(existing, { text: trimmedText, authorId })
+      : formulateHumanHypothesis({
+          projectId: project.id,
+          text: trimmedText,
+          geographyId,
+          authorId,
+        });
+    const hypothesisGate = canProceedWithInstitutionalAnalysis({ canonicalHypothesis });
+    const updates = {
+      hipotesis: trimmedText,
+      canonicalHypothesis,
+      hypothesisRequirementSatisfied: hypothesisGate.hypothesisRequirementSatisfied,
+    };
+
+    const firestore = getDb();
+    const projectRef = doc(firestore, "projects", project.id);
+    await updateDoc(projectRef, updates);
+    setProject((prev) => (prev ? { ...prev, ...updates } : prev));
+
+    await logAuditAction({
+      action: "FORMULAR_HIPOTESIS_HUMANA",
+      module: "Expedientes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Persistida hipótesis humana versión ${canonicalHypothesis.version}.`
+    });
+
+    return canonicalHypothesis;
+  }, [project, isReadOnly, user, logAuditAction]);
 
   const softDeleteDoc = useCallback(async (params: {
     type: "Proyecto" | "Fotografía" | "Documento";
@@ -1957,6 +2020,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       savePhotoContextualization,
       logAuditAction,
       updateProjectDetails,
+      saveHumanHypothesis,
       activeSweepForModal,
       setActiveSweepForModal,
       registerSweep,
@@ -2000,6 +2064,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       savePhotoContextualization,
       logAuditAction,
       updateProjectDetails,
+      saveHumanHypothesis,
       activeSweepForModal,
       registerSweep,
       updateSweep

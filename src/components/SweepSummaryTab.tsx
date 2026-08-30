@@ -7,7 +7,7 @@ import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 
 export function SweepSummaryTab() {
-  const { project, updateProjectDetails, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
+  const { project, saveHumanHypothesis, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
   const [isSavingHypothesis, setIsSavingHypothesis] = useState(false);
   const [hypothesisText, setHypothesisText] = useState(project?.hipotesis || "");
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
@@ -17,7 +17,7 @@ export function SweepSummaryTab() {
     if (project) {
       setHypothesisText(project.hipotesis || "");
     }
-  }, [project?.hipotesis]);
+  }, [project]);
 
   const sweeps = project?.sweeps || [];
   const totalSweeps = sweeps.length;
@@ -32,7 +32,7 @@ export function SweepSummaryTab() {
     if (!project || isReadOnly) return;
     setIsSavingHypothesis(true);
     try {
-      await updateProjectDetails({ hipotesis: hypothesisText });
+      await saveHumanHypothesis(hypothesisText);
       setToast({ type: "success", message: "✅ Hipótesis consolidada guardada exitosamente." });
     } catch (err: any) {
       setToast({ type: "error", message: "❌ Error al guardar la hipótesis: " + err.message });

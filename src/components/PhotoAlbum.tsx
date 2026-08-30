@@ -26,6 +26,7 @@ import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/s
 import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
 import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
 
 import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
@@ -613,6 +614,7 @@ export function PhotoAlbum({
     softDeleteDoc,
     savePhotoContextualization,
     updateProjectDetails,
+    saveHumanHypothesis,
     loadProject,
     registerSweep,
     updateSweep,
@@ -1070,11 +1072,10 @@ export function PhotoAlbum({
     }
   }, [project]);
 
-  // Automatically enable tools if there is an existing hypothesis loaded
+  // Refleja la compuerta institucional persistida; no equivale a aprobación humana.
   useEffect(() => {
-    if (project && project.hipotesis && project.hipotesis.trim().length > 10) {
-      setIsHypothesisValidatedInWorkspace(true);
-    }
+    const gate = canProceedWithInstitutionalAnalysis(project);
+    setIsHypothesisValidatedInWorkspace(gate.hypothesisRequirementSatisfied);
   }, [project]);
 
   const sweepsSummaryText = React.useMemo(() => {
@@ -1381,7 +1382,15 @@ const hasMinimumPhotos =
     }
   };
 
-  const confirmAndGenerateProfile = async () => {
+  const confirmAndGenerateProfile = async (hypothesisOverride?: any) => {
+    const hypothesisGate = canProceedWithInstitutionalAnalysis(
+      hypothesisOverride ? { canonicalHypothesis: hypothesisOverride } : project
+    );
+    if (!hypothesisGate.allowed) {
+      setError("HIPÓTESIS NO FORMULADA: formule una hipótesis humana antes de continuar con el análisis institucional formal.");
+      setShowConfigModal(false);
+      return;
+    }
     let selected = album.filter((p) => selectedIds.includes(p.id));
     if (selected.length === 0) {
       selected = album;
@@ -2966,10 +2975,10 @@ const hasMinimumPhotos =
           <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 max-w-4xl mx-auto mb-6 text-center md:text-left shadow-xl backdrop-blur-sm font-sans">
             <div className="space-y-1">
               <span className="text-xs text-emerald-400 font-black tracking-wider uppercase flex items-center gap-1.5">
-                🛡️ Hipótesis de Gobernanza Validada y Certificada por IA
+                🛡️ Hipótesis Humana Formulada para Gobernanza
               </span>
               <p className="text-[11px] text-slate-400">
-                Las herramientas de análisis táctico y el dictamen oficial están habilitados. La hipótesis se encuentra en modo de lectura protegida.
+                Las herramientas de análisis táctico y el dictamen oficial están habilitados. La hipótesis humana formulada se encuentra en modo de lectura protegida.
               </p>
             </div>
             <button
@@ -3328,20 +3337,15 @@ const hasMinimumPhotos =
                           
                           setAnalysisContext(updatedContext);
 
-                          const { getDb } = await import("@/lib/firebase");
-                          const { doc, updateDoc } = await import("firebase/firestore");
-                          const firestore = getDb();
-                          await updateDoc(doc(firestore, "projects", projectId || ""), {
-                            hipotesis: updatedContext,
-                            sweepsComments: sweepsComments
-                          });
+                          const savedHypothesis = await saveHumanHypothesis(updatedContext);
+                          await updateProjectDetails({ sweepsComments: sweepsComments } as any);
 
                           setIsAnalysisContextAudited(true);
                           setIsHypothesisValidatedInWorkspace(true);
                           void loadAnalysisData();
 
                           window.alert("¡Aceptación manual confirmada! Generando el dictamen oficial...");
-                          await confirmAndGenerateProfile();
+                          await confirmAndGenerateProfile(savedHypothesis);
                         } catch (err: any) {
                           console.error(err);
                           alert("Error al procesar la aceptación: " + err.message);
@@ -3373,7 +3377,7 @@ const hasMinimumPhotos =
             </h4>
           </div>
           <span className={`px-2.5 py-1 text-[9px] font-bold rounded-full tracking-wider uppercase ${isHypothesisValidatedInWorkspace ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
-            {isHypothesisValidatedInWorkspace ? "CONSISTENCIA CERTIFICADA" : "ANÁLISIS EN CURSO"}
+            {isHypothesisValidatedInWorkspace ? "HIPÓTESIS FORMULADA" : "ANÁLISIS EN CURSO"}
           </span>
         </header>
 
@@ -3411,7 +3415,7 @@ const hasMinimumPhotos =
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consistencia Descriptiva</span>
             <div className="flex items-center gap-2 mt-1">
               <span className={isHypothesisValidatedInWorkspace ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
-                {isHypothesisValidatedInWorkspace ? "✓ Validada" : "⚠ Borrador / Sin Validar"}
+                {isHypothesisValidatedInWorkspace ? "✓ Formulada" : "⚠ Borrador / Sin Formular"}
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">Análisis gramatical y correlación predictiva de la hipótesis.</p>

@@ -43,6 +43,7 @@ import { EvidenceNarrativeMapper } from "@/utils/evidenceNarrativeMapper";
 import { ReportCoherenceValidator } from "@/utils/reportCoherenceValidator";
 import { ReportCertificationGate } from "@/utils/reportCertificationGate";
 import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
+import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
 import { renderMarkdownTable } from "@/utils/documentTableRenderer";
 import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
 import {
@@ -568,6 +569,11 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
 }
 
 function getPrimaryInitialHypothesis(payload: any): string {
+  const canonicalChapter0 = buildReportChapter0Hypothesis(payload);
+  if (canonicalChapter0.initialHypothesis !== "HIPÓTESIS NO FORMULADA") {
+    return canonicalChapter0.initialHypothesis;
+  }
+
   // 1. ADR-011 Hypothesis Ledger
   if (payload.hypothesisLifecycle?.hipotesisInicial && payload.hypothesisLifecycle.hipotesisInicial.trim().length > 0) {
     return payload.hypothesisLifecycle.hipotesisInicial.trim();
@@ -582,14 +588,7 @@ function getPrimaryInitialHypothesis(payload: any): string {
   if (typeof payload.hipotesisPrincipal === "string" && payload.hipotesisPrincipal.trim().length > 0) {
     return payload.hipotesisPrincipal.trim();
   }
-  // 4. Fallback exploratorio / finalHypothesis
-  if (payload.finalHypothesis && payload.finalHypothesis.trim().length > 15) {
-    const lines = payload.finalHypothesis.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-    if (lines.length > 0) {
-      return lines[0];
-    }
-  }
-  return "Actividad delictiva disonante bajo investigación territorial.";
+  return "HIPÓTESIS NO FORMULADA";
 }
 
 function assertHypothesisConsistency(portadaHyp: string, cap0Hyp: string) {
