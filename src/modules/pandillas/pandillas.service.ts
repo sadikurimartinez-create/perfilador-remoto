@@ -85,22 +85,16 @@ function getStaticFallbackGangs(): GangEntity[] {
         fechaActualizacion: new Date().toLocaleDateString("es-MX")
       });
 
-      puntos.forEach((p, pIdx) => {
-        // We only generate a polygon/corredor and seed events. Legacy tactical points are removed.
-      });
-
-      geometrias.push({
-        id: `shape-buffer-${index}`,
-        nombre: `Zona de Influencia: ${gangName}`,
-        tipo: "poligono",
-        puntos: puntos.length >= 3 ? puntos.slice(0, 4) : [
-          center,
-          { lat: center.lat + 0.002, lng: center.lng + 0.002 },
-          { lat: center.lat + 0.002, lng: center.lng - 0.002 }
-        ],
-        nivelControlTerritorial: "Medio",
-        fechaActualizacion: new Date().toLocaleDateString("es-MX")
-      });
+      if (puntos.length >= 3) {
+        geometrias.push({
+          id: `shape-poly-${index}`,
+          nombre: `Zona de Influencia: ${gangName}`,
+          tipo: "poligono",
+          puntos: puntos.slice(0, 4),
+          nivelControlTerritorial: "Medio",
+          fechaActualizacion: new Date().toLocaleDateString("es-MX")
+        });
+      }
 
       if (puntos.length >= 2) {
         geometrias.push({
@@ -143,9 +137,9 @@ function getStaticFallbackGangs(): GangEntity[] {
           descripcion: `Disputa violenta registrada entre facciones antagónicas de la zona.`,
           gravedad: "Alta",
           categoria: "enfrentamiento",
-          lugar: puntos.length > 0 
-            ? `Cruce de Operaciones (${(puntos[0].lat + 0.0015).toFixed(6)}, ${(puntos[0].lng - 0.0015).toFixed(6)})`
-            : "Aguascalientes"
+          lugar: puntos.length > 0
+            ? `Referencia fuente (${puntos[0].lat.toFixed(6)}, ${puntos[0].lng.toFixed(6)})`
+            : "Sin georreferencia fuente"
         },
         {
           id: `evt-${index}-2`,
@@ -154,9 +148,9 @@ function getStaticFallbackGangs(): GangEntity[] {
           descripcion: `Evidencia de marcaje e identificación territorial por grafiti.`,
           gravedad: "Baja",
           categoria: "grafiti",
-          lugar: puntos.length > 0 
-            ? `Barda Pública (${(puntos[0].lat - 0.0015).toFixed(6)}, ${(puntos[0].lng + 0.0015).toFixed(6)})`
-            : "Aguascalientes"
+          lugar: puntos.length > 0
+            ? `Referencia fuente (${puntos[0].lat.toFixed(6)}, ${puntos[0].lng.toFixed(6)})`
+            : "Sin georreferencia fuente"
         }
       ],
       imagenesGrafiti: [],

@@ -40,6 +40,13 @@ interface AnalyzeGisRequest {
   influenceZones: InfluenceZone[];
   manualDrawings: ManualDrawing[];
   allGangs: any[];
+  providerTelemetry?: {
+    rssCount?: number;
+    hasGoogleMaps?: boolean;
+    hasScince?: boolean;
+    hasDenue?: boolean;
+    socialMediaSignals?: Partial<Record<"telegram" | "facebook" | "instagram" | "x" | "reddit" | "search", boolean>>;
+  };
 }
 
 export async function POST(req: Request) {
@@ -51,7 +58,8 @@ export async function POST(req: Request) {
       domiciles = [],
       influenceZones = [],
       manualDrawings = [],
-      allGangs = []
+      allGangs = [],
+      providerTelemetry = {}
     } = body;
 
     if (selectedGangs.length === 0) {
@@ -101,17 +109,17 @@ export async function POST(req: Request) {
       incidentsCount: 0,
       domicilesCount: domiciles.length,
       zonesCount: influenceZones.length,
-      rssCount: activeLayers.includes("osint") ? 10 : 0,
-      hasGoogleMaps: true,
-      hasScince: true,
-      hasDenue: true,
+      rssCount: providerTelemetry.rssCount || 0,
+      hasGoogleMaps: providerTelemetry.hasGoogleMaps === true,
+      hasScince: providerTelemetry.hasScince === true,
+      hasDenue: providerTelemetry.hasDenue === true,
       socialMediaSignals: {
-        telegram: activeLayers.includes("domiciles"),
-        facebook: activeLayers.includes("influence"),
-        instagram: activeLayers.includes("influence"),
-        x: activeLayers.includes("influence"),
-        reddit: activeLayers.includes("influence"),
-        search: true,
+        telegram: providerTelemetry.socialMediaSignals?.telegram === true,
+        facebook: providerTelemetry.socialMediaSignals?.facebook === true,
+        instagram: providerTelemetry.socialMediaSignals?.instagram === true,
+        x: providerTelemetry.socialMediaSignals?.x === true,
+        reddit: providerTelemetry.socialMediaSignals?.reddit === true,
+        search: providerTelemetry.socialMediaSignals?.search === true,
       }
     });
 

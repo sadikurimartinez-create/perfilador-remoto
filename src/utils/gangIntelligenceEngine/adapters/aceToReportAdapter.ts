@@ -67,26 +67,47 @@ export class AceToReportAdapter {
       return null;
     }
 
-    // Regla de seguridad: Si la consistencia general del ACE falló (FAILED), o el reporte bloquea el expediente
-    const validatedByACE = report.globalStatus !== "FAILED";
-    const validationStatus = report.globalStatus === "WARNING" ? "CERTIFIED_WITH_LIMITATIONS" : "CERTIFIED";
+    const gim = payload.gimContext;
+    const humanValidationStatus = gim.humanValidationStatus || "READY_FOR_HUMAN_REVIEW";
+    const authorityClassification = gim.authorityClassification || "LEGACY_UNCLASSIFIED";
+    const nonAuthoritativeSourcesCount = gim.nonAuthoritativeSourcesCount ?? 0;
+    const sourceIntegrityStatus = gim.sourceIntegrityStatus || "NOT_READY";
+    const humanApproved = humanValidationStatus === "APPROVED" || humanValidationStatus === "NOT_REQUIRED";
+    const authoritativeSources =
+      authorityClassification === "AUTHORITATIVE" &&
+      nonAuthoritativeSourcesCount === 0 &&
+      sourceIntegrityStatus !== "NOT_READY";
+    const lineage = gim.lineage || { evidenceIds: [], findingIds: [], analysisIds: [], providerProvenance: [] };
+    const hasLineage = lineage.evidenceIds.length > 0;
+    const validatedByACE = report.globalStatus !== "FAILED" && humanApproved && authoritativeSources && hasLineage;
+    const validationStatus =
+      validatedByACE && report.globalStatus === "PASS" ? "CERTIFIED" :
+      validatedByACE && report.globalStatus === "WARNING" ? "READY_WITH_LIMITATIONS" :
+      "NOT_CERTIFIED";
 
     // Si ACE falló, el Report Engine NO debe renderizar contenido GIM fáctico (Regla de bloqueo total)
     if (!validatedByACE) {
       return {
         schemaVersion: "GIM-REPORT-1.0",
-        validationStatus: "CERTIFIED_WITH_LIMITATIONS", // Forzado a descarte/limitado
+        validationStatus,
         confidenceScore: 0,
         validatedByACE: false,
-        limitations: ["El expediente de geointeligencia no superó la auditoría de consistencia analítica de ACE."],
+        humanValidationStatus,
+        validatedByUserId: gim.validatedByUserId ?? null,
+        humanValidatedAt: gim.humanValidatedAt ?? null,
+        limitations: [
+          "El expediente de geointeligencia no superó la auditoría de consistencia analítica de ACE.",
+          !humanApproved ? "Aprobación humana ausente o pendiente." : "",
+          !authoritativeSources ? "Fuente simulada/no autoritativa/legada sin clasificar bloqueada para consumo institucional." : "",
+          !hasLineage ? "Linaje de evidencias insuficiente para payload certificado." : ""
+        ].filter(Boolean),
         analyticalFindings: ["Análisis suspendido por inconsistencia documental o violación de neutralidad lingüística."],
         territorialSummary: ["No certificado para publicación."],
         evidenceSummary: ["Métricas factuales invalidadas."],
-        traceabilityReference: payload.gimContext.hasTraceability ? "REF-INVALIDATED-ACE" : "REF-NONE"
+        traceabilityReference: gim.hasTraceability ? "REF-INVALIDATED-ACE" : "REF-NONE",
+        lineage
       };
     }
-
-    const gim = payload.gimContext;
 
     // 1. Sanitizar y aplicar gobernanza lingüística a hallazgos analíticos
     const analyticalFindings = (gim.analyticalObservations || []).map(obs => 
@@ -105,19 +126,23 @@ export class AceToReportAdapter {
       evidenceSummary.push(this.applyLanguageGovernance(desc));
     });
 
-    // 3. Sanitización geoespacial de zonas de influencia
-    const territorialSummary: string[] = [];
-    const centroid = payload.tceContext.centroid || { lat: 21.80929, lng: -102.26964 };
-    const approximateZoneName = GimReportGeoSanitizer.approximateLocation(centroid.lat, centroid.lng);
-    territorialSummary.push(`Presencia simbólica o dinámica observada en el sector: ${approximateZoneName}.`);
-
-    // 4. Copiar y sanitizar limitaciones metodológicas
+    // 3. Copiar y sanitizar limitaciones metodológicas
     const limitations: string[] = [];
     if (gim.limitationsCount > 0) {
       limitations.push(`El levantamiento táctico registra ${gim.limitationsCount} limitaciones metodológicas de campo.`);
     }
     if (gim.confidenceScore < 80) {
       limitations.push("Advertencia metodológica: confianza cualitativa inicial moderada; requiere supervisión periódica.");
+    }
+
+    // 4. Sanitización geoespacial de zonas de influencia
+    const territorialSummary: string[] = [];
+    const centroid = payload.tceContext.centroid;
+    if (centroid) {
+      const approximateZoneName = GimReportGeoSanitizer.approximateLocation(centroid.lat, centroid.lng);
+      territorialSummary.push(`Presencia simbólica o dinámica observada en el sector: ${approximateZoneName}.`);
+    } else {
+      limitations.push("Centroide territorial no disponible; no se publica resumen geográfico inferido.");
     }
 
     // 5. Trazabilidad
@@ -128,11 +153,15 @@ export class AceToReportAdapter {
       validationStatus,
       confidenceScore: gim.confidenceScore,
       validatedByACE,
+      humanValidationStatus,
+      validatedByUserId: gim.validatedByUserId ?? null,
+      humanValidatedAt: gim.humanValidatedAt ?? null,
       limitations,
       analyticalFindings,
       territorialSummary,
       evidenceSummary,
-      traceabilityReference
+      traceabilityReference,
+      lineage
     };
   }
 }

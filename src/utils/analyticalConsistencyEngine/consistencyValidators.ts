@@ -513,6 +513,93 @@ export class ConsistencyValidators {
       }
     }
 
+    const isOfficialReport = payload.projectId?.startsWith("EXP-") || false;
+
+    const nonAuthoritativeSourcesCount = gim.nonAuthoritativeSourcesCount ?? 0;
+    const authorityClassification = gim.authorityClassification || "LEGACY_UNCLASSIFIED";
+    const sourceIntegrityStatus = gim.sourceIntegrityStatus || "NOT_READY";
+    const humanValidationStatus = gim.humanValidationStatus || "READY_FOR_HUMAN_REVIEW";
+
+    if (nonAuthoritativeSourcesCount > 0 || authorityClassification !== "AUTHORITATIVE") {
+      if (isOfficialReport) {
+        overallStatus = "FAILED";
+      } else if (overallStatus !== "FAILED") {
+        overallStatus = "WARNING";
+      }
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "TECHNICAL",
+        message: "Fuente no autoritativa en GIM: el payload institucional no puede mezclar fuentes simuladas, legadas sin clasificar o no autoritativas como observadas.",
+        severity: "HIGH",
+        source: "GIM-ACE Auditor",
+        expected: "authorityClassification = AUTHORITATIVE y nonAuthoritativeSourcesCount = 0",
+        received: `authorityClassification=${authorityClassification}; nonAuthoritativeSourcesCount=${nonAuthoritativeSourcesCount}`
+      });
+
+      if (!blockingReasons.some(r => r.variable === "sourceAuthority")) {
+        blockingReasons.push({
+          module: "CRIMINOLOGICAL",
+          variable: "sourceAuthority",
+          expected: "Solo fuentes autoritativas verificadas para CertifiedGangAnalysisPayload",
+          received: authorityClassification,
+          message: "GIM contiene fuentes simuladas/no autoritativas/legadas sin clasificar; ACE bloquea la certificación institucional."
+        });
+      }
+    }
+
+    if (sourceIntegrityStatus === "NOT_READY") {
+      if (isOfficialReport) {
+        overallStatus = "FAILED";
+      } else if (overallStatus !== "FAILED") {
+        overallStatus = "WARNING";
+      }
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "TECHNICAL",
+        message: "Integridad de fuente GIM no lista para consumo institucional.",
+        severity: "HIGH",
+        source: "GIM-ACE Auditor",
+        expected: "sourceIntegrityStatus VERIFIED o READY_WITH_LIMITATIONS",
+        received: sourceIntegrityStatus
+      });
+    }
+
+    if (isOfficialReport && (!gim.lineage || gim.lineage.evidenceIds.length === 0)) {
+      overallStatus = "FAILED";
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "TECHNICAL",
+        message: "Linaje insuficiente: el payload certificado requiere evidenceIds preservados desde GIM.",
+        severity: "HIGH",
+        source: "GIM-ACE Auditor",
+        expected: "lineage.evidenceIds poblado",
+        received: "lineage ausente o sin evidenceIds"
+      });
+    }
+
+    if (isOfficialReport && humanValidationStatus !== "APPROVED") {
+      overallStatus = "FAILED";
+      alerts.push({
+        type: "CRIMINOLOGICAL",
+        category: "TECHNICAL",
+        message: "Validación humana pendiente: la revisión IA/GIM no equivale a aprobación humana institucional.",
+        severity: "HIGH",
+        source: "GIM-ACE Auditor",
+        expected: "humanValidationStatus = APPROVED",
+        received: humanValidationStatus
+      });
+
+      if (!blockingReasons.some(r => r.variable === "humanValidationStatus")) {
+        blockingReasons.push({
+          module: "CRIMINOLOGICAL",
+          variable: "humanValidationStatus",
+          expected: "Aprobación humana persistida antes de certificar",
+          received: humanValidationStatus,
+          message: "ACE bloquea la certificación porque GIM está listo para revisión humana, pero no aprobado por una persona."
+        });
+      }
+    }
+
     // 5. Validación de Madurez OSINT y Calibración Metodológica (OBS-009.10.1.2-001)
     if (gim.osintMaturity && gim.osintMaturity.totalEventsCount > 0) {
       const maturity = gim.osintMaturity;

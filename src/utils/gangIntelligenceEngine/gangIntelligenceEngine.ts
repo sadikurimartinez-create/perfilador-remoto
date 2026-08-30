@@ -13,6 +13,9 @@ export interface GIMEngineInput {
   rawOsintFeeds: RawOsintInput[];
   veeGraffitiFeeds: VisualEvidenceEditorial[];
   operatorId?: string;
+  humanValidationStatus?: "NOT_REQUIRED" | "READY_FOR_HUMAN_REVIEW" | "APPROVED" | "REJECTED";
+  validatedByUserId?: string | null;
+  humanValidatedAt?: string | null;
 }
 
 export class GangIntelligenceEngine {
@@ -93,6 +96,10 @@ export class GangIntelligenceEngine {
         event.distanceMeters <= 250 ? 80 : 50,
         ["HIE", "ReportEngine"]
       );
+      record.sourceAuthority = event.qualityStatus === "LIMITED" ? "NON_AUTHORITATIVE" : "AUTHORITATIVE";
+      record.sourceIntegrityStatus = event.traceabilityHash ? "VERIFIED" : "HASH_UNAVAILABLE";
+      record.evidenceId = event.eventId;
+      record.providerProvenance = "OSINT";
       traceabilityLog.push(record);
     });
 
@@ -107,6 +114,10 @@ export class GangIntelligenceEngine {
         60,
         ["HIE", "ReportEngine"]
       );
+      record.sourceAuthority = "AUTHORITATIVE";
+      record.sourceIntegrityStatus = "HASH_UNAVAILABLE";
+      record.evidenceId = graffiti.id;
+      record.providerProvenance = "VEE_GRAFFITI";
       traceabilityLog.push(record);
     });
 
@@ -118,10 +129,21 @@ export class GangIntelligenceEngine {
       osintEvents,
       traceabilityLog
     );
+    assembledGem.metadata.humanValidationStatus = input.humanValidationStatus || "READY_FOR_HUMAN_REVIEW";
+    assembledGem.metadata.validatedByUserId = input.validatedByUserId || null;
+    assembledGem.metadata.humanValidatedAt = input.humanValidatedAt || null;
 
     // 7. Ejecutar validación interna (Capa 1) para calibrar y certificar el estatus
     const validationResult = GangEvidenceValidator.validate(assembledGem);
     assembledGem.status = validationResult.status;
+    assembledGem.metadata.sourceIntegrityStatus =
+      validationResult.errors.length > 0 ? "NOT_READY" :
+      validationResult.warnings.length > 0 ? "READY_WITH_LIMITATIONS" :
+      "VERIFIED";
+    assembledGem.metadata.authorityClassification =
+      traceabilityLog.some((record) => record.sourceAuthority === "SIMULATED" || record.sourceAuthority === "NON_AUTHORITATIVE")
+        ? "NON_AUTHORITATIVE"
+        : "AUTHORITATIVE";
 
     return assembledGem;
   }

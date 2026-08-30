@@ -7,7 +7,8 @@ export interface GangSweepResult {
     lng: number;
     label: string;
     confidence: number;
-    source: "EXIF_GPS" | "NARRATIVE_ESTIMATE" | "FALLBACK_RANDOM";
+    source: "EXIF_GPS" | "SOURCE_RECORD";
+    authority: "AUTHORITATIVE";
   }[];
   suspected_domiciles: {
     lat: number;
@@ -22,7 +23,7 @@ export interface GangSweepResult {
     radiusMetros: number;
     gangName: string;
     confidence: number;
-    type: "hotspot" | "corridor" | "meeting_area";
+    type: "hotspot" | "corridor";
   }[];
   confidence_score: number;
   matched_gangs: {
@@ -62,9 +63,8 @@ export function isWithinAguascalientes(lat: number, lng: number): boolean {
   return lat >= 14.0 && lat <= 33.0 && lng >= -118.0 && lng <= -86.0;
 }
 
-// Comprehensive dictionary mapping typical keywords (such as neighborhood or street names in Domiclios Pandillas.csv)
-// to coordinates in Aguascalientes, Mexico. Used as a high-fidelity visual/semantic estimation fallback.
-const KEYWORD_COORDINATE_MAP: { [key: string]: { lat: number; lng: number; label: string } } = {
+// Legacy keyword registry retained for non-authoritative labels only. It must not seed observed GEO.
+export const PANDILLAS_NON_AUTHORITATIVE_KEYWORD_COORDINATES: { [key: string]: { lat: number; lng: number; label: string } } = {
   "mirador": { lat: 21.8988, lng: -102.2530, label: "Mirador de las Culturas" },
   "bellavista": { lat: 21.8924, lng: -102.2612, label: "Lomas de Bellavista" },
   "cardenal": { lat: 21.8924, lng: -102.2612, label: "Loma del Cardenal" },
@@ -89,8 +89,8 @@ const KEYWORD_COORDINATE_MAP: { [key: string]: { lat: number; lng: number; label
   "infonavit": { lat: 21.8741, lng: -102.2741, label: "Infonavit Morelos" },
 };
 
-// Seed gangs to match if firestore is empty, ensuring there is always a high-quality spatial match
-const FALLBACK_GANGS_REGISTRY = [
+// Legacy seed registry retained for demos outside the authoritative payload. It must not auto-match sweeps.
+export const PANDILLAS_NON_AUTHORITATIVE_FALLBACK_GANGS_REGISTRY = [
   { name: "Los Monstruos de la 14", zone: "Valle de los Cactus", center: { lat: 21.8752, lng: -102.2356 } },
   { name: "Clica Mirador Locos", zone: "Mirador de las Culturas", center: { lat: 21.8988, lng: -102.2530 } },
   { name: "La Clica Palomino Dena", zone: "Benito Palomino Dena", center: { lat: 21.9055, lng: -102.2514 } },
@@ -138,6 +138,7 @@ export class GangGeoSweepEngine {
               label: `Evidencia fotográfica GPS: ${file.name}`,
               confidence: 0.95,
               source: "EXIF_GPS",
+              authority: "AUTHORITATIVE",
             });
             pointsForClustering.push({ lat, lng, confidence: 0.95, source: "EXIF_GPS" });
           } else {
@@ -152,11 +153,9 @@ export class GangGeoSweepEngine {
     // --- STEP 2: SEMANTIC FALLBACK LAYER (NARRATIVE KEYWORDS MATCHING) ---
     // If we extracted no coordinates from EXIF GPS (or to enrich the EXIF data), we analyze narrative + soft prompt
     const fullText = `${narrativeContext} ${softPrompt}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    let keywordsMatched = 0;
-
     // --- STEP 2.1: DATABASE-WIDE TEXT MATCHING ENGINE ---
     // Search the registered gangs database for name, alias, members, addresses, and grab locations
-    const databaseMatches: { lat: number; lng: number; label: string; confidence: number; source: "NARRATIVE_ESTIMATE" }[] = [];
+    const databaseMatches: { lat: number; lng: number; label: string; confidence: number; source: "SOURCE_RECORD" }[] = [];
 
     registeredGangs.forEach(gang => {
       const gangNameLower = (gang.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -195,7 +194,7 @@ export class GangGeoSweepEngine {
               lng: geo.lng,
               label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
               confidence: 0.90,
-              source: "NARRATIVE_ESTIMATE"
+              source: "SOURCE_RECORD"
             });
           } else if (m.location && hasValidCoordinates(m.location) && isGeocodingReliable(m.location as any)) {
             databaseMatches.push({
@@ -203,7 +202,7 @@ export class GangGeoSweepEngine {
               lng: m.location.lng,
               label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
               confidence: 0.90,
-              source: "NARRATIVE_ESTIMATE"
+              source: "SOURCE_RECORD"
             });
           }
         }
@@ -217,37 +216,21 @@ export class GangGeoSweepEngine {
             geo.puntos.forEach((p: any) => {
               databaseMatches.push({
                 lat: p.lat,
-                lng: p.lng,
-                label: `Punto de Control: ${geo.nombre} (${gang.nombre})`,
-                confidence: 0.85,
-                source: "NARRATIVE_ESTIMATE"
-              });
+              lng: p.lng,
+              label: `Punto de Control: ${geo.nombre} (${gang.nombre})`,
+              confidence: 0.85,
+              source: "SOURCE_RECORD"
             });
-          }
-        });
-      }
-
-      // 3. Search zone name inside narrative
-      if (gangZoneLower && gangZoneLower.length > 3 && fullText.includes(gangZoneLower)) {
-        // Find default coordinates for this zone inside KEYWORD_COORDINATE_MAP
-        for (const [key, geo] of Object.entries(KEYWORD_COORDINATE_MAP)) {
-          if (gangZoneLower.includes(key) || key.includes(gangZoneLower)) {
-            databaseMatches.push({
-              lat: geo.lat + (Math.random() - 0.5) * 0.002,
-              lng: geo.lng + (Math.random() - 0.5) * 0.002,
-              label: `Zona de Influencia: ${gang.nombre} en ${geo.label}`,
-              confidence: 0.80,
-              source: "NARRATIVE_ESTIMATE"
-            });
-          }
+          });
         }
-      }
+      });
+    }
     });
 
     // Add database matches to detectedLocations and pointsForClustering
     databaseMatches.forEach(match => {
       if (!detectedLocations.some(l => Math.abs(l.lat - match.lat) < 0.0001 && Math.abs(l.lng - match.lng) < 0.0001)) {
-        detectedLocations.push(match);
+        detectedLocations.push({ ...match, authority: "AUTHORITATIVE" });
         pointsForClustering.push({
           lat: match.lat,
           lng: match.lng,
@@ -292,24 +275,8 @@ export class GangGeoSweepEngine {
     centroidLng = centroidLng / weightSum;
 
     // --- STEP 4: GANG TERRITORY MATCHING & REGISTRY CROSS-REFERENCE ---
-    // Merge database gangs and seed gangs for comprehensive spatial matching
+    // Search only provided records. Static fallback gangs are not authoritative observations.
     const gangsToSearch = [...registeredGangs];
-    FALLBACK_GANGS_REGISTRY.forEach(fg => {
-      if (!gangsToSearch.some(g => g.nombre.toLowerCase().includes(fg.name.toLowerCase()))) {
-        // Mock a db entity structure
-        gangsToSearch.push({
-          nombre: fg.name,
-          zonaInfluencia: fg.zone,
-          geometrias: [
-            {
-              tipo: "buffer",
-              puntos: [fg.center],
-              radio: 500,
-            }
-          ]
-        });
-      }
-    });
 
     const matchedGangs: GangSweepResult["matched_gangs"] = [];
     const suspectedDomiciles: GangSweepResult["suspected_domiciles"] = [];
@@ -335,22 +302,9 @@ export class GangGeoSweepEngine {
           if (m.domicilioConocido) {
             // Check if we can parse or match address
             const addrLower = m.domicilioConocido.toLowerCase();
-            for (const [key, coord] of Object.entries(KEYWORD_COORDINATE_MAP)) {
-              if (addrLower.includes(key)) {
-                gangPoints.push(coord);
-              }
-            }
+            // Address text alone is not a coordinate source for authoritative sweep output.
           }
         });
-      }
-
-      // If no points found, default to general area search
-      if (gangPoints.length === 0) {
-        for (const [key, coord] of Object.entries(KEYWORD_COORDINATE_MAP)) {
-          if (gang.zonaInfluencia && gang.zonaInfluencia.toLowerCase().includes(key)) {
-            gangPoints.push(coord);
-          }
-        }
       }
 
       // Compute distances
@@ -386,15 +340,7 @@ export class GangGeoSweepEngine {
     // Sort matched gangs by strength
     matchedGangs.sort((a, b) => b.match_strength - a.match_strength);
 
-    // If no gangs matched, create a default match based on closest seed
-    if (matchedGangs.length === 0) {
-      matchedGangs.push({
-        name: "Clica Mirador Locos",
-        match_strength: 0.62,
-      });
-    }
-
-    const primaryGangName = matchedGangs[0].name;
+    const primaryGangName = matchedGangs[0]?.name || "NO_MATCH";
 
     // --- STEP 5: SUSPECTED DOMICILES & INFLUENCE DETECTION ---
     // Suspected domiciles: solo desde puntos con coordenadas verificadas (sin asignación por colonia)
@@ -443,25 +389,15 @@ export class GangGeoSweepEngine {
       });
     }
 
-    // 3. Meeting area close by
-    influenceZones.push({
-      lat: centroidLat + 0.0015,
-      lng: centroidLng - 0.0012,
-      radiusMetros: 150,
-      gangName: primaryGangName,
-      confidence: 0.72,
-      type: "meeting_area",
-    });
-
     // Compute aggregate confidence score
     const avgConfidence = pointsForClustering.reduce((acc, p) => acc + p.confidence, 0) / pointsForClustering.length;
     const finalConfidence = parseFloat(Math.min(0.98, avgConfidence + (files.length * 0.01)).toFixed(2));
 
     // Determine Risk Classification
     let risk_classification: GangSweepResult["risk_classification"] = "MEDIUM";
-    if (finalConfidence > 0.85 && matchedGangs[0].match_strength > 0.85) {
+    if (matchedGangs.length > 0 && finalConfidence > 0.85 && matchedGangs[0].match_strength > 0.85) {
       risk_classification = "CRITICAL";
-    } else if (finalConfidence > 0.70 || matchedGangs[0].match_strength > 0.70) {
+    } else if (finalConfidence > 0.70 || (matchedGangs[0]?.match_strength ?? 0) > 0.70) {
       risk_classification = "HIGH";
     } else if (finalConfidence < 0.40) {
       risk_classification = "LOW";

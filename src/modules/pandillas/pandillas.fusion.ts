@@ -1,6 +1,30 @@
 import { GangEntity, FusionResult, calculateSimilarity } from "./pandillas.mapper";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
+export function matchPandillasDatasetRows(
+  csvRows: any[],
+  nombre: string,
+  zonaInfluencia: string
+): any[] {
+  const normalizedGangName = (nombre || "").toLowerCase().trim();
+  let matchesCsv = csvRows.filter(row => {
+    const gangCol = (row.Pandilla || "").toLowerCase().trim();
+    return gangCol && normalizedGangName && (gangCol.includes(normalizedGangName) || normalizedGangName.includes(gangCol));
+  });
+
+  const normalizedZone = (zonaInfluencia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (matchesCsv.length === 0 && normalizedZone) {
+    matchesCsv = csvRows.filter(row => {
+      const col = (row.Colonia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const calle = (row.Calle || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return (col && (col.includes(normalizedZone) || normalizedZone.includes(col))) ||
+        (calle && (calle.includes(normalizedZone) || normalizedZone.includes(calle)));
+    });
+  }
+
+  return matchesCsv;
+}
+
 /**
  * Pandillas Intelligence Fusion Engine
  * Responsible for de-duplicating gangs, merging aliases, and consolidating structural relationships into networks.
@@ -133,7 +157,11 @@ export function fuseGangsAndBuildGraph(
   const geolocalizacion: FusionResult["mapa"]["geolocalizacion"] = [];
   const areasCalientes: FusionResult["mapa"]["areasCalientes"] = [];
 
-  const geoValidation = validateGeoIntegrity(manualGang.coordenadas?.lat, manualGang.coordenadas?.lng);
+  const geoValidation = validateGeoIntegrity({
+    latitude: manualGang.coordenadas?.lat,
+    longitude: manualGang.coordenadas?.lng,
+    source: "ANALYST_SELECTED"
+  });
   const defaultLat = geoValidation.latitude;
   const defaultLng = geoValidation.longitude;
 
@@ -142,16 +170,10 @@ export function fuseGangsAndBuildGraph(
       let lat = Number(match.Lat);
       let lng = Number(match.Lng);
 
-      const itemValidation = validateGeoIntegrity(lat, lng);
+      const itemValidation = validateGeoIntegrity({ latitude: lat, longitude: lng, source: "SOURCE_RECORD" });
       if (itemValidation.confidence !== "UNKNOWN" && itemValidation.latitude !== null && itemValidation.longitude !== null) {
         lat = itemValidation.latitude;
         lng = itemValidation.longitude;
-      } else if (defaultLat !== null && defaultLng !== null) {
-        const seed = idx * 17.5 + (match.Calle || "").length + (match.Colonia || "").length;
-        const dLat = (Math.sin(seed) * 0.015);
-        const dLng = (Math.cos(seed) * 0.015);
-        lat = defaultLat + dLat;
-        lng = defaultLng + dLng;
       } else {
         return; // Skip adding point as it has no valid spatial anchor
       }
@@ -162,27 +184,26 @@ export function fuseGangsAndBuildGraph(
         descripcion: `${match.Calle || ""} ${match.No || ""}, Col. ${match.Colonia || ""}, Aguascalientes`,
       });
 
-      const seedForHeat = idx * 17.5 + (match.Calle || "").length + (match.Colonia || "").length;
       areasCalientes.push({
         lat,
         lng,
-        radioMetros: 150 + (seedForHeat % 150),
-        intensidad: (idx % 3 === 0) ? 0.9 : 0.4,
+        radioMetros: 0,
+        intensidad: 0,
       });
     });
   } else if (primaryGang.zonaInfluencia && defaultLat !== null && defaultLng !== null) {
     // If no CSV matches but zone exists and anchor is valid, make a single central point
-    geolocalizacion.push({
-      lat: defaultLat,
-      lng: defaultLng,
+      geolocalizacion.push({
+        lat: defaultLat,
+        lng: defaultLng,
       descripcion: `Zona Delimitada: ${primaryGang.zonaInfluencia}`,
     });
-    areasCalientes.push({
-      lat: defaultLat,
-      lng: defaultLng,
-      radioMetros: 350,
-      intensidad: 0.6,
-    });
+      areasCalientes.push({
+        lat: defaultLat,
+        lng: defaultLng,
+        radioMetros: 0,
+        intensidad: 0,
+      });
   }
 
   // Generate automated intelligence alerts
