@@ -41,6 +41,7 @@ import {
   type CanonicalProjectGeography,
   type DraftProjectGeography,
 } from "@/utils/canonicalProjectGeography";
+import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -118,6 +119,7 @@ export type AlbumPhoto = {
   evidenceRelationship?: EvidenceRelationship | null;
   geographyId?: string | null;
   geographyType?: CanonicalGeographyType | null;
+  aiAnalyticalOutput?: AiAnalyticalOutput | null;
 
   // Extensión de Gobernanza Street View Evidence v2.1 y Contrato Determinista
   evidenceOrigin?: EvidenceOrigin;

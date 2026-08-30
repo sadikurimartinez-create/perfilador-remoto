@@ -3,6 +3,7 @@ import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
 import { GeointGovernanceStatus, normalizeGeointGovernanceStatus } from "@/types/geointGovernance";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import { validateLineage, type CanonicalLineageNode } from "@/utils/evidenceLineage";
+import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 
 /**
  * ADR-019.17 — Bridge deterministico UniversalEvidenceComparison -> StreetViewFinding (Función Pura).
@@ -17,21 +18,39 @@ export function UniversalEvidenceComparisonToFinding(
   const source = contextualEvidence?.source === "STREET_VIEW_HISTORICAL" ? "STREET_VIEW_PANORAMA" : "SOURCE_RECORD";
   const supportingEvidenceIds = [comparison.evidenceA?.sourceEvidenceId || comparison.evidenceA?.id, comparison.evidenceB?.sourceEvidenceId || comparison.evidenceB?.id]
     .filter((id): id is string => Boolean(id));
+  const geographyId = (comparison as any).geographyId ?? (comparison.evidenceA as any)?.geographyId ?? (comparison.evidenceB as any)?.geographyId ?? null;
   const lineage: CanonicalLineageNode[] = [
+    ...(geographyId ? [{ id: geographyId, type: "GEOGRAPHY" as const, geographyId }] : []),
     ...supportingEvidenceIds.map((evidenceId) => ({
       id: evidenceId,
       type: "EVIDENCE" as const,
       evidenceId,
       sourceReference: "TemporalComparison",
+      geographyId,
     })),
     {
       id: comparison.comparisonId,
       type: "FINDING" as const,
       findingId: comparison.comparisonId,
       supportingEvidenceIds,
+      geographyId,
     },
   ];
   const lineageValidation = validateLineage(lineage);
+  const aiAnalyticalOutput = createAiAnalyticalOutput({
+    outputType: "INFERENCE",
+    provider: "TEMPORAL_COMPARISON",
+    model: "UNAVAILABLE",
+    confidence: comparison.aiAnalysis?.confidenceScore,
+    confidenceSource: "PROVIDER",
+    sourceReferences: [`temporalComparison:${comparison.comparisonId}`],
+    evidenceIds: supportingEvidenceIds,
+    comparedEvidenceIds: supportingEvidenceIds,
+    findingIds: [comparison.comparisonId],
+    geographyId,
+    lineage,
+    limitations: ["Temporal interpretation remains AI_GENERATED and requires human review."],
+  });
   const geoValidation = validateGeoIntegrity({
     latitude: coordinates.lat,
     longitude: coordinates.lng,
@@ -44,6 +63,7 @@ export function UniversalEvidenceComparisonToFinding(
     expedienteId: comparison.expedienteId,
     traceabilityId: comparison.traceabilityId,
     sourceEvidenceId: comparison.sourceEvidenceId || primaryEvidence?.sourceEvidenceId || primaryEvidence?.id || comparison.comparisonId,
+    geographyId,
     supportingEvidenceIds,
     lineage,
     lineageStatus: lineageValidation.status,
@@ -65,6 +85,7 @@ export function UniversalEvidenceComparisonToFinding(
     fechaCreacion: comparison.createdAt,
     usuarioRevision: comparison.validatedBy || comparison.createdBy,
     origenRevision: "MANUAL",
+    aiAnalyticalOutput,
   };
 }
 

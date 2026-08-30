@@ -25,6 +25,7 @@ import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoram
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
+import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 
 import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
@@ -3227,37 +3228,41 @@ const hasMinimumPhotos =
                       if (res.ok) {
                         let scoreVal = data.score ?? 0;
                         let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
+                        const aiHypothesisSuggestion = createAiAnalyticalOutput({
+                          outputType: "HYPOTHESIS_SUGGESTION",
+                          provider: "/api/refine-context",
+                          model: data.model || null,
+                          confidence: data.score,
+                          confidenceSource: typeof data.score === "number" ? "PROVIDER" : "UNKNOWN",
+                          sourceReferences: ["hypothesis-qa", "analysisContext", "sweepsComments"],
+                          evidenceIds: selected.map((p: any) => p.evidenceId || p.id).filter(Boolean),
+                          geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
+                          limitations: ["AI hypothesis QA is a suggestion and does not overwrite the human hypothesis automatically."],
+                        });
                         
                         setAnalysisAuditScore(scoreVal);
                         if (scoreVal >= 80) {
-                          setIsAnalysisContextAudited(true);
-                          
                           const updatedContext = answersString.trim()
                             ? analysisContext + "\n\nContexto adicional:\n" + answersString
                             : analysisContext;
 
-                          if (answersString.trim()) {
-                            setAnalysisContext(updatedContext);
-                          }
                           setAiQuestionsList([]);
                           setUserAnswersMap({});
                           
-                          // Guardar hipótesis y precisiones en la BDD
+                          // Registrar sugerencia IA sin promoverla a hipótesis humana ni conclusión validada.
                           const { getDb } = await import("@/lib/firebase");
                           const { doc, updateDoc } = await import("firebase/firestore");
                           const firestore = getDb();
                           await updateDoc(doc(firestore, "projects", projectId || ""), {
-                            hipotesis: updatedContext,
-                            sweepsComments: sweepsComments
+                            lastAiHypothesisSuggestion: aiHypothesisSuggestion,
+                            aiHypothesisSuggestionText: updatedContext,
+                            sweepsComments: sweepsComments,
                           });
 
-                          // Habilitar herramientas
-                          setIsHypothesisValidatedInWorkspace(true);
-                          void loadAnalysisData();
+                          setIsAnalysisContextAudited(false);
+                          setIsHypothesisValidatedInWorkspace(false);
 
-                          // Generar informe de manera automática
-                          window.alert("¡Validación exitosa! El dictamen y el expediente han sido certificados por la Auditoría Soft IA.");
-                          await confirmAndGenerateProfile();
+                          window.alert("La IA generó una sugerencia de hipótesis lista para revisión humana; no se certificó ni se generó dictamen automáticamente.");
                         } else {
                           setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
                             "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",

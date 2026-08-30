@@ -13,6 +13,7 @@ import {
 } from "@/types/geointGovernance";
 import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
 import { buildStreetViewFindingLineage, validateLineage } from "@/utils/evidenceLineage";
+import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 
 export interface AnalyticalFinding {
   findingId: string;
@@ -81,6 +82,8 @@ export interface StreetViewFinding {
   supportingEvidenceIds?: string[];
   lineage?: CanonicalLineageNode[];
   lineageStatus?: LineageStatus;
+  geographyId?: string | null;
+  aiAnalyticalOutput?: AiAnalyticalOutput | null;
 }
 
 interface StreetViewFindingsPanelProps {

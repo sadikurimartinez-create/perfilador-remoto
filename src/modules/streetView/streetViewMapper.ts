@@ -8,6 +8,7 @@ import {
 } from "@/context/ProjectContext";
 import { evaluateStreetViewGovernance } from "./streetViewGovernance";
 import { buildStreetViewFindingLineage, validateLineage } from "@/utils/evidenceLineage";
+import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 
 export interface StreetViewCapturePayload {
   dataUrl: string; // Preview/base64 de la captura congelada
@@ -25,6 +26,7 @@ export interface StreetViewCapturePayload {
   analystName?: string;
   tipo_origen?: "STREETVIEW_MANUAL" | "STREETVIEW_AUTOMATICO";
   estado_revision?: "PENDIENTE_REVISION" | "APROBADO" | "IGNORADO";
+  geographyId?: string | null;
 }
 
 /**
@@ -67,8 +69,22 @@ export function mapStreetViewToAlbumPhoto(
     findingId: photoId,
     evidenceId,
     sourceReference: payload.panoId || payload.captureDate || "Google Street View Panorama",
+    geographyId: payload.geographyId ?? null,
   });
   const lineageValidation = validateLineage(lineage);
+  const aiAnalyticalOutput = createAiAnalyticalOutput({
+    outputType: "INFERENCE",
+    provider: "GOOGLE_STREET_VIEW",
+    model: "UNAVAILABLE",
+    confidence: governance.confidencePercentage,
+    confidenceSource: "DETERMINISTIC_RULE",
+    sourceReferences: [payload.panoId, payload.captureDate, "Google Street View Panorama"],
+    evidenceIds: [evidenceId],
+    findingIds: [photoId],
+    geographyId: payload.geographyId ?? null,
+    lineage,
+    limitations: ["Visual interpretation remains AI/deterministic inference until human review."],
+  });
 
   return {
     id: photoId,
@@ -88,6 +104,7 @@ export function mapStreetViewToAlbumPhoto(
     humanValidationStatus: "PENDING_REVIEW",
     validationSource: "CANONICAL_FIELD",
     isIndependentPoi: true,
+    geographyId: payload.geographyId ?? null,
 
     // Estructura de Gobernanza v2.1 y Contrato Determinístico de Evidencia
     evidenceOrigin: "REMOTE" as EvidenceOrigin,
@@ -108,6 +125,7 @@ export function mapStreetViewToAlbumPhoto(
     sourceEvidenceId: evidenceId,
     lineage,
     lineageStatus: lineageValidation.status,
+    aiAnalyticalOutput,
   };
 }
 
