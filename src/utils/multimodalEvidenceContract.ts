@@ -45,6 +45,8 @@ export interface MultimodalEvidenceContract {
   size: number | null;
   storageReference: string | null;
   ingestionSource: MultimodalIngestionSource;
+  geographyId?: string | null;
+  geographyType?: "INDIVIDUAL" | "CORRIDOR" | "POLYGON" | null;
   ingestionStatus: MultimodalIngestionStatus;
   extractionStatus: MultimodalExtractionStatus;
   analysisStatus: MultimodalAnalysisStatus;
@@ -89,6 +91,8 @@ export function createStoredRawMultimodalEvidence(input: {
   size?: number | string | null;
   storageReference: string;
   ingestionSource: MultimodalIngestionSource;
+  geographyId?: string | null;
+  geographyType?: "INDIVIDUAL" | "CORRIDOR" | "POLYGON" | null;
   traceabilityId?: string | null;
   analystContext?: string | null;
   forensicIntegrity?: ForensicFileIntegrity | null;
@@ -107,6 +111,8 @@ export function createStoredRawMultimodalEvidence(input: {
     size: Number.isFinite(size) ? Number(size) : null,
     storageReference: input.storageReference,
     ingestionSource: input.ingestionSource,
+    geographyId: input.geographyId ?? null,
+    geographyType: input.geographyType ?? null,
     ingestionStatus: "STORED_RAW",
     extractionStatus: supported ? "EXTRACTION_PENDING" : "UNSUPPORTED_FOR_EXTRACTION",
     analysisStatus: "NOT_ANALYZED",

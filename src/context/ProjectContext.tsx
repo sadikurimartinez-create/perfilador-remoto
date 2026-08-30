@@ -1,7 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
-import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import { ImageDeletionGovernanceService } from "@/utils/imageDeletionGovernanceService";
 import { EvidenceRelationship } from "@/utils/evidenceRelationshipEngine";
 
@@ -35,6 +34,13 @@ import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
 import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
 import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
+import {
+  adaptLegacyProjectGeography,
+  canonicalizeConfirmedDraftGeography,
+  type CanonicalGeographyType,
+  type CanonicalProjectGeography,
+  type DraftProjectGeography,
+} from "@/utils/canonicalProjectGeography";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -110,6 +116,8 @@ export type AlbumPhoto = {
   lineageStatus?: LineageStatus;
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
+  geographyId?: string | null;
+  geographyType?: CanonicalGeographyType | null;
 
   // Extensión de Gobernanza Street View Evidence v2.1 y Contrato Determinista
   evidenceOrigin?: EvidenceOrigin;
@@ -150,6 +158,8 @@ export type SweepIntegrationItem = {
   outputFindingIds?: string[];
   lineage?: CanonicalLineageNode[];
   lineageStatus?: LineageStatus;
+  geographyId?: string | null;
+  geographyType?: CanonicalGeographyType | null;
   relevance: "Alto" | "Medio" | "Bajo";
   data: string;
   context?: string;
@@ -174,6 +184,9 @@ export type Project = {
   hipotesis?: string;
   reportSummary?: string;
   sweeps?: SweepIntegrationItem[];
+  canonicalGeography?: CanonicalProjectGeography | null;
+  geographyId?: string | null;
+  geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;
@@ -228,6 +241,8 @@ type ProjectContextValue = {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
+    canonicalGeography?: CanonicalProjectGeography | null;
+    draftGeography?: DraftProjectGeography | null;
   }) => Promise<string>;
 
   closeProject: () => void;
@@ -397,18 +412,43 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     nombre,
     geometryType,
     descripcion,
+    canonicalGeography,
+    draftGeography,
   }: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
+    canonicalGeography?: CanonicalProjectGeography | null;
+    draftGeography?: DraftProjectGeography | null;
   }) => {
     try {
       const firestore = getDb();
       const counterRef = doc(firestore, "counters", "projects");
       const projectCol = collection(firestore, "projects");
       const projectDocRef = doc(projectCol);
+      if (canonicalGeography && canonicalGeography.validationStatus !== "VALID") {
+        throw new Error("La geografía canónica del expediente está incompleta o es inválida.");
+      }
+      if (!canonicalGeography && !draftGeography?.confirmed) {
+        throw new Error("Debe definir, validar y confirmar la geografía antes de crear el expediente.");
+      }
 
       let ceipolId = "";
+      const confirmedCanonicalGeography = canonicalGeography || canonicalizeConfirmedDraftGeography({
+        projectId: projectDocRef.id,
+        draft: draftGeography!,
+      });
+      const geographyPersistence = confirmedCanonicalGeography
+        ? {
+            canonicalGeography: confirmedCanonicalGeography,
+            geographyId: confirmedCanonicalGeography.geographyId,
+            geographyValidationStatus: confirmedCanonicalGeography.validationStatus,
+          }
+        : {
+            canonicalGeography: null,
+            geographyId: null,
+            geographyValidationStatus: "INVALID" as const,
+          };
       
       await runTransaction(firestore, async (transaction) => {
         const counterSnap = await transaction.get(counterRef);
@@ -436,6 +476,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           lockedBy: null,
           photoCount: 0,
           estado: "ABIERTO",
+          ...geographyPersistence,
         });
       });
 
@@ -447,6 +488,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdBy: user?.username || "Usuario Local",
         ceipolId,
         estado: "ABIERTO",
+        ...geographyPersistence,
       });
 
       setAlbum([]);
@@ -610,12 +652,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             gpsAccuracy: data.gpsAccuracy ?? null,
             gpsTimestamp: data.gpsTimestamp ?? null,
             diagnosticLogs: data.diagnosticLogs ?? null,
+            geographyId: data.geographyId ?? null,
+            geographyType: data.geographyType ?? null,
           };
         })
         .filter((p) => !p.deleted) as any;
 
+      let geoEntities: any[] = [];
       try {
-        const geoEntities = await getGeographicEntities(projectId);
+        geoEntities = await getGeographicEntities(projectId);
         const geoAlbumItems: AlbumPhoto[] = geoEntities.map((geo) => ({
           id: geo.id!,
           previewUrl: "",
@@ -628,11 +673,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           fuente: "Mapa Táctico GEOINT",
           validado: true,
           createdAt: geo.createdAt || Date.now(),
+          geographyId: projectData.geographyId ?? projectData.canonicalGeography?.geographyId ?? null,
+          geographyType: projectData.canonicalGeography?.type ?? null,
         } as any));
         albumPhotos.push(...geoAlbumItems);
       } catch (geoErr) {
         console.warn("[ProjectContext] No se pudieron cargar entidades geográficas:", geoErr);
       }
+
+      const canonicalGeography = adaptLegacyProjectGeography(
+        {
+          id: projectId,
+          geometryType: projectData.geometryType,
+          latitude: projectData.latitude ?? null,
+          longitude: projectData.longitude ?? null,
+          canonicalGeography: projectData.canonicalGeography ?? null,
+        },
+        { geographicEntities: geoEntities }
+      );
 
       setProject({
         id: projectId,
@@ -640,6 +698,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         geometryType: projectData.geometryType,
         descripcion: projectData.descripcion || "",
         ...projectData,
+        canonicalGeography,
+        geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
+        geographyValidationStatus: canonicalGeography?.validationStatus ?? projectData.geographyValidationStatus ?? "INVALID",
       });
       setAlbum(albumPhotos);
       setSelectedIds(albumPhotos.map((p) => p.id));
@@ -759,6 +820,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         gpsLng: metadata?.gpsLng ?? null,
         diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
         validado: metadata?.validado ?? false,
+        geographyId: project.canonicalGeography?.geographyId ?? null,
+        geographyType: project.canonicalGeography?.type ?? null,
         humanValidationStatus: (metadata as any)?.humanValidationStatus || (isStreetView ? "PENDING_REVIEW" : "UNREVIEWED"),
         validationSource: (metadata as any)?.validationSource || (isStreetView ? "CANONICAL_FIELD" : "ABSENT"),
         streetViewCategory: (metadata as any)?.streetViewCategory || null,
@@ -805,6 +868,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng: metadata?.gpsLng ?? null,
       diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
       validado: metadata?.validado ?? false,
+      geographyId: project.canonicalGeography?.geographyId ?? null,
+      geographyType: project.canonicalGeography?.type ?? null,
       streetViewCategory: (metadata as any)?.streetViewCategory || null,
       streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
       analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
@@ -874,6 +939,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           gpsSource: params.isIndependentPoi ? "POI_MAPA" : "VERTICE_MAPA",
           validado: true,
           createdAt: Date.now(),
+          geographyId: project.canonicalGeography?.geographyId ?? null,
+          geographyType: project.canonicalGeography?.type ?? null,
         } as any,
         entityId
       );
@@ -925,6 +992,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         size: file.size,
         storageReference: storagePath,
         ingestionSource: "USER_UPLOAD",
+        geographyId: project.canonicalGeography?.geographyId ?? null,
+        geographyType: project.canonicalGeography?.type ?? null,
         traceabilityId: null,
         analystContext: context,
         forensicIntegrity,
@@ -1577,6 +1646,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       outputFindingIds: lifecycle.outputFindingIds,
       lineage: lifecycle.lineage,
       lineageStatus: lifecycle.lineageStatus,
+      geographyId: params.geographyId ?? project.canonicalGeography?.geographyId ?? null,
+      geographyType: params.geographyType ?? project.canonicalGeography?.type ?? null,
     };
 
     const updatedSweeps = [...currentSweeps, newSweep];
@@ -1619,15 +1690,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         latVal = parseFloat(coordsMatch[1]);
         lngVal = parseFloat(coordsMatch[2]);
       } else {
-        const selectedPhotos = album.filter(p => p.lat && p.lng);
-        if (selectedPhotos.length > 0) {
-          latVal = selectedPhotos.reduce((acc, p) => acc + p.lat!, 0) / selectedPhotos.length;
-          lngVal = selectedPhotos.reduce((acc, p) => acc + p.lng!, 0) / selectedPhotos.length;
-        } else {
-          const geoValidation = validateGeoIntegrity((project as any).latitude, (project as any).longitude);
-          latVal = geoValidation.latitude;
-          lngVal = geoValidation.longitude;
-        }
+        latVal = project.canonicalGeography?.derived?.centroid?.lat ?? null;
+        lngVal = project.canonicalGeography?.derived?.centroid?.lng ?? null;
       }
 
       if (latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
@@ -1653,7 +1717,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             tipo: `Barrido ${params.engine}`,
             comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
             validado: true,
-            isIndependentPoi: true
+            isIndependentPoi: true,
+            geographyId: newSweep.geographyId ?? null,
+            geographyType: newSweep.geographyType ?? null,
           };
           await setDoc(doc(photosColRef, photoId), photoDocData);
           
@@ -1665,7 +1731,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             tipo: `Barrido ${params.engine}`,
             comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
             validado: true,
-            isIndependentPoi: true
+            isIndependentPoi: true,
+            geographyId: newSweep.geographyId ?? null,
+            geographyType: newSweep.geographyType ?? null,
           }]);
         } catch (photoErr) {
           console.error("[ProjectContext] Error creating sweep georeferenced photo:", photoErr);
@@ -1690,7 +1758,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error registering sweep:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction, album, user]);
+  }, [project, isReadOnly, logAuditAction, user]);
 
   const updateSweep = useCallback(async (sweepId: string, updates: Partial<SweepIntegrationItem>) => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");

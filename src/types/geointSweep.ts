@@ -64,6 +64,8 @@ export interface GeoIntSweepFindingPayload {
   status: GeointGovernanceStatusValue;
   traceabilityId: string;
   sourceEvidenceId: string;
+  geographyId?: string | null;
+  geographyType?: "INDIVIDUAL" | "CORRIDOR" | "POLYGON" | null;
   createdBy: string;
   originalFindingId: string;
   geometry: {
@@ -83,6 +85,8 @@ export interface GeoIntSweepFindingPayload {
     panoramaLng?: number;
     panoramaKey?: string;
     distanceMeters?: number;
+    nodeOrder?: number;
+    sweepGeographyContext?: unknown;
   };
 }
 

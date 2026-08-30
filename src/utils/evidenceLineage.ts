@@ -1,4 +1,4 @@
-export type LineageNodeType = "SOURCE" | "EVIDENCE" | "FINDING" | "INFERENCE" | "ANALYSIS" | "CONCLUSION";
+export type LineageNodeType = "GEOGRAPHY" | "SOURCE" | "EVIDENCE" | "FINDING" | "INFERENCE" | "ANALYSIS" | "CONCLUSION";
 
 export type LineageStatus =
   | "SUPPORTED"
@@ -12,6 +12,8 @@ export interface CanonicalLineageNode {
   type: LineageNodeType;
   sourceId?: string | null;
   sourceReference?: string | null;
+  geographyId?: string | null;
+  geographyType?: string | null;
   evidenceId?: string | null;
   findingId?: string | null;
   inferenceId?: string | null;
@@ -41,6 +43,8 @@ export interface LineageValidationResult {
 export function buildEvidenceLineage(input: {
   sourceId?: string | null;
   sourceReference?: string | null;
+  geographyId?: string | null;
+  geographyType?: string | null;
   evidenceId: string;
   findingId?: string | null;
   inferenceId?: string | null;
@@ -48,6 +52,14 @@ export function buildEvidenceLineage(input: {
   conclusionId?: string | null;
 }): CanonicalLineageNode[] {
   const nodes: CanonicalLineageNode[] = [];
+  if (input.geographyId) {
+    nodes.push({
+      id: input.geographyId,
+      type: "GEOGRAPHY",
+      geographyId: input.geographyId,
+      geographyType: input.geographyType ?? null,
+    });
+  }
   if (input.sourceId || input.sourceReference) {
     nodes.push({
       id: input.sourceId || input.sourceReference!,
@@ -62,12 +74,16 @@ export function buildEvidenceLineage(input: {
     evidenceId: input.evidenceId,
     sourceId: input.sourceId ?? null,
     sourceReference: input.sourceReference ?? null,
+    geographyId: input.geographyId ?? null,
+    geographyType: input.geographyType ?? null,
   });
   if (input.findingId) {
     nodes.push({
       id: input.findingId,
       type: "FINDING",
       findingId: input.findingId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
       supportingEvidenceIds: [input.evidenceId],
     });
   }
@@ -76,6 +92,8 @@ export function buildEvidenceLineage(input: {
       id: input.inferenceId,
       type: "INFERENCE",
       inferenceId: input.inferenceId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
       derivedFromFindingIds: [input.findingId],
     });
   }
@@ -84,6 +102,8 @@ export function buildEvidenceLineage(input: {
       id: input.analysisId,
       type: "ANALYSIS",
       analysisId: input.analysisId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
       supportingFindingIds: input.findingId ? [input.findingId] : [],
       supportingInferenceIds: input.inferenceId ? [input.inferenceId] : [],
     });
@@ -93,6 +113,8 @@ export function buildEvidenceLineage(input: {
       id: input.conclusionId,
       type: "CONCLUSION",
       conclusionId: input.conclusionId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
       supportingAnalysisIds: [input.analysisId],
     });
   }
@@ -180,10 +202,10 @@ export function validateLineage(nodes: CanonicalLineageNode[] | null | undefined
 
   const forwardPath: string[] = [];
   const reversePath: string[] = [];
-  for (const type of ["SOURCE", "EVIDENCE", "FINDING", "INFERENCE", "ANALYSIS", "CONCLUSION"] as LineageNodeType[]) {
+  for (const type of ["GEOGRAPHY", "SOURCE", "EVIDENCE", "FINDING", "INFERENCE", "ANALYSIS", "CONCLUSION"] as LineageNodeType[]) {
     pushUnique(forwardPath, nodes.filter((node) => node.type === type).map((node) => `${type}:${node.id}`));
   }
-  for (const type of ["CONCLUSION", "ANALYSIS", "INFERENCE", "FINDING", "EVIDENCE", "SOURCE"] as LineageNodeType[]) {
+  for (const type of ["CONCLUSION", "ANALYSIS", "INFERENCE", "FINDING", "EVIDENCE", "SOURCE", "GEOGRAPHY"] as LineageNodeType[]) {
     pushUnique(reversePath, nodes.filter((node) => node.type === type).map((node) => `${type}:${node.id}`));
   }
 
@@ -213,6 +235,8 @@ export function buildStreetViewFindingLineage(input: {
   findingId: string;
   evidenceId?: string | null;
   sourceReference?: string | null;
+  geographyId?: string | null;
+  geographyType?: string | null;
 }): CanonicalLineageNode[] {
   if (!input.evidenceId) {
     return [{ id: input.findingId, type: "FINDING", findingId: input.findingId, supportingEvidenceIds: [] }];
@@ -222,5 +246,7 @@ export function buildStreetViewFindingLineage(input: {
     sourceReference: input.sourceReference || "Google Street View",
     evidenceId: input.evidenceId,
     findingId: input.findingId,
+    geographyId: input.geographyId ?? null,
+    geographyType: input.geographyType ?? null,
   });
 }

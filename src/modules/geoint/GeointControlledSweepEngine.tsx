@@ -10,6 +10,11 @@ import {
 } from "@/types/geointSweep";
 import { calculateHaversineDistanceMeters } from "@/utils/geoResolver";
 import { buildGeointTraceabilityId } from "@/types/geointGovernance";
+import {
+  buildSweepGeographyContext,
+  getCanonicalGeographyCoordinates,
+  type CanonicalProjectGeography,
+} from "@/utils/canonicalProjectGeography";
 
 interface GeointControlledSweepEngineProps {
   isOpen: boolean;
@@ -17,6 +22,7 @@ interface GeointControlledSweepEngineProps {
   lng: number;
   projectId?: string;
   analystName?: string;
+  canonicalGeography?: CanonicalProjectGeography | null;
   onClose: () => void;
   onFindingsGenerated?: (findings: GeoIntSweepFindingPayload[]) => void;
 }
@@ -30,12 +36,14 @@ export function buildControlledSweepEventIdentity(params: {
   radiusMeters: number;
   sweepType: SweepType;
   selectedCategories: GeoIntSweepCategory[];
+  geographyId?: string | null;
 }) {
   const categoryKey = [...params.selectedCategories].sort().join("-");
   const latKey = params.lat.toFixed(5);
   const lngKey = params.lng.toFixed(5);
   const stableKey = [
     params.projectId,
+    params.geographyId || "NO_CANONICAL_GEOGRAPHY",
     latKey,
     lngKey,
     params.radiusMeters,
@@ -59,7 +67,8 @@ export function GeointControlledSweepEngine({
   lat,
   lng,
   projectId = "EXP-2026",
-  analystName = "Analista CEIPOL",
+  analystName = "UNAVAILABLE",
+  canonicalGeography = null,
   onClose,
   onFindingsGenerated,
 }: GeointControlledSweepEngineProps) {
@@ -90,11 +99,21 @@ export function GeointControlledSweepEngine({
       alert("⚠️ Seleccione al menos una categoría gobernada para ejecutar el barrido GEOINT.");
       return;
     }
+    if (!canonicalGeography || canonicalGeography.validationStatus !== "VALID") {
+      alert("⚠️ Defina y confirme una geografía canónica válida antes de ejecutar el barrido GEOINT.");
+      return;
+    }
 
     sweepExecutionLockedRef.current = true;
     setIsSweeping(true);
     setSweepMsg("Inicializando motor GEOINT Controlled Sweep...");
     const generatedFindings: GeoIntSweepFindingPayload[] = [];
+    const sweepGeographyContext = buildSweepGeographyContext(canonicalGeography, radiusMeters);
+    const canonicalPoints = getCanonicalGeographyCoordinates(canonicalGeography);
+    const samplePoints =
+      canonicalGeography.type === "INDIVIDUAL"
+        ? [{ ...canonicalPoints[0], nodeOrder: undefined as number | undefined }]
+        : canonicalPoints.map((point, index) => ({ ...point, nodeOrder: index + 1 }));
 
     try {
       let globalCount = 0;
@@ -104,7 +123,9 @@ export function GeointControlledSweepEngine({
         const catMeta = GEOINT_SWEEP_CATEGORIES[cat];
         setSweepMsg(`Ejecutando barrido ${sweepType} — Categoría: ${catMeta.label}...`);
 
-        const imagesPerCategory = sweepType === "RADIAL" ? 4 : sweepType === "CORREDOR" ? 2 : 3;
+        const imagesPerCategory = canonicalGeography.type === "INDIVIDUAL"
+          ? sweepType === "RADIAL" ? 4 : sweepType === "CORREDOR" ? 2 : 3
+          : Math.min(samplePoints.length, 4);
 
         for (let i = 0; i < imagesPerCategory; i++) {
           if (globalCount >= 16) break;
@@ -113,7 +134,12 @@ export function GeointControlledSweepEngine({
           let offsetLng = 0;
           let sweepHeading = 0;
 
-          if (sweepType === "CORREDOR") {
+          const canonicalSample = samplePoints[i % samplePoints.length];
+          if (canonicalGeography.type !== "INDIVIDUAL") {
+            offsetLat = 0;
+            offsetLng = 0;
+            sweepHeading = canonicalGeography.type === "CORRIDOR" ? (i % 2 === 0 ? 45 : 225) : (i * 90) % 360;
+          } else if (sweepType === "CORREDOR") {
             const distanceRatio = (i + 1) / imagesPerCategory;
             offsetLat = radiusDegreeApprox * distanceRatio * (i % 2 === 0 ? 1 : -1);
             offsetLng = radiusDegreeApprox * 0.2 * (i % 2 === 0 ? 1 : -1);
@@ -126,15 +152,15 @@ export function GeointControlledSweepEngine({
             sweepHeading = (i * 120 + 45) % 360;
           }
 
-          const sweepLat = lat + offsetLat;
-          const sweepLng = lng + offsetLng;
+          const sweepLat = canonicalGeography.type === "INDIVIDUAL" ? lat + offsetLat : canonicalSample.lat;
+          const sweepLng = canonicalGeography.type === "INDIVIDUAL" ? lng + offsetLng : canonicalSample.lng;
           const sweepPitch = 5.0;
           const sweepFov = 90.0;
 
           // Validación de Integridad Geoespacial ADR-019.15: Haversine distance <= radiusMeters (Max 50m para evidencia directa)
           const distMeters = calculateHaversineDistanceMeters(lat, lng, sweepLat, sweepLng);
 
-          if (distMeters > Math.max(radiusMeters, 50)) {
+          if (canonicalGeography.type === "INDIVIDUAL" && distMeters > Math.max(radiusMeters, 50)) {
             console.warn(`[GeointControlledSweepEngine] Punto de muestreo desalineado a ${distMeters.toFixed(1)}m. Omitiendo.`);
             continue;
           }
@@ -185,6 +211,8 @@ export function GeointControlledSweepEngine({
             status: GeointGovernanceStatus.PENDING_REVIEW,
             traceabilityId,
             sourceEvidenceId: findingId,
+            geographyId: canonicalGeography.geographyId,
+            geographyType: canonicalGeography.type,
             createdBy: analystName,
             originalFindingId: findingId,
             geometry: {
@@ -204,6 +232,8 @@ export function GeointControlledSweepEngine({
               panoramaLng: sweepLng,
               panoramaKey,
               distanceMeters: distMeters,
+              nodeOrder: canonicalSample.nodeOrder,
+              sweepGeographyContext,
             },
           };
 
@@ -227,7 +257,7 @@ export function GeointControlledSweepEngine({
       setIsSweeping(false);
       setSweepMsg("");
     }
-  }, [projectId, lat, lng, selectedCategories, sweepType, radiusMeters, analystName, onFindingsGenerated, onClose]);
+  }, [projectId, lat, lng, selectedCategories, sweepType, radiusMeters, analystName, canonicalGeography, onFindingsGenerated, onClose]);
 
   if (!isOpen) return null;
 

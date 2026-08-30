@@ -3437,6 +3437,7 @@ const hasMinimumPhotos =
                 project={project}
                 album={album}
                 geometryType={project.geometryType || "individual"}
+                canonicalGeography={project.canonicalGeography}
                 coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
                   lat: Number(photo.lat),
                   lng: Number(photo.lng),

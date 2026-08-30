@@ -13,6 +13,12 @@ import { useProject } from "@/context/ProjectContext";
 import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
 import { GeointGovernanceStatus, GeointGovernanceStatusValue } from "@/types/geointGovernance";
 import { buildStreetViewFindingFromTemporalComparison } from "@/services/geoint/temporalComparisonBridge";
+import {
+  buildSweepGeographyContext,
+  getCanonicalGeographyCoordinates,
+  getCanonicalMapViewport,
+  type CanonicalProjectGeography,
+} from "@/utils/canonicalProjectGeography";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
@@ -21,17 +27,21 @@ export function calculateSweepPreparation(input: {
   expedienteId: string;
   georeferencedPhotosCount: number;
   existingFindingsCount: number;
+  canonicalGeography?: CanonicalProjectGeography | null;
 }) {
+  const hasCanonicalGeography = input.canonicalGeography?.validationStatus === "VALID";
   return {
     mode: "PREPARATION" as const,
-    sweepAvailable: input.georeferencedPhotosCount > 0,
+    sweepAvailable: hasCanonicalGeography,
     recommendedReason:
-      input.georeferencedPhotosCount > 0
-        ? "GEOREFERENCED_PHOTOS_AVAILABLE"
-        : "NO_GEOREFERENCED_PHOTOS",
+      hasCanonicalGeography
+        ? "CANONICAL_GEOGRAPHY_AVAILABLE"
+        : "NO_VALID_CANONICAL_GEOGRAPHY",
     expedienteId: input.expedienteId,
     georeferencedPhotosCount: input.georeferencedPhotosCount,
     existingFindingsCount: input.existingFindingsCount,
+    geographyId: input.canonicalGeography?.geographyId ?? null,
+    geographyType: input.canonicalGeography?.type ?? null,
   };
 }
 
@@ -66,28 +76,23 @@ export function GeographicWorkspace() {
     return [];
   }, [album]);
 
-  // Centro y Geografía Rectora reactiva basada en el expediente, fotos de campo o hallazgos reales (Sección 8)
+  // Centro y Geografía Rectora reactiva basada exclusivamente en el contrato canónico del expediente.
   const activeGeografiaRectora = React.useMemo(() => {
-    if (project?.latitude != null && project?.longitude != null) {
-      return {
-        center: { lat: Number(project.latitude), lng: Number(project.longitude) },
-        hasCoordinates: true,
-      };
+    const canonicalGeography = project?.canonicalGeography;
+    if (!canonicalGeography || canonicalGeography.validationStatus !== "VALID") {
+      return { center: undefined, hasCoordinates: false };
     }
-    if (georeferencedPhotos.length > 0 && georeferencedPhotos[0].lat != null && georeferencedPhotos[0].lng != null) {
-      return {
-        center: { lat: Number(georeferencedPhotos[0].lat), lng: Number(georeferencedPhotos[0].lng) },
-        hasCoordinates: true,
-      };
-    }
-    if (findings.length > 0 && findings[0].coordenadas?.lat != null && findings[0].coordenadas?.lng != null) {
-      return {
-        center: { lat: Number(findings[0].coordenadas.lat), lng: Number(findings[0].coordenadas.lng) },
-        hasCoordinates: true,
-      };
-    }
-    return { center: undefined, hasCoordinates: false };
-  }, [project, georeferencedPhotos, findings]);
+    const coordinates = getCanonicalGeographyCoordinates(canonicalGeography);
+    const viewport = getCanonicalMapViewport(canonicalGeography);
+    return {
+      center: viewport.center,
+      polygonCoords: canonicalGeography.type === "POLYGON" ? coordinates : undefined,
+      lineCoords: canonicalGeography.type === "CORRIDOR" ? coordinates : undefined,
+      geographyId: canonicalGeography.geographyId,
+      geographyType: canonicalGeography.type,
+      hasCoordinates: coordinates.length > 0,
+    };
+  }, [project?.canonicalGeography]);
 
   // Resolución reactiva de Evidencia Primaria In Situ real (Campo) sin fallbacks estáticos
   const primaryEvidenceCandidate = React.useMemo(() => {
@@ -162,8 +167,9 @@ export function GeographicWorkspace() {
         expedienteId,
         georeferencedPhotosCount: georeferencedPhotos.length,
         existingFindingsCount: findings.length,
+        canonicalGeography: project?.canonicalGeography ?? null,
       }),
-    [expedienteId, georeferencedPhotos.length, findings.length]
+    [expedienteId, georeferencedPhotos.length, findings.length, project?.canonicalGeography]
   );
 
   // Sincronizar hallazgos del expediente desde el backend al cargar
@@ -357,10 +363,14 @@ export function GeographicWorkspace() {
         {isSweepEngineOpen && (
           <GeointControlledSweepEngine
             isOpen={isSweepEngineOpen}
-            lat={primaryEvidenceCandidate?.lat ?? activeGeografiaRectora.center?.lat ?? 0}
-            lng={primaryEvidenceCandidate?.lng ?? activeGeografiaRectora.center?.lng ?? 0}
+            lat={activeGeografiaRectora.center?.lat ?? 0}
+            lng={activeGeografiaRectora.center?.lng ?? 0}
+            canonicalGeography={project?.canonicalGeography ?? null}
             onClose={() => setIsSweepEngineOpen(false)}
             onFindingsGenerated={(newCaptures) => {
+              const sweepGeographyContext = project?.canonicalGeography
+                ? buildSweepGeographyContext(project.canonicalGeography)
+                : null;
               setCaptures((prev) => [
                 ...prev,
                 ...newCaptures.map((capture) => ({
@@ -375,10 +385,12 @@ export function GeographicWorkspace() {
                 source: "GeointControlledSweepEngine",
                 type: "Directa",
                 relevance: "Alto",
-                data: `Barrido GEOINT controlado generado por acción operacional explícita. Hallazgos: ${newCaptures.length}.`,
                 initialContext: "Ejecución manual desde GeographicWorkspace.",
                 outputEvidenceIds: newCaptures.map((capture) => capture.sourceEvidenceId).filter(Boolean),
                 outputFindingIds: newCaptures.map((capture) => capture.originalFindingId).filter(Boolean),
+                geographyId: project?.canonicalGeography?.geographyId ?? null,
+                geographyType: project?.canonicalGeography?.type ?? null,
+                data: `Barrido GEOINT controlado generado por acción operacional explícita. Hallazgos: ${newCaptures.length}. Geografía: ${sweepGeographyContext?.geographyId ?? "UNAVAILABLE"}.`,
               }).catch((err) => {
                 console.warn("[GeographicWorkspace] No se pudo registrar lifecycle del barrido GEOINT controlado:", err);
               });

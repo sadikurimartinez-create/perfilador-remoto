@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
+import {
+  getCanonicalGeographyCoordinates,
+  getCanonicalMapViewport,
+  type CanonicalProjectGeography,
+} from "@/utils/canonicalProjectGeography";
 
 interface ProjectMapProps {
   geometryType: "individual" | "lineal" | "poligono" | string;
@@ -13,6 +18,7 @@ interface ProjectMapProps {
   onCandidateCapture?: (lat: number, lng: number, context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }) => void;
   onPoiSelect?: (lat: number, lng: number) => void;
   album: any[];
+  canonicalGeography?: CanonicalProjectGeography | null;
   project: {
     id: string;
     latitude?: number | null;
@@ -122,6 +128,7 @@ export function ProjectMap({
   onCandidateCapture,
   onPoiSelect,
   album = [],
+  canonicalGeography,
   project,
 }: ProjectMapProps) {
   const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
@@ -147,6 +154,17 @@ export function ProjectMap({
 
   const [selectedOsintSingle, setSelectedOsintSingle] = useState<any | null>(null);
   const [selectedOsintGroup, setSelectedOsintGroup] = useState<any | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  const canonicalCoordinates = useMemo(
+    () => getCanonicalGeographyCoordinates(canonicalGeography),
+    [canonicalGeography]
+  );
+
+  const canonicalViewport = useMemo(
+    () => getCanonicalMapViewport(canonicalGeography),
+    [canonicalGeography]
+  );
 
   // Mapear y decodificar los barridos OSINT
   const parsedSweeps = useMemo(() => {
@@ -325,13 +343,16 @@ export function ProjectMap({
       Math.abs(Number(project.longitude) - (-102.2916)) < 0.0001;
 
     const hasRealProjectCenter = hasProjectCoords && !isProjectDefault;
-    const hasCoordinates = coordinates && coordinates.length > 0;
-    const hasRealPhotos = georeferencedPhotos.length > 0;
+    const hasCanonicalCoordinates = canonicalCoordinates.length > 0 && canonicalGeography?.validationStatus !== "INVALID";
+    const hasCoordinates = !canonicalGeography && coordinates && coordinates.length > 0;
 
-    return !hasRealProjectCenter && !hasCoordinates && !hasRealPhotos;
-  }, [project, coordinates, georeferencedPhotos]);
+    return !hasCanonicalCoordinates && !hasRealProjectCenter && !hasCoordinates;
+  }, [project, coordinates, canonicalCoordinates, canonicalGeography]);
 
   const center = useMemo(() => {
+    if (canonicalViewport.center && canonicalGeography?.validationStatus !== "INVALID") {
+      return canonicalViewport.center;
+    }
     if (project?.latitude && project?.longitude) {
       const isProjectDefault = Math.abs(Number(project.latitude) - 21.8853) < 0.0001 && 
                                Math.abs(Number(project.longitude) - (-102.2916)) < 0.0001;
@@ -339,21 +360,25 @@ export function ProjectMap({
         return { lat: Number(project.latitude), lng: Number(project.longitude) };
       }
     }
-    if (georeferencedPhotos.length > 0) {
-      return { lat: Number(georeferencedPhotos[0].lat), lng: Number(georeferencedPhotos[0].lng) };
-    }
     if (coordinates.length > 0) {
       return coordinates[0];
     }
     return { lat: 21.8853, lng: -102.2916 }; // Default Aguascalientes (sólo para cargar mapa base, pero oculto tras isFallback)
-  }, [project, coordinates, georeferencedPhotos]);
+  }, [project, coordinates, canonicalViewport, canonicalGeography]);
 
-  // Group coordinates of evidences for corridor polyline or polygon drawing (excl. independent POIs)
+  // Capa geográfica rectora: procede del contrato canónico, no de pines de evidencia.
   const geoShapePath = useMemo(() => {
-    return georeferencedPhotos
-      .filter((p) => !p.isIndependentPoi && p.tipo !== "POI" && p.tipo !== "Punto Independiente" && !p.tipo?.startsWith("Barrido"))
-      .map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
-  }, [georeferencedPhotos]);
+    if (canonicalCoordinates.length > 0) return canonicalCoordinates;
+    if (!canonicalGeography && coordinates.length > 0) return coordinates;
+    return [];
+  }, [canonicalCoordinates, canonicalGeography, coordinates]);
+
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current || !canonicalViewport.bounds || canonicalCoordinates.length < 2) return;
+    const bounds = new google.maps.LatLngBounds();
+    canonicalCoordinates.forEach((point) => bounds.extend(point));
+    mapRef.current.fitBounds(bounds);
+  }, [isLoaded, canonicalViewport, canonicalCoordinates]);
 
   // Carga y cálculo de densidad analítica de calor compatible con Google Maps JS v3.65+ (GEO-ENH-01 v1.1)
   const heatmapDensityClusters = useMemo(() => {
@@ -626,6 +651,12 @@ export function ProjectMap({
         zoom={15}
         options={mapOptions}
         onClick={handleMapClick}
+        onLoad={(map) => {
+          mapRef.current = map;
+        }}
+        onUnmount={() => {
+          mapRef.current = null;
+        }}
       >
         {/* Renderizado de Capa de Densidad Analítica de Calor v1.1 (GEO-ENH-01) */}
         {showHeatmap && heatmapDensityClusters.map((density) => (
@@ -679,9 +710,9 @@ export function ProjectMap({
         ))}
 
         {/* Draw circle for individual type projects (Controlled by showAreas) */}
-        {showAreas && geometryType === "individual" && project?.latitude && project?.longitude && !isFallback && (
+        {showAreas && geometryType === "individual" && geoShapePath.length === 1 && !isFallback && (
           <Circle
-            center={{ lat: project.latitude, lng: project.longitude }}
+            center={geoShapePath[0]}
             radius={Number(project.radius || 500)}
             options={{
               strokeColor: "#38bdf8",
