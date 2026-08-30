@@ -19,6 +19,16 @@ import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
 import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
 import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
+import {
+  certifyGeointSweepWithHumanApproval,
+  createHumanTriggeredRunningSweepLifecycle,
+  markGeointSweepReadyForHumanReview,
+  rejectGeointSweepWithHumanDecision,
+  transitionGeointSweepLifecycle,
+  type GeointSweepAnalysisStatus,
+  type GeointSweepLifecycleRecord,
+  type GeointSweepLifecycleStatus,
+} from "@/utils/geointSweepLifecycle";
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
 import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
@@ -123,6 +133,21 @@ export type SweepIntegrationItem = {
   source: string;
   type: "Directa" | "Contextualizada";
   status: "Integrado" | "Pendiente" | "Rechazado";
+  lifecycleStatus?: GeointSweepLifecycleStatus;
+  lifecycleVersion?: number;
+  lifecycle?: GeointSweepLifecycleRecord;
+  analysisStatus?: GeointSweepAnalysisStatus;
+  aiQualityScore?: number | null;
+  humanValidationStatus?: "UNREVIEWED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "RETURNED_FOR_REANALYSIS" | "LEGACY_UNCLASSIFIED";
+  validationSource?: "ADR_020_24_HUMAN_ACTION" | null;
+  validatedAt?: string | null;
+  validatedBy?: any | null;
+  traceabilityId?: string | null;
+  correlationId?: string | null;
+  outputEvidenceIds?: string[];
+  outputFindingIds?: string[];
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
   relevance: "Alto" | "Medio" | "Bajo";
   data: string;
   context?: string;
@@ -302,6 +327,16 @@ async function getClientIp(): Promise<string> {
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function buildRealValidatorIdentity(user: any): any | null {
+  if (!user) return null;
+  const identity: Record<string, unknown> = {};
+  if (user.id != null && String(user.id).trim()) identity.id = user.id;
+  if (typeof user.username === "string" && user.username.trim()) identity.username = user.username.trim();
+  if (typeof user.name === "string" && user.name.trim()) identity.name = user.name.trim();
+  if (typeof user.role === "string" && user.role.trim()) identity.role = user.role.trim();
+  return Object.keys(identity).length > 0 ? identity : null;
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
@@ -1488,6 +1523,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     
     const sweepId = `SWEEP-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const initialStatus = params.type === "Directa" ? "Integrado" : "Pendiente";
+    const lifecycle = createHumanTriggeredRunningSweepLifecycle({
+      sweepId,
+      expedienteId: project.id,
+      correlationId: (params as any).correlationId ?? null,
+      traceabilityId: (params as any).traceabilityId ?? null,
+      outputEvidenceIds: (params as any).outputEvidenceIds || [],
+      outputFindingIds: (params as any).outputFindingIds || [],
+      lineage: (params as any).lineage || [],
+      lineageStatus: (params as any).lineageStatus,
+    });
     
     const newSweep: SweepIntegrationItem = {
       id: sweepId,
@@ -1498,7 +1543,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       relevance: params.relevance,
       data: params.data,
       context: params.initialContext || "",
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      lifecycleStatus: lifecycle.status,
+      lifecycleVersion: lifecycle.version,
+      lifecycle,
+      analysisStatus: lifecycle.analysisStatus,
+      humanValidationStatus: lifecycle.humanValidationStatus,
+      validationSource: lifecycle.validationSource,
+      validatedAt: lifecycle.validatedAt,
+      validatedBy: lifecycle.validatedBy,
+      traceabilityId: lifecycle.traceabilityId,
+      correlationId: lifecycle.correlationId,
+      outputEvidenceIds: lifecycle.outputEvidenceIds,
+      outputFindingIds: lifecycle.outputFindingIds,
+      lineage: lifecycle.lineage,
+      lineageStatus: lifecycle.lineageStatus,
     };
 
     const currentSweeps = project.sweeps || [];
@@ -1607,17 +1666,79 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error registering sweep:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction]);
+  }, [project, isReadOnly, logAuditAction, album]);
 
   const updateSweep = useCallback(async (sweepId: string, updates: Partial<SweepIntegrationItem>) => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
 
     const currentSweeps = project.sweeps || [];
-    let sweepToUpdate = currentSweeps.find(s => s.id === sweepId);
+    const sweepToUpdate = currentSweeps.find(s => s.id === sweepId);
     if (!sweepToUpdate) throw new Error("Barrido no encontrado.");
 
-    const updatedSweep = { ...sweepToUpdate, ...updates } as SweepIntegrationItem;
-    const updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
+    let lifecycle = updates.lifecycle || sweepToUpdate.lifecycle || null;
+    const validationTimestamp = new Date().toISOString();
+    const validatorIdentity = buildRealValidatorIdentity(user);
+
+    if (updates.status === "Integrado" && lifecycle && lifecycle.status !== "CERTIFIED") {
+      if (lifecycle.status === "RUNNING") {
+        lifecycle = transitionGeointSweepLifecycle(lifecycle, "COLLECTING", {
+          expectedVersion: lifecycle.version,
+          now: validationTimestamp,
+          reason: "SWEEP_OUTPUTS_AVAILABLE_FOR_REVIEW",
+        });
+      }
+      if (lifecycle.status === "COLLECTING") {
+        lifecycle = transitionGeointSweepLifecycle(lifecycle, "ANALYZING", {
+          expectedVersion: lifecycle.version,
+          now: validationTimestamp,
+          reason: "SWEEP_OUTPUTS_COLLECTED",
+        });
+      }
+      if (lifecycle.status === "ANALYZING") {
+        lifecycle = markGeointSweepReadyForHumanReview(lifecycle, {
+          aiQualityScore: updates.aiQualityScore ?? lifecycle.aiQualityScore ?? 0,
+          expectedVersion: lifecycle.version,
+          now: validationTimestamp,
+        });
+      }
+      lifecycle = certifyGeointSweepWithHumanApproval(lifecycle, {
+        validatedAt: updates.validatedAt || validationTimestamp,
+        validatedBy: updates.validatedBy ?? validatorIdentity,
+        expectedVersion: lifecycle.version,
+      });
+    }
+
+    if (updates.status === "Rechazado" && lifecycle && lifecycle.status !== "FAILED") {
+      lifecycle = rejectGeointSweepWithHumanDecision(lifecycle, {
+        reason: updates.justification || "HUMAN_REJECTED_SWEEP",
+        validatedAt: updates.validatedAt || validationTimestamp,
+        validatedBy: updates.validatedBy ?? validatorIdentity,
+        expectedVersion: lifecycle.version,
+      });
+    }
+
+    const updatedSweep = {
+      ...sweepToUpdate,
+      ...updates,
+      ...(lifecycle ? {
+        lifecycle,
+        lifecycleStatus: lifecycle.status,
+        lifecycleVersion: lifecycle.version,
+        analysisStatus: lifecycle.analysisStatus,
+        aiQualityScore: lifecycle.aiQualityScore,
+        humanValidationStatus: lifecycle.humanValidationStatus,
+        validationSource: lifecycle.validationSource,
+        validatedAt: lifecycle.validatedAt,
+        validatedBy: lifecycle.validatedBy,
+        traceabilityId: lifecycle.traceabilityId,
+        correlationId: lifecycle.correlationId,
+        outputEvidenceIds: lifecycle.outputEvidenceIds,
+        outputFindingIds: lifecycle.outputFindingIds,
+        lineage: lifecycle.lineage,
+        lineageStatus: lifecycle.lineageStatus,
+      } : {}),
+    } as SweepIntegrationItem;
+    let updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
 
     let updatedHypothesis = project.hipotesis || "";
 
@@ -1632,7 +1753,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         const endIndex = hyp.indexOf(footer, startIndex);
         if (endIndex !== -1) {
           const fullMatchLength = (endIndex + footer.length) - startIndex;
-          let cleaned = hyp.substring(0, startIndex) + hyp.substring(startIndex + fullMatchLength);
+          const cleaned = hyp.substring(0, startIndex) + hyp.substring(startIndex + fullMatchLength);
           return cleaned.replace(/\n\n\n+/g, "\n\n").trim();
         }
       }
@@ -1657,10 +1778,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
-      
-      await updateDoc(projectRef, {
-        sweeps: updatedSweeps,
-        hipotesis: updatedHypothesis
+
+      await runTransaction(firestore, async (transaction) => {
+        const projectSnap = await transaction.get(projectRef);
+        const serverProject = projectSnap.data() as Project | undefined;
+        const serverSweeps = Array.isArray(serverProject?.sweeps) ? serverProject.sweeps : currentSweeps;
+        const serverSweep = serverSweeps.find((s) => s.id === sweepId);
+        if (!serverSweep) throw new Error("Barrido no encontrado en persistencia.");
+
+        const localVersion = sweepToUpdate.lifecycleVersion ?? sweepToUpdate.lifecycle?.version ?? 0;
+        const serverVersion = serverSweep.lifecycleVersion ?? serverSweep.lifecycle?.version ?? 0;
+        if (serverVersion > localVersion) {
+          throw new Error(`GEOINT_SWEEP_VERSION_CONFLICT:${serverVersion}:LOCAL_${localVersion}`);
+        }
+
+        updatedSweeps = serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s);
+        transaction.update(projectRef, {
+          sweeps: updatedSweeps,
+          hipotesis: updatedHypothesis
+        });
       });
 
       setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
@@ -1680,7 +1816,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error updating sweep:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction, activeSweepForModal]);
+  }, [project, isReadOnly, logAuditAction, activeSweepForModal, user]);
 
   const value = useMemo<ProjectContextValue>(
     () => ({
