@@ -16,15 +16,17 @@ import {
   type CertificationActorIdentity,
   type InstitutionalReportCertification,
 } from "@/utils/reportCertificationGate";
+import { GeointEventOutboxService, type GeointOutboxEventPayload } from "@/services/geoint/geointEventOutboxService";
 
 export interface InstitutionalCertificationRepository {
-  create(certification: InstitutionalReportCertification): Promise<InstitutionalReportCertification>;
+  create(certification: InstitutionalReportCertification, event?: GeointOutboxEventPayload): Promise<InstitutionalReportCertification>;
   get(projectId: string, certificationId: string): Promise<InstitutionalReportCertification | null>;
   list(projectId: string): Promise<InstitutionalReportCertification[]>;
-  save(certification: InstitutionalReportCertification): Promise<InstitutionalReportCertification>;
+  save(certification: InstitutionalReportCertification, event?: GeointOutboxEventPayload): Promise<InstitutionalReportCertification>;
   certifyAndSupersede(
     certification: InstitutionalReportCertification,
-    superseded: InstitutionalReportCertification[]
+    superseded: InstitutionalReportCertification[],
+    event?: GeointOutboxEventPayload
   ): Promise<InstitutionalReportCertification>;
 }
 
@@ -39,8 +41,15 @@ function certificationDoc(db: Firestore, projectId: string, certificationId: str
 export class FirestoreInstitutionalCertificationRepository implements InstitutionalCertificationRepository {
   constructor(private readonly db: Firestore = getDb()) {}
 
-  async create(certification: InstitutionalReportCertification): Promise<InstitutionalReportCertification> {
-    await setDoc(certificationDoc(this.db, certification.projectId, certification.certificationId), certification);
+  async create(certification: InstitutionalReportCertification, event?: GeointOutboxEventPayload): Promise<InstitutionalReportCertification> {
+    if (!event) {
+      await setDoc(certificationDoc(this.db, certification.projectId, certification.certificationId), certification);
+      return certification;
+    }
+    await runTransaction(this.db, async (transaction) => {
+      transaction.set(certificationDoc(this.db, certification.projectId, certification.certificationId), certification);
+      await GeointEventOutboxService.enqueueEventInTransaction(transaction, this.db, event);
+    });
     return certification;
   }
 
@@ -54,23 +63,65 @@ export class FirestoreInstitutionalCertificationRepository implements Institutio
     return snap.docs.map((item) => item.data() as InstitutionalReportCertification);
   }
 
-  async save(certification: InstitutionalReportCertification): Promise<InstitutionalReportCertification> {
-    await setDoc(certificationDoc(this.db, certification.projectId, certification.certificationId), certification, { merge: true });
+  async save(certification: InstitutionalReportCertification, event?: GeointOutboxEventPayload): Promise<InstitutionalReportCertification> {
+    if (!event) {
+      await setDoc(certificationDoc(this.db, certification.projectId, certification.certificationId), certification, { merge: true });
+      return certification;
+    }
+    await runTransaction(this.db, async (transaction) => {
+      transaction.set(certificationDoc(this.db, certification.projectId, certification.certificationId), certification, { merge: true });
+      await GeointEventOutboxService.enqueueEventInTransaction(transaction, this.db, event);
+    });
     return certification;
   }
 
   async certifyAndSupersede(
     certification: InstitutionalReportCertification,
-    superseded: InstitutionalReportCertification[]
+    superseded: InstitutionalReportCertification[],
+    event?: GeointOutboxEventPayload
   ): Promise<InstitutionalReportCertification> {
     await runTransaction(this.db, async (transaction) => {
       superseded.forEach((record) => {
         transaction.set(certificationDoc(this.db, record.projectId, record.certificationId), record, { merge: true });
       });
       transaction.set(certificationDoc(this.db, certification.projectId, certification.certificationId), certification);
+      if (event) {
+        await GeointEventOutboxService.enqueueEventInTransaction(transaction, this.db, event);
+      }
     });
     return certification;
   }
+}
+
+function actorLabel(identity: CertificationActorIdentity | null | undefined): string {
+  return String(identity?.id || identity?.uid || identity?.email || identity?.name || identity?.displayName || "UNAVAILABLE");
+}
+
+function certificationEventPayload(
+  eventType: string,
+  certification: InstitutionalReportCertification,
+  actor: CertificationActorIdentity | null | undefined,
+  source: string,
+  metadata: Record<string, any> = {}
+): GeointOutboxEventPayload {
+  return {
+    eventType,
+    expedienteId: certification.projectId,
+    traceabilityId: certification.certificationId,
+    actor: actorLabel(actor),
+    source,
+    status: certification.status,
+    entityType: "INSTITUTIONAL_REPORT_CERTIFICATION",
+    entityId: certification.certificationId,
+    metadata: {
+      certificationId: certification.certificationId,
+      reportSnapshotId: certification.reportSnapshotId,
+      documentModelId: certification.documentModelId,
+      documentArtifactReference: certification.documentArtifactReference,
+      documentArtifactHash: certification.documentArtifactHash,
+      ...metadata,
+    },
+  };
 }
 
 export class InstitutionalReportCertificationService {
@@ -85,7 +136,10 @@ export class InstitutionalReportCertificationService {
     requestedAt?: string | null;
   }): Promise<InstitutionalReportCertification> {
     const request = ReportCertificationGate.requestInstitutionalCertification(input);
-    return this.repository.create(request);
+    return this.repository.create(
+      request,
+      certificationEventPayload("REPORT_CERTIFICATION_REQUESTED", request, request.requestedBy, "InstitutionalReportCertificationService.requestCertification")
+    );
   }
 
   async certifyInstitutionalReport(input: {
@@ -115,7 +169,13 @@ export class InstitutionalReportCertificationService {
       ReportCertificationGate.supersedeInstitutionalCertification(record, certification)
     );
 
-    return this.repository.certifyAndSupersede(certification, superseded);
+    return this.repository.certifyAndSupersede(
+      certification,
+      superseded,
+      certificationEventPayload("REPORT_CERTIFIED", certification, certification.certifiedBy, "InstitutionalReportCertificationService.certifyInstitutionalReport", {
+        supersededCertificationIds: superseded.map((record) => record.certificationId),
+      })
+    );
   }
 
   async rejectInstitutionalCertification(input: {
@@ -130,7 +190,12 @@ export class InstitutionalReportCertificationService {
       rejectedAt: input.rejectedAt,
       rejectionReason: input.rejectionReason,
     });
-    return this.repository.save(rejected);
+    return this.repository.save(
+      rejected,
+      certificationEventPayload("REPORT_CERTIFICATION_REJECTED", rejected, rejected.rejectedBy, "InstitutionalReportCertificationService.rejectInstitutionalCertification", {
+        rejectionReason: rejected.rejectionReason,
+      })
+    );
   }
 
   async revokeInstitutionalCertification(input: {
@@ -150,7 +215,12 @@ export class InstitutionalReportCertificationService {
       revokedAt: input.revokedAt,
       revocationReason: input.revocationReason,
     });
-    return this.repository.save(revoked);
+    return this.repository.save(
+      revoked,
+      certificationEventPayload("REPORT_CERTIFICATION_REVOKED", revoked, revoked.revokedBy, "InstitutionalReportCertificationService.revokeInstitutionalCertification", {
+        revocationReason: revoked.revocationReason,
+      })
+    );
   }
 
   async listCertifications(projectId: string): Promise<InstitutionalReportCertification[]> {

@@ -54,7 +54,11 @@ import type { InstitutionalReportInput } from "@/utils/institutionalReportPublic
 import {
   institutionalReportCertificationService,
 } from "@/services/institutionalReportCertificationService";
-import type { InstitutionalReportCertification } from "@/utils/reportCertificationGate";
+import { institutionalReportPublicationService } from "@/services/institutionalReportPublicationService";
+import type {
+  InstitutionalReportCertification,
+  InstitutionalReportPublication,
+} from "@/utils/reportCertificationGate";
 import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
 
 export const TIPOS_IMAGEN = [
@@ -360,6 +364,29 @@ type ProjectContextValue = {
     institutionalDocumentModel?: InstitutionalDocumentModel | null;
     documentArtifactReference?: string | null;
   }) => Promise<InstitutionalReportCertification | null>;
+  requestInstitutionalReportPublication: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => Promise<InstitutionalReportPublication>;
+  publishInstitutionalReportByHumanAction: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => Promise<InstitutionalReportPublication>;
+  revokeInstitutionalReportPublication: (params: {
+    publicationId: string;
+    revocationReason: string;
+  }) => Promise<InstitutionalReportPublication>;
+  getCurrentInstitutionalReportPublication: (params: {
+    certification?: InstitutionalReportCertification | null;
+    documentArtifactReference?: string | null;
+    documentArtifactHash?: string | null;
+  }) => Promise<InstitutionalReportPublication | null>;
   activeSweepForModal: SweepIntegrationItem | null;
   setActiveSweepForModal: (sweep: SweepIntegrationItem | null) => void;
   registerSweep: (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => Promise<string>;
@@ -1538,6 +1565,89 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }, [project]);
 
+  const requestInstitutionalReportPublication = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const publication = await institutionalReportPublicationService.requestPublication({
+      projectId: project.id,
+      ...params,
+      requestedBy: actor,
+    });
+    await logAuditAction({
+      action: "SOLICITAR_PUBLICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Solicitud durable de publicación ${publication.publicationId} para certificación ${publication.certificationId}.`,
+    });
+    return publication;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const publishInstitutionalReportByHumanAction = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    if (!actor) throw new Error("INSTITUTIONAL_PUBLICATION_BLOCKED:PUBLISHER_IDENTITY_UNAVAILABLE");
+    const publication = await institutionalReportPublicationService.publishInstitutionalReport({
+      projectId: project.id,
+      ...params,
+      publisherIdentity: actor,
+    });
+    await logAuditAction({
+      action: "PUBLICAR_REPORTE_INSTITUCIONAL",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Publicación humana durable ${publication.publicationId} del artefacto ${publication.documentArtifactReference}.`,
+    });
+    return publication;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const revokeInstitutionalReportPublication = useCallback(async (params: {
+    publicationId: string;
+    revocationReason: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const revoked = await institutionalReportPublicationService.revokePublication({
+      projectId: project.id,
+      publicationId: params.publicationId,
+      revokedBy: actor,
+      revocationReason: params.revocationReason,
+    });
+    await logAuditAction({
+      action: "REVOCAR_PUBLICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Revocada publicación ${revoked.publicationId}. Motivo: ${params.revocationReason}.`,
+    });
+    return revoked;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const getCurrentInstitutionalReportPublication = useCallback(async (params: {
+    certification?: InstitutionalReportCertification | null;
+    documentArtifactReference?: string | null;
+    documentArtifactHash?: string | null;
+  }) => {
+    if (!project) return null;
+    return institutionalReportPublicationService.getCurrentPublication({
+      projectId: project.id,
+      ...params,
+    });
+  }, [project]);
+
   const softDeleteDoc = useCallback(async (params: {
     type: "Proyecto" | "Fotografía" | "Documento";
     id: string;
@@ -2178,6 +2288,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       rejectInstitutionalReportCertification,
       revokeInstitutionalReportCertification,
       getCurrentInstitutionalReportCertification,
+      requestInstitutionalReportPublication,
+      publishInstitutionalReportByHumanAction,
+      revokeInstitutionalReportPublication,
+      getCurrentInstitutionalReportPublication,
       activeSweepForModal,
       setActiveSweepForModal,
       registerSweep,
@@ -2227,6 +2341,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       rejectInstitutionalReportCertification,
       revokeInstitutionalReportCertification,
       getCurrentInstitutionalReportCertification,
+      requestInstitutionalReportPublication,
+      publishInstitutionalReportByHumanAction,
+      revokeInstitutionalReportPublication,
+      getCurrentInstitutionalReportPublication,
       activeSweepForModal,
       registerSweep,
       updateSweep

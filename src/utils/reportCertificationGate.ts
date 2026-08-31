@@ -44,6 +44,22 @@ export type InstitutionalCertificationAction =
   | "AI_REVIEW"
   | "SCORE_REVIEW";
 
+export type InstitutionalPublicationStatus =
+  | "NOT_PUBLISHED"
+  | "PENDING_PUBLICATION"
+  | "PUBLISHED"
+  | "PUBLICATION_FAILED"
+  | "REVOKED"
+  | "SUPERSEDED";
+
+export type InstitutionalPublicationAction =
+  | "REQUEST_PUBLICATION"
+  | "PUBLISH"
+  | "REVOKE_PUBLICATION"
+  | "AI_REVIEW"
+  | "SCORE_REVIEW"
+  | "DOWNLOAD";
+
 export interface CertificationActorIdentity {
   id?: string | null;
   uid?: string | null;
@@ -104,6 +120,47 @@ export interface InstitutionalReportCertification {
   supersedesCertificationId?: string | null;
   supersededByCertificationId?: string | null;
   published: false;
+}
+
+export interface InstitutionalPublicationDecision {
+  status: InstitutionalPublicationStatus;
+  canRequestPublication: boolean;
+  canPublish: boolean;
+  blockingReasons: string[];
+  warnings: string[];
+  requiredHumanActions: string[];
+  certificationId: string | null;
+  projectId: string | null;
+  reportSnapshotId: string | null;
+  documentModelId: string | null;
+  documentArtifactReference: string | null;
+  documentArtifactHash: string | null;
+  published: false;
+}
+
+export interface InstitutionalReportPublication {
+  publicationId: string;
+  projectId: string;
+  certificationId: string;
+  reportSnapshotId: string;
+  documentModelId: string;
+  documentArtifactReference: string;
+  documentArtifactHash: string | null;
+  status: InstitutionalPublicationStatus;
+  requestedAt?: string | null;
+  requestedBy?: CertificationActorIdentity | null;
+  publishedAt: string | null;
+  publishedBy: CertificationActorIdentity | null;
+  publicationChannelOrType: string;
+  warnings: string[];
+  supersedesPublicationId?: string | null;
+  supersededByPublicationId?: string | null;
+  revokedAt?: string | null;
+  revokedBy?: CertificationActorIdentity | null;
+  revocationReason?: string | null;
+  failureAt?: string | null;
+  failureReason?: string | null;
+  outboxEventId?: string | null;
 }
 
 const RESERVED_ACTOR_VALUES = new Set(["ADMIN", "ANALYST", "SYSTEM", "UNKNOWN-USER", "UNKNOWN_USER"]);
@@ -188,6 +245,24 @@ function certificationRequestIdFor(input: {
     "REQUEST",
   ].join("|"));
   return `CEIPOL-CERT-REQ-${datePart}-${suffix}`;
+}
+
+function publicationIdFor(input: {
+  projectId: string;
+  certificationId: string;
+  documentArtifactReference: string;
+  publicationChannelOrType: string;
+  now: string;
+}): string {
+  const datePart = input.now.slice(0, 10).replace(/-/g, "");
+  const suffix = stableHash([
+    input.projectId,
+    input.certificationId,
+    input.documentArtifactReference,
+    input.publicationChannelOrType,
+    input.now,
+  ].join("|"));
+  return `CEIPOL-PUB-${datePart}-${suffix}`;
 }
 
 function institutionalReportInputId(input: InstitutionalReportInput | null | undefined): string | null {
@@ -553,6 +628,250 @@ export class ReportCertificationGate {
       documentArtifactHash: null,
       published: false,
       certified: false,
+    };
+  }
+
+  public static evaluateInstitutionalPublicationGate(input: {
+    currentCertification?: InstitutionalReportCertification | null;
+    institutionalReportInput?: InstitutionalReportInput | null;
+    institutionalDocumentModel?: InstitutionalDocumentModel | null;
+    documentArtifactReference?: string | null;
+    documentArtifactHash?: string | null;
+    publisherIdentity?: CertificationActorIdentity | null;
+    action?: InstitutionalPublicationAction | null;
+  }): InstitutionalPublicationDecision {
+    const certification = input.currentCertification || null;
+    const reportInput = input.institutionalReportInput || null;
+    const documentModel = input.institutionalDocumentModel || null;
+    const artifactReference = asCleanString(input.documentArtifactReference);
+    const artifactHash = asCleanString(input.documentArtifactHash);
+    const publisher = preserveRealIdentity(input.publisherIdentity);
+    const blockers: string[] = [];
+    const warnings: string[] = ["PUBLICATION_ROLE_ENFORCEMENT_PENDING"];
+    const requiredHumanActions = ["EXPLICIT_HUMAN_PUBLICATION_ACTION", "REAL_PUBLISHER_IDENTITY"];
+
+    if (!certification) {
+      blockers.push("CURRENT_CERTIFICATION_REQUIRED");
+    } else {
+      if (certification.status !== "CERTIFIED") blockers.push("CURRENT_CERTIFICATION_REQUIRED");
+      if (certification.status === "REVOKED") blockers.push("CERTIFICATION_REVOKED");
+      if (certification.status === "SUPERSEDED") blockers.push("STALE_CERTIFICATION");
+      if (reportInput && certification.reportSnapshotId !== reportInput.generatedAt) {
+        blockers.push("CERTIFICATION_SNAPSHOT_MISMATCH");
+      }
+      if (documentModel && certification.documentModelId !== documentModel.modelId) {
+        blockers.push("STALE_DOCUMENT_MODEL");
+      }
+      if (artifactReference && certification.documentArtifactReference !== artifactReference) {
+        blockers.push("ARTIFACT_MISMATCH");
+      }
+      if (certification.documentArtifactHash && artifactHash && certification.documentArtifactHash !== artifactHash) {
+        blockers.push("ARTIFACT_HASH_MISMATCH");
+      }
+      if (!certification.documentArtifactHash || !artifactHash) {
+        warnings.push("ARTIFACT_HASH_UNAVAILABLE");
+      }
+    }
+
+    if (!reportInput) blockers.push("INSTITUTIONAL_REPORT_INPUT_MISSING");
+    if (!documentModel) blockers.push("INSTITUTIONAL_DOCUMENT_MODEL_MISSING");
+    if (!artifactReference) blockers.push("DOCUMENT_ARTIFACT_REFERENCE_MISSING");
+    if (reportInput && documentModel?.sourceSnapshotId && documentModel.sourceSnapshotId !== reportInput.generatedAt) {
+      blockers.push("STALE_REPORT_SNAPSHOT");
+    }
+    if (input.action === "AI_REVIEW") blockers.push("AI_REVIEW_CANNOT_PUBLISH");
+    if (input.action === "SCORE_REVIEW") blockers.push("SCORE_REVIEW_CANNOT_PUBLISH");
+    if (input.action === "DOWNLOAD") blockers.push("DOWNLOAD_IS_NOT_PUBLICATION");
+
+    const canRequestPublication = blockers.length === 0;
+    if (input.action === "PUBLISH" && !publisher) {
+      blockers.push("PUBLISHER_IDENTITY_UNAVAILABLE");
+    }
+
+    const canPublish = input.action === "PUBLISH" && blockers.length === 0 && Boolean(publisher);
+    return {
+      status: canPublish ? "PUBLISHED" : canRequestPublication ? "PENDING_PUBLICATION" : "NOT_PUBLISHED",
+      canRequestPublication,
+      canPublish,
+      blockingReasons: Array.from(new Set(blockers)),
+      warnings: Array.from(new Set(warnings)),
+      requiredHumanActions,
+      certificationId: certification?.certificationId || null,
+      projectId: certification?.projectId || reportInput?.projectId || documentModel?.metadata?.projectId || null,
+      reportSnapshotId: certification?.reportSnapshotId || reportInput?.generatedAt || documentModel?.sourceSnapshotId || null,
+      documentModelId: certification?.documentModelId || documentModel?.modelId || null,
+      documentArtifactReference: artifactReference,
+      documentArtifactHash: artifactHash,
+      published: false,
+    };
+  }
+
+  public static requestInstitutionalPublication(input: {
+    currentCertification: InstitutionalReportCertification;
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    requestedBy?: CertificationActorIdentity | null;
+    requestedAt?: string | null;
+    publicationChannelOrType: string;
+  }): InstitutionalReportPublication {
+    const decision = ReportCertificationGate.evaluateInstitutionalPublicationGate({
+      ...input,
+      action: "REQUEST_PUBLICATION",
+    });
+    if (!decision.canRequestPublication) {
+      throw new Error(`PUBLICATION_REQUEST_BLOCKED:${decision.blockingReasons.join(",")}`);
+    }
+    const requestedAt = input.requestedAt ?? new Date().toISOString();
+    return {
+      publicationId: publicationIdFor({
+        projectId: input.currentCertification.projectId,
+        certificationId: input.currentCertification.certificationId,
+        documentArtifactReference: input.documentArtifactReference,
+        publicationChannelOrType: input.publicationChannelOrType,
+        now: requestedAt,
+      }),
+      projectId: input.currentCertification.projectId,
+      certificationId: input.currentCertification.certificationId,
+      reportSnapshotId: input.currentCertification.reportSnapshotId,
+      documentModelId: input.currentCertification.documentModelId,
+      documentArtifactReference: input.documentArtifactReference,
+      documentArtifactHash: input.documentArtifactHash ?? null,
+      status: "PENDING_PUBLICATION",
+      requestedAt,
+      requestedBy: preserveRealIdentity(input.requestedBy),
+      publishedAt: null,
+      publishedBy: null,
+      publicationChannelOrType: input.publicationChannelOrType,
+      warnings: decision.warnings,
+    };
+  }
+
+  public static publishInstitutionalReport(input: {
+    currentCertification: InstitutionalReportCertification;
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publisherIdentity: CertificationActorIdentity;
+    publishedAt?: string | null;
+    publicationChannelOrType: string;
+    supersedesPublicationId?: string | null;
+  }): InstitutionalReportPublication {
+    const publishedAt = input.publishedAt ?? new Date().toISOString();
+    const publisher = preserveRealIdentity(input.publisherIdentity);
+    const decision = ReportCertificationGate.evaluateInstitutionalPublicationGate({
+      ...input,
+      publisherIdentity: publisher,
+      action: "PUBLISH",
+    });
+    if (!decision.canPublish || !publisher) {
+      throw new Error(`INSTITUTIONAL_PUBLICATION_BLOCKED:${decision.blockingReasons.join(",")}`);
+    }
+    return {
+      publicationId: publicationIdFor({
+        projectId: input.currentCertification.projectId,
+        certificationId: input.currentCertification.certificationId,
+        documentArtifactReference: input.documentArtifactReference,
+        publicationChannelOrType: input.publicationChannelOrType,
+        now: publishedAt,
+      }),
+      projectId: input.currentCertification.projectId,
+      certificationId: input.currentCertification.certificationId,
+      reportSnapshotId: input.currentCertification.reportSnapshotId,
+      documentModelId: input.currentCertification.documentModelId,
+      documentArtifactReference: input.documentArtifactReference,
+      documentArtifactHash: input.documentArtifactHash ?? null,
+      status: "PUBLISHED",
+      publishedAt,
+      publishedBy: publisher,
+      publicationChannelOrType: input.publicationChannelOrType,
+      warnings: decision.warnings,
+      supersedesPublicationId: input.supersedesPublicationId ?? null,
+    };
+  }
+
+  public static failInstitutionalPublication(input: {
+    request: InstitutionalReportPublication;
+    failureReason: string;
+    failureAt?: string | null;
+  }): InstitutionalReportPublication {
+    return {
+      ...input.request,
+      status: "PUBLICATION_FAILED",
+      failureAt: input.failureAt ?? new Date().toISOString(),
+      failureReason: input.failureReason,
+    };
+  }
+
+  public static revokeInstitutionalPublication(input: {
+    publication: InstitutionalReportPublication;
+    revokedBy: CertificationActorIdentity;
+    revocationReason: string;
+    revokedAt?: string | null;
+  }): InstitutionalReportPublication {
+    const actor = preserveRealIdentity(input.revokedBy);
+    if (!actor) throw new Error("PUBLICATION_REVOCATION_BLOCKED:PUBLISHER_IDENTITY_UNAVAILABLE");
+    return {
+      ...input.publication,
+      status: "REVOKED",
+      revokedAt: input.revokedAt ?? new Date().toISOString(),
+      revokedBy: actor,
+      revocationReason: input.revocationReason,
+    };
+  }
+
+  public static supersedeInstitutionalPublication(
+    previous: InstitutionalReportPublication,
+    replacement: InstitutionalReportPublication
+  ): InstitutionalReportPublication {
+    return {
+      ...previous,
+      status: "SUPERSEDED",
+      supersededByPublicationId: replacement.publicationId,
+    };
+  }
+
+  public static resolveCurrentInstitutionalPublication(input: {
+    publications: InstitutionalReportPublication[];
+    certification?: InstitutionalReportCertification | null;
+    documentArtifactReference?: string | null;
+    documentArtifactHash?: string | null;
+  }): InstitutionalReportPublication | null {
+    const artifactReference = asCleanString(input.documentArtifactReference);
+    const artifactHash = asCleanString(input.documentArtifactHash);
+    return input.publications
+      .filter((publication) => publication.status === "PUBLISHED")
+      .filter((publication) => {
+        if (input.certification && publication.certificationId !== input.certification.certificationId) return false;
+        if (input.certification && publication.reportSnapshotId !== input.certification.reportSnapshotId) return false;
+        if (input.certification && publication.documentModelId !== input.certification.documentModelId) return false;
+        if (artifactReference && publication.documentArtifactReference !== artifactReference) return false;
+        if (artifactHash && publication.documentArtifactHash && publication.documentArtifactHash !== artifactHash) return false;
+        return true;
+      })
+      .sort((a, b) => String(b.publishedAt || "").localeCompare(String(a.publishedAt || "")))[0] || null;
+  }
+
+  public static adaptLegacyPublication(input: {
+    projectId?: string | null;
+    published?: boolean | null;
+  }): InstitutionalPublicationDecision {
+    return {
+      status: "NOT_PUBLISHED",
+      canRequestPublication: false,
+      canPublish: false,
+      blockingReasons: ["LEGACY_PUBLICATION_UNVERIFIED"],
+      warnings: ["LEGACY_PUBLICATION_BOOLEAN_IS_NOT_INSTITUTIONAL_PUBLICATION"],
+      requiredHumanActions: ["EXPLICIT_HUMAN_PUBLICATION_ACTION", "REAL_PUBLISHER_IDENTITY"],
+      certificationId: null,
+      projectId: input.projectId ?? null,
+      reportSnapshotId: null,
+      documentModelId: null,
+      documentArtifactReference: null,
+      documentArtifactHash: null,
+      published: false,
     };
   }
 }
