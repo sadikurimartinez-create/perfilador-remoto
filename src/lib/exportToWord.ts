@@ -45,6 +45,7 @@ import { ReportCertificationGate } from "@/utils/reportCertificationGate";
 import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
 import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
 import { assessReportReadiness } from "@/utils/reportReadyGovernance";
+import { buildInstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
 import { renderMarkdownTable } from "@/utils/documentTableRenderer";
 import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
 import {
@@ -716,6 +717,9 @@ export async function exportToWord(
       alert(errMsg);
     }
     throw new Error(errMsg);
+  }
+  if (options.exportMode === "INSTITUTIONAL") {
+    payload.institutionalReportInput = buildInstitutionalReportInput(payload);
   }
 
   // Event Log Forense: Registrar consumo de hallazgos por parte del Report Engine (ADR-019.18)
