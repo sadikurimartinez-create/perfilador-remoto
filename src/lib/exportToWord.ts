@@ -786,11 +786,14 @@ export async function exportToWord(
 
   // 3. Coherence Validator & Certification Gate Status Control
   if (isInstitutionalExport) {
-    payload.certificationGateResult = {
-      status: "GENERATED_NOT_CERTIFIED",
-      certificationId: "PENDING",
-      messages: ["ADR-020.33 F5 document generation completed without certification; ADR-020.33 F6 owns certification."],
-    };
+    payload.certificationGateResult = ReportCertificationGate.evaluateInstitutionalCertificationGate({
+      reportReadyAssessment: payload.reportReadyAssessment,
+      institutionalReportInput: payload.institutionalReportInput,
+      institutionalDocumentModel: payload.institutionalDocumentModel,
+      documentArtifactReference: payload.documentArtifactReference || null,
+      documentArtifactHash: payload.documentArtifactHash || null,
+      action: "REQUEST_CERTIFICATION",
+    });
   } else {
     const certResult = ReportCertificationGate.certify(payload, true);
     payload.certificationGateResult = certResult;

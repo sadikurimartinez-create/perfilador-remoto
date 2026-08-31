@@ -49,6 +49,12 @@ import {
   reviseHumanHypothesis,
   type CanonicalProjectHypothesis,
 } from "@/utils/hypothesisGovernance";
+import type { InstitutionalDocumentModel } from "@/utils/institutionalDocumentAssembly";
+import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
+import {
+  institutionalReportCertificationService,
+} from "@/services/institutionalReportCertificationService";
+import type { InstitutionalReportCertification } from "@/utils/reportCertificationGate";
 import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
 
 export const TIPOS_IMAGEN = [
@@ -329,6 +335,31 @@ type ProjectContextValue = {
   }) => Promise<void>;
   updateProjectDetails: (details: Partial<Project>) => Promise<void>;
   saveHumanHypothesis: (text: string) => Promise<CanonicalProjectHypothesis>;
+  requestInstitutionalReportCertification: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => Promise<InstitutionalReportCertification>;
+  certifyInstitutionalReportByHumanAction: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => Promise<InstitutionalReportCertification>;
+  rejectInstitutionalReportCertification: (params: {
+    certification: InstitutionalReportCertification;
+    rejectionReason: string;
+  }) => Promise<InstitutionalReportCertification>;
+  revokeInstitutionalReportCertification: (params: {
+    certificationId: string;
+    revocationReason: string;
+  }) => Promise<InstitutionalReportCertification>;
+  getCurrentInstitutionalReportCertification: (params: {
+    institutionalReportInput?: InstitutionalReportInput | null;
+    institutionalDocumentModel?: InstitutionalDocumentModel | null;
+    documentArtifactReference?: string | null;
+  }) => Promise<InstitutionalReportCertification | null>;
   activeSweepForModal: SweepIntegrationItem | null;
   setActiveSweepForModal: (sweep: SweepIntegrationItem | null) => void;
   registerSweep: (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => Promise<string>;
@@ -1407,6 +1438,106 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return canonicalHypothesis;
   }, [project, isReadOnly, user, logAuditAction, album, documents]);
 
+  const requestInstitutionalReportCertification = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const certification = await institutionalReportCertificationService.requestCertification({
+      ...params,
+      requestedBy: actor,
+    });
+    await logAuditAction({
+      action: "SOLICITAR_CERTIFICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Solicitud durable de certificación ${certification.certificationId} para snapshot ${certification.reportSnapshotId}.`,
+    });
+    return certification;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const certifyInstitutionalReportByHumanAction = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    if (!actor) throw new Error("INSTITUTIONAL_CERTIFICATION_BLOCKED:CERTIFIER_IDENTITY_UNAVAILABLE");
+    const certification = await institutionalReportCertificationService.certifyInstitutionalReport({
+      ...params,
+      certifierIdentity: actor,
+    });
+    await logAuditAction({
+      action: "CERTIFICAR_REPORTE_INSTITUCIONAL",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Certificación humana durable ${certification.certificationId} para snapshot ${certification.reportSnapshotId}.`,
+    });
+    return certification;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const rejectInstitutionalReportCertification = useCallback(async (params: {
+    certification: InstitutionalReportCertification;
+    rejectionReason: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const rejected = await institutionalReportCertificationService.rejectInstitutionalCertification({
+      certification: params.certification,
+      rejectedBy: actor,
+      rejectionReason: params.rejectionReason,
+    });
+    await logAuditAction({
+      action: "RECHAZAR_CERTIFICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Rechazada certificación ${rejected.certificationId}. Motivo: ${params.rejectionReason}.`,
+    });
+    return rejected;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const revokeInstitutionalReportCertification = useCallback(async (params: {
+    certificationId: string;
+    revocationReason: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const revoked = await institutionalReportCertificationService.revokeInstitutionalCertification({
+      projectId: project.id,
+      certificationId: params.certificationId,
+      revokedBy: actor,
+      revocationReason: params.revocationReason,
+    });
+    await logAuditAction({
+      action: "REVOCAR_CERTIFICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Revocada certificación ${revoked.certificationId}. Motivo: ${params.revocationReason}.`,
+    });
+    return revoked;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const getCurrentInstitutionalReportCertification = useCallback(async (params: {
+    institutionalReportInput?: InstitutionalReportInput | null;
+    institutionalDocumentModel?: InstitutionalDocumentModel | null;
+    documentArtifactReference?: string | null;
+  }) => {
+    if (!project) return null;
+    return institutionalReportCertificationService.getCurrentInstitutionalCertification({
+      projectId: project.id,
+      ...params,
+    });
+  }, [project]);
+
   const softDeleteDoc = useCallback(async (params: {
     type: "Proyecto" | "Fotografía" | "Documento";
     id: string;
@@ -2042,6 +2173,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       logAuditAction,
       updateProjectDetails,
       saveHumanHypothesis,
+      requestInstitutionalReportCertification,
+      certifyInstitutionalReportByHumanAction,
+      rejectInstitutionalReportCertification,
+      revokeInstitutionalReportCertification,
+      getCurrentInstitutionalReportCertification,
       activeSweepForModal,
       setActiveSweepForModal,
       registerSweep,
@@ -2086,6 +2222,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       logAuditAction,
       updateProjectDetails,
       saveHumanHypothesis,
+      requestInstitutionalReportCertification,
+      certifyInstitutionalReportByHumanAction,
+      rejectInstitutionalReportCertification,
+      revokeInstitutionalReportCertification,
+      getCurrentInstitutionalReportCertification,
       activeSweepForModal,
       registerSweep,
       updateSweep
