@@ -8,6 +8,7 @@ import {
   buildNarrativeAssertionsFromInstitutionalInput,
   renderGovernedExecutiveSummary,
 } from "@/utils/analyticalNarrativeGovernance";
+import { buildGovernedVisualProducts } from "@/utils/institutionalVisualProductGovernance";
 
 export type PublicationEligibility = "ELIGIBLE" | "ELIGIBLE_WITH_DISCLOSURE" | "INELIGIBLE";
 export type PublicationItemType =
@@ -321,6 +322,21 @@ function collect(project: any, keys: string[]): any[] {
   return keys.flatMap((key) => asArray(project?.[key]));
 }
 
+function hasVisualAsset(item: any): boolean {
+  return Boolean(
+    item?.assetRef ||
+    item?.storageReference ||
+    item?.rawContentReference ||
+    item?.dataUrl ||
+    item?.url ||
+    item?.imageUrl ||
+    item?.previewUrl ||
+    item?.evidenceId ||
+    item?.comparisonId ||
+    item?.traceabilityReference
+  );
+}
+
 function addEligible(target: any[], assessment: ReportItemEligibilityAssessment, item: any, exclusions: PublicationExclusion[], disclosures: PublicationDisclosure[]) {
   exclusions.push(...assessment.exclusions);
   disclosures.push(...assessment.disclosures);
@@ -394,6 +410,17 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     project?.certifiedGimOutput,
   ].filter(Boolean), "SPECIALIZED_INTELLIGENCE", specializedIntelligence);
   process(collect(project, ["maps", "charts", "visualProducts"]), "VISUAL_PRODUCT", visualProducts);
+  visualProducts.length = 0;
+  const governedVisuals = buildGovernedVisualProducts([
+    ...collect(project, ["maps", "charts", "visualProducts"]),
+    ...evidence.filter(hasVisualAsset),
+    ...streetView.filter(hasVisualAsset),
+    ...temporalComparisons.filter(hasVisualAsset),
+    ...specializedIntelligence.filter(hasVisualAsset),
+  ], { canonicalGeography: project?.canonicalGeography || null });
+  visualProducts.push(...governedVisuals.visualProducts.filter((item) => item.publicationEligibility !== "INELIGIBLE"));
+  exclusions.push(...governedVisuals.exclusions);
+  disclosures.push(...governedVisuals.disclosures);
 
   return {
     projectId: reportReadyAssessment.projectId,
@@ -471,8 +498,8 @@ export function reconcileInstitutionalReportPayload(basePayload: any, input: Ins
     executiveSummary: governedExecutiveSummary.text || basePayload?.executiveSummary || "",
     streetViewAnalysis: input.streetView,
     temporalComparisons: input.temporalComparisons,
-    maps: input.visualProducts.filter((item: any) => item.kind !== "chart"),
-    charts: input.visualProducts.filter((item: any) => item.kind === "chart"),
+    maps: input.visualProducts.filter((item: any) => item.visualType === "MAP" || item.kind === "map"),
+    charts: input.visualProducts.filter((item: any) => item.visualType === "CHART" || item.kind === "chart"),
     certifiedGimOutput: specializedGim,
     intelligenceContext: {
       ...(basePayload?.intelligenceContext || {}),

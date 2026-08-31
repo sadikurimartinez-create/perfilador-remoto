@@ -1,6 +1,7 @@
 import { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, ShadingType, BorderStyle, ImageRun } from "docx";
 import { CEIPOL_DOCUMENT_THEME } from "./documentTableRenderer";
 import { VisualDensityManager } from "./documentCompositionEngine";
+import { assessVisualProductEligibility } from "./institutionalVisualProductGovernance";
 
 export interface VisualBlock {
   id?: string;
@@ -120,6 +121,21 @@ export class VisualValidator {
     if (!allowedTypes.includes(block.type)) {
       console.warn(`[VisualValidator] Bloque ${block.id} RECHAZADO: Tipo inválido "${block.type}".`);
       return false;
+    }
+
+    if (block.type === "CHART") {
+      const visualAssessment = assessVisualProductEligibility({
+        id: block.id,
+        kind: "chart",
+        datasetSource: block.metadata.source,
+        sourceReference: block.metadata.source,
+        evidenceId: block.metadata.evidenceId,
+        confidence: block.metadata.confidence,
+      });
+      if (visualAssessment.publicationEligibility === "INELIGIBLE") {
+        console.warn(`[VisualValidator] Bloque ${block.id} RECHAZADO: ${visualAssessment.exclusion?.reasonCode || "VISUAL_PRODUCT_INELIGIBLE"}.`);
+        return false;
+      }
     }
 
     return true;
