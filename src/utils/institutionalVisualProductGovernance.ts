@@ -175,8 +175,8 @@ function integrityStatus(item: any): VisualIntegrityStatus {
 function inferVisualType(item: any): InstitutionalVisualType {
   const raw = String(item?.visualType || item?.type || item?.kind || "").toUpperCase();
   if (item?.decorative === true || raw === "LOGO" || raw === "BRANDING") return "DECORATIVE_ASSET";
-  if (raw.includes("STREET")) return "STREET_VIEW";
-  if (raw.includes("TEMPORAL")) return "TEMPORAL_COMPARISON";
+  if (raw.includes("STREET") || item?.panoramaId || item?.isStreetView || item?.streetViewMetadata) return "STREET_VIEW";
+  if (raw.includes("TEMPORAL") || item?.comparisonId || asArray(item?.comparedEvidenceIds).length > 0) return "TEMPORAL_COMPARISON";
   if (raw.includes("CHART") || raw.includes("GRAPH")) return "CHART";
   if (raw.includes("DIAGRAM")) return "DIAGRAM";
   if (raw.includes("GIM") || raw.includes("PANDILLAS") || item?.validatedByACE != null) return "SPECIALIZED_INTELLIGENCE_VISUAL";

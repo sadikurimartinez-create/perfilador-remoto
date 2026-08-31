@@ -49,6 +49,10 @@ import {
   buildInstitutionalReportInput,
   reconcileInstitutionalReportPayload,
 } from "@/utils/institutionalReportPublicationContract";
+import {
+  applyInstitutionalDocumentModelToPayload,
+  buildInstitutionalDocumentModel,
+} from "@/utils/institutionalDocumentAssembly";
 import { renderMarkdownTable } from "@/utils/documentTableRenderer";
 import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
 import {
@@ -706,13 +710,20 @@ export async function exportToWord(
   user?: any,
   options: { exportMode?: "DRAFT" | "INSTITUTIONAL" } = {}
 ) {
+  const isInstitutionalExport = options.exportMode === "INSTITUTIONAL";
   // Sanitizar payload previo a la maquetación
   payload = sanitizeEditorialPayload(payload);
 
-  if (options.exportMode === "INSTITUTIONAL") {
+  if (isInstitutionalExport) {
     try {
       const institutionalReportInput = buildInstitutionalReportInput(payload);
       payload = reconcileInstitutionalReportPayload(payload, institutionalReportInput);
+      const institutionalDocumentModel = buildInstitutionalDocumentModel(institutionalReportInput, {
+        projectName,
+        reportNumber,
+        institutionName: payload.institutionName || "SSPE / CEIPOL",
+      });
+      payload = applyInstitutionalDocumentModelToPayload(payload, institutionalDocumentModel);
     } catch (err: any) {
       const errMsg = `REPORT_READY requerido para publicación institucional.\n\n${err?.message || err}`;
       if (typeof window !== "undefined") {
@@ -755,33 +766,45 @@ export async function exportToWord(
 
 
   // 1. Evidence Normalizer & Mapper
-  if (payload.photoEvidence) {
+  if (!isInstitutionalExport && payload.photoEvidence) {
     payload.photoEvidence = EvidenceNarrativeMapper.mapEvidenceList(payload.photoEvidence);
   }
-  if (payload.streetViewAnalysis) {
+  if (!isInstitutionalExport && payload.streetViewAnalysis) {
     payload.streetViewAnalysis = EvidenceNarrativeMapper.mapEvidenceList(payload.streetViewAnalysis);
   }
 
   // Ejecutar el motor de gobernanza en caliente de evidencias fotográficas (ADR-011)
-  const governedPhotoResult = PhotoEvidenceGovernanceEngine.process(payload.photoEvidence || []);
-  payload.governedEvidence = governedPhotoResult;
+  if (!isInstitutionalExport) {
+    const governedPhotoResult = PhotoEvidenceGovernanceEngine.process(payload.photoEvidence || []);
+    payload.governedEvidence = governedPhotoResult;
+  }
 
   // 2. AI Sanitizer Engine (modo DOCUMENT_PUBLICATION)
-  payload = AIOutputSanitizerEngine.sanitizeObject(payload, "DOCUMENT_PUBLICATION");
+  if (!isInstitutionalExport) {
+    payload = AIOutputSanitizerEngine.sanitizeObject(payload, "DOCUMENT_PUBLICATION");
+  }
 
   // 3. Coherence Validator & Certification Gate Status Control
-  const certResult = ReportCertificationGate.certify(payload, true);
-  payload.certificationGateResult = certResult;
+  if (isInstitutionalExport) {
+    payload.certificationGateResult = {
+      status: "GENERATED_NOT_CERTIFIED",
+      certificationId: "PENDING",
+      messages: ["ADR-020.33 F5 document generation completed without certification; ADR-020.33 F6 owns certification."],
+    };
+  } else {
+    const certResult = ReportCertificationGate.certify(payload, true);
+    payload.certificationGateResult = certResult;
 
-  if (certResult.status === "NOT_CERTIFIED") {
-    const errMsg = "Informe no certificado: Cadena analítica incompleta.\n\n" + certResult.messages.join("\n");
-    if (typeof window !== "undefined") {
-      alert(errMsg);
-    }
-    throw new Error(errMsg);
-  } else if (certResult.status === "CERTIFIED_WITH_WARNINGS") {
-    if (typeof window !== "undefined") {
-      alert("⚠️ Advertencia de Certificación CEIPOL:\n\n" + certResult.messages.join("\n"));
+    if (certResult.status === "NOT_CERTIFIED") {
+      const errMsg = "Informe no certificado: Cadena analítica incompleta.\n\n" + certResult.messages.join("\n");
+      if (typeof window !== "undefined") {
+        alert(errMsg);
+      }
+      throw new Error(errMsg);
+    } else if (certResult.status === "CERTIFIED_WITH_WARNINGS") {
+      if (typeof window !== "undefined") {
+        alert("⚠️ Advertencia de Certificación CEIPOL:\n\n" + certResult.messages.join("\n"));
+      }
     }
   }
 
@@ -833,17 +856,19 @@ export async function exportToWord(
     if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
       throw new Error("el número de expediente de portada (" + payload.projectId + ") no coincide con el expediente analizado (" + reportNumber + ").");
     }
-    FinalReportConsistencyCheck(payload, reportNumber);
-    ExecutiveReportQualityGate(payload);
-    CartographicQualityGate(payload);
+    if (!isInstitutionalExport) {
+      FinalReportConsistencyCheck(payload, reportNumber);
+      ExecutiveReportQualityGate(payload);
+      CartographicQualityGate(payload);
+    }
 
     // --- INTEGRACIÓN EXCLUSIVA CON EL CONTRATO UNIFICADO (IIC) ---
     const iic = payload.intelligenceContext;
-    if (!iic) {
+    if (!isInstitutionalExport && !iic) {
       throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
     }
 
-    if (iic.analysisReadiness === "NOT_READY" || iic.qualityControl?.status === "FAILED") {
+    if (!isInstitutionalExport && (iic.analysisReadiness === "NOT_READY" || iic.qualityControl?.status === "FAILED")) {
       const aceReport = iic.evidenceSources.ACE;
       const firstFailed = aceReport?.alerts?.find((a: any) => a.status === "FAILED") || {
         module: "ACE",
@@ -1152,6 +1177,15 @@ export async function exportToWord(
   // --- FASE 1: BOX DE HIPÓTESIS INICIAL EN PORTADA ---
   const certGate = payload.certificationGateResult;
   const hypothesisText = getPrimaryInitialHypothesis(payload);
+  const coverAnalyticalQuestion = isInstitutionalExport
+    ? "Modelo documental ensamblado desde InstitutionalReportInput gobernado."
+    : "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?";
+  const coverVariablesText = isInstitutionalExport
+    ? "Variables documentales derivadas de assertions narrativas y visuales gobernados."
+    : "• Territorio (Criminología Ambiental)  • Incidencia Delictiva (911)  • Actores Locales (Dossier)  • Oportunidad Física\n";
+  const coverValidationObjective = isInstitutionalExport
+    ? "Formatear contenido gobernado sin certificar, publicar ni crear claims nuevos."
+    : "Determinar puntos críticos de intervención y coordinar la remediación urbana táctica.";
   const initialHypothesisBlock = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
@@ -1176,13 +1210,13 @@ export async function exportToWord(
               new Paragraph({
                 children: [
                   new TextRun({ text: "Pregunta Analítica: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?\n", size: 16 }),
+                  new TextRun({ text: `${coverAnalyticalQuestion}\n`, size: 16 }),
                   new TextRun({ text: "Hipótesis de Trabajo: ", bold: true, size: 16, color: "1F4E79" }),
                   new TextRun({ text: `${hypothesisText.substring(0, 250)}...\n`, size: 16, italics: true }),
                   new TextRun({ text: "Variables Evaluadas: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: "• Territorio (Criminología Ambiental)  • Incidencia Delictiva (911)  • Actores Locales (Dossier)  • Oportunidad Física\n", size: 16 }),
+                  new TextRun({ text: `${coverVariablesText}\n`, size: 16 }),
                   new TextRun({ text: "Objetivo de Validación: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: "Determinar puntos críticos de intervención y coordinar la remediación urbana táctica.", size: 16 })
+                  new TextRun({ text: coverValidationObjective, size: 16 })
                 ],
                 alignment: AlignmentType.JUSTIFY,
                 spacing: { after: 120 }
