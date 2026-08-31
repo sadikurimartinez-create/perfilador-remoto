@@ -293,6 +293,23 @@ export function assessReportItemEligibility(item: any, context: {
     return withDecision(item, type, disclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", "ANALYSIS", [], disclosures);
   }
 
+  if (type === "VISUAL_PRODUCT") {
+    const visualRefs = refs(item);
+    const hasEligibleLink = Boolean(
+      visualRefs.geographyId ||
+      visualRefs.evidenceIds.length ||
+      visualRefs.findingIds.length ||
+      visualRefs.analysisIds.length
+    );
+    if (!hasEligibleLink && item?.contextual !== true) {
+      return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "VISUAL_PRODUCT_WITHOUT_ELIGIBLE_LINKAGE", "Institutional visual product requires resolvable linkage to eligible content.")], disclosures);
+    }
+    const visualDisclosures = item?.contextual === true
+      ? [...disclosures, disclosure(item, type, "CONTEXTUAL_VISUAL_PRODUCT", "Visual product is contextual and not a standalone institutional fact.")]
+      : disclosures;
+    return withDecision(item, type, visualDisclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", item?.contextual === true ? "CONTEXTUAL" : "INSTITUTIONAL_FACT", [], visualDisclosures);
+  }
+
   return withDecision(item, type, disclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", context.requireInstitutionalFact ? "INSTITUTIONAL_FACT" : "CONTEXTUAL", [], disclosures);
 }
 
@@ -405,5 +422,55 @@ export function buildDraftReportInput(project: any) {
     projectId: String(project?.projectId || project?.id || "UNAVAILABLE"),
     draft: true,
     institutional: false,
+  };
+}
+
+function disclosureNotes(disclosures: PublicationDisclosure[]): string {
+  return disclosures.map((item) => `${item.code}: ${item.message}`).join("\n");
+}
+
+export function reconcileInstitutionalReportPayload(basePayload: any, input: InstitutionalReportInput) {
+  const specializedGim = input.specializedIntelligence[0] || null;
+  return {
+    ...basePayload,
+    institutionalReportInput: input,
+    reportReadyAssessment: input.reportReadyAssessment,
+    publicationEligibility: input.publicationEligibility,
+    publicationExclusions: input.exclusions,
+    publicationDisclosures: input.disclosures,
+    canonicalGeography: input.geography,
+    geographyId: input.geography?.geographyId ?? basePayload?.geographyId ?? null,
+    finalHypothesis: input.hypothesis.currentHypothesis,
+    hypothesisLifecycle: {
+      ...(basePayload?.hypothesisLifecycle || {}),
+      hipotesisInicial: input.hypothesis.initialHypothesis,
+      hipotesisActual: input.hypothesis.currentHypothesis,
+      estadoActual: input.hypothesis.status || basePayload?.hypothesisLifecycle?.estadoActual || "FORMULATED",
+      evidenciaConfirmatoria: input.hypothesis.supportingEvidenceIds || [],
+      evidenciaContradictoria: input.hypothesis.contradictingEvidenceIds || [],
+    },
+    photoEvidence: input.evidence,
+    approvedFindings: input.findings,
+    findings: input.findings,
+    inferences: input.inferences,
+    analysisOutputs: input.analyses,
+    analyses: input.analyses,
+    conclusions: input.conclusions,
+    osintFindings: input.osint,
+    osintSynthesized: input.osint.length
+      ? `${input.osint.map((item: any) => item.summary || item.text || item.description || item.sourceReference || item.id).filter(Boolean).join("\n")}\n${disclosureNotes(input.disclosures.filter((d) => d.itemType === "OSINT"))}`.trim()
+      : "",
+    streetViewAnalysis: input.streetView,
+    temporalComparisons: input.temporalComparisons,
+    maps: input.visualProducts.filter((item: any) => item.kind !== "chart"),
+    charts: input.visualProducts.filter((item: any) => item.kind === "chart"),
+    certifiedGimOutput: specializedGim,
+    intelligenceContext: {
+      ...(basePayload?.intelligenceContext || {}),
+      aceReport: {
+        ...(basePayload?.intelligenceContext?.aceReport || {}),
+        certifiedGimOutput: specializedGim,
+      },
+    },
   };
 }

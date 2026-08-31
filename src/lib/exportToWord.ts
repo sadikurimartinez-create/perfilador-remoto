@@ -45,7 +45,10 @@ import { ReportCertificationGate } from "@/utils/reportCertificationGate";
 import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
 import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
 import { assessReportReadiness } from "@/utils/reportReadyGovernance";
-import { buildInstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
+import {
+  buildInstitutionalReportInput,
+  reconcileInstitutionalReportPayload,
+} from "@/utils/institutionalReportPublicationContract";
 import { renderMarkdownTable } from "@/utils/documentTableRenderer";
 import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
 import {
@@ -705,21 +708,20 @@ export async function exportToWord(
 ) {
   // Sanitizar payload previo a la maquetación
   payload = sanitizeEditorialPayload(payload);
-  const reportReadyAssessment = assessReportReadiness(payload);
-  payload.reportReadyAssessment = reportReadyAssessment;
 
-  if (options.exportMode === "INSTITUTIONAL" && !reportReadyAssessment.readyForInstitutionalReport) {
-    const reasons = [...reportReadyAssessment.blockingReasons, ...reportReadyAssessment.unresolvedItems]
-      .map((reason) => `${reason.code}: ${reason.message}`)
-      .join("\n");
-    const errMsg = `REPORT_READY requerido para publicación institucional.\n\n${reasons}`;
-    if (typeof window !== "undefined") {
-      alert(errMsg);
-    }
-    throw new Error(errMsg);
-  }
   if (options.exportMode === "INSTITUTIONAL") {
-    payload.institutionalReportInput = buildInstitutionalReportInput(payload);
+    try {
+      const institutionalReportInput = buildInstitutionalReportInput(payload);
+      payload = reconcileInstitutionalReportPayload(payload, institutionalReportInput);
+    } catch (err: any) {
+      const errMsg = `REPORT_READY requerido para publicación institucional.\n\n${err?.message || err}`;
+      if (typeof window !== "undefined") {
+        alert(errMsg);
+      }
+      throw new Error(errMsg);
+    }
+  } else {
+    payload.reportReadyAssessment = assessReportReadiness(payload);
   }
 
   // Event Log Forense: Registrar consumo de hallazgos por parte del Report Engine (ADR-019.18)
