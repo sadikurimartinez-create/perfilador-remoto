@@ -4,6 +4,10 @@ import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
 import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
+import {
+  buildNarrativeAssertionsFromInstitutionalInput,
+  renderGovernedExecutiveSummary,
+} from "@/utils/analyticalNarrativeGovernance";
 
 export type PublicationEligibility = "ELIGIBLE" | "ELIGIBLE_WITH_DISCLOSURE" | "INELIGIBLE";
 export type PublicationItemType =
@@ -431,9 +435,13 @@ function disclosureNotes(disclosures: PublicationDisclosure[]): string {
 
 export function reconcileInstitutionalReportPayload(basePayload: any, input: InstitutionalReportInput) {
   const specializedGim = input.specializedIntelligence[0] || null;
+  const governedNarrativeAssertions = buildNarrativeAssertionsFromInstitutionalInput(input);
+  const governedExecutiveSummary = renderGovernedExecutiveSummary(governedNarrativeAssertions, "INSTITUTIONAL");
   return {
     ...basePayload,
     institutionalReportInput: input,
+    governedNarrativeAssertions,
+    governedExecutiveSummary,
     reportReadyAssessment: input.reportReadyAssessment,
     publicationEligibility: input.publicationEligibility,
     publicationExclusions: input.exclusions,
@@ -460,6 +468,7 @@ export function reconcileInstitutionalReportPayload(basePayload: any, input: Ins
     osintSynthesized: input.osint.length
       ? `${input.osint.map((item: any) => item.summary || item.text || item.description || item.sourceReference || item.id).filter(Boolean).join("\n")}\n${disclosureNotes(input.disclosures.filter((d) => d.itemType === "OSINT"))}`.trim()
       : "",
+    executiveSummary: governedExecutiveSummary.text || basePayload?.executiveSummary || "",
     streetViewAnalysis: input.streetView,
     temporalComparisons: input.temporalComparisons,
     maps: input.visualProducts.filter((item: any) => item.kind !== "chart"),

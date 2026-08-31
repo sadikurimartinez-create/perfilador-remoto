@@ -1,5 +1,6 @@
 import { EditorialStructureEngine, EditorialBlock } from "./editorialStructureEngine";
 import { EvidenceNarrativeMapper } from "./evidenceNarrativeMapper";
+import { renderNarrativeAssertions, type NarrativeAssertion } from "./analyticalNarrativeGovernance";
 
 export enum AnalyticalFlowStatus {
   COMPLETE,
@@ -366,6 +367,17 @@ export class IntelligenceReportStructureEngine {
           ...(conc.recomendacionesEstrategicas || [])
         ].join("\n")
       : payload.conclusionesText || "";
+
+    if (Array.isArray(payload.governedNarrativeAssertions) && payload.governedNarrativeAssertions.length > 0) {
+      const governed = renderNarrativeAssertions(payload.governedNarrativeAssertions as NarrativeAssertion[], "INSTITUTIONAL");
+      chapters["Capítulo 2"] = governed.filter((item) => item.sourceItemType === "HYPOTHESIS").map((item) => item.text).join("\n");
+      chapters["Capítulo 5"] = governed.filter((item) => item.sourceItemType === "EVIDENCE" || item.sourceItemType === "FINDING").map((item) => item.text).join("\n");
+      chapters["Capítulo 6"] = governed.filter((item) => item.sourceItemType === "STREET_VIEW" || item.sourceItemType === "TEMPORAL_COMPARISON").map((item) => item.text).join("\n");
+      chapters["Capítulo 7"] = governed.filter((item) => item.sourceItemType === "OSINT").map((item) => item.text).join("\n");
+      chapters["Capítulo 8"] = governed.filter((item) => item.sourceItemType === "SPECIALIZED_INTELLIGENCE").map((item) => item.text).join("\n");
+      chapters["Capítulo 9"] = governed.filter((item) => item.sourceItemType === "INFERENCE" || item.sourceItemType === "ANALYSIS").map((item) => item.text).join("\n");
+      chapters["Capítulo 10"] = governed.filter((item) => item.sourceItemType === "CONCLUSION" || item.sourceItemType === "RECOMMENDATION").map((item) => item.text).join("\n");
+    }
 
     // 1. Ejecutar el validador de flujo analítico
     const flow = AnalyticalFlowValidator.validateFlow(chapters, photoEvidence);
