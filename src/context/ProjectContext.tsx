@@ -49,6 +49,7 @@ import {
   reviseHumanHypothesis,
   type CanonicalProjectHypothesis,
 } from "@/utils/hypothesisGovernance";
+import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -198,6 +199,7 @@ export type Project = {
   geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";
   canonicalHypothesis?: CanonicalProjectHypothesis | null;
   hypothesisRequirementSatisfied?: boolean;
+  reportReadyAssessment?: ReportReadyAssessment | null;
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;
@@ -494,7 +496,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         });
       });
 
-      setProject({
+      const newProjectState = {
         id: projectDocRef.id,
         nombre: nombre.trim() || "Sin nombre",
         geometryType,
@@ -505,6 +507,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         canonicalHypothesis: null,
         hypothesisRequirementSatisfied: false,
         ...geographyPersistence,
+      };
+      setProject({
+        ...newProjectState,
+        reportReadyAssessment: assessReportReadiness(newProjectState),
       });
 
       setAlbum([]);
@@ -714,8 +720,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         canonicalGeography,
       });
       const hypothesisGate = canProceedWithInstitutionalAnalysis({ canonicalHypothesis });
+      const docsColRef = collection(firestore, "projects", projectId, "documents");
+      const docsSnap = await getDocs(query(docsColRef, orderBy("createdAt", "asc")));
+      const projectDocs: ProjectDocument[] = docsSnap.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as any))
+        .filter((d: any) => !d.deleted);
 
-      setProject({
+      const loadedProject = {
         id: projectId,
         nombre: projectData.name,
         geometryType: projectData.geometryType,
@@ -726,18 +740,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         geographyValidationStatus: canonicalGeography?.validationStatus ?? projectData.geographyValidationStatus ?? "INVALID",
         canonicalHypothesis,
         hypothesisRequirementSatisfied: hypothesisGate.hypothesisRequirementSatisfied,
+      };
+      setProject({
+        ...loadedProject,
+        reportReadyAssessment: assessReportReadiness({
+          ...loadedProject,
+          album: albumPhotos,
+          documents: projectDocs,
+        }),
       });
       setAlbum(albumPhotos);
       setSelectedIds(albumPhotos.map((p) => p.id));
-
-      const docsColRef = collection(firestore, "projects", projectId, "documents");
-      const docsSnap = await getDocs(query(docsColRef, orderBy("createdAt", "asc")));
-      const projectDocs: ProjectDocument[] = docsSnap.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as any))
-        .filter((d: any) => !d.deleted);
       setDocuments(projectDocs);
 
       if (projectData.iaAnalysis) {
@@ -1331,7 +1344,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
       await updateDoc(projectRef, details);
-      setProject((prev) => (prev ? { ...prev, ...details } : prev));
+      setProject((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, ...details };
+        return { ...next, reportReadyAssessment: assessReportReadiness({ ...next, album, documents }) };
+      });
       
       await logAuditAction({
         action: "ACTUALIZAR_EXPEDIENTE_DETALLES",
@@ -1344,7 +1361,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error al actualizar detalles del expediente:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction]);
+  }, [project, isReadOnly, logAuditAction, album, documents]);
 
   const saveHumanHypothesis = useCallback(async (text: string): Promise<CanonicalProjectHypothesis> => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
@@ -1373,7 +1390,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const firestore = getDb();
     const projectRef = doc(firestore, "projects", project.id);
     await updateDoc(projectRef, updates);
-    setProject((prev) => (prev ? { ...prev, ...updates } : prev));
+    setProject((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...updates };
+      return { ...next, reportReadyAssessment: assessReportReadiness({ ...next, album, documents }) };
+    });
 
     await logAuditAction({
       action: "FORMULAR_HIPOTESIS_HUMANA",
@@ -1384,7 +1405,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
 
     return canonicalHypothesis;
-  }, [project, isReadOnly, user, logAuditAction]);
+  }, [project, isReadOnly, user, logAuditAction, album, documents]);
 
   const softDeleteDoc = useCallback(async (params: {
     type: "Proyecto" | "Fotografía" | "Documento";

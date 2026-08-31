@@ -44,6 +44,7 @@ import { ReportCoherenceValidator } from "@/utils/reportCoherenceValidator";
 import { ReportCertificationGate } from "@/utils/reportCertificationGate";
 import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
 import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
+import { assessReportReadiness } from "@/utils/reportReadyGovernance";
 import { renderMarkdownTable } from "@/utils/documentTableRenderer";
 import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
 import {
@@ -698,10 +699,24 @@ export async function exportToWord(
   payload: any,
   projectName: string,
   reportNumber?: string,
-  user?: any
+  user?: any,
+  options: { exportMode?: "DRAFT" | "INSTITUTIONAL" } = {}
 ) {
   // Sanitizar payload previo a la maquetación
   payload = sanitizeEditorialPayload(payload);
+  const reportReadyAssessment = assessReportReadiness(payload);
+  payload.reportReadyAssessment = reportReadyAssessment;
+
+  if (options.exportMode === "INSTITUTIONAL" && !reportReadyAssessment.readyForInstitutionalReport) {
+    const reasons = [...reportReadyAssessment.blockingReasons, ...reportReadyAssessment.unresolvedItems]
+      .map((reason) => `${reason.code}: ${reason.message}`)
+      .join("\n");
+    const errMsg = `REPORT_READY requerido para publicación institucional.\n\n${reasons}`;
+    if (typeof window !== "undefined") {
+      alert(errMsg);
+    }
+    throw new Error(errMsg);
+  }
 
   // Event Log Forense: Registrar consumo de hallazgos por parte del Report Engine (ADR-019.18)
   const allFindings = [

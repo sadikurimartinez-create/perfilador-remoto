@@ -1,4 +1,5 @@
 import { ReportCoherenceValidator, CoherenceValidationResult } from "./reportCoherenceValidator";
+import { assessReportReadiness, type ReportReadyAssessment } from "./reportReadyGovernance";
 
 /**
  * ReportCertificationGate - Puerta de Calidad de Certificación Final de Reportes CEIPOL.
@@ -17,6 +18,10 @@ export interface CertificationGateResult {
   version?: string;
   visualGovernance?: boolean;
   documentQuality?: boolean;
+  reportReadyAssessment?: ReportReadyAssessment;
+  reportReadyStatus?: ReportReadyAssessment["status"];
+  readyForInstitutionalReport?: boolean;
+  published?: false;
 }
 
 export class ReportCertificationGate {
@@ -26,6 +31,7 @@ export class ReportCertificationGate {
   public static certify(payload: any, imagesValid: boolean): CertificationGateResult {
     // 1. Validar coherencia analítica (Cadena de Evidencia)
     const coherence: CoherenceValidationResult = ReportCoherenceValidator.validate(payload);
+    const reportReadyAssessment = payload.reportReadyAssessment || assessReportReadiness(payload);
 
     // 2. Generar ID único oficial de certificación CEIPOL
     const timestamp = new Date();
@@ -58,7 +64,11 @@ export class ReportCertificationGate {
       certifiedAt: timestamp.toLocaleString("es-MX"),
       version: "1.0.1",
       visualGovernance: true,
-      documentQuality: true
+      documentQuality: true,
+      reportReadyAssessment,
+      reportReadyStatus: reportReadyAssessment.status,
+      readyForInstitutionalReport: reportReadyAssessment.readyForInstitutionalReport,
+      published: false
     };
   }
 }
