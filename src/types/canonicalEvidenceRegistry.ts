@@ -10,13 +10,14 @@ export type CanonicalNativeType =
   | "STREET_VIEW_EVIDENCE"
   | "STREET_VIEW_FINDING"
   | "TEMPORAL_EVIDENCE"
-  | "TEMPORAL_COMPARISON_FINDING";
+  | "TEMPORAL_COMPARISON_FINDING"
+  | "FIELD_PHOTO_EVIDENCE";
 
 interface CanonicalReferenceBase {
   registryRefId: string;
   expedienteId?: string;
   nativeType: CanonicalNativeType;
-  sourceType: "STREET_VIEW" | "TEMPORAL_COMPARISON";
+  sourceType: "STREET_VIEW" | "TEMPORAL_COMPARISON" | "FIELD_PHOTO";
   sourceId?: string;
   sweepId?: string;
   operationId?: string;

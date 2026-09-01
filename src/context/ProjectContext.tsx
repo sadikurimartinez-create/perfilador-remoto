@@ -18,6 +18,8 @@ import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
 import { enqueueSweepLifecycleEventsInTransaction } from "@/services/geoint/geointSweepLifecycleEventService";
 import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
+import { deriveInSituPhotoOrchestrationItem, isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
+import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
 import {
   certifyGeointSweepWithHumanApproval,
@@ -258,6 +260,7 @@ export type ProjectDocument = {
 type ProjectContextValue = {
   project: Project | null;
   album: AlbumPhoto[];
+  inSituOrchestrationItems: MultisourceOrchestrationItem[];
   selectedIds: string[];
   analysisResult: AnalysisResult | null;
   createProject: (params: {
@@ -1879,7 +1882,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!photo) throw new Error("Fotografía no encontrada.");
 
     const firestore = getDb();
-    const evidenceId = photo.evidenceId || `EVI-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+    const evidenceId = photo.evidenceId || photo.id;
     const contextualizedAt = Date.now();
     const contextualizedBy = user?.username || "Usuario Local";
 
@@ -2243,10 +2246,47 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [project, isReadOnly, logAuditAction, activeSweepForModal, user]);
 
+  const inSituOrchestrationItems = useMemo<MultisourceOrchestrationItem[]>(() => {
+    if (!project?.id) return [];
+
+    const geographyId = project.canonicalGeography?.geographyId ?? project.geographyId ?? null;
+
+    return album.flatMap((photo) => {
+      const classifiedPhoto = photo as AlbumPhoto & {
+        evidenceType?: string | null;
+        analysisType?: string | null;
+        streetViewSource?: string | null;
+      };
+
+      if (!isExplicitInSituPhoto({
+        gpsSource: classifiedPhoto.gpsSource,
+        tipo: classifiedPhoto.tipo,
+        evidenceType: classifiedPhoto.evidenceType,
+        analysisType: classifiedPhoto.analysisType,
+        streetViewSource: classifiedPhoto.streetViewSource,
+      })) {
+        return [];
+      }
+
+      const item = deriveInSituPhotoOrchestrationItem({
+        expedienteId: project.id,
+        photoId: classifiedPhoto.id,
+        evidenceId: classifiedPhoto.evidenceId,
+        sourceEvidenceId: classifiedPhoto.sourceEvidenceId,
+        geographyId,
+        gpsSource: classifiedPhoto.gpsSource,
+        validado: classifiedPhoto.validado,
+      });
+
+      return item ? [item] : [];
+    });
+  }, [project, album]);
+
   const value = useMemo<ProjectContextValue>(
     () => ({
       project,
       album,
+      inSituOrchestrationItems,
       selectedIds,
       analysisResult,
       createProject,
@@ -2300,6 +2340,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [
       project,
       album,
+      inSituOrchestrationItems,
       selectedIds,
       analysisResult,
       createProject,
