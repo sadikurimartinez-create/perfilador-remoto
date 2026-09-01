@@ -17,12 +17,14 @@ import {
   buildGeointTraceabilityId,
   normalizeGeointGovernanceStatus,
 } from "@/types/geointGovernance";
+import { adaptEvidence, adaptFinding } from "@/services/geoint/canonicalEvidenceRegistry";
+import type { CanonicalReferenceSet } from "@/types/canonicalEvidenceRegistry";
 
 export interface StreetViewFinding {
   id: string;
   expedienteId: string;
   traceabilityId: string;
-  sourceEvidenceId: string;
+  sourceEvidenceId?: string;
   evidenciaId?: string;
   captureId?: string;
   categoria:
@@ -65,6 +67,33 @@ function getFirestoreInstance() {
 }
 
 export class StreetViewFindingService {
+  static deriveCanonicalReferences(finding: StreetViewFinding): CanonicalReferenceSet {
+    const evidenceRef = adaptEvidence({
+      expedienteId: finding.expedienteId,
+      nativeEvidenceId: finding.sourceEvidenceId || finding.evidenciaId,
+      nativeType: "STREET_VIEW_EVIDENCE",
+      sourceType: "STREET_VIEW",
+      sourceId: finding.captureId,
+      traceabilityId: finding.traceabilityId,
+      geographyId: (finding as StreetViewFinding & { geographyId?: string | null }).geographyId,
+      legacy: !finding.sourceEvidenceId,
+    });
+    const evidenceRefs = evidenceRef ? [evidenceRef] : [];
+    const findingRef = adaptFinding({
+      expedienteId: finding.expedienteId,
+      nativeFindingId: finding.id,
+      nativeType: "STREET_VIEW_FINDING",
+      sourceType: "STREET_VIEW",
+      sourceFindingId: finding.captureId,
+      sourceId: finding.sourceEvidenceId,
+      supportingEvidenceRefs: evidenceRefs,
+      traceabilityId: finding.traceabilityId,
+      geographyId: (finding as StreetViewFinding & { geographyId?: string | null }).geographyId,
+      legacy: !finding.sourceEvidenceId,
+    });
+    return { evidenceRefs, findingRef };
+  }
+
   /**
    * Registra o crea un nuevo hallazgo de StreetView en Firestore.
    */
@@ -89,13 +118,16 @@ export class StreetViewFindingService {
       traceabilityId:
         (data as any).traceabilityId ||
         buildGeointTraceabilityId("trace-finding", [data.expedienteId, id]),
-      sourceEvidenceId:
-        (data as any).sourceEvidenceId ||
-        data.captureId ||
-        data.evidenciaId ||
-        id,
-      evidenciaId: data.evidenciaId || `evi-${Date.now()}`,
-      captureId: data.captureId || id,
+      ...((data as any).sourceEvidenceId || data.captureId || data.evidenciaId
+        ? {
+          sourceEvidenceId:
+            (data as any).sourceEvidenceId ||
+            data.captureId ||
+            data.evidenciaId,
+        }
+        : {}),
+      ...(data.evidenciaId ? { evidenciaId: data.evidenciaId } : {}),
+      ...(data.captureId ? { captureId: data.captureId } : {}),
       categoria: data.categoria || "RUTA_ACCESO",
       coordenadas: {
         lat,

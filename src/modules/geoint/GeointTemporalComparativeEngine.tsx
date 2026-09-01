@@ -18,10 +18,6 @@ import {
   compareTemporalEvidence,
   updateComparisonValidationStatus,
 } from "../../services/geoint/temporalComparisonService";
-import {
-  GeointGovernanceStatus,
-  buildGeointTraceabilityId,
-} from "../../types/geointGovernance";
 
 export interface GeointTemporalComparativeEngineProps {
   isOpen: boolean;
@@ -43,7 +39,7 @@ export interface GeointTemporalComparativeEngineProps {
  */
 export function GeointTemporalComparativeEngine({
   isOpen,
-  projectId = "EXP-2026",
+  projectId,
   analystName = "UNAVAILABLE",
   evidenceA: initialEvidenceA,
   evidenceB: initialEvidenceB,
@@ -54,51 +50,21 @@ export function GeointTemporalComparativeEngine({
   onComparisonGenerated,
 }: GeointTemporalComparativeEngineProps) {
   // Estado local para Evidencia A
-  const [evA, setEvA] = useState<GeoEvidence>(() => {
+  const [evA, setEvA] = useState<GeoEvidence | null>(() => {
     if (initialEvidenceA) return initialEvidenceA;
     if (primaryEvidenceCandidate) {
-      const adapted = adaptStreetViewFindingToGeoEvidence(primaryEvidenceCandidate);
-      if (adapted) return adapted;
+      return adaptStreetViewFindingToGeoEvidence(primaryEvidenceCandidate);
     }
-    return {
-      id: `ev-A-${Date.now()}`,
-      expedienteId: projectId,
-      traceabilityId: buildGeointTraceabilityId("trace-eva", [projectId, primaryEvidenceCandidate?.id]),
-      sourceEvidenceId: primaryEvidenceCandidate?.id || "SOURCE_EVIDENCE_A_UNKNOWN",
-      source: "FIELD_PHOTO",
-      coordinates: (primaryEvidenceCandidate as any)?.coordinates || {
-        lat: primaryEvidenceCandidate?.lat as number,
-        lng: primaryEvidenceCandidate?.lng as number,
-      },
-      captureDate: primaryEvidenceCandidate?.timestamp || "FECHA_NO_DISPONIBLE",
-      imageReference: primaryEvidenceCandidate?.url || "",
-      metadata: { category: "EVIDENCIA_A", sourceProvider: "CEIPOL_FIELD" },
-      status: GeointGovernanceStatus.APPROVED_EVIDENCE,
-    };
+    return null;
   });
 
   // Estado local para Evidencia B
-  const [evB, setEvB] = useState<GeoEvidence>(() => {
+  const [evB, setEvB] = useState<GeoEvidence | null>(() => {
     if (initialEvidenceB) return initialEvidenceB;
     if (contextualEvidenceCandidate) {
-      const adapted = adaptStreetViewFindingToGeoEvidence(contextualEvidenceCandidate);
-      if (adapted) return adapted;
+      return adaptStreetViewFindingToGeoEvidence(contextualEvidenceCandidate);
     }
-    return {
-      id: `ev-B-${Date.now()}`,
-      expedienteId: projectId,
-      traceabilityId: buildGeointTraceabilityId("trace-evb", [projectId, contextualEvidenceCandidate?.id]),
-      sourceEvidenceId: contextualEvidenceCandidate?.id || "SOURCE_EVIDENCE_B_UNKNOWN",
-      source: "STREET_VIEW_HISTORICAL",
-      coordinates: (contextualEvidenceCandidate as any)?.coordinates || {
-        lat: contextualEvidenceCandidate?.lat as number,
-        lng: contextualEvidenceCandidate?.lng as number,
-      },
-      captureDate: contextualEvidenceCandidate?.panoramaTimestamp || "FECHA_NO_DISPONIBLE",
-      imageReference: contextualEvidenceCandidate?.url || "",
-      metadata: { heading: 180, sourceProvider: "GOOGLE_STREET_VIEW" },
-      status: GeointGovernanceStatus.PENDING_REVIEW,
-    };
+    return null;
   });
 
   const [comparisonType, setComparisonType] = useState<ComparisonType>("TEMPORAL_VISUAL_DELTA");
@@ -112,28 +78,51 @@ export function GeointTemporalComparativeEngine({
   useEffect(() => {
     if (initialEvidenceA) {
       setEvA(initialEvidenceA);
-    } else if (primaryEvidenceCandidate) {
-      const adapted = adaptStreetViewFindingToGeoEvidence(primaryEvidenceCandidate);
-      if (adapted) setEvA(adapted);
+      return;
     }
+
+    if (primaryEvidenceCandidate) {
+      setEvA(adaptStreetViewFindingToGeoEvidence(primaryEvidenceCandidate));
+      return;
+    }
+
+    setEvA(null);
   }, [initialEvidenceA, primaryEvidenceCandidate]);
 
   useEffect(() => {
     if (initialEvidenceB) {
       setEvB(initialEvidenceB);
-    } else if (contextualEvidenceCandidate) {
-      const adapted = adaptStreetViewFindingToGeoEvidence(contextualEvidenceCandidate);
-      if (adapted) setEvB(adapted);
+      return;
     }
+
+    if (contextualEvidenceCandidate) {
+      setEvB(adaptStreetViewFindingToGeoEvidence(contextualEvidenceCandidate));
+      return;
+    }
+
+    setEvB(null);
   }, [initialEvidenceB, contextualEvidenceCandidate]);
 
   // Validar compatibilidad espacio-geográfica in-memory
   const spatialCheck = useMemo(() => {
+    if (!evA || !evB) {
+      return {
+        isCompatible: false,
+        distanceMeters: Infinity,
+        reason: "MISSING_EVIDENCE",
+      };
+    }
+
     return isSameLocation(evA, evB, toleranceMeters);
   }, [evA, evB, toleranceMeters]);
 
   // Función de disparo del análisis comparativo universal
   const handleExecuteTemporalComparison = useCallback(async () => {
+    if (!projectId || !evA || !evB) {
+      alert("⛔ COMPARACIÓN BLOQUEADA: Se requieren expediente válido y dos evidencias reales para ejecutar la comparación temporal.");
+      return;
+    }
+
     if (!spatialCheck.isCompatible) {
       alert(`⛔ COMPARACIÓN BLOQUEADA: La distancia entre Evidencia A y Evidencia B (${spatialCheck.distanceMeters}m) supera el límite máximo permitido (${toleranceMeters}m). Prohibido comparar puntos diferentes.`);
       return;
@@ -169,7 +158,7 @@ export function GeointTemporalComparativeEngine({
       setIsAnalyzing(false);
       setAnalysisStatusMsg("");
     }
-  }, [evA, evB, spatialCheck, toleranceMeters, comparisonType, analystName, onComparisonGenerated]);
+  }, [projectId, evA, evB, spatialCheck, toleranceMeters, comparisonType, analystName, onComparisonGenerated]);
 
   // Función de Convalidación Humana (ADR-016 / ADR-019.13-F4)
   const handleHumanValidation = async (status: AnalystValidationStatus) => {
@@ -240,6 +229,38 @@ export function GeointTemporalComparativeEngine({
   };
 
   if (!isOpen) return null;
+
+  if (!projectId || !evA || !evB) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+        <div className="w-full max-w-2xl rounded-xl border border-amber-500/40 bg-slate-950 p-6 text-slate-100 shadow-2xl">
+          <h2 className="text-lg font-bold text-amber-400">
+            Comparación temporal no disponible
+          </h2>
+
+          <p className="mt-3 text-sm text-slate-300">
+            Para ejecutar una comparación temporal GEOINT se requiere un expediente válido y dos evidencias reales y trazables. El sistema no generará evidencias, fuentes ni identificadores sustitutos.
+          </p>
+
+          <div className="mt-4 space-y-1 rounded border border-slate-800 bg-slate-900 p-3 text-xs font-mono text-slate-400">
+            <div>EXPEDIENTE: {projectId || "NO DISPONIBLE"}</div>
+            <div>EVIDENCIA A: {evA ? "DISPONIBLE" : "NO DISPONIBLE"}</div>
+            <div>EVIDENCIA B: {evB ? "DISPONIBLE" : "NO DISPONIBLE"}</div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">

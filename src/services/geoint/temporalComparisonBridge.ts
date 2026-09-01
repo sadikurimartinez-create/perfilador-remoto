@@ -4,6 +4,43 @@ import { GeointGovernanceStatus, normalizeGeointGovernanceStatus } from "@/types
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import { validateLineage, type CanonicalLineageNode } from "@/utils/evidenceLineage";
 import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import { adaptEvidence, adaptFinding } from "@/services/geoint/canonicalEvidenceRegistry";
+import type { CanonicalReferenceSet } from "@/types/canonicalEvidenceRegistry";
+
+export function deriveTemporalComparisonCanonicalReferences(
+  comparison: UniversalEvidenceComparison
+): CanonicalReferenceSet {
+  const geographyId = (comparison as any).geographyId ?? (comparison.evidenceA as any)?.geographyId ?? (comparison.evidenceB as any)?.geographyId;
+  const evidenceRefs = [comparison.evidenceA, comparison.evidenceB]
+    .map((evidence) => evidence ? adaptEvidence({
+      expedienteId: comparison.expedienteId,
+      nativeEvidenceId: evidence.id,
+      nativeType: "TEMPORAL_EVIDENCE",
+      sourceType: "TEMPORAL_COMPARISON",
+      sourceId: evidence.sourceEvidenceId,
+      traceabilityId: evidence.traceabilityId,
+      geographyId,
+      legacy: !evidence.id || !evidence.sourceEvidenceId,
+    }) : null)
+    .filter((ref): ref is NonNullable<typeof ref> => ref !== null);
+
+  return {
+    evidenceRefs,
+    findingRef: adaptFinding({
+      expedienteId: comparison.expedienteId,
+      nativeFindingId: comparison.comparisonId,
+      nativeType: "TEMPORAL_COMPARISON_FINDING",
+      sourceType: "TEMPORAL_COMPARISON",
+      sourceFindingId: comparison.comparisonId,
+      sourceId: comparison.sourceEvidenceId,
+      supportingEvidenceRefs: evidenceRefs,
+      requiredEvidenceRefCount: 2,
+      traceabilityId: comparison.traceabilityId,
+      geographyId,
+      legacy: evidenceRefs.length < 2,
+    }),
+  };
+}
 
 /**
  * ADR-019.17 — Bridge deterministico UniversalEvidenceComparison -> StreetViewFinding (Función Pura).
@@ -62,12 +99,12 @@ export function UniversalEvidenceComparisonToFinding(
     id: comparison.comparisonId,
     expedienteId: comparison.expedienteId,
     traceabilityId: comparison.traceabilityId,
-    sourceEvidenceId: comparison.sourceEvidenceId || primaryEvidence?.sourceEvidenceId || primaryEvidence?.id || comparison.comparisonId,
+    sourceEvidenceId: comparison.sourceEvidenceId || primaryEvidence?.sourceEvidenceId || primaryEvidence?.id,
     geographyId,
     supportingEvidenceIds,
     lineage,
     lineageStatus: lineageValidation.status,
-    evidenciaId: comparison.comparisonId,
+    evidenciaId: primaryEvidence?.sourceEvidenceId || primaryEvidence?.id,
     captureId: contextualEvidence?.id || primaryEvidence?.id,
     categoria: "COMPARACION_TEMPORAL",
     coordenadas: {

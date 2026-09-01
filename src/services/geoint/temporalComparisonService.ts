@@ -149,51 +149,9 @@ export async function updateComparisonValidationStatus(
     throw new Error("VALIDACION_HUMANA_BLOQUEADA:IDENTIDAD_REVISORA_NO_ACREDITADA");
   }
 
-  let existing = inMemoryComparisonStore.get(comparisonId);
+  const existing = inMemoryComparisonStore.get(comparisonId);
 
   const nowStr = new Date().toISOString();
-
-  if (existing) {
-    existing.analystValidation = {
-      status: normalizeGeointGovernanceStatus(newStatus),
-      reviewerId: normalizedReviewerId,
-      reviewedAt: nowStr,
-      comments: comments.trim(),
-    };
-    inMemoryComparisonStore.set(comparisonId, existing);
-  } else {
-    // Si no está en memoria, crear un registro sintético de actualización
-    existing = {
-      id: comparisonId,
-      expedienteId,
-      traceabilityId: buildGeointTraceabilityId("trace-cmp-synthetic", [expedienteId, comparisonId]),
-      sourceEvidenceId: "SOURCE_EVIDENCE_UNKNOWN",
-      evidenceA: {
-        id: "ev-a-unknown",
-        traceabilityId: buildGeointTraceabilityId("trace-eva-synthetic", [expedienteId, comparisonId]),
-        sourceEvidenceId: "SOURCE_EVIDENCE_A_UNKNOWN",
-        source: "FIELD_PHOTO",
-        coordinates: { lat: null, lng: null },
-      },
-      evidenceB: {
-        id: "ev-b-unknown",
-        traceabilityId: buildGeointTraceabilityId("trace-evb-synthetic", [expedienteId, comparisonId]),
-        sourceEvidenceId: "SOURCE_EVIDENCE_B_UNKNOWN",
-        source: "STREET_VIEW_HISTORICAL",
-        coordinates: { lat: null, lng: null },
-      },
-      spatialValidation: { compatible: false, distanceMeters: Number.NaN },
-      temporalValidation: { valid: true, status: "VALID" },
-      analystValidation: {
-        status: normalizeGeointGovernanceStatus(newStatus),
-        reviewerId: normalizedReviewerId,
-        reviewedAt: nowStr,
-        comments: comments.trim(),
-      },
-      createdAt: nowStr,
-    };
-    inMemoryComparisonStore.set(comparisonId, existing);
-  }
 
   if (typeof window !== "undefined") {
     try {
@@ -219,7 +177,23 @@ export async function updateComparisonValidationStatus(
     }
   }
 
-  return existing;
+  if (!existing) {
+    throw new Error("TEMPORAL_COMPARISON_NOT_AVAILABLE_FOR_VALIDATION");
+  }
+
+  const updated: TemporalComparisonRecord = {
+    ...existing,
+    analystValidation: {
+      status: normalizeGeointGovernanceStatus(newStatus),
+      reviewerId: normalizedReviewerId,
+      reviewedAt: nowStr,
+      comments: comments.trim(),
+    },
+    updatedAt: nowStr,
+  };
+
+  inMemoryComparisonStore.set(comparisonId, updated);
+  return updated;
 }
 
 /**
