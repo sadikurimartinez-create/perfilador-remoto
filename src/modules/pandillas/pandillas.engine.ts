@@ -5,6 +5,7 @@ import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
 import { classifyEpistemicSource, type SourceRouteDescriptor } from "@/lib/providers/sourceRegistry";
 import { adaptDenueScinceSource } from "@/services/geoint/denueScinceOrchestrationAdapter";
+import { adaptOsintSource } from "@/services/geoint/osintCanonicalOrchestrationAdapter";
 import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 
 /**
@@ -83,12 +84,22 @@ export class PandillasEngine {
     const scinceRoute = classifyEpistemicSource(scinceData?.epistemicIntegrity);
     const denueRoute = classifyEpistemicSource(denueData?.epistemicIntegrity);
     const telegramRoute = classifyEpistemicSource(telegramOsint?.epistemicIntegrity);
-    const sourceOrchestrationItems = [scinceData, denueData]
+    const denueScinceOrchestrationItems = [scinceData, denueData]
       .map((item) => adaptDenueScinceSource({
         expedienteId: gang.projectId,
         integrity: item?.epistemicIntegrity,
       }))
       .filter((item): item is MultisourceOrchestrationItem => item !== null);
+
+    const telegramOrchestrationItem = adaptOsintSource({
+      expedienteId: gang.projectId,
+      integrity: telegramOsint?.epistemicIntegrity,
+    });
+
+    const sourceOrchestrationItems = [
+      ...denueScinceOrchestrationItems,
+      ...(telegramOrchestrationItem ? [telegramOrchestrationItem] : []),
+    ];
 
     // Build the enriched context
     let enrichmentPrompt = `

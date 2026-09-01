@@ -69,11 +69,17 @@ describe("ADR-021.4D-2C-B productive DENUE / SCINCE wiring", () => {
       integrantes: [],
     }, "contexto");
 
-    expect(result.sourceOrchestrationItems).toHaveLength(2);
-    expect(result.sourceOrchestrationItems?.map((item) => item.eligibility)).toEqual([
-      "INELIGIBLE",
-      "ELIGIBLE",
-    ]);
+    const scinceItem = result.sourceOrchestrationItems?.find(
+      (item) => item.source.sourceType === "SCINCE"
+    );
+    const denueItem = result.sourceOrchestrationItems?.find(
+      (item) => item.source.sourceType === "DENUE"
+    );
+
+    expect(scinceItem).toBeDefined();
+    expect(denueItem).toBeDefined();
+    expect(scinceItem?.eligibility).toBe("INELIGIBLE");
+    expect(denueItem?.eligibility).toBe("ELIGIBLE");
     expect(result.sourceOrchestrationItems?.every((item) => !item.evidenceRef && !item.findingRef)).toBe(true);
     expect(result.externalSourceProvenance).toHaveLength(3);
     expect(result.sourceRouteClassifications).toBeDefined();
