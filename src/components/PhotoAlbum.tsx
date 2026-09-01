@@ -27,6 +27,12 @@ import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
 import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
+import {
+  adaptDenueScinceSource,
+  canAdmitSourceToInstitutionalContext,
+  type ProductiveSourceIntegrityInput,
+} from "@/services/geoint/denueScinceOrchestrationAdapter";
+import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 
 import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
@@ -74,6 +80,12 @@ type EvidencePhotoType = {
   previewUrl?: string;
   tipo?: string;
   comentario?: string;
+};
+
+type ProductiveSourceConfirmation = {
+  content: string;
+  integrity: ProductiveSourceIntegrityInput;
+  sourceItem: MultisourceOrchestrationItem | null;
 };
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
@@ -943,8 +955,8 @@ export function PhotoAlbum({
   }, []);
   const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [scinceDataConfirm, setScinceDataConfirm] = useState<string | null>(null);
-  const [denueDataConfirm, setDenueDataConfirm] = useState<string | null>(null);
+  const [scinceDataConfirm, setScinceDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
+  const [denueDataConfirm, setDenueDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
     if (!clickCoords) return {};
@@ -3641,7 +3653,11 @@ const hasMinimumPhotos =
                   const data = await getScinceData(centerLat, centerLng);
                   if (data.exito) {
                     const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
-                    setScinceDataConfirm(newContext);
+                    const sourceItem = adaptDenueScinceSource({
+                      expedienteId: project?.id,
+                      integrity: data.epistemicIntegrity,
+                    });
+                    setScinceDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
                   } else {
                     setError(data.error || "Error al consultar INEGI SCINCE.");
                   }
@@ -3700,7 +3716,11 @@ const hasMinimumPhotos =
                   const data = await getDenueData(centerLat, centerLng, 500);
                   if (data.exito) {
                     const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
-                    setDenueDataConfirm(newContext);
+                    const sourceItem = adaptDenueScinceSource({
+                      expedienteId: project?.id,
+                      integrity: data.epistemicIntegrity,
+                    });
+                    setDenueDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
                   } else {
                     setError(data.error || "Error al consultar INEGI DENUE.");
                   }
@@ -5876,8 +5896,11 @@ const hasMinimumPhotos =
           Se han obtenido los siguientes datos sociodemográficos de la cuadra (Demografía, Marginación, Población e Indicadores Sociales). Confirme su incorporación al análisis de hipótesis:
         </p>
         <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
-          {scinceDataConfirm}
+          {scinceDataConfirm?.content}
         </div>
+        <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
+          SCINCE disponible actualmente corresponde a una simulación diagnóstica no autoritativa y no puede incorporarse como corroboración institucional.
+        </p>
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
           <CEIPOLButton
             variant="secondary"
@@ -5887,26 +5910,11 @@ const hasMinimumPhotos =
             Cancelar
           </CEIPOLButton>
           <CEIPOLButton
-            variant="confirm"
+            variant="secondary"
             size="sm"
-            onClick={async () => {
-              if (!scinceDataConfirm) return;
-              try {
-                await registerSweep({
-                  engine: "Población de Cuadra (SCINCE)",
-                  source: "INEGI SCINCE",
-                  type: "Directa",
-                  relevance: "Medio",
-                  data: scinceDataConfirm
-                });
-                setScinceDataConfirm(null);
-                setToast({ type: "success", message: "✓ Datos sociodemográficos agregados a la hipótesis correctamente" });
-              } catch (err: any) {
-                alert("Error al registrar barrido: " + err.message);
-              }
-            }}
+            onClick={() => setScinceDataConfirm(null)}
           >
-            Aceptar y Añadir
+            Cerrar diagnóstico
           </CEIPOLButton>
         </div>
       </DynamicPopup>
@@ -5925,8 +5933,13 @@ const hasMinimumPhotos =
           Se han obtenido los siguientes datos de la actividad comercial (Giros, Concentración y Establecimientos Comerciales). Confirme su incorporación al análisis de hipótesis:
         </p>
         <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
-          {denueDataConfirm}
+          {denueDataConfirm?.content}
         </div>
+        {!canAdmitSourceToInstitutionalContext(denueDataConfirm?.sourceItem) && (
+          <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
+            La fuente DENUE no tiene elegibilidad institucional y no puede incorporarse como dato factual.
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
           <CEIPOLButton
             variant="secondary"
@@ -5938,15 +5951,20 @@ const hasMinimumPhotos =
           <CEIPOLButton
             variant="confirm"
             size="sm"
+            disabled={!canAdmitSourceToInstitutionalContext(denueDataConfirm?.sourceItem)}
             onClick={async () => {
               if (!denueDataConfirm) return;
+              if (!canAdmitSourceToInstitutionalContext(denueDataConfirm.sourceItem)) {
+                alert("DENUE no cuenta con elegibilidad institucional para incorporarse al expediente.");
+                return;
+              }
               try {
                 await registerSweep({
                   engine: "Giros Comerciales (DENUE)",
-                  source: "OSINT",
+                  source: "INEGI DENUE",
                   type: "Directa",
                   relevance: "Medio",
-                  data: denueDataConfirm
+                  data: denueDataConfirm.content
                 });
                 setDenueDataConfirm(null);
                 setToast({ type: "success", message: "✓ Datos comerciales agregados a la hipótesis correctamente" });

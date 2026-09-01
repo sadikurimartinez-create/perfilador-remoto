@@ -4,6 +4,8 @@ import { GangEntity, FusionResult } from "./pandillas.mapper";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
 import { classifyEpistemicSource, type SourceRouteDescriptor } from "@/lib/providers/sourceRegistry";
+import { adaptDenueScinceSource } from "@/services/geoint/denueScinceOrchestrationAdapter";
+import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 
 /**
  * Pandillas intelligence orchestration engine.
@@ -21,7 +23,7 @@ export class PandillasEngine {
   static async executeFullSweep(
     gang: GangEntity,
     userContext: string
-  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; sourceRouteClassifications?: SourceRouteDescriptor[]; isAiGenerated: boolean; warning?: string }> {
+  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; sourceRouteClassifications?: SourceRouteDescriptor[]; sourceOrchestrationItems?: MultisourceOrchestrationItem[]; isAiGenerated: boolean; warning?: string }> {
     const geoValidation = validateGeoIntegrity(gang.coordenadas?.lat, gang.coordenadas?.lng);
     const lat = geoValidation.latitude;
     const lng = geoValidation.longitude;
@@ -81,6 +83,12 @@ export class PandillasEngine {
     const scinceRoute = classifyEpistemicSource(scinceData?.epistemicIntegrity);
     const denueRoute = classifyEpistemicSource(denueData?.epistemicIntegrity);
     const telegramRoute = classifyEpistemicSource(telegramOsint?.epistemicIntegrity);
+    const sourceOrchestrationItems = [scinceData, denueData]
+      .map((item) => adaptDenueScinceSource({
+        expedienteId: gang.projectId,
+        integrity: item?.epistemicIntegrity,
+      }))
+      .filter((item): item is MultisourceOrchestrationItem => item !== null);
 
     // Build the enriched context
     let enrichmentPrompt = `
@@ -114,6 +122,7 @@ export class PandillasEngine {
       denueInfo: denueData.exito ? denueData : undefined,
       externalSourceProvenance,
       sourceRouteClassifications,
+      sourceOrchestrationItems,
     };
   }
 }
