@@ -11,12 +11,21 @@ import {
   type CrimeIncidenceQuerySource,
   type CrimeIncidenceSourceStatus,
 } from "@/utils/crimeIncidenceCanonicalPipeline";
+import type { CrimeDatasetIdentity } from "@/types/crimeDatasetIdentity";
+import {
+  buildCrimeIncidenceDatasetIdentity,
+  readCrimeIncidenceDatasetProvenanceConfig,
+} from "@/utils/crimeIncidenceDatasetProvenance";
 
-type CrimeQueryInput = {
+export type CrimeQueryInput = {
   lat: number;
   lng: number;
   radiusMeters?: number;
   allowLegacyFallback?: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+  incidentTypes?: string[];
+  requestedCoverage?: CrimeCoverageStatus | null;
 };
 
 export type CrimeQueryResult = {
@@ -27,8 +36,21 @@ export type CrimeQueryResult = {
   data: any[];
   bibliografia: string;
   lineage: ReturnType<typeof buildCrimeQueryLineage>;
+  datasetIdentity?: CrimeDatasetIdentity;
   error?: string;
 };
+
+function configuredDatasetIdentity(result: CrimeQueryResult): CrimeDatasetIdentity {
+  return buildCrimeIncidenceDatasetIdentity({
+    config: readCrimeIncidenceDatasetProvenanceConfig(),
+    datasetReference: result.lineage.dataset || null,
+    querySource: result.querySource,
+    sourceStatus: result.sourceStatus,
+    coverageStatus: result.coverageStatus,
+    recordCount: result.data.length,
+    lineage: result.lineage,
+  });
+}
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371000;
@@ -113,6 +135,17 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
     });
   }
 
+  if (input.requestedCoverage && input.requestedCoverage !== coverageStatus) {
+    return emptyResult({
+      ...input,
+      radiusMeters,
+      coverageStatus,
+      querySource: "POSTGIS",
+      sourceStatus: "POSTGIS_AVAILABLE",
+      dataset: "incidencia_estadistica",
+    });
+  }
+
   const client = await getPool().connect();
   try {
     const result = await client.query(
@@ -136,10 +169,13 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
           $3
         )
+          AND ($4::text IS NULL OR fecha::date >= $4::date)
+          AND ($5::text IS NULL OR fecha::date <= $5::date)
+          AND ($6::text[] IS NULL OR incidente = ANY($6::text[]))
         ORDER BY distancia_m ASC
         LIMIT 500
       `,
-      [input.lng, input.lat, radiusMeters]
+      [input.lng, input.lat, radiusMeters, input.startDate ?? null, input.endDate ?? null, input.incidentTypes?.length ? input.incidentTypes : null]
     );
 
     const data = result.rows.map((row: any) => ({
@@ -178,6 +214,8 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
         excluded: 0,
         duplicates: 0,
         returnedRecords: data.length,
+        startDate: input.startDate,
+        endDate: input.endDate,
       }),
     };
   } catch (error: any) {
@@ -206,6 +244,17 @@ export function queryCsvLegacyCrimeIncidence(input: CrimeQueryInput): CrimeQuery
       coverageStatus,
       querySource: "NONE",
       sourceStatus: "OUT_OF_COVERAGE",
+      dataset: "incidencia_csv_files",
+    });
+  }
+
+  if (input.requestedCoverage && input.requestedCoverage !== coverageStatus) {
+    return emptyResult({
+      ...input,
+      radiusMeters,
+      coverageStatus,
+      querySource: "CSV_LEGACY_FALLBACK",
+      sourceStatus: "CSV_LEGACY_FALLBACK",
       dataset: "incidencia_csv_files",
     });
   }
@@ -256,6 +305,19 @@ export function queryCsvLegacyCrimeIncidence(input: CrimeQueryInput): CrimeQuery
         continue;
       }
 
+      if (input.startDate && (!record.date || record.date < input.startDate)) {
+        excluded++;
+        continue;
+      }
+      if (input.endDate && (!record.date || record.date > input.endDate)) {
+        excluded++;
+        continue;
+      }
+      if (input.incidentTypes?.length && !input.incidentTypes.includes(record.incident)) {
+        excluded++;
+        continue;
+      }
+
       const dist = haversineMeters(input.lat, input.lng, record.lat, record.lng);
       if (dist <= radiusMeters) {
         delitosCercanos.push({
@@ -296,6 +358,8 @@ export function queryCsvLegacyCrimeIncidence(input: CrimeQueryInput): CrimeQuery
       excluded,
       duplicates: duplicateCount,
       returnedRecords: delitosCercanos.length,
+      startDate: input.startDate,
+      endDate: input.endDate,
     }),
   };
 }
@@ -303,15 +367,15 @@ export function queryCsvLegacyCrimeIncidence(input: CrimeQueryInput): CrimeQuery
 export async function queryCrimeIncidence(input: CrimeQueryInput): Promise<CrimeQueryResult> {
   const postgis = await queryPostgisCrimeIncidence(input);
   if (postgis.sourceStatus === "POSTGIS_AVAILABLE" || postgis.sourceStatus === "OUT_OF_COVERAGE") {
-    return postgis;
+    return { ...postgis, datasetIdentity: configuredDatasetIdentity(postgis) };
   }
 
   if (input.allowLegacyFallback === false) {
-    return postgis;
+    return { ...postgis, datasetIdentity: configuredDatasetIdentity(postgis) };
   }
 
   const legacy = queryCsvLegacyCrimeIncidence(input);
-  return {
+  const result: CrimeQueryResult = {
     ...legacy,
     error: postgis.error,
     lineage: {
@@ -322,4 +386,5 @@ export async function queryCrimeIncidence(input: CrimeQueryInput): Promise<Crime
       },
     },
   };
+  return { ...result, datasetIdentity: configuredDatasetIdentity(result) };
 }

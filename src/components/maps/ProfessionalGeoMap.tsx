@@ -15,6 +15,8 @@ import StreetViewManualLayer from "./layers/StreetViewManualLayer";
 import StreetViewAutomaticLayer from "./layers/StreetViewAutomaticLayer";
 import FindingsLayer from "./layers/FindingsLayer";
 import StreetViewConeLayer from "./layers/StreetViewConeLayer";
+import CrimeIncidenceLayer from "./layers/CrimeIncidenceLayer";
+import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
 // Contexto de Filtros
 import { useAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
@@ -37,6 +39,10 @@ interface ProfessionalGeoMapProps {
   selectedPoiId?: string;
   selectedSvId?: string;
   selectedFindingId?: string;
+  crimeIncidents?: CanonicalCrimeIncident[];
+  crimeIncidenceMinimumHeight?: string;
+  onCrimeIncidenceRenderProgress?: (rendered: number, total: number) => void;
+  showLayerControls?: boolean;
 }
 
 const mapContainerStyle = {
@@ -78,7 +84,11 @@ export function ProfessionalGeoMap({
   onFindingSelect,
   selectedPoiId,
   selectedSvId,
-  selectedFindingId
+  selectedFindingId,
+  crimeIncidents = [],
+  crimeIncidenceMinimumHeight,
+  onCrimeIncidenceRenderProgress,
+  showLayerControls = true,
 }: ProfessionalGeoMapProps) {
   console.debug("[MAP INPUT DEBUG]", {
     photographsReceived: photographs,
@@ -145,6 +155,11 @@ export function ProfessionalGeoMap({
     fullscreenControl: false,
   }), []);
 
+  const resolvedMapContainerStyle = useMemo(() => ({
+    ...mapContainerStyle,
+    minHeight: crimeIncidenceMinimumHeight ?? mapContainerStyle.minHeight,
+  }), [crimeIncidenceMinimumHeight]);
+
   // Seleccionar automáticamente el centro del cono de visión activo
   const activeConeData = useMemo(() => {
     const active = selectedMarkerForCone;
@@ -180,7 +195,7 @@ export function ProfessionalGeoMap({
 
   if (!isLoaded) {
     return (
-      <div className="w-full h-full min-h-[550px] bg-slate-950 rounded-2xl flex flex-col items-center justify-center border border-slate-900 gap-3">
+      <div className="w-full h-full bg-slate-950 rounded-2xl flex flex-col items-center justify-center border border-slate-900 gap-3" style={{ minHeight: crimeIncidenceMinimumHeight ?? mapContainerStyle.minHeight }}>
         <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
         <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">Cargando Motor SIG Profesional...</span>
       </div>
@@ -190,7 +205,7 @@ export function ProfessionalGeoMap({
   return (
     <div className="w-full h-full relative overflow-hidden rounded-2xl border border-slate-900 bg-slate-950">
       {/* Panel flotante de Capas */}
-      <div className="absolute top-4 right-4 bg-slate-950/90 border border-slate-800 rounded-2xl p-4 z-10 w-64 shadow-2xl backdrop-blur-md">
+      {showLayerControls && <div className="absolute top-4 right-4 bg-slate-950/90 border border-slate-800 rounded-2xl p-4 z-10 w-64 shadow-2xl backdrop-blur-md">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
           <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase">Capas de Inteligencia</span>
           <button
@@ -265,10 +280,10 @@ export function ProfessionalGeoMap({
             <span className="text-cyan-400 font-bold">Conos Visuales Street View</span>
           </label>
         </div>
-      </div>
+      </div>}
 
       <GoogleMap
-        mapContainerStyle={mapContainerStyle}
+        mapContainerStyle={resolvedMapContainerStyle}
         center={mapCenter}
         zoom={15}
         options={mapOptions}
@@ -276,6 +291,12 @@ export function ProfessionalGeoMap({
         <BaseMapLayer />
         
         <RectorGeometryLayer visible={layers.rectorGeometry} geografiaRectora={geografiaRectora} />
+
+        <CrimeIncidenceLayer
+          visible={crimeIncidents.length > 0}
+          matchedRecords={crimeIncidents}
+          onRenderProgress={onCrimeIncidenceRenderProgress}
+        />
         
         <PoiLayer visible={layers.pois} pois={pois} selectedPoiId={selectedPoiId} onPoiSelect={onPoiSelect} />
         

@@ -7,6 +7,7 @@ import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
 import { GeographicWorkspace } from "@/components/GeographicWorkspace";
+import { CrimeIncidenceProductionWorkspace } from "@/components/crime-incidence/CrimeIncidenceProductionWorkspace";
 import { CopilotOverlay } from "@/components/copilot/CopilotOverlay";
 import { db } from "@/lib/localDb";
 import { useAuth } from "@/context/AuthContext";
@@ -55,7 +56,7 @@ export default function ProjectWorkspacePage() {
 
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "crimeIncidence" | "pandillas">("environmental");
 
   const handleExitWorkspace = (e: React.MouseEvent, targetUrl: string) => {
     if (project && project.sweeps) {
@@ -380,7 +381,7 @@ export default function ProjectWorkspacePage() {
       </header>
 
       {/* PREMIUM TABS NAVIGATION HEADER */}
-      <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1.5 gap-1.5 shadow-lg max-w-2xl w-full">
+      <div className="flex rounded-xl border border-slate-800 bg-slate-950 p-1.5 gap-1.5 shadow-lg max-w-4xl w-full overflow-x-auto">
         <button
           onClick={() => setActiveWorkspaceTab("environmental")}
           className={`flex-1 py-2.5 rounded-lg text-xs font-black tracking-wide uppercase transition-all whitespace-nowrap ${
@@ -390,6 +391,16 @@ export default function ProjectWorkspacePage() {
           }`}
         >
           📷 Evidencia y Entorno
+        </button>
+        <button
+          onClick={() => setActiveWorkspaceTab("crimeIncidence")}
+          className={`flex-1 min-w-[180px] py-2.5 rounded-lg text-xs font-black tracking-wide uppercase transition-all whitespace-nowrap ${
+            activeWorkspaceTab === "crimeIncidence"
+              ? "bg-sky-500 text-slate-950 shadow-md font-extrabold"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Incidencia delictiva
         </button>
         <button
           onClick={() => setActiveWorkspaceTab("pandillas")}
@@ -419,6 +430,13 @@ export default function ProjectWorkspacePage() {
           <div className="w-full bg-slate-950/20 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
             <PandillasUI projectId={project.id} onSaveAnalysisToCloud={handleSaveAnalysisToCloud} project={project} />
           </div>
+        )}
+        {activeWorkspaceTab === "crimeIncidence" && (
+          <CrimeIncidenceProductionWorkspace
+            project={project}
+            requestedBy={user?.username}
+            user={user}
+          />
         )}
       </div>
 

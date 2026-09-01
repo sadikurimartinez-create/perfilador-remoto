@@ -28,11 +28,11 @@ const pointGeometry: CrimeIncidenceQueryGeometry = {
 const corridorGeometry: CrimeIncidenceQueryGeometry = {
   mode: "CORRIDOR_COVERAGE",
   geometry: { type: "LineString", coordinates: [[-102.29, 21.88], [-102.28, 21.89]] },
-  corridorWidthMeters: 100,
+  corridorWidthMeters: 250,
 };
 const polygonGeometry: CrimeIncidenceQueryGeometry = {
   mode: "POLYGON_BOUNDARY",
-  geometry: { type: "Polygon", coordinates: [[[-102.29, 21.88], [-102.28, 21.88], [-102.28, 21.89], [-102.29, 21.88]]] },
+  geometry: { type: "Polygon", coordinates: [[[-102.30, 21.87], [-102.27, 21.87], [-102.27, 21.90], [-102.30, 21.90], [-102.30, 21.87]]] },
 };
 
 function dataset(): CrimeDatasetIdentity {

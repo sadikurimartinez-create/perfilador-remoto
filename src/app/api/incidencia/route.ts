@@ -8,6 +8,10 @@ type IncidenciaRequestBody = {
   lng?: number;
   radiusMeters?: number;
   allowLegacyFallback?: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+  incidentTypes?: string[];
+  requestedCoverage?: "IN_COVERAGE" | "OUT_OF_COVERAGE" | "UNKNOWN_COVERAGE" | null;
 };
 
 function toFiniteNumber(v: unknown): number | null {
@@ -33,6 +37,10 @@ export async function POST(req: Request) {
       lng,
       radiusMeters: toFiniteNumber(body.radiusMeters) ?? 1000,
       allowLegacyFallback: body.allowLegacyFallback,
+      startDate: body.startDate ?? null,
+      endDate: body.endDate ?? null,
+      incidentTypes: Array.isArray(body.incidentTypes) ? body.incidentTypes : [],
+      requestedCoverage: body.requestedCoverage ?? null,
     });
 
     return NextResponse.json(
