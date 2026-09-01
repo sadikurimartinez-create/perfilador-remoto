@@ -5,6 +5,10 @@ import type {
   CrimeIncidenceVisualProductMetadata,
 } from "@/types/crimeIncidenceWorkspace";
 import { CRIME_INCIDENCE_INSTITUTIONAL_BRANDING } from "@/types/crimeIncidenceWorkspace";
+import type { CrimeIncidenceAnalyticalProjection } from "@/types/crimeIncidenceAnalyticalProjection";
+import type { CrimeIncidenceExportContract } from "@/types/crimeIncidenceExportContract";
+import type { CrimeIncidenceGeographicResolution } from "@/types/crimeIncidenceGeographicResolution";
+import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 import type {
   CrimeCoverageStatus,
   CrimeIncidenceQuerySource,
@@ -164,5 +168,102 @@ export function createCrimeIncidenceVisualProductMetadata(
   return {
     ...input,
     watermark: CRIME_INCIDENCE_INSTITUTIONAL_BRANDING.watermark,
+  };
+}
+
+export interface CrimeIncidenceWorkspaceViewModel {
+  workspaceId: string | null;
+  expedienteId: string;
+  geographyContext: {
+    canonicalGeography: CanonicalProjectGeography;
+    geographicResolution: CrimeIncidenceGeographicResolution;
+  };
+  incidents: {
+    matched: CanonicalCrimeIncident[];
+    excluded: CanonicalCrimeIncident[];
+    table: Array<{
+      classification: "MATCHED" | "EXCLUDED";
+      incident: CanonicalCrimeIncident;
+    }>;
+  };
+  metrics: CrimeIncidenceAnalyticalProjection["metrics"];
+  limitations: string[];
+  datasetReference: CrimeIncidenceAnalyticalProjection["datasetReference"];
+  queryReference: CrimeIncidenceAnalyticalProjection["sourceQuery"];
+  exportReference: CrimeIncidenceExportContract;
+  institutionalMetadata: CrimeIncidenceExportContract["institutionalMetadata"];
+  lineage: CrimeQueryLineage;
+}
+
+export interface BuildCrimeIncidenceWorkspaceInput {
+  expedienteId: string;
+  canonicalGeography: CanonicalProjectGeography;
+  geographicResolution: CrimeIncidenceGeographicResolution;
+  analyticalProjection: CrimeIncidenceAnalyticalProjection;
+  exportContract: CrimeIncidenceExportContract;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function assertWorkspaceChain(input: BuildCrimeIncidenceWorkspaceInput): void {
+  const resolvedExpedienteId = input.geographicResolution.expedientGeography.expedienteId;
+  if (input.expedienteId !== resolvedExpedienteId || input.expedienteId !== input.exportContract.expedienteId) {
+    throw new Error("CRIME_INCIDENCE_WORKSPACE_EXPEDIENT_MISMATCH");
+  }
+
+  const canonicalGeometry = input.canonicalGeography.geometry;
+  const resolvedGeometry = input.geographicResolution.geometry.geometry;
+  if (
+    input.canonicalGeography.type !== input.geographicResolution.expedientGeography.geographyType ||
+    JSON.stringify(canonicalGeometry) !== JSON.stringify(resolvedGeometry)
+  ) {
+    throw new Error("CRIME_INCIDENCE_WORKSPACE_GEOGRAPHY_MISMATCH");
+  }
+
+  if (
+    input.analyticalProjection.sourceQuery !== input.geographicResolution.queryResolution ||
+    input.exportContract.projectionReference !== input.analyticalProjection
+  ) {
+    throw new Error("CRIME_INCIDENCE_WORKSPACE_GOVERNANCE_CHAIN_MISMATCH");
+  }
+}
+
+/** Assembles governed ADR-022 outputs for a future UI without deriving analytical or spatial facts. */
+export function buildCrimeIncidenceWorkspace(
+  input: BuildCrimeIncidenceWorkspaceInput
+): CrimeIncidenceWorkspaceViewModel {
+  assertWorkspaceChain(input);
+  const matched = input.geographicResolution.matchedRecords;
+  const excluded = input.geographicResolution.excludedRecords;
+
+  return {
+    workspaceId: input.exportContract.exportId,
+    expedienteId: input.expedienteId,
+    geographyContext: {
+      canonicalGeography: input.canonicalGeography,
+      geographicResolution: input.geographicResolution,
+    },
+    incidents: {
+      matched,
+      excluded,
+      table: [
+        ...matched.map((incident) => ({ classification: "MATCHED" as const, incident })),
+        ...excluded.map((incident) => ({ classification: "EXCLUDED" as const, incident })),
+      ],
+    },
+    metrics: input.analyticalProjection.metrics,
+    limitations: unique([
+      ...input.geographicResolution.queryResolution.limitations,
+      ...input.analyticalProjection.limitations,
+      ...input.exportContract.limitations,
+      "WORKSPACE_DATA_IS_NOT_EVIDENCE_FINDING_PROOF_CAUSALITY_OR_CRIMINOLOGICAL_PROFILE",
+    ]),
+    datasetReference: input.analyticalProjection.datasetReference,
+    queryReference: input.analyticalProjection.sourceQuery,
+    exportReference: input.exportContract,
+    institutionalMetadata: input.exportContract.institutionalMetadata,
+    lineage: input.analyticalProjection.lineage,
   };
 }
