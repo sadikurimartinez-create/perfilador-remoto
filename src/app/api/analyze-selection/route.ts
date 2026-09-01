@@ -252,46 +252,22 @@ export async function POST(req: Request) {
     }
 
     // 1. CATEGORÍA 1: Lugares de acecho o escondite (hideout)
-    const hideoutCandidates = [
-      { name: "Zona de Ocultamiento Táctica (Acceso Norte)", dLat: 0.0012, dLng: 0.0002, desc: "Identificación de zona de ocultamiento secundario, accesos ciegos y baja visibilidad." },
-      { name: "Punto de Acecho Urbano (Acceso Sur)", dLat: -0.0012, dLng: -0.0002, desc: "Análisis de puntos ciegos de vigilancia informal y de corredores de escape táctico." },
-      { name: "Espacio de Vigilancia Informal (Acceso Este)", dLat: 0.0002, dLng: 0.0012, desc: "Evaluación de infraestructura con baja iluminación e inmuebles con nula visibilidad." },
-      { name: "Acceso Secundario de Escape (Acceso Oeste)", dLat: -0.0002, dLng: -0.0012, desc: "Análisis de vías secundarias abandonadas e infraestructura desatendida." }
-    ].map(off => {
-      const targetLat = centerLat + off.dLat;
-      const targetLng = centerLng + off.dLng;
-      const svUrl = buildStreetViewUrl(targetLat, targetLng);
-      return {
-        name: off.name,
-        observed: off.desc,
-        streetViewUrl: svUrl as string,
-        lat: targetLat,
-        lng: targetLng
-      };
-    }).filter(img => img.streetViewUrl != null);
-
-    const hideoutImages = validateStreetViewCategoryLimit(hideoutCandidates, "hideout");
+    const hideoutImages: Array<{
+      name: string;
+      observed: string;
+      streetViewUrl: string;
+      lat: number;
+      lng: number;
+    }> = [];
 
     // 2. CATEGORÍA 2: Grafitis (graffiti)
-    const graffitiCandidates = [
-      { name: "Monitoreo de Pintas Territoriales (Noreste)", dLat: 0.0008, dLng: 0.0008, desc: "Detección de grafitis visibles, marcas de bandas y pintas territoriales espaciales." },
-      { name: "Símbolos y Marcas Urbanas (Suroeste)", dLat: -0.0008, dLng: -0.0008, desc: "Inspección de marcajes urbanos y simbología en fachadas públicas." },
-      { name: "Foco de Deterioro Físico (Sureste)", dLat: -0.0008, dLng: 0.0008, desc: "Análisis de acumulación de basura, vandalismo y grafitis en el entorno urbano." },
-      { name: "Punto de Control de Grafitis Territoriales (Noroeste)", dLat: 0.0008, dLng: -0.0008, desc: "Detección táctica de firmas territoriales y de contaminación visual." }
-    ].map(off => {
-      const targetLat = centerLat + off.dLat;
-      const targetLng = centerLng + off.dLng;
-      const svUrl = buildStreetViewUrl(targetLat, targetLng);
-      return {
-        name: off.name,
-        observed: off.desc,
-        streetViewUrl: svUrl as string,
-        lat: targetLat,
-        lng: targetLng
-      };
-    }).filter(img => img.streetViewUrl != null);
-
-    const graffitiImages = validateStreetViewCategoryLimit(graffitiCandidates, "graffiti");
+    const graffitiImages: Array<{
+      name: string;
+      observed: string;
+      streetViewUrl: string;
+      lat: number;
+      lng: number;
+    }> = [];
 
     // 3. CATEGORÍA 3: Negocios estratégicos DENUE (denue_interest)
     const rawDenueUnits = denueResult?.unidades || [];
@@ -369,7 +345,9 @@ export async function POST(req: Request) {
     const denueImages = validateStreetViewCategoryLimit(denueCandidates, "denue_interest");
 
     // Combinar en flat list para compatibilidad total con PhotoAlbum actual y reportEngine
-    const tacticalStreetViews = [...hideoutImages, ...graffitiImages, ...denueImages];
+    // ADR-020.34 C3: productive Street View candidates must be
+    // source-grounded. Synthetic hideout/graffiti coordinates are prohibited.
+    const tacticalStreetViews = [...denueImages];
 
     const streetViewCategories = [
       {

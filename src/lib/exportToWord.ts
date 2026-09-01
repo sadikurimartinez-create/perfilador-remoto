@@ -1,12 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import dossierPandillas from "../modules/pandillas/dossier_pandillas.json";
-import {
-  validateTerritorialActor,
-  classifyActorProximity,
-  formatDomicilio,
-} from "@/utils/geoActorValidation";
 import { buildOsintFindingsFromSweeps } from "@/utils/osintChapterBuilder";
 import { ReportIntelligenceNormalizer } from "@/utils/reportIntelligenceNormalizer";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
@@ -439,13 +433,13 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
   ];
   const defaultChapterFallbacks: Record<string, string> = {
     contextoTerritorial: TCE_DEFAULT_FALLBACK,
-    finalHypothesis: "Se hipotetiza un patrón delictivo recurrente facilitado por la vulnerabilidad física del entorno urbano (falta de luminarias y presencia de lotes baldíos), que favorece la oportunidad para conductas antisociales.",
-    mapsText: "El análisis cartográfico vectorial revela puntos de interés crítico y zonas calientes con radios de influencia concéntricos donde convergen factores de riesgo físico y social.",
-    statsText: "El análisis estadístico espacial muestra una concentración delictiva focalizada, registrando correlaciones significativas entre el desorden urbano y la incidencia delictiva perimetral.",
-    evidenceText: "La evidencia fotográfica recolectada en campo documenta de forma inequívoca el estado de deterioro de la infraestructura urbana, vandalismo gráfico y pérdida de control territorial en los cuadrantes analizados.",
-    osintSynthesized: "La consulta en fuentes abiertas y bases de datos institucionales (DENUE, SCINCE) corrobora la presencia de atractores comerciales de riesgo y patrones demográficos coincidentes con zonas de vulnerabilidad.",
-    pandillasAnalysis: "La investigación espacial identifica marcas territoriales de agrupaciones juveniles locales (grafitis/placas) en los accesos clave al polígono, delimitando fronteras tácticas informales.",
-    conclusionesText: "Se concluye la urgencia de coordinar acciones de recuperación del entorno urbano (iluminación, limpieza de predios) y patrullaje dinámico orientado a resolver las causas raíz identificadas en el presente análisis."
+    finalHypothesis: "No existe una hipótesis criminológica ambiental validada disponible para este expediente. La ausencia de información no permite formular una inferencia sustantiva.",
+    mapsText: "No existe análisis territorial cartográfico validado disponible para este expediente. No se infieren puntos críticos, zonas calientes ni patrones espaciales sin soporte cartográfico suficiente.",
+    statsText: "No existe análisis estadístico validado disponible para este expediente. No se infieren concentraciones, asociaciones ni correlaciones en ausencia de datos suficientes.",
+    evidenceText: "No existe evidencia fotográfica validada suficiente para sustentar una interpretación en este capítulo. La ausencia de evidencia no constituye confirmación de deterioro, vandalismo ni otra condición territorial.",
+    osintSynthesized: "No existe una síntesis OSINT validada disponible para este expediente. No se consideran corroborados actores, patrones, atractores o condiciones territoriales sin fuentes verificables.",
+    pandillasAnalysis: "No existe análisis validado de actores territoriales o pandillas disponible para este expediente. No se infieren presencia, control, marcas territoriales, vínculos o fronteras sin evidencia suficiente.",
+    conclusionesText: "No existen conclusiones operativas validadas disponibles para este expediente. La ausencia de información suficiente impide emitir recomendaciones sustantivas o afirmar causas, riesgos o prioridades de intervención."
   };
 
   for (const ch of requiredChapters) {
@@ -2035,109 +2029,20 @@ export async function exportToWord(
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS"));
 
-  // Estructura de evaluación obligatoria del Capítulo 8 - Matriz inteligente de actores
-  const projectGeoValidation = validateGeoIntegrity({
-    latitude: payload.latitude ?? payload.maps?.[0]?.lat ?? null,
-    longitude: payload.longitude ?? payload.maps?.[0]?.lng ?? null,
-    source: payload.geolocationSource || "PROJECT_GEOMETRY",
-    precision: payload.geolocationPrecision ?? null,
-    observedAt: payload.geolocationObservedAt ?? null,
-    sourceReference: "exportToWord.payload",
-  });
-  const projectLat = projectGeoValidation.reportableAsObservedGeoint ? projectGeoValidation.latitude : null;
-  const projectLng = projectGeoValidation.reportableAsObservedGeoint ? projectGeoValidation.longitude : null;
-  const maxRadiusMeters = payload.analysisRadius ? Number(payload.analysisRadius) : 500;
-  const activeActors: any[] = [];
-
-  if (projectLat !== null && projectLng !== null && dossierPandillas && dossierPandillas.dossiers) {
-    for (const d of dossierPandillas.dossiers) {
-      for (const member of d.integrantes) {
-        const validation = validateTerritorialActor(
-          member,
-          projectLat,
-          projectLng,
-          maxRadiusMeters
-        );
-        if (!validation.valid || validation.distancia === undefined) continue;
-
-        const dist = validation.distancia;
-        const status = classifyActorProximity(dist);
-
-        activeActors.push({
-          nombre: member.nombre_completo,
-          alias: member.alias || "Sin Alias",
-          grupo: d.pandilla,
-          rango: member.rol || "Integrante",
-          domicilio: formatDomicilio(member.direccion),
-          distancia: dist,
-          status,
-          evidencia: `Georreferencia validada a ${dist.toFixed(0)}m del epicentro (domicilio: ${formatDomicilio(member.direccion)}).`
-        });
-      }
-    }
-  }
-
-  // Ordenar por cercanía territorial
-  activeActors.sort((a, b) => a.distancia - b.distancia);
-
   elements.push(
     new Paragraph({
       children: [
         new TextRun({
-          text: "MATRIZ DE ACTORES TERRITORIALES Y EVALUACIÓN DE PRESENCIA (GANG INTEL)",
-          bold: true,
-          size: 18,
-          color: "0D2B52",
+          text: "No existen datos gobernados de pandillas disponibles en el expediente para construir una evaluación de presencia territorial.",
+          size: 19,
+          italic: true,
+          color: "5B6573",
           font: "Calibri"
         })
       ],
       spacing: { after: 120 }
     })
   );
-
-  if (activeActors.length > 0) {
-    const matrixTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          children: [
-            createCell("Actor / Alias", true),
-            createCell("Grupo", true),
-            createCell("Rango / Función", true),
-            createCell("Domicilio Identificado", true),
-            createCell("Evidencia / Relación Territorial", true),
-            createCell("Evaluación", true)
-          ]
-        }),
-        ...activeActors.slice(0, 5).map(actor => new TableRow({
-          children: [
-            createCell(`${actor.nombre} (${actor.alias})`),
-            createCell(actor.grupo),
-            createCell(actor.rango),
-            createCell(actor.domicilio),
-            createCell(actor.evidencia),
-            createCell(actor.status)
-          ]
-        }))
-      ]
-    });
-    elements.push(matrixTable);
-  } else {
-    elements.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `No se identificaron actores territoriales o pandillas con domicilio validado dentro del radio de análisis (${maxRadiusMeters}m) del polígono.`,
-            size: 19,
-            italic: true,
-            color: "ef4444",
-            font: "Calibri"
-          })
-        ],
-        spacing: { after: 120 }
-      })
-    );
-  }
   elements.push(
     new Paragraph({
       children: [

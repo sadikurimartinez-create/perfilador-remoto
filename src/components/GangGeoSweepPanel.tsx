@@ -44,7 +44,6 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   const { registerSweep } = useProject();
   // Input fields
   const [narrative, setNarrative] = useState("");
-  const [softPrompt, setSoftPrompt] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<{ name: string; size: string; preview: string }[]>([]);
 
@@ -82,14 +81,14 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   };
 
   const handleResetView = () => {
-    if (map) {
-      map.setCenter({ lat: 21.8853, lng: -102.2916 });
+    if (map && mapCenter) {
+      map.setCenter(mapCenter);
       map.setZoom(13);
     }
   };
 
   // Pre-load Google Maps API
-  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -157,11 +156,17 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
       setProgressMsg("Cruzando información con el inventario de pandillas...");
       const dbGangs = await PandillasService.getAllGangs();
 
+      if (dbGangs.length === 0) {
+        setSweepResult(null);
+        alert("No hay pandillas productivas persistidas disponibles para ejecutar el barrido.");
+        return;
+      }
+
       // Step 2: Run the custom spatial sweep engine
       await new Promise(resolve => setTimeout(resolve, 800));
       setProgressMsg("Consolidando registros de inteligencia...");
       const result = await GangGeoSweepEngine.executeSweep(
-        [],
+        uploadedFiles,
         narrative,
         "",
         dbGangs
@@ -180,7 +185,6 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   // Reset the panel
   const handleClearForm = () => {
     setNarrative("");
-    setSoftPrompt("");
     setUploadedFiles([]);
     setFilePreviews([]);
     setSweepResult(null);
@@ -243,7 +247,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
         lng: lngSum / sweepResult.detected_locations.length,
       };
     }
-    return { lat: 21.8821, lng: -102.2961 }; // Default Aguascalientes
+    return null; // No demonstrated geography: do not fabricate a visual center
   }, [sweepResult]);
 
   const heatmapData = useMemo(() => {
@@ -401,7 +405,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                   </div>
                 </div>
 
-                {isLoaded ? (
+                {isLoaded && mapCenter ? (
                   <div className="border border-slate-800 rounded-2xl overflow-hidden relative">
                     {/* Zoom & Base Layer Controls Overlay */}
                     <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl shadow-2xl">
@@ -592,7 +596,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                   </div>
                 ) : (
                   <div className="h-[450px] bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-center text-xs text-slate-500 italic">
-                    Cargando servicios de georreferencia de Google Maps...
+                    {isLoaded ? "Sin geografia demostrada para representar este barrido en el mapa." : "Cargando servicios de georreferencia de Google Maps..."}
                   </div>
                 )}
               </div>

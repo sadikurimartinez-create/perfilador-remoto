@@ -77,8 +77,8 @@ export const OrganizationPanel: React.FC<OrganizationPanelProps> = ({
                     <p className="text-sm font-bold text-slate-200 truncate">
                       "{m.alias || "Sin alias"}"
                     </p>
-                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 border rounded ${getRoleStyle(m.estatusPandilla || m.rol || "Integrante")}`}>
-                      {m.estatusPandilla || m.rol || "INTEGRANTE"}
+                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 border rounded ${getRoleStyle(m.estatusPandilla || m.rol || "Sin rol registrado")}`}>
+                      {m.estatusPandilla || m.rol || "SIN ROL REGISTRADO"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 truncate mt-0.5">

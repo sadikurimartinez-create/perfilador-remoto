@@ -194,7 +194,7 @@ interface PandillasUIProps {
 export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: PandillasUIProps = {}) {
   const { user } = useAuth();
   const { registerSweep } = useProject();
-  const username = user?.username || "CEIPOL_Analista";
+  const username = typeof user?.username === "string" ? user.username.trim() : "";
 
   // --- REGISTRY LIST STATES ---
   const [storedGangs, setStoredGangs] = useState<GangEntity[]>([]);
@@ -203,16 +203,16 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   // --- GENERAL GANG DATA STATES ---
   const [nombre, setNombre] = useState("");
   const [aliasConocidos, setAliasConocidos] = useState("");
-  const [estatus, setEstatus] = useState<GangEntity["estatus"]>("Activa");
+  const [estatus, setEstatus] = useState<GangEntity["estatus"]>(undefined);
   const [zonaInfluencia, setZonaInfluencia] = useState("");
   const [coloniasAsociadas, setColoniasAsociadas] = useState<string>("");
-  const [municipiosAsociados, setMunicipiosAsociados] = useState<string>("Aguascalientes");
+  const [municipiosAsociados, setMunicipiosAsociados] = useState<string>("");
   const [ilicitos, setIlicitos] = useState<GangEntity["ilicitos"]>([]);
   const [especificarOtroIlicito, setEspecificarOtroIlicito] = useState("");
   const [drogasConsumidas, setDrogasConsumidas] = useState<string[]>([]);
   const [modusOperandi, setModusOperandi] = useState("");
   const [simbolosIdentificacion, setSimbolosIdentificacion] = useState("");
-  const [peligrosidad, setPeligrosidad] = useState<GangEntity["peligrosidad"]>("Medio");
+  const [peligrosidad, setPeligrosidad] = useState<GangEntity["peligrosidad"]>(undefined);
   const [geoReportId, setGeoReportId] = useState("");
 
   // --- REENGINEERED LISTS ---
@@ -329,97 +329,21 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   const [evidences, setEvidences] = useState<Evidence[]>([]);
 
   useEffect(() => {
-    if (selectedGangId) {
-      setCandidates([
-        {
-          id: "cand-1",
-          personaId: "MAPC040512HDFRRR01",
-          personaNombre: "Carlos Pérez Morales",
-          personaAlias: "El Charly",
-          pandillaId: selectedGangId,
-          rolPropuesto: "Distribuidor",
-          estado: "propuesto",
-          fechaRegistro: new Date(),
-          usuarioRegistro: "analista_ceipol"
-        },
-        {
-          id: "cand-2",
-          personaId: "ROGL981123MDFLNN02",
-          personaNombre: "Luis Rojas Gómez",
-          personaAlias: "El Flaco",
-          pandillaId: selectedGangId,
-          rolPropuesto: "Vigilante",
-          estado: "propuesto",
-          fechaRegistro: new Date(),
-          usuarioRegistro: "analista_ceipol"
-        }
-      ]);
-
-      setIleMemories([
-        {
-          id: "ile-mem-1",
-          entidadOrigen: "Carlos Pérez Morales",
-          entidadDestino: nombre || "Pandilla Seleccionada",
-          tipoRelacion: "Pertenencia",
-          algoritmo: "EME-JaroWinkler-v1",
-          variablesEvaluadas: [
-            { name: "Coincidencia Territorial", value: "85%", weight: 35 },
-            { name: "Evidencias de Campo", value: "90%", weight: 30 },
-            { name: "Redes Sociales", value: "75%", weight: 20 },
-            { name: "Eventos Criminógenos", value: "80%", weight: 15 }
-          ],
-          resultado: "Alta correlación identificada por cruce de detenciones concurrentes en Sector Oriente y grafitis firmados en el perímetro de su domicilio.",
-          confianza: 84,
-          fecha: new Date(),
-          estado: "propuesto",
-          usuarioValidacion: null
-        }
-      ]);
-
-      setEvidences([
-        {
-          id: "ev-1",
-          tipo: "grafiti",
-          fuente: "Muro perimetral en Calle Laurel, Aguascalientes",
-          fecha: new Date(),
-          hash: "a4f2c8d19e3b572c6a0f4e8d3c2b1a9f0e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
-          confianza: "Alta",
-          relacion: "cand-1"
-        },
-        {
-          id: "ev-2",
-          tipo: "red_social",
-          fuente: "Publicación de Facebook con simbología de clica",
-          fecha: new Date(),
-          hash: "b5f3c9e20f4b683d7a1f5e9d4c3b2a0f1e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5c",
-          confianza: "Media",
-          relacion: "cand-1"
-        }
-      ]);
-    } else {
-      setCandidates([]);
-      setIleMemories([]);
-      setEvidences([]);
-    }
+    // ADR-020.34: changing the selected gang must never inject demo
+    // candidates, ILE memories or evidentiary objects into live state.
+    // Governed producers are the only valid source for these records.
+    setCandidates([]);
+    setIleMemories([]);
+    setEvidences([]);
   }, [selectedGangId, nombre]);
 
   const handleCertifyCandidate = (candId: string) => {
-    setCandidates(prev =>
-      prev.map(c => (c.id === candId ? { ...c, estado: "certificado" as const } : c))
+    const candidate = candidates.find(c => c.id === candId);
+    if (!candidate) return;
+
+    alert(
+      "No es posible certificar este candidato todavía. La certificación institucional requiere una relación analítica persistida, evidencia asociada y validación mediante el flujo gobernado."
     );
-    const certifiedCandidate = candidates.find(c => c.id === candId);
-    if (certifiedCandidate) {
-      const newMember: GangMember = {
-        nombre: certifiedCandidate.personaNombre,
-        alias: certifiedCandidate.personaAlias,
-        rol: certifiedCandidate.rolPropuesto,
-        estatusPandilla: certifiedCandidate.rolPropuesto as any,
-        peligrosidadCalculada: 75,
-        domicilioConocido: "Sector Oriente, Aguascalientes",
-        fotografiaUrl: "/avatars/avatar_male.png"
-      };
-      setIntegrantes(prev => [...prev, newMember]);
-    }
   };
 
   const handleRejectCandidate = (candId: string) => {
@@ -458,23 +382,25 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   const [editingMemberIndex, setEditingMemberIndex] = useState<number | null>(null);
   const [tempMember, setTempMember] = useState<Partial<GangMember>>({
-    nombre: "", alias: "", estatusPandilla: "Integrante", sexo: "Masculino", edad: "", curp: "", domicilioConocido: "",
-    telefono: "", detencionesPrevias: "", ingresosCentrosInternamiento: "", consumoDrogas: "", nivelViolencia: "Bajo",
-    riesgoCriminogeno: "Bajo", cicatrices: "", marcasDistintivas: "", lugarTrabajo: "", actividadEconomica: "", escuela: "",
+    nombre: "", alias: "", edad: "", curp: "", domicilioConocido: "",
+    telefono: "", detencionesPrevias: "", ingresosCentrosInternamiento: "", consumoDrogas: "",
+    cicatrices: "", marcasDistintivas: "", lugarTrabajo: "", actividadEconomica: "", escuela: "",
     tatuajes: "", complexion: "", estatura: "", vestimentaUsual: "", telefonoRedes: "", vehiculosAsociados: ""
   });
 
-  const [tempRel, setTempRel] = useState<Partial<GangRelationship>>({
-    tipo: "rival", pandillaNombre: "", tipoVinculo: "", fechaInicio: "", nivelSeveridad: "Medio"
-  });
+  // ADR-020.34 C9A:
+  // Manual coordinates remain draft values until a complete valid pair exists.
+  // Never synthesize a missing latitude or longitude.
+  const [tempGeoLat, setTempGeoLat] = useState("");
+  const [tempGeoLng, setTempGeoLng] = useState("");
 
-  const [tempEvent, setTempEvent] = useState<Partial<TimelineEvent>>({
-    fecha: new Date().toISOString().split("T")[0], titulo: "", descripcion: "", gravedad: "Media", categoria: "otro", lugar: ""
-  });
+  const [tempRel, setTempRel] = useState<Partial<GangRelationship>>({ pandillaNombre: "", tipoVinculo: "", fechaInicio: "" });
+
+  const [tempEvent, setTempEvent] = useState<Partial<TimelineEvent>>({ fecha: "", titulo: "", descripcion: "", lugar: "" });
 
   // --- GRAFFITI GALLERY STATE & HANDLER ---
   const [newGraffitiDesc, setNewGraffitiDesc] = useState("");
-  const [newGraffitiType, setNewGraffitiType] = useState<"Identidad" | "Advertencia" | "Frontera" | "Punto de venta" | "Otro">("Identidad");
+  const [newGraffitiType, setNewGraffitiType] = useState<GraffitiImage["tipo"]>(undefined);
 
   const handleUploadGraffitiImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -485,7 +411,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         id: `graf-${Date.now()}`,
         url: reader.result as string,
         descripcion: newGraffitiDesc || "Sin descripción",
-        tipo: newGraffitiType,
+        ...(newGraffitiType ? { tipo: newGraffitiType } : {}),
         fechaRegistro: new Date().toLocaleDateString("es-MX")
       };
       setImagenesGrafiti(prev => [...prev, newImg]);
@@ -497,9 +423,9 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   // --- DRAWING TOOLBOX STATES ---
   const [drawingMode, setDrawingMode] = useState<"poligono" | "corredor" | "buffer" | "zona_riesgo" | null>(null);
   const [tempShapeName, setTempShapeName] = useState("");
-  const [tempShapeControl, setTempShapeControl] = useState<GeointeligenciaShape["nivelControlTerritorial"]>("Medio");
+  const [tempShapeControl] = useState<GeointeligenciaShape["nivelControlTerritorial"]>(undefined);
   const [tempShapePoints, setTempShapePoints] = useState<{ lat: number; lng: number }[]>([]);
-  const [tempShapeRadius, setTempShapeRadius] = useState<number>(300); // meters for buffer circles
+  const [tempShapeRadius] = useState<number | undefined>(undefined);
 
   // --- GANG GIS ANALYSIS LAYER STATES ---
   const [geointSubTab, setGeointSubTab] = useState<"mapa" | "album">("mapa");
@@ -745,134 +671,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     }
     setIsGisAnalyzing(true);
     try {
-      const html2canvasLib = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
-
-      // Capture map canvas
-      const mapCanvas = await html2canvasLib(mapEl, { useCORS: true, scale: 2 });
-      const mapDataUrl = mapCanvas.toDataURL("image/png");
-
-      // Create dynamic hidden print wrapper
-      const reportContainer = document.createElement("div");
-      reportContainer.style.position = "absolute";
-      reportContainer.style.left = "-9999px";
-      reportContainer.style.top = "-9999px";
-      reportContainer.style.width = "800px";
-      reportContainer.style.padding = "40px";
-      reportContainer.style.backgroundColor = "#ffffff";
-      reportContainer.style.color = "#1e293b";
-      reportContainer.style.fontFamily = "Arial, sans-serif";
-      reportContainer.style.lineHeight = "1.5";
-
-      const nowStr = new Date().toLocaleString("es-MX");
-      const activeLayersStr = Object.entries(activeGisLayers)
-        .filter(([_, active]) => active)
-        .map(([key, _]) => {
-          const map: Record<string, string> = {
-            domiciles: "Domicilios de Integrantes",
-            influence: "Zonas de Influencia",
-            corridors: "Corredores de Movilidad",
-            graffiti: "Grafitis Registrados",
-            history: "Eventos Históricos"
-          };
-          return map[key] || key;
-        })
-        .join(", ") || "Ninguna";
-
-      const selectedGangsStr = selectedGangsForGis.join(", ") || "Ninguna";
-
-      // Build legend items
-      let legendItemsHtml = "";
-      const legendMap: Record<string, { color: string, label: string }> = {
-        domiciles: { color: "#06b6d4", label: "Domicilios de Integrantes" },
-        influence: { color: "#eab308", label: "Zonas de Influencia" },
-        corridors: { color: "#a855f7", label: "Corredores de Movilidad" },
-        graffiti: { color: "#f97316", label: "Grafitis Registrados" },
-        history: { color: "#ef4444", label: "Eventos Históricos" }
-      };
-
-      Object.entries(activeGisLayers).forEach(([key, active]) => {
-        if (active && legendMap[key]) {
-          legendItemsHtml += `
-            <div style="display: flex; align-items: center; gap: 8px; margin-right: 20px; margin-bottom: 8px; font-size: 11px;">
-              <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: ${legendMap[key].color}; border: 1px solid #cbd5e1;"></span>
-              <span>${legendMap[key].label}</span>
-            </div>
-          `;
-        }
-      });
-
-      reportContainer.innerHTML = `
-        <div style="border-bottom: 3px solid #0f172a; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: flex-end;">
-          <div>
-            <h1 style="margin: 0; font-size: 22px; color: #0f172a; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">Centro de Estudios y Política Criminal</h1>
-            <p style="margin: 3px 0 0 0; color: #64748b; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Dirección de Inteligencia y GEOINT</p>
-          </div>
-          <div style="text-align: right;">
-            <p style="margin: 0; font-size: 10px; font-weight: bold; color: #ef4444; border: 1px solid #fecaca; background-color: #fef2f2; padding: 4px 8px; border-radius: 4px; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px;">Reservado - Confidencial</p>
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; margin-bottom: 25px; font-size: 11px;">
-          <div><strong>Pandillas Analizadas:</strong> ${selectedGangsStr}</div>
-          <div><strong>Fecha y Hora de Emisión:</strong> ${nowStr}</div>
-          <div style="grid-column: span 2;"><strong>Capas GIS Utilizadas:</strong> ${activeLayersStr}</div>
-        </div>
-
-        <h3 style="font-size: 14px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 0; margin-bottom: 15px; text-transform: uppercase; font-weight: 800;">1. Mapa de Situación Geopolítica</h3>
-        <div style="border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; margin-bottom: 20px; text-align: center; background-color: #0f172a; height: 350px;">
-          <img src="${mapDataUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
-        </div>
-
-        <h3 style="font-size: 14px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 25px; margin-bottom: 10px; text-transform: uppercase; font-weight: 800;">Leyenda de Capas Tácticas</h3>
-        <div style="display: flex; flex-wrap: wrap; margin-bottom: 25px; background-color: #f8fafc; padding: 10px 15px; border-radius: 6px; border: 1px solid #e2e8f0;">
-          ${legendItemsHtml || '<span style="font-size: 11px; color: #94a3b8; font-style: italic;">Ninguna capa activa seleccionada.</span>'}
-        </div>
-
-        <h3 style="font-size: 14px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 25px; margin-bottom: 15px; text-transform: uppercase; font-weight: 800;">2. Interpretación de Inteligencia GEOINT</h3>
-        <div style="font-size: 12px; color: #334155; white-space: pre-wrap; font-weight: 500; text-align: justify; font-family: sans-serif;">
-          ${gisAnalysisReport || "No se ha generado interpretación narrativa."}
-        </div>
-
-        <div style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center; font-size: 9px; color: #94a3b8;">
-          Este reporte es un producto de análisis de geointeligencia del Módulo de Pandillas (CEIPOL). Su contenido es de carácter confidencial y para fines tácticos policiales.
-        </div>
-      `;
-
-      document.body.appendChild(reportContainer);
-      const reportCanvas = await html2canvasLib(reportContainer, { useCORS: true, scale: 2 });
-
-      if (format === "png") {
-        const url = reportCanvas.toDataURL("image/png");
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `Reporte_GEOINT_${selectedGangsForGis.join("_") || "Pandillas"}.png`;
-        a.click();
-      } else {
-        const pdfWidth = 210;
-        const pageHeight = 297;
-        const imgWidth = pdfWidth;
-        const imgHeight = (reportCanvas.height * pdfWidth) / reportCanvas.width;
-
-        const doc = new jsPDF("p", "mm", "a4");
-        let heightLeft = imgHeight;
-        let position = 0;
-        const imgData = reportCanvas.toDataURL("image/png");
-
-        doc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft >= 0) {
-          position = heightLeft - imgHeight;
-          doc.addPage();
-          doc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
-
-        doc.save(`Reporte_GEOINT_${selectedGangsForGis.join("_") || "Pandillas"}.pdf`);
-      }
-
-      document.body.removeChild(reportContainer);
+      alert("La emisión directa de PDF/PNG está bloqueada. El producto debe pasar por REPORT_READY, certificación y publicación gobernada.");
+      return;
     } catch (err: any) {
       console.error("Error generating printable report:", err);
       alert("Error al generar el reporte: " + err.message);
@@ -1005,16 +805,16 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     setSelectedGangId(gang.id || "");
     setNombre(gang.nombre || "");
     setAliasConocidos(gang.aliasConocidos || "");
-    setEstatus(gang.estatus || "Activa");
+    setEstatus(gang.estatus);
     setZonaInfluencia(gang.zonaInfluencia || "");
     setColoniasAsociadas(gang.coloniasAsociadas?.join(", ") || "");
-    setMunicipiosAsociados(gang.municipiosAsociados?.join(", ") || "Aguascalientes");
+    setMunicipiosAsociados(gang.municipiosAsociados?.join(", ") || "");
     setIlicitos(gang.ilicitos || []);
     setEspecificarOtroIlicito(gang.especificarOtroIlicito || "");
     setDrogasConsumidas(gang.drogasConsumidas || []);
     setModusOperandi(gang.modusOperandi || "");
     setSimbolosIdentificacion(gang.simbolosIdentificacion || "");
-    setPeligrosidad(gang.peligrosidad || "Medio");
+    setPeligrosidad(gang.peligrosidad);
     setGeoReportId(gang.geoReportId || "");
 
     setIntegrantes(gang.integrantes || []);
@@ -1041,8 +841,21 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   // --- SAVE TO FIRESTORE ---
   const handleSaveGangToCloud = async () => {
+    if (selectedGangId.startsWith("static-gang-")) {
+      alert("No se permite promover un registro estático al catálogo productivo de pandillas.");
+      return;
+    }
+
     if (!nombre) {
       alert("⚠️ El nombre oficial de la pandilla es obligatorio para guardar el registro.");
+      return;
+    }
+
+    // ADR-020.34 C15B:
+    // Institutional persistence requires the authenticated analyst identity.
+    // Never substitute a missing user with a synthetic audit identity.
+    if (!username) {
+      alert("No es posible guardar el registro sin una identidad de analista autenticada.");
       return;
     }
 
@@ -1051,20 +864,23 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       const munArray = municipiosAsociados.split(",").map(m => m.trim()).filter(Boolean);
       const centroid = geometrias.length > 0 && geometrias[0].puntos.length > 0
         ? calculateCentroid(geometrias[0].puntos)
-        : { lat: 21.8853, lng: -102.2916 };
-
-      const cleanName = nombre.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 10);
-      const cleanThreat = peligrosidad?.toUpperCase() || "MEDIO";
-      const idSnippet = (selectedGangId || "NEW").substring(0, 5).toUpperCase();
-      const generatedGeoReportId = geoReportId || `CEIPOL-GEO-${cleanName}-${cleanThreat}-${idSnippet}`;
+        : null;
+      const legacyGeoReportId =
+        typeof geoReportId === "string" && geoReportId.trim().length > 0
+          ? geoReportId.trim()
+          : null;
 
       const data: GangEntity = {
         id: selectedGangId || undefined,
         projectId: projectId || undefined,
         nombre,
         aliasConocidos,
-        estatus,
-        fechaRegistro: Date.now(),
+        ...(estatus ? { estatus } : {}),
+        ...(selectedGangId
+          ? ((storedGangs.find(g => g.id === selectedGangId)?.fechaRegistro != null)
+            ? { fechaRegistro: storedGangs.find(g => g.id === selectedGangId)?.fechaRegistro }
+            : {})
+          : { fechaRegistro: Date.now() }),
         zonaInfluencia,
         coloniasAsociadas: colArray,
         municipiosAsociados: munArray,
@@ -1073,22 +889,28 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         drogasConsumidas,
         modusOperandi,
         simbolosIdentificacion,
-        peligrosidad,
+        ...(peligrosidad ? { peligrosidad } : {}),
         integrantes,
         relaciones,
         geometrias,
         cronologiaEventos,
         imagenesGrafiti,
-        coordenadas: centroid,
+        ...(centroid != null ? { coordenadas: centroid } : {}),
         archivosAnexos: archivos,
-        geoReportId: generatedGeoReportId,
-        resumenInteligencia: `${nombre} es una pandilla clasificada con nivel de peligrosidad ${peligrosidad}. Cuenta con ${integrantes.length} integrantes documentados en el Dossier de Inteligencia Criminal, con influencia táctica en ${zonaInfluencia}.`
+        ...(legacyGeoReportId
+          ? { geoReportId: legacyGeoReportId }
+          : {}),
+
+        resumenInteligencia: `${nombre}${peligrosidad ? ` presenta un nivel de peligrosidad registrado como ${peligrosidad}` : " no cuenta con una clasificacion de peligrosidad registrada"}. Cuenta con ${integrantes.length} integrantes documentados en el Dossier de Inteligencia Criminal${zonaInfluencia ? `, con zona de influencia registrada en ${zonaInfluencia}` : ""}.`
       };
 
       const savedId = await PandillasService.saveGang(data, username);
       setSelectedGangId(savedId);
-      setGeoReportId(generatedGeoReportId);
-      alert(`🎉 Registro de Inteligencia Criminal "${nombre}" guardado con éxito en la nube.\nID Geointeligencia: ${generatedGeoReportId}`);
+      if (legacyGeoReportId) {
+        setGeoReportId(legacyGeoReportId);
+      }
+
+      alert(`Registro de Inteligencia Criminal guardado correctamente.\nID t\u00e9cnico del registro: ${savedId}${legacyGeoReportId ? `\nAlias GEOINT heredado: ${legacyGeoReportId}` : ""}`);
       await loadSavedGangs();
     } catch (e: any) {
       alert("❌ Error al persistir el registro en Firestore: " + e.message);
@@ -1234,16 +1056,22 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       return;
     }
 
-    const nextRisk = tempShapeControl === "Nulo" || tempShapeControl === "Bajo" ? "low" : tempShapeControl === "Medio" ? "medium" : "high";
+    const nextRisk = tempShapeControl == null
+      ? undefined
+      : tempShapeControl === "Nulo" || tempShapeControl === "Bajo"
+        ? "low"
+        : tempShapeControl === "Medio"
+          ? "medium"
+          : "high";
 
     const newShape: GeointeligenciaShape & { riskLevel?: "low" | "medium" | "high" } = {
       id: "shape-" + Date.now(),
       nombre: tempShapeName,
       tipo: drawingMode!,
       puntos: [...tempShapePoints],
-      radio: drawingMode === "buffer" ? tempShapeRadius : undefined,
-      nivelControlTerritorial: tempShapeControl,
-      riskLevel: nextRisk,
+      ...(drawingMode === "buffer" && tempShapeRadius != null ? { radio: tempShapeRadius } : {}),
+      ...(tempShapeControl != null ? { nivelControlTerritorial: tempShapeControl } : {}),
+      ...(nextRisk != null ? { riskLevel: nextRisk } : {}),
       fechaActualizacion: new Date().toISOString().split("T")[0]
     };
 
@@ -1276,14 +1104,63 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       return;
     }
 
+    const hasLatInput = tempGeoLat.trim().length > 0;
+    const hasLngInput = tempGeoLng.trim().length > 0;
+
+    if (hasLatInput !== hasLngInput) {
+      alert(
+        "GEOREFERENCIACION INCOMPLETA:\nLatitud y longitud deben capturarse juntas. No se completaran coordenadas automaticamente."
+      );
+      return;
+    }
+
+    let validatedMemberGeoreference: GangMember["georreferencia"] = undefined;
+
+    if (hasLatInput && hasLngInput) {
+      const parsedLat = Number(tempGeoLat);
+      const parsedLng = Number(tempGeoLng);
+
+      const validPair =
+        Number.isFinite(parsedLat) &&
+        parsedLat >= -90 &&
+        parsedLat <= 90 &&
+        Number.isFinite(parsedLng) &&
+        parsedLng >= -180 &&
+        parsedLng <= 180 &&
+        parsedLat !== 0 &&
+        parsedLng !== 0;
+
+      if (!validPair) {
+        alert(
+          "GEOREFERENCIACION INVALIDA:\nCapture latitud y longitud validas. La plataforma no fabricara una ubicacion."
+        );
+        return;
+      }
+
+      const previousGeo = tempMember.georreferencia;
+
+      const unchangedCoordinates =
+        previousGeo?.lat === parsedLat &&
+        previousGeo?.lng === parsedLng;
+
+      validatedMemberGeoreference = {
+        lat: parsedLat,
+        lng: parsedLng,
+        confidence: unchangedCoordinates
+          ? (previousGeo?.confidence ?? 0)
+          : 0,
+        status: previousGeo?.status ?? "investigation"
+      };
+    }
+
     const danger = calculateMemberDanger(tempMember as GangMember);
 
     const newMember: GangMember = {
       nombre: tempMember.nombre || "",
       alias: tempMember.alias || "",
-      rol: tempMember.estatusPandilla || "Integrante",
+      rol: tempMember.estatusPandilla || "",
       edad: tempMember.edad || "",
-      sexo: tempMember.sexo as any,
+      ...(tempMember.sexo ? { sexo: tempMember.sexo } : {}),
       curp: tempMember.curp,
       domicilioConocido: tempMember.domicilioConocido,
       telefono: tempMember.telefono,
@@ -1303,10 +1180,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       vestimentaUsual: tempMember.vestimentaUsual,
       telefonoRedes: tempMember.telefonoRedes,
       vehiculosAsociados: tempMember.vehiculosAsociados,
-      estatusPandilla: tempMember.estatusPandilla as any,
-      peligrosidadCalculada: danger,
-      fotografiaUrl: tempMember.fotografiaUrl || (tempMember.sexo === "Femenino" ? "/avatars/avatar_fem.png" : "/avatars/avatar_male.png"),
-      georreferencia: tempMember.georreferencia
+      ...(tempMember.estatusPandilla ? { estatusPandilla: tempMember.estatusPandilla } : {}),
+      ...(danger != null ? { peligrosidadCalculada: danger } : {}),
+      ...(tempMember.fotografiaUrl ? { fotografiaUrl: tempMember.fotografiaUrl } : {}),
+      georreferencia: validatedMemberGeoreference
     };
 
     if (editingMemberIndex !== null) {
@@ -1320,17 +1197,37 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
     // Reset member form
     setTempMember({
-      nombre: "", alias: "", estatusPandilla: "Integrante", sexo: "Masculino", edad: "", curp: "", domicilioConocido: "",
-      telefono: "", detencionesPrevias: "", ingresosCentrosInternamiento: "", consumoDrogas: "", nivelViolencia: "Bajo",
-      riesgoCriminogeno: "Bajo", cicatrices: "", marcasDistintivas: "", lugarTrabajo: "", actividadEconomica: "", escuela: "",
+      nombre: "", alias: "", edad: "", curp: "", domicilioConocido: "",
+      telefono: "", detencionesPrevias: "", ingresosCentrosInternamiento: "", consumoDrogas: "",
+      cicatrices: "", marcasDistintivas: "", lugarTrabajo: "", actividadEconomica: "", escuela: "",
       tatuajes: "", complexion: "", estatura: "", vestimentaUsual: "", telefonoRedes: "", vehiculosAsociados: "", fotografiaUrl: "",
       georreferencia: undefined
     });
+    setTempGeoLat("");
+    setTempGeoLng("");
   };
 
   const handleEditMember = (index: number) => {
+    const member = integrantes[index];
+
     setEditingMemberIndex(index);
-    setTempMember({ ...integrantes[index] });
+    setTempMember({ ...member });
+
+    const existingLat =
+      typeof member.georreferencia?.lat === "number" &&
+      Number.isFinite(member.georreferencia.lat)
+        ? member.georreferencia.lat
+        : null;
+
+    const existingLng =
+      typeof member.georreferencia?.lng === "number" &&
+      Number.isFinite(member.georreferencia.lng)
+        ? member.georreferencia.lng
+        : null;
+
+    setTempGeoLat(existingLat !== null ? String(existingLat) : "");
+    setTempGeoLng(existingLng !== null ? String(existingLng) : "");
+
     setActiveTab("integrantes");
   };
 
@@ -1340,17 +1237,21 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       alert("⚠️ Seleccione o escriba el nombre de la pandilla vinculada.");
       return;
     }
+    if (!tempRel.tipo || !tempRel.tipoVinculo?.trim()) {
+      alert("Seleccione el tipo de relación y describa el vínculo antes de registrarlo.");
+      return;
+    }
 
     const newRel: GangRelationship = {
-      tipo: tempRel.tipo || "rival",
+      tipo: tempRel.tipo,
       pandillaNombre: tempRel.pandillaNombre,
-      tipoVinculo: tempRel.tipoVinculo || (tempRel.tipo === "rival" ? "Fricción Territorial" : "Actividad Conjunta"),
-      fechaInicio: tempRel.fechaInicio || new Date().toISOString().split("T")[0],
-      nivelSeveridad: tempRel.nivelSeveridad as any
+      tipoVinculo: tempRel.tipoVinculo.trim(),
+      ...(tempRel.fechaInicio ? { fechaInicio: tempRel.fechaInicio } : {}),
+      ...(tempRel.nivelSeveridad ? { nivelSeveridad: tempRel.nivelSeveridad } : {})
     };
 
     setRelaciones(prev => [...prev, newRel]);
-    setTempRel({ tipo: "rival", pandillaNombre: "", tipoVinculo: "", fechaInicio: "", nivelSeveridad: "Medio" });
+    setTempRel({ pandillaNombre: "", tipoVinculo: "", fechaInicio: "" });
   };
 
   // --- TIMELINE EVENTS METHODS ---
@@ -1362,16 +1263,16 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
     const newEvent: TimelineEvent = {
       id: "event-" + Date.now(),
-      fecha: tempEvent.fecha || new Date().toISOString().split("T")[0],
+      ...(tempEvent.fecha ? { fecha: tempEvent.fecha } : {}),
       titulo: tempEvent.titulo,
       descripcion: tempEvent.descripcion,
-      gravedad: tempEvent.gravedad as any,
-      categoria: tempEvent.categoria as any,
+      ...(tempEvent.gravedad ? { gravedad: tempEvent.gravedad } : {}),
+      ...(tempEvent.categoria ? { categoria: tempEvent.categoria } : {}),
       lugar: tempEvent.lugar
     };
 
-    setCronologiaEventos(prev => [...prev, newEvent].sort((a, b) => b.fecha.localeCompare(a.fecha)));
-    setTempEvent({ fecha: new Date().toISOString().split("T")[0], titulo: "", descripcion: "", gravedad: "Media", categoria: "otro", lugar: "" });
+    setCronologiaEventos(prev => [...prev, newEvent].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")));
+    setTempEvent({ fecha: "", titulo: "", descripcion: "", lugar: "" });
   };
 
   const handleGisAnalysis = async () => {
@@ -1479,7 +1380,9 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         relaciones,
         geometrias,
         cronologiaEventos,
-        coordenadas: geometrias.length > 0 ? calculateCentroid(geometrias[0].puntos) : { lat: 21.8853, lng: -102.2916 }
+        ...(geometrias.length > 0 && geometrias[0].puntos.length > 0
+          ? { coordenadas: calculateCentroid(geometrias[0].puntos) }
+          : {})
       };
 
       const result = await PandillasEngine.executeFullSweep(inputGang, filterPrompt);
@@ -1508,16 +1411,16 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       setSelectedGangId("");
       setNombre("");
       setAliasConocidos("");
-      setEstatus("Activa");
+      setEstatus(undefined);
       setZonaInfluencia("");
       setColoniasAsociadas("");
-      setMunicipiosAsociados("Aguascalientes");
+      setMunicipiosAsociados("");
       setIlicitos([]);
       setEspecificarOtroIlicito("");
       setDrogasConsumidas([]);
       setModusOperandi("");
       setSimbolosIdentificacion("");
-      setPeligrosidad("Medio");
+      setPeligrosidad(undefined);
       setGeoReportId("");
       setIntegrantes([]);
       setRelaciones([]);
@@ -1546,45 +1449,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         `- ${r.tipo === "rival" ? "❌ RIVAL" : "🤝 AFÍN"}: ${r.pandillaNombre} | Tipo: ${r.tipoVinculo} (Severidad: ${r.nivelSeveridad})`
       ).join("\n");
 
-      const content = `# INFORMES DE INTELIGENCIA CRIMINAL Y GEOINTELIGENCIA TÁCTICA
-**Subsistema Perfilador Remoto - CEIPOL**
-**Pandilla:** ${nombre} (${aliasConocidos ? `Alias: ${aliasConocidos}` : "Sin alias"})
-**ID Geointeligencia:** ${geoReportId || "N/A"}
-**Fecha de Emisión:** ${new Date().toLocaleDateString("es-MX")}
-
----
-
-## PRODUCTO 1: ANÁLISIS DE ESTRUCTURA Y RED DE VÍNCULOS
-### 1.1 Identificación y Demografía Criminal
-- **Nombre Oficial:** ${nombre}
-- **Zona de Influencia Primaria:** ${zonaInfluencia}
-- **Colonias Vinculadas:** ${coloniasAsociadas}
-- **Municipios:** ${municipiosAsociados}
-- **Estatus Operativo:** ${estatus}
-
-### 1.2 Dossier de Integrantes Documentados
-${formattedIntegrantes || "*Sin integrantes capturados.*"}
-
-### 1.3 Red de Vínculos Inter-Pandillas (Alianzas y Conflictos)
-${formattedRelaciones || "*Sin relaciones binarias registradas.*"}
-
----
-
-## PRODUCTO 2: INFORME DE RIESGO TERRITORIAL Y GEOINTELIGENCIA
-### 2.1 Capas Cartográficas de Control
-${formattedGeometrias || "*Sin geometrías delineadas.*"}
-
-### 2.2 Diagnóstico Técnico del Sector
-${analysisResult.ficha.resumenInteligencia}
-
-### 2.3 Evaluación Jurídica (Art. 2 Ley de Delincuencia Organizada)
-${analysisResult.ficha.crossCheckJuridico}
-
----
-*Documento confidencial para uso exclusivo de mandos policiales. Emitido por el motor CEIPOL FUSION.*`;
-
-      await onSaveAnalysisToCloud(content);
-      alert("📋 ¡Los productos de inteligencia se han anexado correctamente al expediente del proyecto!");
+      alert("La emisión directa de informes está bloqueada. El producto debe pasar por REPORT_READY, certificación y publicación gobernada.");
+      return;
     } catch (e: any) {
       alert("❌ Error al anexar informes: " + e.message);
     }
@@ -1770,10 +1636,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                       className="bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-xs text-slate-200"
                     />
                     <select
-                      value={tempEvent.gravedad}
-                      onChange={e => setTempEvent({ ...tempEvent, gravedad: e.target.value as any })}
+                      value={tempEvent.gravedad ?? ""}
+                      onChange={e => setTempEvent({ ...tempEvent, gravedad: e.target.value ? e.target.value as TimelineEvent["gravedad"] : undefined })}
                       className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
                     >
+                      <option value="">Gravedad no evaluada</option>
                       <option value="Baja">Gravedad Baja</option>
                       <option value="Media">Gravedad Media</option>
                       <option value="Alta">Gravedad Alta</option>
@@ -1963,10 +1830,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Estatus de la Pandilla</label>
                     <select
-                      value={estatus}
-                      onChange={e => setEstatus(e.target.value as any)}
+                      value={estatus ?? ""}
+                      onChange={e => setEstatus(e.target.value ? e.target.value as GangEntity["estatus"] : undefined)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
                     >
+                      <option value="">No determinado</option>
                       <option value="Activa">Activa (Operación Territorial)</option>
                       <option value="Inactiva">Inactiva</option>
                       <option value="En observación">En observación táctica</option>
@@ -1977,10 +1845,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Nivel de Peligrosidad</label>
                     <select
-                      value={peligrosidad}
-                      onChange={e => setPeligrosidad(e.target.value as any)}
+                      value={peligrosidad ?? ""}
+                      onChange={e => setPeligrosidad(e.target.value ? e.target.value as GangEntity["peligrosidad"] : undefined)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 transition-colors"
                     >
+                      <option value="">No evaluado</option>
                       <option value="Bajo">Bajo</option>
                       <option value="Medio">Medio</option>
                       <option value="Alto">Alto (Fricción armada constante)</option>
@@ -2112,10 +1981,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                     <div className="sm:col-span-4 space-y-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase">Clasificación / Tipo</label>
                       <select
-                        value={newGraffitiType}
-                        onChange={e => setNewGraffitiType(e.target.value as any)}
+                        value={newGraffitiType ?? ""}
+                        onChange={e => setNewGraffitiType(e.target.value ? e.target.value as GraffitiImage["tipo"] : undefined)}
                         className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
                       >
+                        <option value="">No clasificado</option>
                         <option value="Identidad">Identidad / Marca de Clica</option>
                         <option value="Advertencia">Mensaje de Advertencia / Rivalidad</option>
                         <option value="Frontera">Límite Territorial / Frontera</option>
@@ -2256,10 +2126,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div className="space-y-1">
                     <label className="text-[9px] font-bold text-slate-400 uppercase">Sexo</label>
                     <select
-                      value={tempMember.sexo}
-                      onChange={e => setTempMember({ ...tempMember, sexo: e.target.value as any })}
+                      value={tempMember.sexo ?? ""}
+                      onChange={e => setTempMember({ ...tempMember, sexo: e.target.value ? e.target.value as GangMember["sexo"] : undefined })}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200"
                     >
+                      <option value="">No registrado</option>
                       <option value="Masculino">Masculino</option>
                       <option value="Femenino">Femenino</option>
                       <option value="Otro">Otro</option>
@@ -2278,10 +2149,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div className="space-y-1">
                     <label className="text-[9px] font-bold text-slate-400 uppercase">Estatus / Jerarquía</label>
                     <select
-                      value={tempMember.estatusPandilla}
-                      onChange={e => setTempMember({ ...tempMember, estatusPandilla: e.target.value as any })}
+                      value={tempMember.estatusPandilla ?? ""}
+                      onChange={e => setTempMember({ ...tempMember, estatusPandilla: e.target.value ? e.target.value as GangMember["estatusPandilla"] : undefined })}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
                     >
+                      <option value="">No registrado</option>
                       <option value="Líder">Líder</option>
                       <option value="Segundo al mando">Segundo al mando</option>
                       <option value="Reclutador">Reclutador</option>
@@ -2335,16 +2207,8 @@ ${analysisResult.ficha.crossCheckJuridico}
                       type="number"
                       step="0.000001"
                       placeholder="Ej. 21.8853"
-                      value={tempMember.georreferencia?.lat ?? ""}
-                      onChange={e => setTempMember({
-                        ...tempMember,
-                        georreferencia: {
-                          lat: parseFloat(e.target.value) || 0,
-                          lng: tempMember.georreferencia?.lng ?? -102.2916,
-                          confidence: 1.0,
-                          status: "investigation"
-                        }
-                      })}
+                      value={tempGeoLat}
+                      onChange={e => setTempGeoLat(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
                     />
                   </div>
@@ -2354,16 +2218,8 @@ ${analysisResult.ficha.crossCheckJuridico}
                       type="number"
                       step="0.000001"
                       placeholder="Ej. -102.2916"
-                      value={tempMember.georreferencia?.lng ?? ""}
-                      onChange={e => setTempMember({
-                        ...tempMember,
-                        georreferencia: {
-                          lat: tempMember.georreferencia?.lat ?? 21.8853,
-                          lng: parseFloat(e.target.value) || 0,
-                          confidence: 1.0,
-                          status: "investigation"
-                        }
-                      })}
+                      value={tempGeoLng}
+                      onChange={e => setTempGeoLng(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
                     />
                   </div>
@@ -2377,10 +2233,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase">Nivel de Violencia</label>
                       <select
-                        value={tempMember.nivelViolencia}
-                        onChange={e => setTempMember({ ...tempMember, nivelViolencia: e.target.value as any })}
+                        value={tempMember.nivelViolencia ?? ""}
+                        onChange={e => setTempMember({ ...tempMember, nivelViolencia: e.target.value ? e.target.value as GangMember["nivelViolencia"] : undefined })}
                         className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
                       >
+                        <option value="">No evaluado</option>
                         <option value="Bajo">Bajo</option>
                         <option value="Medio">Medio</option>
                         <option value="Alto">Alto</option>
@@ -2389,10 +2246,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                     <div className="space-y-1">
                       <label className="text-[8px] font-bold text-slate-400 uppercase">Riesgo Criminógeno</label>
                       <select
-                        value={tempMember.riesgoCriminogeno}
-                        onChange={e => setTempMember({ ...tempMember, riesgoCriminogeno: e.target.value as any })}
+                        value={tempMember.riesgoCriminogeno ?? ""}
+                        onChange={e => setTempMember({ ...tempMember, riesgoCriminogeno: e.target.value ? e.target.value as GangMember["riesgoCriminogeno"] : undefined })}
                         className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
                       >
+                        <option value="">No evaluado</option>
                         <option value="Bajo">Bajo</option>
                         <option value="Medio">Medio</option>
                         <option value="Alto">Alto</option>
@@ -2607,10 +2465,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Tipo de Vínculo</label>
                   <select
-                    value={tempRel.tipo}
-                    onChange={e => setTempRel({ ...tempRel, tipo: e.target.value as any })}
+                    value={tempRel.tipo ?? ""}
+                    onChange={e => setTempRel({ ...tempRel, tipo: e.target.value ? e.target.value as GangRelationship["tipo"] : undefined })}
                     className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-200"
                   >
+                    <option value="">Seleccione tipo de vínculo</option>
                     <option value="rival">Pandilla Antagónica (Rivalidad)</option>
                     <option value="asociado">Pandilla Afín (Alianza)</option>
                   </select>
@@ -2656,10 +2515,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Nivel de Confrontación / Alianza</label>
                     <select
-                      value={tempRel.nivelSeveridad}
-                      onChange={e => setTempRel({ ...tempRel, nivelSeveridad: e.target.value as any })}
+                    value={tempRel.nivelSeveridad ?? ""}
+                    onChange={e => setTempRel({ ...tempRel, nivelSeveridad: e.target.value ? e.target.value as GangRelationship["nivelSeveridad"] : undefined })}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200"
                     >
+                      <option value="">No evaluado</option>
                       <option value="Bajo">Bajo</option>
                       <option value="Medio">Medio</option>
                       <option value="Alto">Alto</option>
@@ -2954,6 +2814,13 @@ ${analysisResult.ficha.crossCheckJuridico}
                               key={zone.zone_id}
                               paths={zone.points}
                               onClick={() => {
+                                const firstPoint = zone.points?.[0];
+
+                                if (!firstPoint) {
+                                  setSelectedGisElement(null);
+                                  return;
+                                }
+
                                 setSelectedGisZone(zone);
                                 setSelectedGisElement({
                                   tipo: "Zona de Influencia",
@@ -2962,8 +2829,8 @@ ${analysisResult.ficha.crossCheckJuridico}
                                   detalle: `Área de control territorial calculada mediante agrupamiento de domicilios (DBSCAN). Contiene ${zone.memberCount} integrantes mapeados con una densidad de ${zone.density.toFixed(2)} integrantes/km². Score de influencia: ${zone.influence_score}.`,
                                   gang: zone.gang,
                                   color: gangColor,
-                                  lat: zone.points[0]?.lat || 21.88,
-                                  lng: zone.points[0]?.lng || -102.29,
+                                  lat: firstPoint.lat,
+                                  lng: firstPoint.lng,
                                   source: "Análisis Espacial DBSCAN"
                                 });
                               }}
@@ -4194,11 +4061,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div id="print-structure-report" className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 space-y-6 shadow-2xl relative">
                     <div className="flex justify-between border-b border-slate-800 pb-4">
                       <div>
-                        <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">PRODUCTO DE INTELIGENCIA MILITAR CEIPOL</span>
+                        <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">VISTA ANALÍTICA PRELIMINAR CEIPOL</span>
                         <h2 className="text-2xl font-black text-slate-100 uppercase mt-1">Estructura & Red de Vínculos</h2>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs font-bold text-slate-400 font-mono">ID: {geoReportId || "PRE-EMISION"}</span>
+                        <span className="text-xs font-bold text-slate-400 font-mono">Alias GEOINT heredado: {geoReportId || "Sin alias GEOINT heredado"}</span>
                         <p className="text-[10px] text-slate-500 mt-1">Fecha: {new Date().toLocaleDateString("es-MX")}</p>
                       </div>
                     </div>
@@ -4292,11 +4159,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                   <div id="print-risk-report" className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 space-y-6 shadow-2xl relative">
                     <div className="flex justify-between border-b border-slate-800 pb-4">
                       <div>
-                        <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">PRODUCTO DE INTELIGENCIA MILITAR CEIPOL</span>
-                        <h2 className="text-2xl font-black text-slate-100 uppercase mt-1">Informe de Riesgo Territorial</h2>
+                        <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">VISTA ANALÍTICA PRELIMINAR CEIPOL</span>
+                        <h2 className="text-2xl font-black text-slate-100 uppercase mt-1">Vista Analítica de Riesgo Territorial — No Certificada</h2>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs font-bold text-slate-400 font-mono">ID: {geoReportId || "PRE-EMISION"}</span>
+                        <span className="text-xs font-bold text-slate-400 font-mono">Alias GEOINT heredado: {geoReportId || "Sin alias GEOINT heredado"}</span>
                         <p className="text-[10px] text-slate-500 mt-1">Fecha: {new Date().toLocaleDateString("es-MX")}</p>
                       </div>
                     </div>
@@ -4436,7 +4303,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                           SECRETÓ / CLASIFICADO • EXCLUSIVO PARA USO OPERATIVO
                         </span>
                         <h2 className="text-3xl font-black text-slate-100 uppercase mt-2 tracking-tight">
-                          INFORME TÁCTICO INTEGRAL DE INTELIGENCIA
+                          VISTA ANALÍTICA INTEGRAL — NO CERTIFICADA
                         </h2>
                         <p className="text-xs text-slate-400 font-bold mt-1 uppercase">
                           SISTEMA DE PERFILAMIENTO REMOTO Y GEOINTELIGENCIA CRITICA (CEIPOL)
@@ -4445,11 +4312,11 @@ ${analysisResult.ficha.crossCheckJuridico}
                       <div className="text-right flex flex-col justify-between">
                         <div>
                           <span className="text-xs font-black text-slate-400 font-mono bg-slate-950/80 px-2.5 py-1 rounded border border-slate-800">
-                            ID: {geoReportId || "PRE-EMISION"}
+                            Alias GEOINT heredado: {geoReportId || "Sin alias GEOINT heredado"}
                           </span>
                         </div>
                         <div className="mt-4">
-                          <p className="text-[10px] text-slate-400 font-bold font-mono">EMISIÓN: {new Date().toLocaleDateString("es-MX")} {new Date().toLocaleTimeString("es-MX")}</p>
+                          <p className="text-[10px] text-slate-400 font-bold font-mono">ACTUALIZACIÓN DE VISTA: {new Date().toLocaleDateString("es-MX")} {new Date().toLocaleTimeString("es-MX")}</p>
                           <p className="text-[9px] text-slate-500 font-mono">PERFILADOR DE PANDILLAS V2.1</p>
                         </div>
                       </div>
@@ -4683,7 +4550,7 @@ ${analysisResult.ficha.crossCheckJuridico}
                               <div className="relative w-full h-32 rounded-xl bg-slate-900 border border-slate-900 overflow-hidden shadow-inner">
                                 <img src={img.url} className="w-full h-full object-cover" alt="Grafiti" />
                                 <span className="absolute top-2 left-2 px-2 py-0.5 rounded text-[8px] font-black uppercase bg-slate-950/95 text-sky-400 border border-slate-800 shadow">
-                                  {img.tipo || "Identidad"}
+                                  {img.tipo || "No clasificado"}
                                 </span>
                               </div>
                               <div className="space-y-1">

@@ -18,9 +18,49 @@ export class TerritorialIntelligenceEngine {
     albumData: any[],
     hotspots: { lat: number; lng: number; weight?: number }[] = []
   ): TerritorialEvidenceMatrix {
-    const centerLat = projectData?.latitud || projectData?.lat || 21.88234;
-    const centerLng = projectData?.longitud || projectData?.lng || -102.28234;
-    const radiusMeters = projectData?.radio || 500; // radio por defecto
+    // ADR-020.34 C7:
+    // Territorial analysis requires demonstrated spatial context.
+    // Never substitute a missing expediente geography with a default location.
+    const rawLat = projectData?.latitud ?? projectData?.lat;
+    const rawLng = projectData?.longitud ?? projectData?.lng;
+    const rawRadius = projectData?.radio ?? projectData?.analysisRadius;
+
+    const centerLat =
+      typeof rawLat === "number"
+        ? rawLat
+        : typeof rawLat === "string" && rawLat.trim().length > 0
+          ? Number(rawLat)
+          : Number.NaN;
+
+    const centerLng =
+      typeof rawLng === "number"
+        ? rawLng
+        : typeof rawLng === "string" && rawLng.trim().length > 0
+          ? Number(rawLng)
+          : Number.NaN;
+
+    const radiusMeters =
+      typeof rawRadius === "number"
+        ? rawRadius
+        : typeof rawRadius === "string" && rawRadius.trim().length > 0
+          ? Number(rawRadius)
+          : Number.NaN;
+
+    const hasValidTerritorialGeography =
+      Number.isFinite(centerLat) &&
+      centerLat >= -90 &&
+      centerLat <= 90 &&
+      Number.isFinite(centerLng) &&
+      centerLng >= -180 &&
+      centerLng <= 180 &&
+      Number.isFinite(radiusMeters) &&
+      radiusMeters > 0;
+
+    if (!hasValidTerritorialGeography) {
+      throw new Error(
+        "TerritorialIntelligenceEngine requiere latitud, longitud y radio territoriales validos del expediente; no se permite fabricar contexto geografico."
+      );
+    }
 
     // 1. Analizar e identificar atractores económicos filtrados por distancia (DENUE)
     const validatedAttractors = AttractorAnalyzer.analyze(

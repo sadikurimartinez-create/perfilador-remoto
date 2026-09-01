@@ -13,7 +13,7 @@ import { classifyEpistemicSource, type SourceRouteDescriptor } from "@/lib/provi
 export class PandillasEngine {
   /**
    * Run the full Sweep Orchestration:
-   * 1. Check if the gang zone has coordinates. If not, fallback to default Aguascalientes Center coordinates (21.8853, -102.2916).
+   * 1. Validate the gang coordinates. If valid geography is absent, stop the territorial sweep without fabricating a fallback location.
    * 2. Query internal APIs (getScinceData, getDenueData, getTelegramOsintData) to pull demographic, business, and social OSINT data.
    * 3. Construct a unified context payload detailing SCINCE, DENUE, and OSINT matches.
    * 4. Call the main AI and CSV sweep endpoint via PandillasService.
@@ -42,11 +42,35 @@ export class PandillasEngine {
 
     console.log(`[PandillasEngine] Iniciando barrido geoespacial en [${lat}, ${lng}]`);
 
+    // ADR-020.34 C9D3:
+    // The OSINT territorial query must use only real source text.
+    // Do not append a fixed municipality or invent a colony.
+    const normalizedGangName =
+      typeof gang.nombre === "string"
+        ? gang.nombre.trim()
+        : "";
+
+    const normalizedInfluenceArea =
+      typeof gang.zonaInfluencia === "string"
+        ? gang.zonaInfluencia.trim()
+        : "";
+
+    const telegramQuery = [
+      normalizedGangName
+        ? `Pandilla ${normalizedGangName}`
+        : "Pandilla",
+      normalizedInfluenceArea
+        ? normalizedInfluenceArea
+        : ""
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     // Concurrent execution of internal APIs (SCINCE, DENUE, and OSINT Crawler)
     const [scinceData, denueData, telegramOsint] = (await Promise.all([
       getScinceData(lat, lng).catch(() => ({ exito: false, error: "Fallo SCINCE" })),
       getDenueData(lat, lng, 350).catch(() => ({ exito: false, error: "Fallo DENUE" })),
-      getTelegramOsintData(`Pandilla ${gang.nombre} Colonia ${gang.zonaInfluencia} Aguascalientes`).catch(() => ({ success: false, error: "Fallo OSINT" }))
+      getTelegramOsintData(telegramQuery).catch(() => ({ success: false, error: "Fallo OSINT" }))
     ])) as [any, any, any];
     const externalSourceProvenance = [scinceData, denueData, telegramOsint]
       .map((item) => item?.epistemicIntegrity)

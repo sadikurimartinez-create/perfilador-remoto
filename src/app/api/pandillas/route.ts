@@ -7,7 +7,7 @@ import path from "node:path";
 import { parse } from "csv-parse/sync";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
-import { fuseGangsAndBuildGraph, matchPandillasDatasetRows } from "@/modules/pandillas/pandillas.fusion";
+import { matchPandillasDatasetRows } from "@/modules/pandillas/pandillas.fusion";
 import { GangEntity } from "@/modules/pandillas/pandillas.mapper";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       integrantes,
       grafitiInfo,
       archivosAnexos,
-      estatus: body.estatus || "Activa"
+      estatus: body.estatus || "Sin determinar"
     };
 
     // 1. CARGAR Y PARSEAR EL DATASET LOCAL DESDE EXCEL (INVENTARIO PANDILLAS.xlsx)
@@ -294,13 +294,15 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
     if (isAiGenerated && parsedResult) {
       return NextResponse.json({ ...overwriteAiSpatialOutputWithSourceCoordinates(parsedResult, seedAddresses), isAiGenerated: true });
     } else {
-      console.warn("[API Pandillas] Both Vertex AI and REST API failed. Using local deterministic model fallback.");
-      const deterministicResult = fuseGangsAndBuildGraph(manualGang, [], csvRows);
-      return NextResponse.json({
-        ...deterministicResult,
-        isAiGenerated: false,
-        warning: "Fallo de servicios de IA. Usando fusión determinista local."
-      });
+      console.warn("[API Pandillas] Los servicios de IA no están disponibles. El análisis queda NOT_READY.");
+      return NextResponse.json(
+        {
+          error: "No fue posible generar un análisis gobernado de pandillas.",
+          analysisReadiness: "NOT_READY",
+          isAiGenerated: false
+        },
+        { status: 503 }
+      );
     }
 
   } catch (error: any) {

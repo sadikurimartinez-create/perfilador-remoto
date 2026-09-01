@@ -169,13 +169,38 @@ export async function POST(req: Request) {
     const safeBody = { ...body };
 
     const projectName = safeBody.projectName || "EXPEDIENTE TÁCTICO INDETERMINADO";
-    const projectId = safeBody.projectId || "EXP-2026-XXXXX";
-    const projectDescription = safeBody.projectDescription || "Aguascalientes, Ags";
-    const radius = safeBody.analysisRadius || 250;
-    const geometry = safeBody.geometryType || "individual";
+    const projectId = typeof safeBody.projectId === "string" ? safeBody.projectId.trim() : "";
+    // ADR-020.34: preserve missing spatial context as UNKNOWN.
+    const projectDescription =
+      typeof safeBody.projectDescription === "string"
+        ? safeBody.projectDescription
+        : "";
+    const radiusCandidate = Number(safeBody.analysisRadius);
+    const radius =
+      Number.isFinite(radiusCandidate) && radiusCandidate > 0
+        ? radiusCandidate
+        : null;
+    const geometry =
+      typeof safeBody.geometryType === "string" && safeBody.geometryType.trim()
+        ? safeBody.geometryType
+        : null;
     const chapter = safeBody.chapter || 1;
-    const lat = parseFloat(String(safeBody.lat ?? safeBody.latitude ?? "0"));
-    const lng = parseFloat(String(safeBody.lng ?? safeBody.longitude ?? "0"));
+    const latCandidate = Number(safeBody.lat ?? safeBody.latitude);
+    const lat =
+      Number.isFinite(latCandidate) &&
+      latCandidate >= -90 &&
+      latCandidate <= 90 &&
+      latCandidate !== 0
+        ? latCandidate
+        : null;
+    const lngCandidate = Number(safeBody.lng ?? safeBody.longitude);
+    const lng =
+      Number.isFinite(lngCandidate) &&
+      lngCandidate >= -180 &&
+      lngCandidate <= 180 &&
+      lngCandidate !== 0
+        ? lngCandidate
+        : null;
 
     const rawIncidents = Array.isArray(safeBody.historicalIncidents)
       ? safeBody.historicalIncidents
@@ -188,7 +213,12 @@ export async function POST(req: Request) {
     let sem: any = null;
     let generalRisk = "MEDIO";
 
-    if (chapter === 3 || chapter === 4 || chapter === 5 || chapter === 6 || chapter === 7) {
+    if (
+      (chapter === 3 || chapter === 4 || chapter === 5 || chapter === 6 || chapter === 7) &&
+      lat !== null &&
+      lng !== null &&
+      radius !== null
+    ) {
       sieData = StatisticalIntelligenceEngineV2.analyze(
         rawIncidents,
         lat,
@@ -244,7 +274,13 @@ export async function POST(req: Request) {
 
     // Instanciar TCE si se genera el Capítulo 1, Capítulo 2 o Capítulo 3 (para alimentar al HIE / CIE)
     let tceData: any = null;
-    if (chapter === 2 || chapter === 3 || chapter === 4) {
+    if (
+      (chapter === 2 || chapter === 3 || chapter === 4) &&
+      lat !== null &&
+      lng !== null &&
+      radius !== null &&
+      geometry !== null
+    ) {
       tceData = TerritorialContextEngine.generate({
         projectName,
         projectId,
@@ -286,7 +322,13 @@ export async function POST(req: Request) {
     let visualEvidenceMatrix: any = null;
     let territorialEvidenceMatrix: any = null;
 
-    if (chapter === 6 && sem) {
+    if (
+      chapter === 6 &&
+      sem &&
+      lat !== null &&
+      lng !== null &&
+      radius !== null
+    ) {
       visualEvidenceMatrix = VisualEvidenceEngine.process(
         projectId,
         safeBody.photos || [],
@@ -297,7 +339,13 @@ export async function POST(req: Request) {
       );
     }
 
-    if (chapter === 7 && sem) {
+    if (
+      chapter === 7 &&
+      sem &&
+      lat !== null &&
+      lng !== null &&
+      radius !== null
+    ) {
       const rawAttractors = safeBody.osintEngineData?.denue || safeBody.denueData || safeBody.attractors || [];
       territorialEvidenceMatrix = TerritorialIntelligenceEngine.process(
         { id: projectId, nombre: projectName, lat, lng, radio: radius },
@@ -309,7 +357,13 @@ export async function POST(req: Request) {
       );
     }
 
-    if (chapter === 5 && sem) {
+    if (
+      chapter === 5 &&
+      sem &&
+      lat !== null &&
+      lng !== null &&
+      radius !== null
+    ) {
       validationVector = HIEValidationVectorAdapter.adapt(
         typeof safeBody.analysisContext === "string" ? safeBody.analysisContext : "",
         projectDescription
@@ -345,16 +399,24 @@ export async function POST(req: Request) {
     }
 
     // 2. Construir el IntelligenceIntegrationContext unificado (IIC) antes del motor editorial
-    const safeAceReport = aceReport || {
-      globalStatus: "PASS",
-      overallConfidence: 100,
-      alerts: [],
-      metadata: { auditedAt: new Date().toISOString() }
+    const safeAceReport = aceReport ?? {
+      globalStatus: "WARNING",
+      overallConfidence: 0,
+      alerts: [{
+        type: "DOCUMENT",
+        category: "TECHNICAL",
+        severity: "HIGH",
+        source: "generate-profile",
+        message: "No existe reporte ACE certificado disponible. Se requiere auditoria real."
+      }],
+      certifiedOsintOutput: null,
+      certifiedGimOutput: null,
+      metadata: { auditedAt: "" }
     };
 
     const safeSem = sem || {
       metadata: { projectId, totalCanonicalIncidents: 0, analysisRadiusMeters: radius },
-      criminalEvidence: { totalEvents: 0, dominantCrime: "Ninguno" },
+      criminalEvidence: { totalEvents: 0, dominantCrime: "" },
       temporalEvidence: { temporalCoverage: { startDate: "", endDate: "" } },
       spatialEvidence: { hotspots: [], hotspotsCount: 0 }
     };
@@ -368,6 +430,10 @@ export async function POST(req: Request) {
       safeAceReport,
       cieData
     );
+
+    if (!aceReport) {
+      iic.analysisReadiness = "NOT_READY";
+    }
 
     const ctx = ReportContextAdapter.adapt(iic, {
       chapterId: String(chapter),
@@ -494,7 +560,8 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           tacticalStreetViews: safeBody.streetViews || [],
           sieData: safeSieDataForClient,
           tceData: tceData,
-          hieData: hieData
+          hieData: hieData,
+          ...(aceReport != null ? { aceReport } : {})
         });
         
         // Enviar el inicio del JSON (el navegador tolera el espacio en blanco inicial)

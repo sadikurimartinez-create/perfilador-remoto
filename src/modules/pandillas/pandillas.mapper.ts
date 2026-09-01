@@ -75,18 +75,18 @@ export interface GeointeligenciaShape {
   tipo: "poligono" | "corredor" | "buffer" | "zona_riesgo";
   puntos: { lat: number; lng: number }[]; // Array of points
   radio?: number; // Used for buffer circles
-  nivelControlTerritorial: "Nulo" | "Bajo" | "Medio" | "Alto" | "Absoluto";
+  nivelControlTerritorial?: "Nulo" | "Bajo" | "Medio" | "Alto" | "Absoluto";
   riskLevel?: "low" | "medium" | "high";
   fechaActualizacion: string;
 }
 
 export interface TimelineEvent {
   id: string;
-  fecha: string;
+  fecha?: string;
   titulo: string;
   descripcion: string;
-  gravedad: "Baja" | "Media" | "Alta" | "Crítica";
-  categoria: "enfrentamiento" | "detencion" | "grafiti" | "expansion" | "otro";
+  gravedad?: "Baja" | "Media" | "Alta" | "Crítica";
+  categoria?: "enfrentamiento" | "detencion" | "grafiti" | "expansion" | "otro";
   lugar?: string;
 }
 
@@ -104,7 +104,7 @@ export interface GangEntity {
   nombre: string;
   aliasConocidos?: string;
   fechaRegistro?: number;
-  estatus: "Activa" | "Inactiva" | "En observación" | "Desarticulada";
+  estatus?: "Activa" | "Inactiva" | "En observación" | "Desarticulada" | "Sin determinar";
 
   // DATOS GENERALES
   zonaInfluencia: string;
@@ -154,6 +154,7 @@ export interface GangEntity {
 
   createdAt?: number;
   createdBy?: string;
+  updatedBy?: string;
   geoReportId?: string;
   nivelRiesgo?: string; // Kept for backward compatibility
   resumenInteligencia?: string;
@@ -190,7 +191,16 @@ export interface FusionResult {
 /**
  * Calculates member danger rating automatically.
  */
-export function calculateMemberDanger(m: GangMember): number {
+export function calculateMemberDanger(m: GangMember): number | undefined {
+  const hasEvaluativeInput = Boolean(
+    m.estatusPandilla ||
+    m.nivelViolencia ||
+    m.riesgoCriminogeno ||
+    m.antecedentes ||
+    m.detencionesPrevias
+  );
+  if (!hasEvaluativeInput) return undefined;
+
   let score = 20; // Base score
   if (m.estatusPandilla === "Líder") score += 35;
   else if (m.estatusPandilla === "Segundo al mando") score += 25;
@@ -240,4 +250,3 @@ export function calculateSimilarity(s1: string, s2: string): number {
   const union = new Set([...set1, ...set2]).size;
   return union > 0 ? intersection / union : 0;
 }
-

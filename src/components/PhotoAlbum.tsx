@@ -12,7 +12,7 @@ import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
-import { runOSINTScan } from "../utils/osintEngine";
+
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
 import { GangGeoSweepPanel } from "./GangGeoSweepPanel";
@@ -898,7 +898,11 @@ export function PhotoAlbum({
     lng: number,
     context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }
   ) => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyBB1mc8b1lpevjxcFSSLHurnbCQw62RAaA";
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+    if (!apiKey) {
+      alert("Google Maps no está disponible porque falta NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.");
+      return;
+    }
     const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=17&size=600x400&maptype=hybrid&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
 
     const newCapture = {
@@ -1472,7 +1476,7 @@ const hasMinimumPhotos =
       console.log("[confirmAndGenerateProfile] 1. Inicializando análisis y llamando APIs concurrentes...");
       setAiProfile("Inicializando análisis y consultando bases cartográficas...");
 
-      // EJECUCIÓN PARALELA: Mapa, Incidencia y Barrido OSINT Automático (X/Twitter, Google, DENUE, News)
+      // EJECUCION PARALELA: analisis territorial e incidencia. Profile generation does not initiate OSINT.
       const mapResPromise = fetchWithTimeout("/api/analyze-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1498,20 +1502,17 @@ const hasMinimumPhotos =
           })
         : Promise.resolve(null);
 
-      const osintPromise = lat !== null && lng !== null
-        ? runOSINTScan({ ...project, latitude: lat, longitude: lng }).catch(e => {
-            console.warn("[Auto-OSINT] Falló el barrido:", e);
-            return null;
-          })
-        : Promise.resolve(null);
+      // ADR-020.34 C4:
+      // Profile generation MUST NOT initiate OSINT acquisition.
+      // Productive OSINT requires an explicit human-triggered sweep.
+      const automaticOsintData = null;
 
-      const [mapRes, incidenciaRes, automaticOsintData] = await Promise.all([
+      const [mapRes, incidenciaRes] = await Promise.all([
         mapResPromise,
-        incidenciaResPromise,
-        osintPromise
+        incidenciaResPromise
       ]);
 
-      addLog("APIs territoriales, de incidencia y OSINT resueltas correctamente.");
+      addLog("APIs territoriales e incidencia resueltas. La generacion del perfil no inicio un barrido OSINT.");
       console.log("[confirmAndGenerateProfile] 2. APIs iniciales resueltas.");
 
       let currentAnalysisResult = analysisResult;
@@ -1593,7 +1594,8 @@ const hasMinimumPhotos =
                   lng,
                   bibliografiaLocal,
                   multimodalContext,
-                  geometryType: project?.geometryType || "individual",
+                  // ADR-020.34: preserve missing geography type as UNKNOWN.
+                  geometryType: project?.geometryType || null,
                   projectDescription: project?.descripcion || "",
                   osintEngineData: automaticOsintData,
                   streetViews: svData,
@@ -1706,12 +1708,10 @@ const hasMinimumPhotos =
         console.log("[confirmAndGenerateProfile] 4. Generación con IA finalizada. Procesando carátula e integraciones...");
         finalMarkdown = finalMarkdown.trim();
 
-        if (
-          automaticOsintData?.streetViewAnalysis?.analisis &&
-          !/BARRIDO MULTIMODAL DE STREET VIEW/i.test(finalMarkdown)
-        ) {
-          finalMarkdown += `\n\n### BARRIDO MULTIMODAL DE STREET VIEW (IA)\n${automaticOsintData.streetViewAnalysis.analisis}`;
-        }
+        // ADR-020.34 C4:
+        // No automatic OSINT/Street View analysis is appended during
+        // profile generation. Only previously governed evidence may
+        // reach the report through its authorized lineage.
 
         setAiProfile(finalMarkdown);
         setEditableProfile(finalMarkdown);
@@ -1759,7 +1759,7 @@ const hasMinimumPhotos =
         }
 
         if (!summaryText) {
-          summaryText = `Dictamen estratégico de geointeligencia operativa para el cuadrante del expediente ${project?.nombre || 'bajo estudio'}. Con base en las inspecciones tácticas y el relevamiento espacial, se identificaron factores criminógenos de oportunidad vial y perimetral vinculados al desorden de infraestructura y la pérdida de vigilancia natural en la zona.`;
+          summaryText = "No existe un resumen analítico validado disponible para este expediente.";
         }
         setReportSummary(summaryText);
 
@@ -1768,20 +1768,25 @@ const hasMinimumPhotos =
           ...(data.meta?.incidenciaDetalles || []).map((c: any) => ({
             lat: c.lat,
             lng: c.lng,
-            fecha: c.fecha || c.FECHA || c.Fecha || c.fechaStr || c.fecha_hecho || c.FECHA_HECHO || new Date().toISOString().split("T")[0],
-            tipoDelito: c.incidente || c.tipoDelito || "Delito",
-            rangoHorario: c.rango_horario || c.rangoHorario || "Sin rango",
-            colonia: c.colonia || c.COLONIA || "SECTOR NO ESPECIFICADO",
-            arma: c.arma || c.ARMA || "NINGUNA"
+            // ADR-020.34 C14B.1:
+            // Preserve missing upstream incident attributes as missing.
+            fecha: c.fecha ?? c.FECHA ?? c.Fecha ?? c.fechaStr ?? c.fecha_hecho ?? c.FECHA_HECHO ?? null,
+            tipoDelito: c.incidente ?? c.tipoDelito ?? null,
+            rangoHorario: c.rango_horario ?? c.rangoHorario ?? null,
+            colonia: c.colonia ?? c.COLONIA ?? null,
+            arma: c.arma ?? c.ARMA ?? null
           })),
           ...incidenciaLocal.map((c: any) => ({
             lat: c.lat,
             lng: c.lng,
-            fecha: c.fecha || c.FECHA || c.Fecha || c.fechaStr || c.fecha_hecho || c.FECHA_HECHO || new Date().toISOString().split("T")[0],
-            tipoDelito: c.tipo || c.incidente || c.tipoDelito || "Delito",
-            rangoHorario: c.rangoHorario || c.rango_horario || "Sin rango",
-            colonia: c.colonia || c.COLONIA || "SECTOR NO ESPECIFICADO",
-            arma: c.arma || c.ARMA || "NINGUNA"
+            // ADR-020.34 C14B:
+            // Preserve legacy missing incident attributes as missing.
+            // Never reconstruct historical facts from runtime defaults.
+            fecha: c.fecha ?? c.FECHA ?? c.Fecha ?? c.fechaStr ?? c.fecha_hecho ?? c.FECHA_HECHO ?? null,
+            tipoDelito: c.tipo ?? c.incidente ?? c.tipoDelito ?? null,
+            rangoHorario: c.rangoHorario ?? c.rango_horario ?? null,
+            colonia: c.colonia ?? c.COLONIA ?? null,
+            arma: c.arma ?? c.ARMA ?? null
           })),
         ];
 
@@ -1797,6 +1802,7 @@ const hasMinimumPhotos =
           sieData: data.meta?.sieData || (currentAnalysisResult as any)?.sieData,
           tceData: data.meta?.tceData || (currentAnalysisResult as any)?.tceData,
           hieData: data.meta?.hieData || (currentAnalysisResult as any)?.hieData,
+          aceReport: data.meta?.aceReport ?? (currentAnalysisResult as any)?.aceReport ?? null,
         } as any);
 
         // Integrar automáticamente los lugares de acecho (StreetView) al Álbum
@@ -2158,14 +2164,22 @@ const hasMinimumPhotos =
         })
         .filter(Boolean);
 
+      const realAceReport = (analysisResult as any)?.aceReport ?? null;
+      const aceStatus = realAceReport?.globalStatus;
+      const hasUsableAce = aceStatus === "PASS" || aceStatus === "WARNING";
+
       const intelligenceContext = {
-        projectId: project?.id || "PR-001",
+        projectId: project?.id ?? "",
         schemaVersion: "2.0",
-        analysisReadiness: "READY" as const,
+        analysisReadiness: (hasUsableAce ? "READY" : "NOT_READY") as "READY" | "NOT_READY",
         qualityControl: {
-          status: "PASS" as const,
-          confidenceScore: 100,
-          auditedAt: new Date().toISOString()
+          status: (aceStatus === "PASS" || aceStatus === "WARNING" || aceStatus === "FAILED"
+            ? aceStatus
+            : "WARNING") as "PASS" | "WARNING" | "FAILED",
+          confidenceScore: realAceReport?.overallConfidence ?? 0,
+          ...(realAceReport?.metadata?.auditedAt
+            ? { auditedAt: realAceReport.metadata.auditedAt }
+            : {})
         },
         evidenceSources: {
           SEM: {
@@ -2182,14 +2196,7 @@ const hasMinimumPhotos =
             status: (analysisResult as any)?.hieData ? "PASS" : "WARNING",
             data: (analysisResult as any)?.hieData || null
           },
-          ACE: {
-            globalStatus: "PASS" as const,
-            overallConfidence: 100,
-            alerts: [],
-            certifiedOsintOutput: true,
-            certifiedGimOutput: true,
-            metadata: { auditedAt: new Date().toISOString() }
-          }
+          ACE: realAceReport
         }
       };
 

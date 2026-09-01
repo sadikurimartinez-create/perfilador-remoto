@@ -1,165 +1,6 @@
 import { getDb } from "@/lib/firebase";
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where } from "firebase/firestore";
-import { GangEntity, FusionResult, GeointeligenciaShape } from "./pandillas.mapper";
-import dossierData from "./dossier_pandillas.json";
-
-/**
- * Helper to convert static JSON dossiers into valid GangEntity records.
- */
-function getStaticFallbackGangs(): GangEntity[] {
-  if (!dossierData || !dossierData.dossiers) return [];
-  
-  return dossierData.dossiers.map((d: any, index: number) => {
-    const gangName = d.pandilla || `Pandilla ${index + 1}`;
-    
-    // Map members
-    const integrantes = (d.integrantes || []).map((m: any) => {
-      const dir = m.direccion || {};
-      const domicilio = dir.calle 
-        ? `${dir.calle}${dir.numero ? " #" + dir.numero : ""}, ${dir.colonia || ""}, ${dir.municipio || "Aguascalientes"}`.trim().replace(/, ,/g, ",").replace(/,,/g, ",")
-        : "";
-      
-      // estatusPandilla mapping
-      let estatus: any = "Integrante";
-      const rolLower = (m.rol || "").toLowerCase();
-      if (rolLower.includes("lider")) estatus = "Líder";
-      else if (rolLower.includes("segundo")) estatus = "Segundo al mando";
-      else if (rolLower.includes("reclutador")) estatus = "Reclutador";
-      else if (rolLower.includes("distribuidor")) estatus = "Distribuidor";
-      else if (rolLower.includes("vigilante") || rolLower.includes("halcon")) estatus = "Vigilante";
-      else if (rolLower.includes("operador")) estatus = "Operador";
-      else if (rolLower.includes("exintegrante")) estatus = "Exintegrante";
-      else if (rolLower.includes("colaborador")) estatus = "Colaborador externo";
-      
-      return {
-        nombre: m.nombre_completo || m.nombre || "Sujeto Desconocido",
-        alias: m.alias || "",
-        rol: m.rol || "Integrante",
-        estatusPandilla: estatus,
-        domicilioConocido: domicilio,
-        sexo: "Masculino",
-        edad: m.edad || "",
-        nivelViolencia: "Medio",
-        riesgoCriminogeno: "Medio",
-        tatuajes: "",
-        cicatrices: "",
-        marcasDistintivas: ""
-      };
-    });
-
-    // Map activities to ilicitos
-    const ilicitos: any[] = [];
-    const acts = d.actividades_delictivas || [];
-    acts.forEach((a: string) => {
-      const lower = a.toLowerCase();
-      if (lower.includes("robo")) ilicitos.push("Robo");
-      if (lower.includes("droga") || lower.includes("narco") || lower.includes("venta")) ilicitos.push("Narcomenudeo");
-      if (lower.includes("extor")) ilicitos.push("Extorsión");
-      if (lower.includes("homicidio") || lower.includes("asesinato")) ilicitos.push("Homicidio");
-      if (lower.includes("lesion") || lower.includes("golpe") || lower.includes("rina")) ilicitos.push("Lesiones");
-      if (lower.includes("vandal") || lower.includes("grafiti") || lower.includes("daño")) ilicitos.push("Vandalismo");
-    });
-    if (ilicitos.length === 0) {
-      ilicitos.push("Robo");
-    }
-
-    // Create mock geointeligencia shapes from geocoded members
-    const geometrias: GeointeligenciaShape[] = [];
-    const puntos: { lat: number; lng: number }[] = [];
-    
-    (d.integrantes || []).forEach((m: any) => {
-      if (m.georreferencia && typeof m.georreferencia.lat === "number" && typeof m.georreferencia.lng === "number") {
-        puntos.push({ lat: m.georreferencia.lat, lng: m.georreferencia.lng });
-      }
-    });
-
-    if (puntos.length > 0) {
-      const center = puntos[0];
-      geometrias.push({
-        id: `shape-buffer-${index}`,
-        nombre: `Zona de Influencia: ${gangName}`,
-        tipo: "buffer",
-        puntos: [center],
-        radio: 500,
-        nivelControlTerritorial: "Medio",
-        fechaActualizacion: new Date().toLocaleDateString("es-MX")
-      });
-
-      if (puntos.length >= 3) {
-        geometrias.push({
-          id: `shape-poly-${index}`,
-          nombre: `Zona de Influencia: ${gangName}`,
-          tipo: "poligono",
-          puntos: puntos.slice(0, 4),
-          nivelControlTerritorial: "Medio",
-          fechaActualizacion: new Date().toLocaleDateString("es-MX")
-        });
-      }
-
-      if (puntos.length >= 2) {
-        geometrias.push({
-          id: `shape-corr-${index}`,
-          nombre: `Corredor de Movilidad: ${gangName}`,
-          tipo: "corredor",
-          puntos: [
-            puntos[0],
-            puntos[1]
-          ],
-          nivelControlTerritorial: "Alto",
-          fechaActualizacion: new Date().toLocaleDateString("es-MX")
-        });
-      }
-    }
-
-    const listDrogas = d.sustancias_consumidores || d.narcoticos_asociados || ["Cristal", "Marihuana"];
-
-    return {
-      id: `static-gang-${index}`,
-      nombre: gangName,
-      aliasConocidos: d.alias_gang || "",
-      estatus: "Activa",
-      zonaInfluencia: d.area_influencia || "Aguascalientes",
-      coloniasAsociadas: d.area_influencia ? [d.area_influencia] : ["Zona Centro"],
-      municipiosAsociados: ["Aguascalientes"],
-      ilicitos: ilicitos,
-      drogasConsumidas: listDrogas,
-      modusOperandi: `Operan principalmente en horarios nocturnos mediante agresiones en grupo. Actividades de ${acts.join(", ")}.`,
-      simbolosIdentificacion: `Grafitis con las siglas ${gangName}.`,
-      peligrosidad: d.integrantes_registrados > 4 ? "Alto" : "Medio",
-      integrantes: integrantes,
-      geometrias: geometrias,
-      relaciones: [],
-      cronologiaEventos: [
-        {
-          id: `evt-${index}-1`,
-          fecha: new Date().toLocaleDateString("es-MX"),
-          titulo: "Enfrentamiento Territorial",
-          descripcion: `Disputa violenta registrada entre facciones antagónicas de la zona.`,
-          gravedad: "Alta",
-          categoria: "enfrentamiento",
-          lugar: puntos.length > 0
-            ? `Referencia fuente (${puntos[0].lat.toFixed(6)}, ${puntos[0].lng.toFixed(6)})`
-            : "Sin georreferencia fuente"
-        },
-        {
-          id: `evt-${index}-2`,
-          fecha: new Date().toLocaleDateString("es-MX"),
-          titulo: "Marcaje de Territorio por Grafiti",
-          descripcion: `Evidencia de marcaje e identificación territorial por grafiti.`,
-          gravedad: "Baja",
-          categoria: "grafiti",
-          lugar: puntos.length > 0
-            ? `Referencia fuente (${puntos[0].lat.toFixed(6)}, ${puntos[0].lng.toFixed(6)})`
-            : "Sin georreferencia fuente"
-        }
-      ],
-      imagenesGrafiti: [],
-      geoReportId: `CEIPOL-GEO-${gangName.toUpperCase().replace(/[^A-Z0-9]/g, "")}-ALTO-${index + 100}`,
-      createdAt: Date.now() - (index * 60000),
-      createdBy: "Inyector Automático OSINT"
-    };
-  });
-}
+import { GangEntity, FusionResult } from "./pandillas.mapper";
 
 /**
  * Service class to manage Firestore data persistence and execute intelligence sweep requests.
@@ -198,21 +39,27 @@ export class PandillasService {
    * Saves a new gang record or updates an existing one in Firestore.
    */
   static async saveGang(gang: GangEntity, username: string): Promise<string> {
+    if (gang.id?.startsWith("static-gang-")) {
+      throw new Error("No se permite promover un registro estático al catálogo productivo de pandillas.");
+    }
+
     const db = getDb();
     const dataToSave = {
       ...gang,
       updatedAt: Date.now(),
-      createdBy: gang.createdBy || username,
+      updatedBy: username,
+      ...(gang.id
+        ? (gang.createdBy ? { createdBy: gang.createdBy } : {})
+        : { createdBy: username }),
     };
 
-    if (gang.id && !gang.id.startsWith("static-gang-")) {
+    if (gang.id) {
       const docRef = doc(db, this.collectionName, gang.id);
       const { id, ...cleanData } = dataToSave;
       await updateDoc(docRef, cleanData);
       return gang.id;
     } else {
       const colRef = collection(db, this.collectionName);
-      // Remove temporary static id before saving
       const { id, ...cleanData } = dataToSave;
       const docRef = await addDoc(colRef, {
         ...cleanData,
@@ -223,7 +70,7 @@ export class PandillasService {
   }
 
   /**
-   * Fetches all gang records saved in Firestore. Falls back to mapped dossier JSON if empty.
+   * Fetches only productive gang records persisted in Firestore.
    */
   static async getAllGangs(): Promise<GangEntity[]> {
     const db = getDb();
@@ -236,14 +83,10 @@ export class PandillasService {
         ...doc.data()
       })) as GangEntity[];
       
-      if (list.length === 0) {
-        console.info("[PandillasService] Firestore vacío. Retornando 29 pandillas estáticas de dossier_pandillas.json.");
-        return getStaticFallbackGangs();
-      }
       return list;
     } catch (e) {
-      console.warn("[PandillasService] Fallo consultando Firestore. Retornando 29 pandillas estáticas de dossier_pandillas.json.", e);
-      return getStaticFallbackGangs();
+      console.warn("[PandillasService] Fallo consultando Firestore. No se retornarán datos estáticos.", e);
+      return [];
     }
   }
 
@@ -269,7 +112,7 @@ export class PandillasService {
   }
 
   /**
-   * Fetches a gang record associated with a specific geoReportId. Falls back to static list.
+   * Fetches a persisted gang record associated with a specific geoReportId.
    */
   static async getGangByGeoReportId(geoReportId: string): Promise<GangEntity | null> {
     const db = getDb();
@@ -286,14 +129,6 @@ export class PandillasService {
       }
     } catch (e) {
       console.warn("[PandillasService] Fallo consultando pandilla por geoReportId en Firestore:", e);
-    }
-    
-    // Fallback: search in static dossiers
-    const fallbackList = getStaticFallbackGangs();
-    const found = fallbackList.find(g => g.geoReportId?.toLowerCase() === geoReportId.toLowerCase());
-    if (found) {
-      console.info(`[PandillasService] Encontrado reporte estático para ID: ${geoReportId}`);
-      return found;
     }
     return null;
   }

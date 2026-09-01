@@ -227,18 +227,20 @@ export class GangGeoSweepEngine {
     }
     });
 
-    // Add database matches to detectedLocations and pointsForClustering
-    databaseMatches.forEach(match => {
-      if (!detectedLocations.some(l => Math.abs(l.lat - match.lat) < 0.0001 && Math.abs(l.lng - match.lng) < 0.0001)) {
-        detectedLocations.push({ ...match, authority: "AUTHORITATIVE" });
-        pointsForClustering.push({
-          lat: match.lat,
-          lng: match.lng,
-          confidence: match.confidence,
-          source: match.source
-        });
-      }
-    });
+    // ADR-020.34 C9C:
+    // Narrative/database matching is contextual only.
+    // A real coordinate stored in a source record does not become an
+    // observed location of THIS sweep merely because narrative text
+    // matched a gang, alias, member or territory.
+    //
+    // Preserve semantic matching for future contextual analysis, but
+    // do not promote databaseMatches into detectedLocations,
+    // pointsForClustering, centroids, hotspots or influence zones.
+    if (databaseMatches.length > 0) {
+      console.log(
+        `[GangGeoSweepEngine] Contextual source-record GEO matches retained as non-observed context only: ${databaseMatches.length}. No coordinates promoted to sweep observations.`
+      );
+    }
 
     // PROHIBIDO: asignar coordenadas por palabra clave de colonia (KEYWORD_COORDINATE_MAP).
     // Solo se usan coordenadas EXIF, integrantes geocodificados verificados y geometrías de pandilla.

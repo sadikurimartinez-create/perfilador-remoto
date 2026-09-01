@@ -1060,27 +1060,31 @@ export class ReportEngineKernelClass {
         }
 
         // --- VALIDACIÓN DE INTEGRACIÓN MEDIANTE EL CONTRATO UNIFICADO (IIC) ---
-        // Auto-construcción resiliente en caliente si el contexto no fue proveído por el frontend legacy (undefined)
-        if (this.context.intelligenceContext === undefined) {
-          console.warn("[ReportEngine] IntelligenceContext no proveído. Inicializando capa de resiliencia IIC (ADR-007.3)...");
+        // Missing context cannot establish an ACE certification.
+        if (this.context.intelligenceContext == null) {
+          console.warn("[ReportEngine] IntelligenceContext no disponible. Se requiere auditoria ACE real.");
           
           const autoAceReport = {
-            globalStatus: "PASS" as const,
-            overallConfidence: 100,
-            alerts: [],
-            certifiedOsintOutput: true,
-            certifiedGimOutput: true,
-            metadata: { auditedAt: new Date().toISOString() }
+            globalStatus: "WARNING" as const,
+            overallConfidence: 0,
+            alerts: [{
+              type: "DOCUMENT" as const,
+              category: "TECHNICAL" as const,
+              severity: "HIGH" as const,
+              source: "ReportEngine",
+              message: "No existe reporte ACE certificado disponible. Se requiere auditoria real."
+            }],
+            certifiedOsintOutput: null,
+            certifiedGimOutput: null
           };
 
           this.context.intelligenceContext = {
-            projectId: this.context.project?.id || "PR-001",
+            projectId: this.context.project?.id ?? "",
             schemaVersion: "2.0",
-            analysisReadiness: "READY" as const,
+            analysisReadiness: "NOT_READY" as const,
             qualityControl: {
-              status: "PASS" as const,
-              confidenceScore: 100,
-              auditedAt: new Date().toISOString()
+              status: "WARNING" as const,
+              confidenceScore: 0
             },
             evidenceSources: {
               SEM: { status: "PASS", totalCanonicalEvents: this.context.project?.historicalIncidents?.length || 0 },
@@ -1094,12 +1098,16 @@ export class ReportEngineKernelClass {
 
         const iic = this.context.intelligenceContext;
 
-        // Caso 5: Bloqueo de acceso legacy (si no se proporciona el IIC - Cubierto de forma resiliente)
+        // Caso 5: Bloqueo de acceso legacy sin IIC.
         if (!iic) {
           throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
         }
 
         const aceReport = iic.evidenceSources.ACE;
+
+        if (!aceReport) {
+          throw new Error("BLOQUEO DE SEGURIDAD (NOT_READY): No existe reporte ACE certificado disponible. Se requiere auditoria real.");
+        }
 
         // Caso 4: Bloqueo estricto de NOT_READY / ACE FAILED
         if (iic.analysisReadiness === "NOT_READY" || iic.qualityControl.status === "FAILED") {
@@ -1108,7 +1116,7 @@ export class ReportEngineKernelClass {
             variable: "status",
             expected: "PASS/WARNING",
             received: "FAILED",
-            message: "Inconsistencia crítica o datos estadísticos insuficientes en el expediente."
+            message: aceReport.alerts?.[0]?.message || "Inconsistencia crítica o datos estadísticos insuficientes en el expediente."
           };
           throw new Error(`BLOQUEO DE SEGURIDAD (NOT_READY): El expediente no cumple con los requisitos metodológicos mínimos para su exportación institucional. Detalle: ${firstReason.message}`);
         }
