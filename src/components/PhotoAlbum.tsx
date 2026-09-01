@@ -6078,7 +6078,7 @@ const hasMinimumPhotos =
               setSvFlowTarget(null);
             }}
             onAccept={handleAcceptSvModal2}
-            analystName={user?.displayName || "Analista CEIPOL"}
+            analystName={user?.displayName || user?.username || "UNAVAILABLE"}
           />
 
           <StreetViewPanoramaPicker
@@ -6092,7 +6092,7 @@ const hasMinimumPhotos =
             }}
             onCapture={handleCompleteStreetViewCapture}
             onCaptureMultiple={handleCompleteMultipleStreetViewCaptures}
-            analystName={user?.displayName || "Analista CEIPOL"}
+            analystName={user?.displayName || user?.username || "UNAVAILABLE"}
           />
         </>
       )}

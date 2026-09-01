@@ -18,8 +18,23 @@ export async function PATCH(
 
     const body = await req.json();
     const estado = body.estado || body.estado_revision || body.status || "PENDIENTE_REVISION";
-    const usuarioRevision = body.usuarioRevision || body.validatedBy || body.rejectedBy || "analista";
+    const usuarioRevision = String(
+      body.usuarioRevision || body.validatedBy || body.rejectedBy || ""
+    ).trim();
     const validationComment = body.validationComment || body.rejectionComment || body.comentario || "";
+    const syntheticReviewerIds = new Set([
+      "ANALISTA",
+      "ANALISTA CEIPOL",
+      "US-CEIPOL-ANALISTA",
+      "UNAVAILABLE",
+    ]);
+
+    if (!usuarioRevision || syntheticReviewerIds.has(usuarioRevision.toUpperCase())) {
+      return NextResponse.json(
+        { error: "La identidad real de la persona revisora es obligatoria para registrar una validaci?n humana." },
+        { status: 400 }
+      );
+    }
 
     const success = await StreetViewFindingService.updateStreetViewFindingStatus(
       expedienteId,

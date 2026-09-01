@@ -136,8 +136,19 @@ export async function updateComparisonValidationStatus(
   expedienteId: string,
   newStatus: AnalystValidationStatus,
   comments: string,
-  reviewerId: string = "US-CEIPOL-ANALISTA"
+  reviewerId: string
 ): Promise<TemporalComparisonRecord | null> {
+  const normalizedReviewerId = reviewerId.trim();
+  const syntheticReviewerIds = new Set([
+    "ANALISTA",
+    "ANALISTA CEIPOL",
+    "US-CEIPOL-ANALISTA",
+    "UNAVAILABLE",
+  ]);
+  if (!normalizedReviewerId || syntheticReviewerIds.has(normalizedReviewerId.toUpperCase())) {
+    throw new Error("VALIDACION_HUMANA_BLOQUEADA:IDENTIDAD_REVISORA_NO_ACREDITADA");
+  }
+
   let existing = inMemoryComparisonStore.get(comparisonId);
 
   const nowStr = new Date().toISOString();
@@ -145,7 +156,7 @@ export async function updateComparisonValidationStatus(
   if (existing) {
     existing.analystValidation = {
       status: normalizeGeointGovernanceStatus(newStatus),
-      reviewerId,
+      reviewerId: normalizedReviewerId,
       reviewedAt: nowStr,
       comments: comments.trim(),
     };
@@ -175,7 +186,7 @@ export async function updateComparisonValidationStatus(
       temporalValidation: { valid: true, status: "VALID" },
       analystValidation: {
         status: normalizeGeointGovernanceStatus(newStatus),
-        reviewerId,
+        reviewerId: normalizedReviewerId,
         reviewedAt: nowStr,
         comments: comments.trim(),
       },
@@ -192,7 +203,7 @@ export async function updateComparisonValidationStatus(
         body: JSON.stringify({
           status: normalizeGeointGovernanceStatus(newStatus),
           comments: comments.trim(),
-          reviewerId,
+          reviewerId: normalizedReviewerId,
           reviewedAt: nowStr,
         }),
       }).catch((err) => console.warn("[updateComparisonValidationStatus] Muted PATCH error:", err));
@@ -256,7 +267,7 @@ export async function compareTemporalEvidence(
   evidenceB: GeoEvidence,
   toleranceMeters: number = 50,
   comparisonType: ComparisonType = "TEMPORAL_VISUAL_DELTA",
-  analystId: string = "US-CEIPOL-ANALISTA"
+  analystId: string = "UNAVAILABLE"
 ): Promise<UniversalComparisonExecutionResult> {
   if (!evidenceA || !evidenceB) {
     return {

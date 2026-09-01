@@ -15,11 +15,24 @@ export async function PATCH(
     const body = await req.json();
     const status = normalizeGeointGovernanceStatus(body.status) as GeointGovernanceStatusValue;
     const comments = String(body.comments || body.validationComment || "").trim();
-    const reviewerId = String(body.reviewerId || body.validatedBy || "US-CEIPOL-ANALISTA");
+    const reviewerId = String(body.reviewerId || body.validatedBy || "").trim();
+    const syntheticReviewerIds = new Set([
+      "ANALISTA",
+      "ANALISTA CEIPOL",
+      "US-CEIPOL-ANALISTA",
+      "UNAVAILABLE",
+    ]);
 
     if (!expedienteId || !comparisonId) {
       return NextResponse.json(
         { error: "id y comparisonId son obligatorios" },
+        { status: 400 }
+      );
+    }
+
+    if (!reviewerId || syntheticReviewerIds.has(reviewerId.toUpperCase())) {
+      return NextResponse.json(
+        { error: "La identidad real de la persona revisora es obligatoria para registrar una validaci?n humana." },
         { status: 400 }
       );
     }

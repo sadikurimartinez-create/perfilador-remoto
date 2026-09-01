@@ -52,6 +52,6 @@ export interface PowerUpExecutionLog {
   timestamp: string;
   inputUsed: string;
   outputGenerated: string;
-  confidenceScore: number;     // confidence percentage or coefficient (e.g. 0.94)
+  confidenceScore: number | null; // null when execution produced no measured confidence
   sourcesConsulted: string[];  // list of services queried
 }

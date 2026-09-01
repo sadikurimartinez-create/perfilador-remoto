@@ -44,7 +44,7 @@ export interface GeointTemporalComparativeEngineProps {
 export function GeointTemporalComparativeEngine({
   isOpen,
   projectId = "EXP-2026",
-  analystName = "Analista CEIPOL",
+  analystName = "UNAVAILABLE",
   evidenceA: initialEvidenceA,
   evidenceB: initialEvidenceB,
   primaryEvidenceCandidate,
@@ -175,6 +175,12 @@ export function GeointTemporalComparativeEngine({
   const handleHumanValidation = async (status: AnalystValidationStatus) => {
     if (!activeComparison) return;
 
+    const reviewerId = analystName.trim();
+    if (!reviewerId || reviewerId.toUpperCase() === "UNAVAILABLE") {
+      setValidationError("No hay una identidad humana acreditada disponible para registrar la convalidación.");
+      return;
+    }
+
     if (status === "APPROVED_EVIDENCE" && (!validationComment || validationComment.trim().length === 0)) {
       setValidationError("⚠️ Justificación/Comentario de convalidación obligatoria para promover a evidencia probatoria.");
       return;
@@ -189,14 +195,14 @@ export function GeointTemporalComparativeEngine({
         activeComparison.expedienteId,
         status,
         validationComment.trim(),
-        analystName
+        reviewerId
       );
 
       const updatedComparison: UniversalEvidenceComparison = {
         ...activeComparison,
         analystValidationStatus: status,
         validationComment: validationComment.trim(),
-        validatedBy: analystName,
+        validatedBy: reviewerId,
         validatedAt: new Date().toISOString(),
       };
 
