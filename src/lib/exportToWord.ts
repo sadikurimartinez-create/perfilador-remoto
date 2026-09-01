@@ -123,12 +123,8 @@ async function getImageDimensionsAndBuffer(
           console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a CartoDB.`);
         }
       } else {
-        if (apiKey) {
-          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
-        } else {
-          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png`;
-        }
-        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de Yandex. Aplicado centro por defecto de Aguascalientes.");
+        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Mapa Yandex omitido: no contiene coordenadas verificables.");
+        return null;
       }
     }
 
@@ -147,12 +143,8 @@ async function getImageDimensionsAndBuffer(
           console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: OSM Center [${lat}, ${lng}] -> Redireccionado a CartoDB.`);
         }
       } else {
-        if (apiKey) {
-          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
-        } else {
-          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png`;
-        }
-        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de OSM. Aplicado centro por defecto de Aguascalientes.");
+        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Mapa OSM omitido: no contiene coordenadas verificables.");
+        return null;
       }
     }
 

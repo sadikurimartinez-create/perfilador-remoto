@@ -95,7 +95,7 @@ export function mapStreetViewToAlbumPhoto(
     comentario: commentText,
     evidenceId,
     contextualizedAt: timestamp,
-    contextualizedBy: payload.analystName || "Analista CEIPOL",
+    contextualizedBy: payload.analystName || "UNAVAILABLE",
     isContextualized: true,
     gpsAccuracy: 5,
     gpsTimestamp: timestamp,

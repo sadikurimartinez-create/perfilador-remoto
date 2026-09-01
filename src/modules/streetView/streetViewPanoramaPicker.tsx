@@ -21,7 +21,7 @@ export function StreetViewPanoramaPicker({
   onClose,
   onCapture,
   onCaptureMultiple,
-  analystName = "Analista CEIPOL",
+  analystName = "UNAVAILABLE",
 }: StreetViewPanoramaPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);

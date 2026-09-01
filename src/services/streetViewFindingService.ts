@@ -74,6 +74,14 @@ export class StreetViewFindingService {
     const db = getFirestoreInstance();
     const id = data.id || data.captureId || `sv-finding-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const fechaCreacion = data.fechaCreacion || new Date().toISOString();
+    const rawLat: unknown = data.coordenadas?.lat;
+    const rawLng: unknown = data.coordenadas?.lng;
+    const lat = rawLat == null || rawLat === "" ? Number.NaN : Number(rawLat);
+    const lng = rawLng == null || rawLng === "" ? Number.NaN : Number(rawLng);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new Error("STREETVIEW_FINDING_GEO_REQUIRED");
+    }
 
     const finding: StreetViewFinding = {
       id,
@@ -90,8 +98,8 @@ export class StreetViewFindingService {
       captureId: data.captureId || id,
       categoria: data.categoria || "RUTA_ACCESO",
       coordenadas: {
-        lat: Number(data.coordenadas?.lat || 0),
-        lng: Number(data.coordenadas?.lng || 0)
+        lat,
+        lng
       },
       imagen: data.imagen || "",
       heading: Number(data.heading || 0),

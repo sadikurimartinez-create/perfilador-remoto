@@ -1959,7 +1959,7 @@ const hasMinimumPhotos =
       const dataToSave = {
         projectId: project?.id || "EXP_TACTICO",
         poligono: project?.nombre || (project as any)?.name || "Zona de Estudio",
-        analyst: user?.username || "Analista CEIPOL",
+        analyst: user?.username || "UNAVAILABLE",
         fecha: Date.now(),
         version: "v9.0",
         componentes: activeComponents,

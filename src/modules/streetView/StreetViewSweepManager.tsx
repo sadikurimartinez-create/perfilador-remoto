@@ -24,7 +24,7 @@ export function StreetViewSweepManager({
   lng,
   onClose,
   onCaptureMultiple,
-  analystName = "Analista CEIPOL",
+  analystName = "UNAVAILABLE",
 }: StreetViewSweepManagerProps) {
   const handleFindingsGenerated = (findings: GeoIntSweepFindingPayload[]) => {
     // Adaptar estructuras al pipeline de convalidación humana (ADR-016 / ADR-018)
