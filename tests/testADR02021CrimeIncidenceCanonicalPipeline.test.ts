@@ -134,6 +134,112 @@ describe("ADR-020.21 - Crime incidence canonical pipeline", () => {
     expect(classified.summary.validated).toBe(1);
   });
 
+  test("TEST 6A configured temporal window rejects out-of-scope records without rewriting dates", () => {
+    const previousStart = process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
+    const previousEnd = process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+
+    process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = "2025-01-01";
+    process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END = "2025-12-31";
+
+    try {
+      const classified = classifyCrimeDataset(
+        [
+          {
+            INCIDENTE: "Robo",
+            FECHA: "24/12/2025",
+            HORA: "04:00",
+            LAT: "21.93338",
+            LONG: "-102.29069",
+          },
+          {
+            INCIDENTE: "Robo",
+            FECHA: "24/12/2026",
+            HORA: "04:00",
+            LAT: "21.93338",
+            LONG: "-102.29069",
+          },
+        ],
+        "Robo negocio 2025.csv"
+      );
+
+      expect(classified.status).toBe("PARTIAL");
+      expect(classified.summary.received).toBe(2);
+      expect(classified.summary.validated).toBe(1);
+      expect(classified.summary.rejected).toBe(1);
+
+      const accepted = classified.records.find(
+        (record) => record.date === "2025-12-24"
+      );
+      const rejected = classified.records.find(
+        (record) => record.date === "2026-12-24"
+      );
+
+      expect(accepted?.isValid).toBe(true);
+      expect(rejected?.isValid).toBe(false);
+      expect(rejected?.rejectionReason).toBe("TEMPORAL_OUT_OF_SCOPE");
+
+      // El firewall rechaza; nunca corrige ni reescribe la fecha fuente.
+      expect(rejected?.date).toBe("2026-12-24");
+
+      expect(classified.temporalCoverage).toEqual({
+        start: "2025-12-24",
+        end: "2025-12-24",
+        status: "KNOWN",
+      });
+    } finally {
+      if (previousStart === undefined) {
+        delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
+      } else {
+        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = previousStart;
+      }
+
+      if (previousEnd === undefined) {
+        delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+      } else {
+        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END = previousEnd;
+      }
+    }
+  });
+
+  test("TEST 6B partial temporal configuration fails closed", () => {
+    const previousStart = process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
+    const previousEnd = process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+
+    process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = "2025-01-01";
+    delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+
+    try {
+      const record = normalizeCrimeRecord(
+        {
+          INCIDENTE: "Robo",
+          FECHA: "24/12/2025",
+          HORA: "04:00",
+          LAT: "21.93338",
+          LONG: "-102.29069",
+        },
+        "Robo negocio 2025.csv"
+      );
+
+      expect(record.isValid).toBe(false);
+      expect(record.date).toBe("2025-12-24");
+      expect(record.rejectionReason).toBe(
+        "TEMPORAL_CONFIGURATION_INVALID"
+      );
+    } finally {
+      if (previousStart === undefined) {
+        delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
+      } else {
+        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = previousStart;
+      }
+
+      if (previousEnd === undefined) {
+        delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+      } else {
+        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END = previousEnd;
+      }
+    }
+  });
+
   test("TEST 7 upload differentiates received inserted rejected and duplicates", async () => {
     const { POST } = await import("../src/app/api/upload-csv/route");
     const csv = [

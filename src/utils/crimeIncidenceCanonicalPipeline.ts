@@ -74,6 +74,66 @@ export function determineAguascalientesCoverage(lat: number | null, lng: number 
   return "IN_COVERAGE";
 }
 
+export type CrimeIncidenceTemporalWindow =
+  | {
+      status: "CONFIGURED";
+      start: string;
+      end: string;
+    }
+  | {
+      status: "INVALID_CONFIGURATION";
+      start: null;
+      end: null;
+    };
+
+function validConfiguredIsoDate(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+
+  const [year, month, day] = raw.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return raw;
+}
+
+export function resolveCrimeIncidenceTemporalWindow(
+  environment: Record<string, string | undefined> = process.env
+): CrimeIncidenceTemporalWindow | null {
+  const rawStart = environment.CRIME_INCIDENCE_DATASET_TEMPORAL_START?.trim();
+  const rawEnd = environment.CRIME_INCIDENCE_DATASET_TEMPORAL_END?.trim();
+
+  // Compatibilidad controlada: si ninguna variable temporal fue configurada,
+  // no se activa el firewall institucional.
+  if (!rawStart && !rawEnd) return null;
+
+  const start = validConfiguredIsoDate(rawStart);
+  const end = validConfiguredIsoDate(rawEnd);
+
+  // Si existe intención de configuración, cualquier estado parcial,
+  // inválido o invertido debe fallar cerrado.
+  if (!start || !end || start > end) {
+    return {
+      status: "INVALID_CONFIGURATION",
+      start: null,
+      end: null,
+    };
+  }
+
+  return {
+    status: "CONFIGURED",
+    start,
+    end,
+  };
+}
+
 export function parseCrimeDate(value: unknown): string | null {
   if (!value) return null;
   const raw = String(value).trim();
@@ -140,13 +200,29 @@ export function normalizeCrimeRecord(row: RawCrimeRecord, sourceFile: string): N
   const geoStatus = geo.geolocationStatus ?? "INVALID";
   const hasRequired = Boolean(incident && date && originalLat != null && originalLng != null);
   const inCoverage = coverageStatus === "IN_COVERAGE";
-  const isValid = hasRequired && geoStatus === "VALID_GEOLOCATION" && inCoverage;
+  const temporalWindow = resolveCrimeIncidenceTemporalWindow();
+  const temporalConfigurationValid =
+    temporalWindow?.status !== "INVALID_CONFIGURATION";
+  const temporalInScope =
+    temporalWindow === null ||
+    (temporalWindow.status === "CONFIGURED" &&
+      date !== null &&
+      date >= temporalWindow.start &&
+      date <= temporalWindow.end);
+  const isValid =
+    hasRequired &&
+    geoStatus === "VALID_GEOLOCATION" &&
+    inCoverage &&
+    temporalConfigurationValid &&
+    temporalInScope;
   const dedupKey = buildCrimeDedupKey({ incident, date, time, originalLat, originalLng, sourceFile });
 
   let rejectionReason: string | undefined;
   if (!hasRequired) rejectionReason = "MISSING_REQUIRED_FIELDS";
   else if (geoStatus !== "VALID_GEOLOCATION") rejectionReason = "GEO_INVALID";
   else if (!inCoverage) rejectionReason = coverageStatus;
+  else if (!temporalConfigurationValid) rejectionReason = "TEMPORAL_CONFIGURATION_INVALID";
+  else if (!temporalInScope) rejectionReason = "TEMPORAL_OUT_OF_SCOPE";
 
   return {
     id: dedupKey,
