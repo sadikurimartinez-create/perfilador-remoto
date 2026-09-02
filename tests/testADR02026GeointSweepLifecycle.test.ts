@@ -143,20 +143,23 @@ describe("ADR-020.26 - GEOINT Sweep lifecycle integration", () => {
     );
   });
 
-  test("TEST 11 mock repository remains non-productive", () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), "domain/sweep/repository/mock.sweep.repository.ts"),
-      "utf8"
-    );
-    const projectContext = fs.readFileSync(
-      path.join(process.cwd(), "src/context/ProjectContext.tsx"),
-      "utf8"
-    );
+  test("TEST 11 productive architecture does not wire a mock sweep repository", () => {
+    const productiveFiles = [
+      "src/context/ProjectContext.tsx",
+      "src/utils/geointSweepLifecycle.ts",
+      "src/services/geoint/geointSweepService.ts",
+      "src/services/geoint/geointSweepLifecycleEventService.ts",
+    ];
 
-    expect(source).toContain("MockGeointSweepStateRepository");
-    expect(projectContext).not.toContain("MockGeointSweepStateRepository");
+    for (const relativePath of productiveFiles) {
+      const source = fs.readFileSync(
+        path.join(process.cwd(), relativePath),
+        "utf8"
+      );
+
+      expect(source).not.toContain("MockGeointSweepStateRepository");
+    }
   });
-
   test("TEST 12 traceabilityId absent upstream is not fabricated", () => {
     const fromDocumentOnly = createGeointSweepLifecycleRecord({
       sweepId: "sweep-doc",
