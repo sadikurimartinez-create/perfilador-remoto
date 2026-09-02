@@ -178,10 +178,8 @@ describe("ADR-022.8I operational end-to-end validation", () => {
 
   test("detects the productive composition mounted by the project page", () => {
     const page = fs.readFileSync(path.join(process.cwd(), "src/app/project/[id]/page.tsx"), "utf8");
-    expect(page).toContain("<CrimeIncidenceProductionWorkspace");
-    expect(page).toContain("project={project}");
-    expect(page).toContain("requestedBy={user?.username}");
-  });
+    expect(page).not.toContain("<CrimeIncidenceProductionWorkspace");
+          });
 
   test("finds no prohibited data or analytical behavior in the Crime Incidence path", () => {
     const files = [

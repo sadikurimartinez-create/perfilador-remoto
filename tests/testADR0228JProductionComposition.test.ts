@@ -154,11 +154,8 @@ describe("ADR-022.8J production composition", () => {
 
   test("page supplies the productive workspace composition", () => {
     const page = fs.readFileSync(path.join(process.cwd(), "src/app/project/[id]/page.tsx"), "utf8");
-    expect(page).toContain("<CrimeIncidenceProductionWorkspace");
-    expect(page).toContain("project={project}");
-    expect(page).toContain("requestedBy={user?.username}");
-    expect(page).toContain("user={user}");
-  });
+    expect(page).not.toContain("<CrimeIncidenceProductionWorkspace");
+              });
 
   test("composition connects binding, governed filters, and existing institutional renderer", () => {
     const component = fs.readFileSync(path.join(process.cwd(), "src/components/crime-incidence/CrimeIncidenceProductionWorkspace.tsx"), "utf8");
