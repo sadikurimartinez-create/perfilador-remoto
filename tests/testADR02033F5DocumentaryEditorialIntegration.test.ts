@@ -13,6 +13,7 @@ import {
   buildInstitutionalReportInput,
   reconcileInstitutionalReportPayload,
 } from "../src/utils/institutionalReportPublicationContract";
+import { assessRequestedAnnexAvailability } from "../src/utils/reportAnnexAvailabilityGovernance";
 
 function readSource(relativePath: string) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -321,5 +322,75 @@ describe("ADR-020.33 F5 - Documentary/editorial integration", () => {
     expect(source.indexOf("buildInstitutionalReportInput(payload)")).toBeLessThan(source.indexOf("reconcileInstitutionalReportPayload(payload, institutionalReportInput)"));
     expect(source.indexOf("reconcileInstitutionalReportPayload(payload, institutionalReportInput)")).toBeLessThan(source.indexOf("buildInstitutionalDocumentModel(institutionalReportInput"));
     expect(source).toContain("applyInstitutionalDocumentModelToPayload");
+  });
+
+  test("TEST 31 requested missing map creates disclosure without fabricating a map", () => {
+    const payload = { maps: [], graphs: [], sweepsData: [], hypothesisGraph: null };
+    const disclosures = assessRequestedAnnexAvailability(payload, { mapDensity: true });
+
+    expect(payload.maps).toEqual([]);
+    expect(disclosures).toContainEqual(expect.objectContaining({
+      itemId: "annex-map-density",
+      itemType: "VISUAL_PRODUCT",
+      code: "REQUESTED_VISUAL_PRODUCT_UNAVAILABLE",
+    }));
+  });
+
+  test("TEST 32 requested missing chart creates disclosure without fabricating a chart", () => {
+    const payload = { maps: [], graphs: [], sweepsData: [], hypothesisGraph: null };
+    const disclosures = assessRequestedAnnexAvailability(payload, { chartTemporal: true });
+
+    expect(payload.graphs).toEqual([]);
+    expect(disclosures.map((item) => item.itemId)).toContain("annex-chart-temporal");
+  });
+
+  test("TEST 33 requested unexecuted sweep does not create a synthetic negative result", () => {
+    const payload = { maps: [], graphs: [], sweepsData: [], hypothesisGraph: null };
+    const disclosures = assessRequestedAnnexAvailability(payload, { sweepDenue: { selected: true, available: false } });
+
+    expect(payload.sweepsData).toEqual([]);
+    expect(disclosures).toContainEqual(expect.objectContaining({
+      itemId: "annex-sweep-denue",
+      itemType: "ANALYSIS",
+      code: "REQUESTED_ANALYTICAL_PRODUCT_UNAVAILABLE",
+    }));
+  });
+
+  test("TEST 34 requested missing HIG does not create a no-connections graph", () => {
+    const payload = { maps: [], graphs: [], sweepsData: [], hypothesisGraph: null };
+    const disclosures = assessRequestedAnnexAvailability(payload, { graphConnections: true });
+
+    expect(payload.hypothesisGraph).toBeNull();
+    expect(disclosures.map((item) => item.itemId)).toContain("annex-hig-connections");
+  });
+
+  test("TEST 35 existing real product keeps its analytical title and needs no unavailability disclosure", () => {
+    const payload = {
+      maps: [{ title: "Mapa de densidad observado" }],
+      graphs: [{ title: "Distribución temporal observada" }],
+      sweepsData: [{ engine: "DENUE", source: "INEGI", data: "resultado trazable", context: "expediente" }],
+      hypothesisGraph: { dataUrl: longImage },
+    };
+    const original = JSON.parse(JSON.stringify(payload));
+    const disclosures = assessRequestedAnnexAvailability(payload, {
+      mapDensity: true,
+      chartTemporal: true,
+      sweepDenue: true,
+      graphConnections: true,
+    });
+
+    expect(payload).toEqual(original);
+    expect(disclosures).toEqual([]);
+  });
+
+  test("TEST 36 Report Engine uses governed disclosures and contains no product fallback injection", () => {
+    const source = readSource("src/lib/reportEngine.ts");
+
+    expect(source).toContain("assessRequestedAnnexAvailability");
+    expect(source).toContain("publicationDisclosures");
+    expect(source).not.toMatch(/payloadObj\.(maps|graphs|sweepsData)\.push/);
+    expect(source).not.toMatch(/payloadObj\.hypothesisGraph\s*=/);
+    expect(source).not.toContain("(Normalizado)");
+    expect(source).not.toContain("Sin Conexiones Identificadas en el Sector");
   });
 });
