@@ -122,4 +122,22 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     expect(source).toContain("Confirmar geografía");
     expect(source).toContain("draftGeography,");
   });
+
+  test("TEST 16 project list camera capture feeds draft geography without auto-confirming", () => {
+    const source = readSource("src/components/ProjectList.tsx");
+    expect(source).toContain("import exifr from \"exifr\"");
+    expect(source).toContain("readPhotoGps(file, isLiveCapture)");
+    expect(source).toContain("updateDraftProjectGeography(draftGeography, nextPoints)");
+    expect(source).toContain("Confirmar geografía");
+    expect(source).not.toContain("Usar GPS actual");
+  });
+
+  test("TEST 17 project list distinguishes in-situ camera from gallery import", () => {
+    const source = readSource("src/components/ProjectList.tsx");
+    expect(source).toContain("CAMERA_IN_SITU");
+    expect(source).toContain("GALLERY_IMPORT");
+    expect(source).toContain("handlePendingPhotosChange(e, true)");
+    expect(source).toContain("handlePendingPhotosChange(e, false)");
+    expect(source).toContain("no redefine la geografía rectora");
+  });
 });

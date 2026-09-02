@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import exifr from "exifr";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import {
@@ -47,6 +48,85 @@ type ProjectWithCount = {
   ceipolId?: string;
 };
 
+type PendingProjectPhoto = {
+  file: File;
+  url: string;
+  captureSource: "CAMERA_IN_SITU" | "GALLERY_IMPORT";
+  lat: number | null;
+  lng: number | null;
+  gpsSource: "EXIF_GPS" | "DEVICE_GPS" | "NO_GPS";
+  gpsAccuracy: number | null;
+  gpsTimestamp: number | null;
+};
+
+function getCameraDeviceLocation(): Promise<{ lat: number; lng: number; accuracy: number | null; timestamp: number | null }> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || typeof navigator.geolocation?.getCurrentPosition !== "function") {
+      reject(new Error("El navegador de este celular no soporta geolocalización."));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy ?? null,
+          timestamp: pos.timestamp ?? Date.now(),
+        });
+      },
+      (err) => {
+        let errMsg = "Error de GPS.";
+        if (err.code === 1) errMsg = "Permiso de ubicación denegado para la cámara.";
+        if (err.code === 2) errMsg = "Posición GPS no disponible para la captura in situ.";
+        if (err.code === 3) errMsg = "Tiempo de espera agotado por el sensor GPS del dispositivo.";
+        reject(new Error(errMsg));
+      },
+      { enableHighAccuracy: true, timeout: 35000, maximumAge: 0 }
+    );
+  });
+}
+
+async function readPhotoGps(file: File, isLiveCapture: boolean): Promise<{
+  lat: number | null;
+  lng: number | null;
+  gpsSource: PendingProjectPhoto["gpsSource"];
+  gpsAccuracy: number | null;
+  gpsTimestamp: number | null;
+}> {
+  const exifGps = await exifr.gps(file).catch(() => null);
+  if (
+    exifGps &&
+    typeof exifGps.latitude === "number" &&
+    typeof exifGps.longitude === "number"
+  ) {
+    return {
+      lat: exifGps.latitude,
+      lng: exifGps.longitude,
+      gpsSource: "EXIF_GPS",
+      gpsAccuracy: null,
+      gpsTimestamp: null,
+    };
+  }
+
+  if (!isLiveCapture) {
+    return { lat: null, lng: null, gpsSource: "NO_GPS", gpsAccuracy: null, gpsTimestamp: null };
+  }
+
+  try {
+    const device = await getCameraDeviceLocation();
+    return {
+      lat: device.lat,
+      lng: device.lng,
+      gpsSource: "DEVICE_GPS",
+      gpsAccuracy: device.accuracy,
+      gpsTimestamp: device.timestamp,
+    };
+  } catch {
+    return { lat: null, lng: null, gpsSource: "NO_GPS", gpsAccuracy: null, gpsTimestamp: null };
+  }
+}
+
 export function ProjectList() {
   const router = useRouter();
   const { 
@@ -71,7 +151,7 @@ export function ProjectList() {
   const draftPreview = buildDraftGeographyPreview(draftGeography);
   const geometryConfirmed = draftGeography.confirmed && draftPreview.canConfirm;
   const [isListening, setIsListening] = useState(false);
-  const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingProjectPhoto[]>([]);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -266,15 +346,62 @@ export function ProjectList() {
     }
   };
 
-  const handlePendingPhotosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newItems = Array.from(e.target.files).map(file => ({
-        file,
-        url: URL.createObjectURL(file)
-      }));
-      setPendingPhotos(prev => [...prev, ...newItems]);
-    }
+  const handlePendingPhotosChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isLiveCapture = false
+  ) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
+    if (files.length === 0) return;
+
+    const newItems = await Promise.all(files.map(async (file) => {
+      const gps = await readPhotoGps(file, isLiveCapture);
+      return {
+        file,
+        url: URL.createObjectURL(file),
+        captureSource: isLiveCapture ? "CAMERA_IN_SITU" : "GALLERY_IMPORT",
+        ...gps,
+      } satisfies PendingProjectPhoto;
+    }));
+
+    setPendingPhotos(prev => [...prev, ...newItems]);
+
+    if (!isLiveCapture) {
+      setDraftFeedback("Fotografía de galería agregada como evidencia pendiente; no redefine la geografía rectora.");
+      return;
+    }
+
+    const rectorPoints = newItems
+      .filter((item): item is PendingProjectPhoto & { lat: number; lng: number } => (
+        item.captureSource === "CAMERA_IN_SITU" &&
+        Number.isFinite(item.lat) &&
+        Number.isFinite(item.lng)
+      ))
+      .map((item) => ({ lat: item.lat, lng: item.lng }));
+
+    if (rectorPoints.length === 0) {
+      setDraftFeedback("La captura in situ no contiene coordenadas GPS válidas. Capture nuevamente o ingrese Latitud/Longitud manualmente.");
+      return;
+    }
+
+    const nextPoints =
+      geometryType === "individual"
+        ? [rectorPoints[rectorPoints.length - 1]]
+        : [...draftGeography.points, ...rectorPoints];
+
+    setDraftGeography(
+      updateDraftProjectGeography(draftGeography, nextPoints)
+    );
+    const lastPoint = nextPoints[nextPoints.length - 1];
+    setDraftLatInput(String(lastPoint.lat));
+    setDraftLngInput(String(lastPoint.lng));
+    setDraftFeedback(
+      draftGeography.confirmed || draftWasConfirmed
+        ? "Geografía modificada por captura in situ. Confírmela nuevamente antes de crear el expediente."
+        : geometryType === "individual"
+          ? "Captura in situ vinculada como punto rector. Confirme la geografía antes de crear."
+          : "Captura in situ agregada como nodo rector. Confirme la geografía antes de crear."
+    );
   };
 
   const removePendingPhoto = (index: number) => {
@@ -1255,7 +1382,7 @@ export function ProjectList() {
                       accept="image/*"
                       capture="environment"
                       className="sr-only"
-                      onChange={handlePendingPhotosChange}
+                      onChange={(e) => void handlePendingPhotosChange(e, true)}
                     />
                   </label>
                   <label className="flex-1 text-center cursor-pointer rounded-lg border border-sky-600 bg-sky-900/30 text-sky-100 py-2.5 text-sm font-semibold hover:bg-sky-800/50 shadow-md transition-colors flex items-center justify-center gap-2">
@@ -1265,7 +1392,7 @@ export function ProjectList() {
                       accept="image/*"
                       multiple
                       className="sr-only"
-                      onChange={handlePendingPhotosChange}
+                      onChange={(e) => void handlePendingPhotosChange(e, false)}
                     />
                   </label>
                 </div>
