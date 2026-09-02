@@ -1,5 +1,25 @@
 import { GeointEventType } from "@/types/geointEventLog";
 
+type GeointEventRuntime = {
+  window?: {
+    document?: unknown;
+    location?: { protocol?: string };
+    fetch?: unknown;
+  };
+};
+
+export function resolveGeointEventTransport(
+  runtime: GeointEventRuntime = globalThis as GeointEventRuntime
+): "BROWSER_API" | "SERVER_OUTBOX" {
+  const browserWindow = runtime.window;
+  const protocol = browserWindow?.location?.protocol;
+  return browserWindow?.document
+    && typeof browserWindow.fetch === "function"
+    && (protocol === "http:" || protocol === "https:")
+    ? "BROWSER_API"
+    : "SERVER_OUTBOX";
+}
+
 /**
  * Emite eventos GEOINT de forma confiable mediante Outbox.
  * ADR-019.19 FASE 2B: el adapter conserva la firma legacy, pero deja
@@ -16,8 +36,8 @@ export async function logGeointEvent(
   entityId: string,
   metadata: Record<string, any> = {}
 ) {
-  if (typeof window !== "undefined") {
-    const response = await fetch("/api/geoint/events/outbox", {
+  if (resolveGeointEventTransport() === "BROWSER_API") {
+    const response = await window.fetch("/api/geoint/events/outbox", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

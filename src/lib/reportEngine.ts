@@ -809,6 +809,14 @@ export class ReportEngineKernelClass {
           throw new Error("VALIDATE_EXECUTION_ID_MISMATCH");
         }
 
+        // ADR-007.3: IIC Migration Firewall
+        // Ningún flujo institucional puede continuar sin IntelligenceIntegrationContext.
+        if (this.context.intelligenceContext == null) {
+          throw new Error(
+            "MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3."
+          );
+        }
+
         const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
         if (previewLayer) {
           throw new Error("ASSERT_FAILED: Preview layer exists");
@@ -1059,49 +1067,7 @@ export class ReportEngineKernelClass {
           }
         }
 
-        // --- VALIDACIÓN DE INTEGRACIÓN MEDIANTE EL CONTRATO UNIFICADO (IIC) ---
-        // Missing context cannot establish an ACE certification.
-        if (this.context.intelligenceContext == null) {
-          console.warn("[ReportEngine] IntelligenceContext no disponible. Se requiere auditoria ACE real.");
-          
-          const autoAceReport = {
-            globalStatus: "WARNING" as const,
-            overallConfidence: 0,
-            alerts: [{
-              type: "DOCUMENT" as const,
-              category: "TECHNICAL" as const,
-              severity: "HIGH" as const,
-              source: "ReportEngine",
-              message: "No existe reporte ACE certificado disponible. Se requiere auditoria real."
-            }],
-            certifiedOsintOutput: null,
-            certifiedGimOutput: null
-          };
-
-          this.context.intelligenceContext = {
-            projectId: this.context.project?.id ?? "",
-            schemaVersion: "2.0",
-            analysisReadiness: "NOT_READY" as const,
-            qualityControl: {
-              status: "WARNING" as const,
-              confidenceScore: 0
-            },
-            evidenceSources: {
-              SEM: { status: "PASS", totalCanonicalEvents: this.context.project?.historicalIncidents?.length || 0 },
-              TCE: { status: "PASS" },
-              CIE: { status: "PASS" },
-              HIE: { status: "PASS" },
-              ACE: autoAceReport
-            }
-          };
-        }
-
         const iic = this.context.intelligenceContext;
-
-        // Caso 5: Bloqueo de acceso legacy sin IIC.
-        if (!iic) {
-          throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
-        }
 
         const aceReport = iic.evidenceSources.ACE;
 

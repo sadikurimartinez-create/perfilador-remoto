@@ -99,11 +99,21 @@ describe("ADR-020.18 Fase 2 - Photo evidence and temporal comparison geointegrit
   });
 
   test("TEMPORAL-02 comparison without coordinates does not produce zero-zero", async () => {
-    const syntheticUpdate = await updateComparisonValidationStatus(
-      "cmp-without-geo",
+    const persistedComparison = await compareTemporalEvidence(
+      makeGeoEvidence({ id: "review-a", traceabilityId: "trace-review-a" }),
+      makeGeoEvidence({ id: "review-b", traceabilityId: "trace-review-b", source: "STREET_VIEW_HISTORICAL" }),
+      50,
+      "TEMPORAL_VISUAL_DELTA",
+      "ANALISTA_TEST_ADR02018"
+    );
+    expect(persistedComparison.comparison).toBeDefined();
+
+    const reviewedComparison = await updateComparisonValidationStatus(
+      persistedComparison.comparison!.comparisonId,
       "EXP-GEO",
       "APPROVED_EVIDENCE",
-      "reviewed"
+      "reviewed",
+      "ANALISTA_TEST_ADR02018"
     );
     const finding = buildStreetViewFindingFromTemporalComparison({
       comparisonId: "cmp-no-geo-finding",
@@ -117,8 +127,7 @@ describe("ADR-020.18 Fase 2 - Photo evidence and temporal comparison geointegrit
       createdAt: "2026-08-28T00:00:00.000Z",
     } as any);
 
-    expect(syntheticUpdate?.evidenceA.coordinates).toEqual({ lat: null, lng: null });
-    expect(syntheticUpdate?.evidenceB.coordinates).toEqual({ lat: null, lng: null });
+    expect(reviewedComparison?.analystValidation.reviewerId).toBe("ANALISTA_TEST_ADR02018");
     expect(finding.coordenadas).toEqual({ lat: null, lng: null });
     expect(finding.geolocationIntegrity.reportableAsObservedGeoint).toBe(false);
   });

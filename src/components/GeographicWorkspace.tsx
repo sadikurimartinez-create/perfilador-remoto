@@ -10,6 +10,7 @@ import { AnalyticsFilterProvider } from "./analytics/AnalyticsFilterContext";
 import { GeointControlledSweepEngine } from "@/modules/geoint/GeointControlledSweepEngine";
 import { GeointTemporalComparativeEngine } from "@/modules/geoint/GeointTemporalComparativeEngine";
 import { useProject } from "@/context/ProjectContext";
+import { useAuth } from "@/context/AuthContext";
 import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
 import { GeointGovernanceStatus, GeointGovernanceStatusValue } from "@/types/geointGovernance";
 import { buildStreetViewFindingFromTemporalComparison } from "@/services/geoint/temporalComparisonBridge";
@@ -47,6 +48,7 @@ export function calculateSweepPreparation(input: {
 
 export function GeographicWorkspace() {
   const { project, album, registerSweep } = useProject();
+  const { user } = useAuth();
   const expedienteId = project?.id || "EXP-2026";
 
   const [selectedPoi, setSelectedPoi] = useState<any | null>(null);
@@ -402,6 +404,7 @@ export function GeographicWorkspace() {
           <GeointTemporalComparativeEngine
             isOpen={isTemporalEngineOpen}
             projectId={expedienteId}
+            analystName={user?.username}
             primaryEvidenceCandidate={primaryEvidenceCandidate}
             contextualEvidenceCandidate={contextualEvidenceCandidate}
             onClose={() => {

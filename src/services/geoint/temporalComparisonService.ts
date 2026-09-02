@@ -138,7 +138,7 @@ export async function updateComparisonValidationStatus(
   comments: string,
   reviewerId: string
 ): Promise<TemporalComparisonRecord | null> {
-  const normalizedReviewerId = reviewerId.trim();
+  const normalizedReviewerId = typeof reviewerId === "string" ? reviewerId.trim() : "";
   const syntheticReviewerIds = new Set([
     "ANALISTA",
     "ANALISTA CEIPOL",
@@ -146,7 +146,7 @@ export async function updateComparisonValidationStatus(
     "UNAVAILABLE",
   ]);
   if (!normalizedReviewerId || syntheticReviewerIds.has(normalizedReviewerId.toUpperCase())) {
-    throw new Error("VALIDACION_HUMANA_BLOQUEADA:IDENTIDAD_REVISORA_NO_ACREDITADA");
+    throw new Error("IDENTIDAD_REVISORA_NO_ACREDITADA");
   }
 
   const existing = inMemoryComparisonStore.get(comparisonId);
