@@ -21,6 +21,7 @@ module.exports = {
     "/tests/testADR01913Governance\\.test\\.ts$",
     "/tests/testADR01915Geointegrity\\.test\\.ts$",
     "/tests/testADR01917Connectivity\\.test\\.ts$",
+    "/tests/testADR01918EventLedger\\.test\\.ts$",
     "/tests/testADR01919Fingerprint\\.test\\.ts$",
 
     "/src/utils/analyticalConsistencyEngine/tests/ace\\.test\\.ts$",
