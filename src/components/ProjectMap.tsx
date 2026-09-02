@@ -290,52 +290,6 @@ export function ProjectMap({
     });
   }, [album]);
 
-  // Compute dispersed positions for marker rendering to prevent stacked pins
-  const markersWithDispersion = useMemo(() => {
-    console.log("[GEOINT DEBUG] georeferencedPhotos:", georeferencedPhotos);
-    console.log("[GEOINT DEBUG] markersWithDispersion input:", georeferencedPhotos.length);
-    console.log(
-      "[GEOINT DEBUG] Coordenadas reales:",
-      JSON.stringify(
-        georeferencedPhotos.slice(0,5).map((p)=>({
-          id:p.id,
-          lat:p.lat,
-          lng:p.lng
-        })),
-        null,
-        2
-      )
-    );
-    const coordCounts: Record<string, number> = {};
-    return georeferencedPhotos.map((photo) => {
-      const lat = Number(photo.lat);
-      const lng = Number(photo.lng);
-      const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
-      if (coordCounts[key] === undefined) {
-        coordCounts[key] = 0;
-      }
-      const count = coordCounts[key];
-      coordCounts[key] += 1;
-      if (count === 0) {
-        return {
-          ...photo,
-          displayLat: lat,
-          displayLng: lng,
-        };
-      } else {
-        const angle = (count * 2 * Math.PI) / 8; // Max 8 points per ring
-        const ring = Math.floor((count - 1) / 8) + 1;
-        const baseRadius = 0.000035; // ~3-4 meters
-        const radius = baseRadius * ring;
-        return {
-          ...photo,
-          displayLat: lat + radius * Math.sin(angle),
-          displayLng: lng + radius * Math.cos(angle),
-        };
-      }
-    });
-  }, [georeferencedPhotos]);
-
   const isFallback = useMemo(() => {
     const hasProjectCoords = project?.latitude != null && project?.longitude != null;
     const isProjectDefault = hasProjectCoords && 
@@ -770,19 +724,7 @@ export function ProjectMap({
         )}
 
         {/* Georeferenced Evidence markers */}
-        {showPhotos && markersWithDispersion.map((photo) => {
-
-          console.log(
-            "[GEOINT DEBUG] Marker render:",
-            {
-              id: photo.id,
-              displayLat: photo.displayLat,
-              displayLng: photo.displayLng,
-              lat: photo.lat,
-              lng: photo.lng
-            }
-          );
-
+        {showPhotos && georeferencedPhotos.map((photo) => {
           const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente";
           if (photo.tipo?.startsWith("Barrido")) return null; // Los barridos se manejan por separado en showOsint
           if (isPoi && !showGeoint) return null; // Las POIs se controlan mediante Inteligencia GEOINT
@@ -791,7 +733,7 @@ export function ProjectMap({
           return (
             <Marker
               key={photo.id}
-              position={{ lat: Number(photo.displayLat), lng: Number(photo.displayLng) }}
+              position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
               zIndex={isPoi ? 100 : 200}
               title={`Evidencia ${photo.id}`}
               onClick={() => {
@@ -996,7 +938,7 @@ export function ProjectMap({
         {/* Hover info window containing the preview and limited metadata of the georeferenced evidence */}
         {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (
           <InfoWindow
-            position={{ lat: Number(hoveredPhoto.displayLat ?? hoveredPhoto.lat), lng: Number(hoveredPhoto.displayLng ?? hoveredPhoto.lng) }}
+            position={{ lat: Number(hoveredPhoto.lat), lng: Number(hoveredPhoto.lng) }}
             options={{
               pixelOffset: new window.google.maps.Size(0, -35),
             }}
@@ -1028,7 +970,7 @@ export function ProjectMap({
         {/* Action-oriented selection InfoWindow for depth analysis and street view activation */}
         {activePhoto && activePhoto.lat != null && activePhoto.lng != null && (
           <InfoWindow
-            position={{ lat: Number(activePhoto.displayLat ?? activePhoto.lat), lng: Number(activePhoto.displayLng ?? activePhoto.lng) }}
+            position={{ lat: Number(activePhoto.lat), lng: Number(activePhoto.lng) }}
             options={{
               pixelOffset: new window.google.maps.Size(0, -35),
             }}

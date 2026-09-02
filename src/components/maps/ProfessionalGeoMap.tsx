@@ -23,6 +23,7 @@ import { useOptionalAnalyticsFilter } from "../analytics/AnalyticsFilterContext"
 
 interface ProfessionalGeoMapProps {
   geografiaRectora?: {
+    geometryType?: string;
     polygonCoords?: { lat: number; lng: number }[];
     lineCoords?: { lat: number; lng: number }[];
     center?: { lat: number; lng: number };
@@ -146,11 +147,34 @@ export function ProfessionalGeoMap({
   });
 
   const mapCenter = useMemo(() => {
-    if (geografiaRectora?.center?.lat && geografiaRectora?.center?.lng) {
-      return geografiaRectora.center;
+    const lat = geografiaRectora?.center?.lat;
+    const lng = geografiaRectora?.center?.lng;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat: lat as number, lng: lng as number };
     }
-    return { lat: 23.6345, lng: -102.5528 };
+    return { lat: 21.8853, lng: -102.2916 };
   }, [geografiaRectora]);
+
+  useEffect(() => {
+    if (!mapInstance || !geografiaRectora?.hasCoordinates || typeof google === "undefined") return;
+
+    const boundsPoints = geografiaRectora.polygonCoords?.length
+      ? geografiaRectora.polygonCoords
+      : geografiaRectora.lineCoords?.length
+        ? geografiaRectora.lineCoords
+        : geografiaRectora.center
+          ? [geografiaRectora.center]
+          : [];
+
+    if (boundsPoints.length >= 2) {
+      const bounds = new google.maps.LatLngBounds();
+      boundsPoints.forEach((point) => bounds.extend(point));
+      mapInstance.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
+    } else if (boundsPoints.length === 1) {
+      mapInstance.setCenter(boundsPoints[0]);
+      mapInstance.setZoom(15);
+    }
+  }, [mapInstance, geografiaRectora]);
 
   const mapOptions = useMemo(() => ({
     styles: darkMapStyles,

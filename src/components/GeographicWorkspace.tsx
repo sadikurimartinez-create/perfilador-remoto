@@ -20,9 +20,86 @@ import {
   getCanonicalMapViewport,
   type CanonicalProjectGeography,
 } from "@/utils/canonicalProjectGeography";
+import { isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
+
+function presentToken(value: unknown): string | undefined {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return normalized || undefined;
+}
+
+function hasRealCoordinates(photo: any): boolean {
+  const lat = Number(photo?.lat);
+  const lng = Number(photo?.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng);
+}
+
+function isDefaultCoordinateFallback(photo: any): boolean {
+  return (
+    Math.abs(Number(photo?.lat) - 21.8853) < 0.0001 &&
+    Math.abs(Number(photo?.lng) - (-102.2916)) < 0.0001
+  );
+}
+
+function hasInSituIncompatibleSignal(photo: any): boolean {
+  const tipo = presentToken(photo?.tipo);
+  const gpsSource = presentToken(photo?.gpsSource);
+  const evidenceType = presentToken(photo?.evidenceType ?? photo?.metadata?.evidenceType);
+  const analysisType = presentToken(photo?.analysisType ?? photo?.metadata?.analysisType);
+  const sourceType = presentToken(photo?.sourceType ?? photo?.metadata?.sourceType);
+  const sourceProvider = presentToken(photo?.sourceProvider ?? photo?.metadata?.sourceProvider);
+  const fuente = presentToken(photo?.fuente ?? photo?.metadata?.fuente);
+  const streetViewSource = presentToken(photo?.streetViewSource ?? photo?.metadata?.streetViewSource);
+
+  return Boolean(
+    tipo?.includes("STREET_VIEW") ||
+    gpsSource === "STREET_VIEW" ||
+    evidenceType === "GEOGRAPHIC_VECTOR" ||
+    evidenceType === "VIRTUAL_STREET_VIEW" ||
+    evidenceType === "MAP_CAPTURE" ||
+    analysisType === "STREET_VIEW" ||
+    analysisType === "MAP_CAPTURE" ||
+    sourceType === "STREET_VIEW" ||
+    sourceType === "STREETVIEW_AUTOMATICO" ||
+    sourceType === "REMOTE_VISUAL" ||
+    sourceProvider === "GOOGLE_STREET_VIEW" ||
+    fuente?.includes("STREET VIEW") ||
+    streetViewSource ||
+    photo?.streetViewMetadata ||
+    photo?.isStreetView === true
+  );
+}
+
+function hasModernInSituClassificationMetadata(photo: any): boolean {
+  return Boolean(
+    presentToken(photo?.gpsSource) ||
+    presentToken(photo?.evidenceType ?? photo?.metadata?.evidenceType) ||
+    presentToken(photo?.analysisType ?? photo?.metadata?.analysisType) ||
+    presentToken(photo?.sourceType ?? photo?.metadata?.sourceType) ||
+    presentToken(photo?.streetViewSource ?? photo?.metadata?.streetViewSource)
+  );
+}
+
+function isWorkspaceInSituPhoto(photo: any): boolean {
+  if (!hasRealCoordinates(photo)) return false;
+  if (isDefaultCoordinateFallback(photo)) return false;
+  if (hasInSituIncompatibleSignal(photo)) return false;
+
+  if (isExplicitInSituPhoto({
+    gpsSource: photo.gpsSource,
+    tipo: photo.tipo,
+    evidenceType: photo.evidenceType ?? photo.metadata?.evidenceType,
+    analysisType: photo.analysisType ?? photo.metadata?.analysisType,
+    streetViewSource: photo.streetViewSource ?? photo.metadata?.streetViewSource,
+  })) {
+    return true;
+  }
+
+  // compatibilidad legacy: lectura de fotos historicas con lat/lng reales y sin metadata moderna.
+  return !hasModernInSituClassificationMetadata(photo);
+}
 
 export function calculateSweepPreparation(input: {
   expedienteId: string;
@@ -63,16 +140,10 @@ export function GeographicWorkspace() {
   const [isTemporalEngineOpen, setIsTemporalEngineOpen] = useState(false);
   const [activeTemporalCandidate, setActiveTemporalCandidate] = useState<any | null>(null);
 
-  // Extraer fotografías georreferenciadas reales del álbum del expediente
-  const georeferencedPhotos = React.useMemo(() => {
+  // Extraer fotografías de campo in situ según el contrato canónico existente.
+  const inSituGeoreferencedPhotos = React.useMemo(() => {
     if (album && Array.isArray(album) && album.length > 0) {
-      const filtered = album.filter((p: any) => {
-        if (p.lat == null || p.lng == null) return false;
-        const isDefaultFallback =
-          Math.abs(Number(p.lat) - 21.8853) < 0.0001 &&
-          Math.abs(Number(p.lng) - (-102.2916)) < 0.0001;
-        return !isDefaultFallback;
-      });
+      const filtered = album.filter(isWorkspaceInSituPhoto);
       if (filtered.length > 0) return filtered;
     }
     return [];
@@ -90,6 +161,7 @@ export function GeographicWorkspace() {
       center: viewport.center,
       polygonCoords: canonicalGeography.type === "POLYGON" ? coordinates : undefined,
       lineCoords: canonicalGeography.type === "CORRIDOR" ? coordinates : undefined,
+      geometryType: canonicalGeography.type,
       geographyId: canonicalGeography.geographyId,
       geographyType: canonicalGeography.type,
       hasCoordinates: coordinates.length > 0,
@@ -98,7 +170,7 @@ export function GeographicWorkspace() {
 
   // Resolución reactiva de Evidencia Primaria In Situ real (Campo) sin fallbacks estáticos
   const primaryEvidenceCandidate = React.useMemo(() => {
-    const rawPhoto = georeferencedPhotos?.[0] || (album && album.length > 0 ? album[0] : null);
+    const rawPhoto = inSituGeoreferencedPhotos?.[0] || null;
     if (!rawPhoto) return undefined;
     const photo: any = rawPhoto;
 
@@ -124,7 +196,7 @@ export function GeographicWorkspace() {
       lat: Number(rawLat),
       lng: Number(rawLng),
     };
-  }, [georeferencedPhotos, album]);
+  }, [inSituGeoreferencedPhotos]);
 
   // Resolución reactiva de Evidencia Contextual Street View real (Panorama) sin fallbacks estáticos
   const contextualEvidenceCandidate = React.useMemo(() => {
@@ -167,11 +239,11 @@ export function GeographicWorkspace() {
     () =>
       calculateSweepPreparation({
         expedienteId,
-        georeferencedPhotosCount: georeferencedPhotos.length,
+        georeferencedPhotosCount: inSituGeoreferencedPhotos.length,
         existingFindingsCount: findings.length,
         canonicalGeography: project?.canonicalGeography ?? null,
       }),
-    [expedienteId, georeferencedPhotos.length, findings.length, project?.canonicalGeography]
+    [expedienteId, inSituGeoreferencedPhotos.length, findings.length, project?.canonicalGeography]
   );
 
   // Sincronizar hallazgos del expediente desde el backend al cargar
@@ -255,8 +327,8 @@ export function GeographicWorkspace() {
 
   console.debug("[GEOINT DEBUG]", {
     albumPhotosCount: album?.length || 0,
-    georeferencedPhotosCount: georeferencedPhotos?.length || 0,
-    firstGeoreferencedPhoto: georeferencedPhotos?.[0] || null,
+    georeferencedPhotosCount: inSituGeoreferencedPhotos?.length || 0,
+    firstGeoreferencedPhoto: inSituGeoreferencedPhotos?.[0] || null,
     findingsCount: findings?.length || 0,
     firstFindingCoordinates: findings?.[0]?.coordenadas || null,
     sweepPreparation,
@@ -324,7 +396,7 @@ export function GeographicWorkspace() {
           <ProfessionalGeoMap
             geografiaRectora={activeGeografiaRectora}
             pois={[]}
-            photographs={georeferencedPhotos}
+            photographs={inSituGeoreferencedPhotos}
             streetViewManual={[]}
             streetViewAutomatic={captures}
             findings={findings}

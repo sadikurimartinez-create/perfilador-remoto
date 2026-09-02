@@ -5,6 +5,10 @@ import { Circle, GoogleMap, Marker, Polygon, Polyline, OverlayView, useJsApiLoad
 import { useProject } from "@/context/ProjectContext";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
+import {
+  getCanonicalGeographyCoordinates,
+  getCanonicalMapViewport,
+} from "@/utils/canonicalProjectGeography";
 
 export type MapViewMode = "HEATMAP" | "DENSITY" | "TOPOGRAPHY" | "MOBILITY" | "PREDICTIVE";
 
@@ -445,58 +449,33 @@ export function AnalysisMap({
     [album]
   );
 
-  // Compute dispersed positions for marker rendering to prevent stacked pins in analysis map
-  const photosWithDispersion = useMemo(() => {
-    const coordCounts: Record<string, number> = {};
-    return photosWithCoords.map((photo) => {
-      const lat = Number(photo.lat);
-      const lng = Number(photo.lng);
-      const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
-      if (coordCounts[key] === undefined) {
-        coordCounts[key] = 0;
-      }
-      const count = coordCounts[key];
-      coordCounts[key] += 1;
-      if (count === 0) {
-        return {
-          ...photo,
-          displayLat: lat,
-          displayLng: lng,
-        };
-      } else {
-        const angle = (count * 2 * Math.PI) / 8;
-        const ring = Math.floor((count - 1) / 8) + 1;
-        const baseRadius = 0.000035;
-        const radius = baseRadius * ring;
-        return {
-          ...photo,
-          displayLat: lat + radius * Math.sin(angle),
-          displayLng: lng + radius * Math.cos(angle),
-        };
-      }
-    });
-  }, [photosWithCoords]);
+  const canonicalGeography = project?.canonicalGeography?.validationStatus === "VALID"
+    ? project.canonicalGeography
+    : null;
+
+  const canonicalCoordinates = useMemo(
+    () => getCanonicalGeographyCoordinates(canonicalGeography),
+    [canonicalGeography]
+  );
+
+  const canonicalViewport = useMemo(
+    () => getCanonicalMapViewport(canonicalGeography),
+    [canonicalGeography]
+  );
+
+  const activeGeographyType = canonicalGeography?.type || (geometryType === "lineal" ? "CORRIDOR" : geometryType === "poligono" ? "POLYGON" : "INDIVIDUAL");
 
   const center = useMemo(() => {
+    if (canonicalViewport.center) {
+      return canonicalViewport.center;
+    }
+
     const activeCoords: { lat: number; lng: number }[] = [];
     
-    if (photosWithCoords.length > 0) {
-      photosWithCoords.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
-    } else if (analysisPolygon && analysisPolygon.length > 0) {
+    if (isPreliminary && analysisPolygon && analysisPolygon.length > 0) {
       analysisPolygon.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
     } else if (manualPois && manualPois.length > 0) {
       manualPois.forEach(p => activeCoords.push({ lat: p.lat, lng: p.lng }));
-    } else if (analysisResult) {
-      if (analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0) {
-        analysisResult.historicalCrimes.forEach(c => {
-          if (hasValidCoords(c)) activeCoords.push({ lat: c.lat as number, lng: c.lng as number });
-        });
-      }
-      if (activeCoords.length === 0 && analysisResult.pois && analysisResult.pois.length > 0) {
-        analysisResult.pois.forEach(p => {
-          if (hasValidCoords(p)) activeCoords.push({ lat: p.lat as number, lng: p.lng as number });
-        });
-      }
     }
 
     if (activeCoords.length === 0) {
@@ -505,47 +484,41 @@ export function AnalysisMap({
     const lat = activeCoords.reduce((a, p) => a + p.lat, 0) / activeCoords.length;
     const lng = activeCoords.reduce((a, p) => a + p.lng, 0) / activeCoords.length;
     return { lat, lng };
-  }, [photosWithCoords, analysisPolygon, manualPois, analysisResult]);
+  }, [canonicalViewport, isPreliminary, analysisPolygon, manualPois]);
 
   const isPointInActiveGeography = useCallback((point: { lat: number; lng: number }): boolean => {
     if (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) {
       return isPointInPolygon(point, analysisPolygon);
     }
     
-    if (geometryType === "poligono") {
-      const polyPoints = photosWithCoords.filter(p => p.tipo === "Perímetro").length >= 3
-        ? photosWithCoords.filter(p => p.tipo === "Perímetro").map(p => ({ lat: p.lat, lng: p.lng }))
-        : photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }));
-      if (polyPoints.length >= 3) {
-        return isPointInPolygon(point, polyPoints);
-      }
+    if (activeGeographyType === "POLYGON" && canonicalCoordinates.length >= 3) {
+      return isPointInPolygon(point, canonicalCoordinates);
     }
     
-    if (geometryType === "lineal" && photosWithCoords.length >= 1) {
-      const linePoints = photosWithCoords.map(p => ({ lat: p.lat, lng: p.lng }));
-      return isPointNearLine(point, linePoints, 500);
+    if (activeGeographyType === "CORRIDOR" && canonicalCoordinates.length >= 1) {
+      return isPointNearLine(point, canonicalCoordinates, 500);
     }
     
-    if (photosWithCoords.length > 0 || (manualPois && manualPois.length > 0)) {
+    if (activeGeographyType === "INDIVIDUAL" && canonicalViewport.center) {
       return isPointInRadius(point, center, analysisRadius);
     }
     
     return true;
-  }, [isPreliminary, analysisPolygon, geometryType, photosWithCoords, center, analysisRadius, manualPois]);
+  }, [isPreliminary, analysisPolygon, activeGeographyType, canonicalCoordinates, canonicalViewport.center, center, analysisRadius]);
 
   const crimesWithCoords = useMemo(() => {
     const raw = (analysisResult?.historicalCrimes ?? []).filter((c) => hasValidCoords(c)) as Array<{ lat: number; lng: number; tipoDelito: string }>;
-    const hasActiveGeo = photosWithCoords.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) || (manualPois && manualPois.length > 0);
+    const hasActiveGeo = canonicalCoordinates.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3);
     if (!hasActiveGeo) return raw;
     return raw.filter(c => isPointInActiveGeography(c));
-  }, [analysisResult?.historicalCrimes, isPointInActiveGeography, photosWithCoords.length, isPreliminary, analysisPolygon, manualPois]);
+  }, [analysisResult?.historicalCrimes, isPointInActiveGeography, canonicalCoordinates.length, isPreliminary, analysisPolygon]);
 
   const poisWithCoords = useMemo(() => {
     const raw = (analysisResult?.pois ?? []).filter((p) => hasValidCoords(p)) as Array<{ lat: number; lng: number; name?: string; type?: string; category?: string }>;
-    const hasActiveGeo = photosWithCoords.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3) || (manualPois && manualPois.length > 0);
+    const hasActiveGeo = canonicalCoordinates.length > 0 || (isPreliminary && analysisPolygon && analysisPolygon.length >= 3);
     if (!hasActiveGeo) return raw;
     return raw.filter(p => isPointInActiveGeography(p));
-  }, [analysisResult?.pois, isPointInActiveGeography, photosWithCoords.length, isPreliminary, analysisPolygon, manualPois]);
+  }, [analysisResult?.pois, isPointInActiveGeography, canonicalCoordinates.length, isPreliminary, analysisPolygon]);
 
   const clusteredCrimes = useMemo(() => {
     if (!activeLayers.clusters) {
@@ -642,13 +615,11 @@ export function AnalysisMap({
   }, [manualPois, isPointInActiveGeography]);
 
   const boundsPoints = useMemo(() => {
-    const points: Array<{ lat: number; lng: number }> = [];
-    photosWithCoords.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
-    crimesWithCoords.forEach((c) => points.push({ lat: c.lat as number, lng: c.lng as number }));
-    top5Pois.forEach((p) => points.push({ lat: p.lat as number, lng: p.lng as number }));
-    filteredManualPois.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
-    return points;
-  }, [photosWithCoords, crimesWithCoords, top5Pois, filteredManualPois]);
+    if (canonicalCoordinates.length > 0) return canonicalCoordinates;
+    if (isPreliminary && analysisPolygon && analysisPolygon.length > 0) return analysisPolygon;
+    if (filteredManualPois.length > 0) return filteredManualPois;
+    return [];
+  }, [canonicalCoordinates, isPreliminary, analysisPolygon, filteredManualPois]);
 
   const onMapLoad = useCallback((map: any) => {
     mapRef.current = map;
@@ -904,6 +875,49 @@ export function AnalysisMap({
             />
           )}
 
+          {/* Geografía Rectora Canónica */}
+          {showAreas && activeGeographyType === "CORRIDOR" && canonicalCoordinates.length >= 2 && (
+            <Polyline
+              path={canonicalCoordinates}
+              options={{
+                strokeColor: "#38bdf8",
+                strokeOpacity: 0.95,
+                strokeWeight: 4,
+                clickable: false,
+              }}
+            />
+          )}
+
+          {showAreas && activeGeographyType === "POLYGON" && canonicalCoordinates.length >= 3 && (
+            <Polygon
+              paths={canonicalCoordinates}
+              options={{
+                fillColor: "#06b6d4",
+                fillOpacity: 0.14,
+                strokeColor: "#38bdf8",
+                strokeOpacity: 0.9,
+                strokeWeight: 2.5,
+                clickable: false,
+              }}
+            />
+          )}
+
+          {showAreas && activeGeographyType === "INDIVIDUAL" && canonicalCoordinates.length === 1 && (
+            <Marker
+              position={canonicalCoordinates[0]}
+              title="Punto Rector Canónico"
+              clickable={false}
+              icon={{
+                path: 0,
+                scale: 8,
+                fillColor: "#38bdf8",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+              }}
+            />
+          )}
+
           {/* Polígono de Análisis dibujado si existe */}
           {analysisPolygon && analysisPolygon.length >= 3 && (
             <Polygon
@@ -918,11 +932,11 @@ export function AnalysisMap({
             />
           )}
 
-          {/* Marcadores de Evidencia Fotográfica con Dispersión */}
-          {showPhotos && photosWithDispersion.map((photo) => (
+          {/* Marcadores de Evidencia Fotográfica con coordenadas reales */}
+          {showPhotos && photosWithCoords.map((photo) => (
             <Marker
               key={`photo-${photo.id}`}
-              position={{ lat: photo.displayLat, lng: photo.displayLng }}
+              position={{ lat: photo.lat, lng: photo.lng }}
               title={`${photo.tipo}: ${photo.comentario}`}
               icon={{
                 path: 0,
