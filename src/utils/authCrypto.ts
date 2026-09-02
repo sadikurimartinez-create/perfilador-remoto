@@ -1,7 +1,13 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-const SESSION_SECRET = process.env.SESSION_SECRET || "ceipol_secret_unificado_2026_default_key";
+function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || !secret.trim()) {
+    throw new Error("SESSION_SECRET_NOT_CONFIGURED");
+  }
+  return secret;
+}
 
 /**
  * Genera un hash irreversible a partir de una contraseña utilizando bcryptjs.
@@ -26,13 +32,14 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
  * Firma un objeto JSON convirtiéndolo a un token seguro con firma HMAC-SHA256.
  */
 export function signSession(payload: any): string {
+  const sessionSecret = getSessionSecret();
   const data = JSON.stringify({
     ...payload,
     createdAt: Date.now()
   });
   
   const payloadBase64 = Buffer.from(data).toString("base64url");
-  const hmac = crypto.createHmac("sha256", SESSION_SECRET);
+  const hmac = crypto.createHmac("sha256", sessionSecret);
   hmac.update(payloadBase64);
   const signature = hmac.digest("base64url");
   
@@ -44,6 +51,7 @@ export function signSession(payload: any): string {
  * Retorna null si la firma es inválida.
  */
 export function verifySession(token: string): any {
+  const sessionSecret = getSessionSecret();
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
@@ -51,7 +59,7 @@ export function verifySession(token: string): any {
   const [payloadBase64, signature] = parts;
   
   // Recrear firma
-  const hmac = crypto.createHmac("sha256", SESSION_SECRET);
+  const hmac = crypto.createHmac("sha256", sessionSecret);
   hmac.update(payloadBase64);
   const expectedSignature = hmac.digest("base64url");
   

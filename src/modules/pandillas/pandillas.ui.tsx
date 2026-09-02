@@ -15,6 +15,7 @@ import {
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
+import { adaptPandillasCanonicalInput } from "@/services/geoint/pandillasCanonicalInputAdapter";
 import { GoogleMap, Polygon, Polyline, Marker, Circle, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { GangGISAnalysisLayer, GISRelationshipLine } from "@/lib/providers/gangGISAnalysisLayer";
 import { GISMemberNode, InfluenceZone } from "@/lib/providers/gangInfluenceEngine";
@@ -193,7 +194,33 @@ interface PandillasUIProps {
 
 export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: PandillasUIProps = {}) {
   const { user } = useAuth();
-  const { registerSweep } = useProject();
+  const {
+    project: activeProject,
+    album,
+    inSituOrchestrationItems,
+    registerSweep
+  } = useProject();
+
+  const canonicalProjectCenter = useMemo(() => {
+    const geography = activeProject?.canonicalGeography;
+    if (!geography || geography.validationStatus !== "VALID") {
+      return null;
+    }
+
+    const centroid = geography.derived?.centroid;
+    if (
+      !centroid ||
+      typeof centroid.lat !== "number" ||
+      typeof centroid.lng !== "number"
+    ) {
+      return null;
+    }
+
+    return {
+      lat: centroid.lat,
+      lng: centroid.lng,
+    };
+  }, [activeProject?.canonicalGeography]);
   const username = typeof user?.username === "string" ? user.username.trim() : "";
 
   // --- REGISTRY LIST STATES ---
@@ -504,7 +531,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
   const selectedGangsCentroid = useMemo(() => {
     const activeGangs = storedGangs.filter(g => selectedGangsForGis.includes(g.nombre));
-    if (activeGangs.length === 0) return { lat: 21.8853, lng: -102.2916 };
+    if (activeGangs.length === 0) return canonicalProjectCenter || { lat: 21.8853, lng: -102.2916 };
     let latSum = 0;
     let lngSum = 0;
     let count = 0;
@@ -513,16 +540,20 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         latSum += g.coordenadas.lat;
         lngSum += g.coordenadas.lng;
         count++;
-      } else if (g.geometrias && g.geometrias.length > 0) {
+      } else if (
+        g.geometrias &&
+        g.geometrias.length > 0 &&
+        g.geometrias[0].puntos.length > 0
+      ) {
         const c = calculateCentroid(g.geometrias[0].puntos);
         latSum += c.lat;
         lngSum += c.lng;
         count++;
       }
     });
-    if (count === 0) return { lat: 21.8853, lng: -102.2916 };
+    if (count === 0) return canonicalProjectCenter || { lat: 21.8853, lng: -102.2916 };
     return { lat: latSum / count, lng: lngSum / count };
-  }, [storedGangs, selectedGangsForGis]);
+  }, [storedGangs, selectedGangsForGis, canonicalProjectCenter]);
 
   // 1. Mobility Corridors (from database shape.tipo === "corredor")
   const realCorridors = useMemo(() => {
@@ -697,7 +728,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
   // --- AUTOMATIC ALERTS SYSTEM ---
   const [alerts, setAlerts] = useState<{ id: string; tipo: string; severidad: string; mensaje: string; fecha: string }[]>([]);
 
-  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -745,10 +776,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
       // Si tenemos las coordenadas del proyecto, filtramos y ordenamos por proximidad
       let processedList = [...list];
-      const projectLat = project?.latitude;
-      const projectLng = project?.longitude;
+      const projectLat = canonicalProjectCenter?.lat;
+      const projectLng = canonicalProjectCenter?.lng;
       
-      if (projectLat && projectLng) {
+      if (projectLat != null && projectLng != null) {
         processedList = list
           .map(gang => {
             const pt = getGangFirstPoint(gang);
@@ -762,16 +793,21 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       setStoredGangs(processedList);
       
       // Si hay pandillas y el proyecto ya tiene un reporte, lo cargará loadGangForProject.
-      // De lo contrario, si hay pandillas y la más cercana está a <= 2.5km, autoseleccionamos.
+      // De lo contrario, si hay pandillas y la más cercana está a <= 1 km, autoseleccionamos.
       // Si no hay ninguna cercana, limpiamos o no autoseleccionamos para evitar duplicados repetitivos
       if (processedList.length > 0) {
         const firstGang = processedList[0];
         const firstPt = getGangFirstPoint(firstGang);
-        const dist = (firstPt && projectLat && projectLng) 
+        const dist = (firstPt && projectLat != null && projectLng != null)
           ? getHaversineDistance({ lat: projectLat, lng: projectLng }, firstPt) 
           : Infinity;
           
-        if (dist <= 1000 || !projectLat) { // Radio de 1km o si no hay coordenadas del proyecto
+        if (
+          projectLat != null &&
+          projectLng != null &&
+          firstPt &&
+          dist <= 1000
+        ) {
           loadGangIntoState(firstGang);
         } else {
           // Limpiar o no preseleccionar para no mostrar duplicados estáticos ajenos a la zona
@@ -836,8 +872,8 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     if (geometrias.length > 0 && geometrias[0].puntos.length > 0) {
       return calculateCentroid(geometrias[0].puntos);
     }
-    return { lat: 21.8853, lng: -102.2916 }; // Aguascalientes City Center
-  }, [tempShapePoints, geometrias]);
+    return canonicalProjectCenter || { lat: 21.8853, lng: -102.2916 }; // Visual-only fallback
+  }, [tempShapePoints, geometrias, canonicalProjectCenter]);
 
   // --- SAVE TO FIRESTORE ---
   const handleSaveGangToCloud = async () => {
@@ -1372,6 +1408,13 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         filterPrompt += `Geometría GIS: "${targetShape?.nombre || "Polígono"}" de tipo ${targetShape?.tipo || ""}`;
       }
 
+      const canonicalPandillasInput = adaptPandillasCanonicalInput({
+        projectId: projectId || activeProject?.id || "",
+        canonicalGeography: activeProject?.canonicalGeography,
+        inSituOrchestrationItems,
+        streetViewItems: album,
+      });
+
       const inputGang: GangEntity = {
         nombre,
         zonaInfluencia,
@@ -1380,9 +1423,10 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         relaciones,
         geometrias,
         cronologiaEventos,
-        ...(geometrias.length > 0 && geometrias[0].puntos.length > 0
-          ? { coordenadas: calculateCentroid(geometrias[0].puntos) }
-          : {})
+        coordenadas: {
+          lat: canonicalPandillasInput.representativePoint.lat,
+          lng: canonicalPandillasInput.representativePoint.lng,
+        },
       };
 
       const result = await PandillasEngine.executeFullSweep(inputGang, filterPrompt);
@@ -1396,8 +1440,9 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
         type: "Contextualizada",
         relevance: "Alto",
         data: resultSummary,
-        initialContext: filterPrompt
-      });
+        initialContext: filterPrompt,
+        createVisualEvidence: false
+      } as any);
     } catch (err: any) {
       console.error(err);
       alert("❌ Falló el motor de barrido Vertex AI: " + err.message);
@@ -3714,7 +3759,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
                                 <GoogleMap
                                   mapContainerStyle={{ width: "100%", height: "100%" }}
-                                  center={activeAlbumGang.coordenadas || (gangNodes[0]?.location) || { lat: 21.8853, lng: -102.2916 }}
+                                  center={activeAlbumGang.coordenadas || (gangNodes[0]?.location) || canonicalProjectCenter || { lat: 21.8853, lng: -102.2916 }}
                                   zoom={13}
                                   onLoad={(map) => setMiniMapInstance(map)}
                                   mapTypeId={baseLayer === "standard" ? "roadmap" : "satellite"}

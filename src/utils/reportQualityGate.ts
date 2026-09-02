@@ -51,20 +51,16 @@ export class ReportQualityGate {
     // ------------------------------------------------------------------------
     const transparentFallback = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-    // Hot-repair para Street View
+    // Gobernanza Street View:
+    // La ausencia de evidencia visual nunca debe materializarse como evidencia sintética.
     if (!payload.streetViewAnalysis || payload.streetViewAnalysis.length === 0) {
-      console.warn("[SOFT GOVERNANCE] [ADVISORY] Ausencia de Street View. Inyectando bloque editorial institucional.");
-      payload.streetViewAnalysis = [{
-        id: "sv-fallback",
-        title: "Barrido Vial de Soporte (Bloque Editorial)",
-        dataUrl: transparentFallback,
-        location: "Coordenadas de sector bajo análisis",
-        observed: "Información de barrido vial (Street View) no disponible para este sector. La ausencia de evidencia visual de soporte no limita la integridad del análisis criminológico de CEIPOL."
-      }];
+      console.warn("[SOFT GOVERNANCE] [ADVISORY] Ausencia de Street View. No se inyecta evidencia sintética.");
     } else {
       payload.streetViewAnalysis.forEach(sv => {
         if (!sv.dataUrl || sv.dataUrl.trim() === "") {
-          sv.dataUrl = transparentFallback;
+          console.warn(
+            `[SOFT GOVERNANCE] [ADVISORY] Registro Street View real sin imagen disponible (ID: ${sv.id || "N/D"}). Se conserva el registro sin fabricar dataUrl.`
+          );
         }
       });
     }

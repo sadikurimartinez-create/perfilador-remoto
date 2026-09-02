@@ -2,6 +2,10 @@ import assert from "assert";
 import { hashPassword, verifyPassword, signSession, verifySession } from "../src/utils/authCrypto";
 
 export async function runAuthTests() {
+  const previousSessionSecret = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = previousSessionSecret || "adr-020-36-legacy-suite-test-secret";
+
+  try {
   console.log("\n======================================================================");
   console.log("🔒 EJECUTANDO SUITE DE PRUEBAS DE SEGURIDAD (HARDENING DE AUTENTICACIÓN)");
   console.log("======================================================================");
@@ -116,6 +120,13 @@ export async function runAuthTests() {
   console.log("\n======================================================================");
   console.log("🎉 ¡TODAS LAS PRUEBAS DE SEGURIDAD DE LA FASE 1 PASARON CON ÉXITO! 🎉");
   console.log("======================================================================");
+  } finally {
+    if (previousSessionSecret === undefined) {
+      delete process.env.SESSION_SECRET;
+    } else {
+      process.env.SESSION_SECRET = previousSessionSecret;
+    }
+  }
 }
 
 if (require.main === module) {

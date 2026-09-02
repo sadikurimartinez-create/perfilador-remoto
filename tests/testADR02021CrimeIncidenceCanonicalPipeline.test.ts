@@ -241,30 +241,132 @@ describe("ADR-020.21 - Crime incidence canonical pipeline", () => {
   });
 
   test("TEST 7 upload differentiates received inserted rejected and duplicates", async () => {
+    const previousName =
+      process.env.CRIME_INCIDENCE_DATASET_NAME;
+    const previousVersion =
+      process.env.CRIME_INCIDENCE_DATASET_VERSION;
+    const previousOrganization =
+      process.env.CRIME_INCIDENCE_SOURCE_ORGANIZATION;
     const previousStart =
       process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
     const previousEnd =
       process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
 
+    process.env.CRIME_INCIDENCE_DATASET_NAME =
+      "Test Crime Incidence Dataset";
+    process.env.CRIME_INCIDENCE_DATASET_VERSION =
+      "2026-TEST-v1";
+    process.env.CRIME_INCIDENCE_SOURCE_ORGANIZATION =
+      "Test Institutional Source";
     process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = "2026-01-01";
     process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END = "2026-12-31";
 
+    let canonicalInsertOrdinal = 0;
+
+    mockQuery.mockImplementation(async (sql: string) => {
+      const statement = String(sql);
+
+      if (
+        statement.includes(
+          "FROM public.crime_incidence_datasets"
+        )
+      ) {
+        return {
+          rows: [
+            {
+              id: "11111111-1111-1111-1111-111111111111",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+
+      if (
+        statement.includes(
+          "INSERT INTO public.incidencia_estadistica"
+        )
+      ) {
+        canonicalInsertOrdinal++;
+
+        if (canonicalInsertOrdinal === 1) {
+          return {
+            rows: [
+              {
+                id: "22222222-2222-2222-2222-222222222222",
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+
+        return {
+          rows: [],
+          rowCount: 0,
+        };
+      }
+
+      if (
+        statement.includes(
+          "FROM public.incidencia_estadistica"
+        ) &&
+        statement.includes(
+          "WHERE source_fingerprint = $1"
+        )
+      ) {
+        return {
+          rows: [
+            {
+              id: "22222222-2222-2222-2222-222222222222",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+
+      if (
+        statement.includes(
+          "INSERT INTO public.crime_incidence_dataset_records"
+        )
+      ) {
+        return {
+          rows: [],
+          rowCount: 1,
+        };
+      }
+
+      return {
+        rows: [],
+        rowCount: 0,
+      };
+    });
+
     try {
       const { POST } = await import("../src/app/api/upload-csv/route");
+
       const csv = [
         "INCIDENTE,FECHA,HORA,RANGO,NOM_ASEN,LAT,LONG",
         "Robo,2026-07-01,7,Matutino,Centro,21.8818,-102.2916",
         "Robo,2026-07-01,7,Matutino,Centro,21.8818,-102.2916",
         "Robo,2026-07-01,7,Matutino,Centro,19.4326,-99.1332",
       ].join("\n");
-      const file = new File([csv], "incidencia.csv", { type: "text/csv" });
+
+      const file = new File(
+        [csv],
+        "incidencia.csv",
+        { type: "text/csv" }
+      );
+
       const form = new FormData();
       form.set("file", file);
 
-      const response = await POST({ formData: async () => form } as any);
+      const response = await POST(
+        { formData: async () => form } as any
+      );
+
       const body = await response.json();
 
       expect(response.status).toBe(200);
+
       expect(body).toMatchObject({
         ok: true,
         received: 3,
@@ -274,19 +376,70 @@ describe("ADR-020.21 - Crime incidence canonical pipeline", () => {
         duplicates: 1,
         validationStatus: "PARTIAL",
       });
+
+      expect(body.attempted).toBe(2);
+
       expect(mockQuery).toHaveBeenCalledWith("BEGIN");
       expect(mockQuery).toHaveBeenCalledWith("COMMIT");
+
+      const canonicalCalls = mockQuery.mock.calls.filter(([sql]) =>
+        String(sql).includes(
+          "INSERT INTO public.incidencia_estadistica"
+        )
+      );
+
+      const lineageCalls = mockQuery.mock.calls.filter(([sql]) =>
+        String(sql).includes(
+          "INSERT INTO public.crime_incidence_dataset_records"
+        )
+      );
+
+      expect(canonicalCalls).toHaveLength(2);
+      expect(lineageCalls).toHaveLength(2);
     } finally {
+      if (previousName === undefined) {
+        delete process.env.CRIME_INCIDENCE_DATASET_NAME;
+      }
+
+      if (previousName !== undefined) {
+        process.env.CRIME_INCIDENCE_DATASET_NAME =
+          previousName;
+      }
+
+      if (previousVersion === undefined) {
+        delete process.env.CRIME_INCIDENCE_DATASET_VERSION;
+      }
+
+      if (previousVersion !== undefined) {
+        process.env.CRIME_INCIDENCE_DATASET_VERSION =
+          previousVersion;
+      }
+
+      if (previousOrganization === undefined) {
+        delete process.env.CRIME_INCIDENCE_SOURCE_ORGANIZATION;
+      }
+
+      if (previousOrganization !== undefined) {
+        process.env.CRIME_INCIDENCE_SOURCE_ORGANIZATION =
+          previousOrganization;
+      }
+
       if (previousStart === undefined) {
         delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
-      } else {
-        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = previousStart;
+      }
+
+      if (previousStart !== undefined) {
+        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START =
+          previousStart;
       }
 
       if (previousEnd === undefined) {
         delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
-      } else {
-        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END = previousEnd;
+      }
+
+      if (previousEnd !== undefined) {
+        process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END =
+          previousEnd;
       }
     }
   });

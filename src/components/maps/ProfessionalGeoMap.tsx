@@ -19,7 +19,7 @@ import CrimeIncidenceLayer from "./layers/CrimeIncidenceLayer";
 import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
 // Contexto de Filtros
-import { useAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
+import { useOptionalAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
 
 interface ProfessionalGeoMapProps {
   geografiaRectora?: {
@@ -101,16 +101,10 @@ export function ProfessionalGeoMap({
   const [layers, setLayers] = useState<MapLayersState>(layerManager.getState());
   const [forceFallback, setForceFallback] = useState(false);
   const [selectedMarkerForCone, setSelectedMarkerForCone] = useState<any | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
-  // Intentar obtener el contexto de forma segura por si se renderiza de forma aislada
-  let analyticsContext: any = null;
-  try {
-    analyticsContext = useAnalyticsFilter();
-  } catch (err) {
-    // Fallback silencioso si no hay provider
-  }
-
-  const filterState = analyticsContext ? analyticsContext.filterState : {};
+  const analyticsContext = useOptionalAnalyticsFilter();
+  const filterState = analyticsContext?.filterState ?? {};
 
   // Filtrado reactivo de Hallazgos y Capturas según la categoría activa seleccionada en el Dashboard
   const filteredFindings = useMemo(() => {
@@ -130,7 +124,21 @@ export function ProfessionalGeoMap({
     return unsubscribe;
   }, [layerManager]);
 
-  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
+  useEffect(() => {
+    if (!mapInstance || typeof ResizeObserver === "undefined") return;
+    const mapDiv = mapInstance.getDiv();
+    const resizeObserver = new ResizeObserver(() => {
+      google.maps.event.trigger(mapInstance, "resize");
+    });
+
+    resizeObserver.observe(mapDiv);
+    if (mapDiv.parentElement) resizeObserver.observe(mapDiv.parentElement);
+    return () => resizeObserver.disconnect();
+  }, [mapInstance]);
+
+  const apiKey = typeof process !== "undefined"
+    ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "")
+    : "";
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -287,6 +295,8 @@ export function ProfessionalGeoMap({
         center={mapCenter}
         zoom={15}
         options={mapOptions}
+        onLoad={setMapInstance}
+        onUnmount={() => setMapInstance(null)}
       >
         <BaseMapLayer />
         

@@ -636,8 +636,10 @@ export function PhotoAlbum({
 
   // 1. Auditoría y validación de Street View (Gobernanza FIX-GEO-01)
   const streetViewValidation = useMemo(() => {
-    const svPhotos = (rawAlbum || []).filter(
-      (p: any) => p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW"
+    const svPhotos = (rawAlbum || []).filter((p: any) =>
+      p.tipo === "STREET_VIEW" ||
+      p.tipo === "REMOTE_STREET_VIEW" ||
+      p.evidenceType === "VIRTUAL_STREET_VIEW"
     );
 
     const getStatus = (count: number) => {
@@ -678,9 +680,14 @@ export function PhotoAlbum({
     if (!rawAlbum) return [];
 
     // Conservar todas las fotos de usuario intactas
-    const userPhotos = rawAlbum.filter(
-      (p: any) => p.tipo !== "STREET_VIEW" && p.evidenceType !== "VIRTUAL_STREET_VIEW"
-    );
+    const userPhotos = rawAlbum.filter((p: any) => {
+      const isStreetView =
+        p.tipo === "STREET_VIEW" ||
+        p.tipo === "REMOTE_STREET_VIEW" ||
+        p.evidenceType === "VIRTUAL_STREET_VIEW";
+      const isAnalyticalSweep = typeof p.tipo === "string" && p.tipo.startsWith("Barrido");
+      return !isStreetView && !isAnalyticalSweep;
+    });
 
     // Fotos de Street View gobernadas (Máximo visual de 4 por categoría)
     const hideouts = streetViewValidation.hideout.photos.slice(0, 4);
@@ -689,11 +696,18 @@ export function PhotoAlbum({
 
     // Otras fotos Street View que no pertenezcan a las categorías principales
     const otherSvs = rawAlbum.filter((p: any) => 
-      (p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW") &&
+      (p.tipo === "STREET_VIEW" || p.tipo === "REMOTE_STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW") &&
       !["hideout", "graffiti", "denue_interest"].includes(p.streetViewCategory)
     );
 
-    return [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs];
+    const seenEvidenceIds = new Set<string>();
+    return [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs].filter((photo: any) => {
+      const stableId = photo?.evidenceId || photo?.id;
+      if (!stableId) return true;
+      if (seenEvidenceIds.has(stableId)) return false;
+      seenEvidenceIds.add(stableId);
+      return true;
+    });
   }, [rawAlbum, streetViewValidation]);
 
   // Sobrescribir "album" local para que todo el componente herede las reglas gobernadas
@@ -1402,6 +1416,8 @@ const hasMinimumPhotos =
     const hypothesisGate = canProceedWithInstitutionalAnalysis(
       hypothesisOverride ? { canonicalHypothesis: hypothesisOverride } : project
     );
+    const effectiveCanonicalHypothesis =
+      hypothesisOverride ?? project?.canonicalHypothesis ?? null;
     if (!hypothesisGate.allowed) {
       setError("HIPÓTESIS NO FORMULADA: formule una hipótesis humana antes de continuar con el análisis institucional formal.");
       setShowConfigModal(false);
@@ -1596,6 +1612,7 @@ const hasMinimumPhotos =
                 body: JSON.stringify({
                   projectName: project?.nombre || "",
                   projectId: project?.id || "",
+                  canonicalHypothesis: effectiveCanonicalHypothesis,
                   photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
                   analysisContext: (analysisContext || "") + svInstruction,
                   analysisRadius,
@@ -3904,8 +3921,9 @@ const hasMinimumPhotos =
                       source: "GEOINT",
                       type: "Directa",
                       relevance: "Alto",
-                      data: summaryContext
-                    });
+                      data: summaryContext,
+                      createVisualEvidence: false
+                    } as any);
                   } else {
                     setError(data.error || "Error al obtener la incidencia delictiva.");
                   }
@@ -4078,8 +4096,9 @@ const hasMinimumPhotos =
                       type: "Contextualizada",
                       relevance: "Alto",
                       data: newContext,
-                      initialContext: plateContext
-                    });
+                      initialContext: plateContext,
+                      createVisualEvidence: false
+                    } as any);
                     setPlateQuery("");
                     setPlateContext("");
                   } else {
@@ -4161,8 +4180,9 @@ const hasMinimumPhotos =
                       type: "Contextualizada",
                       relevance: "Medio",
                       data: newContext,
-                      initialContext: rnpdnoContext
-                    });
+                      initialContext: rnpdnoContext,
+                      createVisualEvidence: false
+                    } as any);
                     setRnpdnoContext("");
                   } else {
                     setError(data.error || "Error al extraer datos de SEGOB.");
@@ -4303,8 +4323,9 @@ const hasMinimumPhotos =
                       source: "GEOINT",
                       type: "Directa",
                       relevance: "Alto",
-                      data: newContext
-                    });
+                      data: newContext,
+                      createVisualEvidence: false
+                    } as any);
                     setGeoQueries([]);
                   }
                 } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
@@ -5964,8 +5985,9 @@ const hasMinimumPhotos =
                   source: "INEGI DENUE",
                   type: "Directa",
                   relevance: "Medio",
-                  data: denueDataConfirm.content
-                });
+                  data: denueDataConfirm.content,
+                  createVisualEvidence: false
+                } as any);
                 setDenueDataConfirm(null);
                 setToast({ type: "success", message: "✓ Datos comerciales agregados a la hipótesis correctamente" });
               } catch (err: any) {

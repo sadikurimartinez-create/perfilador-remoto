@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import {
@@ -21,6 +22,7 @@ import { AnalyticalConsistencyEngine } from "@/utils/analyticalConsistencyEngine
 import { HIEValidationVectorAdapter } from "@/utils/analyticalConsistencyEngine/hieValidationVectorAdapter";
 import { TerritorialContextEngine } from "@/utils/territorialContextEngine";
 import { HypothesisIntelligenceEngine } from "@/utils/hypothesisIntelligenceEngine";
+import { authorizeTrustedProjectHypothesis } from "@/utils/trustedProjectHypothesisAuthority.server";
 import { CartographicIntelligenceEngine } from "@/utils/cartographicIntelligenceEngine";
 import { VisualEvidenceEngine } from "@/utils/visualEvidenceEngine";
 import { TerritorialIntelligenceEngine } from "@/utils/territorialIntelligenceEngine";
@@ -30,8 +32,6 @@ import { ReportContextAdapter } from "@/utils/intelligenceIntegrationContract/re
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Burlar la validación de certificados TLS del proxy institucional local
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 function simplifyOsintData(data: any): any {
   if (!data) return "Sin información OSINT.";
@@ -167,9 +167,26 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const safeBody = { ...body };
+    const projectId = typeof safeBody.projectId === "string" ? safeBody.projectId.trim() : "";
+    const sessionToken = cookies().get("ceipol_session")?.value;
+    const hypothesisAuthority = await authorizeTrustedProjectHypothesis({
+      projectId,
+      sessionToken,
+    });
+
+    if (!hypothesisAuthority.allowed) {
+      return NextResponse.json(
+        {
+          error: hypothesisAuthority.code,
+          code: hypothesisAuthority.code,
+          message: hypothesisAuthority.message,
+        },
+        { status: hypothesisAuthority.status }
+      );
+    }
+    safeBody.canonicalHypothesis = hypothesisAuthority.canonicalHypothesis;
 
     const projectName = safeBody.projectName || "EXPEDIENTE TÁCTICO INDETERMINADO";
-    const projectId = typeof safeBody.projectId === "string" ? safeBody.projectId.trim() : "";
     // ADR-020.34: preserve missing spatial context as UNKNOWN.
     const projectDescription =
       typeof safeBody.projectDescription === "string"
