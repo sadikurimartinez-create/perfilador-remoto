@@ -14,8 +14,8 @@ const NEWS_API_KEY = process.env.NEWS_API_TOKEN || "ec9ae852706040efa3a92fea10fe
 export const RSS_FEEDS = [
   // Nacionales y Aguascalientes (Existentes)
   { nombre: "El Heraldo de Ags", url: "https://www.heraldo.mx/feed/" },
-  { nombre: "El Sol del Centro", url: "https://www.elsoldelcentro.com.mx/policiaca/rss.xml" },
-  { nombre: "BI Noticias", url: "https://www.binoticias.com/rss.xml" },
+  { nombre: "El Sol del Centro", url: "https://www.elsoldelcentro.com.mx/rss.xml" },
+  { nombre: "BI Noticias", url: "https://www.binoticias.com/feed/" },
   { nombre: "Milenio Policía", url: "https://www.milenio.com/rss/policia" },
   // Aguascalientes (Nuevos)
   { nombre: "Hidrocálido Digital", url: "https://www.hidrocalidodigital.com/feed/" },
@@ -36,16 +36,20 @@ export const RSS_FEEDS = [
   { nombre: "Líder Informativo", url: "https://lider919.com/feed/" },
   // San Luis Potosí
   { nombre: "El Sol de San Luis", url: "https://www.elsoldesanluis.com.mx/rss.xml" },
-  { nombre: "Plano Informativo", url: "https://planoinformativo.com/rss.xml" },
+  { nombre: "Plano Informativo", url: "https://planoinformativo.com/feed/" },
   { nombre: "Pulso Diario de San Luis", url: "https://pulsoslp.com.mx/feed/" },
   { nombre: "Astrolabio Diario Digital", url: "https://www.astrolabio.com.mx/feed/" },
   { nombre: "La Orquesta", url: "https://laorquesta.mx/feed/" },
   // Guanajuato
-  { nombre: "Periódico AM (León)", url: "https://www.am.com.mx/rss.xml" },
+  { nombre: "Periódico AM (León)", url: "https://www.am.com.mx/feed/" },
   { nombre: "El Sol de León", url: "https://www.elsoldeleon.com.mx/rss.xml" },
   { nombre: "El Sol de Irapuato", url: "https://www.elsoldeirapuato.com.mx/rss.xml" },
   { nombre: "Periódico Correo", url: "https://periodicocorreo.com.mx/feed/" },
   { nombre: "Zona Franca", url: "https://zonafranca.mx/feed/" },
+  // Querétaro
+  { nombre: "Diario de Querétaro", url: "https://www.diariodequeretaro.com.mx/rss.xml" },
+  { nombre: "Códice Informativo", url: "https://codiceinformativo.com/feed/" },
+  { nombre: "Plaza de Armas QRO", url: "https://plazadearmas.com.mx/feed/" },
   // Foros y Redes Sociales (Reddit)
   { nombre: "Reddit México", url: "https://www.reddit.com/r/mexico/new/.rss" },
   { nombre: "Reddit CDMX", url: "https://www.reddit.com/r/MexicoCity/new/.rss" },

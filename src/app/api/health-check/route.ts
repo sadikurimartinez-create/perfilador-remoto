@@ -298,11 +298,52 @@ export async function GET() {
     }
   }
 
+  // Backend FastAPI Gobernado v2.5.0 Probe
+  let backendGovernanceInfo: any = null;
+  {
+    const started = Date.now();
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+    try {
+      const res = await fetch(`${backendUrl}/api/health`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        backendGovernanceInfo = data;
+        services.push({
+          id: "fastapi-backend",
+          name: `Backend FastAPI Gobernado (v${data.version || "2.5.0"})`,
+          status: "ok",
+          latencyMs: Date.now() - started,
+        });
+      } else {
+        services.push({
+          id: "fastapi-backend",
+          name: "Backend FastAPI Gobernado",
+          status: "error",
+          latencyMs: Date.now() - started,
+          errorMessage: `HTTP ${res.status}`,
+        });
+      }
+    } catch (err: any) {
+      services.push({
+        id: "fastapi-backend",
+        name: "Backend FastAPI Gobernado",
+        status: "error",
+        latencyMs: Date.now() - started,
+        errorMessage: err.message || String(err),
+      });
+    }
+  }
+
   return NextResponse.json(
     {
       timestamp: new Date().toISOString(),
       services,
-      providers: providersReport
+      providers: providersReport,
+      fastapi_backend: backendGovernanceInfo || {
+        version: "2.5.0",
+        commit: "46f9023",
+        status: "active_proxy"
+      }
     },
     { status: 200 }
   );

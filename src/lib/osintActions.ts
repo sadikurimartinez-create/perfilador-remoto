@@ -194,6 +194,7 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
     }
     const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
+
     return {
       exito: true,
       total: data.length,

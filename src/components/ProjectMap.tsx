@@ -16,7 +16,7 @@ interface ProjectMapProps {
   onAddPoint?: (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => Promise<void>;
   onMoveMarker?: (id: string, lat: number, lng: number) => Promise<void>;
   onCandidateCapture?: (lat: number, lng: number, context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }) => void;
-  onPoiSelect?: (lat: number, lng: number) => void;
+  onPoiSelect?: (poi: any) => void;
   album: any[];
   canonicalGeography?: CanonicalProjectGeography | null;
   project: {
@@ -470,7 +470,18 @@ export function ProjectMap({
 
     if (geometryType === "individual") {
       if (onPoiSelect) {
-        onPoiSelect(lat, lng);
+        onPoiSelect({
+            id: `poi-map-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+            name: geometryType === "individual" ? "Punto individual" : "Punto de Interés",
+            lat,
+            lng,
+            comentario: geometryType === "individual"
+              ? "Geografía individual seleccionada"
+              : "POI independiente seleccionado",
+            category: geometryType === "individual"
+              ? "GEOGRAFIA_INDIVIDUAL"
+              : "POI",
+          });
         return;
       }
       if (!onAddPoint) return;
@@ -491,7 +502,18 @@ export function ProjectMap({
       } else {
         // Modalidad 2: Evidencia / POI Independiente
         if (onPoiSelect) {
-          onPoiSelect(lat, lng);
+          onPoiSelect({
+            id: `poi-map-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+            name: geometryType === "individual" ? "Punto individual" : "Punto de Interés",
+            lat,
+            lng,
+            comentario: geometryType === "individual"
+              ? "Geografía individual seleccionada"
+              : "POI independiente seleccionado",
+            category: geometryType === "individual"
+              ? "GEOGRAFIA_INDIVIDUAL"
+              : "POI",
+          });
           return;
         }
         if (!onAddPoint) return;
@@ -709,19 +731,13 @@ export function ProjectMap({
           />
         ))}
 
-        {/* Draw circle for individual type projects (Controlled by showAreas) */}
+        
+        {/* Individual canonical geography is represented as one frozen rector point. */}
         {showAreas && geometryType === "individual" && geoShapePath.length === 1 && !isFallback && (
-          <Circle
-            center={geoShapePath[0]}
-            radius={Number(project.radius || 500)}
-            options={{
-              strokeColor: "#38bdf8",
-              strokeOpacity: 0.35,
-              strokeWeight: 2,
-              fillColor: "#38bdf8",
-              fillOpacity: 0.8,
-              clickable: false,
-            }}
+          <Marker
+            position={geoShapePath[0]}
+            title="Geografía rectora individual"
+            clickable={false}
           />
         )}
 
@@ -1054,7 +1070,14 @@ export function ProjectMap({
                   <button
                     onClick={() => {
                       if (onPoiSelect) {
-                        onPoiSelect(activePhoto.lat, activePhoto.lng);
+                        onPoiSelect({
+                            id: activePhoto.id,
+                            name: activePhoto.tipo || "POI remoto",
+                            lat: Number(activePhoto.lat),
+                            lng: Number(activePhoto.lng),
+                            comentario: activePhoto.comentario || "Análisis remoto Street View",
+                            category: "Google Street View",
+                          });
                       }
                       setActivePhoto(null);
                     }}

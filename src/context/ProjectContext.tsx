@@ -186,7 +186,8 @@ export type SweepIntegrationItem = {
   data: string;
   context?: string;
   justification?: string;
-  timestamp: number;
+  timestamp: number;
+  createVisualEvidence?: boolean;
 };
 
 export type Project = {
@@ -1982,25 +1983,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const updatedSweeps = [...currentSweeps, newSweep];
 
-    let updatedHypothesis = project.hipotesis || "";
-
-    if (params.type === "Directa") {
-      const delimiterStart = `\n=== BARRIDO DIRECTO [ID: ${sweepId}] [Engine: ${params.engine}] ===\n`;
-      const delimiterEnd = `\n=========================================\n`;
-      const textToAppend = `${delimiterStart}Fecha: ${new Date(newSweep.timestamp).toLocaleString("es-MX")}\nFuente: ${params.source}\nRelevancia: ${params.relevance}\n${params.data}${delimiterEnd}`;
-      updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
-    }
-
-    try {
+      try {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
       
       const updateData: any = {
         sweeps: updatedSweeps
       };
-      if (params.type === "Directa") {
-        updateData.hipotesis = updatedHypothesis;
-      }
 
       await runTransaction(firestore, async (transaction) => {
         transaction.update(projectRef, updateData);
@@ -2024,7 +2013,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         lngVal = project.canonicalGeography?.derived?.centroid?.lng ?? null;
       }
 
-      if (latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
+      if (params.createVisualEvidence === true && latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
         try {
           const photoId = `EVI-SWEEP-${Date.now()}`;
           const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
@@ -2070,7 +2059,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
+      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps } : prev);
       
       await logAuditAction({
         action: "REGISTRAR_BARRIDO",
@@ -2162,40 +2151,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     } as SweepIntegrationItem;
     let updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
 
-    let updatedHypothesis = project.hipotesis || "";
-
-    const directHeader = `=== BARRIDO DIRECTO [ID: ${sweepId}]`;
-    const directFooter = `=========================================\n`;
-    const contextualizedHeader = `=== BARRIDO CONTEXTUALIZADO [ID: ${sweepId}]`;
-    const contextualizedFooter = `================================================\n`;
-
-    const cleanHypothesisBlock = (hyp: string, header: string, footer: string) => {
-      const startIndex = hyp.indexOf(header);
-      if (startIndex !== -1) {
-        const endIndex = hyp.indexOf(footer, startIndex);
-        if (endIndex !== -1) {
-          const fullMatchLength = (endIndex + footer.length) - startIndex;
-          const cleaned = hyp.substring(0, startIndex) + hyp.substring(startIndex + fullMatchLength);
-          return cleaned.replace(/\n\n\n+/g, "\n\n").trim();
-        }
-      }
-      return hyp;
-    };
-
-    updatedHypothesis = cleanHypothesisBlock(updatedHypothesis, directHeader, directFooter);
-    updatedHypothesis = cleanHypothesisBlock(updatedHypothesis, contextualizedHeader, contextualizedFooter);
-
-    if (updatedSweep.status === "Integrado") {
-      if (updatedSweep.type === "Directa") {
-        const delimiterStart = `\n=== BARRIDO DIRECTO [ID: ${sweepId}] [Engine: ${updatedSweep.engine}] ===\n`;
-        const textToAppend = `${delimiterStart}Fecha: ${new Date(updatedSweep.timestamp).toLocaleString("es-MX")}\nFuente: ${updatedSweep.source}\nRelevancia: ${updatedSweep.relevance}\nContexto/Ajuste: ${updatedSweep.context || "Sin contexto adicional"}\n${updatedSweep.data}${directFooter}`;
-        updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
-      } else {
-        const delimiterStart = `\n=== BARRIDO CONTEXTUALIZADO [ID: ${sweepId}] [Engine: ${updatedSweep.engine}] ===\n`;
-        const textToAppend = `${delimiterStart}Fecha: ${new Date().toLocaleString("es-MX")}\nFuente: ${updatedSweep.source}\nRelevancia: ${updatedSweep.relevance}\nContexto/Validación: ${updatedSweep.context || "Sin contexto adicional"}\nDetalles: ${updatedSweep.data}${contextualizedFooter}`;
-        updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
-      }
-    }
 
     try {
       const firestore = getDb();
@@ -2216,8 +2171,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
         updatedSweeps = serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s);
         transaction.update(projectRef, {
-          sweeps: updatedSweeps,
-          hipotesis: updatedHypothesis
+          sweeps: updatedSweeps
         });
         if (updatedSweep.lifecycle) {
           await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, updatedSweep.lifecycle, {
@@ -2227,7 +2181,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
+      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps } : prev);
 
       await logAuditAction({
         action: "ACTUALIZAR_BARRIDO",

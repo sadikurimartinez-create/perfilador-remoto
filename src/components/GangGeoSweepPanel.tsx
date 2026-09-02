@@ -219,7 +219,8 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
         type: "Contextualizada",
         relevance: "Alto",
         data: sweepSummary,
-        initialContext: narrative
+        initialContext: narrative,
+        createVisualEvidence: false
       });
 
       await onUpdateProject();

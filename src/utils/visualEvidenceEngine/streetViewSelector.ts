@@ -61,10 +61,9 @@ export class StreetViewSelector {
       return { candidate: c, score };
     });
 
-    // Ordenar de mayor a menor relevancia
+    // Ordenar de mayor a menor relevancia y retornar la totalidad de candidatos aprobados (sin límites artificiales)
     ranked.sort((a, b) => b.score - a.score);
 
-    // Retornar máximo 4 candidatos seleccionados
-    return ranked.slice(0, 4).map(r => r.candidate);
+    return ranked.map(r => r.candidate);
   }
 }

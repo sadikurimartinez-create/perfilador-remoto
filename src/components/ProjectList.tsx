@@ -19,6 +19,15 @@ import {
 import { getDb } from "@/lib/firebase";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
+import {
+  buildDraftGeographyPreview,
+  confirmDraftProjectGeography,
+  createDraftProjectGeography,
+  resetDraftProjectGeography,
+  updateDraftProjectGeography,
+  type DraftProjectGeography,
+  type LatLngPoint,
+} from "@/utils/canonicalProjectGeography";
 
 type ProjectWithCount = {
   id: string;
@@ -54,6 +63,12 @@ export function ProjectList() {
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
+  const [draftGeography, setDraftGeography] = useState<DraftProjectGeography>(() => createDraftProjectGeography("individual"));
+  const [draftLatInput, setDraftLatInput] = useState("");
+  const [draftLngInput, setDraftLngInput] = useState("");
+  const [draftFeedback, setDraftFeedback] = useState("");
+  const draftPreview = buildDraftGeographyPreview(draftGeography);
+  const geometryConfirmed = draftGeography.confirmed && draftPreview.canConfirm;
   const [isListening, setIsListening] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -272,11 +287,107 @@ export function ProjectList() {
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
+    setGeometryType("individual");
+    setDraftGeography(createDraftProjectGeography("individual"));
+    setDraftLatInput("");
+    setDraftLngInput("");
+    setDraftFeedback("");
     pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
     setPendingPhotos([]);
     setShowPrompt(true);
   };
 
+  const handleGeometryTypeChange = (nextType: "individual" | "lineal" | "poligono") => {
+    setGeometryType(nextType);
+    setDraftGeography(resetDraftProjectGeography(nextType));
+    setDraftLatInput("");
+    setDraftLngInput("");
+    setDraftFeedback("Geografía en borrador reiniciada.");
+  };
+
+  const parseDraftPoint = (): LatLngPoint | null => {
+    const point = {
+      lat: Number(draftLatInput),
+      lng: Number(draftLngInput),
+    };
+
+    if (
+      !Number.isFinite(point.lat) ||
+      !Number.isFinite(point.lng) ||
+      point.lat < -90 ||
+      point.lat > 90 ||
+      point.lng < -180 ||
+      point.lng > 180
+    ) {
+      setDraftFeedback("Ingrese latitud y longitud válidas.");
+      return null;
+    }
+
+    return point;
+  };
+
+  const handleAddDraftPoint = () => {
+    const point = parseDraftPoint();
+    if (!point) return;
+
+    const nextPoints =
+      geometryType === "individual"
+        ? [point]
+        : [...draftGeography.points, point];
+
+    setDraftGeography(
+      updateDraftProjectGeography(draftGeography, nextPoints)
+    );
+
+    setDraftLatInput("");
+    setDraftLngInput("");
+
+    setDraftFeedback(
+      geometryType === "individual"
+        ? "Punto individual actualizado en borrador."
+        : "Nodo agregado al borrador."
+    );
+  };
+
+  const handleRemoveDraftPoint = (index: number) => {
+    setDraftGeography(
+      updateDraftProjectGeography(
+        draftGeography,
+        draftGeography.points.filter((_, i) => i !== index)
+      )
+    );
+
+    setDraftFeedback(
+      "Borrador actualizado. Confirme nuevamente antes de crear."
+    );
+  };
+
+  const handleResetDraftGeometry = () => {
+    setDraftGeography(resetDraftProjectGeography(geometryType));
+    setDraftLatInput("");
+    setDraftLngInput("");
+    setDraftFeedback("Borrador reiniciado.");
+  };
+
+  const handleConfirmDraftGeometry = () => {
+    try {
+      setDraftGeography(
+        confirmDraftProjectGeography(draftGeography)
+      );
+
+      setDraftFeedback(
+        "Geografía validada y confirmada para creación."
+      );
+    } catch {
+      setDraftFeedback(
+        geometryType === "individual"
+          ? "Defina exactamente un punto válido antes de confirmar."
+          : geometryType === "lineal"
+            ? "El corredor requiere al menos dos nodos ordenados."
+            : "El polígono requiere al menos tres vértices distintos."
+      );
+    }
+  };
   const handleConfirmarNombre = async () => {
     const nombre = nombreInput.trim();
     if (!nombre || !user) return;
@@ -284,10 +395,18 @@ export function ProjectList() {
       if (pendingPhotos.length > 0) {
         (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
       }
+      if (!geometryConfirmed) {
+        setDraftFeedback(
+          "Debe definir, validar y confirmar la geografía antes de crear el expediente."
+        );
+        return;
+      }
+
       const newId = await createProject({
         nombre,
         geometryType,
-        descripcion: ""
+        descripcion: "",
+        draftGeography,
       });
       pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);
@@ -967,10 +1086,10 @@ export function ProjectList() {
                       name="geometryType"
                       value="individual"
                       checked={geometryType === "individual"}
-                      onChange={() => setGeometryType("individual")}
+                      onChange={() => handleGeometryTypeChange("individual")}
                       className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
                     />{" "}
-                    Individual (Punto + Radio operacional)
+                    Individual (Punto rector)
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
                     <input
@@ -978,7 +1097,7 @@ export function ProjectList() {
                       name="geometryType"
                       value="lineal"
                       checked={geometryType === "lineal"}
-                      onChange={() => setGeometryType("lineal")}
+                      onChange={() => handleGeometryTypeChange("lineal")}
                       className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
                     />{" "}
                     Lineal (Rutas de patrullaje / Proyecciones)
@@ -989,7 +1108,7 @@ export function ProjectList() {
                       name="geometryType"
                       value="poligono"
                       checked={geometryType === "poligono"}
-                      onChange={() => setGeometryType("poligono")}
+                      onChange={() => handleGeometryTypeChange("poligono")}
                       className="text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-700"
                     />{" "}
                     Polígono (Áreas de interés / Zonas calientes)
@@ -998,6 +1117,116 @@ export function ProjectList() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-slate-200">
+                  Definición geográfica en borrador
+                </span>
+                <span className={`text-[10px] font-black uppercase ${geometryConfirmed ? "text-emerald-400" : "text-amber-400"}`}>
+                  {geometryConfirmed ? "Confirmada" : "Draft"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  step="any"
+                  value={draftLatInput}
+                  onChange={(e) => setDraftLatInput(e.target.value)}
+                  placeholder="Latitud"
+                  className="bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100"
+                />
+                <input
+                  type="number"
+                  step="any"
+                  value={draftLngInput}
+                  onChange={(e) => setDraftLngInput(e.target.value)}
+                  placeholder="Longitud"
+                  className="bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <CEIPOLButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleAddDraftPoint}
+                >
+                  {geometryType === "individual" ? "Definir punto" : "Agregar nodo"}
+                </CEIPOLButton>
+
+                <CEIPOLButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetDraftGeometry}
+                >
+                  Reiniciar
+                </CEIPOLButton>
+
+                <CEIPOLButton
+                  type="button"
+                  variant="confirm"
+                  size="sm"
+                  onClick={handleConfirmDraftGeometry}
+                  disabled={!draftPreview.canConfirm}
+                >
+                  Confirmar geografía
+                </CEIPOLButton>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
+                  Preview {draftPreview.geometry.type} · {draftPreview.validationStatus}
+                </div>
+
+                {draftGeography.points.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Defina coordenadas antes de crear el expediente.
+                  </p>
+                ) : (
+                  <ol className="space-y-1 text-xs text-slate-300">
+                    {draftGeography.points.map((point, index) => {
+                      const role =
+                        geometryType === "lineal"
+                          ? index === 0
+                            ? "START"
+                            : index === draftGeography.points.length - 1
+                              ? "END"
+                              : "INTERMEDIATE"
+                          : geometryType === "poligono"
+                            ? `VERTEX ${index + 1}`
+                            : "POINT";
+
+                      return (
+                        <li
+                          key={`${point.lat}-${point.lng}-${index}`}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="font-mono">
+                            {role}: {point.lat.toFixed(6)}, {point.lng.toFixed(6)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDraftPoint(index)}
+                            className="text-[10px] font-bold text-rose-300 hover:text-rose-200"
+                          >
+                            Quitar
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+
+              {draftFeedback && (
+                <p className="text-xs text-amber-300">
+                  {draftFeedback}
+                </p>
+              )}
+            </div>
             {/* Columna Derecha: Evidencia y Multimedia */}
             <div className="space-y-4">
               <div>
@@ -1058,7 +1287,7 @@ export function ProjectList() {
             <button
               type="button"
               onClick={() => void handleConfirmarNombre()}
-              disabled={!nombreInput.trim()}
+              disabled={!nombreInput.trim() || !geometryConfirmed}
               className="btn-primary flex-1 py-2.5 text-sm font-semibold"
             >
               Crear e ingresar

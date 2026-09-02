@@ -162,4 +162,23 @@ export class ReportIntelligenceNormalizer {
 
     return uniqueParagraphs.join("\n\n");
   }
+
+  /**
+   * Bloquea la generación automática de riesgo predictivo/hotspots si incidentes = 0 o la evidencia es insuficiente (ADR Gobernanza Editorial).
+   */
+  public static sanitizePredictiveRisk(
+    text: string,
+    incidentCount: number,
+    evidenceCount: number
+  ): string {
+    if (incidentCount === 0 || evidenceCount === 0) {
+      const predictivePattern = /(hotspot|corredor de escape predictivo|alta probabilidad delictiva|zona de riesgo alto|foco rojo predictivo)[^.\n]*/gi;
+      let sanitized = text.replace(predictivePattern, "");
+      if (!sanitized.includes("Información territorial insuficiente")) {
+        sanitized += "\n\nNOTA DE GOBERNANZA EDITORIAL: Información territorial insuficiente o ausente. Se omite la generación de patrones predictivos y estimaciones de riesgo automatizadas de acuerdo al protocolo instituido.";
+      }
+      return sanitized.trim();
+    }
+    return text;
+  }
 }

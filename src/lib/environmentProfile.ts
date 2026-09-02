@@ -2,7 +2,7 @@ import type { VisionAnalysisResult } from "./googleVision";
 import type { PlacesAnalysisResult } from "./googlePlaces";
 import type { DenueSearchResult } from "./denueInegi";
 import type { RouteEscapeAnalysis } from "./googleRoutes";
-import type { StreetViewComparison } from "./googleStreetView";
+import type { StreetViewComparison } from "./legacy/googleStreetView";
 
 export type DeterioroFisico = {
   vision?: VisionAnalysisResult | null;

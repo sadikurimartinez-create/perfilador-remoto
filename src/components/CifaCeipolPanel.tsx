@@ -130,7 +130,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         source: "OSINT",
         type: "Directa",
         relevance: "Alto",
-        data: text
+        data: text,
+        createVisualEvidence: false
       });
       setCifaDataConfirm(null);
       setToast({ type: "success", message: "✓ Hipótesis OSINT guardada correctamente en el expediente" });
@@ -242,6 +243,76 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                   />
                 </div>
 
+                {/* Sources Selection Checklist */}
+                <div className="space-y-3 bg-slate-900/80 border border-slate-800 rounded-xl p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-800">
+                    <div>
+                      <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">Fuentes de Inteligencia Activas ({selectedSources.length}/{Object.keys(SOURCE_PLATFORM_LABELS).length})</h4>
+                      <p className="text-[10px] text-slate-400">Seleccione las plataformas y motores que participarán en el barrido táctico</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSources(Object.keys(SOURCE_PLATFORM_LABELS))}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold transition"
+                      >
+                        ✓ Todas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSources(["telegram", "x_twitter", "reddit", "youtube", "facebook_public", "instagram_public"])}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-semibold transition"
+                      >
+                        📱 Redes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSources(["osint_territorial", "google_maps", "street_view", "apis_gubernamentales"])}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold transition"
+                      >
+                        🗺️ Geo & DENUE
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSources([])}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-rose-300 font-semibold transition"
+                      >
+                        ✕ Ninguna
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1 max-h-[220px] overflow-y-auto pr-1">
+                    {Object.entries(SOURCE_PLATFORM_LABELS).map(([key, label]) => {
+                      const isChecked = selectedSources.includes(key);
+                      return (
+                        <label
+                          key={key}
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                            isChecked
+                              ? "bg-slate-950 border-cyan-500/50 text-slate-100"
+                              : "bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedSources(prev => [...prev, key]);
+                              } else {
+                                setSelectedSources(prev => prev.filter(k => k !== key));
+                              }
+                            }}
+                            className="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500/40 h-3.5 w-3.5 cursor-pointer"
+                          />
+                          <span className="truncate text-[11px] font-medium">{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Execution Button */}
                 <div className="flex justify-end gap-3 pt-2">
                   <CEIPOLButton
@@ -253,7 +324,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                       void handleExecuteScan();
                     }}
                   >
-                    Ejecutar Barrido Inteligente
+                    Ejecutar Barrido Inteligente Multifuente ({selectedSources.length} Fuentes)
                   </CEIPOLButton>
                 </div>
               </>

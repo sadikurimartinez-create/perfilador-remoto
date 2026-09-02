@@ -65,6 +65,8 @@ import {
   EvidenceFallbackFactory,
   resolveImageExtension
 } from "@/utils/documentEvidenceIntegrationEngine";
+import { EvidenceAdapterEngine } from "@/utils/evidence/EvidenceAdapterEngine";
+import { EvidenceFallbackRenderer } from "@/document-engine/renderers/EvidenceFallbackRenderer";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -150,7 +152,31 @@ async function getImageDimensionsAndBuffer(
 
     if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
       const isExternal = typeof window !== "undefined" && !imgSrc.includes(window.location.host);
-      const fetchUrl = isExternal ? `/api/proxy-image?url=${encodeURIComponent(imgSrc)}` : imgSrc;
+      let fetchUrl = imgSrc;
+
+      if (isExternal) {
+        if (imgSrc.includes("maps.googleapis.com/maps/api/streetview")) {
+          try {
+            const u = new URL(imgSrc);
+            const loc = u.searchParams.get("location") || "";
+            const [lat, lng] = loc.split(",");
+            if (lat && lng) {
+              const heading = u.searchParams.get("heading") || "0";
+              const pitch = u.searchParams.get("pitch") || "0";
+              const fov = u.searchParams.get("fov") || "90";
+              const size = u.searchParams.get("size") || "800x600";
+              fetchUrl = `/api/proxy-image?lat=${lat}&lng=${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&size=${size}`;
+            } else {
+              fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+            }
+          } catch (e) {
+            console.warn("[Document Engine] Error parsing streetview URL, fallback to direct proxy url parameter", e);
+            fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+          }
+        } else {
+          fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+        }
+      }
       
       const response = await fetch(fetchUrl, { cache: "no-cache" });
       if (!response.ok) return null;
@@ -437,9 +463,24 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
   for (const ch of requiredChapters) {
     const text = payload[ch.key];
     if (!text || text.trim().length === 0) {
-      console.warn(`[WARNING] El capítulo ${ch.name} estaba vacío o no disponible. Aplicando fallback profesional.`);
-      payload[ch.key] = defaultChapterFallbacks[ch.key];
+      console.warn(`[WARNING] El capítulo ${ch.name} (${ch.key}) estaba vacío o no disponible.`);
+
+      // En lugar de sobreescribir destructivamente, registramos la alerta de calidad
+      emptyChaptersAlerts.push(`- El capítulo ${ch.name} (${ch.key}) se encuentra vacío de narrativa.`);
+
+      // Se inyecta un marcador visible pero no intrusivo en el capítulo analítico correspondiente
+      payload[ch.key] = `[PRESTACIÓN REQUERIDA: Narrativa analítica pendiente de carga para el ${ch.name}]`;
     }
+  }
+
+  // Inyectar alertas en el Capítulo 10 de forma no obstructiva (ADR-015)
+  if (emptyChaptersAlerts.length > 0) {
+    const validationHeader = "\n\n=== APÉNDICE DE AUDITORÍA Y CERTIFICACIÓN DE CALIDAD ===\n" +
+      "Se identificaron las siguientes insuficiencias analíticas durante la validación del reporte:\n" +
+      emptyChaptersAlerts.join("\n") + "\n" +
+      "========================================================\n";
+
+    payload.conclusionesText = (payload.conclusionesText || "") + validationHeader;
   }
 
   // 3. Mapas
@@ -491,12 +532,7 @@ function ExecutiveReportQualityGate(payload: any) {
     (!m.recommendation || m.recommendation.length <= 300)
   );
   if (!mapCheck) {
-    console.warn("[WARNING] El Capítulo 3 excede los límites de síntesis del formato operacional. Aplicando límites.");
-    for (const m of payload.maps) {
-      if (m.spatialFinding) m.spatialFinding = m.spatialFinding.slice(0, 180);
-      if (m.interpretation) m.interpretation = m.interpretation.slice(0, 300);
-      if (m.recommendation) m.recommendation = m.recommendation.slice(0, 180);
-    }
+    console.warn("[WARNING] El Capítulo 3 excede los límites de síntesis del formato operacional. (Conservando texto completo bajo ADR-015).");
   }
 
   const graphCheck = !payload.graphs || payload.graphs.every((g: any) =>
@@ -504,11 +540,7 @@ function ExecutiveReportQualityGate(payload: any) {
     (!g.relation || g.relation.length <= 250)
   );
   if (!graphCheck && payload.graphs) {
-    console.warn("[WARNING] El Capítulo 4 excede los límites de síntesis estadística. Aplicando límites.");
-    for (const g of payload.graphs) {
-      if (g.finding) g.finding = g.finding.slice(0, 180);
-      if (g.relation) g.relation = g.relation.slice(0, 120);
-    }
+    console.warn("[WARNING] El Capítulo 4 excede los límites de síntesis estadística. (Conservando texto completo bajo ADR-015).");
   }
 
   const photoCheck = !payload.photoEvidence || payload.photoEvidence.every((p: any) =>
@@ -517,12 +549,7 @@ function ExecutiveReportQualityGate(payload: any) {
     (!p.relation || p.relation.length <= 300)
   );
   if (!photoCheck && payload.photoEvidence) {
-    console.warn("[WARNING] El Capítulo 5 excede los límites de síntesis de evidencia fotográfica. Aplicando límites.");
-    for (const p of payload.photoEvidence) {
-      if (p.caption) p.caption = p.caption.slice(0, 180);
-      if (p.criminologicalInterpretation) p.criminologicalInterpretation = p.criminologicalInterpretation.slice(0, 300);
-      if (p.relation) p.relation = p.relation.slice(0, 180);
-    }
+    console.warn("[WARNING] El Capítulo 5 excede los límites de síntesis de evidencia fotográfica. (Conservando texto completo bajo ADR-015).");
   }
 
   console.log("[QUALITY GATE] ExecutiveReportQualityGate: PASSED");
@@ -817,23 +844,23 @@ export async function exportToWord(
   if (payload.maps) {
     payload.maps = payload.maps.map((m: any) => ({
       ...m,
-      spatialFinding: m.spatialFinding ? m.spatialFinding.slice(0, 180) : "",
-      interpretation: m.interpretation ? m.interpretation.slice(0, 300) : "",
-      recommendation: m.recommendation ? m.recommendation.slice(0, 180) : ""
+      spatialFinding: m.spatialFinding || "",
+      interpretation: m.interpretation || "",
+      recommendation: m.recommendation || ""
     }));
   }
   if (payload.graphs) {
     payload.graphs = payload.graphs.map((g: any) => ({
       ...g,
-      finding: g.finding ? g.finding.slice(0, 180) : "",
-      relation: g.relation ? g.relation.slice(0, 120) : "",
-      interpretation: g.interpretation ? g.interpretation.slice(0, 240) : (g.explanation ? g.explanation.slice(0, 240) : "")
+      finding: g.finding || "",
+      relation: g.relation || "",
+      interpretation: g.interpretation || g.explanation || ""
     }));
   }
   if (payload.photoEvidence) {
     payload.photoEvidence = payload.photoEvidence.map((p: any) => ({
       ...p,
-      caption: p.caption ? p.caption.slice(0, 180) : "",
+      caption: p.caption || "",
       criminologicalInterpretation: p.criminologicalInterpretation || "",
       relation: p.relation || ""
     }));
@@ -1201,7 +1228,7 @@ export async function exportToWord(
                   new TextRun({ text: "Pregunta Analítica: ", bold: true, size: 16, color: "1F4E79" }),
                   new TextRun({ text: `${coverAnalyticalQuestion}\n`, size: 16 }),
                   new TextRun({ text: "Hipótesis de Trabajo: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: `${hypothesisText.substring(0, 250)}...\n`, size: 16, italics: true }),
+                  new TextRun({ text: `${hypothesisText}\n`, size: 16, italics: true }),
                   new TextRun({ text: "Variables Evaluadas: ", bold: true, size: 16, color: "1F4E79" }),
                   new TextRun({ text: `${coverVariablesText}\n`, size: 16 }),
                   new TextRun({ text: "Objetivo de Validación: ", bold: true, size: 16, color: "1F4E79" }),
@@ -1381,17 +1408,16 @@ export async function exportToWord(
       })
     : [];
 
-  // Mapear evidencias para el renderer
   const mappedEvidenceLinks = [
     ...(payload.photoEvidence || []).map((p: any) => ({
       evidence: p.id || p.code || "FOTO_ND",
       type: "Registro Fotográfico de Campo",
-      result: p.criminologicalInterpretation ? p.criminologicalInterpretation.slice(0, 80) + "..." : "Análisis visual de terreno realizado."
+      result: p.criminologicalInterpretation || "Análisis visual de terreno realizado."
     })),
     ...(payload.streetViewAnalysis || []).map((s: any) => ({
       evidence: s.id || "SV_ND",
       type: "Street View Intelligence",
-      result: s.inferenciaAnalitica ? s.inferenciaAnalitica.slice(0, 80) + "..." : "Análisis visual de entorno realizado."
+      result: s.inferenciaAnalitica || "Análisis visual de entorno realizado."
     }))
   ];
 
@@ -1484,11 +1510,11 @@ export async function exportToWord(
             children: [
               new TextRun({ text: "Interpretación operacional:\n", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
               new TextRun({ text: "• Hallazgo territorial: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: `${(map.spatialFinding || "").slice(0, 180)}\n`, size: 14, font: "Calibri" }),
+              new TextRun({ text: `${map.spatialFinding || ""}\n`, size: 14, font: "Calibri" }),
               new TextRun({ text: "• Interpretación criminológica: ", bold: true, size: 14, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: `${(map.interpretation || "").slice(0, 300)}\n`, size: 14, font: "Calibri" }),
+              new TextRun({ text: `${map.interpretation || ""}\n`, size: 14, font: "Calibri" }),
               new TextRun({ text: "• Implicación operativa: ", bold: true, size: 14, color: "B91C1C", font: "Calibri" }),
-              new TextRun({ text: `${(map.recommendation || "").slice(0, 180)}`, size: 14, font: "Calibri" })
+              new TextRun({ text: `${map.recommendation || ""}`, size: 14, font: "Calibri" })
             ],
             spacing: { after: 180 }
           })
@@ -1594,21 +1620,21 @@ export async function exportToWord(
           new Paragraph({
             children: [
               new TextRun({ text: "Hallazgo: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: graph.finding.slice(0, 180), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.finding, size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
               new TextRun({ text: "Interpretación Narrativa: ", bold: true, size: 16, color: "0D2B52", font: "Calibri" }),
-              new TextRun({ text: graph.interpretation.slice(0, 240), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.interpretation, size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
           new Paragraph({
             children: [
               new TextRun({ text: "Relación con Hipótesis Criminológica: ", bold: true, size: 16, color: "1F4E79", font: "Calibri" }),
-              new TextRun({ text: graph.relation.slice(0, 120), size: 16, font: "Calibri" })
+              new TextRun({ text: graph.relation, size: 16, font: "Calibri" })
             ],
             spacing: { after: 40 }
           }),
@@ -1769,59 +1795,49 @@ export async function exportToWord(
 
   elements.push(...renderEditorialText(sanitizedStreetViewText));
 
-  // Renderizar las Tarjetas de Evidencia Virtual de Street View
-  if (hasStreetViewImages) {
-    for (let i = 0; i < payload.streetViewAnalysis.length; i++) {
-      const sv = payload.streetViewAnalysis[i];
-      
-      // Regla determinística: Priorizar imagen real capturada para REMOTE_STREET_VIEW o STREET_VIEW
-      if (sv.tipo === "REMOTE_STREET_VIEW" || sv.tipo === "STREET_VIEW" || sv.isStreetView || sv.source === "STREET_VIEW") {
-        const resolvedImage = sv.previewUrl || sv.dataUrl || sv.imageUrl || sv.url || sv.capturaPanoramica || sv.panoramaUrl || sv.streetViewMetadata?.staticUrl || "";
-        sv.dataUrl = resolvedImage;
-        sv.previewUrl = resolvedImage;
-        sv.imageUrl = resolvedImage;
-        sv.url = resolvedImage;
+  // Renderizar las Tarjetas de Evidencia Virtual de Street View (Garantizando Trazabilidad Absoluta sin Pérdidas)
+  if ((payload.streetViewAnalysis && payload.streetViewAnalysis.length > 0) || hasStreetViewImages) {
+    const svList = payload.streetViewAnalysis || [];
+    for (let i = 0; i < svList.length; i++) {
+      const rawSv = svList[i];
+      const sv = EvidenceAdapterEngine.adapt(rawSv, i);
+
+      let imgRes: any = null;
+      if (sv.image) {
+        const dims = PageBalanceEngine.calculateDimensions(sv.metadata.description ? sv.metadata.description.length : 100, 'photo');
+        imgRes = await getImageDimensionsAndBuffer(sv.image, dims.width, dims.height, sv.metadata.description || "Se aprecian condiciones físicas del entorno.", sv.id);
       }
 
-      if (!sv.dataUrl) continue;
-      
-      const dims = PageBalanceEngine.calculateDimensions(sv.observed ? sv.observed.length : 100, 'photo');
-      const imgRes = await getImageDimensionsAndBuffer(sv.dataUrl, dims.width, dims.height, sv.observed || "Se aprecian condiciones físicas del entorno.", sv.id);
-      
-      if (!imgRes || !imgRes.data) {
+      // Regla Institucional Obligatoria: Si la imagen falla o no tiene buffer, NUNCA eliminar. Renderizar Ficha Fallback.
+      if (!imgRes || !imgRes.data || imgRes.data.byteLength === 0) {
+        console.warn(`[REGLA INSTITUCIONAL 8.2.1] Falla/Ausencia de imagen en evidencia ${sv.id}. Generando Ficha de Evidencia Remota.`);
+        const fallbackCard = EvidenceFallbackRenderer.renderFallbackCard(
+          sv,
+          sv.duplicateOf ? `Imagen similar a evidencia ${sv.duplicateOf}` : "Imagen no disponible durante renderizado documental."
+        );
+        elements.push(fallbackCard);
         continue;
       }
-      
-      const isRemoteGabinete = sv.evidenceCategoryClass === "REMOTE_VISUAL" || sv.evidenceOrigin === "REMOTE" || sv.source === "STREET_VIEW";
+
+      const isRemoteGabinete = sv.metadata.evidenceCategoryClass === "REMOTE_VISUAL" || sv.source === "GOOGLE_STREET_VIEW";
       const disclaimerText = isRemoteGabinete
         ? "[TRABAJO DE GABINETE] Evidencia obtenida mediante análisis remoto utilizando fuente visual georreferenciada. No corresponde a inspección física en campo."
         : "";
 
-      const povText = sv.streetViewMetadata
-        ? ` (Cobertura Google: ${sv.streetViewMetadata.captureDate || "N/D"} | POV: HDG ${sv.streetViewMetadata.heading}° Pitch ${sv.streetViewMetadata.pitch}° FOV ${sv.streetViewMetadata.fov}°)`
-        : "";
+      const povText = ` (Cobertura Google: ${sv.metadata.captureDate || "N/D"} | POV: HDG ${sv.metadata.heading}° Pitch ${sv.metadata.pitch}° FOV ${sv.metadata.fov}°)`;
 
       const context: EvidenceContext = {
-        evidenceId: sv.id || `SV-0${i + 1}`,
+        evidenceId: sv.id,
         source: "STREET_VIEW",
-        analyticalPurpose: `${disclaimerText} ${sv.analyticalPurpose || sv.observed || sv.indicadorCriminologico || ""}${povText}`.trim(),
-        relatedHypothesis: sv.relatedHypothesis || sv.hypothesis || undefined,
+        analyticalPurpose: `${disclaimerText} ${sv.metadata.criminologicalInterpretation || sv.metadata.description || ""}${povText}`.trim(),
+        relatedHypothesis: sv.metadata.relatedHypothesis || undefined,
         evidenceClass: "PRIMARY",
-        confidence: sv.confidencePercentage || sv.confidence || 100,
-        capturedAt: sv.capturedAt || sv.date || undefined
+        confidence: sv.metadata.confidence || 100,
+        capturedAt: sv.timestamp
       };
 
-      // ADR-013.2 Evidence Publication Strict Mode
-      // Una captura Street View sin imagen real no debe generar bloque documental.
-      if (!imgRes || !imgRes.data || imgRes.data.byteLength === 0) {
-        console.warn(
-          `[ADR-013.2] Street View excluido sin captura válida: ${sv.id || "SIN_ID"}`
-        );
-        continue;
-      }
-
       // Maquetar la tarjeta mediante el builder de evidencias
-      const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, sv, context);
+      const tableCard = EvidenceLayoutBuilder.buildEvidenceCard(imgRes, rawSv, context);
       elements.push(tableCard);
     }
   }

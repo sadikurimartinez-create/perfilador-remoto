@@ -69,21 +69,67 @@ export function MockMap({
     }
 
     // Dibujar Geografía Rectora
-    if (visibleLayers.rectora && geografiaRectora?.polygonCoords && geografiaRectora.polygonCoords.length > 0) {
-      ctx.fillStyle = "rgba(6, 182, 212, 0.15)";
-      ctx.strokeStyle = "#06b6d4";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      geografiaRectora.polygonCoords.forEach((coord, index) => {
-        // Mapeo determinista temporal de coordenadas a píxeles
-        const x = 100 + (coord.lng + 102) * 5000;
-        const y = 300 - (coord.lat - 21) * 5000;
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+    if (visibleLayers.rectora && geografiaRectora) {
+      const rawType = (geografiaRectora as any).geometryType?.toUpperCase() || "";
+      const isCorridor = rawType.includes("CORREDOR") || rawType.includes("LINE");
+      const isIndividual = rawType.includes("INDIVIDUAL") || rawType.includes("PUNTO");
+
+      if (isCorridor && geografiaRectora.lineCoords && geografiaRectora.lineCoords.length > 0) {
+        // Renderizar Corredor Táctico
+        ctx.strokeStyle = "rgba(6, 182, 212, 0.3)";
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        geografiaRectora.lineCoords.forEach((coord, index) => {
+          const x = 100 + (coord.lng + 102) * 5000;
+          const y = 300 - (coord.lat - 21) * 5000;
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        geografiaRectora.lineCoords.forEach((coord, index) => {
+          const x = 100 + (coord.lng + 102) * 5000;
+          const y = 300 - (coord.lat - 21) * 5000;
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      } else if (isIndividual && geografiaRectora.center) {
+        // Renderizar Punto Focal + Círculo
+        const x = 100 + (geografiaRectora.center.lng + 102) * 5000;
+        const y = 300 - (geografiaRectora.center.lat - 21) * 5000;
+        ctx.fillStyle = "rgba(6, 182, 212, 0.15)";
+        ctx.strokeStyle = "#06b6d4";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 40, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+
+        // Pin Central
+        ctx.fillStyle = "#38bdf8";
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+      } else if (geografiaRectora.polygonCoords && geografiaRectora.polygonCoords.length > 0) {
+        // Renderizar Polígono
+        ctx.fillStyle = "rgba(6, 182, 212, 0.15)";
+        ctx.strokeStyle = "#06b6d4";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        geografiaRectora.polygonCoords.forEach((coord, index) => {
+          const x = 100 + (coord.lng + 102) * 5000;
+          const y = 300 - (coord.lat - 21) * 5000;
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
     }
 
     // Dibujar POIs

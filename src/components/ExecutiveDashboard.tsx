@@ -79,7 +79,7 @@ const ExecutiveDashboard: React.FC<Props> = ({
         <h1 className="text-2xl font-bold text-cyan-300">
           Consola Ejecutiva CEIPOL
         </h1>
-        {isSuperAdmin && (
+        {isSuperAdmin && process.env.NEXT_PUBLIC_SHOW_ML_TRAINING === "true" && (
           <CEIPOLButton
             type="button"
             variant="primary"

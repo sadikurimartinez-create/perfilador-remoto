@@ -689,10 +689,9 @@ export function PhotoAlbum({
       return !isStreetView && !isAnalyticalSweep;
     });
 
-    // Fotos de Street View gobernadas (Máximo visual de 4 por categoría)
-    const hideouts = streetViewValidation.hideout.photos.slice(0, 4);
-    const graffitis = streetViewValidation.graffiti.photos.slice(0, 4);
-    const denues = streetViewValidation.denue_interest.photos.slice(0, 4);
+    const hideouts = streetViewValidation.hideout.photos;
+    const graffitis = streetViewValidation.graffiti.photos;
+    const denues = streetViewValidation.denue_interest.photos;
 
     // Otras fotos Street View que no pertenezcan a las categorías principales
     const otherSvs = rawAlbum.filter((p: any) => 
@@ -828,9 +827,24 @@ export function PhotoAlbum({
   const [isSvModal2Open, setIsSvModal2Open] = useState(false);
   const [isSvPickerOpen, setIsSvPickerOpen] = useState(false);
 
-  const handleStartStreetViewFlow = useCallback((lat: number, lng: number) => {
-    setSvFlowTarget({ lat, lng });
-    setIsSvModal1Open(true);
+  const handleStartStreetViewFlow = useCallback((poiOrLat: any, legacyLng?: number) => {
+    let targetLat = 0;
+    let targetLng = 0;
+    if (poiOrLat && typeof poiOrLat === "object" && typeof poiOrLat.lat === "number") {
+      targetLat = poiOrLat.lat;
+      targetLng = poiOrLat.lng;
+    } else if (typeof poiOrLat === "number" && typeof legacyLng === "number") {
+      targetLat = poiOrLat;
+      targetLng = legacyLng;
+    } else if (poiOrLat && typeof poiOrLat.lat === "number") {
+      targetLat = Number(poiOrLat.lat);
+      targetLng = Number(poiOrLat.lng);
+    }
+
+    if (targetLat !== 0 && targetLng !== 0) {
+      setSvFlowTarget({ lat: targetLat, lng: targetLng });
+      setIsSvModal1Open(true);
+    }
   }, []);
 
   const handleConfirmSvModal1 = useCallback(() => {
@@ -872,8 +886,14 @@ export function PhotoAlbum({
         alert("Evidencia remota Street View v2.1 incorporada exitosamente al expediente.");
       }
     } catch (err: any) {
-      console.error("[PhotoAlbum] Error al incorporar evidencia Street View v2.1:", err);
-      alert("Error al incorporar evidencia remota: " + err.message);
+      console.error("STREETVIEW_CAPTURE_ERROR", err);
+      const code = err?.code || "SV_CAPTURE_001";
+      const component = err?.component || "PhotoAlbum";
+      const endpoint = err?.endpoint || "/api/proxy-image";
+      const message = err?.message || "Google rechazó la imagen solicitada";
+      alert(
+        `ERROR STREET VIEW\n\nCódigo: ${code}\nComponente: ${component}\nEndpoint: ${endpoint}\nDetalle: ${message}`
+      );
     } finally {
       setSvFlowTarget(null);
     }
@@ -912,8 +932,14 @@ export function PhotoAlbum({
       }
       alert(`Barrido Asistido Multicapa completado con éxito: ${savedCount} imágenes incorporadas al expediente.`);
     } catch (err: any) {
-      console.error("[PhotoAlbum] Error al incorporar barrido Street View:", err);
-      alert("Error al incorporar barrido de imágenes: " + err.message);
+      console.error("STREETVIEW_CAPTURE_ERROR", err);
+      const code = err?.code || "SV_CAPTURE_001";
+      const component = err?.component || "PhotoAlbum";
+      const endpoint = err?.endpoint || "/api/proxy-image";
+      const message = err?.message || "Google rechazó la imagen solicitada";
+      alert(
+        `ERROR STREET VIEW\n\nCódigo: ${code}\nComponente: ${component}\nEndpoint: ${endpoint}\nDetalle: ${message}`
+      );
     } finally {
       setSvFlowTarget(null);
     }
@@ -1911,7 +1937,7 @@ const hasMinimumPhotos =
                     }
                   }
                 } else {
-                  console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
+                    console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
                 }
               } catch (err) {
                 console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);
@@ -2131,10 +2157,10 @@ const hasMinimumPhotos =
         return true;
       });
 
-      const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps].slice(0, 8);
-      let photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl).slice(0, 8);
+      const sortedSnapshotsToExport = [...mapsSnaps, ...chartsSnaps];
+      let photosToExport = album.filter((p) => selectedIds.includes(p.id) && p.previewUrl);
       if (photosToExport.length === 0) {
-        photosToExport = album.filter((p) => p.previewUrl).slice(0, 8);
+        photosToExport = album.filter((p) => p.previewUrl);
       }
 
       const photosToExportData = photosToExport.map((p) => {
@@ -2552,7 +2578,13 @@ const hasMinimumPhotos =
                   <div className="w-full relative rounded overflow-hidden bg-black">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={p.previewUrl}
+                      src={(() => {
+                        const url = p.previewUrl || (p as any).url || "";
+                        if ((url.includes("staticmap") || url.includes("cartocdn") || url.includes("openstreetmap")) && p.lat != null && p.lng != null) {
+                          return `/api/proxy-image?lat=${p.lat}&lng=${p.lng}&heading=0&pitch=0&fov=90&size=600x400`;
+                        }
+                        return url || "/no-image.png";
+                      })()}
                       alt=""
                       className="w-full h-auto max-h-[75vh] object-contain"
                     />
@@ -3463,11 +3495,15 @@ const hasMinimumPhotos =
 
       {/* PASO 2: MAPA INTERACTIVO */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <header className="space-y-1">
-          <h4 className="text-base font-semibold text-slate-200">📍 Mapa Interactivo de Evidencias (Paso 2)</h4>
-          <p className="text-xs text-slate-400">
-            Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
-          </p>
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div className="space-y-1">
+            <h4 className="text-base font-semibold text-slate-200 flex items-center gap-2">
+              <span>📍</span> Mapa Interactivo de Evidencias (Paso 2)
+            </h4>
+            <p className="text-xs text-slate-400">
+              Visualización en tiempo real del polígono de interés y la geolocalización de las evidencias de campo.
+            </p>
+          </div>
         </header>
         <div className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-950/20">
           {album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng))).length === 0 ? (

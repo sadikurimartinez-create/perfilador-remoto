@@ -153,25 +153,25 @@ export function buildOperationalOsintChapter(input: OsintChapterInput): string {
       : `el perímetro de ${projectName} (${locationStr})`;
 
   const hallazgo = businesses.length > 0
-    ? `Se identificó un corredor de actividad comercial conformado por ${businessList} en ${streetRef}, generando concentración de flujo peatonal en horarios de 07:00–09:00 y 17:00–21:00 horas dentro del radio de ${analysisRadius} metros.`
-    : `El barrido OSINT del polígono ${projectName} en ${streetRef} detectó patrones de movilidad y vulnerabilidad asociados a ${incidentCount > 0 ? `${incidentCount} registros de incidencia delictiva` : "actividad reportada en fuentes abiertas"} en el radio de ${analysisRadius} metros.`;
+    ? `En el marco del criminodiagnóstico territorial SSPE-CEIPOL, se identificó un corredor de actividad e interconexión comercial conformado por ${businessList} en ${streetRef}, evidenciando concentraciones de movilidad peatonal en franjas horarias de 07:00–09:00 y 17:00–21:00 horas dentro del radio de amortiguamiento de ${analysisRadius} metros.`
+    : `El barrido de inteligencia en fuentes abiertas (OSINT/GEOINT) sobre el polígono ${projectName} en ${streetRef} identificó vectores de movilidad y vulnerabilidad ambiental asociados a ${incidentCount > 0 ? `${incidentCount} registros históricos de incidencia delictiva` : "actividad reportada en fuentes abiertas con relevancia geoespacial"} en el radio de ${analysisRadius} metros.`;
 
   const fuentesTexto =
     sources.length > 0
       ? sources.join(", ")
-      : "DENUE, incidencia delictiva, evidencia fotográfica de campo y registros GEOINT del expediente";
+      : "DENUE (INEGI), registros de incidencia delictiva, alertas en fuentes abiertas (RDSS/Telegram/X) y evidencia fotográfica GEOINT";
 
-  const evidencia = `La conclusión deriva del análisis conjunto de ${fuentesTexto} aplicados al polígono con epicentro en ${locationStr} durante el periodo de monitoreo del expediente.`;
+  const evidencia = `El hallazgo se sustenta en el procesamiento analítico y la trazabilidad digital inmutable de las fuentes: ${fuentesTexto}, georreferenciadas respecto al epicentro operacional en ${locationStr} dentro del expediente institucional.`;
 
   const analisis = streets.length > 0
-    ? `El cruce de fuentes identificó deficiencias de vigilancia natural y concentración de atractores en ${streetRef}, donde la convergencia de comercio formal e informal incrementa la exposición de transeúntes, ${incidentCount > 0 ? `correlacionado con ${incidentCount} incidentes dentro del radio configurado` : "sin correlación directa con incidencia histórica en el radio"}.`
-    : `El análisis integrado confirma que los factores de oportunidad delictiva en ${projectName} se concentran en zonas de baja iluminación y alto flujo comercial nocturno, sustentado por ${fuentesTexto}.`;
+    ? `El análisis criminológico espacial determinó deficiencias en la vigilancia natural y concentración de atractores ambientales en ${streetRef}, donde la convergencia de flujo comercial e infraestructura urbana incrementa la exposición a factores de riesgo, ${incidentCount > 0 ? `correlacionado cuantitativamente con ${incidentCount} eventos en el radio evaluado` : "mantenimiento de monitoreo preventivo sin concentración anómala en el histórico reciente"}.`
+    : `El cruce multidisciplinario confirma que los factores de oportunidad delictiva en ${projectName} responden a la interacción entre intensidad de flujo nocturno y deficiencias en el diseño ambiental urbano, verificado mediante la cadena de datos de ${fuentesTexto}.`;
 
   const implicacion = streets.length > 0
-    ? `Se recomienda implementar recorridos de proximidad en ${streetRef} durante el horario de 18:00 a 23:00 horas, priorizando contacto con comerciantes y vecinos de los corredores identificados como generadores de mayor movilidad.`
-    : `Se recomienda desplegar patrullaje de proximidad en el radio de ${analysisRadius} metros de ${locationStr} en horario de 18:00 a 23:00 horas, con énfasis en puntos de convergencia comercial identificados por DENUE y evidencia de campo.`;
+    ? `Se sugiere a la Mando Único / Policía Estatal implementar dispositivos de patrullaje de proximidad e inteligencia preventiva sobre ${streetRef} en la franja de 18:00 a 23:00 horas, priorizando la vinculación con la comunidad comercial y vecinal de la zona.`
+    : `Se sugiere desplegar rondines de vigilancia preventiva e inteligencia territorial en el perímetro de ${analysisRadius} metros con epicentro en ${locationStr} en el intervalo de 18:00 a 23:00 horas, enfocando acciones en puntos de convergencia peatonal identificados por DENUE y barridos OSINT.`;
 
-  return `HALLAZGO:\n${hallazgo}\n\nEVIDENCIA:\n${evidencia}\n\nANÁLISIS:\n${analisis}\n\nIMPLICACIÓN OPERATIVA:\n${implicacion}`;
+  return `HALLAZGO CLAVE DE INTELIGENCIA:\n${hallazgo}\n\nCADENA DE EVIDENCIA Y TRAZABILIDAD:\n${evidencia}\n\nANÁLISIS DE VULNERABILIDAD Y RIESGO:\n${analisis}\n\nIMPLICACIÓN OPERATIVA CEIPOL:\n${implicacion}`;
 }
 
 /** Detecta si el Capítulo 7 contiene frases genéricas prohibidas. */

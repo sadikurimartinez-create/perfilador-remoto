@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { searchX, searchReddit, searchTelegram } from './socialProviders';
 import { searchSerpAPI, searchYouTubeOSINT } from './osintProviders';
 import { validateGeoIntegrity } from './geoIntegrityEngine';
+import { generateTraceabilityHash } from './traceability';
 
 // Interfaces obligatorias para OSINT Territorial v2.0
 export interface NormalizedOSINTEvent {
@@ -30,11 +31,7 @@ export interface NormalizedOSINTEvent {
   neighborhood?: string; // Colonia asociada por contenido semántico
   url?: string;
   traceabilityHash: string; // SHA-256 inmutable de la evidencia
-}
-
-export function generateTraceabilityHash(content: string, timestamp: string, url?: string): string {
-  const data = `${content}||${timestamp}||${url || ""}`;
-  return crypto.createHash("sha256").update(data).digest("hex");
+  origin_type?: "REAL" | "SIMULATED" | "UNAVAILABLE"; // Clasificación de procedencia real para evitar falsos positivos
 }
 
 

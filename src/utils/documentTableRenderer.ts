@@ -36,7 +36,14 @@ export class TableParser {
    * Divide una línea de tabla Markdown en celdas individuales respetando los separadores "|".
    */
   private static splitLineToCells(line: string): string[] {
-    let cells = line.split("|").map(c => c.trim());
+    let cells = line.split("|").map(c => {
+      if (c === null || c === undefined) return "N/D";
+      const trimmed = c.trim();
+      if (trimmed.length === 0 || trimmed.toLowerCase() === "null" || trimmed.toLowerCase() === "undefined") {
+        return "N/D";
+      }
+      return trimmed;
+    });
     if (line.startsWith("|")) cells.shift();
     if (line.endsWith("|")) cells.pop();
     return cells;
@@ -189,6 +196,26 @@ export class TableRenderer {
 
       const bodyCells = row.map((cellText, colIdx) => {
         const align = parsed.alignments[colIdx] || AlignmentType.LEFT;
+        
+        // Determinar contexto para el placeholder (ADR-016)
+        const headerTitle = (parsed.headers[colIdx] || "").toLowerCase();
+        let fallbackVal = "N/D";
+        if (
+          headerTitle.includes("nombre") || 
+          headerTitle.includes("comentario") || 
+          headerTitle.includes("descrip") || 
+          headerTitle.includes("observa") || 
+          headerTitle.includes("registro") ||
+          headerTitle.includes("detalles")
+        ) {
+          fallbackVal = "Sin Registro";
+        }
+
+        let sanitizedText = cellText === null || cellText === undefined ? fallbackVal : String(cellText).trim();
+        if (sanitizedText.length === 0 || sanitizedText.toLowerCase() === "null" || sanitizedText.toLowerCase() === "undefined" || sanitizedText === "N/D") {
+          sanitizedText = fallbackVal;
+        }
+
         return new TableCell({
           width: { size: colWidthPercent, type: WidthType.PERCENTAGE },
           shading: { fill: bgFill, type: ShadingType.CLEAR },
@@ -198,7 +225,7 @@ export class TableRenderer {
               alignment: align,
               children: [
                 new TextRun({
-                  text: TableParser.cleanCellMarkdown(cellText),
+                  text: TableParser.cleanCellMarkdown(sanitizedText),
                   size: 18, // 9pt
                   color: CEIPOL_DOCUMENT_THEME.bodyText,
                   font: "Calibri"

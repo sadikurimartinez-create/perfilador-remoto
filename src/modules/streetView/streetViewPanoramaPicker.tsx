@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { buildStreetViewUrl } from "@/lib/googleStreetView";
+import { buildStreetViewUrl } from "@/lib/legacy/googleStreetView";
 import { StreetViewCapturePayload } from "./streetViewMapper";
 
 interface StreetViewPanoramaPickerProps {
@@ -144,8 +144,8 @@ export function StreetViewPanoramaPicker({
         throw new Error("No se pudo generar la clave de API para la captura estática de Street View.");
       }
 
-      // Descargar congelado estático para almacenamiento permanente
-      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(staticUrl)}`;
+      // Descargar congelado estático para almacenamiento permanente usando el Proxy Seguro del Backend
+      const proxyUrl = `/api/proxy-image?lat=${panoLat || lat}&lng=${panoLng || lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&size=800x600`;
       let dataUrl = staticUrl;
 
       try {

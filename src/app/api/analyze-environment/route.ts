@@ -3,7 +3,7 @@ import { analyzeBrokenWindowsWithVision } from "@/lib/googleVision";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
 import { analyzeEscapeRoutes } from "@/lib/googleRoutes";
-import { getStreetViewComparison } from "@/lib/googleStreetView";
+import { getStreetViewComparison } from "@/lib/legacy/googleStreetView";
 import {
   buildConflictPoints,
   buildIrregularBusinesses,
