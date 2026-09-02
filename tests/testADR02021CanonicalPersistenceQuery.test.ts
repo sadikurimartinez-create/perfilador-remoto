@@ -22,6 +22,8 @@ describe("ADR-020.21 Fase 2 - Canonical persistence and query reconciliation", (
     process.env = { ...originalEnv };
     delete process.env.DATABASE_URL;
     process.env.CRIME_INCIDENCE_CSV_DIR = legacyDir;
+    process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = "2026-01-01";
+    process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END = "2026-12-31";
     mockQuery.mockResolvedValue({ rows: [] });
     mockRelease.mockImplementation(() => undefined);
     mockConnect.mockResolvedValue({ query: mockQuery, release: mockRelease });
@@ -145,6 +147,60 @@ describe("ADR-020.21 Fase 2 - Canonical persistence and query reconciliation", (
     expect(response.status).toBe(500);
     expect(body.inserted).toBe(0);
     expect(body.persistenceConfirmation).toBe("FAILED");
+  });
+
+  test("TEST E1 upload fails closed when temporal governance is absent", async () => {
+    delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
+    delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+
+    const { POST } = await import("../src/app/api/upload-csv/route");
+    const csv =
+      "INCIDENTE,FECHA,HORA,RANGO,NOM_ASEN,LAT,LONG\nRobo,2026-07-01,7,Matutino,Centro,21.8818,-102.2916\n";
+    const file = new File([csv], "incidencia.csv", { type: "text/csv" });
+    const form = new FormData();
+    form.set("file", file);
+
+    const response = await POST({ formData: async () => form } as any);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.code).toBe(
+      "CRIME_INCIDENCE_TEMPORAL_CONFIGURATION_REQUIRED"
+    );
+    expect(body.inserted).toBe(0);
+    expect(body.attempted).toBe(0);
+    expect(body.persistenceConfirmation).toBe(
+      "BLOCKED_BY_TEMPORAL_GOVERNANCE"
+    );
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  test("TEST E2 upload fails closed when temporal governance is invalid", async () => {
+    process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START = "2026-01-01";
+    delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+
+    const { POST } = await import("../src/app/api/upload-csv/route");
+    const csv =
+      "INCIDENTE,FECHA,HORA,RANGO,NOM_ASEN,LAT,LONG\nRobo,2026-07-01,7,Matutino,Centro,21.8818,-102.2916\n";
+    const file = new File([csv], "incidencia.csv", { type: "text/csv" });
+    const form = new FormData();
+    form.set("file", file);
+
+    const response = await POST({ formData: async () => form } as any);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.code).toBe(
+      "CRIME_INCIDENCE_TEMPORAL_CONFIGURATION_INVALID"
+    );
+    expect(body.inserted).toBe(0);
+    expect(body.attempted).toBe(0);
+    expect(body.persistenceConfirmation).toBe(
+      "BLOCKED_BY_TEMPORAL_GOVERNANCE"
+    );
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   test("TEST F lineage preserves querySource", async () => {

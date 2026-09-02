@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { parse } from "csv-parse/sync";
 import { getPool } from "@/lib/db";
-import { classifyCrimeDataset } from "@/utils/crimeIncidenceCanonicalPipeline";
+import {
+  classifyCrimeDataset,
+  resolveCrimeIncidenceTemporalWindow,
+} from "@/utils/crimeIncidenceCanonicalPipeline";
 
 type CsvRow = {
   INCIDENTE: string;
@@ -27,6 +30,30 @@ export async function POST(req: Request) {
       );
     }
 
+    // ADR-022.8K: el boundary productivo de ingestión falla cerrado.
+    // El pipeline canónico conserva compatibilidad legacy cuando no existe
+    // configuración temporal, pero una carga persistente nunca puede hacerlo.
+    const temporalWindow = resolveCrimeIncidenceTemporalWindow();
+
+    if (
+      temporalWindow === null ||
+      temporalWindow.status === "INVALID_CONFIGURATION"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "La ingestión de incidencia delictiva está bloqueada porque la ventana temporal institucional no está configurada correctamente.",
+          code:
+            temporalWindow === null
+              ? "CRIME_INCIDENCE_TEMPORAL_CONFIGURATION_REQUIRED"
+              : "CRIME_INCIDENCE_TEMPORAL_CONFIGURATION_INVALID",
+          inserted: 0,
+          attempted: 0,
+          persistenceConfirmation: "BLOCKED_BY_TEMPORAL_GOVERNANCE",
+        },
+        { status: 503 }
+      );
+    }
     const arrayBuffer = await file.arrayBuffer();
     const csvText = Buffer.from(arrayBuffer).toString("utf8");
 
