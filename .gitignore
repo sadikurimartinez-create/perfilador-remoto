@@ -40,3 +40,6 @@ scriptspurge_firestore_projects.js
 *_audit.json
 *AUDIT_REPORT.json
 scripts/audit_*.js
+.env.production.decrypted
+.env.vercel
+.env.vercel.production
