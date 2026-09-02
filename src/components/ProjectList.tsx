@@ -67,6 +67,7 @@ export function ProjectList() {
   const [draftLatInput, setDraftLatInput] = useState("");
   const [draftLngInput, setDraftLngInput] = useState("");
   const [draftFeedback, setDraftFeedback] = useState("");
+  const [draftWasConfirmed, setDraftWasConfirmed] = useState(false);
   const draftPreview = buildDraftGeographyPreview(draftGeography);
   const geometryConfirmed = draftGeography.confirmed && draftPreview.canConfirm;
   const [isListening, setIsListening] = useState(false);
@@ -289,6 +290,7 @@ export function ProjectList() {
     setNombreInput("");
     setGeometryType("individual");
     setDraftGeography(createDraftProjectGeography("individual"));
+    setDraftWasConfirmed(false);
     setDraftLatInput("");
     setDraftLngInput("");
     setDraftFeedback("");
@@ -300,6 +302,7 @@ export function ProjectList() {
   const handleGeometryTypeChange = (nextType: "individual" | "lineal" | "poligono") => {
     setGeometryType(nextType);
     setDraftGeography(resetDraftProjectGeography(nextType));
+    setDraftWasConfirmed(false);
     setDraftLatInput("");
     setDraftLngInput("");
     setDraftFeedback("Geografía en borrador reiniciada.");
@@ -329,6 +332,7 @@ export function ProjectList() {
   const handleAddDraftPoint = () => {
     const point = parseDraftPoint();
     if (!point) return;
+    const requiresReconfirmation = draftGeography.confirmed || draftWasConfirmed;
 
     const nextPoints =
       geometryType === "individual"
@@ -343,13 +347,16 @@ export function ProjectList() {
     setDraftLngInput("");
 
     setDraftFeedback(
-      geometryType === "individual"
-        ? "Punto individual actualizado en borrador."
-        : "Nodo agregado al borrador."
+      requiresReconfirmation
+        ? "Geografía modificada. Confírmela nuevamente antes de crear el expediente."
+        : geometryType === "individual"
+          ? "Punto individual actualizado en borrador."
+          : "Nodo agregado al borrador."
     );
   };
 
   const handleRemoveDraftPoint = (index: number) => {
+    const requiresReconfirmation = draftGeography.confirmed || draftWasConfirmed;
     setDraftGeography(
       updateDraftProjectGeography(
         draftGeography,
@@ -358,12 +365,15 @@ export function ProjectList() {
     );
 
     setDraftFeedback(
-      "Borrador actualizado. Confirme nuevamente antes de crear."
+      requiresReconfirmation
+        ? "Geografía modificada. Confírmela nuevamente antes de crear el expediente."
+        : "Borrador actualizado. Confirme nuevamente antes de crear."
     );
   };
 
   const handleResetDraftGeometry = () => {
     setDraftGeography(resetDraftProjectGeography(geometryType));
+    setDraftWasConfirmed(false);
     setDraftLatInput("");
     setDraftLngInput("");
     setDraftFeedback("Borrador reiniciado.");
@@ -374,6 +384,7 @@ export function ProjectList() {
       setDraftGeography(
         confirmDraftProjectGeography(draftGeography)
       );
+      setDraftWasConfirmed(true);
 
       setDraftFeedback(
         "Geografía validada y confirmada para creación."
@@ -392,14 +403,18 @@ export function ProjectList() {
     const nombre = nombreInput.trim();
     if (!nombre || !user) return;
     try {
-      if (pendingPhotos.length > 0) {
-        (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
-      }
       if (!geometryConfirmed) {
         setDraftFeedback(
-          "Debe definir, validar y confirmar la geografía antes de crear el expediente."
+          draftWasConfirmed && draftPreview.canConfirm
+            ? "Geografía modificada. Confírmela nuevamente antes de crear el expediente."
+            : draftPreview.canConfirm
+              ? "Debe confirmar la geografía antes de crear el expediente."
+              : "Debe definir, validar y confirmar la geografía antes de crear el expediente."
         );
         return;
+      }
+      if (pendingPhotos.length > 0) {
+        (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
       }
 
       const newId = await createProject({
@@ -413,6 +428,7 @@ export function ProjectList() {
       setNombreInput("");
       setPendingPhotos([]);
       setGeometryType("individual");
+      setDraftWasConfirmed(false);
       router.push(`/project/${newId}`);
     } catch (err: any) {
       delete (window as any).pendingProjectPhotos;
@@ -1287,7 +1303,7 @@ export function ProjectList() {
             <button
               type="button"
               onClick={() => void handleConfirmarNombre()}
-              disabled={!nombreInput.trim() || !geometryConfirmed}
+              disabled={!nombreInput.trim()}
               className="btn-primary flex-1 py-2.5 text-sm font-semibold"
             >
               Crear e ingresar
