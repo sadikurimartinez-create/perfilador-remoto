@@ -8,6 +8,7 @@ import { GimToAceAdapter } from "../src/utils/gangIntelligenceEngine/adapters/gi
 import { AnalyticalConsistencyEngine } from "../src/utils/analyticalConsistencyEngine/analyticalConsistencyEngine";
 import { ACEPayload } from "../src/utils/analyticalConsistencyEngine/models/aceTypes";
 import { PredictionService } from "../src/modules/pandillas/services/predictionService";
+import exifr from "exifr";
 
 jest.mock("@/lib/geminiEnv", () => ({
   GCP_PROJECT_ID: "test",
@@ -18,6 +19,11 @@ jest.mock("@/lib/geminiEnv", () => ({
 }));
 
 jest.mock("@google-cloud/vertexai", () => ({ VertexAI: jest.fn() }));
+
+jest.mock("exifr", () => ({
+  __esModule: true,
+  default: { gps: jest.fn() },
+}));
 
 const mockCorrelate = jest.fn((input) => ({ input }));
 
@@ -171,7 +177,7 @@ describe("ADR-020.29 Pandillas authoritative pipeline", () => {
     expect(result.geo_heatmap).toEqual([]);
   });
 
-  test("TEST 006 - GangGeoSweepEngine preserves matched source-record coordinates only", async () => {
+  test("TEST 006 - SOURCE_RECORD matches are not promoted to current GEOINT observations", async () => {
     const result = await GangGeoSweepEngine.executeSweep([], "clica norte", "", [
       {
         nombre: "Clica Norte",
@@ -179,8 +185,30 @@ describe("ADR-020.29 Pandillas authoritative pipeline", () => {
       }
     ]);
 
-    expect(result.detected_locations[0]).toMatchObject({ lat: 21.812, lng: -102.271, source: "SOURCE_RECORD", authority: "AUTHORITATIVE" });
-    expect(result.influence_zones.every((zone) => zone.type !== "meeting_area")).toBe(true);
+    expect(result.detected_locations).toEqual([]);
+    expect(result.suspected_domiciles).toEqual([]);
+    expect(result.influence_zones).toEqual([]);
+    expect(result.geo_heatmap).toEqual([]);
+    expect(result.matched_gangs).toEqual([]);
+    expect(result.confidence_score).toBe(0);
+  });
+
+  test("TEST 006A - authorized EXIF GPS is promoted to a current GEOINT observation", async () => {
+    jest.mocked(exifr.gps).mockResolvedValueOnce({
+      latitude: 21.812,
+      longitude: -102.271,
+    });
+    const authorizedPhoto = { name: "authorized-current-sweep.jpg" } as File;
+
+    const result = await GangGeoSweepEngine.executeSweep([authorizedPhoto], "", "", []);
+
+    expect(result.detected_locations).toHaveLength(1);
+    expect(result.detected_locations[0]).toMatchObject({
+      lat: 21.812,
+      lng: -102.271,
+      source: "EXIF_GPS",
+      authority: "AUTHORITATIVE",
+    });
   });
 
   test("TEST 007 - high AI/GIM score remains READY_FOR_HUMAN_REVIEW and not APPROVED", () => {
