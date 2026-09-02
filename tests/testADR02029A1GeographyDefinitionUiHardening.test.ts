@@ -127,7 +127,8 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     const source = readSource("src/components/ProjectList.tsx");
     expect(source).toContain("import exifr from \"exifr\"");
     expect(source).toContain("readPhotoGps(file, isLiveCapture)");
-    expect(source).toContain("updateDraftProjectGeography(draftGeography, nextPoints)");
+    expect(source).toContain("updateDraftProjectGeography(draftGeography, rectorPoints)");
+    expect(source).toContain("confirmDraftProjectGeography(creationDraft)");
     expect(source).toContain("Confirmar geografía");
     expect(source).not.toContain("Usar GPS actual");
   });
@@ -138,6 +139,24 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     expect(source).toContain("GALLERY_IMPORT");
     expect(source).toContain("handlePendingPhotosChange(e, true)");
     expect(source).toContain("handlePendingPhotosChange(e, false)");
-    expect(source).toContain("no redefine la geografía rectora");
+    expect(source).toContain("!isLiveCapture");
+    expect(source).toContain("gpsSource: \"NO_GPS\"");
+  });
+
+  test("TEST 18 project list enforces rector photo minimums before creation", () => {
+    const source = readSource("src/components/ProjectList.tsx");
+    expect(source).toContain("minimumRectorPhotoCount");
+    expect(source).toContain("if (geometryType === \"lineal\") return 2");
+    expect(source).toContain("if (geometryType === \"poligono\") return 3");
+    expect(source).toContain("return 1");
+    expect(source).toContain("!hasRequiredRectorPhotos || !creationPreview.canConfirm");
+  });
+
+  test("TEST 19 rector photos drive individual, corridor, and polygon draft points", () => {
+    const source = readSource("src/components/ProjectList.tsx");
+    expect(source).toContain("buildDraftPointsFromRectorPhotos");
+    expect(source).toContain("geometryType === \"individual\" ? points.slice(-1) : points");
+    expect(source).toContain("photo.gpsSource !== \"NO_GPS\"");
+    expect(source).toContain("isValidLatLng({ lat: photo.lat, lng: photo.lng })");
   });
 });

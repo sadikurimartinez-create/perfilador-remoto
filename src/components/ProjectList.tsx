@@ -24,6 +24,7 @@ import {
   buildDraftGeographyPreview,
   confirmDraftProjectGeography,
   createDraftProjectGeography,
+  isValidLatLng,
   resetDraftProjectGeography,
   updateDraftProjectGeography,
   type DraftProjectGeography,
@@ -58,6 +59,32 @@ type PendingProjectPhoto = {
   gpsAccuracy: number | null;
   gpsTimestamp: number | null;
 };
+
+function isRectorPhotoWithCoordinates(
+  photo: PendingProjectPhoto
+): photo is PendingProjectPhoto & { lat: number; lng: number } {
+  return photo.gpsSource !== "NO_GPS" && isValidLatLng({ lat: photo.lat, lng: photo.lng });
+}
+
+function minimumRectorPhotoCount(geometryType: "individual" | "lineal" | "poligono") {
+  if (geometryType === "lineal") return 2;
+  if (geometryType === "poligono") return 3;
+  return 1;
+}
+
+function buildDraftPointsFromRectorPhotos(
+  photos: PendingProjectPhoto[],
+  geometryType: "individual" | "lineal" | "poligono"
+): LatLngPoint[] {
+  const points = photos
+    .filter(isRectorPhotoWithCoordinates)
+    .map((photo) => ({ lat: photo.lat, lng: photo.lng }));
+  return geometryType === "individual" ? points.slice(-1) : points;
+}
+
+function validRectorPhotoCount(photos: PendingProjectPhoto[]) {
+  return photos.filter(isRectorPhotoWithCoordinates).length;
+}
 
 function getCameraDeviceLocation(): Promise<{ lat: number; lng: number; accuracy: number | null; timestamp: number | null }> {
   return new Promise((resolve, reject) => {
@@ -152,6 +179,9 @@ export function ProjectList() {
   const geometryConfirmed = draftGeography.confirmed && draftPreview.canConfirm;
   const [isListening, setIsListening] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<PendingProjectPhoto[]>([]);
+  const requiredRectorPhotos = minimumRectorPhotoCount(geometryType);
+  const currentRectorPhotos = validRectorPhotoCount(pendingPhotos);
+  const hasRequiredRectorPhotos = currentRectorPhotos >= requiredRectorPhotos;
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -364,53 +394,52 @@ export function ProjectList() {
       } satisfies PendingProjectPhoto;
     }));
 
-    setPendingPhotos(prev => [...prev, ...newItems]);
+    const allPendingPhotos = [...pendingPhotos, ...newItems];
+    setPendingPhotos(allPendingPhotos);
 
-    if (!isLiveCapture) {
-      setDraftFeedback("Fotografía de galería agregada como evidencia pendiente; no redefine la geografía rectora.");
-      return;
-    }
-
-    const rectorPoints = newItems
-      .filter((item): item is PendingProjectPhoto & { lat: number; lng: number } => (
-        item.captureSource === "CAMERA_IN_SITU" &&
-        Number.isFinite(item.lat) &&
-        Number.isFinite(item.lng)
-      ))
-      .map((item) => ({ lat: item.lat, lng: item.lng }));
+    const rectorPoints = buildDraftPointsFromRectorPhotos(allPendingPhotos, geometryType);
 
     if (rectorPoints.length === 0) {
-      setDraftFeedback("La captura in situ no contiene coordenadas GPS válidas. Capture nuevamente o ingrese Latitud/Longitud manualmente.");
+      setDraftFeedback(
+        isLiveCapture
+          ? "La captura in situ no contiene coordenadas GPS válidas. Capture nuevamente o ingrese Latitud/Longitud manualmente."
+          : "Fotografía de galería agregada como evidencia pendiente; no contiene EXIF GPS para geografía rectora."
+      );
       return;
     }
 
-    const nextPoints =
-      geometryType === "individual"
-        ? [rectorPoints[rectorPoints.length - 1]]
-        : [...draftGeography.points, ...rectorPoints];
-
     setDraftGeography(
-      updateDraftProjectGeography(draftGeography, nextPoints)
+      updateDraftProjectGeography(draftGeography, rectorPoints)
     );
-    const lastPoint = nextPoints[nextPoints.length - 1];
+    const lastPoint = rectorPoints[rectorPoints.length - 1];
     setDraftLatInput(String(lastPoint.lat));
     setDraftLngInput(String(lastPoint.lng));
+    const nextRectorCount = validRectorPhotoCount(allPendingPhotos);
     setDraftFeedback(
       draftGeography.confirmed || draftWasConfirmed
-        ? "Geografía modificada por captura in situ. Confírmela nuevamente antes de crear el expediente."
+        ? "Geografía modificada por fotografía rectora. Puede crear cuando cumpla el mínimo de fotografías rectoras."
         : geometryType === "individual"
-          ? "Captura in situ vinculada como punto rector. Confirme la geografía antes de crear."
-          : "Captura in situ agregada como nodo rector. Confirme la geografía antes de crear."
+          ? "Fotografía rectora vinculada como punto del expediente."
+          : `Fotografía rectora agregada como nodo ${nextRectorCount} de ${requiredRectorPhotos}.`
     );
   };
 
   const removePendingPhoto = (index: number) => {
-    setPendingPhotos(prev => {
-      const updated = [...prev];
-      URL.revokeObjectURL(updated[index].url);
-      updated.splice(index, 1);
-      return updated;
-    });
+    const updated = [...pendingPhotos];
+    URL.revokeObjectURL(updated[index].url);
+    updated.splice(index, 1);
+    setPendingPhotos(updated);
+    const rectorPoints = buildDraftPointsFromRectorPhotos(updated, geometryType);
+    setDraftGeography(updateDraftProjectGeography(draftGeography, rectorPoints));
+    if (rectorPoints.length > 0) {
+      const lastPoint = rectorPoints[rectorPoints.length - 1];
+      setDraftLatInput(String(lastPoint.lat));
+      setDraftLngInput(String(lastPoint.lng));
+    } else {
+      setDraftLatInput("");
+      setDraftLngInput("");
+    }
+    setDraftFeedback("Fotografía retirada. La geografía rectora fue recalculada desde las fotografías pendientes.");
   };
 
   const handleNuevoProyecto = () => {
@@ -428,11 +457,17 @@ export function ProjectList() {
 
   const handleGeometryTypeChange = (nextType: "individual" | "lineal" | "poligono") => {
     setGeometryType(nextType);
-    setDraftGeography(resetDraftProjectGeography(nextType));
+    const rectorPoints = buildDraftPointsFromRectorPhotos(pendingPhotos, nextType);
+    setDraftGeography(
+      rectorPoints.length > 0
+        ? updateDraftProjectGeography(resetDraftProjectGeography(nextType), rectorPoints)
+        : resetDraftProjectGeography(nextType)
+    );
     setDraftWasConfirmed(false);
-    setDraftLatInput("");
-    setDraftLngInput("");
-    setDraftFeedback("Geografía en borrador reiniciada.");
+    const lastPoint = rectorPoints[rectorPoints.length - 1];
+    setDraftLatInput(lastPoint ? String(lastPoint.lat) : "");
+    setDraftLngInput(lastPoint ? String(lastPoint.lng) : "");
+    setDraftFeedback("Geografía rectora recalculada para la modalidad seleccionada.");
   };
 
   const parseDraftPoint = (): LatLngPoint | null => {
@@ -530,16 +565,18 @@ export function ProjectList() {
     const nombre = nombreInput.trim();
     if (!nombre || !user) return;
     try {
-      if (!geometryConfirmed) {
+      const rectorPoints = buildDraftPointsFromRectorPhotos(pendingPhotos, geometryType);
+      const creationDraft = updateDraftProjectGeography(draftGeography, rectorPoints);
+      const creationPreview = buildDraftGeographyPreview(creationDraft);
+      if (!hasRequiredRectorPhotos || !creationPreview.canConfirm) {
         setDraftFeedback(
-          draftWasConfirmed && draftPreview.canConfirm
-            ? "Geografía modificada. Confírmela nuevamente antes de crear el expediente."
-            : draftPreview.canConfirm
-              ? "Debe confirmar la geografía antes de crear el expediente."
-              : "Debe definir, validar y confirmar la geografía antes de crear el expediente."
+          `Debe capturar ${requiredRectorPhotos} fotografía(s) rectora(s) con coordenadas válidas antes de crear el expediente.`
         );
         return;
       }
+      const confirmedDraftGeography = geometryConfirmed
+        ? draftGeography
+        : confirmDraftProjectGeography(creationDraft);
       if (pendingPhotos.length > 0) {
         (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
       }
@@ -548,7 +585,7 @@ export function ProjectList() {
         nombre,
         geometryType,
         descripcion: "",
-        draftGeography,
+        draftGeography: confirmedDraftGeography,
       });
       pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);
