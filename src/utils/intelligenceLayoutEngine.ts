@@ -508,6 +508,23 @@ export function extractSection(content: string, secNum: number): string {
   return result.trim();
 }
 
+export function resolveProjectGeolocationForReport(project: any, sourceReference = "intelligenceLayoutEngine.project") {
+  const geoValidation = validateGeoIntegrity({
+    latitude: project?.lat ?? project?.latitude ?? null,
+    longitude: project?.lng ?? project?.longitude ?? null,
+    source: project?.geolocationSource || "PROJECT_GEOMETRY",
+    precision: project?.geolocationPrecision ?? null,
+    observedAt: project?.geolocationObservedAt ?? null,
+    sourceReference,
+  });
+
+  return {
+    latitude: geoValidation.reportableAsObservedGeoint ? geoValidation.latitude : null,
+    longitude: geoValidation.reportableAsObservedGeoint ? geoValidation.longitude : null,
+    geoValidation,
+  };
+}
+
 /**
  * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v9.0)
  */
@@ -520,8 +537,21 @@ export const buildIntelligenceEditorialPayload = async (
   reportNumber?: string,
   analystName?: string
 ): Promise<IntelligenceReportPayload> => {
-  // Aplicar regla determinista del Evidence Governance Engine (EGE Contract Rules)
-  album = (album || []).map(p => {
+  // REGLA GOBERNADA ADR-019.13-F4: El informe únicamente puede consumir evidencias aprobadas (APPROVED_EVIDENCE / APROBADO)
+  const isApprovedEvidence = (item: any) => {
+    if (!item) return false;
+    const status = (item.status || item.estado || item.estado_revision || item.analystValidationStatus || "").toUpperCase();
+    if (status === "REJECTED_FINDING" || status === "RECHAZADO" || status === "IGNORADO" || status === "PENDING_REVIEW" || status === "PENDIENTE_REVISION" || status === "GENERATED" || status === "GENERADO") {
+      return false;
+    }
+    if (status === "APPROVED_EVIDENCE" || status === "APROBADO" || status === "APPROVED") {
+      return true;
+    }
+    if (!status) return true;
+    return false;
+  };
+
+  album = (album || []).filter(isApprovedEvidence).map(p => {
     if (p && (p.tipo === "REMOTE_STREET_VIEW" || p.tipo === "STREET_VIEW" || p.isStreetView)) {
       return {
         ...p,
@@ -534,6 +564,8 @@ export const buildIntelligenceEditorialPayload = async (
     }
     return p;
   });
+
+  sweeps = (sweeps || []).filter(isApprovedEvidence);
 
   const rawExecSummary = extractSection(rawContent, 1);
   const rawHypothesis = extractSection(rawContent, 3);
@@ -553,11 +585,14 @@ export const buildIntelligenceEditorialPayload = async (
   const areaGeografica = project?.areaGeografica || "Aguascalientes, Ags, México";
 
   // Bloque I.1: Contexto territorial
-  const lat = project?.lat ?? project?.latitude ?? 0;
-  const lng = project?.lng ?? project?.longitude ?? 0;
+  const projectGeolocation = resolveProjectGeolocationForReport(project);
+  const lat = projectGeolocation.latitude;
+  const lng = projectGeolocation.longitude;
+  const engineLat = lat ?? Number.NaN;
+  const engineLng = lng ?? Number.NaN;
   const radius = project?.analysisRadius ?? project?.radius ?? 250;
   const incidents = project?.historicalIncidents ?? project?.incidents ?? project?.incidenciaCompleta ?? project?.incidenciaLocal ?? project?.iaAnalysis?.historicalCrimes ?? [];
-  const stats = StatisticalIntelligenceEngineV2.analyze(incidents, lat, lng, radius);
+  const stats = StatisticalIntelligenceEngineV2.analyze(incidents, engineLat, engineLng, radius);
   const semResult = StatisticalEvidenceMatrixManager.process(projectId, incidents, stats);
   const sem = semResult.sem;
 
@@ -699,8 +734,8 @@ export const buildIntelligenceEditorialPayload = async (
   // Instanciar el motor de renderizado vectorial táctico para generar los mapas y gráficas HD directamente
   const vectorInput = {
     projectName: projectName || "Expediente",
-    latitude: lat,
-    longitude: lng,
+    latitude: engineLat,
+    longitude: engineLng,
     geometryType: project?.geometryType || "individual",
     incidents: incidents,
     sweeps: sweeps || [],
@@ -820,8 +855,8 @@ export const buildIntelligenceEditorialPayload = async (
   const visualMatrix = VisualEvidenceEngine.process(
     projectId || "PR-001",
     governedAlbum,
-    lat,
-    lng,
+    engineLat,
+    engineLng,
     radius,
     sem?.spatialEvidence?.hotspots || []
   );
@@ -893,8 +928,8 @@ export const buildIntelligenceEditorialPayload = async (
       criminologicalInterpretation: p.finding,
       relation: relationStr,
       riskLevel: "Alto",
-      lat: 0,
-      lng: 0,
+      lat: null,
+      lng: null,
       fecha: new Date().toLocaleDateString("es-MX")
     };
   });

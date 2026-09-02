@@ -1,7 +1,16 @@
+import { createHash } from "node:crypto";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { DriveIngestionService, DriveFileRecord } from "./drive-ingestion.service";
 import { getPool } from "@/lib/db";
+import {
+  createStoredRawMultimodalEvidence,
+  markAiAnalyzed,
+  markExtracted,
+  markReadyForHumanReview,
+  type MultimodalEvidenceContract,
+} from "@/utils/multimodalEvidenceContract";
+import { createComputedFileIntegrity, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
 
 export interface ExtractedIntelligence {
   fileId: string;
@@ -29,6 +38,7 @@ export interface ExtractedIntelligence {
     targetName: string;
     reason: string;
   }>;
+  multimodalEvidence?: MultimodalEvidenceContract;
 }
 
 /**
@@ -101,7 +111,27 @@ export class DriveIngestionEngine {
 
         try {
           // Mark as pending immediately to avoid race conditions or dual triggers
-          await DriveIngestionService.setFileStatus(file.id, file.name, "pending", file.logicalCategory);
+          await DriveIngestionService.setFileStatus(file.id, file.name, "pending", file.logicalCategory, undefined, {
+            multimodalEvidence: createStoredRawMultimodalEvidence({
+              evidenceId: file.id,
+              expedienteId: "GOOGLE_DRIVE",
+              fileId: file.id,
+              checksum: file.md5Checksum ?? null,
+              fileName: file.name,
+              mimeType: file.mimeType,
+              size: file.size ?? null,
+              storageReference: `drive://${file.id}`,
+              ingestionSource: "GOOGLE_DRIVE",
+              traceabilityId: file.traceabilityId ?? null,
+              forensicIntegrity: createHashUnavailableIntegrity({
+                providerChecksum: file.md5Checksum ?? null,
+                providerChecksumAlgorithm: file.md5Checksum ? "MD5" : null,
+                fileId: file.id,
+                declaredMimeType: file.mimeType,
+                fileName: file.name,
+              }),
+            }),
+          });
 
           // 3. Process individual file through the AI analysis pipeline
           await this.processSingleFile(file);
@@ -154,6 +184,28 @@ export class DriveIngestionEngine {
   private static async processSingleFile(file: DriveFileRecord): Promise<void> {
     // 1. Secure download with strict geofencing check
     const { buffer, fileMeta } = await DriveIngestionService.downloadFileContent(file.id);
+    const rawSha256 = createHash("sha256").update(buffer).digest("hex");
+    const rawEvidence = createStoredRawMultimodalEvidence({
+      evidenceId: fileMeta.id,
+      expedienteId: "GOOGLE_DRIVE",
+      fileId: fileMeta.id,
+      checksum: fileMeta.md5Checksum ?? null,
+      fileName: fileMeta.name,
+      mimeType: fileMeta.mimeType,
+      size: fileMeta.size ?? null,
+      storageReference: `drive://${fileMeta.id}`,
+      ingestionSource: "GOOGLE_DRIVE",
+      traceabilityId: fileMeta.traceabilityId ?? null,
+      forensicIntegrity: createComputedFileIntegrity({
+        rawSha256,
+        providerChecksum: fileMeta.md5Checksum ?? null,
+        providerChecksumAlgorithm: fileMeta.md5Checksum ? "MD5" : null,
+        fileId: fileMeta.id,
+        declaredMimeType: fileMeta.mimeType,
+        fileName: fileMeta.name,
+        bytes: buffer,
+      }),
+    });
 
     // 2. Invoke Vertex AI Gemini for Multimodal Extraction
     if (!GCP_PROJECT_ID) {
@@ -279,8 +331,15 @@ export class DriveIngestionEngine {
       parsedIntelligence.summary || "",
       JSON.stringify(parsedIntelligence.correlationSuggestions || []),
     ]);
+    const analyzedEvidence = markReadyForHumanReview(
+      markAiAnalyzed(
+        markExtracted(rawEvidence, `drive_ingested_intelligence/${fileMeta.id}/extracted_text`),
+        `drive_ingested_intelligence/${fileMeta.id}`,
+        null
+      )
+    );
 
-    // 4. Update the tracking status log to 'processed'
+    // 4. processed means technically processed and ready for human review, not human-approved.
     await DriveIngestionService.setFileStatus(
       fileMeta.id,
       fileMeta.name,
@@ -290,6 +349,8 @@ export class DriveIngestionEngine {
       {
         processedAt: new Date().toISOString(),
         entitiesExtracted: Object.keys(parsedIntelligence.entities || {}).length,
+        technicalStatus: "TECHNICALLY_PROCESSED",
+        multimodalEvidence: analyzedEvidence,
       }
     );
 
@@ -302,27 +363,61 @@ export class DriveIngestionEngine {
   public static async getIngestedIntelligence(category?: string): Promise<ExtractedIntelligence[]> {
     await this.ensureTablesExists();
     const pool = getPool();
-    let queryStr = "SELECT file_id, file_name, logical_category, extracted_text, entities, risk_level, summary, correlation_suggestions FROM drive_ingested_intelligence";
+    let queryStr = `
+      SELECT i.file_id, i.file_name, i.logical_category, i.extracted_text, i.entities, i.risk_level, i.summary, i.correlation_suggestions, l.metadata
+      FROM drive_ingested_intelligence i
+      LEFT JOIN drive_ingestion_log l ON l.file_id = i.file_id
+    `;
     const params: string[] = [];
 
     if (category) {
-      queryStr += " WHERE logical_category = $1";
+      queryStr += " WHERE i.logical_category = $1";
       params.push(category);
     }
 
-    queryStr += " ORDER BY created_at DESC";
+      queryStr += " ORDER BY i.created_at DESC";
 
     const res = await pool.query(queryStr, params);
 
-    return res.rows.map((row) => ({
-      fileId: row.file_id,
-      fileName: row.file_name,
-      logicalCategory: row.logical_category,
-      extractedText: row.extracted_text,
-      summary: row.summary,
-      riskLevel: row.risk_level,
-      entities: typeof row.entities === "string" ? JSON.parse(row.entities) : row.entities,
-      correlationSuggestions: typeof row.correlation_suggestions === "string" ? JSON.parse(row.correlation_suggestions) : row.correlation_suggestions,
-    }));
+    return res.rows.map((row) => {
+      const metadata = typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata;
+      const persistedEvidence = metadata?.multimodalEvidence as MultimodalEvidenceContract | undefined;
+
+      return {
+        fileId: row.file_id,
+        fileName: row.file_name,
+        logicalCategory: row.logical_category,
+        extractedText: row.extracted_text,
+        summary: row.summary,
+        riskLevel: row.risk_level,
+        entities: typeof row.entities === "string" ? JSON.parse(row.entities) : row.entities,
+        correlationSuggestions: typeof row.correlation_suggestions === "string" ? JSON.parse(row.correlation_suggestions) : row.correlation_suggestions,
+        multimodalEvidence: persistedEvidence ?? markReadyForHumanReview(
+          markAiAnalyzed(
+            markExtracted(
+              createStoredRawMultimodalEvidence({
+                evidenceId: row.file_id,
+                expedienteId: "GOOGLE_DRIVE",
+                fileId: row.file_id,
+                fileName: row.file_name,
+                mimeType: "unknown",
+                size: null,
+                storageReference: `drive://${row.file_id}`,
+                ingestionSource: "GOOGLE_DRIVE",
+                traceabilityId: null,
+                forensicIntegrity: createHashUnavailableIntegrity({
+                  fileId: row.file_id,
+                  declaredMimeType: "unknown",
+                  fileName: row.file_name,
+                }),
+              }),
+              `drive_ingested_intelligence/${row.file_id}/extracted_text`
+            ),
+            `drive_ingested_intelligence/${row.file_id}`,
+            null
+          )
+        ),
+      };
+    });
   }
 }

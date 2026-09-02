@@ -1,7 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
-import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import { ImageDeletionGovernanceService } from "@/utils/imageDeletionGovernanceService";
 import { EvidenceRelationship } from "@/utils/evidenceRelationshipEngine";
 
@@ -17,8 +16,52 @@ import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, o
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
+import { enqueueSweepLifecycleEventsInTransaction } from "@/services/geoint/geointSweepLifecycleEventService";
+import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
+import { deriveInSituPhotoOrchestrationItem, isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
+import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
+import { createComputedFileIntegrityFromBytes, createHashUnavailableIntegrity } from "@/utils/forensicFileIntegrity";
+import {
+  certifyGeointSweepWithHumanApproval,
+  createHumanTriggeredRunningSweepLifecycle,
+  isActiveGeointSweepLifecycleStatus,
+  markGeointSweepReadyForHumanReview,
+  rejectGeointSweepWithHumanDecision,
+  transitionGeointSweepLifecycle,
+  type GeointSweepAnalysisStatus,
+  type GeointSweepLifecycleRecord,
+  type GeointSweepLifecycleStatus,
+} from "@/utils/geointSweepLifecycle";
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
+import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
+import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
+import {
+  adaptLegacyProjectGeography,
+  canonicalizeConfirmedDraftGeography,
+  type CanonicalGeographyType,
+  type CanonicalProjectGeography,
+  type DraftProjectGeography,
+} from "@/utils/canonicalProjectGeography";
+import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import {
+  adaptLegacyProjectHypothesis,
+  canProceedWithInstitutionalAnalysis,
+  formulateHumanHypothesis,
+  reviseHumanHypothesis,
+  type CanonicalProjectHypothesis,
+} from "@/utils/hypothesisGovernance";
+import type { InstitutionalDocumentModel } from "@/utils/institutionalDocumentAssembly";
+import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
+import {
+  institutionalReportCertificationService,
+} from "@/services/institutionalReportCertificationService";
+import { institutionalReportPublicationService } from "@/services/institutionalReportPublicationService";
+import type {
+  InstitutionalReportCertification,
+  InstitutionalReportPublication,
+} from "@/utils/reportCertificationGate";
+import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -75,6 +118,7 @@ export type AlbumPhoto = {
   comentario: string;
   file?: File;
   evidenceId?: string;
+  sourceEvidenceId?: string | null;
   contextualizedAt?: number;
   contextualizedBy?: string;
   isContextualized?: boolean;
@@ -87,8 +131,15 @@ export type AlbumPhoto = {
   gpsLng?: number | null;
   diagnosticLogs?: string;
   validado?: boolean;
+  humanValidationStatus?: "UNREVIEWED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "RETURNED_FOR_REANALYSIS" | "LEGACY_UNCLASSIFIED";
+  validationSource?: "ADR_020_24_HUMAN_ACTION" | "CANONICAL_FIELD" | "LEGACY_COMPATIBILITY" | "TECHNICAL_BOOLEAN" | "AI_READY" | "ABSENT";
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
+  geographyId?: string | null;
+  geographyType?: CanonicalGeographyType | null;
+  aiAnalyticalOutput?: AiAnalyticalOutput | null;
 
   // Extensión de Gobernanza Street View Evidence v2.1 y Contrato Determinista
   evidenceOrigin?: EvidenceOrigin;
@@ -114,11 +165,28 @@ export type SweepIntegrationItem = {
   source: string;
   type: "Directa" | "Contextualizada";
   status: "Integrado" | "Pendiente" | "Rechazado";
+  lifecycleStatus?: GeointSweepLifecycleStatus;
+  lifecycleVersion?: number;
+  lifecycle?: GeointSweepLifecycleRecord;
+  analysisStatus?: GeointSweepAnalysisStatus;
+  aiQualityScore?: number | null;
+  humanValidationStatus?: "UNREVIEWED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "RETURNED_FOR_REANALYSIS" | "LEGACY_UNCLASSIFIED";
+  validationSource?: "ADR_020_24_HUMAN_ACTION" | null;
+  validatedAt?: string | null;
+  validatedBy?: any | null;
+  traceabilityId?: string | null;
+  correlationId?: string | null;
+  outputEvidenceIds?: string[];
+  outputFindingIds?: string[];
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
+  geographyId?: string | null;
+  geographyType?: CanonicalGeographyType | null;
   relevance: "Alto" | "Medio" | "Bajo";
   data: string;
   context?: string;
   justification?: string;
-  timestamp: number;
+  timestamp: number;
   createVisualEvidence?: boolean;
 };
 
@@ -139,20 +207,16 @@ export type Project = {
   hipotesis?: string;
   reportSummary?: string;
   sweeps?: SweepIntegrationItem[];
-  latitude?: number | null;
-  longitude?: number | null;
+  canonicalGeography?: CanonicalProjectGeography | null;
+  geographyId?: string | null;
+  geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";
+  canonicalHypothesis?: CanonicalProjectHypothesis | null;
+  hypothesisRequirementSatisfied?: boolean;
+  reportReadyAssessment?: ReportReadyAssessment | null;
+  latitude?: number;
+  longitude?: number;
   analysisRadius?: number;
-  locationSource?: LocationSource;
 };
-
-export type LocationSource =
-  | "GPS_EXIF"
-  | "MAP_VERTEX"
-  | "USER_SELECTED"
-  | "STREET_VIEW"
-  | "GEOCODED"
-  | "APPROXIMATE"
-  | "UNKNOWN";
 
 export type PerPhotoFinding = {
   photoId: string;
@@ -191,21 +255,21 @@ export type ProjectDocument = {
   type: string;
   context: string;
   createdAt: number;
+  multimodalEvidence?: MultimodalEvidenceContract;
 };
 
 type ProjectContextValue = {
   project: Project | null;
   album: AlbumPhoto[];
+  inSituOrchestrationItems: MultisourceOrchestrationItem[];
   selectedIds: string[];
   analysisResult: AnalysisResult | null;
   createProject: (params: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    locationSource?: LocationSource;
-    analysisRadius?: number;
+    canonicalGeography?: CanonicalProjectGeography | null;
+    draftGeography?: DraftProjectGeography | null;
   }) => Promise<string>;
 
   closeProject: () => void;
@@ -230,6 +294,15 @@ type ProjectContextValue = {
       isIndependentPoi?: boolean;
     }
   ) => Promise<void>;
+  createGeographicEntity?: (params: {
+    lat: number;
+    lng: number;
+    type: "POI" | "VERTEX" | "EVIDENCE_LOCATION";
+    name?: string;
+    comentario?: string;
+    isIndependentPoi?: boolean;
+    isVertex?: boolean;
+  }) => Promise<string>;
   removePhotoFromAlbum: (id: string) => Promise<void>;
   removeAllPhotosFromAlbum: (projectId: string) => Promise<void>;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
@@ -269,6 +342,55 @@ type ProjectContextValue = {
     details: string;
   }) => Promise<void>;
   updateProjectDetails: (details: Partial<Project>) => Promise<void>;
+  saveHumanHypothesis: (text: string) => Promise<CanonicalProjectHypothesis>;
+  requestInstitutionalReportCertification: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => Promise<InstitutionalReportCertification>;
+  certifyInstitutionalReportByHumanAction: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => Promise<InstitutionalReportCertification>;
+  rejectInstitutionalReportCertification: (params: {
+    certification: InstitutionalReportCertification;
+    rejectionReason: string;
+  }) => Promise<InstitutionalReportCertification>;
+  revokeInstitutionalReportCertification: (params: {
+    certificationId: string;
+    revocationReason: string;
+  }) => Promise<InstitutionalReportCertification>;
+  getCurrentInstitutionalReportCertification: (params: {
+    institutionalReportInput?: InstitutionalReportInput | null;
+    institutionalDocumentModel?: InstitutionalDocumentModel | null;
+    documentArtifactReference?: string | null;
+  }) => Promise<InstitutionalReportCertification | null>;
+  requestInstitutionalReportPublication: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => Promise<InstitutionalReportPublication>;
+  publishInstitutionalReportByHumanAction: (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => Promise<InstitutionalReportPublication>;
+  revokeInstitutionalReportPublication: (params: {
+    publicationId: string;
+    revocationReason: string;
+  }) => Promise<InstitutionalReportPublication>;
+  getCurrentInstitutionalReportPublication: (params: {
+    certification?: InstitutionalReportCertification | null;
+    documentArtifactReference?: string | null;
+    documentArtifactHash?: string | null;
+  }) => Promise<InstitutionalReportPublication | null>;
   activeSweepForModal: SweepIntegrationItem | null;
   setActiveSweepForModal: (sweep: SweepIntegrationItem | null) => void;
   registerSweep: (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => Promise<string>;
@@ -298,6 +420,21 @@ async function getClientIp(): Promise<string> {
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function buildRealValidatorIdentity(user: any): any | null {
+  if (!user) return null;
+  const identity: Record<string, unknown> = {};
+  if (user.id != null && String(user.id).trim()) identity.id = user.id;
+  if (typeof user.username === "string" && user.username.trim()) identity.username = user.username.trim();
+  if (typeof user.name === "string" && user.name.trim()) identity.name = user.name.trim();
+  if (typeof user.role === "string" && user.role.trim()) identity.role = user.role.trim();
+  return Object.keys(identity).length > 0 ? identity : null;
+}
+
+function buildGeointSweepEventActor(user: any): string {
+  const identity = buildRealValidatorIdentity(user);
+  return identity?.username || identity?.name || (identity?.id != null ? String(identity.id) : "UNAVAILABLE");
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
@@ -351,32 +488,44 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     nombre,
     geometryType,
     descripcion,
-    latitude,
-    longitude,
-    locationSource,
-    analysisRadius,
+    canonicalGeography,
+    draftGeography,
   }: {
     nombre: string;
     geometryType: "individual" | "lineal" | "poligono";
     descripcion?: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    locationSource?: LocationSource;
-    analysisRadius?: number;
+    canonicalGeography?: CanonicalProjectGeography | null;
+    draftGeography?: DraftProjectGeography | null;
   }) => {
     try {
       const firestore = getDb();
       const counterRef = doc(firestore, "counters", "projects");
       const projectCol = collection(firestore, "projects");
       const projectDocRef = doc(projectCol);
+      if (canonicalGeography && canonicalGeography.validationStatus !== "VALID") {
+        throw new Error("La geografía canónica del expediente está incompleta o es inválida.");
+      }
+      if (!canonicalGeography && !draftGeography?.confirmed) {
+        throw new Error("Debe definir, validar y confirmar la geografía antes de crear el expediente.");
+      }
 
       let ceipolId = "";
+      const confirmedCanonicalGeography = canonicalGeography || canonicalizeConfirmedDraftGeography({
+        projectId: projectDocRef.id,
+        draft: draftGeography!,
+      });
+      const geographyPersistence = confirmedCanonicalGeography
+        ? {
+            canonicalGeography: confirmedCanonicalGeography,
+            geographyId: confirmedCanonicalGeography.geographyId,
+            geographyValidationStatus: confirmedCanonicalGeography.validationStatus,
+          }
+        : {
+            canonicalGeography: null,
+            geographyId: null,
+            geographyValidationStatus: "INVALID" as const,
+          };
       
-      const latVal = latitude !== undefined ? latitude : null;
-      const lngVal = longitude !== undefined ? longitude : null;
-      const radiusVal = analysisRadius || 500;
-      const sourceVal: LocationSource = locationSource || (latVal !== null && lngVal !== null ? "USER_SELECTED" : "UNKNOWN");
-
       await runTransaction(firestore, async (transaction) => {
         const counterSnap = await transaction.get(counterRef);
         let currentCount = 0;
@@ -403,14 +552,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           lockedBy: null,
           photoCount: 0,
           estado: "ABIERTO",
-          latitude: latVal,
-          longitude: lngVal,
-          analysisRadius: radiusVal,
-          locationSource: sourceVal,
+          canonicalHypothesis: null,
+          hypothesisRequirementSatisfied: false,
+          ...geographyPersistence,
         });
       });
 
-      setProject({
+      const newProjectState = {
         id: projectDocRef.id,
         nombre: nombre.trim() || "Sin nombre",
         geometryType,
@@ -418,10 +566,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdBy: user?.username || "Usuario Local",
         ceipolId,
         estado: "ABIERTO",
-        latitude: latVal,
-        longitude: lngVal,
-        analysisRadius: radiusVal,
-        locationSource: sourceVal,
+        canonicalHypothesis: null,
+        hypothesisRequirementSatisfied: false,
+        ...geographyPersistence,
+      };
+      setProject({
+        ...newProjectState,
+        reportReadyAssessment: assessReportReadiness(newProjectState),
       });
 
       setAlbum([]);
@@ -565,6 +716,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             comentario: data.comentario,
             deleted: data.deleted === true,
             evidenceId: data.evidenceId || null,
+            sourceEvidenceId: data.sourceEvidenceId || null,
             contextualizedAt: data.contextualizedAt || null,
             contextualizedBy: data.contextualizedBy || null,
             isContextualized: data.isContextualized || false,
@@ -575,31 +727,61 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             analysisType: data.analysisType || null,
             fuente: data.fuente || "Inspección de Campo",
             validado: data.validado === true,
+            humanValidationStatus: data.humanValidationStatus || null,
+            validationSource: data.validationSource || null,
+            lineage: data.lineage || null,
+            lineageStatus: data.lineageStatus || null,
             gpsLat: data.gpsLat ?? null,
             gpsLng: data.gpsLng ?? null,
             gpsAccuracy: data.gpsAccuracy ?? null,
             gpsTimestamp: data.gpsTimestamp ?? null,
             diagnosticLogs: data.diagnosticLogs ?? null,
-            gpsSource: data.gpsSource ?? "SOLO_EXIF",
-            isVertex: data.isVertex === true || data.gpsSource === "VERTICE_MAPA"
+            geographyId: data.geographyId ?? null,
+            geographyType: data.geographyType ?? null,
           };
         })
         .filter((p) => !p.deleted) as any;
 
-      setProject({
-        id: projectId,
-        nombre: projectData.name || projectData.nombre || "Sin nombre",
-        geometryType: projectData.geometryType,
-        descripcion: projectData.descripcion || "",
-        latitude: projectData.latitude ?? null,
-        longitude: projectData.longitude ?? null,
-        analysisRadius: projectData.analysisRadius ?? 500,
-        locationSource: projectData.locationSource || (projectData.latitude ? "USER_SELECTED" : "UNKNOWN"),
-        ...projectData,
-      });
-      setAlbum(albumPhotos);
-      setSelectedIds(albumPhotos.map((p) => p.id));
+      let geoEntities: any[] = [];
+      try {
+        geoEntities = await getGeographicEntities(projectId);
+        const geoAlbumItems: AlbumPhoto[] = geoEntities.map((geo) => ({
+          id: geo.id!,
+          previewUrl: "",
+          lat: geo.lat,
+          lng: geo.lng,
+          tipo: geo.metadata?.tipo || (geo.metadata?.isIndependentPoi ? "POI" : "Punto Geográfico"),
+          comentario: geo.metadata?.comentario || geo.metadata?.name || "Punto Geográfico",
+          evidenceType: "GEOGRAPHIC_VECTOR",
+          isIndependentPoi: geo.metadata?.isIndependentPoi ?? true,
+          fuente: "Mapa Táctico GEOINT",
+          validado: true,
+          createdAt: geo.createdAt || Date.now(),
+          geographyId: projectData.geographyId ?? projectData.canonicalGeography?.geographyId ?? null,
+          geographyType: projectData.canonicalGeography?.type ?? null,
+        } as any));
+        albumPhotos.push(...geoAlbumItems);
+      } catch (geoErr) {
+        console.warn("[ProjectContext] No se pudieron cargar entidades geográficas:", geoErr);
+      }
 
+      const canonicalGeography = adaptLegacyProjectGeography(
+        {
+          id: projectId,
+          geometryType: projectData.geometryType,
+          latitude: projectData.latitude ?? null,
+          longitude: projectData.longitude ?? null,
+          canonicalGeography: projectData.canonicalGeography ?? null,
+        },
+        { geographicEntities: geoEntities }
+      );
+      const canonicalHypothesis = adaptLegacyProjectHypothesis({
+        ...projectData,
+        id: projectId,
+        geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
+        canonicalGeography,
+      });
+      const hypothesisGate = canProceedWithInstitutionalAnalysis({ canonicalHypothesis });
       const docsColRef = collection(firestore, "projects", projectId, "documents");
       const docsSnap = await getDocs(query(docsColRef, orderBy("createdAt", "asc")));
       const projectDocs: ProjectDocument[] = docsSnap.docs
@@ -608,6 +790,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           ...doc.data()
         } as any))
         .filter((d: any) => !d.deleted);
+
+      const loadedProject = {
+        id: projectId,
+        nombre: projectData.name,
+        geometryType: projectData.geometryType,
+        descripcion: projectData.descripcion || "",
+        ...projectData,
+        canonicalGeography,
+        geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
+        geographyValidationStatus: canonicalGeography?.validationStatus ?? projectData.geographyValidationStatus ?? "INVALID",
+        canonicalHypothesis,
+        hypothesisRequirementSatisfied: hypothesisGate.hypothesisRequirementSatisfied,
+      };
+      setProject({
+        ...loadedProject,
+        reportReadyAssessment: assessReportReadiness({
+          ...loadedProject,
+          album: albumPhotos,
+          documents: projectDocs,
+        }),
+      });
+      setAlbum(albumPhotos);
+      setSelectedIds(albumPhotos.map((p) => p.id));
       setDocuments(projectDocs);
 
       if (projectData.iaAnalysis) {
@@ -715,6 +920,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         gpsLng: metadata?.gpsLng ?? null,
         diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
         validado: metadata?.validado ?? false,
+        geographyId: project.canonicalGeography?.geographyId ?? null,
+        geographyType: project.canonicalGeography?.type ?? null,
+        humanValidationStatus: (metadata as any)?.humanValidationStatus || (isStreetView ? "PENDING_REVIEW" : "UNREVIEWED"),
+        validationSource: (metadata as any)?.validationSource || (isStreetView ? "CANONICAL_FIELD" : "ABSENT"),
         streetViewCategory: (metadata as any)?.streetViewCategory || null,
         streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
         analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
@@ -759,6 +968,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng: metadata?.gpsLng ?? null,
       diagnosticLogs: metadata?.diagnosticLogs ?? "Carga estándar",
       validado: metadata?.validado ?? false,
+      geographyId: project.canonicalGeography?.geographyId ?? null,
+      geographyType: project.canonicalGeography?.type ?? null,
       streetViewCategory: (metadata as any)?.streetViewCategory || null,
       streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
       analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
@@ -780,23 +991,113 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   }, [project, addPhotoToAlbum, isReadOnly, setSelectedIds]);
 
+  const createGeographicEntity = useCallback(
+    async (params: {
+      lat: number;
+      lng: number;
+      type: "POI" | "VERTEX" | "EVIDENCE_LOCATION";
+      name?: string;
+      comentario?: string;
+      isIndependentPoi?: boolean;
+      isVertex?: boolean;
+    }) => {
+      if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
+      if (!project) throw new Error("No hay un proyecto activo para crear el punto geográfico.");
+
+      const entityId = `geo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const comment = params.comentario || params.name || (params.isIndependentPoi ? "POI creado desde mapa." : "Vértice de trazado.");
+      const resolvedTipo = params.isIndependentPoi ? "POI" : (project.geometryType === "lineal" ? "Corredor" : "Polígono");
+
+      await saveGeographicEntity({
+        id: entityId,
+        projectId: project.id,
+        lat: params.lat,
+        lng: params.lng,
+        type: params.type,
+        geometryType: project.geometryType || "individual",
+        source: "MAP_VECTOR",
+        createdAt: Date.now(),
+        metadata: {
+          name: params.name || "",
+          comentario: comment,
+          isIndependentPoi: params.isIndependentPoi ?? true,
+          isVertex: params.isVertex ?? false,
+          tipo: resolvedTipo,
+        },
+      });
+
+      addPhotoToAlbum(
+        {
+          previewUrl: "",
+          lat: params.lat,
+          lng: params.lng,
+          tipo: resolvedTipo,
+          fuente: "Mapa Táctico GEOINT",
+          evidenceType: "GEOGRAPHIC_VECTOR",
+          comentario: comment,
+          isIndependentPoi: params.isIndependentPoi ?? true,
+          gpsSource: params.isIndependentPoi ? "POI_MAPA" : "VERTICE_MAPA",
+          validado: true,
+          createdAt: Date.now(),
+          geographyId: project.canonicalGeography?.geographyId ?? null,
+          geographyType: project.canonicalGeography?.type ?? null,
+        } as any,
+        entityId
+      );
+
+      return entityId;
+    },
+    [isReadOnly, project, addPhotoToAlbum]
+  );
+
   const uploadDocument = useCallback(async (file: File, context: string) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
     if (!project) throw new Error("No hay un proyecto activo para subir el anexo.");
     const storage = getStorage();
     const docId = generateId();
+    let forensicIntegrity;
+    try {
+      const rawBytes = await file.arrayBuffer();
+      forensicIntegrity = await createComputedFileIntegrityFromBytes({
+        bytes: rawBytes,
+        declaredMimeType: file.type || null,
+        fileName: file.name,
+      });
+    } catch (err) {
+      console.warn("[ProjectContext] No se pudo calcular SHA-256 real del archivo local.", err);
+      forensicIntegrity = createHashUnavailableIntegrity({
+        declaredMimeType: file.type || null,
+        fileName: file.name,
+      });
+    }
     const storageRef = ref(storage, `projects/${project.id}/documents/${docId}_${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
 
     const firestore = getDb();
     const docsColRef = collection(firestore, "projects", project.id, "documents");
+    const storagePath = snapshot.ref.fullPath;
     const docData = {
       name: file.name,
       url: downloadURL,
       type: file.type || "unknown",
       context,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      multimodalEvidence: createStoredRawMultimodalEvidence({
+        evidenceId: docId,
+        expedienteId: project.id,
+        documentId: docId,
+        fileName: file.name,
+        mimeType: file.type || "unknown",
+        size: file.size,
+        storageReference: storagePath,
+        ingestionSource: "USER_UPLOAD",
+        geographyId: project.canonicalGeography?.geographyId ?? null,
+        geographyType: project.canonicalGeography?.type ?? null,
+        traceabilityId: null,
+        analystContext: context,
+        forensicIntegrity,
+      })
     };
     const docRef = await addDoc(docsColRef, docData);
     setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);
@@ -1105,7 +1406,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
       await updateDoc(projectRef, details);
-      setProject((prev) => (prev ? { ...prev, ...details } : prev));
+      setProject((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, ...details };
+        return { ...next, reportReadyAssessment: assessReportReadiness({ ...next, album, documents }) };
+      });
       
       await logAuditAction({
         action: "ACTUALIZAR_EXPEDIENTE_DETALLES",
@@ -1118,7 +1423,234 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error al actualizar detalles del expediente:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction]);
+  }, [project, isReadOnly, logAuditAction, album, documents]);
+
+  const saveHumanHypothesis = useCallback(async (text: string): Promise<CanonicalProjectHypothesis> => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const trimmedText = text.trim();
+    if (!trimmedText) throw new Error("La hipótesis humana no puede estar vacía.");
+
+    const realIdentity = buildRealValidatorIdentity(user);
+    const authorId = realIdentity?.username || realIdentity?.name || (realIdentity?.id != null ? String(realIdentity.id) : null);
+    const existing = project.canonicalHypothesis || adaptLegacyProjectHypothesis(project);
+    const geographyId = project.geographyId ?? project.canonicalGeography?.geographyId ?? existing?.geographyId ?? null;
+    const canonicalHypothesis = existing
+      ? reviseHumanHypothesis(existing, { text: trimmedText, authorId })
+      : formulateHumanHypothesis({
+          projectId: project.id,
+          text: trimmedText,
+          geographyId,
+          authorId,
+        });
+    const hypothesisGate = canProceedWithInstitutionalAnalysis({ canonicalHypothesis });
+    const updates = {
+      hipotesis: trimmedText,
+      canonicalHypothesis,
+      hypothesisRequirementSatisfied: hypothesisGate.hypothesisRequirementSatisfied,
+    };
+
+    const firestore = getDb();
+    const projectRef = doc(firestore, "projects", project.id);
+    await updateDoc(projectRef, updates);
+    setProject((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...updates };
+      return { ...next, reportReadyAssessment: assessReportReadiness({ ...next, album, documents }) };
+    });
+
+    await logAuditAction({
+      action: "FORMULAR_HIPOTESIS_HUMANA",
+      module: "Expedientes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Persistida hipótesis humana versión ${canonicalHypothesis.version}.`
+    });
+
+    return canonicalHypothesis;
+  }, [project, isReadOnly, user, logAuditAction, album, documents]);
+
+  const requestInstitutionalReportCertification = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const certification = await institutionalReportCertificationService.requestCertification({
+      ...params,
+      requestedBy: actor,
+    });
+    await logAuditAction({
+      action: "SOLICITAR_CERTIFICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Solicitud durable de certificación ${certification.certificationId} para snapshot ${certification.reportSnapshotId}.`,
+    });
+    return certification;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const certifyInstitutionalReportByHumanAction = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    if (!actor) throw new Error("INSTITUTIONAL_CERTIFICATION_BLOCKED:CERTIFIER_IDENTITY_UNAVAILABLE");
+    const certification = await institutionalReportCertificationService.certifyInstitutionalReport({
+      ...params,
+      certifierIdentity: actor,
+    });
+    await logAuditAction({
+      action: "CERTIFICAR_REPORTE_INSTITUCIONAL",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Certificación humana durable ${certification.certificationId} para snapshot ${certification.reportSnapshotId}.`,
+    });
+    return certification;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const rejectInstitutionalReportCertification = useCallback(async (params: {
+    certification: InstitutionalReportCertification;
+    rejectionReason: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const rejected = await institutionalReportCertificationService.rejectInstitutionalCertification({
+      certification: params.certification,
+      rejectedBy: actor,
+      rejectionReason: params.rejectionReason,
+    });
+    await logAuditAction({
+      action: "RECHAZAR_CERTIFICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Rechazada certificación ${rejected.certificationId}. Motivo: ${params.rejectionReason}.`,
+    });
+    return rejected;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const revokeInstitutionalReportCertification = useCallback(async (params: {
+    certificationId: string;
+    revocationReason: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const revoked = await institutionalReportCertificationService.revokeInstitutionalCertification({
+      projectId: project.id,
+      certificationId: params.certificationId,
+      revokedBy: actor,
+      revocationReason: params.revocationReason,
+    });
+    await logAuditAction({
+      action: "REVOCAR_CERTIFICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Revocada certificación ${revoked.certificationId}. Motivo: ${params.revocationReason}.`,
+    });
+    return revoked;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const getCurrentInstitutionalReportCertification = useCallback(async (params: {
+    institutionalReportInput?: InstitutionalReportInput | null;
+    institutionalDocumentModel?: InstitutionalDocumentModel | null;
+    documentArtifactReference?: string | null;
+  }) => {
+    if (!project) return null;
+    return institutionalReportCertificationService.getCurrentInstitutionalCertification({
+      projectId: project.id,
+      ...params,
+    });
+  }, [project]);
+
+  const requestInstitutionalReportPublication = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const publication = await institutionalReportPublicationService.requestPublication({
+      projectId: project.id,
+      ...params,
+      requestedBy: actor,
+    });
+    await logAuditAction({
+      action: "SOLICITAR_PUBLICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Solicitud durable de publicación ${publication.publicationId} para certificación ${publication.certificationId}.`,
+    });
+    return publication;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const publishInstitutionalReportByHumanAction = useCallback(async (params: {
+    institutionalReportInput: InstitutionalReportInput;
+    institutionalDocumentModel: InstitutionalDocumentModel;
+    documentArtifactReference: string;
+    documentArtifactHash?: string | null;
+    publicationChannelOrType: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    if (!actor) throw new Error("INSTITUTIONAL_PUBLICATION_BLOCKED:PUBLISHER_IDENTITY_UNAVAILABLE");
+    const publication = await institutionalReportPublicationService.publishInstitutionalReport({
+      projectId: project.id,
+      ...params,
+      publisherIdentity: actor,
+    });
+    await logAuditAction({
+      action: "PUBLICAR_REPORTE_INSTITUCIONAL",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Publicación humana durable ${publication.publicationId} del artefacto ${publication.documentArtifactReference}.`,
+    });
+    return publication;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const revokeInstitutionalReportPublication = useCallback(async (params: {
+    publicationId: string;
+    revocationReason: string;
+  }) => {
+    if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+    const actor = buildRealValidatorIdentity(user);
+    const revoked = await institutionalReportPublicationService.revokePublication({
+      projectId: project.id,
+      publicationId: params.publicationId,
+      revokedBy: actor,
+      revocationReason: params.revocationReason,
+    });
+    await logAuditAction({
+      action: "REVOCAR_PUBLICACION_REPORTE",
+      module: "Reportes",
+      projectId: project.id,
+      projectName: project.ceipolId || project.nombre,
+      details: `Revocada publicación ${revoked.publicationId}. Motivo: ${params.revocationReason}.`,
+    });
+    return revoked;
+  }, [project, isReadOnly, user, logAuditAction]);
+
+  const getCurrentInstitutionalReportPublication = useCallback(async (params: {
+    certification?: InstitutionalReportCertification | null;
+    documentArtifactReference?: string | null;
+    documentArtifactHash?: string | null;
+  }) => {
+    if (!project) return null;
+    return institutionalReportPublicationService.getCurrentPublication({
+      projectId: project.id,
+      ...params,
+    });
+  }, [project]);
 
   const softDeleteDoc = useCallback(async (params: {
     type: "Proyecto" | "Fotografía" | "Documento";
@@ -1351,7 +1883,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!photo) throw new Error("Fotografía no encontrada.");
 
     const firestore = getDb();
-    const evidenceId = photo.evidenceId || `EVI-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+    const evidenceId = photo.evidenceId || photo.id;
     const contextualizedAt = Date.now();
     const contextualizedBy = user?.username || "Usuario Local";
 
@@ -1395,9 +1927,31 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const registerSweep = useCallback(async (params: Omit<SweepIntegrationItem, "id" | "status" | "timestamp"> & { initialContext?: string }) => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
+
+    const currentSweeps = project.sweeps || [];
+    const activeDuplicate = currentSweeps.find((s) =>
+      s.engine === params.engine &&
+      s.source === params.source &&
+      s.type === params.type &&
+      isActiveGeointSweepLifecycleStatus(s.lifecycleStatus || s.lifecycle?.status)
+    );
+    if (activeDuplicate) {
+      setActiveSweepForModal(activeDuplicate);
+      return activeDuplicate.id;
+    }
     
     const sweepId = `SWEEP-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const initialStatus = params.type === "Directa" ? "Integrado" : "Pendiente";
+    const lifecycle = createHumanTriggeredRunningSweepLifecycle({
+      sweepId,
+      expedienteId: project.id,
+      correlationId: (params as any).correlationId ?? null,
+      traceabilityId: (params as any).traceabilityId ?? null,
+      outputEvidenceIds: (params as any).outputEvidenceIds || [],
+      outputFindingIds: (params as any).outputFindingIds || [],
+      lineage: (params as any).lineage || [],
+      lineageStatus: (params as any).lineageStatus,
+    });
     
     const newSweep: SweepIntegrationItem = {
       id: sweepId,
@@ -1408,58 +1962,104 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       relevance: params.relevance,
       data: params.data,
       context: params.initialContext || "",
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      lifecycleStatus: lifecycle.status,
+      lifecycleVersion: lifecycle.version,
+      lifecycle,
+      analysisStatus: lifecycle.analysisStatus,
+      humanValidationStatus: lifecycle.humanValidationStatus,
+      validationSource: lifecycle.validationSource,
+      validatedAt: lifecycle.validatedAt,
+      validatedBy: lifecycle.validatedBy,
+      traceabilityId: lifecycle.traceabilityId,
+      correlationId: lifecycle.correlationId,
+      outputEvidenceIds: lifecycle.outputEvidenceIds,
+      outputFindingIds: lifecycle.outputFindingIds,
+      lineage: lifecycle.lineage,
+      lineageStatus: lifecycle.lineageStatus,
+      geographyId: params.geographyId ?? project.canonicalGeography?.geographyId ?? null,
+      geographyType: params.geographyType ?? project.canonicalGeography?.type ?? null,
     };
 
-    const currentSweeps = project.sweeps || [];
     const updatedSweeps = [...currentSweeps, newSweep];
 
-    let updatedHypothesis = project.hipotesis || "";
-
-    if (params.type === "Directa") {
-      const delimiterStart = `\n=== BARRIDO DIRECTO [ID: ${sweepId}] [Engine: ${params.engine}] ===\n`;
-      const delimiterEnd = `\n=========================================\n`;
-      const textToAppend = `${delimiterStart}Fecha: ${new Date(newSweep.timestamp).toLocaleString("es-MX")}\nFuente: ${params.source}\nRelevancia: ${params.relevance}\n${params.data}${delimiterEnd}`;
-      updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
-    }
-
-    try {
+      try {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
       
       const updateData: any = {
         sweeps: updatedSweeps
       };
-      if (params.type === "Directa") {
-        updateData.hipotesis = updatedHypothesis;
-      }
-      
-      await updateDoc(projectRef, updateData);
 
-      // Toda evidencia generada por barridos crea automáticamente un elemento geográfico con trazabilidad propia
-      let latVal: number | null = (params as any).lat ?? null;
-      let lngVal: number | null = (params as any).lng ?? null;
+      await runTransaction(firestore, async (transaction) => {
+        transaction.update(projectRef, updateData);
+        await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, lifecycle, {
+          actor: buildGeointSweepEventActor(user),
+          source: "ProjectContext.registerSweep",
+        });
+      });
+
+      // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
+      let latVal: number | null = null;
+      let lngVal: number | null = null;
       
-      // Parse coordinates from sweep data text if not explicitly provided
-      if (latVal == null || lngVal == null) {
-        const coordsMatch = params.data.match(/(?:lat|lng|coordenadas|coords|posicion)[:\s]+(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/i);
-        if (coordsMatch) {
-          latVal = parseFloat(coordsMatch[1]);
-          lngVal = parseFloat(coordsMatch[2]);
-        } else {
-          const selectedPhotos = album.filter(p => p.lat && p.lng && !p.tipo?.startsWith("Barrido"));
-          if (selectedPhotos.length > 0) {
-            latVal = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
-            lngVal = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
+      // Parse coordinates from sweep data text
+      const coordsMatch = params.data.match(/(?:lat|lng|coordenadas|coords|posicion)[:\s]+(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/i);
+      if (coordsMatch) {
+        latVal = parseFloat(coordsMatch[1]);
+        lngVal = parseFloat(coordsMatch[2]);
+      } else {
+        latVal = project.canonicalGeography?.derived?.centroid?.lat ?? null;
+        lngVal = project.canonicalGeography?.derived?.centroid?.lng ?? null;
+      }
+
+      if (params.createVisualEvidence === true && latVal != null && lngVal != null && !Number.isNaN(latVal) && !Number.isNaN(lngVal)) {
+        try {
+          const photoId = `EVI-SWEEP-${Date.now()}`;
+          const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+          let previewUrl = "";
+          if (apiKey) {
+            console.log("[ProjectContext] Creando mapa de barrido con Google Maps Static API (Habilitada por Analista)...");
+            previewUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${latVal},${lngVal}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
           } else {
-            const geoValidation = validateGeoIntegrity((project as any).latitude, (project as any).longitude);
-            latVal = geoValidation.latitude;
-            lngVal = geoValidation.longitude;
+            console.warn("[ProjectContext] API Key de Google no detectada en creación de barrido. Usando CartoDB...");
+            previewUrl = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lngVal}/${latVal}/600x400.png`;
           }
+          const photosColRef = collection(firestore, "projects", project.id, "photos");
+          const photoDocData = {
+            url: previewUrl,
+            storagePath: `sweeps/${photoId}.jpg`,
+            lat: latVal,
+            lng: lngVal,
+            projectId: project.id,
+            createdAt: Date.now(),
+            tipo: `Barrido ${params.engine}`,
+            comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
+            validado: false,
+            isIndependentPoi: true,
+            geographyId: newSweep.geographyId ?? null,
+            geographyType: newSweep.geographyType ?? null,
+          };
+          await setDoc(doc(photosColRef, photoId), photoDocData);
+          
+          setAlbum(prev => [...prev, {
+            id: photoId,
+            previewUrl,
+            lat: latVal!,
+            lng: lngVal!,
+            tipo: `Barrido ${params.engine}`,
+            comentario: `Evidencia generada automáticamente por barrido OSINT/GIS (${params.source}). Datos clave: ${params.data.slice(0, 300)}`,
+            validado: false,
+            isIndependentPoi: true,
+            geographyId: newSweep.geographyId ?? null,
+            geographyType: newSweep.geographyType ?? null,
+          }]);
+        } catch (photoErr) {
+          console.error("[ProjectContext] Error creating sweep georeferenced photo:", photoErr);
         }
       }
 
-      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
+      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps } : prev);
       
       await logAuditAction({
         action: "REGISTRAR_BARRIDO",
@@ -1477,63 +2077,111 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error registering sweep:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction]);
+  }, [project, isReadOnly, logAuditAction, user]);
 
   const updateSweep = useCallback(async (sweepId: string, updates: Partial<SweepIntegrationItem>) => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
 
     const currentSweeps = project.sweeps || [];
-    let sweepToUpdate = currentSweeps.find(s => s.id === sweepId);
+    const sweepToUpdate = currentSweeps.find(s => s.id === sweepId);
     if (!sweepToUpdate) throw new Error("Barrido no encontrado.");
 
-    const updatedSweep = { ...sweepToUpdate, ...updates } as SweepIntegrationItem;
-    const updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
+    let lifecycle = updates.lifecycle || sweepToUpdate.lifecycle || null;
+    const validationTimestamp = new Date().toISOString();
+    const validatorIdentity = buildRealValidatorIdentity(user);
 
-    let updatedHypothesis = project.hipotesis || "";
-
-    const directHeader = `=== BARRIDO DIRECTO [ID: ${sweepId}]`;
-    const directFooter = `=========================================\n`;
-    const contextualizedHeader = `=== BARRIDO CONTEXTUALIZADO [ID: ${sweepId}]`;
-    const contextualizedFooter = `================================================\n`;
-
-    const cleanHypothesisBlock = (hyp: string, header: string, footer: string) => {
-      const startIndex = hyp.indexOf(header);
-      if (startIndex !== -1) {
-        const endIndex = hyp.indexOf(footer, startIndex);
-        if (endIndex !== -1) {
-          const fullMatchLength = (endIndex + footer.length) - startIndex;
-          let cleaned = hyp.substring(0, startIndex) + hyp.substring(startIndex + fullMatchLength);
-          return cleaned.replace(/\n\n\n+/g, "\n\n").trim();
-        }
+    if (updates.status === "Integrado" && lifecycle && lifecycle.status !== "CERTIFIED") {
+      if (lifecycle.status === "RUNNING") {
+        lifecycle = transitionGeointSweepLifecycle(lifecycle, "COLLECTING", {
+          expectedVersion: lifecycle.version,
+          now: validationTimestamp,
+          reason: "SWEEP_OUTPUTS_AVAILABLE_FOR_REVIEW",
+        });
       }
-      return hyp;
-    };
-
-    updatedHypothesis = cleanHypothesisBlock(updatedHypothesis, directHeader, directFooter);
-    updatedHypothesis = cleanHypothesisBlock(updatedHypothesis, contextualizedHeader, contextualizedFooter);
-
-    if (updatedSweep.status === "Integrado") {
-      if (updatedSweep.type === "Directa") {
-        const delimiterStart = `\n=== BARRIDO DIRECTO [ID: ${sweepId}] [Engine: ${updatedSweep.engine}] ===\n`;
-        const textToAppend = `${delimiterStart}Fecha: ${new Date(updatedSweep.timestamp).toLocaleString("es-MX")}\nFuente: ${updatedSweep.source}\nRelevancia: ${updatedSweep.relevance}\nContexto/Ajuste: ${updatedSweep.context || "Sin contexto adicional"}\n${updatedSweep.data}${directFooter}`;
-        updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
-      } else {
-        const delimiterStart = `\n=== BARRIDO CONTEXTUALIZADO [ID: ${sweepId}] [Engine: ${updatedSweep.engine}] ===\n`;
-        const textToAppend = `${delimiterStart}Fecha: ${new Date().toLocaleString("es-MX")}\nFuente: ${updatedSweep.source}\nRelevancia: ${updatedSweep.relevance}\nContexto/Validación: ${updatedSweep.context || "Sin contexto adicional"}\nDetalles: ${updatedSweep.data}${contextualizedFooter}`;
-        updatedHypothesis = updatedHypothesis ? `${updatedHypothesis}\n${textToAppend}` : textToAppend;
+      if (lifecycle.status === "COLLECTING") {
+        lifecycle = transitionGeointSweepLifecycle(lifecycle, "ANALYZING", {
+          expectedVersion: lifecycle.version,
+          now: validationTimestamp,
+          reason: "SWEEP_OUTPUTS_COLLECTED",
+        });
       }
+      if (lifecycle.status === "ANALYZING") {
+        lifecycle = markGeointSweepReadyForHumanReview(lifecycle, {
+          aiQualityScore: updates.aiQualityScore ?? lifecycle.aiQualityScore ?? 0,
+          expectedVersion: lifecycle.version,
+          now: validationTimestamp,
+        });
+      }
+      lifecycle = certifyGeointSweepWithHumanApproval(lifecycle, {
+        validatedAt: updates.validatedAt || validationTimestamp,
+        validatedBy: updates.validatedBy ?? validatorIdentity,
+        expectedVersion: lifecycle.version,
+      });
     }
+
+    if (updates.status === "Rechazado" && lifecycle && lifecycle.status !== "FAILED") {
+      lifecycle = rejectGeointSweepWithHumanDecision(lifecycle, {
+        reason: updates.justification || "HUMAN_REJECTED_SWEEP",
+        validatedAt: updates.validatedAt || validationTimestamp,
+        validatedBy: updates.validatedBy ?? validatorIdentity,
+        expectedVersion: lifecycle.version,
+      });
+    }
+
+    const updatedSweep = {
+      ...sweepToUpdate,
+      ...updates,
+      ...(lifecycle ? {
+        lifecycle,
+        lifecycleStatus: lifecycle.status,
+        lifecycleVersion: lifecycle.version,
+        analysisStatus: lifecycle.analysisStatus,
+        aiQualityScore: lifecycle.aiQualityScore,
+        humanValidationStatus: lifecycle.humanValidationStatus,
+        validationSource: lifecycle.validationSource,
+        validatedAt: lifecycle.validatedAt,
+        validatedBy: lifecycle.validatedBy,
+        traceabilityId: lifecycle.traceabilityId,
+        correlationId: lifecycle.correlationId,
+        outputEvidenceIds: lifecycle.outputEvidenceIds,
+        outputFindingIds: lifecycle.outputFindingIds,
+        lineage: lifecycle.lineage,
+        lineageStatus: lifecycle.lineageStatus,
+      } : {}),
+    } as SweepIntegrationItem;
+    let updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
+
 
     try {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
-      
-      await updateDoc(projectRef, {
-        sweeps: updatedSweeps,
-        hipotesis: updatedHypothesis
+
+      await runTransaction(firestore, async (transaction) => {
+        const projectSnap = await transaction.get(projectRef);
+        const serverProject = projectSnap.data() as Project | undefined;
+        const serverSweeps = Array.isArray(serverProject?.sweeps) ? serverProject.sweeps : currentSweeps;
+        const serverSweep = serverSweeps.find((s) => s.id === sweepId);
+        if (!serverSweep) throw new Error("Barrido no encontrado en persistencia.");
+
+        const localVersion = sweepToUpdate.lifecycleVersion ?? sweepToUpdate.lifecycle?.version ?? 0;
+        const serverVersion = serverSweep.lifecycleVersion ?? serverSweep.lifecycle?.version ?? 0;
+        if (serverVersion > localVersion) {
+          throw new Error(`GEOINT_SWEEP_VERSION_CONFLICT:${serverVersion}:LOCAL_${localVersion}`);
+        }
+
+        updatedSweeps = serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s);
+        transaction.update(projectRef, {
+          sweeps: updatedSweeps
+        });
+        if (updatedSweep.lifecycle) {
+          await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, updatedSweep.lifecycle, {
+            actor: buildGeointSweepEventActor(user),
+            source: "ProjectContext.updateSweep",
+          });
+        }
       });
 
-      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps, hipotesis: updatedHypothesis } : prev);
+      setProject(prev => prev ? { ...prev, sweeps: updatedSweeps } : prev);
 
       await logAuditAction({
         action: "ACTUALIZAR_BARRIDO",
@@ -1550,12 +2198,49 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("[ProjectContext] Error updating sweep:", err);
       throw err;
     }
-  }, [project, isReadOnly, logAuditAction, activeSweepForModal]);
+  }, [project, isReadOnly, logAuditAction, activeSweepForModal, user]);
+
+  const inSituOrchestrationItems = useMemo<MultisourceOrchestrationItem[]>(() => {
+    if (!project?.id) return [];
+
+    const geographyId = project.canonicalGeography?.geographyId ?? project.geographyId ?? null;
+
+    return album.flatMap((photo) => {
+      const classifiedPhoto = photo as AlbumPhoto & {
+        evidenceType?: string | null;
+        analysisType?: string | null;
+        streetViewSource?: string | null;
+      };
+
+      if (!isExplicitInSituPhoto({
+        gpsSource: classifiedPhoto.gpsSource,
+        tipo: classifiedPhoto.tipo,
+        evidenceType: classifiedPhoto.evidenceType,
+        analysisType: classifiedPhoto.analysisType,
+        streetViewSource: classifiedPhoto.streetViewSource,
+      })) {
+        return [];
+      }
+
+      const item = deriveInSituPhotoOrchestrationItem({
+        expedienteId: project.id,
+        photoId: classifiedPhoto.id,
+        evidenceId: classifiedPhoto.evidenceId,
+        sourceEvidenceId: classifiedPhoto.sourceEvidenceId,
+        geographyId,
+        gpsSource: classifiedPhoto.gpsSource,
+        validado: classifiedPhoto.validado,
+      });
+
+      return item ? [item] : [];
+    });
+  }, [project, album]);
 
   const value = useMemo<ProjectContextValue>(
     () => ({
       project,
       album,
+      inSituOrchestrationItems,
       selectedIds,
       analysisResult,
       createProject,
@@ -1563,6 +2248,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       loadProject,
       addPhotoToAlbum,
       uploadAndAddPhoto,
+      createGeographicEntity,
       removePhotoFromAlbum,
       removeAllPhotosFromAlbum,
       updatePhotoMeta,
@@ -1590,6 +2276,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       savePhotoContextualization,
       logAuditAction,
       updateProjectDetails,
+      saveHumanHypothesis,
+      requestInstitutionalReportCertification,
+      certifyInstitutionalReportByHumanAction,
+      rejectInstitutionalReportCertification,
+      revokeInstitutionalReportCertification,
+      getCurrentInstitutionalReportCertification,
+      requestInstitutionalReportPublication,
+      publishInstitutionalReportByHumanAction,
+      revokeInstitutionalReportPublication,
+      getCurrentInstitutionalReportPublication,
       activeSweepForModal,
       setActiveSweepForModal,
       registerSweep,
@@ -1598,6 +2294,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [
       project,
       album,
+      inSituOrchestrationItems,
       selectedIds,
       analysisResult,
       createProject,
@@ -1605,6 +2302,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       loadProject,
       addPhotoToAlbum,
       uploadAndAddPhoto,
+      createGeographicEntity,
       removePhotoFromAlbum,
       removeAllPhotosFromAlbum,
       updatePhotoMeta,
@@ -1632,6 +2330,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       savePhotoContextualization,
       logAuditAction,
       updateProjectDetails,
+      saveHumanHypothesis,
+      requestInstitutionalReportCertification,
+      certifyInstitutionalReportByHumanAction,
+      rejectInstitutionalReportCertification,
+      revokeInstitutionalReportCertification,
+      getCurrentInstitutionalReportCertification,
+      requestInstitutionalReportPublication,
+      publishInstitutionalReportByHumanAction,
+      revokeInstitutionalReportPublication,
+      getCurrentInstitutionalReportPublication,
       activeSweepForModal,
       registerSweep,
       updateSweep

@@ -57,42 +57,24 @@ export class FacebookProvider implements IProvider {
         };
       }
 
-      // Real network reachability fetch to check connection to Facebook
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch("https://www.facebook.com", { 
-        method: "GET",
-        signal: controller.signal,
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-      });
-      clearTimeout(id);
-
-      const latency = Date.now() - start;
-      const ok = res.status < 500;
-
-      if (!ok) {
-        throw new Error(`Facebook server responded with HTTP status ${res.status}`);
-      }
-
-      const dummyData = [
-        {
-          platform: "Facebook",
-          content: "Enlace perimetral con Facebook verificado y activo.",
-          timestamp: new Date().toISOString()
-        }
-      ];
-
       const action = params?.action || "health_check";
-      const normalized = GeoDataNormalizerEngine.normalize(this.getId(), action, dummyData, lat, lng);
+      const normalized = GeoDataNormalizerEngine.normalize(this.getId(), action, [], lat, lng);
 
       return {
         provider: this.getId(),
         status: "ok",
         timestamp: new Date().toISOString(),
-        confidence: 100,
+        confidence: 0,
         payload: normalized,
-        latency,
-        metadata: { version: "2.1.0", connection: "active" }
+        latency: Date.now() - start,
+        metadata: {
+          version: "2.1.0",
+          sourceFamily: "FACEBOOK",
+          operationalMode: "CONNECTIVITY_ONLY",
+          acquisitionStatus: "NOT_CONFIGURED",
+          authoritative: false,
+          isConnectivityOnly: true,
+        }
       };
     } catch (err: any) {
       return {
@@ -129,7 +111,7 @@ export class FacebookProvider implements IProvider {
         latencyMs,
         details: "Conectado al servidor de Facebook de manera exitosa.",
         timestamp: new Date().toISOString(),
-        authenticationStatus: "valid",
+          authenticationStatus: "bypassed",
         availability: 100,
         recordsCount: 1
       };

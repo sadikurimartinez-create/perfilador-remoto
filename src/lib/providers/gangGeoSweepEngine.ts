@@ -1,6 +1,5 @@
 import exifr from "exifr";
 import { isGeocodingReliable, hasValidCoordinates } from "@/utils/geoActorValidation";
-import { geocodeAddressDirect } from "@/lib/osintActions";
 
 export interface GangSweepResult {
   detected_locations: {
@@ -8,10 +7,8 @@ export interface GangSweepResult {
     lng: number;
     label: string;
     confidence: number;
-    source: "EXIF_GPS" | "NARRATIVE_ESTIMATE" | "FALLBACK_RANDOM" | "GOOGLE_GEOCODING_API" | "REGISTRO_HISTORICO_STATIC";
-    precision?: "ROOFTOP" | "RANGE_INTERPOLATED" | "GEOMETRIC_CENTER" | "APPROXIMATE";
-    timestamp?: string;
-    status?: "RESOLVED" | "UNRESOLVED_ADDRESS";
+    source: "EXIF_GPS" | "SOURCE_RECORD";
+    authority: "AUTHORITATIVE";
   }[];
   suspected_domiciles: {
     lat: number;
@@ -19,16 +16,6 @@ export interface GangSweepResult {
     address: string;
     confidence: number;
     gangName?: string;
-    precision?: "ROOFTOP" | "RANGE_INTERPOLATED" | "GEOMETRIC_CENTER" | "APPROXIMATE";
-    fuente?: "GOOGLE_GEOCODING_API" | "EXIF_GPS" | "REGISTRO_HISTORICO_STATIC";
-    timestamp?: string;
-    status?: "RESOLVED" | "UNRESOLVED_ADDRESS";
-  }[];
-  unresolved_addresses?: {
-    address: string;
-    reason: string;
-    status: "UNRESOLVED_ADDRESS";
-    timestamp: string;
   }[];
   influence_zones: {
     lat: number;
@@ -36,7 +23,7 @@ export interface GangSweepResult {
     radiusMetros: number;
     gangName: string;
     confidence: number;
-    type: "hotspot" | "corridor" | "meeting_area";
+    type: "hotspot" | "corridor";
   }[];
   confidence_score: number;
   matched_gangs: {
@@ -76,8 +63,34 @@ export function isWithinAguascalientes(lat: number, lng: number): boolean {
   return lat >= 14.0 && lat <= 33.0 && lng >= -118.0 && lng <= -86.0;
 }
 
-// Seed gangs to match if firestore is empty, ensuring there is always a high-quality spatial match
-const FALLBACK_GANGS_REGISTRY = [
+// Legacy keyword registry retained for non-authoritative labels only. It must not seed observed GEO.
+export const PANDILLAS_NON_AUTHORITATIVE_KEYWORD_COORDINATES: { [key: string]: { lat: number; lng: number; label: string } } = {
+  "mirador": { lat: 21.8988, lng: -102.2530, label: "Mirador de las Culturas" },
+  "bellavista": { lat: 21.8924, lng: -102.2612, label: "Lomas de Bellavista" },
+  "cardenal": { lat: 21.8924, lng: -102.2612, label: "Loma del Cardenal" },
+  "dena": { lat: 21.9055, lng: -102.2514, label: "Benito Palomino Dena" },
+  "cactus": { lat: 21.8752, lng: -102.2356, label: "Valle de los Cactus" },
+  "nopal": { lat: 21.8752, lng: -102.2356, label: "Valle de los Cactus - Recinto Nopal" },
+  "pitayo": { lat: 21.8752, lng: -102.2356, label: "Valle de los Cactus - Recinto Pitayo" },
+  "peralta": { lat: 21.8841, lng: -102.2472, label: "Guadalupe Peralta" },
+  "palmas": { lat: 21.8611, lng: -102.2555, label: "Villa Las Palmas" },
+  "centro": { lat: 21.8821, lng: -102.2961, label: "Zona Centro Aguascalientes" },
+  "vinsa": { lat: 21.8688, lng: -102.2852, label: "VINSA Estacion" },
+  "san marcos": { lat: 21.8797, lng: -102.3021, label: "Barrio de San Marcos" },
+  "miravalle": { lat: 21.8905, lng: -102.3115, label: "Miravalle" },
+  "flores": { lat: 21.8895, lng: -102.3065, label: "Las Flores" },
+  "soledad": { lat: 21.9118, lng: -102.3211, label: "La Soledad" },
+  "altavista": { lat: 21.8995, lng: -102.3023, label: "Altavista" },
+  "olivares": { lat: 21.9052, lng: -102.3045, label: "Olivares Santana" },
+  "jesus maria": { lat: 21.9612, lng: -102.3435, label: "Jesús María" },
+  "ojocaliente": { lat: 21.8855, lng: -102.2598, label: "Ojocaliente" },
+  "insurgentes": { lat: 21.8644, lng: -102.3188, label: "Insurgentes (Las Huertas)" },
+  "pilar": { lat: 21.8541, lng: -102.2891, label: "Pilar Blanco" },
+  "infonavit": { lat: 21.8741, lng: -102.2741, label: "Infonavit Morelos" },
+};
+
+// Legacy seed registry retained for demos outside the authoritative payload. It must not auto-match sweeps.
+export const PANDILLAS_NON_AUTHORITATIVE_FALLBACK_GANGS_REGISTRY = [
   { name: "Los Monstruos de la 14", zone: "Valle de los Cactus", center: { lat: 21.8752, lng: -102.2356 } },
   { name: "Clica Mirador Locos", zone: "Mirador de las Culturas", center: { lat: 21.8988, lng: -102.2530 } },
   { name: "La Clica Palomino Dena", zone: "Benito Palomino Dena", center: { lat: 21.9055, lng: -102.2514 } },
@@ -87,11 +100,11 @@ const FALLBACK_GANGS_REGISTRY = [
 ];
 
 /**
- * Spatial sweep engine for gangs (Restored FASE 5A Governance).
+ * Spatial sweep engine for gangs.
  * Integrates:
  * 1. EXIF geolocation parsing of multiple files with browser-safe fallback
- * 2. Real-time Google Maps Geocoding API for direct address resolution (Zero random jitter)
- * 3. Strict resolution governance: Unresolved addresses set status: UNRESOLVED_ADDRESS
+ * 2. Visual/semantic keyword estimation from narrative and soft prompt
+ * 3. Proximity-based matching against the Domicilios Pandillas.csv registry
  * 4. Clustering, hotspot calculations, move corridors, and OSINT expansion
  */
 export class GangGeoSweepEngine {
@@ -102,25 +115,12 @@ export class GangGeoSweepEngine {
     files: File[],
     narrativeContext: string,
     softPrompt: string = "",
-    registeredGangs: any[] = [],
-    projectCenter?: { lat: number; lng: number; radiusKm?: number }
+    registeredGangs: any[] = []
   ): Promise<GangSweepResult> {
-    const centerLat = projectCenter?.lat ?? 21.8853;
-    const centerLng = projectCenter?.lng ?? -102.2916;
-    const maxRadiusMeters = Math.max(500, (projectCenter?.radiusKm ?? 5) * 1000);
-
-    console.log(`[GangGeoSweepEngine - FASE 5A] Initiating spatial sweep around [${centerLat}, ${centerLng}] (radius: ${maxRadiusMeters}m). Images: ${files.length}. Context len: ${narrativeContext.length}`);
+    console.log(`[GangGeoSweepEngine] Initiating spatial sweep. Images: ${files.length}. Context len: ${narrativeContext.length}`);
 
     const detectedLocations: GangSweepResult["detected_locations"] = [];
-    const resolvedGeocodedDomiciles: GangSweepResult["suspected_domiciles"] = [];
-    const unresolvedAddresses: GangSweepResult["unresolved_addresses"] = [];
     const pointsForClustering: { lat: number; lng: number; confidence: number; source: any }[] = [];
-
-    // Helper: Verify if point is strictly within project radius
-    const isWithinRadius = (ptLat: number, ptLng: number): boolean => {
-      const dist = getHaversineDistance({ lat: ptLat, lng: ptLng }, { lat: centerLat, lng: centerLng });
-      return dist <= maxRadiusMeters;
-    };
 
     // --- STEP 1: GEO-EXTRACTION LAYER (EXIF GPS PARSING) ---
     for (let i = 0; i < files.length; i++) {
@@ -130,7 +130,7 @@ export class GangGeoSweepEngine {
         if (gps && gps.latitude && gps.longitude) {
           const lat = gps.latitude;
           const lng = gps.longitude;
-          if (isWithinAguascalientes(lat, lng) && isWithinRadius(lat, lng)) {
+          if (isWithinAguascalientes(lat, lng)) {
             console.log(`[GangGeoSweepEngine] Successfully parsed EXIF GPS from ${file.name}: [${lat}, ${lng}]`);
             detectedLocations.push({
               lat,
@@ -138,12 +138,11 @@ export class GangGeoSweepEngine {
               label: `Evidencia fotográfica GPS: ${file.name}`,
               confidence: 0.95,
               source: "EXIF_GPS",
-              timestamp: new Date().toISOString(),
-              status: "RESOLVED"
+              authority: "AUTHORITATIVE",
             });
             pointsForClustering.push({ lat, lng, confidence: 0.95, source: "EXIF_GPS" });
           } else {
-            console.warn(`[GangGeoSweepEngine] GPS coords [${lat}, ${lng}] in EXIF are outside active project radius, skipping.`);
+            console.warn(`[GangGeoSweepEngine] GPS coords [${lat}, ${lng}] in EXIF are outside Aguascalientes, skipping.`);
           }
         }
       } catch (err) {
@@ -151,91 +150,17 @@ export class GangGeoSweepEngine {
       }
     }
 
-    // --- STEP 2: REAL-TIME GEOCODING LAYER (GOOGLE MAPS GEOCODING API) ---
-    // Extract potential addresses or street queries from narrative
-    const combinedPrompt = `${narrativeContext}\n${softPrompt}`.trim();
-    const addressCandidates: string[] = [];
-
-    // Extract lines or sentences that look like addresses or street queries
-    const lines = combinedPrompt.split(/[\n;.]/).map(s => s.trim()).filter(s => s.length > 5);
-    lines.forEach(line => {
-      const lower = line.toLowerCase();
-      if (
-        lower.includes("calle") || lower.includes("colonia") || lower.includes("domicilio") ||
-        lower.includes("avenida") || lower.includes("loma") || lower.includes("villas") ||
-        lower.includes("fraccionamiento") || lower.includes("barrido") || lower.includes("buscar")
-      ) {
-        // Clean command prefix words
-        const cleaned = line
-          .replace(/^(realizar\s+barrido\s+de\s+domicilios\s+en\s+la?\s*)/i, "")
-          .replace(/^(realizar\s+barrido\s+en\s+la?\s*)/i, "")
-          .replace(/^(buscar\s+domicilios\s+asociados\s+a\s+la?\s*)/i, "")
-          .replace(/^(buscar\s+integrantes\s+en\s+la?\s*)/i, "")
-          .replace(/^(localizar\s+domicilios\s+en\s+la?\s*)/i, "")
-          .trim();
-        if (cleaned.length > 3 && !addressCandidates.includes(cleaned)) {
-          addressCandidates.push(cleaned);
-        }
-      }
-    });
-
-    if (addressCandidates.length === 0 && combinedPrompt.length > 3) {
-      addressCandidates.push(combinedPrompt);
-    }
-
-    // Execute real-time server-side geocoding for extracted address candidates
-    for (const cand of addressCandidates) {
-      console.log(`[GangGeoSweepEngine] Executing direct Google Geocoding for candidate: "${cand}"`);
-      const geocoded = await geocodeAddressDirect(cand);
-
-      if (geocoded.exito && geocoded.status === "RESOLVED" && typeof geocoded.lat === "number" && typeof geocoded.lng === "number") {
-        console.log(`[GangGeoSweepEngine] Direct Geocoding SUCCESS: "${geocoded.address}" -> [${geocoded.lat}, ${geocoded.lng}] (${geocoded.precision})`);
-        
-        detectedLocations.push({
-          lat: geocoded.lat,
-          lng: geocoded.lng,
-          label: `Domicilio geocodificado: ${geocoded.address}`,
-          confidence: geocoded.confidence,
-          source: "GOOGLE_GEOCODING_API",
-          precision: geocoded.precision,
-          timestamp: geocoded.timestamp,
-          status: "RESOLVED"
-        });
-
-        resolvedGeocodedDomiciles.push({
-          lat: geocoded.lat,
-          lng: geocoded.lng,
-          address: geocoded.address,
-          confidence: geocoded.confidence,
-          precision: geocoded.precision,
-          fuente: "GOOGLE_GEOCODING_API",
-          timestamp: geocoded.timestamp,
-          status: "RESOLVED"
-        });
-
-        pointsForClustering.push({
-          lat: geocoded.lat,
-          lng: geocoded.lng,
-          confidence: geocoded.confidence,
-          source: "GOOGLE_GEOCODING_API"
-        });
-      } else {
-        console.warn(`[GangGeoSweepEngine] Direct Geocoding UNRESOLVED for candidate "${cand}": ${geocoded.error}`);
-        unresolvedAddresses.push({
-          address: cand,
-          reason: geocoded.error || "Dirección no encontrada o fuera del estado de Aguascalientes",
-          status: "UNRESOLVED_ADDRESS",
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
-    // --- STEP 3: DATABASE-WIDE TEXT MATCHING ENGINE (HISTORICAL RECORDS ONLY) ---
-    const fullText = combinedPrompt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    // --- STEP 2: SEMANTIC FALLBACK LAYER (NARRATIVE KEYWORDS MATCHING) ---
+    // If we extracted no coordinates from EXIF GPS (or to enrich the EXIF data), we analyze narrative + soft prompt
+    const fullText = `${narrativeContext} ${softPrompt}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    // --- STEP 2.1: DATABASE-WIDE TEXT MATCHING ENGINE ---
+    // Search the registered gangs database for name, alias, members, addresses, and grab locations
+    const databaseMatches: { lat: number; lng: number; label: string; confidence: number; source: "SOURCE_RECORD" }[] = [];
 
     registeredGangs.forEach(gang => {
       const gangNameLower = (gang.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const gangAliasLower = (gang.aliasConocidos || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const gangZoneLower = (gang.zonaInfluencia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
       let isGangMatched = false;
       if (gangNameLower && fullText.includes(gangNameLower)) {
@@ -245,7 +170,7 @@ export class GangGeoSweepEngine {
         isGangMatched = true;
       }
 
-      // Search registered members with verified static georeference
+      // 1. Search members
       const members = gang.integrantes || [];
       members.forEach((m: any) => {
         const mNameLower = (m.nombre || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -261,61 +186,68 @@ export class GangGeoSweepEngine {
 
         if (isMemberMatched) {
           isGangMatched = true;
+          // Solo usar coordenadas de integrante si la geocodificación es fiable (no jitter por colonia/ciudad)
           const geo = m.georreferencia;
-          if (geo && hasValidCoordinates(geo) && isGeocodingReliable(geo) && isWithinRadius(geo.lat, geo.lng)) {
-            detectedLocations.push({
+          if (geo && hasValidCoordinates(geo) && isGeocodingReliable(geo)) {
+            databaseMatches.push({
               lat: geo.lat,
               lng: geo.lng,
-              label: `Integrante Histórico: ${m.alias || m.nombre} (${gang.nombre})`,
+              label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
               confidence: 0.90,
-              source: "REGISTRO_HISTORICO_STATIC",
-              precision: "GEOMETRIC_CENTER",
-              timestamp: new Date().toISOString(),
-              status: "RESOLVED"
+              source: "SOURCE_RECORD"
             });
-            pointsForClustering.push({ lat: geo.lat, lng: geo.lng, confidence: 0.90, source: "REGISTRO_HISTORICO_STATIC" });
+          } else if (m.location && hasValidCoordinates(m.location) && isGeocodingReliable(m.location as any)) {
+            databaseMatches.push({
+              lat: m.location.lat,
+              lng: m.location.lng,
+              label: `Integrante: ${m.alias || m.nombre} (${gang.nombre})`,
+              confidence: 0.90,
+              source: "SOURCE_RECORD"
+            });
           }
         }
       });
 
-      // Search geometries of matched gang
+      // 2. Search geometries/points of the matched gang
       if (isGangMatched) {
         const geometries = gang.geometrias || [];
         geometries.forEach((geo: any) => {
           if (geo.puntos && geo.puntos.length > 0) {
             geo.puntos.forEach((p: any) => {
-              if (isWithinRadius(p.lat, p.lng)) {
-                detectedLocations.push({
-                  lat: p.lat,
-                  lng: p.lng,
-                  label: `Punto de Control Histórico: ${geo.nombre} (${gang.nombre})`,
-                  confidence: 0.85,
-                  source: "REGISTRO_HISTORICO_STATIC",
-                  precision: "GEOMETRIC_CENTER",
-                  timestamp: new Date().toISOString(),
-                  status: "RESOLVED"
-                });
-                pointsForClustering.push({ lat: p.lat, lng: p.lng, confidence: 0.85, source: "REGISTRO_HISTORICO_STATIC" });
-              }
+              databaseMatches.push({
+                lat: p.lat,
+              lng: p.lng,
+              label: `Punto de Control: ${geo.nombre} (${gang.nombre})`,
+              confidence: 0.85,
+              source: "SOURCE_RECORD"
             });
-          }
-        });
-      }
+          });
+        }
+      });
+    }
     });
 
-    // --- STEP 4: STRICT RESILIENCE - NO ARTIFICIAL OFFSETS ON PROJECT CENTER ---
+    // ADR-020.34 C9C:
+    // Narrative/database matching is contextual only.
+    // A real coordinate stored in a source record does not become an
+    // observed location of THIS sweep merely because narrative text
+    // matched a gang, alias, member or territory.
+    //
+    // Preserve semantic matching for future contextual analysis, but
+    // do not promote databaseMatches into detectedLocations,
+    // pointsForClustering, centroids, hotspots or influence zones.
+    if (databaseMatches.length > 0) {
+      console.log(
+        `[GangGeoSweepEngine] Contextual source-record GEO matches retained as non-observed context only: ${databaseMatches.length}. No coordinates promoted to sweep observations.`
+      );
+    }
+
+    // PROHIBIDO: asignar coordenadas por palabra clave de colonia (KEYWORD_COORDINATE_MAP).
+    // Solo se usan coordenadas EXIF, integrantes geocodificados verificados y geometrías de pandilla.
+
+    // Ultimate Fallback: si no hay coordenadas verificadas, no inventar ubicaciones por colonia
     if (pointsForClustering.length === 0) {
-      console.warn(`[GangGeoSweepEngine - FASE 5A] No points resolved for sweep query. Returning UNRESOLVED_ADDRESS report without artificial offsets.`);
-      return {
-        detected_locations: [],
-        suspected_domiciles: [],
-        unresolved_addresses: unresolvedAddresses,
-        influence_zones: [],
-        confidence_score: 0,
-        matched_gangs: [],
-        geo_heatmap: [],
-        risk_classification: "LOW" as const,
-      };
+      console.log("[GangGeoSweepEngine] Sin coordenadas verificadas (EXIF o geocodificación fiable). No se asignan puntos por colonia.");
     }
 
     // --- STEP 3: SPATIAL CLUSTERING & CENTROID ---
@@ -345,24 +277,8 @@ export class GangGeoSweepEngine {
     centroidLng = centroidLng / weightSum;
 
     // --- STEP 4: GANG TERRITORY MATCHING & REGISTRY CROSS-REFERENCE ---
-    // Merge database gangs and seed gangs for comprehensive spatial matching
+    // Search only provided records. Static fallback gangs are not authoritative observations.
     const gangsToSearch = [...registeredGangs];
-    FALLBACK_GANGS_REGISTRY.forEach(fg => {
-      if (!gangsToSearch.some(g => g.nombre.toLowerCase().includes(fg.name.toLowerCase()))) {
-        // Mock a db entity structure
-        gangsToSearch.push({
-          nombre: fg.name,
-          zonaInfluencia: fg.zone,
-          geometrias: [
-            {
-              tipo: "buffer",
-              puntos: [fg.center],
-              radio: 500,
-            }
-          ]
-        });
-      }
-    });
 
     const matchedGangs: GangSweepResult["matched_gangs"] = [];
     const suspectedDomiciles: GangSweepResult["suspected_domiciles"] = [];
@@ -385,8 +301,10 @@ export class GangGeoSweepEngine {
       }
       if (gang.integrantes && Array.isArray(gang.integrantes)) {
         gang.integrantes.forEach((m: any) => {
-          if (m.georreferencia && hasValidCoordinates(m.georreferencia)) {
-            gangPoints.push(m.georreferencia);
+          if (m.domicilioConocido) {
+            // Check if we can parse or match address
+            const addrLower = m.domicilioConocido.toLowerCase();
+            // Address text alone is not a coordinate source for authoritative sweep output.
           }
         });
       }
@@ -424,42 +342,20 @@ export class GangGeoSweepEngine {
     // Sort matched gangs by strength
     matchedGangs.sort((a, b) => b.match_strength - a.match_strength);
 
-    // If no gangs matched, create a default match based on closest seed
-    if (matchedGangs.length === 0) {
-      matchedGangs.push({
-        name: "Clica Mirador Locos",
-        match_strength: 0.62,
-      });
-    }
-
-    const primaryGangName = matchedGangs[0].name;
+    const primaryGangName = matchedGangs[0]?.name || "NO_MATCH";
 
     // --- STEP 5: SUSPECTED DOMICILES & INFLUENCE DETECTION ---
-    // Populate suspectedDomiciles with real geocoded addresses first
-    resolvedGeocodedDomiciles.forEach(dom => {
+    // Suspected domiciles: solo desde puntos con coordenadas verificadas (sin asignación por colonia)
+    pointsForClustering.forEach((pt, idx) => {
       suspectedDomiciles.push({
-        ...dom,
+        lat: pt.lat,
+        lng: pt.lng,
+        address: pt.source === "EXIF_GPS"
+          ? `Evidencia fotográfica georreferenciada #${idx + 1}`
+          : `Punto verificado #${idx + 1} (coordenadas GPS)`,
+        confidence: parseFloat((pt.confidence * 0.9).toFixed(2)),
         gangName: primaryGangName,
       });
-    });
-
-    // Also include verified points from clustering
-    pointsForClustering.forEach((pt, idx) => {
-      if (pt.source !== "GOOGLE_GEOCODING_API") {
-        suspectedDomiciles.push({
-          lat: pt.lat,
-          lng: pt.lng,
-          address: pt.source === "EXIF_GPS"
-            ? `Evidencia fotográfica georreferenciada #${idx + 1}`
-            : `Punto verificado #${idx + 1} (coordenadas GPS/Históricas)`,
-          confidence: parseFloat((pt.confidence * 0.9).toFixed(2)),
-          gangName: primaryGangName,
-          fuente: pt.source === "EXIF_GPS" ? "EXIF_GPS" : "REGISTRO_HISTORICO_STATIC",
-          precision: "ROOFTOP",
-          timestamp: new Date().toISOString(),
-          status: "RESOLVED"
-        });
-      }
 
       // Generate Heatmap points
       geoHeatmap.push({
@@ -495,25 +391,15 @@ export class GangGeoSweepEngine {
       });
     }
 
-    // 3. Meeting area close by
-    influenceZones.push({
-      lat: centroidLat + 0.0015,
-      lng: centroidLng - 0.0012,
-      radiusMetros: 150,
-      gangName: primaryGangName,
-      confidence: 0.72,
-      type: "meeting_area",
-    });
-
     // Compute aggregate confidence score
     const avgConfidence = pointsForClustering.reduce((acc, p) => acc + p.confidence, 0) / pointsForClustering.length;
     const finalConfidence = parseFloat(Math.min(0.98, avgConfidence + (files.length * 0.01)).toFixed(2));
 
     // Determine Risk Classification
     let risk_classification: GangSweepResult["risk_classification"] = "MEDIUM";
-    if (finalConfidence > 0.85 && matchedGangs[0].match_strength > 0.85) {
+    if (matchedGangs.length > 0 && finalConfidence > 0.85 && matchedGangs[0].match_strength > 0.85) {
       risk_classification = "CRITICAL";
-    } else if (finalConfidence > 0.70 || matchedGangs[0].match_strength > 0.70) {
+    } else if (finalConfidence > 0.70 || (matchedGangs[0]?.match_strength ?? 0) > 0.70) {
       risk_classification = "HIGH";
     } else if (finalConfidence < 0.40) {
       risk_classification = "LOW";
@@ -522,7 +408,6 @@ export class GangGeoSweepEngine {
     return {
       detected_locations: detectedLocations,
       suspected_domiciles: suspectedDomiciles,
-      unresolved_addresses: unresolvedAddresses,
       influence_zones: influenceZones,
       confidence_score: finalConfidence,
       matched_gangs: matchedGangs,

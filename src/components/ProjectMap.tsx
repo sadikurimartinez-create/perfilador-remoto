@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
+import {
+  getCanonicalGeographyCoordinates,
+  getCanonicalMapViewport,
+  type CanonicalProjectGeography,
+} from "@/utils/canonicalProjectGeography";
 
 interface ProjectMapProps {
   geometryType: "individual" | "lineal" | "poligono" | string;
@@ -12,8 +17,8 @@ interface ProjectMapProps {
   onMoveMarker?: (id: string, lat: number, lng: number) => Promise<void>;
   onCandidateCapture?: (lat: number, lng: number, context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }) => void;
   onPoiSelect?: (poi: any) => void;
-  onDeletePhoto?: (id: string) => Promise<void>;
   album: any[];
+  canonicalGeography?: CanonicalProjectGeography | null;
   project: {
     id: string;
     latitude?: number | null;
@@ -122,11 +127,11 @@ export function ProjectMap({
   onMoveMarker,
   onCandidateCapture,
   onPoiSelect,
-  onDeletePhoto,
   album = [],
+  canonicalGeography,
   project,
 }: ProjectMapProps) {
-  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -149,6 +154,17 @@ export function ProjectMap({
 
   const [selectedOsintSingle, setSelectedOsintSingle] = useState<any | null>(null);
   const [selectedOsintGroup, setSelectedOsintGroup] = useState<any | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  const canonicalCoordinates = useMemo(
+    () => getCanonicalGeographyCoordinates(canonicalGeography),
+    [canonicalGeography]
+  );
+
+  const canonicalViewport = useMemo(
+    () => getCanonicalMapViewport(canonicalGeography),
+    [canonicalGeography]
+  );
 
   // Mapear y decodificar los barridos OSINT
   const parsedSweeps = useMemo(() => {
@@ -295,9 +311,11 @@ export function ProjectMap({
       const lat = Number(photo.lat);
       const lng = Number(photo.lng);
       const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
-      coordCounts[key] = (coordCounts[key] || 0) + 1;
-      const count = coordCounts[key] - 1;
-
+      if (coordCounts[key] === undefined) {
+        coordCounts[key] = 0;
+      }
+      const count = coordCounts[key];
+      coordCounts[key] += 1;
       if (count === 0) {
         return {
           ...photo,
@@ -305,10 +323,10 @@ export function ProjectMap({
           displayLng: lng,
         };
       } else {
-        // Dispersión micro (~3.5m) únicamente para fotos apiladas en la misma coordenada
-        const angle = (count * 2 * Math.PI) / 8;
+        const angle = (count * 2 * Math.PI) / 8; // Max 8 points per ring
         const ring = Math.floor((count - 1) / 8) + 1;
-        const radius = 0.000035 * ring;
+        const baseRadius = 0.000035; // ~3-4 meters
+        const radius = baseRadius * ring;
         return {
           ...photo,
           displayLat: lat + radius * Math.sin(angle),
@@ -325,13 +343,16 @@ export function ProjectMap({
       Math.abs(Number(project.longitude) - (-102.2916)) < 0.0001;
 
     const hasRealProjectCenter = hasProjectCoords && !isProjectDefault;
-    const hasCoordinates = coordinates && coordinates.length > 0;
-    const hasRealPhotos = georeferencedPhotos.length > 0;
+    const hasCanonicalCoordinates = canonicalCoordinates.length > 0 && canonicalGeography?.validationStatus !== "INVALID";
+    const hasCoordinates = !canonicalGeography && coordinates && coordinates.length > 0;
 
-    return !hasRealProjectCenter && !hasCoordinates && !hasRealPhotos;
-  }, [project, coordinates, georeferencedPhotos]);
+    return !hasCanonicalCoordinates && !hasRealProjectCenter && !hasCoordinates;
+  }, [project, coordinates, canonicalCoordinates, canonicalGeography]);
 
   const center = useMemo(() => {
+    if (canonicalViewport.center && canonicalGeography?.validationStatus !== "INVALID") {
+      return canonicalViewport.center;
+    }
     if (project?.latitude && project?.longitude) {
       const isProjectDefault = Math.abs(Number(project.latitude) - 21.8853) < 0.0001 && 
                                Math.abs(Number(project.longitude) - (-102.2916)) < 0.0001;
@@ -339,36 +360,25 @@ export function ProjectMap({
         return { lat: Number(project.latitude), lng: Number(project.longitude) };
       }
     }
-    if (georeferencedPhotos.length > 0) {
-      return { lat: Number(georeferencedPhotos[0].lat), lng: Number(georeferencedPhotos[0].lng) };
-    }
     if (coordinates.length > 0) {
       return coordinates[0];
     }
     return { lat: 21.8853, lng: -102.2916 }; // Default Aguascalientes (sólo para cargar mapa base, pero oculto tras isFallback)
-  }, [project, coordinates, georeferencedPhotos]);
+  }, [project, coordinates, canonicalViewport, canonicalGeography]);
 
-  // Group coordinates strictly for rector geometry (corridor polyline or polygon shape)
+  // Capa geográfica rectora: procede del contrato canónico, no de pines de evidencia.
   const geoShapePath = useMemo(() => {
-    const minRequired = (geometryType === "lineal" || geometryType === "corredor") ? 2 : 3;
-    if (coordinates && coordinates.length >= minRequired) {
-      return coordinates;
-    }
-    const vertexPhotos = georeferencedPhotos.filter((p) => {
-      const isSweep = p.tipo?.startsWith("Barrido");
-      const isPoi = p.isIndependentPoi || p.tipo === "POI" || p.tipo === "Punto Independiente";
-      const isExplicitVertex = p.gpsSource === "VERTICE_MAPA" || (p as any).isVertex === true;
-      const isShapeType = p.tipo === "Polígono" || p.tipo === "Corredor";
-      
-      return !isSweep && !isPoi && (isExplicitVertex || isShapeType);
-    });
-
-    if (vertexPhotos.length >= minRequired) {
-      return vertexPhotos.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
-    }
-
+    if (canonicalCoordinates.length > 0) return canonicalCoordinates;
+    if (!canonicalGeography && coordinates.length > 0) return coordinates;
     return [];
-  }, [coordinates, georeferencedPhotos, geometryType]);
+  }, [canonicalCoordinates, canonicalGeography, coordinates]);
+
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current || !canonicalViewport.bounds || canonicalCoordinates.length < 2) return;
+    const bounds = new google.maps.LatLngBounds();
+    canonicalCoordinates.forEach((point) => bounds.extend(point));
+    mapRef.current.fitBounds(bounds);
+  }, [isLoaded, canonicalViewport, canonicalCoordinates]);
 
   // Carga y cálculo de densidad analítica de calor compatible con Google Maps JS v3.65+ (GEO-ENH-01 v1.1)
   const heatmapDensityClusters = useMemo(() => {
@@ -459,6 +469,21 @@ export function ProjectMap({
     const lng = e.latLng.lng();
 
     if (geometryType === "individual") {
+      if (onPoiSelect) {
+        onPoiSelect({
+            id: `poi-map-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+            name: geometryType === "individual" ? "Punto individual" : "Punto de Interés",
+            lat,
+            lng,
+            comentario: geometryType === "individual"
+              ? "Geografía individual seleccionada"
+              : "POI independiente seleccionado",
+            category: geometryType === "individual"
+              ? "GEOGRAFIA_INDIVIDUAL"
+              : "POI",
+          });
+        return;
+      }
       if (!onAddPoint) return;
       const name = window.prompt("Ingrese el nombre o comentario para esta evidencia / POI:", "Evidencia de Campo");
       if (name === null) return;
@@ -476,6 +501,21 @@ export function ProjectMap({
         await onAddPoint(lat, lng, { name: "Vértice de trazado", isIndependentPoi: false, isVertex: true });
       } else {
         // Modalidad 2: Evidencia / POI Independiente
+        if (onPoiSelect) {
+          onPoiSelect({
+            id: `poi-map-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+            name: geometryType === "individual" ? "Punto individual" : "Punto de Interés",
+            lat,
+            lng,
+            comentario: geometryType === "individual"
+              ? "Geografía individual seleccionada"
+              : "POI independiente seleccionado",
+            category: geometryType === "individual"
+              ? "GEOGRAFIA_INDIVIDUAL"
+              : "POI",
+          });
+          return;
+        }
         if (!onAddPoint) return;
         const name = window.prompt("Ingrese el comentario para esta evidencia independiente:", "POI Independiente");
         if (name === null) return;
@@ -633,6 +673,12 @@ export function ProjectMap({
         zoom={15}
         options={mapOptions}
         onClick={handleMapClick}
+        onLoad={(map) => {
+          mapRef.current = map;
+        }}
+        onUnmount={() => {
+          mapRef.current = null;
+        }}
       >
         {/* Renderizado de Capa de Densidad Analítica de Calor v1.1 (GEO-ENH-01) */}
         {showHeatmap && heatmapDensityClusters.map((density) => (
@@ -680,11 +726,20 @@ export function ProjectMap({
               fillColor: "#f59e0b",
               fillOpacity: 0.25,
               zIndex: 5,
+              clickable: false,
             }}
           />
         ))}
 
-        {/* Individual point geometry rendered as frozen point (Gobernanza GEOINT v2.5.1: POI != Circle) */}
+        
+        {/* Individual canonical geography is represented as one frozen rector point. */}
+        {showAreas && geometryType === "individual" && geoShapePath.length === 1 && !isFallback && (
+          <Marker
+            position={geoShapePath[0]}
+            title="Geografía rectora individual"
+            clickable={false}
+          />
+        )}
 
         {/* Draw polyline for lineal (corridor) type projects (Controlled by showAreas) */}
         {showAreas && (geometryType === "lineal" || geometryType === "corredor") && geoShapePath.length > 1 && (
@@ -694,6 +749,7 @@ export function ProjectMap({
               strokeColor: "#f43f5e",
               strokeOpacity: 0.9,
               strokeWeight: 4,
+              clickable: false,
             }}
           />
         )}
@@ -708,12 +764,25 @@ export function ProjectMap({
               strokeWeight: 3,
               fillColor: "#10b981",
               fillOpacity: 0.15,
+              clickable: false,
             }}
           />
         )}
 
         {/* Georeferenced Evidence markers */}
         {showPhotos && markersWithDispersion.map((photo) => {
+
+          console.log(
+            "[GEOINT DEBUG] Marker render:",
+            {
+              id: photo.id,
+              displayLat: photo.displayLat,
+              displayLng: photo.displayLng,
+              lat: photo.lat,
+              lng: photo.lng
+            }
+          );
+
           const isPoi = photo.isIndependentPoi || photo.tipo === "POI" || photo.tipo === "Punto Independiente";
           if (photo.tipo?.startsWith("Barrido")) return null; // Los barridos se manejan por separado en showOsint
           if (isPoi && !showGeoint) return null; // Las POIs se controlan mediante Inteligencia GEOINT
@@ -727,6 +796,15 @@ export function ProjectMap({
               title={`Evidencia ${photo.id}`}
               onClick={() => {
                 setActivePhoto(photo);
+                setHoveredPhoto(null);
+              }}
+              onMouseOver={() => {
+                if (activePhoto?.id !== photo.id) {
+                  setHoveredPhoto(photo);
+                }
+              }}
+              onMouseOut={() => {
+                setHoveredPhoto(null);
               }}
               draggable={true}
               onDragEnd={async (e) => {
@@ -860,9 +938,8 @@ export function ProjectMap({
               strokeColor: "#a855f7",
               strokeOpacity: 0.15,
               strokeWeight: 1.5,
-              clickable: true,
+              clickable: false,
             }}
-            onClick={() => setSelectedOsintSingle(s)}
           />
         ))}
 
@@ -916,6 +993,38 @@ export function ProjectMap({
           </InfoWindow>
         )}
 
+        {/* Hover info window containing the preview and limited metadata of the georeferenced evidence */}
+        {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (
+          <InfoWindow
+            position={{ lat: Number(hoveredPhoto.displayLat ?? hoveredPhoto.lat), lng: Number(hoveredPhoto.displayLng ?? hoveredPhoto.lng) }}
+            options={{
+              pixelOffset: new window.google.maps.Size(0, -35),
+            }}
+            onCloseClick={() => setHoveredPhoto(null)}
+          >
+            <div className="bg-slate-950/95 text-slate-200 p-3 rounded-xl border border-slate-800 shadow-2xl flex flex-col gap-2 w-64 pointer-events-none font-sans text-xs">
+              <img
+                src={hoveredPhoto.previewUrl || "/no-image.png"}
+                alt={hoveredPhoto.tipo || "Evidencia"}
+                className="w-full h-28 object-cover rounded-lg border border-slate-800 bg-slate-900"
+              />
+              <div className="w-full space-y-1">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-1">
+                  <span className="font-black text-cyan-400 uppercase tracking-wide">
+                    {hoveredPhoto.evidenceId || `EVI-${hoveredPhoto.id.slice(0, 6).toUpperCase()}`}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-y-0.5 text-[9px] text-slate-400">
+                  <div><span className="text-slate-500 font-bold">Tipo:</span> {hoveredPhoto.tipo || "Fotografía"}</div>
+                  <div><span className="text-slate-500 font-bold">Fecha:</span> {hoveredPhoto.contextualizedAt ? new Date(hoveredPhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
+                  <div><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(hoveredPhoto.lat).toFixed(3)}, {Number(hoveredPhoto.lng).toFixed(3)}</div>
+                </div>
+              </div>
+            </div>
+          </InfoWindow>
+        )}
+
         {/* Action-oriented selection InfoWindow for depth analysis and street view activation */}
         {activePhoto && activePhoto.lat != null && activePhoto.lng != null && (
           <InfoWindow
@@ -927,14 +1036,7 @@ export function ProjectMap({
           >
             <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2.5 w-80 font-sans text-xs">
               <img
-                src={(() => {
-                  if (!activePhoto) return "/no-image.png";
-                  const url = activePhoto.previewUrl || activePhoto.url || "";
-                  if ((url.includes("staticmap") || url.includes("cartocdn") || url.includes("openstreetmap")) && activePhoto.lat != null && activePhoto.lng != null) {
-                    return `/api/proxy-image?lat=${activePhoto.lat}&lng=${activePhoto.lng}&heading=0&pitch=0&fov=90&size=600x400`;
-                  }
-                  return url || "/no-image.png";
-                })()}
+                src={activePhoto.previewUrl || "/no-image.png"}
                 alt={activePhoto.tipo || "Evidencia"}
                 className="w-full h-36 object-cover rounded-lg border border-slate-700 bg-slate-950"
               />
@@ -969,13 +1071,13 @@ export function ProjectMap({
                     onClick={() => {
                       if (onPoiSelect) {
                         onPoiSelect({
-                          id: activePhoto.id,
-                          name: activePhoto.tipo || "POI remoto",
-                          lat: Number(activePhoto.lat),
-                          lng: Number(activePhoto.lng),
-                          comentario: activePhoto.comentario || "Análisis remoto Street View",
-                          category: "Google Street View"
-                        });
+                            id: activePhoto.id,
+                            name: activePhoto.tipo || "POI remoto",
+                            lat: Number(activePhoto.lat),
+                            lng: Number(activePhoto.lng),
+                            comentario: activePhoto.comentario || "Análisis remoto Street View",
+                            category: "Google Street View",
+                          });
                       }
                       setActivePhoto(null);
                     }}
@@ -983,20 +1085,6 @@ export function ProjectMap({
                   >
                     Activar análisis remoto Street View
                   </button>
-
-                  <button
-                    onClick={async () => {
-                      const photoId = activePhoto.id;
-                      setActivePhoto(null);
-                      if (onDeletePhoto) {
-                        await onDeletePhoto(photoId);
-                      }
-                    }}
-                    className="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-1.5 px-3 rounded-lg transition-colors text-center text-[10px] flex items-center justify-center gap-1.5 shadow cursor-pointer"
-                  >
-                    <span>🗑️</span> Borrar del Expediente
-                  </button>
-
                   <div className="text-[9px] text-slate-400 text-center">
                     Arrastre el pin para ajustar posición geográfica en el mapa
                   </div>

@@ -66,6 +66,8 @@ React.FC<Props> = ({
 
               strokeWeight: 2,
 
+              clickable: false,
+
             }}
           />
 

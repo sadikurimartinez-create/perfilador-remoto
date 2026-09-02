@@ -120,13 +120,21 @@ export interface CertifiedOSINTAnalysisPayload {
 
 export interface CertifiedGangAnalysisPayload {
   schemaVersion: "GIM-REPORT-1.0";
-  validationStatus: "CERTIFIED" | "CERTIFIED_WITH_LIMITATIONS";
+  validationStatus: "CERTIFIED" | "READY_WITH_LIMITATIONS" | "NOT_CERTIFIED";
   confidenceScore: number;
   validatedByACE: boolean;
+  humanValidationStatus?: "NOT_REQUIRED" | "READY_FOR_HUMAN_REVIEW" | "APPROVED" | "REJECTED";
+  validatedByUserId?: string | null;
+  humanValidatedAt?: string | null;
   limitations: string[];
   analyticalFindings: string[];           // Listado de afirmaciones cualitativas seguras y neutralizadas
   territorialSummary: string[];           // Listado de zonas geográficas sanitizadas
   evidenceSummary: string[];              // Recuento de evidencias factuales visuales y OSINT
   traceabilityReference: string;          // Hash único para auditoría pública y trazabilidad legal
+  lineage?: {
+    evidenceIds: string[];
+    findingIds: string[];
+    analysisIds: string[];
+    providerProvenance: string[];
+  };
 }
-

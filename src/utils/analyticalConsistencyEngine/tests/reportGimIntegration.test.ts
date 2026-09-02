@@ -116,6 +116,21 @@ const baseEditorialPayload: any = {
   finalHypothesis: "Hipótesis..."
 };
 
+const adr02029ApprovedGimFields = {
+  sourceIntegrityStatus: "VERIFIED" as const,
+  authorityClassification: "AUTHORITATIVE" as const,
+  nonAuthoritativeSourcesCount: 0,
+  humanValidationStatus: "APPROVED" as const,
+  validatedByUserId: "report-gim-test-user",
+  humanValidatedAt: "2026-08-30T12:00:00.000Z",
+  lineage: {
+    evidenceIds: ["gim-evidence-1"],
+    findingIds: ["gim-finding-1"],
+    analysisIds: ["gim-analysis-1"],
+    providerProvenance: ["GIM_TEST_FIXTURE"]
+  }
+};
+
 export function runReportGimTests(): { passedCount: number; failedCount: number } {
   console.log("=== INICIANDO SUITE DE PRUEBAS DE INTEGRACIÓN EDITORIAL ACE → REPORT (ADR-008.8.3) ===");
   let passedCount = 0;
@@ -138,6 +153,7 @@ export function runReportGimTests(): { passedCount: number; failedCount: number 
     const payload1 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: true,
@@ -173,6 +189,7 @@ export function runReportGimTests(): { passedCount: number; failedCount: number 
     const payload2 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 60, // Confianza baja (<80) genera advertencia metodológica automática
         limitationsCount: 2,
         hasTraceability: true,
@@ -257,6 +274,7 @@ export function runReportGimTests(): { passedCount: number; failedCount: number 
     const payload6 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 95,
         limitationsCount: 0,
         hasTraceability: true,

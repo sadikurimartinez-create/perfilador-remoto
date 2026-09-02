@@ -1,6 +1,6 @@
 import { EditorialStructureEngine, EditorialBlock } from "./editorialStructureEngine";
 import { EvidenceNarrativeMapper } from "./evidenceNarrativeMapper";
-import { InstitutionalChapterID } from "../types/Report";
+import { renderNarrativeAssertions, type NarrativeAssertion } from "./analyticalNarrativeGovernance";
 
 export enum AnalyticalFlowStatus {
   COMPLETE,
@@ -346,18 +346,19 @@ export class IntelligenceReportStructureEngine {
   ): ReportStructureAuditResult {
     const chapters: Record<string, string> = {};
 
-    const cap01 = payload.contextoTerritorial || payload[InstitutionalChapterID.CAP_01_RESUMEN] || payload.resumenEjecutivo || "";
-    const cap02 = payload.fichaTecnica || payload[InstitutionalChapterID.CAP_02_FICHA_TECNICA] || "";
-    const cap03 = payload.marcoGeografico || payload[InstitutionalChapterID.CAP_03_MARCO_GEOGRAFICO] || "";
-    const cap04 = (payload.maps || []).map((m: any) => m.interpretation).join("\n") || payload[InstitutionalChapterID.CAP_04_GEOINT] || "";
-    const cap05 = payload.osintSynthesized || payload[InstitutionalChapterID.CAP_05_OSINT] || "";
-    const cap06 = (payload.intelligenceContext as any)?.narrative || payload.finalHypothesis || payload[InstitutionalChapterID.CAP_06_IAC_NARRATIVA] || "";
-    const cap07 = (payload.photoEvidence || []).map((p: any) => `${p.caption}\n${p.criminologicalInterpretation}\n${p.relation}`).join("\n") || payload[InstitutionalChapterID.CAP_07_EVIDENCIA_VISUAL] || "";
-    const cap08 = payload.recomendaciones || payload[InstitutionalChapterID.CAP_08_RECOMENDACIONES] || "";
-    const cap09 = payload.anexos || payload[InstitutionalChapterID.CAP_09_ANEXOS_TECNICOS] || "";
+    // Extraer capítulos del payload
+    chapters["Capítulo 1"] = payload.contextoTerritorial || "";
+    chapters["Capítulo 2"] = payload.finalHypothesis || "";
+    chapters["Capítulo 3"] = (payload.maps || []).map((m: any) => m.interpretation).join("\n") || "";
+    chapters["Capítulo 4"] = (payload.graphs || []).map((g: any) => `${g.explanation}\n${g.finding}\n${g.relation}`).join("\n") || "";
+    chapters["Capítulo 5"] = (payload.photoEvidence || []).map((p: any) => `${p.caption}\n${p.criminologicalInterpretation}\n${p.relation}`).join("\n") || "";
+    chapters["Capítulo 6"] = (payload.streetViewAnalysis || []).map((s: any) => `${s.observed}\n${s.criminologicalAnalysis}\n${s.relation}`).join("\n") || "";
+    chapters["Capítulo 7"] = payload.osintSynthesized || "";
+    chapters["Capítulo 8"] = payload.pandillasAnalysis || "";
+    chapters["Capítulo 9"] = (payload.intelligenceContext as any)?.narrative || "";
     
     const conc = payload.conclusiones;
-    const cap10 = conc
+    chapters["Capítulo 10"] = conc
       ? [
           ...(conc.hallazgosCriticos || []),
           ...(conc.riesgosInmediatos || []),
@@ -365,70 +366,56 @@ export class IntelligenceReportStructureEngine {
           ...(conc.recomendacionesTacticas || []),
           ...(conc.recomendacionesEstrategicas || [])
         ].join("\n")
-      : payload.conclusionesText || payload[InstitutionalChapterID.CAP_10_CERTIFICACION] || "";
+      : payload.conclusionesText || "";
 
-    // Mapeo legado para compatibilidad con validadores analíticos de flujo
-    chapters["Capítulo 1"] = cap01 || cap03;
-    chapters["Capítulo 2"] = cap06;
-    chapters["Capítulo 3"] = cap04;
-    chapters["Capítulo 4"] = (payload.graphs || []).map((g: any) => `${g.explanation}\n${g.finding}\n${g.relation}`).join("\n") || "";
-    chapters["Capítulo 5"] = cap07;
-    chapters["Capítulo 6"] = (payload.streetViewAnalysis || []).map((s: any) => `${s.observed}\n${s.criminologicalAnalysis}\n${s.relation}`).join("\n") || "";
-    chapters["Capítulo 7"] = cap05;
-    chapters["Capítulo 8"] = payload.pandillasAnalysis || "";
-    chapters["Capítulo 9"] = cap09;
-    chapters["Capítulo 10"] = cap10;
+    if (Array.isArray(payload.governedNarrativeAssertions) && payload.governedNarrativeAssertions.length > 0) {
+      const governed = renderNarrativeAssertions(payload.governedNarrativeAssertions as NarrativeAssertion[], "INSTITUTIONAL");
+      chapters["Capítulo 2"] = governed.filter((item) => item.sourceItemType === "HYPOTHESIS").map((item) => item.text).join("\n");
+      chapters["Capítulo 5"] = governed.filter((item) => item.sourceItemType === "EVIDENCE" || item.sourceItemType === "FINDING").map((item) => item.text).join("\n");
+      chapters["Capítulo 6"] = governed.filter((item) => item.sourceItemType === "STREET_VIEW" || item.sourceItemType === "TEMPORAL_COMPARISON").map((item) => item.text).join("\n");
+      chapters["Capítulo 7"] = governed.filter((item) => item.sourceItemType === "OSINT").map((item) => item.text).join("\n");
+      chapters["Capítulo 8"] = governed.filter((item) => item.sourceItemType === "SPECIALIZED_INTELLIGENCE").map((item) => item.text).join("\n");
+      chapters["Capítulo 9"] = governed.filter((item) => item.sourceItemType === "INFERENCE" || item.sourceItemType === "ANALYSIS").map((item) => item.text).join("\n");
+      chapters["Capítulo 10"] = governed.filter((item) => item.sourceItemType === "CONCLUSION" || item.sourceItemType === "RECOMMENDATION").map((item) => item.text).join("\n");
+    }
 
-    // Mapeo unificado para el contrato maestro de capítulos institucionales (ADR-014)
-    chapters[InstitutionalChapterID.CAP_01_RESUMEN] = cap01;
-    chapters[InstitutionalChapterID.CAP_02_FICHA_TECNICA] = cap02;
-    chapters[InstitutionalChapterID.CAP_03_MARCO_GEOGRAFICO] = cap03;
-    chapters[InstitutionalChapterID.CAP_04_GEOINT] = cap04;
-    chapters[InstitutionalChapterID.CAP_05_OSINT] = cap05;
-    chapters[InstitutionalChapterID.CAP_06_IAC_NARRATIVA] = cap06;
-    chapters[InstitutionalChapterID.CAP_07_EVIDENCIA_VISUAL] = cap07;
-    chapters[InstitutionalChapterID.CAP_08_RECOMENDACIONES] = cap08;
-    chapters[InstitutionalChapterID.CAP_09_ANEXOS_TECNICOS] = cap09;
-    chapters[InstitutionalChapterID.CAP_10_CERTIFICACION] = cap10;
-
-    // 1. Ejecutar el validador de flujo analítico (sobre el esquema legado)
+    // 1. Ejecutar el validador de flujo analítico
     const flow = AnalyticalFlowValidator.validateFlow(chapters, photoEvidence);
 
-    // 2. Ejecutar análisis de redundancia inter-capítulo (sobre el esquema legado)
+    // 2. Ejecutar análisis de redundancia inter-capítulo
     const redundancies = ReportRedundancyAnalyzer.analyzeRedundancy(chapters);
 
-    // 3. Evaluar cada capítulo canonizado de forma independiente (ADR-014)
+    // 3. Evaluar cada capítulo de forma independiente
     const reports: Record<string, ChapterStructureReport> = {};
     let scoresSum = 0;
     let chaptersCount = 0;
 
-    Object.values(InstitutionalChapterID).forEach((enumKey) => {
-      const text = chapters[enumKey];
+    Object.entries(chapters).forEach(([key, text]) => {
       if (!text || text.trim().length === 0) return;
 
-      const balance = ChapterBalanceAnalyzer.analyzeChapter(enumKey, text, photoEvidence);
+      const balance = ChapterBalanceAnalyzer.analyzeChapter(key, text, photoEvidence);
 
       // Calcular la matriz de cobertura de evidencias (EvidenceCoverageMatrix)
       let evidenceCoverage = balance.evidenceWeight;
       let unsupportedClaims = 0;
 
-      if (enumKey === InstitutionalChapterID.CAP_10_CERTIFICACION && flow.unsupportedConclusions.length > 0) {
+      if (key === "Capítulo 10" && flow.unsupportedConclusions.length > 0) {
         unsupportedClaims = flow.unsupportedConclusions.length;
       }
 
       const coverage: EvidenceCoverageMatrix = {
-        chapterId: enumKey,
-        hypothesisCoverage: enumKey === InstitutionalChapterID.CAP_06_IAC_NARRATIVA ? 95 : 70,
+        chapterId: key,
+        hypothesisCoverage: balance.chapter === "Capítulo 2" ? 95 : 70,
         evidenceCoverage,
         visualCoverage: balance.visualWeight,
         unsupportedClaims
       };
 
-      const hasWarning = flow.warnings.some(w => w.includes(enumKey) || (enumKey === InstitutionalChapterID.CAP_10_CERTIFICACION && w.includes("Capítulo 10")));
+      const hasWarning = flow.warnings.some(w => w.includes(key));
       const scores = ChapterQualityScore.calculateScores(balance, coverage, hasWarning);
 
-      reports[enumKey] = {
-        chapterKey: enumKey,
+      reports[key] = {
+        chapterKey: key,
         balance,
         coverage,
         scores

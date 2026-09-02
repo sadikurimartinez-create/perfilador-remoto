@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Papa from "papaparse";
+import { classifyCrimeDataset, type CrimeDatasetValidationStatus } from "./crimeIncidenceCanonicalPipeline";
 
 export type CrimeValidationReport = {
   success: boolean;
@@ -8,8 +9,10 @@ export type CrimeValidationReport = {
   folderPath: string;
   totalFiles: number;
   totalRecords: number;
-  yearMin: number;
-  yearMax: number;
+  yearMin: number | null;
+  yearMax: number | null;
+  temporalCoverageStatus: "KNOWN" | "TEMPORAL_COVERAGE_UNKNOWN";
+  validationStatus: CrimeDatasetValidationStatus;
   columnsStatus: "OK" | "FAIL";
   missingColumns: string[];
   georefStatus: "OK" | "FAIL";
@@ -43,8 +46,10 @@ export class CrimeDatasetValidationEngine {
         folderPath: "",
         totalFiles: 0,
         totalRecords: 0,
-        yearMin: 0,
-        yearMax: 0,
+        yearMin: null,
+        yearMax: null,
+        temporalCoverageStatus: "TEMPORAL_COVERAGE_UNKNOWN",
+        validationStatus: "INVALID",
         columnsStatus: "FAIL",
         missingColumns: ["FECHA", "INCIDENTE", "LAT", "LON", "NOM_ASEN"],
         georefStatus: "FAIL",
@@ -66,8 +71,10 @@ export class CrimeDatasetValidationEngine {
         folderPath: activeDir,
         totalFiles: 0,
         totalRecords: 0,
-        yearMin: 0,
-        yearMax: 0,
+        yearMin: null,
+        yearMax: null,
+        temporalCoverageStatus: "TEMPORAL_COVERAGE_UNKNOWN",
+        validationStatus: "INVALID",
         columnsStatus: "FAIL",
         missingColumns: [],
         georefStatus: "FAIL",
@@ -78,11 +85,12 @@ export class CrimeDatasetValidationEngine {
     }
 
     let totalRecords = 0;
-    let yearMin = 9999;
-    let yearMax = 0;
+    let yearMin: number | null = null;
+    let yearMax: number | null = null;
     const delitosSet = new Set<string>();
     let duplicates = 0;
-    const seenIds = new Set<string>();
+    let rejectedRecords = 0;
+    let validationStatus: CrimeDatasetValidationStatus = "INVALID";
     
     // Column checks
     let hasFecha = false;
@@ -99,6 +107,14 @@ export class CrimeDatasetValidationEngine {
         const content = fs.readFileSync(file, "utf8");
         const parsed = Papa.parse(content, { header: true, skipEmptyLines: true });
         const rows = parsed.data as any[];
+        const classified = classifyCrimeDataset(rows, path.basename(file));
+        duplicates += classified.summary.duplicates;
+        rejectedRecords += classified.summary.rejected;
+        if (classified.status === "SCHEMA_VALID" || (validationStatus !== "SCHEMA_VALID" && classified.status === "PARTIAL")) {
+          validationStatus = classified.status;
+        } else if (validationStatus === "INVALID" && classified.status === "GEO_INVALID") {
+          validationStatus = "GEO_INVALID";
+        }
         totalRecords += rows.length;
 
         for (const row of rows) {
@@ -113,26 +129,15 @@ export class CrimeDatasetValidationEngine {
           const delito = row.INCIDENTE || row.incidente || row.delito || row.DELITO || path.basename(file, ".csv");
           if (delito) delitosSet.add(String(delito).toUpperCase().trim());
 
-          // Date check for years (period 2015-present)
           const dateStr = row.FECHA || row.fecha || row.Fecha;
           if (dateStr) {
             const yearMatch = String(dateStr).match(/\b(20\d{2})\b/);
             if (yearMatch) {
               const yr = parseInt(yearMatch[1], 10);
               if (yr >= 2010 && yr <= 2030) {
-                if (yr < yearMin) yearMin = yr;
-                if (yr > yearMax) yearMax = yr;
+                if (yearMin == null || yr < yearMin) yearMin = yr;
+                if (yearMax == null || yr > yearMax) yearMax = yr;
               }
-            }
-          }
-
-          // Duplicate checks (using FOLIO or combination of FECHA+LAT+LON)
-          const rowId = row.FOLIO || row.folio || `${dateStr}_${row.LAT}_${row.LON}`;
-          if (rowId) {
-            if (seenIds.has(rowId)) {
-              duplicates++;
-            } else {
-              seenIds.add(rowId);
             }
           }
 
@@ -157,27 +162,27 @@ export class CrimeDatasetValidationEngine {
     if (!hasColonia) missingColumns.push("COLONIA/NOM_ASEN");
 
     const columnsStatus = missingColumns.length === 0 ? "OK" : "FAIL";
-    const georefStatus = invalidGeorefCount / (totalGeorefCount || 1) < 0.1 ? "OK" : "FAIL";
-
-    if (yearMin === 9999) yearMin = 2015;
-    if (yearMax === 0) yearMax = 2026;
+    const georefStatus = invalidGeorefCount === 0 ? "OK" : "FAIL";
+    const temporalCoverageStatus = yearMin == null || yearMax == null ? "TEMPORAL_COVERAGE_UNKNOWN" : "KNOWN";
 
     return {
-      success: columnsStatus === "OK",
+      success: columnsStatus === "OK" && georefStatus === "OK",
       folderFound: true,
       folderPath: activeDir,
       totalFiles: files.length,
       totalRecords,
       yearMin,
       yearMax,
+      temporalCoverageStatus,
+      validationStatus,
       columnsStatus,
       missingColumns,
       georefStatus,
       duplicateCount: duplicates,
       delitosList: Array.from(delitosSet).slice(0, 15),
-      reportMessage: columnsStatus === "OK" 
-        ? "El archivo histórico de incidencia delictiva se procesa de manera óptima." 
-        : `Faltan las siguientes columnas estructurales requeridas: ${missingColumns.join(", ")}`
+      reportMessage: columnsStatus === "OK" && georefStatus === "OK"
+        ? "El archivo histórico de incidencia delictiva se procesa con esquema y georreferencia válidos."
+        : `Validación no aprobada. Columnas faltantes: ${missingColumns.join(", ") || "ninguna"}. Registros rechazados por georreferencia/cobertura: ${rejectedRecords}.`
     };
   }
 }

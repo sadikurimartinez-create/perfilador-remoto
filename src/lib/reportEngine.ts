@@ -2,7 +2,8 @@ import { jsPDF } from "jspdf";
 import { exportToWord } from "@/lib/exportToWord";
 import { buildIntelligenceBriefing, loadPublicImageAsDataUrl, IntelligenceBriefing, buildIntelligenceEditorialPayload, IntelligenceReportPayload } from "@/utils/intelligenceLayoutEngine";
 import { ReportQualityGate } from "@/utils/reportQualityGate";
-import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
+import { assessRequestedAnnexAvailability } from "@/utils/reportAnnexAvailabilityGovernance";
+import type { PublicationDisclosure } from "@/utils/institutionalReportPublicationContract";
 import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
 import { StatisticalIntelligenceEngineV2 } from "@/utils/statisticalIntelligenceEngineV2";
@@ -16,6 +17,8 @@ import { adaptDocumentPackageForWord } from "@/utils/documentRenderAdapter";
 import { ExecutiveIntelligenceSummaryEngine } from "@/utils/executiveIntelligenceSummaryEngine";
 import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
 import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
+import { classifyLegacyCompatibility, evaluateIntelligenceEligibility } from "@/utils/syntheticIntelligenceFirewall";
+import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 
 
 
@@ -37,6 +40,47 @@ type FinalizeOptions = {
   powerups?: any[];
   selectedAnnexes?: any;
 };
+
+export interface ReportLineageBoundaryResult {
+  lineageStatus: LineageStatus;
+  supportingEvidenceIds: string[];
+  supportingFindingIds: string[];
+  supportingAnalysisIds: string[];
+  canPresentAsSupportedConclusion: boolean;
+}
+
+export function evaluateReportLineageBoundary(item: any): ReportLineageBoundaryResult {
+  const lineage = item?.lineage as CanonicalLineageNode[] | undefined;
+  const validation = validateLineage(lineage);
+  const nodes = lineage || [];
+  const supportingEvidenceIds = Array.from(new Set(nodes.flatMap((node) => node.supportingEvidenceIds || (node.evidenceId ? [node.evidenceId] : []))));
+  const supportingFindingIds = Array.from(new Set(nodes.flatMap((node) => node.supportingFindingIds || (node.findingId ? [node.findingId] : []))));
+  const supportingAnalysisIds = Array.from(new Set(nodes.flatMap((node) => node.supportingAnalysisIds || (node.analysisId ? [node.analysisId] : []))));
+
+  return {
+    lineageStatus: item?.lineageStatus || validation.status,
+    supportingEvidenceIds,
+    supportingFindingIds,
+    supportingAnalysisIds,
+    canPresentAsSupportedConclusion: validation.status === "SUPPORTED" && supportingAnalysisIds.length > 0,
+  };
+}
+
+export function isReportEngineEvidenceEligible(item: any): boolean {
+  if (!item) return false;
+  const hasConclusionLineage =
+    Boolean(item.conclusionId || item.supportingAnalysisIds) ||
+    Boolean((item.lineage || []).some((node: CanonicalLineageNode) => node.type === "CONCLUSION"));
+  if (hasConclusionLineage && !evaluateReportLineageBoundary(item).canPresentAsSupportedConclusion) return false;
+
+  const eligibility = evaluateIntelligenceEligibility(item);
+  if (eligibility.eligibleForReport) return true;
+
+  const hasExplicitEpistemicContract = Boolean(item.epistemic || item.epistemicIntegrity || item.acquisitionMode || item.validationStatus);
+  if (hasExplicitEpistemicContract) return false;
+
+  return classifyLegacyCompatibility(item).compatibleForReport;
+}
 
 export async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -569,13 +613,13 @@ export class ReportEngineKernelClass {
 
         this.context.project = payload.project;
         this.context.content = cleanContent;
-        this.context.album = payload.album || [];
+        this.context.album = (payload.album || []).filter(isReportEngineEvidenceEligible);
         this.context.mapSnapshots = payload.mapSnapshots || [];
         this.context.riskLevel = payload.riskLevel;
         this.context.reportSummary = payload.reportSummary;
         this.context.user = payload.user;
         this.context.markAsPrinted = payload.markAsPrinted;
-        this.context.sweeps = payload.sweeps || [];
+        this.context.sweeps = (payload.sweeps || []).filter(isReportEngineEvidenceEligible);
         this.context.powerups = payload.powerups || [];
         this.context.scinceDemographics = payload.scinceDemographics;
         this.context.reportNumber = payload.reportNumber;
@@ -766,6 +810,14 @@ export class ReportEngineKernelClass {
           throw new Error("VALIDATE_EXECUTION_ID_MISMATCH");
         }
 
+        // ADR-007.3: IIC Migration Firewall
+        // Ningún flujo institucional puede continuar sin IntelligenceIntegrationContext.
+        if (this.context.intelligenceContext == null) {
+          throw new Error(
+            "MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3."
+          );
+        }
+
         const previewLayer = typeof document !== 'undefined' && document.getElementById("official-pdf-content");
         if (previewLayer) {
           throw new Error("ASSERT_FAILED: Preview layer exists");
@@ -779,284 +831,30 @@ export class ReportEngineKernelClass {
         // Auditar mediante ReportQualityGate v6.0
         ReportQualityGate.validate(payloadObj, this.context.briefing);
 
-        const hasHIGGraph = !!payloadObj.hypothesisGraph && !!payloadObj.hypothesisGraph.dataUrl;
-
-        // GOVERNANCE: Component integration checks based on UI selections with hot-repair resilience
-        const selectedAnnexes = this.context.selectedAnnexes;
-        if (selectedAnnexes) {
-          console.log("[AUDITORÍA CONSISTENCIA SAI] Iniciando validación y auto-reparación de Gobernanza para anexos...");
-
-          const geoValidation = validateGeoIntegrity(this.context.project?.latitude, this.context.project?.longitude);
-          const hasValidCoords = geoValidation.confidence !== "UNKNOWN" && geoValidation.latitude !== null && geoValidation.longitude !== null;
-          
-          const getMapUrl = () => {
-            if (hasValidCoords) {
-              return `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${geoValidation.longitude}/${geoValidation.latitude}/600x400.png`;
-            }
-            return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'><rect width='600' height='400' fill='%230f172a'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' font-weight='bold' fill='%2394a3b8'>La representación territorial requiere validación geográfica.</text></svg>";
-          };
-
-          const mapUrl = getMapUrl();
-
-          // 1. Validar y auto-reparar Mapas
-          if (selectedAnnexes.mapDensity) {
-            const hasDensity = payloadObj.maps.some((m: any) => m.title && (m.title.toLowerCase().includes("densidad") || m.title.toLowerCase().includes("calor") || m.title.toLowerCase().includes("riesgo") || m.title.toLowerCase().includes("mapa")));
-            if (!hasDensity) {
-              if (payloadObj.maps.length > 0) {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Auto-reparando título de mapa para anexo Densidad...");
-                payloadObj.maps[0].title = `${payloadObj.maps[0].title || "Mapa Analítico"} - Densidad de Incidentes (Normalizado)`;
-              } else {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Inyectando mapa fallback de Densidad vacío debido a degradación...");
-                payloadObj.maps.push({
-                  title: "Mapa de Densidad y Calor de Incidentes (Fallback)",
-                  url: mapUrl,
-                  previewUrl: mapUrl,
-                  description: "Mapa analítico de concentración delictiva."
-                });
-              }
-            }
-          }
-
-          if (selectedAnnexes.mapMobility) {
-            const hasMobility = payloadObj.maps.some((m: any) => m.title && (m.title.toLowerCase().includes("corredores") || m.title.toLowerCase().includes("movilidad") || m.title.toLowerCase().includes("flujos")));
-            if (!hasMobility) {
-              if (payloadObj.maps.length > 1) {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Auto-reparando título de mapa para anexo Movilidad...");
-                payloadObj.maps[1].title = `${payloadObj.maps[1].title || "Mapa Analítico"} - Corredores de Movilidad (Normalizado)`;
-              } else if (payloadObj.maps.length > 0) {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Auto-reparando título de mapa para anexo Movilidad...");
-                payloadObj.maps[0].title = `${payloadObj.maps[0].title || "Mapa Analítico"} - Corredores de Movilidad (Normalizado)`;
-              } else {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Inyectando mapa fallback de Corredores...");
-                payloadObj.maps.push({
-                  title: "Mapa de Corredores de Movilidad y Flujos (Fallback)",
-                  url: mapUrl,
-                  previewUrl: mapUrl,
-                  description: "Mapa analítico de flujos y movilidad delictiva."
-                });
-              }
-            }
-          }
-
-          if (selectedAnnexes.mapAttractors) {
-            const hasAttractors = payloadObj.maps.some((m: any) => m.title && (m.title.toLowerCase().includes("atracción") || m.title.toLowerCase().includes("atractores") || m.title.toLowerCase().includes("denue")));
-            if (!hasAttractors) {
-              const idx = Math.min(2, payloadObj.maps.length - 1);
-              if (idx >= 0) {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Auto-reparando título de mapa para anexo Atractores...");
-                payloadObj.maps[idx].title = `${payloadObj.maps[idx].title || "Mapa Analítico"} - Atractores de Riesgo (Normalizado)`;
-              } else {
-                payloadObj.maps.push({
-                  title: "Mapa de Atractores Ambientales de Riesgo (Fallback)",
-                  url: mapUrl,
-                  previewUrl: mapUrl,
-                  description: "Mapa analítico de atractores urbanos de oportunidad."
-                });
-              }
-            }
-          }
-
-          if (selectedAnnexes.mapPredictive) {
-            const hasPredictive = payloadObj.maps.some((m: any) => m.title && (m.title.toLowerCase().includes("proyección") || m.title.toLowerCase().includes("predicción") || m.title.toLowerCase().includes("predictiva")));
-            if (!hasPredictive) {
-              const idx = Math.min(3, payloadObj.maps.length - 1);
-              if (idx >= 0) {
-                console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Auto-reparando título de mapa para anexo Predictivo...");
-                payloadObj.maps[idx].title = `${payloadObj.maps[idx].title || "Mapa Analítico"} - Proyección Predictiva (Normalizado)`;
-              } else {
-                payloadObj.maps.push({
-                  title: "Mapa de Proyección Predictiva y Patrones (Fallback)",
-                  url: mapUrl,
-                  previewUrl: mapUrl,
-                  description: "Mapa analítico predictivo del comportamiento espacial."
-                });
-              }
-            }
-          }
-
-          // 2. Validar y auto-reparar Gráficas
-          if (selectedAnnexes.chartTemporal) {
-            const hasTemporal = payloadObj.graphs.some((g: any) => g.title && (g.title.toLowerCase().includes("temporal") || g.title.toLowerCase().includes("turno") || g.title.toLowerCase().includes("horario") || g.title.toLowerCase().includes("delitos")));
-            if (!hasTemporal) {
-              if (payloadObj.graphs.length > 0) {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Auto-reparando título de gráfica para anexo Temporal...");
-                payloadObj.graphs[0].title = `${payloadObj.graphs[0].title || "Distribución Estadística"} - Distribución Temporal (Normalizado)`;
-              } else {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando gráfica fallback de Distribución Temporal...");
-                payloadObj.graphs.push({
-                  title: "Análisis de Distribución Temporal y Horarios (Fallback)",
-                  dataUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='%230F172A'/><text x='150' y='200' fill='white' font-size='20'>Sin Eventos Registrados Temporalmente</text></svg>",
-                  description: "Gráfica estadística de comportamiento horario temporal."
-                });
-              }
-            }
-          }
-
-          if (selectedAnnexes.chartTopology) {
-            const hasTopology = payloadObj.graphs.some((g: any) => g.title && (g.title.toLowerCase().includes("topología") || g.title.toLowerCase().includes("frecuencia") || g.title.toLowerCase().includes("incidentes") || g.title.toLowerCase().includes("atractores")));
-            if (!hasTopology) {
-              if (payloadObj.graphs.length > 1) {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Auto-reparando título de gráfica para anexo Topología...");
-                payloadObj.graphs[1].title = `${payloadObj.graphs[1].title || "Topología de Incidentes"} - Topología de Frecuencias (Normalizado)`;
-              } else if (payloadObj.graphs.length > 0) {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Auto-reparando título de gráfica para anexo Topología...");
-                payloadObj.graphs[0].title = `${payloadObj.graphs[0].title || "Topología de Incidentes"} - Topología de Frecuencias (Normalizado)`;
-              } else {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando gráfica fallback de Frecuencias...");
-                payloadObj.graphs.push({
-                  title: "Análisis de Topología de Frecuencias (Fallback)",
-                  dataUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='%230F172A'/><text x='150' y='200' fill='white' font-size='20'>Sin Eventos Registrados para Frecuencias</text></svg>",
-                  description: "Gráfica estadística de distribución de incidentes."
-                });
-              }
-            }
-          }
-
-          if (selectedAnnexes.chartEnvironmental) {
-            const hasEnv = payloadObj.graphs.some((g: any) => g.title && (g.title.toLowerCase().includes("facilitadores") || g.title.toLowerCase().includes("ambiental") || g.title.toLowerCase().includes("oportunidad") || g.title.toLowerCase().includes("riesgo")));
-            if (!hasEnv) {
-              const idx = Math.min(2, payloadObj.graphs.length - 1);
-              if (idx >= 0) {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Auto-reparando título de gráfica para anexo Ambiental...");
-                payloadObj.graphs[idx].title = `${payloadObj.graphs[idx].title || "Factores de Riesgo"} - Facilitadores Ambientales (Normalizado)`;
-              } else {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando gráfica fallback de Facilitadores Ambientales...");
-                payloadObj.graphs.push({
-                  title: "Análisis de Facilitadores Ambientales y de Riesgo (Fallback)",
-                  dataUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='%230F172A'/><text x='150' y='200' fill='white' font-size='20'>Sin Eventos Registrados para Riesgo Ambiental</text></svg>",
-                  description: "Gráfica estadística de factores facilitadores urbanos."
-                });
-              }
-            }
-          }
-
-          if (selectedAnnexes.chartPrediction) {
-            const hasPrediction = payloadObj.graphs.some((g: any) => g.title && (g.title.toLowerCase().includes("predicción") || g.title.toLowerCase().includes("futuro") || g.title.toLowerCase().includes("aumento")));
-            if (!hasPrediction) {
-              const idx = Math.min(3, payloadObj.graphs.length - 1);
-              if (idx >= 0) {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Auto-reparando título de gráfica para anexo Predictivo...");
-                payloadObj.graphs[idx].title = `${payloadObj.graphs[idx].title || "Predicción Criminológica"} - Proyección de Tendencias (Normalizado)`;
-              } else {
-                console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando gráfica fallback de Predicción...");
-                payloadObj.graphs.push({
-                  title: "Análisis Predictivo y Proyección de Tendencias (Fallback)",
-                  dataUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='%230F172A'/><text x='150' y='200' fill='white' font-size='20'>Sin Eventos Registrados para Modelos Predictivos</text></svg>",
-                  description: "Gráfica analítica de modelos predictivos criminológicos."
-                });
-              }
-            }
-          }
-
-          // 3. Validar y auto-reparar Sweeps (Barridos)
-          const isSweepRequired = (val: any): boolean => {
-            if (val && typeof val === 'object') {
-              return !!(val.selected && val.available);
-            }
-            return !!val;
-          };
-
-          if (isSweepRequired(selectedAnnexes.sweepDenue) && !payloadObj.sweepsData.some((s: any) => s.engine && (s.engine.toLowerCase().includes("denue") || s.engine.toLowerCase().includes("inegi")))) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando sweepsData de DENUE en caliente...");
-            payloadObj.sweepsData.push({
-              engine: "Análisis de Proximidad DENUE (Normalizado)",
-              source: "INEGI DENUE 2026",
-              results: "Sin afectaciones críticas identificadas en el perímetro de análisis."
-            });
-          }
-          if (isSweepRequired(selectedAnnexes.sweepIncidencia) && !payloadObj.sweepsData.some((s: any) => s.engine && (s.engine.toLowerCase().includes("incidencia") || s.engine.toLowerCase().includes("delitos")))) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando sweepsData de Incidencia en caliente...");
-            payloadObj.sweepsData.push({
-              engine: "Incidencia Delictiva del Fuero Común y Federal (Normalizado)",
-              source: "Secretariado Ejecutivo del Sistema Nacional de Seguridad Pública",
-              results: "Sin eventos registrados geográficamente dentro del polígono delimitado."
-            });
-          }
-          if (isSweepRequired(selectedAnnexes.sweepRepuve) && !payloadObj.sweepsData.some((s: any) => s.engine && (s.engine.toLowerCase().includes("repuve") || s.engine.toLowerCase().includes("vehicular")))) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando sweepsData de REPUVE en caliente...");
-            payloadObj.sweepsData.push({
-              engine: "Registro Público Vehicular REPUVE (Normalizado)",
-              source: "Plataforma Nacional REPUVE",
-              results: "Sin reportes de vehículos con reporte de robo activos en el sector."
-            });
-          }
-          if (isSweepRequired(selectedAnnexes.sweepRnpdno) && !payloadObj.sweepsData.some((s: any) => s.engine && (s.engine.toLowerCase().includes("rnpdno") || s.engine.toLowerCase().includes("desaparecidos")))) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando sweepsData de RNPDNO en caliente...");
-            payloadObj.sweepsData.push({
-              engine: "Registro de Personas Desaparecidas y No Localizadas RNPDNO (Normalizado)",
-              source: "Comisión Nacional de Búsqueda",
-              results: "Sin incidencias vinculadas registradas en el sector georreferenciado."
-            });
-          }
-          if (isSweepRequired(selectedAnnexes.sweepMultimodal) && !payloadObj.sweepsData.some((s: any) => s.engine && s.engine.toLowerCase().includes("multimodal"))) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando sweepsData Multimodal en caliente...");
-            payloadObj.sweepsData.push({
-              engine: "Análisis Multimodal de Infraestructura Urbana (Normalizado)",
-              source: "Catastro Municipal de Aguascalientes",
-              results: "Infraestructura urbana evaluada sin novedades críticas reportadas."
-            });
-          }
-          if (isSweepRequired(selectedAnnexes.sweepCifa) && !payloadObj.sweepsData.some((s: any) => s.engine && s.engine.toLowerCase().includes("cifa"))) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Inyectando sweepsData de CIFA en caliente...");
-            payloadObj.sweepsData.push({
-              engine: "Análisis de Factores Sociodemográficos CIFA (Normalizado)",
-              source: "Centro de Inteligencia Familiar Estatal",
-              results: "Células familiares estables evaluadas en el polígono sin anomalías."
-            });
-          }
-
-          // 4. Validar e inyectar HIG Graph (Grafo de Conexiones)
-          if (selectedAnnexes.graphConnections && !hasHIGGraph) {
-            console.warn("[AUDITORÍA CONSISTENCIA SAI] Auto-reparando anexo de conexiones HIG Graph con datos de respaldo...");
-            payloadObj.hypothesisGraph = {
-              title: "Grafo de Conexiones y Vínculos Criminales HIG (Normalizado)",
-              dataUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='%230F172A'/><text x='150' y='200' fill='white' font-size='20'>Sin Conexiones Identificadas en el Sector</text></svg>",
-              description: "Grafo analítico de topología de vínculos y redes asociativas."
-            };
-          }
-        }
-
-        // --- VALIDACIÓN DE INTEGRACIÓN MEDIANTE EL CONTRATO UNIFICADO (IIC) ---
-        // Auto-construcción resiliente en caliente si el contexto no fue proveído por el frontend legacy (undefined)
-        if (this.context.intelligenceContext === undefined) {
-          console.warn("[ReportEngine] IntelligenceContext no proveído. Inicializando capa de resiliencia IIC (ADR-007.3)...");
-          
-          const autoAceReport = {
-            globalStatus: "PASS" as const,
-            overallConfidence: 100,
-            alerts: [],
-            certifiedOsintOutput: true,
-            certifiedGimOutput: true,
-            metadata: { auditedAt: new Date().toISOString() }
-          };
-
-          this.context.intelligenceContext = {
-            projectId: this.context.project?.id || "PR-001",
-            schemaVersion: "2.0",
-            analysisReadiness: "READY" as const,
-            qualityControl: {
-              status: "PASS" as const,
-              confidenceScore: 100,
-              auditedAt: new Date().toISOString()
-            },
-            evidenceSources: {
-              SEM: { status: "PASS", totalCanonicalEvents: this.context.project?.historicalIncidents?.length || 0 },
-              TCE: { status: "PASS" },
-              CIE: { status: "PASS" },
-              HIE: { status: "PASS" },
-              ACE: autoAceReport
-            }
-          };
-        }
-
+        const unavailableAnnexDisclosures = assessRequestedAnnexAvailability(
+          payloadObj,
+          this.context.selectedAnnexes
+        );
+        const governedPayload = payloadObj as IntelligenceReportPayload & {
+          publicationDisclosures?: PublicationDisclosure[];
+        };
+        const existingDisclosures = Array.isArray(governedPayload.publicationDisclosures)
+          ? governedPayload.publicationDisclosures
+          : [];
+        const existingDisclosureIds = new Set(existingDisclosures.map((item) => `${item.itemType}:${item.itemId}:${item.code}`));
+        governedPayload.publicationDisclosures = [
+          ...existingDisclosures,
+          ...unavailableAnnexDisclosures.filter(
+            (item) => !existingDisclosureIds.has(`${item.itemType}:${item.itemId}:${item.code}`)
+          ),
+        ];
         const iic = this.context.intelligenceContext;
 
-        // Caso 5: Bloqueo de acceso legacy (si no se proporciona el IIC - Cubierto de forma resiliente)
-        if (!iic) {
-          throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
-        }
-
         const aceReport = iic.evidenceSources.ACE;
+
+        if (!aceReport) {
+          throw new Error("BLOQUEO DE SEGURIDAD (NOT_READY): No existe reporte ACE certificado disponible. Se requiere auditoria real.");
+        }
 
         // Caso 4: Bloqueo estricto de NOT_READY / ACE FAILED
         if (iic.analysisReadiness === "NOT_READY" || iic.qualityControl.status === "FAILED") {
@@ -1065,7 +863,7 @@ export class ReportEngineKernelClass {
             variable: "status",
             expected: "PASS/WARNING",
             received: "FAILED",
-            message: "Inconsistencia crítica o datos estadísticos insuficientes en el expediente."
+            message: aceReport.alerts?.[0]?.message || "Inconsistencia crítica o datos estadísticos insuficientes en el expediente."
           };
           throw new Error(`BLOQUEO DE SEGURIDAD (NOT_READY): El expediente no cumple con los requisitos metodológicos mínimos para su exportación institucional. Detalle: ${firstReason.message}`);
         }

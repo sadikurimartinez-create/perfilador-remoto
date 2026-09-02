@@ -2,6 +2,11 @@ import { getScinceData, getDenueData, getTelegramOsintData } from "@/lib/osintAc
 import { PandillasService } from "./pandillas.service";
 import { GangEntity, FusionResult } from "./pandillas.mapper";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
+import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
+import { classifyEpistemicSource, type SourceRouteDescriptor } from "@/lib/providers/sourceRegistry";
+import { adaptDenueScinceSource } from "@/services/geoint/denueScinceOrchestrationAdapter";
+import { adaptOsintSource } from "@/services/geoint/osintCanonicalOrchestrationAdapter";
+import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 
 /**
  * Pandillas intelligence orchestration engine.
@@ -11,7 +16,7 @@ import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 export class PandillasEngine {
   /**
    * Run the full Sweep Orchestration:
-   * 1. Check if the gang zone has coordinates. If not, fallback to default Aguascalientes Center coordinates (21.8853, -102.2916).
+   * 1. Validate the gang coordinates. If valid geography is absent, stop the territorial sweep without fabricating a fallback location.
    * 2. Query internal APIs (getScinceData, getDenueData, getTelegramOsintData) to pull demographic, business, and social OSINT data.
    * 3. Construct a unified context payload detailing SCINCE, DENUE, and OSINT matches.
    * 4. Call the main AI and CSV sweep endpoint via PandillasService.
@@ -19,7 +24,7 @@ export class PandillasEngine {
   static async executeFullSweep(
     gang: GangEntity,
     userContext: string
-  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; isAiGenerated: boolean; warning?: string }> {
+  ): Promise<FusionResult & { scinceInfo?: any; denueInfo?: any; externalSourceProvenance?: EpistemicIntegrityMetadata[]; sourceRouteClassifications?: SourceRouteDescriptor[]; sourceOrchestrationItems?: MultisourceOrchestrationItem[]; isAiGenerated: boolean; warning?: string }> {
     const geoValidation = validateGeoIntegrity(gang.coordenadas?.lat, gang.coordenadas?.lng);
     const lat = geoValidation.latitude;
     const lng = geoValidation.longitude;
@@ -40,27 +45,76 @@ export class PandillasEngine {
 
     console.log(`[PandillasEngine] Iniciando barrido geoespacial en [${lat}, ${lng}]`);
 
+    // ADR-020.34 C9D3:
+    // The OSINT territorial query must use only real source text.
+    // Do not append a fixed municipality or invent a colony.
+    const normalizedGangName =
+      typeof gang.nombre === "string"
+        ? gang.nombre.trim()
+        : "";
+
+    const normalizedInfluenceArea =
+      typeof gang.zonaInfluencia === "string"
+        ? gang.zonaInfluencia.trim()
+        : "";
+
+    const telegramQuery = [
+      normalizedGangName
+        ? `Pandilla ${normalizedGangName}`
+        : "Pandilla",
+      normalizedInfluenceArea
+        ? normalizedInfluenceArea
+        : ""
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     // Concurrent execution of internal APIs (SCINCE, DENUE, and OSINT Crawler)
     const [scinceData, denueData, telegramOsint] = (await Promise.all([
       getScinceData(lat, lng).catch(() => ({ exito: false, error: "Fallo SCINCE" })),
       getDenueData(lat, lng, 350).catch(() => ({ exito: false, error: "Fallo DENUE" })),
-      getTelegramOsintData(`Pandilla ${gang.nombre} Colonia ${gang.zonaInfluencia} Aguascalientes`).catch(() => ({ success: false, error: "Fallo OSINT" }))
+      getTelegramOsintData(telegramQuery).catch(() => ({ success: false, error: "Fallo OSINT" }))
     ])) as [any, any, any];
+    const externalSourceProvenance = [scinceData, denueData, telegramOsint]
+      .map((item) => item?.epistemicIntegrity)
+      .filter(Boolean) as EpistemicIntegrityMetadata[];
+    const sourceRouteClassifications = externalSourceProvenance
+      .map((metadata) => classifyEpistemicSource(metadata))
+      .filter(Boolean) as SourceRouteDescriptor[];
+    const scinceRoute = classifyEpistemicSource(scinceData?.epistemicIntegrity);
+    const denueRoute = classifyEpistemicSource(denueData?.epistemicIntegrity);
+    const telegramRoute = classifyEpistemicSource(telegramOsint?.epistemicIntegrity);
+    const denueScinceOrchestrationItems = [scinceData, denueData]
+      .map((item) => adaptDenueScinceSource({
+        expedienteId: gang.projectId,
+        integrity: item?.epistemicIntegrity,
+      }))
+      .filter((item): item is MultisourceOrchestrationItem => item !== null);
+
+    const telegramOrchestrationItem = adaptOsintSource({
+      expedienteId: gang.projectId,
+      integrity: telegramOsint?.epistemicIntegrity,
+    });
+
+    const sourceOrchestrationItems = [
+      ...denueScinceOrchestrationItems,
+      ...(telegramOrchestrationItem ? [telegramOrchestrationItem] : []),
+    ];
 
     // Build the enriched context
     let enrichmentPrompt = `
 - Información de Entorno Extraída de APIs Internas:
-* Datos Demográficos (INEGI SCINCE): ${
+* Datos Demográficos (SCINCE / ${scinceRoute?.operationalMode || "UNKNOWN"}): ${
       scinceData.exito
-        ? `Población: ${scinceData.poblacionTotal}, Viviendas: ${scinceData.viviendasTotales}, Grado de Marginación: ${scinceData.gradoMarginacion}`
+        ? `Uso diagnostico no autoritativo. Población estimada: ${scinceData.poblacionTotal}, Viviendas: ${scinceData.viviendasTotales}, Grado de Marginación: ${scinceData.gradoMarginacion}`
         : "Sin datos demográficos."
     }
-* Comercios Locales Activos (INEGI DENUE): ${
-      denueData.exito && denueData.total > 0
+* Comercios Locales Activos (DENUE / ${denueRoute?.operationalMode || "UNKNOWN"}): ${
+      denueRoute?.authoritative && denueData.exito && denueData.total > 0
         ? `Total comercios en radio: ${denueData.total}. Muestra de negocios: ${denueData.resumen}`
-        : "Sin comercios reportados."
+        : "Sin adquisición DENUE autoritativa disponible."
     }
-* Análisis OSINT Complementario (CEIPOL Crawler): ${
+* Análisis OSINT Complementario (${telegramRoute?.sourceType || "TELEGRAM_CONTEXT"} / ${telegramRoute?.operationalMode || "UNKNOWN"}): ${
       telegramOsint.success
         ? telegramOsint.osintSummary
         : "Sin correlaciones OSINT adicionales detectadas."
@@ -77,6 +131,9 @@ export class PandillasEngine {
       ...result,
       scinceInfo: scinceData.exito ? scinceData : undefined,
       denueInfo: denueData.exito ? denueData : undefined,
+      externalSourceProvenance,
+      sourceRouteClassifications,
+      sourceOrchestrationItems,
     };
   }
 }

@@ -22,6 +22,12 @@ export interface GIMTraceabilityRecord {
   transformationApplied: string; // Tipo de limpieza o normalización (ej. "Filtro perimetral Haversine")
   gimConfidenceAllocated: number; // Porcentaje de confianza local (0-100) asignado por GIM
   consumersList: string[]; // Componentes internos que consumieron este dato (ej. ["HIE", "ReportEngine"])
+  sourceAuthority?: "AUTHORITATIVE" | "NON_AUTHORITATIVE" | "SIMULATED" | "LEGACY_UNCLASSIFIED";
+  sourceIntegrityStatus?: "VERIFIED" | "HASH_UNAVAILABLE" | "GEO_UNAVAILABLE" | "SIMULATED" | "LEGACY_UNCLASSIFIED";
+  evidenceId?: string;
+  findingIds?: string[];
+  analysisIds?: string[];
+  providerProvenance?: string;
 }
 
 /**
@@ -88,6 +94,11 @@ export interface GangEvidenceMatrix {
     version: "1.0.0"; // Versionado semántico del código del motor
     generatedAt: string; // Timestamp de compilación
     schemaVersion: "ADR-008.2"; // Versión del esquema del contrato unificado para retrocompatibilidad
+    sourceIntegrityStatus?: "VERIFIED" | "READY_WITH_LIMITATIONS" | "NOT_READY";
+    authorityClassification?: "AUTHORITATIVE" | "NON_AUTHORITATIVE" | "LEGACY_UNCLASSIFIED";
+    humanValidationStatus?: "NOT_REQUIRED" | "READY_FOR_HUMAN_REVIEW" | "APPROVED" | "REJECTED";
+    validatedByUserId?: string | null;
+    humanValidatedAt?: string | null;
   };
   presenceEvidence: GangPresenceEvidence;
   territorialInfluence: TerritorialInfluence[];
@@ -110,4 +121,3 @@ export interface GangValidationResult {
   errors: string[];
   validatedAt: string;
 }
-

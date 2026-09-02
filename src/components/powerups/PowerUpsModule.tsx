@@ -63,7 +63,16 @@ export function PowerUpsModule({
     try {
       const stored = localStorage.getItem("perfilador_powerups_logs_v2");
       if (stored) {
-        setLogs(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const normalizedLogs = parsed.map((log: PowerUpExecutionLog) => ({
+            ...log,
+            confidenceScore: null,
+            sourcesConsulted: [],
+          }));
+          setLogs(normalizedLogs);
+          localStorage.setItem("perfilador_powerups_logs_v2", JSON.stringify(normalizedLogs));
+        }
       }
     } catch (e) {
       console.error("Error loading PowerUp logs", e);
@@ -117,7 +126,6 @@ export function PowerUpsModule({
       onApplyPowerUp(config.technicalText);
 
       // Create traceability log entry
-      const confidence = Number((0.92 + Math.random() * 0.07).toFixed(2)); // Random confidence between 92% and 99%
       const newLog: PowerUpExecutionLog = {
         analysisId: "AN-" + Math.floor(100000 + Math.random() * 900000),
         powerUpId: config.id,
@@ -125,8 +133,8 @@ export function PowerUpsModule({
         timestamp: new Date().toLocaleTimeString("es-MX", { hour12: false }) + " " + new Date().toLocaleDateString("es-MX"),
         inputUsed: config.preview.dataToProcess,
         outputGenerated: config.technicalText,
-        confidenceScore: confidence,
-        sourcesConsulted: config.tooltip.expandableOperative.sources
+        confidenceScore: null,
+        sourcesConsulted: []
       };
 
       const updatedLogs = [newLog, ...logs];
@@ -157,8 +165,6 @@ export function PowerUpsModule({
     const newLogs: PowerUpExecutionLog[] = appliedTexts.map((txt, idx) => {
       const matchWord = txt.match(/POWERUP APLICADO:\s*\*\*([^*]+)\*\*/);
       const title = matchWord ? matchWord[1].trim() : "Puente Contextual Combinado";
-      const confidence = Number((0.94 + Math.random() * 0.05).toFixed(2));
-      
       return {
         analysisId: "AN-PT-" + Math.floor(100000 + Math.random() * 900000),
         powerUpId: "puente_contextual_" + idx,
@@ -166,8 +172,8 @@ export function PowerUpsModule({
         timestamp: new Date().toLocaleTimeString("es-MX", { hour12: false }) + " " + new Date().toLocaleDateString("es-MX"),
         inputUsed: insumoText ? insumoText.substring(0, 100) + "..." : "Texto Contextualizado",
         outputGenerated: txt,
-        confidenceScore: confidence,
-        sourcesConsulted: ["Base de datos OSINT Estatal", "Google Vertex NLP", "Servicio Spatial PostGIS"]
+        confidenceScore: null,
+        sourcesConsulted: []
       };
     });
 
@@ -422,7 +428,11 @@ export function PowerUpsModule({
                     <td className="py-2 font-bold">{log.powerUpTitle}</td>
                     <td className="py-2 text-slate-500">{log.timestamp}</td>
                     <td className="py-2 text-slate-400 truncate max-w-[150px]" title={log.inputUsed}>{log.inputUsed}</td>
-                    <td className="py-2 text-right font-mono font-bold text-emerald-400">{(log.confidenceScore * 100).toFixed(0)}%</td>
+                    <td className="py-2 text-right font-mono font-bold text-slate-400">
+                      {typeof log.confidenceScore === "number"
+                        ? `${(log.confidenceScore * 100).toFixed(0)}%`
+                        : "No disponible"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

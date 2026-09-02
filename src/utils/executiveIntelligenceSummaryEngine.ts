@@ -1,4 +1,8 @@
 import { EditorialStructureEngine } from "./editorialStructureEngine";
+import {
+  renderGovernedExecutiveSummary,
+  type NarrativeAssertion,
+} from "./analyticalNarrativeGovernance";
 
 export enum RiskStatus {
   SUPPORTED = "SUPPORTED",
@@ -305,6 +309,47 @@ export class ExecutiveIntelligenceSummaryEngine {
     payload: any,
     photoEvidence: any[] = []
   ): ExecutiveSummaryReport {
+    if (Array.isArray(payload.governedNarrativeAssertions) && payload.governedNarrativeAssertions.length > 0) {
+      const governed = renderGovernedExecutiveSummary(payload.governedNarrativeAssertions as NarrativeAssertion[], "INSTITUTIONAL");
+      const primaryFindings: ExecutiveFinding[] = governed.renderedAssertions
+        .filter((item) => item.sourceItemType === "FINDING" || item.sourceItemType === "CONCLUSION")
+        .slice(0, 5)
+        .map((item, idx) => ({
+          id: item.assertionId,
+          title: item.sourceItemType === "CONCLUSION" ? "Conclusión validada gobernada" : "Hallazgo gobernado",
+          finding: item.text,
+          sourceChapter: "InstitutionalReportInput",
+          evidenceIds: item.claimIds,
+          confidence: 0,
+          relevance: 3,
+          evidenceSupport: 5,
+          hypothesisImpact: 3,
+          operationalImportance: idx === 0 ? 4 : 3,
+          score: 3,
+        }));
+      return {
+        situation: governed.text || "Síntesis ejecutiva gobernada no disponible.",
+        primaryFindings,
+        supportingFindings: [],
+        risks: [],
+        hypothesisState: {
+          statement: payload.institutionalReportInput?.hypothesis?.currentHypothesis || payload.finalHypothesis || "Hipótesis en proceso de corroboración perimetral.",
+          state: payload.institutionalReportInput?.hypothesis?.status === "VALIDATED" ? "CONFIRMADA" : "EN_EVALUACION",
+          confidenceScore: 0,
+        },
+        recommendations: [],
+        traces: governed.claimIds.map((claimId) => ({
+          summaryBlockId: claimId,
+          sourceChapter: "InstitutionalReportInput",
+          sourceEvidenceIds: [claimId],
+          sourceHypothesisId: payload.institutionalReportInput?.hypothesis?.hypothesisId,
+          confidence: 0,
+        })),
+        isValid: governed.claimIds.length > 0,
+        errorCode: governed.claimIds.length > 0 ? undefined : "EXECUTIVE_SUMMARY_NOT_AVAILABLE",
+      };
+    }
+
     const chapters: Record<string, string> = {};
 
     chapters["Capítulo 1"] = payload.contextoTerritorial || "";

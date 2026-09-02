@@ -18,6 +18,13 @@ import { InegiWmsProvider } from "./inegi_wms_provider";
 import { CircuitBreaker } from "../infra/circuitBreaker";
 import { GeointTelemetry } from "../infra/geointTelemetry";
 import { GlobalErrorHandler } from "../infra/globalErrorHandler";
+import {
+  getSourceFamilyRoutes,
+  getSourceRoutes,
+  selectAuthoritativeRoute,
+  type SourceFamily,
+  type SourceRouteDescriptor,
+} from "./sourceRegistry";
 
 export class ApiOrchestrator {
   private providers: Map<string, IProvider> = new Map();
@@ -64,6 +71,55 @@ export class ApiOrchestrator {
    */
   public getProvider(id: string): IProvider | undefined {
     return this.providers.get(id);
+  }
+
+  public getSourceRoutes(sourceFamily?: SourceFamily): SourceRouteDescriptor[] {
+    return sourceFamily ? getSourceFamilyRoutes(sourceFamily) : getSourceRoutes();
+  }
+
+  public selectAuthoritativeRoute(sourceFamily: SourceFamily): SourceRouteDescriptor | null {
+    const route = selectAuthoritativeRoute(sourceFamily);
+    if (!route || !this.getProvider(route.providerId)?.isEnabled()) {
+      return null;
+    }
+    return route;
+  }
+
+  public async executeAuthoritative(
+    sourceFamily: SourceFamily,
+    params: any,
+    timeoutMs: number = 8000
+  ): Promise<ProviderResponse> {
+    const route = this.selectAuthoritativeRoute(sourceFamily);
+    if (!route) {
+      return {
+        provider: sourceFamily,
+        status: "disabled",
+        timestamp: new Date().toISOString(),
+        confidence: 0,
+        payload: null,
+        latency: 0,
+        metadata: {
+          acquisitionStatus: "NOT_CONFIGURED",
+          operationalMode: "NOT_CONFIGURED",
+          authoritative: false,
+        },
+        errors: [`No authoritative productive route configured for source family '${sourceFamily}'.`],
+      };
+    }
+
+    const response = await this.execute([route.providerId], { ...params, action: route.action }, timeoutMs);
+    const result = response[route.providerId];
+    if (result) {
+      result.metadata = {
+        ...(result.metadata ?? {}),
+        sourceFamily: route.sourceFamily,
+        routeId: route.routeId,
+        operationalMode: route.operationalMode,
+        authoritative: route.authoritative,
+      };
+    }
+    return result;
   }
 
   /**

@@ -7,8 +7,9 @@ import path from "node:path";
 import { parse } from "csv-parse/sync";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
-import { fuseGangsAndBuildGraph } from "@/modules/pandillas/pandillas.fusion";
+import { matchPandillasDatasetRows } from "@/modules/pandillas/pandillas.fusion";
 import { GangEntity } from "@/modules/pandillas/pandillas.mapper";
+import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 
 async function callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -28,6 +29,49 @@ async function callGeminiRestApi(prompt: string, modelName: string, apiKey: stri
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("No text returned from Gemini REST API.");
   return text;
+}
+
+function sourceCoordinatesFromMatchedRows(
+  rows: { Lat?: string | number; Lng?: string | number; Calle?: string; No?: string; Colonia?: string }[]
+): { lat: number; lng: number; descripcion: string }[] {
+  return rows.flatMap((row) => {
+    const lat = typeof row.Lat === "number" ? row.Lat : Number(row.Lat);
+    const lng = typeof row.Lng === "number" ? row.Lng : Number(row.Lng);
+    const validation = validateGeoIntegrity({ latitude: lat, longitude: lng, source: "SOURCE_RECORD" });
+
+    if (validation.latitude === null || validation.longitude === null || !validation.reportableAsObservedGeoint) {
+      return [];
+    }
+
+    return [{
+      lat: validation.latitude,
+      lng: validation.longitude,
+      descripcion: `${row.Calle || ""} ${row.No || ""}, Col. ${row.Colonia || ""}, Aguascalientes`.trim(),
+    }];
+  });
+}
+
+function overwriteAiSpatialOutputWithSourceCoordinates(parsedResult: any, seedAddresses: any[]): any {
+  const geolocalizacion = sourceCoordinatesFromMatchedRows(seedAddresses);
+  return {
+    ...parsedResult,
+    mapa: {
+      ...(parsedResult?.mapa || {}),
+      geolocalizacion,
+      areasCalientes: geolocalizacion.map((point) => ({
+        lat: point.lat,
+        lng: point.lng,
+        radioMetros: 0,
+        intensidad: 0,
+        sourceIntegrityStatus: "OBSERVED_SOURCE_RECORD",
+      })),
+    },
+    sourceIntegrity: {
+      ...(parsedResult?.sourceIntegrity || {}),
+      geolocationPolicy: geolocalizacion.length > 0 ? "SOURCE_COORDINATES_ONLY" : "GEO_UNAVAILABLE",
+      aiGeneratedCoordinatesDiscarded: true,
+    },
+  };
 }
 
 export async function POST(req: Request) {
@@ -50,11 +94,11 @@ export async function POST(req: Request) {
       integrantes,
       grafitiInfo,
       archivosAnexos,
-      estatus: body.estatus || "Activa"
+      estatus: body.estatus || "Sin determinar"
     };
 
     // 1. CARGAR Y PARSEAR EL DATASET LOCAL DESDE EXCEL (INVENTARIO PANDILLAS.xlsx)
-    let csvRows: any[] = [];
+    const csvRows: any[] = [];
     let xlsxPath = path.join(process.cwd(), "INVENTARIO PANDILLAS.xlsx");
     
     try {
@@ -106,26 +150,7 @@ export async function POST(req: Request) {
 
     // 2. MATCH GEOGRÁFICO Y CORRELACIÓN DE DOMICILIOS
     // Primero intentamos emparejar por el nombre de la pandilla
-    const normalizedGangName = (nombre || "").toLowerCase().trim();
-    let matchesCsv = csvRows.filter(row => {
-      const gangCol = (row.Pandilla || "").toLowerCase().trim();
-      return gangCol && (gangCol.includes(normalizedGangName) || normalizedGangName.includes(gangCol));
-    });
-
-    // Si no hay coincidencias de nombre, intentamos buscar por zona de influencia
-    const normalizedZone = (zonaInfluencia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (matchesCsv.length === 0 && normalizedZone) {
-      matchesCsv = csvRows.filter(row => {
-        const col = (row.Colonia || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const calle = (row.Calle || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        return col.includes(normalizedZone) || normalizedZone.includes(col) || calle.includes(normalizedZone);
-      });
-    }
-
-    // Si sigue vacío, extraemos una muestra representativa general
-    if (matchesCsv.length === 0) {
-      matchesCsv = csvRows.slice(0, 20);
-    }
+    const matchesCsv = matchPandillasDatasetRows(csvRows, nombre, zonaInfluencia);
 
     // Limitar matches para no saturar contexto de IA (máximo 40 registros altamente representativos)
     const seedAddresses = matchesCsv.slice(0, 40);
@@ -177,9 +202,10 @@ Debes devolver ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido que responda EXACT
 }
 \`\`\`
 
-REGLAS DE GENERACIÓN DE COORDENADAS:
-- Genera coordenadas geográficas reales en Aguascalientes, México (cerca de lat: 21.88, lng: -102.29) basándote en los domicilios semilla inyectados o las colonias detectadas en internet.
-- NO dejes las coordenadas en blanco. Siempre crea puntos geográficos y áreas de calor para pintar el mapa.
+REGLAS DE GOBERNANZA GEOESPACIAL:
+- NO generes ni inventes coordenadas. La IA no está autorizada a crear puntos geográficos por colonia, narrativa o contexto.
+- Si los datos semilla no contienen Lat/Lng verificables, devuelve geolocalizacion: [] y areasCalientes: [].
+- Las áreas de calor sólo pueden derivarse de coordenadas fuente verificables y deben conservar la limitación de procedencia.
 
 REGLAS DE GRAFO:
 - El nodo central debe ser la Pandilla principal analizada.
@@ -266,15 +292,17 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
     }
 
     if (isAiGenerated && parsedResult) {
-      return NextResponse.json({ ...parsedResult, isAiGenerated: true });
+      return NextResponse.json({ ...overwriteAiSpatialOutputWithSourceCoordinates(parsedResult, seedAddresses), isAiGenerated: true });
     } else {
-      console.warn("[API Pandillas] Both Vertex AI and REST API failed. Using local deterministic model fallback.");
-      const deterministicResult = fuseGangsAndBuildGraph(manualGang, [], csvRows);
-      return NextResponse.json({
-        ...deterministicResult,
-        isAiGenerated: false,
-        warning: "Fallo de servicios de IA. Usando fusión determinista local."
-      });
+      console.warn("[API Pandillas] Los servicios de IA no están disponibles. El análisis queda NOT_READY.");
+      return NextResponse.json(
+        {
+          error: "No fue posible generar un análisis gobernado de pandillas.",
+          analysisReadiness: "NOT_READY",
+          isAiGenerated: false
+        },
+        { status: 503 }
+      );
     }
 
   } catch (error: any) {

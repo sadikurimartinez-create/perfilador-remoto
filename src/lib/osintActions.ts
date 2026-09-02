@@ -2,11 +2,75 @@
 
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, EpistemicValidationStatus, IntelligenceSemanticRole } from "@/types/epistemicIntegrity";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
+
+function osintEpistemicIntegrity(params: {
+  sourceId: string;
+  providerId: string;
+  providerName?: string | null;
+  sourceType: string;
+  acquisitionMode: AcquisitionMode;
+  acquisitionStatus: AcquisitionStatus;
+  semanticRole: IntelligenceSemanticRole;
+  validationStatus?: EpistemicValidationStatus;
+  isSimulated?: boolean;
+  isConnectivityOnly?: boolean;
+  observedAt?: string | null;
+  generatedAt?: string | null;
+  sourceReference: string;
+  sourceUrl?: string | null;
+  rawSourceReference?: string | null;
+  query?: string | null;
+  resultCount?: number | null;
+  geolocationSource?: string | null;
+  traceabilityId?: string | null;
+}): EpistemicIntegrityMetadata {
+  return {
+    sourceId: params.sourceId,
+    providerId: params.providerId,
+    providerName: params.providerName ?? null,
+    sourceType: params.sourceType,
+    acquisitionMode: params.acquisitionMode,
+    acquisitionStatus: params.acquisitionStatus,
+    semanticRole: params.semanticRole,
+    validationStatus: params.validationStatus || "UNREVIEWED",
+    isSimulated: Boolean(params.isSimulated),
+    isDerived: false,
+    isConnectivityOnly: Boolean(params.isConnectivityOnly),
+    observedAt: params.observedAt ?? null,
+    acquiredAt: params.observedAt ?? params.generatedAt ?? new Date().toISOString(),
+    generatedAt: params.generatedAt ?? null,
+    sourceReference: params.sourceReference,
+    sourceUrl: params.sourceUrl ?? null,
+    rawSourceReference: params.rawSourceReference ?? null,
+    query: params.query ?? null,
+    resultCount: params.resultCount ?? null,
+    geolocationSource: params.geolocationSource ?? null,
+    traceabilityId: params.traceabilityId ?? null,
+    lineage: [],
+  };
+}
 
 // Ping silencioso para la telemetría (Centro de Conexiones)
 export async function pingOsint() {
-  return { status: "ok" };
+  return {
+    status: "ok",
+    epistemicIntegrity: osintEpistemicIntegrity({
+      sourceId: "osint-connectivity-ping",
+      providerId: "CEIPOL_OSINT_CONNECTIVITY",
+      providerName: "CEIPOL OSINT Connectivity Healthcheck",
+      sourceType: "CONNECTIVITY_HEALTHCHECK",
+      acquisitionMode: "CONNECTIVITY_ONLY",
+      acquisitionStatus: "ACQUIRED",
+      semanticRole: "DIAGNOSTIC",
+      isConnectivityOnly: true,
+      generatedAt: new Date().toISOString(),
+      sourceReference: "src/lib/osintActions.ts:pingOsint",
+      rawSourceReference: "local-healthcheck:osint-actions",
+      resultCount: 0,
+    }),
+  };
 }
 
 // Obtener la URL de Ngrok rápidamente para conexión directa desde el cliente
@@ -32,39 +96,148 @@ export async function getScinceData(lat: number, lng: number) {
       viviendasTotales: viviendas.toString(),
       viviendasDeshabitadas: deshabitadas.toString(),
       gradoMarginacion: marginacion,
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "SCINCE_LOCAL_SIMULATOR",
+        providerId: "SCINCE_LOCAL_SIMULATOR",
+        providerName: "SCINCE Local Simulator",
+        sourceType: "SCINCE",
+        acquisitionMode: "SIMULATED",
+        acquisitionStatus: "ACQUIRED",
+        semanticRole: "DIAGNOSTIC",
+        isSimulated: true,
+        generatedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getScinceData",
+        rawSourceReference: "local-simulator:scince-demographic-seed",
+        query: `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`,
+        resultCount: 1,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
     };
   } catch (error: any) {
-    return { exito: false, error: error.message || "Error al calcular SCINCE" };
+    return {
+      exito: false,
+      error: error.message || "Error al calcular SCINCE",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "SCINCE_LOCAL_SIMULATOR",
+        providerId: "SCINCE_LOCAL_SIMULATOR",
+        providerName: "SCINCE Local Simulator",
+        sourceType: "SCINCE",
+        acquisitionMode: "SIMULATED",
+        acquisitionStatus: "FAILED",
+        semanticRole: "DIAGNOSTIC",
+        isSimulated: true,
+        generatedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getScinceData",
+        rawSourceReference: "local-simulator:scince-demographic-seed",
+        query: `${lat},${lng}`,
+        resultCount: 0,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
+    };
   }
 }
 
 export async function getDenueData(lat: number, lng: number, radio: number = 500) {
   try {
     if (!lat || !lng) throw new Error("Faltan coordenadas");
-    const token = process.env.INEGI_DENUE_TOKEN || "dbf9098a-165e-4938-a5fc-841bd476e357";
+    const token = process.env.INEGI_DENUE_TOKEN;
+    if (!token) {
+      return {
+        exito: false,
+        error: "Proveedor INEGI DENUE no configurado.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          sourceId: "inegi-denue-api",
+          providerId: "INEGI_DENUE",
+          providerName: "INEGI DENUE API Publica",
+          sourceType: "DENUE",
+          acquisitionMode: "OBSERVED",
+          acquisitionStatus: "NOT_CONFIGURED",
+          semanticRole: "SOURCE_FACT",
+          observedAt: null,
+          generatedAt: new Date().toISOString(),
+          sourceReference: "src/lib/osintActions.ts:getDenueData",
+          sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+          rawSourceReference: "denue:v1:consulta:Buscar:todos",
+          query: `${lat},${lng},${radio}`,
+          resultCount: 0,
+          geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+        }),
+      };
+    }
     const url = `https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar/todos/${lat},${lng}/${radio}/${token}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Error de la API de INEGI: ${res.status}`);
     
     const data = await res.json();
-    if (!Array.isArray(data)) return { exito: true, total: 0, resumen: "No se encontraron negocios." };
+    if (!Array.isArray(data)) {
+      return {
+        exito: true,
+        total: 0,
+        resumen: "No se encontraron negocios.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          sourceId: "inegi-denue-api",
+          providerId: "INEGI_DENUE",
+          providerName: "INEGI DENUE API Publica",
+          sourceType: "DENUE",
+          acquisitionMode: "OBSERVED",
+          acquisitionStatus: "NO_DATA",
+          semanticRole: "SOURCE_FACT",
+          observedAt: new Date().toISOString(),
+          sourceReference: "src/lib/osintActions.ts:getDenueData",
+          sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+          rawSourceReference: "denue:v1:consulta:Buscar:todos",
+          query: `${lat},${lng},${radio}`,
+          resultCount: 0,
+          geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+        }),
+      };
+    }
     const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
-    const items = data.map((n: any) => ({
-      name: n.Nombre,
-      activity: n.Clase_actividad,
-      lat: Number(n.Latitud),
-      lng: Number(n.Longitud)
-    })).filter((i: any) => Number.isFinite(i.lat) && Number.isFinite(i.lng));
 
     return {
       exito: true,
       total: data.length,
       resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno.",
-      items
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "inegi-denue-api",
+        providerId: "INEGI_DENUE",
+        providerName: "INEGI DENUE API Publica",
+        sourceType: "DENUE",
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: data.length > 0 ? "ACQUIRED" : "NO_DATA",
+        semanticRole: "SOURCE_FACT",
+        observedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getDenueData",
+        sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+        rawSourceReference: "denue:v1:consulta:Buscar:todos",
+        query: `${lat},${lng},${radio}`,
+        resultCount: data.length,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
     };
   } catch (error: any) {
-    return { exito: false, error: error.message || "Error interno del servidor al consultar DENUE." };
+    return {
+      exito: false,
+      error: error.message || "Error interno del servidor al consultar DENUE.",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        sourceId: "inegi-denue-api",
+        providerId: "INEGI_DENUE",
+        providerName: "INEGI DENUE API Publica",
+        sourceType: "DENUE",
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: "FAILED",
+        semanticRole: "SOURCE_FACT",
+        observedAt: null,
+        generatedAt: new Date().toISOString(),
+        sourceReference: "src/lib/osintActions.ts:getDenueData",
+        sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+        rawSourceReference: "denue:v1:consulta:Buscar:todos",
+        query: `${lat},${lng},${radio}`,
+        resultCount: 0,
+        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+      }),
+    };
   }
 }
 
@@ -117,8 +290,33 @@ export async function getDatosGobMxData(
 }
 
 export async function getTelegramOsintData(queryTelegram: string) {
+  const baseMetadata = {
+    sourceId: "telegram-gemini-osint-synthesis",
+    providerId: "GEMINI",
+    providerName: "Google Vertex AI Gemini",
+    sourceType: "TELEGRAM_CONTEXT",
+    acquisitionMode: "AI_GENERATED" as const,
+    semanticRole: "SYNTHESIS" as const,
+    sourceReference: "src/lib/osintActions.ts:getTelegramOsintData",
+    rawSourceReference: "gemini:generateContent:telegram-context-synthesis",
+    query: queryTelegram || null,
+  };
+
   try {
     if (!queryTelegram) throw new Error("Falta la consulta de Telegram OSINT.");
+    if (!GCP_PROJECT_ID || !GCP_LOCATION || !GEMINI_MODEL) {
+      return {
+        success: false,
+        error: "Proveedor Gemini no configurado para barrido OSINT.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          ...baseMetadata,
+          acquisitionStatus: "NOT_CONFIGURED",
+          validationStatus: "UNREVIEWED",
+          generatedAt: new Date().toISOString(),
+          resultCount: 0,
+        }),
+      };
+    }
 
     const authOptions = GCP_PRIVATE_KEY
       ? {
@@ -141,11 +339,45 @@ Genera un resumen analítico táctico estructurado (OSINT Summary) que describa 
 Estructura tu respuesta en un solo párrafo contundente o en 3 viñetas cortas. NO menciones que eres una IA. Escribe el reporte directamente como un hallazgo de inteligencia táctica listo para inyectarse en un dictamen.`;
 
     const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } });
-    const osintSummary = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "No se detectaron patrones anómalos en el análisis OSINT de estos conceptos.";
-    return { success: true, osintSummary: osintSummary.trim() };
+    const osintSummary = result.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!osintSummary) {
+      return {
+        success: false,
+        error: "El proveedor Gemini no devolvió contenido OSINT.",
+        epistemicIntegrity: osintEpistemicIntegrity({
+          ...baseMetadata,
+          acquisitionStatus: "NO_DATA",
+          validationStatus: "UNREVIEWED",
+          generatedAt: new Date().toISOString(),
+          resultCount: 0,
+        }),
+      };
+    }
+
+    return {
+      success: true,
+      osintSummary,
+      epistemicIntegrity: osintEpistemicIntegrity({
+        ...baseMetadata,
+        acquisitionStatus: "ACQUIRED",
+        validationStatus: "PENDING_REVIEW",
+        generatedAt: new Date().toISOString(),
+        resultCount: 1,
+      }),
+    };
   } catch (error: any) {
     console.error("[osintActions.getTelegramOsintData] Error:", error);
-    return { success: false, error: "Error interno del servidor al ejecutar el barrido OSINT." };
+    return {
+      success: false,
+      error: "Error interno del servidor al ejecutar el barrido OSINT.",
+      epistemicIntegrity: osintEpistemicIntegrity({
+        ...baseMetadata,
+        acquisitionStatus: "FAILED",
+        validationStatus: "UNREVIEWED",
+        generatedAt: new Date().toISOString(),
+        resultCount: 0,
+      }),
+    };
   }
 }
 
@@ -196,80 +428,5 @@ export async function getRepuveData(placa: string) {
       return { exito: false, error: "⚠️ Vercel no puede comunicarse con el Robot local. Asegúrate de encender el robot (node robot-repuve.js) y de configurar la variable ROBOT_NGROK_URL en Vercel." };
     }
     return { exito: false, error: error.message || "Error conectando al cuartel general (Robot REPUVE)." };
-  }
-}
-
-/**
- * Direct real-time Google Maps Geocoding API Server Action for GIM and Perfilador GEOINT.
- * Converts structured address strings into exact validated coordinates (geometry.location).
- */
-export async function geocodeAddressDirect(addressQuery: string) {
-  try {
-    if (!addressQuery || !addressQuery.trim()) {
-      return { exito: false, status: "UNRESOLVED_ADDRESS", error: "Dirección vacía o no especificada." };
-    }
-
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
-    let formattedQuery = addressQuery.trim();
-    if (!formattedQuery.toLowerCase().includes("aguascalientes")) {
-      formattedQuery += ", Aguascalientes, México";
-    }
-
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(formattedQuery)}&key=${apiKey}`;
-    const res = await fetch(url, { cache: "force-cache" });
-    if (!res.ok) {
-      return { exito: false, status: "UNRESOLVED_ADDRESS", error: `Error de servidor Google Maps (Status: ${res.status})` };
-    }
-
-    const data = await res.json();
-    if (data.status !== "OK" || !Array.isArray(data.results) || data.results.length === 0) {
-      return { exito: false, status: "UNRESOLVED_ADDRESS", error: `Dirección no geocodificable (Google Status: ${data.status})` };
-    }
-
-    const firstResult = data.results[0];
-    const lat = firstResult.geometry.location.lat;
-    const lng = firstResult.geometry.location.lng;
-    const locationType = firstResult.geometry.location_type || "APPROXIMATE";
-
-    // Strict bounding box check for Aguascalientes (lat: 21.0 - 22.5, lng: -103.0 - -101.5)
-    if (lat < 21.0 || lat > 22.5 || lng < -103.0 || lng > -101.5) {
-      return { exito: false, status: "UNRESOLVED_ADDRESS", error: "Coordenadas fuera del estado de Aguascalientes" };
-    }
-
-    let confidence = 0.70;
-    if (locationType === "ROOFTOP") confidence = 0.98;
-    else if (locationType === "RANGE_INTERPOLATED") confidence = 0.90;
-    else if (locationType === "GEOMETRIC_CENTER") confidence = 0.82;
-
-    return {
-      exito: true,
-      status: "RESOLVED",
-      lat,
-      lng,
-      address: firstResult.formatted_address || addressQuery,
-      precision: locationType as "ROOFTOP" | "RANGE_INTERPOLATED" | "GEOMETRIC_CENTER" | "APPROXIMATE",
-      fuente: "GOOGLE_GEOCODING_API" as const,
-      confidence,
-      timestamp: new Date().toISOString()
-    };
-  } catch (err: any) {
-    // Offline resilience fallback for local CLI / dev test environments when external network is restricted
-    if (err.message?.includes("fetch failed") || err.cause?.code === "ENOTFOUND") {
-      const lower = addressQuery.toLowerCase();
-      if (lower.includes("cardenal") || lower.includes("mirador")) {
-        return {
-          exito: true,
-          status: "RESOLVED",
-          lat: 21.8924,
-          lng: -102.2612,
-          address: "Calle Loma del Cardenal 103, Mirador de las Culturas, Aguascalientes",
-          precision: "ROOFTOP" as const,
-          fuente: "GOOGLE_GEOCODING_API" as const,
-          confidence: 0.98,
-          timestamp: new Date().toISOString()
-        };
-      }
-    }
-    return { exito: false, status: "UNRESOLVED_ADDRESS", error: err.message || "Error al geocodificar dirección" };
   }
 }

@@ -1,14 +1,9 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import dossierPandillas from "../modules/pandillas/dossier_pandillas.json";
-import {
-  validateTerritorialActor,
-  classifyActorProximity,
-  formatDomicilio,
-} from "@/utils/geoActorValidation";
 import { buildOsintFindingsFromSweeps } from "@/utils/osintChapterBuilder";
 import { ReportIntelligenceNormalizer } from "@/utils/reportIntelligenceNormalizer";
+import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
 import {
   Document,
   ImageRun,
@@ -29,7 +24,7 @@ import {
   WidthType,
 } from "docx";
 import { saveAs } from "file-saver";
-import { TCE_DEFAULT_FALLBACK } from "../utils/territorialContextEngine";
+import { logGeointEvent } from "@/services/geoint/logGeointEvent";
 import { EditorialStructureEngine } from "@/utils/editorialStructureEngine";
 import { AIOutputSanitizerEngine } from "@/utils/aiOutputSanitizerEngine";
 import { 
@@ -42,6 +37,16 @@ import { EvidenceNarrativeMapper } from "@/utils/evidenceNarrativeMapper";
 import { ReportCoherenceValidator } from "@/utils/reportCoherenceValidator";
 import { ReportCertificationGate } from "@/utils/reportCertificationGate";
 import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
+import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
+import { assessReportReadiness } from "@/utils/reportReadyGovernance";
+import {
+  buildInstitutionalReportInput,
+  reconcileInstitutionalReportPayload,
+} from "@/utils/institutionalReportPublicationContract";
+import {
+  applyInstitutionalDocumentModelToPayload,
+  buildInstitutionalDocumentModel,
+} from "@/utils/institutionalDocumentAssembly";
 import { renderMarkdownTable } from "@/utils/documentTableRenderer";
 import { renderVisualBlock, VisualDensityController } from "@/utils/documentVisualIntelligenceEngine";
 import {
@@ -120,12 +125,8 @@ async function getImageDimensionsAndBuffer(
           console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a CartoDB.`);
         }
       } else {
-        if (apiKey) {
-          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
-        } else {
-          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png`;
-        }
-        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de Yandex. Aplicado centro por defecto de Aguascalientes.");
+        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Mapa Yandex omitido: no contiene coordenadas verificables.");
+        return null;
       }
     }
 
@@ -144,19 +145,15 @@ async function getImageDimensionsAndBuffer(
           console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: OSM Center [${lat}, ${lng}] -> Redireccionado a CartoDB.`);
         }
       } else {
-        if (apiKey) {
-          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=21.8853,-102.2916&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
-        } else {
-          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/-102.2916/21.8853/600x400.png`;
-        }
-        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] No se extrajeron coordenadas de la URL de OSM. Aplicado centro por defecto de Aguascalientes.");
+        console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Mapa OSM omitido: no contiene coordenadas verificables.");
+        return null;
       }
     }
 
     if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
       const isExternal = typeof window !== "undefined" && !imgSrc.includes(window.location.host);
       let fetchUrl = imgSrc;
-      
+
       if (isExternal) {
         if (imgSrc.includes("maps.googleapis.com/maps/api/streetview")) {
           try {
@@ -452,17 +449,25 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
     { key: "pandillasAnalysis", name: "Capítulo 8" },
     { key: "conclusionesText", name: "Capítulo 10" }
   ];
-
-  const emptyChaptersAlerts: string[] = [];
+  const defaultChapterFallbacks: Record<string, string> = {
+    contextoTerritorial: TCE_DEFAULT_FALLBACK,
+    finalHypothesis: "No existe una hipótesis criminológica ambiental validada disponible para este expediente. La ausencia de información no permite formular una inferencia sustantiva.",
+    mapsText: "No existe análisis territorial cartográfico validado disponible para este expediente. No se infieren puntos críticos, zonas calientes ni patrones espaciales sin soporte cartográfico suficiente.",
+    statsText: "No existe análisis estadístico validado disponible para este expediente. No se infieren concentraciones, asociaciones ni correlaciones en ausencia de datos suficientes.",
+    evidenceText: "No existe evidencia fotográfica validada suficiente para sustentar una interpretación en este capítulo. La ausencia de evidencia no constituye confirmación de deterioro, vandalismo ni otra condición territorial.",
+    osintSynthesized: "No existe una síntesis OSINT validada disponible para este expediente. No se consideran corroborados actores, patrones, atractores o condiciones territoriales sin fuentes verificables.",
+    pandillasAnalysis: "No existe análisis validado de actores territoriales o pandillas disponible para este expediente. No se infieren presencia, control, marcas territoriales, vínculos o fronteras sin evidencia suficiente.",
+    conclusionesText: "No existen conclusiones operativas validadas disponibles para este expediente. La ausencia de información suficiente impide emitir recomendaciones sustantivas o afirmar causas, riesgos o prioridades de intervención."
+  };
 
   for (const ch of requiredChapters) {
     const text = payload[ch.key];
     if (!text || text.trim().length === 0) {
       console.warn(`[WARNING] El capítulo ${ch.name} (${ch.key}) estaba vacío o no disponible.`);
-      
+
       // En lugar de sobreescribir destructivamente, registramos la alerta de calidad
       emptyChaptersAlerts.push(`- El capítulo ${ch.name} (${ch.key}) se encuentra vacío de narrativa.`);
-      
+
       // Se inyecta un marcador visible pero no intrusivo en el capítulo analítico correspondiente
       payload[ch.key] = `[PRESTACIÓN REQUERIDA: Narrativa analítica pendiente de carga para el ${ch.name}]`;
     }
@@ -474,7 +479,7 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
       "Se identificaron las siguientes insuficiencias analíticas durante la validación del reporte:\n" +
       emptyChaptersAlerts.join("\n") + "\n" +
       "========================================================\n";
-    
+
     payload.conclusionesText = (payload.conclusionesText || "") + validationHeader;
   }
 
@@ -586,6 +591,11 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
 }
 
 function getPrimaryInitialHypothesis(payload: any): string {
+  const canonicalChapter0 = buildReportChapter0Hypothesis(payload);
+  if (canonicalChapter0.initialHypothesis !== "HIPÓTESIS NO FORMULADA") {
+    return canonicalChapter0.initialHypothesis;
+  }
+
   // 1. ADR-011 Hypothesis Ledger
   if (payload.hypothesisLifecycle?.hipotesisInicial && payload.hypothesisLifecycle.hipotesisInicial.trim().length > 0) {
     return payload.hypothesisLifecycle.hipotesisInicial.trim();
@@ -600,14 +610,7 @@ function getPrimaryInitialHypothesis(payload: any): string {
   if (typeof payload.hipotesisPrincipal === "string" && payload.hipotesisPrincipal.trim().length > 0) {
     return payload.hipotesisPrincipal.trim();
   }
-  // 4. Fallback exploratorio / finalHypothesis
-  if (payload.finalHypothesis && payload.finalHypothesis.trim().length > 15) {
-    const lines = payload.finalHypothesis.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-    if (lines.length > 0) {
-      return lines[0];
-    }
-  }
-  return "Actividad delictiva disonante bajo investigación territorial.";
+  return "HIPÓTESIS NO FORMULADA";
 }
 
 function assertHypothesisConsistency(portadaHyp: string, cap0Hyp: string) {
@@ -717,43 +720,107 @@ export async function exportToWord(
   payload: any,
   projectName: string,
   reportNumber?: string,
-  user?: any
+  user?: any,
+  options: { exportMode?: "DRAFT" | "INSTITUTIONAL" } = {}
 ) {
+  const isInstitutionalExport = options.exportMode === "INSTITUTIONAL";
   // Sanitizar payload previo a la maquetación
   payload = sanitizeEditorialPayload(payload);
 
-  // --- CAPA DE GOBERNANZA DE CALIDAD DE REPORTES CEIPOL v1.0 ---
-  // Resetear registro de huellas dactilares para esta corrida de exportación
-  ImageFingerprintService.clearRegistry();
+  if (isInstitutionalExport) {
+    try {
+      const institutionalReportInput = buildInstitutionalReportInput(payload);
+      payload = reconcileInstitutionalReportPayload(payload, institutionalReportInput);
+      const institutionalDocumentModel = buildInstitutionalDocumentModel(institutionalReportInput, {
+        projectName,
+        reportNumber,
+        institutionName: payload.institutionName || "SSPE / CEIPOL",
+      });
+      payload = applyInstitutionalDocumentModelToPayload(payload, institutionalDocumentModel);
+    } catch (err: any) {
+      const errMsg = `REPORT_READY requerido para publicación institucional.\n\n${err?.message || err}`;
+      if (typeof window !== "undefined") {
+        alert(errMsg);
+      }
+      throw new Error(errMsg);
+    }
+  } else {
+    payload.reportReadyAssessment = assessReportReadiness(payload);
+  }
+
+  // Event Log Forense: Registrar consumo de hallazgos por parte del Report Engine (ADR-019.18)
+  const allFindings = [
+    ...(payload.streetViewAnalysis || []),
+    ...(payload.approvedFindings || []),
+    ...(payload.findings || []),
+  ];
+  for (const f of allFindings) {
+    const fId = f.id || f.findingId || f.evidenceId || "FINDING-UNKNOWN";
+    const expId = payload.projectId || payload.expedienteId || projectName || "EXP-2026";
+    const reportId = reportNumber || payload.reportId || payload.id || `report-${expId}`;
+    const tId = f.traceabilityId || f.evidenceId || `trace-report-${expId}-${fId}`;
+    
+    await logGeointEvent(
+      "REPORT_CONSUMED",
+      expId,
+      tId,
+      user?.name || user?.email || "REPORT_ENGINE_SYSTEM",
+      "exportToWord",
+      "CONSUMED",
+      "REPORT",
+      reportId,
+      {
+        reportId,
+        findingId: fId,
+        projectName,
+      }
+    );
+  }
+
 
   // 1. Evidence Normalizer & Mapper
-  if (payload.photoEvidence) {
+  if (!isInstitutionalExport && payload.photoEvidence) {
     payload.photoEvidence = EvidenceNarrativeMapper.mapEvidenceList(payload.photoEvidence);
   }
-  if (payload.streetViewAnalysis) {
+  if (!isInstitutionalExport && payload.streetViewAnalysis) {
     payload.streetViewAnalysis = EvidenceNarrativeMapper.mapEvidenceList(payload.streetViewAnalysis);
   }
 
   // Ejecutar el motor de gobernanza en caliente de evidencias fotográficas (ADR-011)
-  const governedPhotoResult = PhotoEvidenceGovernanceEngine.process(payload.photoEvidence || []);
-  payload.governedEvidence = governedPhotoResult;
+  if (!isInstitutionalExport) {
+    const governedPhotoResult = PhotoEvidenceGovernanceEngine.process(payload.photoEvidence || []);
+    payload.governedEvidence = governedPhotoResult;
+  }
 
   // 2. AI Sanitizer Engine (modo DOCUMENT_PUBLICATION)
-  payload = AIOutputSanitizerEngine.sanitizeObject(payload, "DOCUMENT_PUBLICATION");
+  if (!isInstitutionalExport) {
+    payload = AIOutputSanitizerEngine.sanitizeObject(payload, "DOCUMENT_PUBLICATION");
+  }
 
   // 3. Coherence Validator & Certification Gate Status Control
-  const certResult = ReportCertificationGate.certify(payload, true);
-  payload.certificationGateResult = certResult;
+  if (isInstitutionalExport) {
+    payload.certificationGateResult = ReportCertificationGate.evaluateInstitutionalCertificationGate({
+      reportReadyAssessment: payload.reportReadyAssessment,
+      institutionalReportInput: payload.institutionalReportInput,
+      institutionalDocumentModel: payload.institutionalDocumentModel,
+      documentArtifactReference: payload.documentArtifactReference || null,
+      documentArtifactHash: payload.documentArtifactHash || null,
+      action: "REQUEST_CERTIFICATION",
+    });
+  } else {
+    const certResult = ReportCertificationGate.certify(payload, true);
+    payload.certificationGateResult = certResult;
 
-  if (certResult.status === "NOT_CERTIFIED") {
-    const errMsg = "Informe no certificado: Cadena analítica incompleta.\n\n" + certResult.messages.join("\n");
-    if (typeof window !== "undefined") {
-      alert(errMsg);
-    }
-    throw new Error(errMsg);
-  } else if (certResult.status === "CERTIFIED_WITH_WARNINGS") {
-    if (typeof window !== "undefined") {
-      alert("⚠️ Advertencia de Certificación CEIPOL:\n\n" + certResult.messages.join("\n"));
+    if (certResult.status === "NOT_CERTIFIED") {
+      const errMsg = "Informe no certificado: Cadena analítica incompleta.\n\n" + certResult.messages.join("\n");
+      if (typeof window !== "undefined") {
+        alert(errMsg);
+      }
+      throw new Error(errMsg);
+    } else if (certResult.status === "CERTIFIED_WITH_WARNINGS") {
+      if (typeof window !== "undefined") {
+        alert("⚠️ Advertencia de Certificación CEIPOL:\n\n" + certResult.messages.join("\n"));
+      }
     }
   }
 
@@ -805,17 +872,19 @@ export async function exportToWord(
     if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
       throw new Error("el número de expediente de portada (" + payload.projectId + ") no coincide con el expediente analizado (" + reportNumber + ").");
     }
-    FinalReportConsistencyCheck(payload, reportNumber);
-    ExecutiveReportQualityGate(payload);
-    CartographicQualityGate(payload);
+    if (!isInstitutionalExport) {
+      FinalReportConsistencyCheck(payload, reportNumber);
+      ExecutiveReportQualityGate(payload);
+      CartographicQualityGate(payload);
+    }
 
     // --- INTEGRACIÓN EXCLUSIVA CON EL CONTRATO UNIFICADO (IIC) ---
     const iic = payload.intelligenceContext;
-    if (!iic) {
+    if (!isInstitutionalExport && !iic) {
       throw new Error("MIGRATION_BLOCKAGE: Legacy context access is strictly forbidden under ADR-007.3.");
     }
 
-    if (iic.analysisReadiness === "NOT_READY" || iic.qualityControl?.status === "FAILED") {
+    if (!isInstitutionalExport && (iic.analysisReadiness === "NOT_READY" || iic.qualityControl?.status === "FAILED")) {
       const aceReport = iic.evidenceSources.ACE;
       const firstFailed = aceReport?.alerts?.find((a: any) => a.status === "FAILED") || {
         module: "ACE",
@@ -1124,6 +1193,15 @@ export async function exportToWord(
   // --- FASE 1: BOX DE HIPÓTESIS INICIAL EN PORTADA ---
   const certGate = payload.certificationGateResult;
   const hypothesisText = getPrimaryInitialHypothesis(payload);
+  const coverAnalyticalQuestion = isInstitutionalExport
+    ? "Modelo documental ensamblado desde InstitutionalReportInput gobernado."
+    : "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?";
+  const coverVariablesText = isInstitutionalExport
+    ? "Variables documentales derivadas de assertions narrativas y visuales gobernados."
+    : "• Territorio (Criminología Ambiental)  • Incidencia Delictiva (911)  • Actores Locales (Dossier)  • Oportunidad Física\n";
+  const coverValidationObjective = isInstitutionalExport
+    ? "Formatear contenido gobernado sin certificar, publicar ni crear claims nuevos."
+    : "Determinar puntos críticos de intervención y coordinar la remediación urbana táctica.";
   const initialHypothesisBlock = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
@@ -1148,13 +1226,13 @@ export async function exportToWord(
               new Paragraph({
                 children: [
                   new TextRun({ text: "Pregunta Analítica: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: "¿Cuáles son los facilitadores ambientales y espaciales que incrementan la oportunidad delictiva en este cuadrante?\n", size: 16 }),
+                  new TextRun({ text: `${coverAnalyticalQuestion}\n`, size: 16 }),
                   new TextRun({ text: "Hipótesis de Trabajo: ", bold: true, size: 16, color: "1F4E79" }),
                   new TextRun({ text: `${hypothesisText}\n`, size: 16, italics: true }),
                   new TextRun({ text: "Variables Evaluadas: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: "• Territorio (Criminología Ambiental)  • Incidencia Delictiva (911)  • Actores Locales (Dossier)  • Oportunidad Física\n", size: 16 }),
+                  new TextRun({ text: `${coverVariablesText}\n`, size: 16 }),
                   new TextRun({ text: "Objetivo de Validación: ", bold: true, size: 16, color: "1F4E79" }),
-                  new TextRun({ text: "Determinar puntos críticos de intervención y coordinar la remediación urbana táctica.", size: 16 })
+                  new TextRun({ text: coverValidationObjective, size: 16 })
                 ],
                 alignment: AlignmentType.JUSTIFY,
                 spacing: { after: 120 }
@@ -1959,101 +2037,20 @@ export async function exportToWord(
   // FlexibleChapterFlow: No pageBreakBefore, flow naturally
   elements.push(createTitle("CAPÍTULO 8: ACTORES TERRITORIALES Y PANDILLAS"));
 
-  // Estructura de evaluación obligatoria del Capítulo 8 - Matriz inteligente de actores
-  const projectLat = payload.latitude || (payload.maps && payload.maps[0]?.lat) || 21.8853;
-  const projectLng = payload.longitude || (payload.maps && payload.maps[0]?.lng) || -102.2916;
-  const maxRadiusMeters = payload.analysisRadius ? Number(payload.analysisRadius) : 500;
-  const activeActors: any[] = [];
-
-  if (dossierPandillas && dossierPandillas.dossiers) {
-    for (const d of dossierPandillas.dossiers) {
-      for (const member of d.integrantes) {
-        const validation = validateTerritorialActor(
-          member,
-          projectLat,
-          projectLng,
-          maxRadiusMeters
-        );
-        if (!validation.valid || validation.distancia === undefined) continue;
-
-        const dist = validation.distancia;
-        const status = classifyActorProximity(dist);
-
-        activeActors.push({
-          nombre: member.nombre_completo,
-          alias: member.alias || "Sin Alias",
-          grupo: d.pandilla,
-          rango: member.rol || "Integrante",
-          domicilio: formatDomicilio(member.direccion),
-          distancia: dist,
-          status,
-          evidencia: `Georreferencia validada a ${dist.toFixed(0)}m del epicentro (domicilio: ${formatDomicilio(member.direccion)}).`
-        });
-      }
-    }
-  }
-
-  // Ordenar por cercanía territorial
-  activeActors.sort((a, b) => a.distancia - b.distancia);
-
   elements.push(
     new Paragraph({
       children: [
         new TextRun({
-          text: "MATRIZ DE ACTORES TERRITORIALES Y EVALUACIÓN DE PRESENCIA (GANG INTEL)",
-          bold: true,
-          size: 18,
-          color: "0D2B52",
+          text: "No existen datos gobernados de pandillas disponibles en el expediente para construir una evaluación de presencia territorial.",
+          size: 19,
+          italic: true,
+          color: "5B6573",
           font: "Calibri"
         })
       ],
       spacing: { after: 120 }
     })
   );
-
-  if (activeActors.length > 0) {
-    const matrixTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          children: [
-            createCell("Actor / Alias", true),
-            createCell("Grupo", true),
-            createCell("Rango / Función", true),
-            createCell("Domicilio Identificado", true),
-            createCell("Evidencia / Relación Territorial", true),
-            createCell("Evaluación", true)
-          ]
-        }),
-        ...activeActors.slice(0, 5).map(actor => new TableRow({
-          children: [
-            createCell(`${actor.nombre} (${actor.alias})`),
-            createCell(actor.grupo),
-            createCell(actor.rango),
-            createCell(actor.domicilio),
-            createCell(actor.evidencia),
-            createCell(actor.status)
-          ]
-        }))
-      ]
-    });
-    elements.push(matrixTable);
-  } else {
-    elements.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `No se identificaron actores territoriales o pandillas con domicilio validado dentro del radio de análisis (${maxRadiusMeters}m) del polígono.`,
-            size: 19,
-            italic: true,
-            color: "ef4444",
-            font: "Calibri"
-          })
-        ],
-        spacing: { after: 120 }
-      })
-    );
-  }
   elements.push(
     new Paragraph({
       children: [

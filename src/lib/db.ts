@@ -24,24 +24,10 @@ export async function ensureSchema(pool: Pool) {
     `);
     
     // 3. Seeding del usuario admin si la tabla está vacía o no existe el admin
-    const { rows } = await pool.query(
-      "SELECT id FROM users WHERE username = $1 LIMIT 1",
-      ["admin"]
-    );
-    
+    // Gobernanza de credenciales:
+    // Las cuentas administrativas no se provisionan con contraseñas fijas
+    // embebidas en el código de aplicación.
     const bcrypt = require("bcryptjs");
-    if (rows.length === 0) {
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync("Admin2026!", salt);
-      
-      await pool.query(`
-        INSERT INTO users (username, password_hash, role, name)
-        VALUES ($1, $2, $3, $4)
-      `, ["admin", hash, "ADMIN", "Administrador Unificado"]);
-      
-      console.log("PostgreSQL auto-migration: Seeded default admin user successfully.");
-    }
-
     // 4. Migración transparente de contraseñas de texto plano a hashes de Bcrypt
     const { rows: allUsers } = await pool.query(
       "SELECT id, username, password_hash FROM users"
@@ -138,39 +124,29 @@ function parseConnectionString(str: string) {
  * Así el build de Vercel no falla al importar este módulo.
  */
 export function getPool(): Pool {
-  let connectionString = process.env.DATABASE_URL || "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
-  
-  console.log("getPool diagnostic (before fallback check):", {
-    hasEnv: !!process.env.DATABASE_URL,
-    envLength: process.env.DATABASE_URL ? process.env.DATABASE_URL.length : 0,
-    envPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 25) : "none"
-  });
-
-  // Si la cadena de conexión en Vercel es un placeholder o no es válida (ej. contiene 'USUARIO' o carece de '@')
-  // forzamos automáticamente el fallback transparente a la conexión real de Namecheap.
-if (
-  process.env.NODE_ENV === "production" &&
-  (
-    connectionString.includes("USUARIO") ||
-    connectionString.includes("CONTRASENA") ||
-    connectionString.includes("host") ||
-    !connectionString.includes("@")
-  )
-) {
-    console.warn("getPool warning: DATABASE_URL on Vercel is a placeholder or invalid. Falling back to working Namecheap database URL.");
-    connectionString = "postgresql://postgres:Cocipe2009@159.198.64.191:5432/ceipol_perfilador";
-  }
-
-  console.log("getPool diagnostic (after fallback check):", {
-    usedLength: connectionString.length,
-    usedPrefix: connectionString.substring(0, 25)
-  });
+  const connectionString = process.env.DATABASE_URL?.trim();
 
   if (!connectionString) {
     throw new Error(
-      "Falta la variable de entorno DATABASE_URL para conectar a PostgreSQL."
+      "DATABASE_CONFIGURATION_ERROR: DATABASE_URL is required."
     );
   }
+
+  if (
+    !connectionString.startsWith("postgresql://") &&
+    !connectionString.startsWith("postgres://")
+  ) {
+    throw new Error(
+      "DATABASE_CONFIGURATION_ERROR: DATABASE_URL must use the PostgreSQL protocol."
+    );
+  }
+
+  if (!connectionString.includes("@")) {
+    throw new Error(
+      "DATABASE_CONFIGURATION_ERROR: DATABASE_URL is structurally invalid."
+    );
+  }
+
 
   if (!poolInstance) {
     const parsed = parseConnectionString(connectionString);

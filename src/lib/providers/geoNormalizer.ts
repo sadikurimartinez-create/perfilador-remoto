@@ -108,13 +108,39 @@ export class GeoDataNormalizerEngine {
           dataType = "demographic";
           observed_at = "2020-03-15T00:00:00.000Z"; // Mexican Census 2020
           temporalFreshness = 15; // older demographic dataset
-          geomType = "Polygon"; // AGEB or Neighborhood polygons
-          geomCoords = rawData?.geometry?.coordinates || [[lng - 0.01, lat - 0.01], [lng + 0.01, lat - 0.01], [lng + 0.01, lat + 0.01], [lng - 0.01, lat + 0.01]];
-          spatialVal = 100;
-          spatialUnit = "neighborhood";
-          spatialDesc = "AGEB (Área Geoestadística Básica) demographic aggregation boundary";
+
+          // ADR-020.34 C6:
+          // SCINCE territorial geometry is authoritative only when
+          // supplied by the source payload. Missing geometry remains
+          // missing and must never be synthesized around lat/lng.
+          const sourceGeometryCoordinates =
+            Array.isArray(rawData?.geometry?.coordinates) &&
+            rawData.geometry.coordinates.length > 0
+              ? rawData.geometry.coordinates
+              : null;
+
+          if (sourceGeometryCoordinates) {
+            geomType = "Polygon";
+            geomCoords = sourceGeometryCoordinates;
+            spatialVal = 100;
+            spatialUnit = "neighborhood";
+            spatialDesc =
+              "SCINCE demographic polygon supplied by the source payload";
+            confidenceNotes =
+              "Demographic source retained with source-supplied territorial geometry.";
+          } else {
+            geomType = "Unknown";
+            geomCoords = null;
+            spatialVal = null;
+            spatialUnit = "administrative";
+            spatialDesc =
+              "SCINCE demographic record without demonstrated source geometry";
+            geospatialPrecision = 0;
+            confidenceNotes =
+              "Demographic source retained without demonstrated geometry; no territorial boundary was synthesized.";
+          }
+
           payload = rawData;
-          confidenceNotes = "Demographic baseline verified under federal decennial census records.";
         } else {
           // DENUE
           dataType = "infrastructure";

@@ -7,7 +7,7 @@ import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 
 export function SweepSummaryTab() {
-  const { project, updateProjectDetails, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
+  const { project, saveHumanHypothesis, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
   const [isSavingHypothesis, setIsSavingHypothesis] = useState(false);
   const [hypothesisText, setHypothesisText] = useState(project?.hipotesis || "");
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
@@ -17,12 +17,13 @@ export function SweepSummaryTab() {
     if (project) {
       setHypothesisText(project.hipotesis || "");
     }
-  }, [project?.hipotesis]);
+  }, [project]);
 
   const sweeps = project?.sweeps || [];
   const totalSweeps = sweeps.length;
   const completedSweeps = sweeps.filter(s => s.status === "Integrado" || s.status === "Rechazado").length;
   const pendingSweeps = sweeps.filter(s => s.status === "Pendiente").length;
+  const reportReadyAssessment = project?.reportReadyAssessment;
 
   const completenessPercentage = totalSweeps > 0 
     ? Math.round((completedSweeps / totalSweeps) * 100) 
@@ -32,7 +33,7 @@ export function SweepSummaryTab() {
     if (!project || isReadOnly) return;
     setIsSavingHypothesis(true);
     try {
-      await updateProjectDetails({ hipotesis: hypothesisText });
+      await saveHumanHypothesis(hypothesisText);
       setToast({ type: "success", message: "✅ Hipótesis consolidada guardada exitosamente." });
     } catch (err: any) {
       setToast({ type: "error", message: "❌ Error al guardar la hipótesis: " + err.message });
@@ -144,24 +145,24 @@ export function SweepSummaryTab() {
         {/* Integration Rules Check */}
         <CEIPOLCard variant="glass" className="p-6 flex flex-col justify-between min-h-[190px] shadow-xl">
           <div>
-            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Gobernanza Criminológica</h4>
+            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5">Readiness Institucional</h4>
             <div className="space-y-1.5 text-xs text-slate-300 font-medium">
               <div className="flex items-start gap-2">
-                <span className="text-emerald-400">✓</span>
-                <p className="leading-snug">Trazabilidad completa por timestamp</p>
+                <span className={reportReadyAssessment?.geographyReady ? "text-emerald-400" : "text-amber-400"}>●</span>
+                <p className="leading-snug">Geografía canónica {reportReadyAssessment?.geographyReady ? "válida" : "pendiente"}</p>
               </div>
               <div className="flex items-start gap-2">
-                <span className="text-emerald-400">✓</span>
-                <p className="leading-snug">Identificador único por bloque inyectado</p>
+                <span className={reportReadyAssessment?.hypothesisReady ? "text-emerald-400" : "text-amber-400"}>●</span>
+                <p className="leading-snug">Hipótesis humana {reportReadyAssessment?.hypothesisReady ? "formulada" : "requerida"}</p>
               </div>
               <div className="flex items-start gap-2">
-                <span className="text-emerald-400">✓</span>
-                <p className="leading-snug">Registro obligatorio de justificación de descarte</p>
+                <span className={reportReadyAssessment?.readyForInstitutionalReport ? "text-emerald-400" : "text-amber-400"}>●</span>
+                <p className="leading-snug">{reportReadyAssessment?.status || "NOT_READY"}</p>
               </div>
             </div>
           </div>
           <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
-            Normativa Operativa CEIPOL v3.0
+            {(reportReadyAssessment?.blockingReasons || reportReadyAssessment?.unresolvedItems || [])[0]?.code || "REPORT_READY_DERIVADO"}
           </div>
         </CEIPOLCard>
       </div>

@@ -2,8 +2,22 @@
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 
-// Importación dinámica para evitar errores de SSR en Next.js
-const ForceGraph2D: any = dynamic(() => import('react-force-graph-2d'), { ssr: false });
+const ForceGraph2DFallback = () => (
+  <div className="p-6 text-center text-slate-400 text-xs font-mono border border-dashed border-slate-800 rounded bg-slate-950/60">
+    ⚠️ Motor gráfico 2D no disponible temporalmente.
+  </div>
+);
+ForceGraph2DFallback.displayName = "ForceGraph2DFallback";
+
+// Importación dinámica resiliente para evitar cierres catastróficos por ChunkLoadError
+const ForceGraph2D: any = dynamic(
+  () =>
+    import('react-force-graph-2d').catch((err) => {
+      console.warn('[MODULE FALLBACK] Fallo al cargar paquete de visualización de grafo 2D:', err);
+      return ForceGraph2DFallback;
+    }),
+  { ssr: false }
+);
 
 interface NetworkDashboardProps {
   project?: any;

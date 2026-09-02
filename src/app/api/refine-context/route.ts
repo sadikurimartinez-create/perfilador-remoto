@@ -5,8 +5,6 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Burlar la validación de certificados TLS del proxy institucional local
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 function formatCoord(n: number | null | undefined): string {
   return typeof n === "number" ? n.toFixed(5) : "N/A";

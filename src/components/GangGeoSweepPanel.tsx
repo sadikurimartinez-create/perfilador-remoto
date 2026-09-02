@@ -44,7 +44,6 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   const { registerSweep } = useProject();
   // Input fields
   const [narrative, setNarrative] = useState("");
-  const [softPrompt, setSoftPrompt] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<{ name: string; size: string; preview: string }[]>([]);
 
@@ -82,14 +81,14 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   };
 
   const handleResetView = () => {
-    if (map) {
-      map.setCenter({ lat: 21.8853, lng: -102.2916 });
+    if (map && mapCenter) {
+      map.setCenter(mapCenter);
       map.setZoom(13);
     }
   };
 
   // Pre-load Google Maps API
-  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc") : "AIzaSyDSO_b0Hi9XEt5eB1vNH9AFoKYQ_a2d0Fc";
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
@@ -157,19 +156,20 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
       setProgressMsg("Cruzando información con el inventario de pandillas...");
       const dbGangs = await PandillasService.getAllGangs();
 
+      if (dbGangs.length === 0) {
+        setSweepResult(null);
+        alert("No hay pandillas productivas persistidas disponibles para ejecutar el barrido.");
+        return;
+      }
+
       // Step 2: Run the custom spatial sweep engine
       await new Promise(resolve => setTimeout(resolve, 800));
       setProgressMsg("Consolidando registros de inteligencia...");
       const result = await GangGeoSweepEngine.executeSweep(
         uploadedFiles,
         narrative,
-        softPrompt,
-        dbGangs,
-        {
-          lat: project?.latitude || 21.8853,
-          lng: project?.longitude || -102.2916,
-          radiusKm: project?.radiusKm || 5
-        }
+        "",
+        dbGangs
       );
 
       setSweepResult(result);
@@ -185,7 +185,6 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
   // Reset the panel
   const handleClearForm = () => {
     setNarrative("");
-    setSoftPrompt("");
     setUploadedFiles([]);
     setFilePreviews([]);
     setSweepResult(null);
@@ -249,7 +248,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
         lng: lngSum / sweepResult.detected_locations.length,
       };
     }
-    return { lat: 21.8821, lng: -102.2961 }; // Default Aguascalientes
+    return null; // No demonstrated geography: do not fabricate a visual center
   }, [sweepResult]);
 
   const heatmapData = useMemo(() => {
@@ -407,7 +406,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                   </div>
                 </div>
 
-                {isLoaded ? (
+                {isLoaded && mapCenter ? (
                   <div className="border border-slate-800 rounded-2xl overflow-hidden relative">
                     {/* Zoom & Base Layer Controls Overlay */}
                     <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 bg-slate-950/90 border border-slate-800 p-2.5 rounded-xl shadow-2xl">
@@ -598,7 +597,7 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                   </div>
                 ) : (
                   <div className="h-[450px] bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-center text-xs text-slate-500 italic">
-                    Cargando servicios de georreferencia de Google Maps...
+                    {isLoaded ? "Sin geografia demostrada para representar este barrido en el mapa." : "Cargando servicios de georreferencia de Google Maps..."}
                   </div>
                 )}
               </div>
@@ -648,55 +647,15 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inferencia de Domicilios</p>
                     <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-3.5 space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
-                      {sweepResult.suspected_domiciles.length > 0 ? (
-                        sweepResult.suspected_domiciles.map((dom, idx) => (
-                          <div key={idx} className="text-[11px] leading-relaxed border-b border-slate-900 pb-2 last:border-0 last:pb-0 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <p className="font-extrabold text-slate-200">🏠 Domicilio {idx + 1}</p>
-                              {dom.precision && (
-                                <span className="px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-800/60 text-emerald-400 font-mono text-[8px] rounded uppercase font-bold">
-                                  {dom.precision}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-slate-400 mt-0.5">{dom.address}</p>
-                            <div className="flex items-center justify-between text-[9px] text-slate-500 font-bold">
-                              <span>Confianza: {Math.round(dom.confidence * 100)}%</span>
-                              {dom.fuente && <span className="text-slate-500 font-mono">{dom.fuente}</span>}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-[10px] text-slate-500 italic">No se ubicaron domicilios geocodificados válidos.</p>
-                      )}
+                      {sweepResult.suspected_domiciles.map((dom, idx) => (
+                        <div key={idx} className="text-[11px] leading-relaxed border-b border-slate-900 pb-2 last:border-0 last:pb-0">
+                          <p className="font-extrabold text-slate-200">🏠 Domicilio {idx + 1}</p>
+                          <p className="text-slate-400 mt-0.5">{dom.address}</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5 font-bold">Confianza: {Math.round(dom.confidence * 100)}%</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  {/* Unresolved Addresses warning panel (FASE 5A Governance) */}
-                  {sweepResult.unresolved_addresses && sweepResult.unresolved_addresses.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center justify-between">
-                        <span>⚠️ Direcciones No Resueltas</span>
-                        <span className="text-[9px] font-mono text-amber-500/80">({sweepResult.unresolved_addresses.length})</span>
-                      </p>
-                      <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 space-y-2 max-h-[140px] overflow-y-auto">
-                        {sweepResult.unresolved_addresses.map((u, idx) => (
-                          <div key={idx} className="text-[10px] text-amber-200/90 space-y-0.5 border-b border-amber-900/30 pb-1.5 last:border-0 last:pb-0">
-                            <div className="font-extrabold flex items-center justify-between gap-1">
-                              <span className="truncate">📍 {u.address}</span>
-                              <span className="px-1.5 py-0.2 bg-amber-950 text-amber-400 text-[8px] font-mono rounded border border-amber-800/60 uppercase shrink-0">
-                                UNRESOLVED_ADDRESS
-                              </span>
-                            </div>
-                            <p className="text-[9px] text-amber-400/70 italic">{u.reason}</p>
-                          </div>
-                        ))}
-                        <p className="text-[8px] text-slate-400 italic mt-1 border-t border-amber-900/30 pt-1">
-                          Gobernanza FASE 5A: Ninguna dirección no resuelta utiliza las coordenadas del proyecto como sustituto.
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Linking action */}

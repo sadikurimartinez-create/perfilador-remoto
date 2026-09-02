@@ -12,7 +12,7 @@ import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
-import { runOSINTScan } from "../utils/osintEngine";
+
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
 import { GangGeoSweepPanel } from "./GangGeoSweepPanel";
@@ -23,9 +23,45 @@ import { StreetViewConfirmationModal } from "@/modules/streetView/StreetViewConf
 import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDisclaimerModal";
 import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
-import { StreetViewCaptureService } from "@/services/streetViewCaptureService";
+import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
+import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
+import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
+import {
+  adaptDenueScinceSource,
+  canAdmitSourceToInstitutionalContext,
+  type ProductiveSourceIntegrityInput,
+} from "@/services/geoint/denueScinceOrchestrationAdapter";
+import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 
-const NetworkDashboard = dynamic(() => import("./NetworkDashboard").then((mod) => mod.NetworkDashboard), { ssr: false });
+import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
+import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
+
+const NetworkDashboardFallback = () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" />;
+NetworkDashboardFallback.displayName = "NetworkDashboardFallback";
+
+const NetworkDashboard = dynamic(
+  () =>
+    import("./NetworkDashboard")
+      .then((mod) => mod.NetworkDashboard)
+      .catch((err) => {
+        console.warn("[MODULE FALLBACK] Fallo al cargar chunk de NetworkDashboard (HIG 2.0):", err);
+        return NetworkDashboardFallback;
+      }),
+  {
+    ssr: false,
+    loading: () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" loading={true} />,
+  }
+);
+
+function averagePhotoCoordinate(album: any[], axis: "lat" | "lng"): number | null {
+  const values = (album || [])
+    .map((p) => buildPhotoEvidenceGeoFields(p)[axis])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
@@ -44,6 +80,12 @@ type EvidencePhotoType = {
   previewUrl?: string;
   tipo?: string;
   comentario?: string;
+};
+
+type ProductiveSourceConfirmation = {
+  content: string;
+  integrity: ProductiveSourceIntegrityInput;
+  sourceItem: MultisourceOrchestrationItem | null;
 };
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
@@ -139,11 +181,16 @@ function ElapsedTime({ running }: { running: boolean }) {
 
 function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isReadOnly }: any) {
   const { documents, saveCustomDocument, removeDocument } = useProject();
-  const [context, setContext] = useState("");
+  const { user } = useAuth();
+  const [context, setContext] = useState(d.context || "");
   const [suggestions, setSuggestions] = useState("");
   const [auditScore, setAuditScore] = useState<number | null>(null);
   const [isRefining, setIsRefining] = useState(false);
-  const [isAudited, setIsAudited] = useState(false);
+  const [isAudited, setIsAudited] = useState(d.multimodalEvidence?.humanValidationStatus === "APPROVED");
+  const [isReadyForHumanReview, setIsReadyForHumanReview] = useState(
+    d.multimodalEvidence?.analysisStatus === "READY_FOR_HUMAN_REVIEW" ||
+    d.multimodalEvidence?.humanValidationStatus === "APPROVED"
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const parseJSONResponse = (suggestionsVal: string, scoreVal: number) => {
@@ -195,7 +242,7 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
         const { sVal, scVal } = parseJSONResponse(data.suggestions ?? "", data.score ?? 0);
         setSuggestions(sVal);
         setAuditScore(scVal);
-        if (scVal >= 80) setIsAudited(true);
+        if (scVal >= 80) setIsReadyForHumanReview(true);
       } else {
         alert(data.error || "No se pudieron obtener sugerencias.");
       }
@@ -217,6 +264,38 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
       });
     } catch(e: any) {
       alert("Error al guardar: " + e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const buildValidatorIdentity = () => {
+    if (!user) return null;
+    const identity: any = {};
+    if (user.id != null && String(user.id).trim()) identity.id = user.id;
+    if (user.username && user.username.trim()) identity.username = user.username.trim();
+    if (user.name && user.name.trim()) identity.name = user.name.trim();
+    return Object.keys(identity).length > 0 ? identity : null;
+  };
+
+  const handleHumanApproval = async () => {
+    if (isReadOnly || !d.multimodalEvidence) return;
+    setIsSaving(true);
+    try {
+      const { getDb } = await import("@/lib/firebase");
+      const { doc, updateDoc } = await import("firebase/firestore");
+      const firestore = getDb();
+      const approvedEvidence = markHumanApproved(d.multimodalEvidence, {
+        validatedAt: new Date().toISOString(),
+        validatedBy: buildValidatorIdentity(),
+      });
+      await updateDoc(doc(firestore, "projects", projectId, "documents", d.id), {
+        multimodalEvidence: approvedEvidence,
+      });
+      d.multimodalEvidence = approvedEvidence;
+      setIsAudited(true);
+    } catch(e: any) {
+      alert("Error al persistir aprobación humana: " + e.message);
     } finally {
       setIsSaving(false);
     }
@@ -298,13 +377,26 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
                    type="button"
                    variant="ghost"
                    size="sm"
-                   onClick={() => { setContext(c => c + "\n\n" + suggestions); setSuggestions(""); setIsAudited(true); }}
+                   onClick={() => { setContext((c: string) => c + "\n\n" + suggestions); setSuggestions(""); setIsReadyForHumanReview(true); setIsAudited(false); }}
                  >
                    + Añadir plantilla...
                  </CEIPOLButton>
-                 <button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button>
+                 <button type="button" onClick={() => { setSuggestions(""); setAuditScore(null); setIsReadyForHumanReview(false); setIsAudited(false); }} className="bg-red-900/50 border border-red-800 text-red-200 hover:bg-red-800/50 px-2 py-1 rounded font-medium text-[11px]">Descartar</button>
                </div>
            </div>
+       )}
+       {isReadyForHumanReview && !isAudited && (
+         <div className="flex justify-end">
+           <CEIPOLButton
+             type="button"
+             variant="secondary"
+             size="sm"
+             onClick={handleHumanApproval}
+             disabled={isReadOnly || !d.multimodalEvidence || isSaving}
+           >
+             Confirmar revisión humana
+           </CEIPOLButton>
+         </div>
        )}
        <div className="flex justify-end mt-2">
          <CEIPOLButton
@@ -528,11 +620,13 @@ export function PhotoAlbum({
     isReadOnly,
     markAsPrinted,
     uploadAndAddPhoto,
+    createGeographicEntity,
     datosGobMxResult, // <-- Obtener del contexto
     setDatosGobMxResult,
     softDeleteDoc,
     savePhotoContextualization,
     updateProjectDetails,
+    saveHumanHypothesis,
     loadProject,
     registerSweep,
     updateSweep,
@@ -542,8 +636,10 @@ export function PhotoAlbum({
 
   // 1. Auditoría y validación de Street View (Gobernanza FIX-GEO-01)
   const streetViewValidation = useMemo(() => {
-    const svPhotos = (rawAlbum || []).filter(
-      (p: any) => p.tipo === "STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW"
+    const svPhotos = (rawAlbum || []).filter((p: any) =>
+      p.tipo === "STREET_VIEW" ||
+      p.tipo === "REMOTE_STREET_VIEW" ||
+      p.evidenceType === "VIRTUAL_STREET_VIEW"
     );
 
     const getStatus = (count: number) => {
@@ -583,35 +679,34 @@ export function PhotoAlbum({
   const normalizedAlbum = useMemo(() => {
     if (!rawAlbum) return [];
 
-    // Exclusión robusta de Street View y Barridos para las fotos normales cargadas por el usuario
+    // Conservar todas las fotos de usuario intactas
     const userPhotos = rawAlbum.filter((p: any) => {
-      const isSv = p.tipo === "STREET_VIEW" || 
-                   p.tipo === "REMOTE_STREET_VIEW" || 
-                   p.evidenceType === "VIRTUAL_STREET_VIEW";
-      const isSweep = p.tipo?.startsWith("Barrido");
-      return !isSv && !isSweep; // PRINCIPIO: BARRIDO ANALÍTICO ≠ EVIDENCIA VISUAL
+      const isStreetView =
+        p.tipo === "STREET_VIEW" ||
+        p.tipo === "REMOTE_STREET_VIEW" ||
+        p.evidenceType === "VIRTUAL_STREET_VIEW";
+      const isAnalyticalSweep = typeof p.tipo === "string" && p.tipo.startsWith("Barrido");
+      return !isStreetView && !isAnalyticalSweep;
     });
 
     const hideouts = streetViewValidation.hideout.photos;
     const graffitis = streetViewValidation.graffiti.photos;
     const denues = streetViewValidation.denue_interest.photos;
 
-    const otherSvs = rawAlbum.filter((p: any) => {
-      const isSvType = p.tipo === "STREET_VIEW" || 
-                       p.tipo === "REMOTE_STREET_VIEW" || 
-                       p.evidenceType === "VIRTUAL_STREET_VIEW";
-      return isSvType && !["hideout", "graffiti", "denue_interest"].includes(p.streetViewCategory);
-    });
+    // Otras fotos Street View que no pertenezcan a las categorías principales
+    const otherSvs = rawAlbum.filter((p: any) => 
+      (p.tipo === "STREET_VIEW" || p.tipo === "REMOTE_STREET_VIEW" || p.evidenceType === "VIRTUAL_STREET_VIEW") &&
+      !["hideout", "graffiti", "denue_interest"].includes(p.streetViewCategory)
+    );
 
-    // Deduplicación estricta utilizando un mapa inmutable por ID único para evitar repeticiones
-    const combined = [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs];
-    const uniqueMap = new Map();
-    combined.forEach((photo) => {
-      if (photo && photo.id) {
-        uniqueMap.set(photo.id, photo);
-      }
+    const seenEvidenceIds = new Set<string>();
+    return [...userPhotos, ...hideouts, ...graffitis, ...denues, ...otherSvs].filter((photo: any) => {
+      const stableId = photo?.evidenceId || photo?.id;
+      if (!stableId) return true;
+      if (seenEvidenceIds.has(stableId)) return false;
+      seenEvidenceIds.add(stableId);
+      return true;
     });
-    return Array.from(uniqueMap.values());
   }, [rawAlbum, streetViewValidation]);
 
   // Sobrescribir "album" local para que todo el componente herede las reglas gobernadas
@@ -767,15 +862,8 @@ export function PhotoAlbum({
     try {
       const albumPhoto = mapStreetViewToAlbumPhoto(payload);
       if (uploadAndAddPhoto) {
-        const metadata = (albumPhoto.streetViewMetadata || {}) as any;
-        const blob = await StreetViewCaptureService.captureStreetViewImage({
-          lat: albumPhoto.lat!,
-          lng: albumPhoto.lng!,
-          heading: metadata.heading || 0,
-          pitch: metadata.pitch || 0,
-          fov: metadata.fov || 90,
-          size: "800x600"
-        });
+        const blobRes = await fetch(albumPhoto.previewUrl);
+        const blob = await blobRes.blob();
         const file = new File([blob], `Remote_StreetView_${Date.now()}.jpg`, { type: "image/jpeg" });
 
         await uploadAndAddPhoto(file, albumPhoto.lat!, albumPhoto.lng!, {
@@ -818,15 +906,8 @@ export function PhotoAlbum({
       for (const payload of payloads) {
         const albumPhoto = mapStreetViewToAlbumPhoto(payload);
         if (uploadAndAddPhoto) {
-          const metadata = (albumPhoto.streetViewMetadata || {}) as any;
-          const blob = await StreetViewCaptureService.captureStreetViewImage({
-            lat: albumPhoto.lat!,
-            lng: albumPhoto.lng!,
-            heading: metadata.heading || 0,
-            pitch: metadata.pitch || 0,
-            fov: metadata.fov || 90,
-            size: "800x600"
-          });
+          const blobRes = await fetch(albumPhoto.previewUrl);
+          const blob = await blobRes.blob();
           const file = new File([blob], `Remote_StreetView_${Date.now()}_${savedCount}.jpg`, { type: "image/jpeg" });
 
           await uploadAndAddPhoto(file, albumPhoto.lat!, albumPhoto.lng!, {
@@ -869,11 +950,16 @@ export function PhotoAlbum({
     lng: number,
     context: { geometryType: "POLYGON" | "LINE"; captureContext: "vertex_add" | "vertex_edit"; previousPhotoId?: string }
   ) => {
-    const svUrl = `/api/proxy-image?lat=${lat}&lng=${lng}&heading=0&pitch=0&fov=90&size=600x400`;
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+    if (!apiKey) {
+      alert("Google Maps no está disponible porque falta NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.");
+      return;
+    }
+    const staticUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=17&size=600x400&maptype=hybrid&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
 
     const newCapture = {
       id: `temp-map-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      url: svUrl,
+      url: staticUrl,
       lat,
       lng,
       geometryType: context.geometryType,
@@ -909,10 +995,8 @@ export function PhotoAlbum({
   }, []);
   const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [scinceDataConfirm, setScinceDataConfirm] = useState<string | null>(null);
-  const [denueDataConfirm, setDenueDataConfirm] = useState<string | null>(null);
-  const [scinceTargetCoords, setScinceTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [denueTargetCoords, setDenueTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [scinceDataConfirm, setScinceDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
+  const [denueDataConfirm, setDenueDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
     if (!clickCoords) return {};
@@ -929,20 +1013,20 @@ export function PhotoAlbum({
   const handleAddMapPoint = async (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => {
     if (isReadOnly) return;
     try {
-      const fileBlob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")).blob();
-      const file = new File([fileBlob], `${details.isIndependentPoi ? "POI" : "Vertex"}_${Date.now()}.jpg`, { type: "image/jpeg" });
-      
-      if (uploadAndAddPhoto) {
-        await uploadAndAddPhoto(file, lat, lng, {
-          gpsSource: details.isIndependentPoi ? "POI_MAPA" : "VERTICE_MAPA",
-          validado: true,
-          tipo: details.isIndependentPoi ? "POI" : (project?.geometryType === "lineal" ? "Corredor" : "Polígono"),
+      if (createGeographicEntity) {
+        await createGeographicEntity({
+          lat,
+          lng,
+          type: details.isIndependentPoi ? "POI" : "VERTEX",
+          name: details.name,
           comentario: details.name || (details.isIndependentPoi ? "POI creado desde mapa." : "Vértice de trazado."),
-          isIndependentPoi: details.isIndependentPoi
+          isIndependentPoi: details.isIndependentPoi,
+          isVertex: details.isVertex,
         });
       }
     } catch (err: any) {
-      alert("Error al agregar punto geográfico: " + err.message);
+      const errorMsg = err?.message || (typeof err === "string" ? err : err?.code || "Error desconocido al agregar punto geográfico");
+      alert("Error al agregar punto geográfico: " + errorMsg);
     }
   };
   const [reportGenerationMeta, setReportGenerationMeta] = useState<{ date: string; time: string; user: string } | null>(null);
@@ -1044,11 +1128,10 @@ export function PhotoAlbum({
     }
   }, [project]);
 
-  // Automatically enable tools if there is an existing hypothesis loaded
+  // Refleja la compuerta institucional persistida; no equivale a aprobación humana.
   useEffect(() => {
-    if (project && project.hipotesis && project.hipotesis.trim().length > 10) {
-      setIsHypothesisValidatedInWorkspace(true);
-    }
+    const gate = canProceedWithInstitutionalAnalysis(project);
+    setIsHypothesisValidatedInWorkspace(gate.hypothesisRequirementSatisfied);
   }, [project]);
 
   const sweepsSummaryText = React.useMemo(() => {
@@ -1355,7 +1438,17 @@ const hasMinimumPhotos =
     }
   };
 
-  const confirmAndGenerateProfile = async () => {
+  const confirmAndGenerateProfile = async (hypothesisOverride?: any) => {
+    const hypothesisGate = canProceedWithInstitutionalAnalysis(
+      hypothesisOverride ? { canonicalHypothesis: hypothesisOverride } : project
+    );
+    const effectiveCanonicalHypothesis =
+      hypothesisOverride ?? project?.canonicalHypothesis ?? null;
+    if (!hypothesisGate.allowed) {
+      setError("HIPÓTESIS NO FORMULADA: formule una hipótesis humana antes de continuar con el análisis institucional formal.");
+      setShowConfigModal(false);
+      return;
+    }
     let selected = album.filter((p) => selectedIds.includes(p.id));
     if (selected.length === 0) {
       selected = album;
@@ -1407,15 +1500,15 @@ const hasMinimumPhotos =
         })
       );
 
-      // Usar el centroide geográfico real de las evidencias seleccionadas, priorizando las coordenadas del proyecto o el polígono de análisis
+      // Usar sólo georreferencias reales disponibles; no fabricar centroide por default.
       const projLat = Number(project?.latitude);
       const projLng = Number(project?.longitude);
       const polyLat = (analysisPolygon && analysisPolygon.length > 0) ? (analysisPolygon.reduce((acc, p) => acc + p.lat, 0) / analysisPolygon.length) : NaN;
       const polyLng = (analysisPolygon && analysisPolygon.length > 0) ? (analysisPolygon.reduce((acc, p) => acc + p.lng, 0) / analysisPolygon.length) : NaN;
       const centerLat = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length) : NaN;
       const centerLng = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length) : NaN;
-      const lat = (!isNaN(projLat) && projLat !== 0) ? projLat : (!isNaN(polyLat) ? polyLat : (!isNaN(centerLat) ? centerLat : 21.8818));
-      const lng = (!isNaN(projLng) && projLng !== 0) ? projLng : (!isNaN(polyLng) ? polyLng : (!isNaN(centerLng) ? centerLng : -102.2915));
+      const lat = (!isNaN(projLat) && projLat !== 0) ? projLat : (!isNaN(polyLat) ? polyLat : (!isNaN(centerLat) ? centerLat : null));
+      const lng = (!isNaN(projLng) && projLng !== 0) ? projLng : (!isNaN(polyLng) ? polyLng : (!isNaN(centerLng) ? centerLng : null));
       // Helper local de fetch con timeout
       const fetchWithTimeout = async (url: string, options: any, timeoutMs = 15000): Promise<Response> => {
         const controller = new AbortController();
@@ -1437,7 +1530,7 @@ const hasMinimumPhotos =
       console.log("[confirmAndGenerateProfile] 1. Inicializando análisis y llamando APIs concurrentes...");
       setAiProfile("Inicializando análisis y consultando bases cartográficas...");
 
-      // EJECUCIÓN PARALELA: Mapa, Incidencia y Barrido OSINT Automático (X/Twitter, Google, DENUE, News)
+      // EJECUCION PARALELA: analisis territorial e incidencia. Profile generation does not initiate OSINT.
       const mapResPromise = fetchWithTimeout("/api/analyze-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1452,27 +1545,28 @@ const hasMinimumPhotos =
         return null;
       });
 
-      const incidenciaResPromise = fetchWithTimeout("/api/incidencia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng, radius: analysisRadius }), // Forzamos a la BDD a respetar el radio
-      }, 12000).catch(e => {
-        console.warn("[PhotoAlbum] Error /api/incidencia (se continúa sin incidencia local):", e);
-        return null;
-      });
+      const incidenciaResPromise = lat !== null && lng !== null
+        ? fetchWithTimeout("/api/incidencia", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat, lng, radius: analysisRadius }),
+          }, 12000).catch(e => {
+            console.warn("[PhotoAlbum] Error /api/incidencia (se continúa sin incidencia local):", e);
+            return null;
+          })
+        : Promise.resolve(null);
 
-      const osintPromise = runOSINTScan({ ...project, latitude: lat, longitude: lng }).catch(e => {
-        console.warn("[Auto-OSINT] Falló el barrido:", e);
-        return null;
-      });
+      // ADR-020.34 C4:
+      // Profile generation MUST NOT initiate OSINT acquisition.
+      // Productive OSINT requires an explicit human-triggered sweep.
+      const automaticOsintData = null;
 
-      const [mapRes, incidenciaRes, automaticOsintData] = await Promise.all([
+      const [mapRes, incidenciaRes] = await Promise.all([
         mapResPromise,
-        incidenciaResPromise,
-        osintPromise
+        incidenciaResPromise
       ]);
 
-      addLog("APIs territoriales, de incidencia y OSINT resueltas correctamente.");
+      addLog("APIs territoriales e incidencia resueltas. La generacion del perfil no inicio un barrido OSINT.");
       console.log("[confirmAndGenerateProfile] 2. APIs iniciales resueltas.");
 
       let currentAnalysisResult = analysisResult;
@@ -1544,6 +1638,7 @@ const hasMinimumPhotos =
                 body: JSON.stringify({
                   projectName: project?.nombre || "",
                   projectId: project?.id || "",
+                  canonicalHypothesis: effectiveCanonicalHypothesis,
                   photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
                   analysisContext: (analysisContext || "") + svInstruction,
                   analysisRadius,
@@ -1554,7 +1649,8 @@ const hasMinimumPhotos =
                   lng,
                   bibliografiaLocal,
                   multimodalContext,
-                  geometryType: project?.geometryType || "individual",
+                  // ADR-020.34: preserve missing geography type as UNKNOWN.
+                  geometryType: project?.geometryType || null,
                   projectDescription: project?.descripcion || "",
                   osintEngineData: automaticOsintData,
                   streetViews: svData,
@@ -1667,12 +1763,10 @@ const hasMinimumPhotos =
         console.log("[confirmAndGenerateProfile] 4. Generación con IA finalizada. Procesando carátula e integraciones...");
         finalMarkdown = finalMarkdown.trim();
 
-        if (
-          automaticOsintData?.streetViewAnalysis?.analisis &&
-          !/BARRIDO MULTIMODAL DE STREET VIEW/i.test(finalMarkdown)
-        ) {
-          finalMarkdown += `\n\n### BARRIDO MULTIMODAL DE STREET VIEW (IA)\n${automaticOsintData.streetViewAnalysis.analisis}`;
-        }
+        // ADR-020.34 C4:
+        // No automatic OSINT/Street View analysis is appended during
+        // profile generation. Only previously governed evidence may
+        // reach the report through its authorized lineage.
 
         setAiProfile(finalMarkdown);
         setEditableProfile(finalMarkdown);
@@ -1720,7 +1814,7 @@ const hasMinimumPhotos =
         }
 
         if (!summaryText) {
-          summaryText = `Dictamen estratégico de geointeligencia operativa para el cuadrante del expediente ${project?.nombre || 'bajo estudio'}. Con base en las inspecciones tácticas y el relevamiento espacial, se identificaron factores criminógenos de oportunidad vial y perimetral vinculados al desorden de infraestructura y la pérdida de vigilancia natural en la zona.`;
+          summaryText = "No existe un resumen analítico validado disponible para este expediente.";
         }
         setReportSummary(summaryText);
 
@@ -1729,20 +1823,25 @@ const hasMinimumPhotos =
           ...(data.meta?.incidenciaDetalles || []).map((c: any) => ({
             lat: c.lat,
             lng: c.lng,
-            fecha: c.fecha || c.FECHA || c.Fecha || c.fechaStr || c.fecha_hecho || c.FECHA_HECHO || new Date().toISOString().split("T")[0],
-            tipoDelito: c.incidente || c.tipoDelito || "Delito",
-            rangoHorario: c.rango_horario || c.rangoHorario || "Sin rango",
-            colonia: c.colonia || c.COLONIA || "SECTOR NO ESPECIFICADO",
-            arma: c.arma || c.ARMA || "NINGUNA"
+            // ADR-020.34 C14B.1:
+            // Preserve missing upstream incident attributes as missing.
+            fecha: c.fecha ?? c.FECHA ?? c.Fecha ?? c.fechaStr ?? c.fecha_hecho ?? c.FECHA_HECHO ?? null,
+            tipoDelito: c.incidente ?? c.tipoDelito ?? null,
+            rangoHorario: c.rango_horario ?? c.rangoHorario ?? null,
+            colonia: c.colonia ?? c.COLONIA ?? null,
+            arma: c.arma ?? c.ARMA ?? null
           })),
           ...incidenciaLocal.map((c: any) => ({
             lat: c.lat,
             lng: c.lng,
-            fecha: c.fecha || c.FECHA || c.Fecha || c.fechaStr || c.fecha_hecho || c.FECHA_HECHO || new Date().toISOString().split("T")[0],
-            tipoDelito: c.tipo || c.incidente || c.tipoDelito || "Delito",
-            rangoHorario: c.rangoHorario || c.rango_horario || "Sin rango",
-            colonia: c.colonia || c.COLONIA || "SECTOR NO ESPECIFICADO",
-            arma: c.arma || c.ARMA || "NINGUNA"
+            // ADR-020.34 C14B:
+            // Preserve legacy missing incident attributes as missing.
+            // Never reconstruct historical facts from runtime defaults.
+            fecha: c.fecha ?? c.FECHA ?? c.Fecha ?? c.fechaStr ?? c.fecha_hecho ?? c.FECHA_HECHO ?? null,
+            tipoDelito: c.tipo ?? c.incidente ?? c.tipoDelito ?? null,
+            rangoHorario: c.rangoHorario ?? c.rango_horario ?? null,
+            colonia: c.colonia ?? c.COLONIA ?? null,
+            arma: c.arma ?? c.ARMA ?? null
           })),
         ];
 
@@ -1758,6 +1857,7 @@ const hasMinimumPhotos =
           sieData: data.meta?.sieData || (currentAnalysisResult as any)?.sieData,
           tceData: data.meta?.tceData || (currentAnalysisResult as any)?.tceData,
           hieData: data.meta?.hieData || (currentAnalysisResult as any)?.hieData,
+          aceReport: data.meta?.aceReport ?? (currentAnalysisResult as any)?.aceReport ?? null,
         } as any);
 
         // Integrar automáticamente los lugares de acecho (StreetView) al Álbum
@@ -1794,30 +1894,12 @@ const hasMinimumPhotos =
             
             if (!exists && uploadAndAddPhoto) {
               try {
-                let heading = 0;
-                let pitch = 0;
-                let fov = 90;
-                if (sv.streetViewUrl) {
-                  try {
-                    const urlObj = new URL(sv.streetViewUrl);
-                    heading = parseFloat(urlObj.searchParams.get("heading") || "0") || 0;
-                    pitch = parseFloat(urlObj.searchParams.get("pitch") || "0") || 0;
-                    fov = parseFloat(urlObj.searchParams.get("fov") || "90") || 90;
-                  } catch (ue) {
-                    console.warn("[PhotoAlbum] Fallo al parsear URL de StreetView para metadata:", ue);
-                  }
-                }
-
-                const blob = await StreetViewCaptureService.captureStreetViewImage({
-                  lat: svLat,
-                  lng: svLng,
-                  heading,
-                  pitch,
-                  fov,
-                  size: "800x600"
-                });
-                const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
-                const category = sv.streetViewCategory || "hideout";
+                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(sv.streetViewUrl)}`;
+                const svRes = await fetch(proxyUrl);
+                if (svRes.ok) {
+                  const blob = await svRes.blob();
+                  const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
+                  const category = sv.streetViewCategory || "hideout";
                   await uploadAndAddPhoto(file, svLat, svLng, {
                     tipo: "STREET_VIEW",
                     gpsSource: "STREET_VIEW",
@@ -1854,6 +1936,9 @@ const hasMinimumPhotos =
                       console.warn("[PhotoAlbum] No se pudo escribir extra metadata en Firestore (pero el archivo ya se subió):", fsErr);
                     }
                   }
+                } else {
+                    console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
+                }
               } catch (err) {
                 console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);
               }
@@ -1929,7 +2014,7 @@ const hasMinimumPhotos =
       const dataToSave = {
         projectId: project?.id || "EXP_TACTICO",
         poligono: project?.nombre || (project as any)?.name || "Zona de Estudio",
-        analyst: user?.username || "Analista CEIPOL",
+        analyst: user?.username || "UNAVAILABLE",
         fecha: Date.now(),
         version: "v9.0",
         componentes: activeComponents,
@@ -2078,34 +2163,39 @@ const hasMinimumPhotos =
         photosToExport = album.filter((p) => p.previewUrl);
       }
 
-      const photosToExportData = photosToExport.map((p) => ({
-        id: p.id,
-        previewUrl: p.previewUrl,
-        url: (p as any).url,
-        tipo: p.tipo || "Evidencia Táctica",
-        comentario: p.comentario || "Sin comentario.",
-        lat: p.lat ?? p.gpsLat ?? null,
-        lng: p.lng ?? p.gpsLng ?? null,
-        gpsLat: p.gpsLat ?? p.lat ?? null,
-        gpsLng: p.gpsLng ?? p.lng ?? null,
-        gpsAccuracy: p.gpsAccuracy ?? null,
-        gpsTimestamp: p.gpsTimestamp ?? null,
-        gpsSource: p.gpsSource,
-        fecha: (p as any).fecha,
-        createdAt: (p as any).createdAt,
-        evidenceId: p.evidenceId,
-        evidenceOrigin: p.evidenceOrigin,
-        collectionMethod: p.collectionMethod,
-        evidenceCategoryClass: p.evidenceCategoryClass,
-        confidenceLevel: p.confidenceLevel,
-        confidencePercentage: p.confidencePercentage,
-        sourceProvider: p.sourceProvider,
-        streetViewMetadata: p.streetViewMetadata,
-        confidenceFactors: p.confidenceFactors,
-        streetViewCategory: p.streetViewCategory,
-        streetViewSource: p.streetViewSource,
-        evidenceRelationship: p.evidenceRelationship
-      }));
+      const photosToExportData = photosToExport.map((p) => {
+        const geoFields = buildPhotoEvidenceGeoFields(p);
+        return {
+          id: p.id,
+          previewUrl: p.previewUrl,
+          url: (p as any).url,
+          tipo: p.tipo || "Evidencia Táctica",
+          comentario: p.comentario || "Sin comentario.",
+          lat: geoFields.lat,
+          lng: geoFields.lng,
+          gpsLat: geoFields.gpsLat,
+          gpsLng: geoFields.gpsLng,
+          gpsAccuracy: p.gpsAccuracy ?? null,
+          gpsTimestamp: p.gpsTimestamp ?? null,
+          gpsSource: p.gpsSource,
+          geolocationSource: geoFields.geolocationSource,
+          geolocationIntegrity: geoFields.geolocationIntegrity,
+          fecha: (p as any).fecha,
+          createdAt: (p as any).createdAt,
+          evidenceId: p.evidenceId,
+          evidenceOrigin: p.evidenceOrigin,
+          collectionMethod: p.collectionMethod,
+          evidenceCategoryClass: p.evidenceCategoryClass,
+          confidenceLevel: p.confidenceLevel,
+          confidencePercentage: p.confidencePercentage,
+          sourceProvider: p.sourceProvider,
+          streetViewMetadata: p.streetViewMetadata,
+          confidenceFactors: p.confidenceFactors,
+          streetViewCategory: p.streetViewCategory,
+          streetViewSource: p.streetViewSource,
+          evidenceRelationship: p.evidenceRelationship
+        };
+      });
 
       const selectedSweeps = (project?.sweeps || []).filter((s: any) => {
         const engineLower = s.engine.toLowerCase();
@@ -2129,14 +2219,22 @@ const hasMinimumPhotos =
         })
         .filter(Boolean);
 
+      const realAceReport = (analysisResult as any)?.aceReport ?? null;
+      const aceStatus = realAceReport?.globalStatus;
+      const hasUsableAce = aceStatus === "PASS" || aceStatus === "WARNING";
+
       const intelligenceContext = {
-        projectId: project?.id || "PR-001",
+        projectId: project?.id ?? "",
         schemaVersion: "2.0",
-        analysisReadiness: "READY" as const,
+        analysisReadiness: (hasUsableAce ? "READY" : "NOT_READY") as "READY" | "NOT_READY",
         qualityControl: {
-          status: "PASS" as const,
-          confidenceScore: 100,
-          auditedAt: new Date().toISOString()
+          status: (aceStatus === "PASS" || aceStatus === "WARNING" || aceStatus === "FAILED"
+            ? aceStatus
+            : "WARNING") as "PASS" | "WARNING" | "FAILED",
+          confidenceScore: realAceReport?.overallConfidence ?? 0,
+          ...(realAceReport?.metadata?.auditedAt
+            ? { auditedAt: realAceReport.metadata.auditedAt }
+            : {})
         },
         evidenceSources: {
           SEM: {
@@ -2153,14 +2251,7 @@ const hasMinimumPhotos =
             status: (analysisResult as any)?.hieData ? "PASS" : "WARNING",
             data: (analysisResult as any)?.hieData || null
           },
-          ACE: {
-            globalStatus: "PASS" as const,
-            overallConfidence: 100,
-            alerts: [],
-            certifiedOsintOutput: true,
-            certifiedGimOutput: true,
-            metadata: { auditedAt: new Date().toISOString() }
-          }
+          ACE: realAceReport
         }
       };
 
@@ -2170,18 +2261,8 @@ const hasMinimumPhotos =
       await KernelGuard({ type: "INIT_KERNEL", payload: { executionId: activeId } });
 
       // 2. LOCK_INPUT
-      const centroidLat = (() => {
-        if (project?.latitude) return project.latitude;
-        const valid = (album || []).filter(p => p.lat != null);
-        if (valid.length === 0) return 21.8853;
-        return valid.reduce((sum, p) => sum + Number(p.lat), 0) / valid.length;
-      })();
-      const centroidLng = (() => {
-        if (project?.longitude) return project.longitude;
-        const valid = (album || []).filter(p => p.lng != null);
-        if (valid.length === 0) return -102.2916;
-        return valid.reduce((sum, p) => sum + Number(p.lng), 0) / valid.length;
-      })();
+      const centroidLat = project?.latitude ?? averagePhotoCoordinate(album, "lat");
+      const centroidLng = project?.longitude ?? averagePhotoCoordinate(album, "lng");
 
       await KernelGuard({
         type: "LOCK_INPUT",
@@ -2962,10 +3043,10 @@ const hasMinimumPhotos =
           <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 max-w-4xl mx-auto mb-6 text-center md:text-left shadow-xl backdrop-blur-sm font-sans">
             <div className="space-y-1">
               <span className="text-xs text-emerald-400 font-black tracking-wider uppercase flex items-center gap-1.5">
-                🛡️ Hipótesis de Gobernanza Validada y Certificada por IA
+                🛡️ Hipótesis Humana Formulada para Gobernanza
               </span>
               <p className="text-[11px] text-slate-400">
-                Las herramientas de análisis táctico y el dictamen oficial están habilitados. La hipótesis se encuentra en modo de lectura protegida.
+                Las herramientas de análisis táctico y el dictamen oficial están habilitados. La hipótesis humana formulada se encuentra en modo de lectura protegida.
               </p>
             </div>
             <button
@@ -3224,37 +3305,41 @@ const hasMinimumPhotos =
                       if (res.ok) {
                         let scoreVal = data.score ?? 0;
                         let questionsVal: string[] = Array.isArray(data.questions) ? data.questions : [];
+                        const aiHypothesisSuggestion = createAiAnalyticalOutput({
+                          outputType: "HYPOTHESIS_SUGGESTION",
+                          provider: "/api/refine-context",
+                          model: data.model || null,
+                          confidence: data.score,
+                          confidenceSource: typeof data.score === "number" ? "PROVIDER" : "UNKNOWN",
+                          sourceReferences: ["hypothesis-qa", "analysisContext", "sweepsComments"],
+                          evidenceIds: selected.map((p: any) => p.evidenceId || p.id).filter(Boolean),
+                          geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
+                          limitations: ["AI hypothesis QA is a suggestion and does not overwrite the human hypothesis automatically."],
+                        });
                         
                         setAnalysisAuditScore(scoreVal);
                         if (scoreVal >= 80) {
-                          setIsAnalysisContextAudited(true);
-                          
                           const updatedContext = answersString.trim()
                             ? analysisContext + "\n\nContexto adicional:\n" + answersString
                             : analysisContext;
 
-                          if (answersString.trim()) {
-                            setAnalysisContext(updatedContext);
-                          }
                           setAiQuestionsList([]);
                           setUserAnswersMap({});
                           
-                          // Guardar hipótesis y precisiones en la BDD
+                          // Registrar sugerencia IA sin promoverla a hipótesis humana ni conclusión validada.
                           const { getDb } = await import("@/lib/firebase");
                           const { doc, updateDoc } = await import("firebase/firestore");
                           const firestore = getDb();
                           await updateDoc(doc(firestore, "projects", projectId || ""), {
-                            hipotesis: updatedContext,
-                            sweepsComments: sweepsComments
+                            lastAiHypothesisSuggestion: aiHypothesisSuggestion,
+                            aiHypothesisSuggestionText: updatedContext,
+                            sweepsComments: sweepsComments,
                           });
 
-                          // Habilitar herramientas
-                          setIsHypothesisValidatedInWorkspace(true);
-                          void loadAnalysisData();
+                          setIsAnalysisContextAudited(false);
+                          setIsHypothesisValidatedInWorkspace(false);
 
-                          // Generar informe de manera automática
-                          window.alert("¡Validación exitosa! El dictamen y el expediente han sido certificados por la Auditoría Soft IA.");
-                          await confirmAndGenerateProfile();
+                          window.alert("La IA generó una sugerencia de hipótesis lista para revisión humana; no se certificó ni se generó dictamen automáticamente.");
                         } else {
                           setAiQuestionsList(questionsVal.length > 0 ? questionsVal.slice(0,5) : [
                             "¿Cómo describiría el estado de la iluminación o deterioro en el lugar específico?",
@@ -3320,20 +3405,15 @@ const hasMinimumPhotos =
                           
                           setAnalysisContext(updatedContext);
 
-                          const { getDb } = await import("@/lib/firebase");
-                          const { doc, updateDoc } = await import("firebase/firestore");
-                          const firestore = getDb();
-                          await updateDoc(doc(firestore, "projects", projectId || ""), {
-                            hipotesis: updatedContext,
-                            sweepsComments: sweepsComments
-                          });
+                          const savedHypothesis = await saveHumanHypothesis(updatedContext);
+                          await updateProjectDetails({ sweepsComments: sweepsComments } as any);
 
                           setIsAnalysisContextAudited(true);
                           setIsHypothesisValidatedInWorkspace(true);
                           void loadAnalysisData();
 
                           window.alert("¡Aceptación manual confirmada! Generando el dictamen oficial...");
-                          await confirmAndGenerateProfile();
+                          await confirmAndGenerateProfile(savedHypothesis);
                         } catch (err: any) {
                           console.error(err);
                           alert("Error al procesar la aceptación: " + err.message);
@@ -3365,7 +3445,7 @@ const hasMinimumPhotos =
             </h4>
           </div>
           <span className={`px-2.5 py-1 text-[9px] font-bold rounded-full tracking-wider uppercase ${isHypothesisValidatedInWorkspace ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-amber-950 text-amber-400 border border-amber-800"}`}>
-            {isHypothesisValidatedInWorkspace ? "CONSISTENCIA CERTIFICADA" : "ANÁLISIS EN CURSO"}
+            {isHypothesisValidatedInWorkspace ? "HIPÓTESIS FORMULADA" : "ANÁLISIS EN CURSO"}
           </span>
         </header>
 
@@ -3403,7 +3483,7 @@ const hasMinimumPhotos =
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consistencia Descriptiva</span>
             <div className="flex items-center gap-2 mt-1">
               <span className={isHypothesisValidatedInWorkspace ? "text-emerald-400 text-xs font-black" : "text-amber-400 text-xs font-black"}>
-                {isHypothesisValidatedInWorkspace ? "✓ Validada" : "⚠ Borrador / Sin Validar"}
+                {isHypothesisValidatedInWorkspace ? "✓ Formulada" : "⚠ Borrador / Sin Formular"}
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">Análisis gramatical y correlación predictiva de la hipótesis.</p>
@@ -3438,40 +3518,12 @@ const hasMinimumPhotos =
                 project={project}
                 album={album}
                 geometryType={project.geometryType || "individual"}
-                coordinates={(() => {
-                  if (Array.isArray((project as any)?.coordinates) && (project as any).coordinates.length > 0) {
-                    return (project as any).coordinates.map((c: any) => ({ lat: Number(c.lat), lng: Number(c.lng) }));
-                  }
-                  return album
-                    .filter((p) => {
-                      if (p.lat == null || p.lng == null || !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng))) return false;
-                      const isSweep = p.tipo?.startsWith("Barrido");
-                      const isPoi = p.isIndependentPoi || p.tipo === "POI" || p.tipo === "Punto Independiente";
-                      const isExplicitVertex = p.gpsSource === "VERTICE_MAPA" || (p as any).isVertex === true;
-                      const isShapeType = p.tipo === "Polígono" || p.tipo === "Corredor";
-                      
-                      return !isSweep && !isPoi && (isExplicitVertex || isShapeType);
-                    })
-                    .map((photo) => ({
-                      lat: Number(photo.lat),
-                      lng: Number(photo.lng),
-                    }));
-                })()}
+                canonicalGeography={project.canonicalGeography}
+                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
+                  lat: Number(photo.lat),
+                  lng: Number(photo.lng),
+                }))}
                 onPoiSelect={handleStartStreetViewFlow}
-                onDeletePhoto={async (id) => {
-                  const item = album.find(p => p.id === id);
-                  if (item) {
-                    setImageDeleteFlow({
-                      isOpen: true,
-                      photo: item,
-                      step: 1
-                    });
-                  } else if (onDeletePhoto) {
-                    onDeletePhoto(id);
-                  } else if (removePhotoFromAlbum) {
-                    await removePhotoFromAlbum(id);
-                  }
-                }}
                 onAddPoint={handleAddMapPoint}
                 onMoveMarker={updatePhotoCoordinates}
                 onCandidateCapture={handleCandidateCapture}
@@ -3653,9 +3705,12 @@ const hasMinimumPhotos =
 
                   const data = await getScinceData(centerLat, centerLng);
                   if (data.exito) {
-                    setScinceTargetCoords({ lat: centerLat, lng: centerLng });
                     const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
-                    setScinceDataConfirm(newContext);
+                    const sourceItem = adaptDenueScinceSource({
+                      expedienteId: project?.id,
+                      integrity: data.epistemicIntegrity,
+                    });
+                    setScinceDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
                   } else {
                     setError(data.error || "Error al consultar INEGI SCINCE.");
                   }
@@ -3713,13 +3768,12 @@ const hasMinimumPhotos =
 
                   const data = await getDenueData(centerLat, centerLng, 500);
                   if (data.exito) {
-                    const firstBusiness = (data as any).items && (data as any).items.length > 0 ? (data as any).items[0] : null;
-                    const targetLat = firstBusiness ? firstBusiness.lat : centerLat;
-                    const targetLng = firstBusiness ? firstBusiness.lng : centerLng;
-                    setDenueTargetCoords({ lat: targetLat, lng: targetLng });
-
                     const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
-                    setDenueDataConfirm(newContext);
+                    const sourceItem = adaptDenueScinceSource({
+                      expedienteId: project?.id,
+                      integrity: data.epistemicIntegrity,
+                    });
+                    setDenueDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
                   } else {
                     setError(data.error || "Error al consultar INEGI DENUE.");
                   }
@@ -3905,7 +3959,7 @@ const hasMinimumPhotos =
                       relevance: "Alto",
                       data: summaryContext,
                       createVisualEvidence: false
-                    });
+                    } as any);
                   } else {
                     setError(data.error || "Error al obtener la incidencia delictiva.");
                   }
@@ -4080,7 +4134,7 @@ const hasMinimumPhotos =
                       data: newContext,
                       initialContext: plateContext,
                       createVisualEvidence: false
-                    });
+                    } as any);
                     setPlateQuery("");
                     setPlateContext("");
                   } else {
@@ -4164,7 +4218,7 @@ const hasMinimumPhotos =
                       data: newContext,
                       initialContext: rnpdnoContext,
                       createVisualEvidence: false
-                    });
+                    } as any);
                     setRnpdnoContext("");
                   } else {
                     setError(data.error || "Error al extraer datos de SEGOB.");
@@ -4282,8 +4336,8 @@ const hasMinimumPhotos =
 
                   const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
                   const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
-                  const centerLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
-                  const centerLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
+                  const centerLat = averagePhotoCoordinate(photosToUse, "lat");
+                  const centerLng = averagePhotoCoordinate(photosToUse, "lng");
 
                   const res = await fetch("/api/refine-context", {
                     method: "POST",
@@ -4291,8 +4345,8 @@ const hasMinimumPhotos =
                     body: JSON.stringify({
                       mode: "multimodal-sweep",
                       queries: itemsPayload,
-                      lat: centerLat || 21.8818,
-                      lng: centerLng || -102.2915,
+                      lat: centerLat,
+                      lng: centerLng,
                       radius: 1000
                     })
                   });
@@ -4307,7 +4361,7 @@ const hasMinimumPhotos =
                       relevance: "Alto",
                       data: newContext,
                       createVisualEvidence: false
-                    });
+                    } as any);
                     setGeoQueries([]);
                   }
                 } catch (err: any) { setError(err.message || "Error de red al conectar con el motor Geo-Espacial."); } finally { setIsCheckingGeo(false); }
@@ -4663,7 +4717,9 @@ const hasMinimumPhotos =
           </p>
         </header>
         <div className="w-full">
-          <NetworkDashboard />
+          <DynamicErrorBoundary moduleName="Hypothesis Intelligence Graph (HIG 2.0)">
+            <NetworkDashboard />
+          </DynamicErrorBoundary>
         </div>
       </div>
     
@@ -5897,8 +5953,11 @@ const hasMinimumPhotos =
           Se han obtenido los siguientes datos sociodemográficos de la cuadra (Demografía, Marginación, Población e Indicadores Sociales). Confirme su incorporación al análisis de hipótesis:
         </p>
         <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
-          {scinceDataConfirm}
+          {scinceDataConfirm?.content}
         </div>
+        <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
+          SCINCE disponible actualmente corresponde a una simulación diagnóstica no autoritativa y no puede incorporarse como corroboración institucional.
+        </p>
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
           <CEIPOLButton
             variant="secondary"
@@ -5908,30 +5967,11 @@ const hasMinimumPhotos =
             Cancelar
           </CEIPOLButton>
           <CEIPOLButton
-            variant="confirm"
+            variant="secondary"
             size="sm"
-            onClick={async () => {
-              if (!scinceDataConfirm) return;
-              try {
-                await registerSweep({
-                  engine: "Población de Cuadra (SCINCE)",
-                  source: "INEGI SCINCE",
-                  type: "Directa",
-                  relevance: "Medio",
-                  data: scinceDataConfirm,
-                  lat: scinceTargetCoords?.lat,
-                  lng: scinceTargetCoords?.lng,
-                  heading: 180, // Sur (Demográfico)
-                  createVisualEvidence: false
-                } as any);
-                setScinceDataConfirm(null);
-                setToast({ type: "success", message: "✓ Datos sociodemográficos agregados a la hipótesis correctamente" });
-              } catch (err: any) {
-                alert("Error al registrar barrido: " + err.message);
-              }
-            }}
+            onClick={() => setScinceDataConfirm(null)}
           >
-            Aceptar y Añadir
+            Cerrar diagnóstico
           </CEIPOLButton>
         </div>
       </DynamicPopup>
@@ -5950,8 +5990,13 @@ const hasMinimumPhotos =
           Se han obtenido los siguientes datos de la actividad comercial (Giros, Concentración y Establecimientos Comerciales). Confirme su incorporación al análisis de hipótesis:
         </p>
         <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
-          {denueDataConfirm}
+          {denueDataConfirm?.content}
         </div>
+        {!canAdmitSourceToInstitutionalContext(denueDataConfirm?.sourceItem) && (
+          <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
+            La fuente DENUE no tiene elegibilidad institucional y no puede incorporarse como dato factual.
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
           <CEIPOLButton
             variant="secondary"
@@ -5963,18 +6008,20 @@ const hasMinimumPhotos =
           <CEIPOLButton
             variant="confirm"
             size="sm"
+            disabled={!canAdmitSourceToInstitutionalContext(denueDataConfirm?.sourceItem)}
             onClick={async () => {
               if (!denueDataConfirm) return;
+              if (!canAdmitSourceToInstitutionalContext(denueDataConfirm.sourceItem)) {
+                alert("DENUE no cuenta con elegibilidad institucional para incorporarse al expediente.");
+                return;
+              }
               try {
                 await registerSweep({
                   engine: "Giros Comerciales (DENUE)",
-                  source: "OSINT",
+                  source: "INEGI DENUE",
                   type: "Directa",
                   relevance: "Medio",
-                  data: denueDataConfirm,
-                  lat: denueTargetCoords?.lat,
-                  lng: denueTargetCoords?.lng,
-                  heading: 0, // Norte (Comercial / DENUE)
+                  data: denueDataConfirm.content,
                   createVisualEvidence: false
                 } as any);
                 setDenueDataConfirm(null);
@@ -6107,7 +6154,7 @@ const hasMinimumPhotos =
               setSvFlowTarget(null);
             }}
             onAccept={handleAcceptSvModal2}
-            analystName={user?.displayName || "Analista CEIPOL"}
+            analystName={user?.displayName || user?.username || "UNAVAILABLE"}
           />
 
           <StreetViewPanoramaPicker
@@ -6121,7 +6168,7 @@ const hasMinimumPhotos =
             }}
             onCapture={handleCompleteStreetViewCapture}
             onCaptureMultiple={handleCompleteMultipleStreetViewCaptures}
-            analystName={user?.displayName || "Analista CEIPOL"}
+            analystName={user?.displayName || user?.username || "UNAVAILABLE"}
           />
         </>
       )}

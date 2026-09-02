@@ -497,7 +497,7 @@ export const OsintTerritorialPanel: React.FC<Props> = ({
             <input
               type="text"
               disabled={isFrozen || loading}
-              placeholder={isFrozen ? "Descongela el expediente para editar o realizar nuevas búsquedas..." : `Muestra: "${project?.locationName || 'Aguascalientes'} balacera" u operativo nocturno...`}
+              placeholder={isFrozen ? "Descongela el expediente para editar o realizar nuevas búsquedas..." : `Muestra: "${project?.locationName || 'ubicacion del expediente'} balacera" u operativo nocturno...`}
               value={customQuery}
               onChange={(e) => setCustomQuery(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl py-2.5 pl-11 pr-4 text-sm text-slate-200 placeholder-slate-500 transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"

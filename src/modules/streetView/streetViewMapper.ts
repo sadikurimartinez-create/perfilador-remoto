@@ -7,6 +7,8 @@ import {
   StreetViewMetadata,
 } from "@/context/ProjectContext";
 import { evaluateStreetViewGovernance } from "./streetViewGovernance";
+import { buildStreetViewFindingLineage, validateLineage } from "@/utils/evidenceLineage";
+import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 
 export interface StreetViewCapturePayload {
   dataUrl: string; // Preview/base64 de la captura congelada
@@ -24,6 +26,7 @@ export interface StreetViewCapturePayload {
   analystName?: string;
   tipo_origen?: "STREETVIEW_MANUAL" | "STREETVIEW_AUTOMATICO";
   estado_revision?: "PENDIENTE_REVISION" | "APROBADO" | "IGNORADO";
+  geographyId?: string | null;
 }
 
 /**
@@ -35,6 +38,7 @@ export function mapStreetViewToAlbumPhoto(
 ): AlbumPhoto {
   const timestamp = Date.now();
   const photoId = `remote-sv-${timestamp}-${Math.random().toString(36).substring(2, 7)}`;
+  const evidenceId = `EVI-REM-${timestamp.toString().slice(-6)}`;
 
   // Evaluar gobernanza y confiabilidad v2.1
   const governance = evaluateStreetViewGovernance(payload.captureDate, 5);
@@ -61,6 +65,27 @@ export function mapStreetViewToAlbumPhoto(
     ? payload.comentario
     : `Análisis remoto de entorno vial [Categoría: ${categoryLabel}].`;
 
+  const lineage = buildStreetViewFindingLineage({
+    findingId: photoId,
+    evidenceId,
+    sourceReference: payload.panoId || payload.captureDate || "Google Street View Panorama",
+    geographyId: payload.geographyId ?? null,
+  });
+  const lineageValidation = validateLineage(lineage);
+  const aiAnalyticalOutput = createAiAnalyticalOutput({
+    outputType: "INFERENCE",
+    provider: "GOOGLE_STREET_VIEW",
+    model: "UNAVAILABLE",
+    confidence: governance.confidencePercentage,
+    confidenceSource: "DETERMINISTIC_RULE",
+    sourceReferences: [payload.panoId, payload.captureDate, "Google Street View Panorama"],
+    evidenceIds: [evidenceId],
+    findingIds: [photoId],
+    geographyId: payload.geographyId ?? null,
+    lineage,
+    limitations: ["Visual interpretation remains AI/deterministic inference until human review."],
+  });
+
   return {
     id: photoId,
     previewUrl: payload.dataUrl,
@@ -68,15 +93,18 @@ export function mapStreetViewToAlbumPhoto(
     lng: payload.poiLng,
     tipo: "REMOTE_STREET_VIEW",
     comentario: commentText,
-    evidenceId: `EVI-REM-${timestamp.toString().slice(-6)}`,
+    evidenceId,
     contextualizedAt: timestamp,
-    contextualizedBy: payload.analystName || "Analista CEIPOL",
+    contextualizedBy: payload.analystName || "UNAVAILABLE",
     isContextualized: true,
     gpsAccuracy: 5,
     gpsTimestamp: timestamp,
     gpsSource: "GOOGLE_STREET_VIEW_PANORAMA",
     validado: true,
+    humanValidationStatus: "PENDING_REVIEW",
+    validationSource: "CANONICAL_FIELD",
     isIndependentPoi: true,
+    geographyId: payload.geographyId ?? null,
 
     // Estructura de Gobernanza v2.1 y Contrato Determinístico de Evidencia
     evidenceOrigin: "REMOTE" as EvidenceOrigin,
@@ -94,6 +122,10 @@ export function mapStreetViewToAlbumPhoto(
     category: "STREET_VIEW",
     classification: "REMOTE_VISUAL",
     isStreetView: true,
+    sourceEvidenceId: evidenceId,
+    lineage,
+    lineageStatus: lineageValidation.status,
+    aiAnalyticalOutput,
   };
 }
 

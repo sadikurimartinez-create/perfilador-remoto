@@ -1,6 +1,6 @@
 /**
  * Servicio único y unificado para la captura de imágenes de Google Street View
- * mediante el Proxy Seguro del Backend.
+ * mediante el Proxy Seguro del Backend (ADR-007 / ADR-011).
  */
 export interface StreetViewCaptureParams {
   lat: number;

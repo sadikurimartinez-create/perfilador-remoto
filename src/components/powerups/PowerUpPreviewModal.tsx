@@ -14,7 +14,6 @@ interface PowerUpPreviewModalProps {
 }
 
 export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm, coords }: PowerUpPreviewModalProps) {
-  if (!isOpen) return null;
   const theme = config.colorTheme;
   const preview = config.preview;
 
@@ -42,6 +41,8 @@ export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm, coords
       window.removeEventListener("resize", updatePosition);
     };
   }, [isOpen, coords]);
+
+  if (!isOpen) return null;
 
   return (
     <div 

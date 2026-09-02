@@ -1,11 +1,49 @@
 "use server";
 
+import type { EpistemicIntegrityMetadata } from "@/types/epistemicIntegrity";
+import { validateGeoIntegrity } from "./geoIntegrityEngine";
+
 export const runOSINTScan = async (project: any) => {
   const location = project?.locationName || 'Aguascalientes';
-  const lat = project?.latitude || 21.8818;
-  const lng = project?.longitude || -102.2915;
+  const geoValidation = validateGeoIntegrity({
+    latitude: project?.latitude ?? null,
+    longitude: project?.longitude ?? null,
+    source: project?.geolocationSource || "PROJECT_GEOMETRY",
+    precision: project?.geolocationPrecision ?? null,
+    observedAt: project?.geolocationObservedAt ?? null,
+    sourceReference: "osintEngine.project",
+  });
+  const lat = geoValidation.reportableAsObservedGeoint ? geoValidation.latitude : null;
+  const lng = geoValidation.reportableAsObservedGeoint ? geoValidation.longitude : null;
+  const syntheticPointIntegrity = validateGeoIntegrity({
+    latitude: lat,
+    longitude: lng,
+    source: "JITTER",
+    sourceReference: "src/utils/osintEngine.ts:synthetic-poi",
+  });
+  const generatedAt = new Date().toISOString();
+  const syntheticEpistemicIntegrity: EpistemicIntegrityMetadata = {
+    sourceId: "osint-engine-mock-fixture",
+    providerId: "osintEngine",
+    sourceType: "OSINT_SYNTHETIC_FIXTURE",
+    acquisitionMode: "MOCK",
+    acquisitionStatus: "ACQUIRED",
+    semanticRole: "DIAGNOSTIC",
+    validationStatus: "UNREVIEWED",
+    isSimulated: true,
+    isDerived: false,
+    isConnectivityOnly: false,
+    observedAt: null,
+    generatedAt,
+    sourceReference: "src/utils/osintEngine.ts",
+    sourceUrl: null,
+    query: location,
+    geolocationSource: "SYNTHETIC_POINT",
+    traceabilityId: project?.traceabilityId || null,
+    lineage: [],
+  };
 
-  console.log(`[Auto-OSINT] 🚀 Instant OSINT scan for location: ${location} (coords: ${lat}, ${lng})`);
+  console.log(`[Auto-OSINT] Instant OSINT scan for location: ${location} (coords: ${lat ?? "NO_GEO"}, ${lng ?? "NO_GEO"})`);
 
   // Fast, reliable, high-quality criminological data for Aguascalientes (CDS, CJNG, La Oficina)
   const mockSerp = [
@@ -18,13 +56,13 @@ export const runOSINTScan = async (project: any) => {
   ];
 
   const mockDenue = [
-    { name: "Abarrotes y Vinos La Oficina", lat: lat + 0.001, lng: lng - 0.001 },
-    { name: "Taller Mecánico El Buda", lat: lat - 0.0012, lng: lng + 0.0015 },
-    { name: "Depósito de Cerveza Pilar Blanco", lat: lat + 0.0005, lng: lng + 0.0008 }
+    { name: "Abarrotes y Vinos La Oficina", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
+    { name: "Taller Mecánico El Buda", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
+    { name: "Depósito de Cerveza Pilar Blanco", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity }
   ];
 
   const mockGooglePlaces = [
-    { name: "Parque Recreativo Los Rodolfos", lat: lat - 0.002, lng: lng - 0.001 }
+    { name: "Parque Recreativo Los Rodolfos", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity }
   ];
 
   const mockWebOSINT = {
@@ -64,6 +102,7 @@ export const runOSINTScan = async (project: any) => {
   });
 
   return {
+    epistemicIntegrity: syntheticEpistemicIntegrity,
     serp: mockSerp,
     news: mockNews,
     gnews: [],

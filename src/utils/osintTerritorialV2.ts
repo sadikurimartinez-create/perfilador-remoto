@@ -192,7 +192,7 @@ function analyzeTextContent(text: string): { keywords: string[]; entities: strin
 }
 
 // Georreferenciar semánticamente buscando menciones de colonias o municipios en el texto
-function georeferenceSemantically(text: string, defaultLat: number | null, defaultLng: number | null): { location: { type: "Point"; coordinates: [number, number] } | null; neighborhood: string | undefined } {
+function georeferenceSemantically(text: string, _defaultLat: number | null, _defaultLng: number | null): { location: { type: "Point"; coordinates: [number, number] } | null; neighborhood: string | undefined } {
   const lowercaseText = text.toLowerCase();
   
   for (const [colonia, coords] of Object.entries(COLONIAS_AGS_COORDENADAS)) {
@@ -207,23 +207,12 @@ function georeferenceSemantically(text: string, defaultLat: number | null, defau
     }
   }
 
-  if (defaultLat === null || defaultLng === null) {
-    return {
-      location: null,
-      neighborhood: undefined
-    };
-  }
-
-  // Si no se menciona ninguna colonia en el texto, generamos una coordenada con un ligero ruido aleatorio (jitter)
-  // alrededor del centro del expediente/proyecto para dispersar los puntos en el mapa y alimentar el heatmap.
-  const jitterLat = (Math.random() - 0.5) * 0.015; // aprox 1km de radio
-  const jitterLng = (Math.random() - 0.5) * 0.015;
-  
+  // ADR-020.34 C5A:
+  // If no territorial reference is demonstrated in the source,
+  // geography remains absent. Never synthesize a map point around
+  // the project centroid solely to populate territorial visualizations.
   return {
-    location: {
-      type: "Point",
-      coordinates: [defaultLng + jitterLng, defaultLat + jitterLat]
-    },
+    location: null,
     neighborhood: undefined
   };
 }
@@ -331,13 +320,33 @@ export const runOSINTTerritorialV2 = async (
     throw new Error("No hay expediente o proyecto activo.");
   }
 
-  const projectLocation = project.locationName || "Aguascalientes";
+  const projectLocation =
+    typeof project.locationName === "string" &&
+    project.locationName.trim().length > 0
+      ? project.locationName.trim()
+      : null;
   const geoValidation = validateGeoIntegrity(project.latitude, project.longitude);
   const defaultLat = geoValidation.latitude;
   const defaultLng = geoValidation.longitude;
 
   // Query principal de búsqueda
-  const query = customQuery || `${projectLocation} operativo OR balacera OR robo OR detención`;
+  // ADR-020.34 C5B:
+  // Territorial acquisition requires either an explicit analyst query
+  // or a demonstrated textual location from the expediente.
+  const normalizedCustomQuery =
+    typeof customQuery === "string" && customQuery.trim().length > 0
+      ? customQuery.trim()
+      : null;
+
+  if (!normalizedCustomQuery && !projectLocation) {
+    throw new Error(
+      "El barrido OSINT territorial requiere una consulta explicita del analista o una ubicacion territorial valida del expediente."
+    );
+  }
+
+  const query =
+    normalizedCustomQuery ??
+    `${projectLocation} operativo OR balacera OR robo OR detencion`;
 
   console.log(`[OSINT Territorial v2.0] 📡 Iniciando barrido multifuente para: "${query}"`);
 

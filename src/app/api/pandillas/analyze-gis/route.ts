@@ -33,6 +33,73 @@ interface ManualDrawing {
   timestamp: string;
 }
 
+function isValidObservedCoordinate(
+  coordinate: unknown
+): coordinate is { lat: number; lng: number } {
+  if (!coordinate || typeof coordinate !== "object") {
+    return false;
+  }
+
+  const candidate = coordinate as {
+    lat?: unknown;
+    lng?: unknown;
+  };
+
+  return (
+    typeof candidate.lat === "number" &&
+    Number.isFinite(candidate.lat) &&
+    candidate.lat >= -90 &&
+    candidate.lat <= 90 &&
+    typeof candidate.lng === "number" &&
+    Number.isFinite(candidate.lng) &&
+    candidate.lng >= -180 &&
+    candidate.lng <= 180 &&
+    !(candidate.lat === 0 && candidate.lng === 0)
+  );
+}
+
+function hasInvalidSpatialInput(
+  domiciles: GISMemberNode[],
+  influenceZones: InfluenceZone[],
+  manualDrawings: ManualDrawing[]
+): boolean {
+  const invalidDomicile =
+    domiciles.some(
+      (domicile) =>
+        !isValidObservedCoordinate(
+          domicile?.location
+        )
+    );
+
+  const invalidInfluenceZone =
+    influenceZones.some(
+      (zone) =>
+        !Array.isArray(zone?.points) ||
+        zone.points.length === 0 ||
+        zone.points.some(
+          (point) =>
+            !isValidObservedCoordinate(point)
+        )
+    );
+
+  const invalidManualDrawing =
+    manualDrawings.some(
+      (drawing) =>
+        !Array.isArray(drawing?.coordinates) ||
+        drawing.coordinates.length === 0 ||
+        drawing.coordinates.some(
+          (point) =>
+            !isValidObservedCoordinate(point)
+        )
+    );
+
+  return (
+    invalidDomicile ||
+    invalidInfluenceZone ||
+    invalidManualDrawing
+  );
+}
+
 interface AnalyzeGisRequest {
   selectedGangs: string[];
   activeLayers: string[];
@@ -40,6 +107,13 @@ interface AnalyzeGisRequest {
   influenceZones: InfluenceZone[];
   manualDrawings: ManualDrawing[];
   allGangs: any[];
+  providerTelemetry?: {
+    rssCount?: number;
+    hasGoogleMaps?: boolean;
+    hasScince?: boolean;
+    hasDenue?: boolean;
+    socialMediaSignals?: Partial<Record<"telegram" | "facebook" | "instagram" | "x" | "reddit" | "search", boolean>>;
+  };
 }
 
 export async function POST(req: Request) {
@@ -51,12 +125,33 @@ export async function POST(req: Request) {
       domiciles = [],
       influenceZones = [],
       manualDrawings = [],
-      allGangs = []
+      allGangs = [],
+      providerTelemetry = {}
     } = body;
 
     if (selectedGangs.length === 0) {
       return NextResponse.json(
         { error: "Debe seleccionar al menos una pandilla para realizar el análisis." },
+        { status: 400 }
+      );
+    }
+
+    // ADR-020.34 C9D1:
+    // Spatial data crossing the client/API trust boundary must already
+    // be complete and geographically valid. The API does not repair,
+    // complete or fabricate coordinates.
+    if (
+      hasInvalidSpatialInput(
+        domiciles,
+        influenceZones,
+        manualDrawings
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "La solicitud contiene geografia incompleta o invalida. El analisis GIS no fabricara ni completara coordenadas."
+        },
         { status: 400 }
       );
     }
@@ -101,17 +196,17 @@ export async function POST(req: Request) {
       incidentsCount: 0,
       domicilesCount: domiciles.length,
       zonesCount: influenceZones.length,
-      rssCount: activeLayers.includes("osint") ? 10 : 0,
-      hasGoogleMaps: true,
-      hasScince: true,
-      hasDenue: true,
+      rssCount: providerTelemetry.rssCount || 0,
+      hasGoogleMaps: providerTelemetry.hasGoogleMaps === true,
+      hasScince: providerTelemetry.hasScince === true,
+      hasDenue: providerTelemetry.hasDenue === true,
       socialMediaSignals: {
-        telegram: activeLayers.includes("domiciles"),
-        facebook: activeLayers.includes("influence"),
-        instagram: activeLayers.includes("influence"),
-        x: activeLayers.includes("influence"),
-        reddit: activeLayers.includes("influence"),
-        search: true,
+        telegram: providerTelemetry.socialMediaSignals?.telegram === true,
+        facebook: providerTelemetry.socialMediaSignals?.facebook === true,
+        instagram: providerTelemetry.socialMediaSignals?.instagram === true,
+        x: providerTelemetry.socialMediaSignals?.x === true,
+        reddit: providerTelemetry.socialMediaSignals?.reddit === true,
+        search: providerTelemetry.socialMediaSignals?.search === true,
       }
     });
 

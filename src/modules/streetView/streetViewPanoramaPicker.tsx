@@ -21,7 +21,7 @@ export function StreetViewPanoramaPicker({
   onClose,
   onCapture,
   onCaptureMultiple,
-  analystName = "Analista CEIPOL",
+  analystName = "UNAVAILABLE",
 }: StreetViewPanoramaPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panoramaRef = useRef<google.maps.StreetViewPanorama | null>(null);
@@ -177,7 +177,7 @@ export function StreetViewPanoramaPicker({
         comentario: comentario.trim() || undefined,
         analystName,
         tipo_origen: "STREETVIEW_MANUAL",
-        estado_revision: "APROBADO" // Capturas manuales se consideran aprobadas de inmediato
+        estado_revision: "PENDIENTE_REVISION"
       };
 
       onCapture(payload);
@@ -187,6 +187,7 @@ export function StreetViewPanoramaPicker({
       setIsCapturing(false);
     }
   }, [panoLat, panoLng, lat, lng, heading, pitch, fov, panoId, captureDate, category, comentario, analystName, onCapture]);
+
 
   if (!isOpen) return null;
 
@@ -291,6 +292,8 @@ export function StreetViewPanoramaPicker({
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none resize-none"
                 />
               </div>
+
+
 
               {/* Telemetría Físico-Criminológica */}
               <div className="bg-slate-950/80 border border-slate-800 p-2.5 rounded-xl space-y-1.5 text-[10px] font-mono text-slate-400">

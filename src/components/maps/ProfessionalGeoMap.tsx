@@ -15,11 +15,11 @@ import StreetViewManualLayer from "./layers/StreetViewManualLayer";
 import StreetViewAutomaticLayer from "./layers/StreetViewAutomaticLayer";
 import FindingsLayer from "./layers/FindingsLayer";
 import StreetViewConeLayer from "./layers/StreetViewConeLayer";
+import CrimeIncidenceLayer from "./layers/CrimeIncidenceLayer";
+import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
 // Contexto de Filtros
-import { useAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
-import { useProject } from "@/context/ProjectContext";
-import { EvidenceDeleteConfirmModal } from "../modals/EvidenceDeleteConfirmModal";
+import { useOptionalAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
 
 interface ProfessionalGeoMapProps {
   geografiaRectora?: {
@@ -39,6 +39,10 @@ interface ProfessionalGeoMapProps {
   selectedPoiId?: string;
   selectedSvId?: string;
   selectedFindingId?: string;
+  crimeIncidents?: CanonicalCrimeIncident[];
+  crimeIncidenceMinimumHeight?: string;
+  onCrimeIncidenceRenderProgress?: (rendered: number, total: number) => void;
+  showLayerControls?: boolean;
 }
 
 const mapContainerStyle = {
@@ -66,7 +70,7 @@ const darkMapStyles = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
 ];
 
-const GOOGLE_MAPS_LIBRARIES: any = ["places", "visualization"];
+const GOOGLE_MAPS_LIBRARIES: any = ["places", "visualization", "drawing"];
 
 export function ProfessionalGeoMap({
   geografiaRectora,
@@ -80,33 +84,27 @@ export function ProfessionalGeoMap({
   onFindingSelect,
   selectedPoiId,
   selectedSvId,
-  selectedFindingId
+  selectedFindingId,
+  crimeIncidents = [],
+  crimeIncidenceMinimumHeight,
+  onCrimeIncidenceRenderProgress,
+  showLayerControls = true,
 }: ProfessionalGeoMapProps) {
+  console.debug("[MAP INPUT DEBUG]", {
+    photographsReceived: photographs,
+    findingsReceived: findings,
+    streetViewAutomaticReceived: streetViewAutomatic,
+  });
+
   // Inicialización del gestor reactivo de capas
   const layerManager = useMemo(() => new MapLayerManager(), []);
   const [layers, setLayers] = useState<MapLayersState>(layerManager.getState());
   const [forceFallback, setForceFallback] = useState(false);
   const [selectedMarkerForCone, setSelectedMarkerForCone] = useState<any | null>(null);
-  const [photoToDelete, setPhotoToDelete] = useState<any | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
-  let removePhotoFromAlbum: ((id: string) => Promise<void>) | null = null;
-  try {
-    const projectCtx = useProject();
-    removePhotoFromAlbum = projectCtx.removePhotoFromAlbum;
-  } catch (err) {
-    // Fallback silencioso si se renderiza de forma aislada
-  }
-
-  // Intentar obtener el contexto de forma segura por si se renderiza de forma aislada
-  let analyticsContext: any = null;
-  try {
-    analyticsContext = useAnalyticsFilter();
-  } catch (err) {
-    // Fallback silencioso si no hay provider
-  }
-
-  const filterState = analyticsContext ? analyticsContext.filterState : {};
+  const analyticsContext = useOptionalAnalyticsFilter();
+  const filterState = analyticsContext?.filterState ?? {};
 
   // Filtrado reactivo de Hallazgos y Capturas según la categoría activa seleccionada en el Dashboard
   const filteredFindings = useMemo(() => {
@@ -127,29 +125,23 @@ export function ProfessionalGeoMap({
   }, [layerManager]);
 
   useEffect(() => {
-    if (!mapInstance || typeof window === "undefined" || typeof ResizeObserver === "undefined") return;
-    const div = mapInstance.getDiv();
-    if (!div) return;
-
+    if (!mapInstance || typeof ResizeObserver === "undefined") return;
+    const mapDiv = mapInstance.getDiv();
     const resizeObserver = new ResizeObserver(() => {
-      if (mapInstance) {
-        google.maps.event.trigger(mapInstance, "resize");
-      }
+      google.maps.event.trigger(mapInstance, "resize");
     });
 
-    resizeObserver.observe(div);
-    const parent = div.parentElement;
-    if (parent) {
-      resizeObserver.observe(parent);
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-    };
+    resizeObserver.observe(mapDiv);
+    if (mapDiv.parentElement) resizeObserver.observe(mapDiv.parentElement);
+    return () => resizeObserver.disconnect();
   }, [mapInstance]);
 
+  const apiKey = typeof process !== "undefined"
+    ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "")
+    : "";
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    id: "google-map-script",
+    googleMapsApiKey: apiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
@@ -157,7 +149,7 @@ export function ProfessionalGeoMap({
     if (geografiaRectora?.center?.lat && geografiaRectora?.center?.lng) {
       return geografiaRectora.center;
     }
-    return { lat: 21.885, lng: -102.291 }; // Aguascalientes, México
+    return { lat: 23.6345, lng: -102.5528 };
   }, [geografiaRectora]);
 
   const mapOptions = useMemo(() => ({
@@ -170,6 +162,11 @@ export function ProfessionalGeoMap({
     rotateControl: true,
     fullscreenControl: false,
   }), []);
+
+  const resolvedMapContainerStyle = useMemo(() => ({
+    ...mapContainerStyle,
+    minHeight: crimeIncidenceMinimumHeight ?? mapContainerStyle.minHeight,
+  }), [crimeIncidenceMinimumHeight]);
 
   // Seleccionar automáticamente el centro del cono de visión activo
   const activeConeData = useMemo(() => {
@@ -206,7 +203,7 @@ export function ProfessionalGeoMap({
 
   if (!isLoaded) {
     return (
-      <div className="w-full h-full min-h-[550px] bg-slate-950 rounded-2xl flex flex-col items-center justify-center border border-slate-900 gap-3">
+      <div className="w-full h-full bg-slate-950 rounded-2xl flex flex-col items-center justify-center border border-slate-900 gap-3" style={{ minHeight: crimeIncidenceMinimumHeight ?? mapContainerStyle.minHeight }}>
         <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
         <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">Cargando Motor SIG Profesional...</span>
       </div>
@@ -216,7 +213,7 @@ export function ProfessionalGeoMap({
   return (
     <div className="w-full h-full relative overflow-hidden rounded-2xl border border-slate-900 bg-slate-950">
       {/* Panel flotante de Capas */}
-      <div className="absolute top-4 right-4 bg-slate-950/90 border border-slate-800 rounded-2xl p-4 z-10 w-64 shadow-2xl backdrop-blur-md">
+      {showLayerControls && <div className="absolute top-4 right-4 bg-slate-950/90 border border-slate-800 rounded-2xl p-4 z-10 w-64 shadow-2xl backdrop-blur-md">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
           <span className="text-[10px] font-black tracking-widest text-cyan-500 uppercase">Capas de Inteligencia</span>
           <button
@@ -291,26 +288,29 @@ export function ProfessionalGeoMap({
             <span className="text-cyan-400 font-bold">Conos Visuales Street View</span>
           </label>
         </div>
-      </div>
+      </div>}
 
       <GoogleMap
-        mapContainerStyle={mapContainerStyle}
+        mapContainerStyle={resolvedMapContainerStyle}
         center={mapCenter}
         zoom={15}
         options={mapOptions}
-        onLoad={(map) => setMapInstance(map)}
+        onLoad={setMapInstance}
+        onUnmount={() => setMapInstance(null)}
       >
         <BaseMapLayer />
         
         <RectorGeometryLayer visible={layers.rectorGeometry} geografiaRectora={geografiaRectora} />
+
+        <CrimeIncidenceLayer
+          visible={crimeIncidents.length > 0}
+          matchedRecords={crimeIncidents}
+          onRenderProgress={onCrimeIncidenceRenderProgress}
+        />
         
         <PoiLayer visible={layers.pois} pois={pois} selectedPoiId={selectedPoiId} onPoiSelect={onPoiSelect} />
         
-        <PhotoEvidenceLayer
-          visible={layers.photos}
-          photographs={photographs}
-          onSelectPhoto={(photo) => setPhotoToDelete(photo)}
-        />
+        <PhotoEvidenceLayer visible={layers.photos} photographs={photographs} />
         
         <StreetViewManualLayer
           visible={layers.streetViewManual}
@@ -347,19 +347,6 @@ export function ProfessionalGeoMap({
           fov={activeConeData?.fov || 90}
         />
       </GoogleMap>
-
-      {/* Modal de Borrado con Secuencia Preventiva de 2 Pasos */}
-      <EvidenceDeleteConfirmModal
-        isOpen={!!photoToDelete}
-        evidence={photoToDelete}
-        onClose={() => setPhotoToDelete(null)}
-        onConfirmDelete={async (evidenceId) => {
-          if (removePhotoFromAlbum) {
-            await removePhotoFromAlbum(evidenceId);
-          }
-          setPhotoToDelete(null);
-        }}
-      />
     </div>
   );
 }

@@ -8,10 +8,11 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const moduleName = (searchParams.get("module") || "perfil") as "pandillas" | "inundaciones" | "perfil";
     const query = searchParams.get("query") || "";
-    const lat = parseFloat(searchParams.get("lat") || "21.8853");
-    const lng = parseFloat(searchParams.get("lng") || "-102.2916");
 
-    const report = MultiSourceCorrelationEngine.correlate(moduleName, { lat, lng, query });
+    // ADR-020.34: diagnostic provider correlation must not fabricate geography.
+    // Geographic context is optional for MultiSourceCorrelationEngine and must
+    // only be supplied by callers when it is explicit and source-grounded.
+    const report = MultiSourceCorrelationEngine.correlate(moduleName, { query });
     return NextResponse.json(report);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

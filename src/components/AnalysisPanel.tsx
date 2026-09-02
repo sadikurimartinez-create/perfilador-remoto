@@ -15,13 +15,13 @@ const AnalysisPanel: React.FC<Props> = ({
   project,
 }) => {
 
-  if (!iaAnalysis || iaAnalysis.length === 0) return null;
-
   const userRole =
     project?.userRole || 'USER';
 
   const permissions =
     usePermissions(userRole);
+
+  if (!iaAnalysis || iaAnalysis.length === 0) return null;
 
   return (
     <div className="bg-slate-900/80 border border-slate-700 rounded-lg p-4 mt-2">

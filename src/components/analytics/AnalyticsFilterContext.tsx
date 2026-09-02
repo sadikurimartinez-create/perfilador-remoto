@@ -57,3 +57,7 @@ export function useAnalyticsFilter() {
   }
   return context;
 }
+
+export function useOptionalAnalyticsFilter() {
+  return useContext(AnalyticsFilterContext);
+}

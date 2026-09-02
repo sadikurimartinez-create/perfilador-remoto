@@ -89,6 +89,21 @@ const baseConsistentPayload: ACEPayload = {
   }
 };
 
+const adr02029ApprovedGimFields = {
+  sourceIntegrityStatus: "VERIFIED" as const,
+  authorityClassification: "AUTHORITATIVE" as const,
+  nonAuthoritativeSourcesCount: 0,
+  humanValidationStatus: "APPROVED" as const,
+  validatedByUserId: "ace-gim-test-user",
+  humanValidatedAt: "2026-08-30T12:00:00.000Z",
+  lineage: {
+    evidenceIds: ["gim-evidence-1"],
+    findingIds: ["gim-finding-1"],
+    analysisIds: ["gim-analysis-1"],
+    providerProvenance: ["GIM_TEST_FIXTURE"]
+  }
+};
+
 export function runAceGimTests(): { passedCount: number; failedCount: number } {
   console.log("=== INICIANDO SUITE DE PRUEBAS DE INTEGRACIÓN GIM → ACE (ADR-008.8.2) ===");
   let passedCount = 0;
@@ -111,6 +126,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
     const payload1 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: true,
@@ -130,6 +146,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
     const payload2 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: true,
@@ -153,6 +170,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
     const payload3 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: true,
@@ -176,6 +194,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
     const payload4 = {
       ...baseConsistentPayload,
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 60,
         limitationsCount: 0,
         hasTraceability: true,
@@ -199,6 +218,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
     const payload5Inst = {
       ...baseConsistentPayload, // Prefijo EXP-
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: false,
@@ -213,6 +233,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
       ...baseConsistentPayload,
       projectId: "PR-2026-EXPLORATORIO", // Sin prefijo EXP-
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: false,
@@ -255,6 +276,7 @@ export function runAceGimTests(): { passedCount: number; failedCount: number } {
       ...baseConsistentPayload,
       sieEventsCount: 500, // Discrepancia cuantitativa drástica para inducir fallo propio de ACE
       gimContext: {
+        ...adr02029ApprovedGimFields,
         confidenceScore: 90,
         limitationsCount: 0,
         hasTraceability: true,

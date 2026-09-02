@@ -94,7 +94,8 @@ export interface Evidence {
   tipo: "grafiti" | "tatuaje" | "red_social" | "arma" | "reporte_911" | "otro";
   fuente: string;
   fecha: Date;
-  hash: string;           // SHA-256 hash representing physical file integrity
+  hash?: string | null;   // SHA-256 only when supplied/computed from real upstream file bytes
+  forensicIntegrity?: import("@/utils/forensicFileIntegrity").ForensicFileIntegrity | null;
   confianza: "Baja" | "Media" | "Alta" | "Certificada";
   relacion: string | null; // UUID of related relationship or entity
 }

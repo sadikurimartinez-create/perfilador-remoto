@@ -66,22 +66,22 @@ export class XProvider implements IProvider {
       if (token) {
         data = await searchX(query);
       } else {
-        // Real connection reachability check if bearer token is missing
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch("https://api.twitter.com", { method: "GET", signal: controller.signal });
-        clearTimeout(id);
-
-        if (res.status >= 500) {
-          throw new Error(`X/Twitter API server unreachable, status: ${res.status}`);
-        }
-        data = [
-          {
-            id: "tweet_reachability_check",
-            text: `Verificación de conectividad con X/Twitter activa. Búsqueda simulada para '${query}'.`,
-            created_at: new Date().toISOString()
-          }
-        ];
+        return {
+          provider: this.getId(),
+          status: "disabled",
+          timestamp: new Date().toISOString(),
+          confidence: 0,
+          payload: null,
+          latency: Date.now() - start,
+          metadata: {
+            version: "2.1.0",
+            sourceFamily: "X",
+            operationalMode: "NOT_CONFIGURED",
+            acquisitionStatus: "NOT_CONFIGURED",
+            authoritative: false,
+          },
+          errors: ["X/Twitter API credentials are not configured."]
+        };
       }
 
       const action = params?.action || "search";

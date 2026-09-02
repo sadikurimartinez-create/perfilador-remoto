@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const lat = searchParams.get("lat");
   const lng = searchParams.get("lng");
 
-  // Si se proveen parámetros individuales, construimos la URL en el servidor de forma segura sin exponer la API Key
+  // Si se proveen parámetros individuales, construimos la URL en el servidor de forma segura sin exponer la API Key (ADR-007)
   if (lat && lng) {
     const heading = searchParams.get("heading") || "0";
     const pitch = searchParams.get("pitch") || "0";
@@ -44,4 +44,3 @@ export async function GET(request: NextRequest) {
     return new NextResponse(`Error proxying image: ${error.message}`, { status: 500 });
   }
 }
-
