@@ -485,4 +485,25 @@ describe("ADR-020.21 - Crime incidence canonical pipeline", () => {
       process.cwd = originalCwd;
     }
   });
+  it("acepta FECHA_DENUNCIA como fecha canonica de incidencia", () => {
+    const record = normalizeCrimeRecord(
+      {
+        INCIDENTE: "Fraude y extorsión",
+        FECHA_DENUNCIA: "2025-01-01",
+        LAT: "21.89758900",
+        LONG: "-102.24782100",
+      },
+      "2025 FRAUDE Y EXTORSION PERFILADOR.csv"
+    );
+
+    expect(record.date).toBe("2025-01-01");
+    expect(record.incident).toBe("Fraude y extorsión");
+    expect(record.originalLat).toBe(21.897589);
+    expect(record.originalLng).toBe(-102.247821);
+    expect(record.coverageStatus).toBe("IN_COVERAGE");
+    expect(record.geoValidationStatus).toBe("VALID_GEOLOCATION");
+    expect(record.isValid).toBe(true);
+    expect(record.rejectionReason).toBeUndefined();
+  });
+
 });

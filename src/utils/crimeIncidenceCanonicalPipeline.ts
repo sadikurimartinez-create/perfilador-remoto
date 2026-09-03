@@ -191,7 +191,7 @@ export function buildCrimeDedupKey(record: {
 
 export function normalizeCrimeRecord(row: RawCrimeRecord, sourceFile: string): NormalizedCrimeRecord {
   const incident = String(pick(row, ["INCIDENTE", "incidente", "DELITO", "delito"]) ?? "").trim();
-  const date = parseCrimeDate(pick(row, ["FECHA", "fecha", "Fecha"]));
+  const date = parseCrimeDate(pick(row, ["FECHA", "fecha", "Fecha", "FECHA_DENUNCIA", "fecha_denuncia", "Fecha_Denuncia"]));
   const time = normalizeCrimeTime(pick(row, ["HORA", "hora", "Hora"]));
   const originalLat = toFiniteNumber(pick(row, ["LAT", "lat", "Lat", "latitude", "Latitude"]));
   const originalLng = toFiniteNumber(pick(row, ["LONG", "LON", "lng", "lon", "Long", "Lon", "longitude", "Longitude"]));
