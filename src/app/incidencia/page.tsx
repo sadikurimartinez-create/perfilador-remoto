@@ -23,6 +23,30 @@ type IncidenceResponse = {
   files?: number;
   totalRecords?: number;
   records?: IncidentRecord[];
+  governance?: {
+    datasetReference: string;
+    fingerprint: string;
+    canonical: {
+      received: number;
+      accepted: number;
+      rejected: number;
+      duplicates: number;
+    };
+    provenance: {
+      datasetName: string | null;
+      datasetVersion: string | null;
+      sourceOrganization: string | null;
+      temporalStart: string | null;
+      temporalEnd: string | null;
+      missing: string[];
+    };
+    admission: {
+      status: string;
+      accepted: boolean;
+      reasons: string[];
+      warnings: string[];
+    };
+  };
   error?: string;
 };
 
@@ -203,7 +227,7 @@ export default function CrimeIncidencePage() {
 
       {!loading && data?.success && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
               <div className="text-xs uppercase text-slate-500">Registros</div>
               <div className="text-2xl font-black text-slate-100">{data.totalRecords ?? 0}</div>
@@ -216,7 +240,51 @@ export default function CrimeIncidencePage() {
               <div className="text-xs uppercase text-slate-500">Resultado filtrado</div>
               <div className="text-2xl font-black text-slate-100">{filtered.length}</div>
             </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-xs uppercase text-slate-500">Gobernanza ADR-022</div>
+              <div className={`text-lg font-black ${data.governance?.admission.accepted ? "text-emerald-400" : "text-amber-400"}`}>
+                {data.governance?.admission.status ?? "NO DISPONIBLE"}
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {data.governance?.provenance.missing.length
+                  ? `Faltan ${data.governance.provenance.missing.length} metadatos de procedencia`
+                  : "Provenance institucional completa"}
+              </div>
+            </div>
           </div>
+
+          {data.governance && (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-200">Gobernanza y trazabilidad ADR-022</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Canonicalización, fingerprint, provenance y admission gate del dataset activo.
+                  </p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-black ${data.governance.admission.accepted ? "bg-emerald-950 text-emerald-300" : "bg-amber-950 text-amber-300"}`}>
+                  {data.governance.admission.status}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div><span className="text-slate-500">Recibidos</span><div className="font-bold text-slate-200">{data.governance.canonical.received}</div></div>
+                <div><span className="text-slate-500">Aceptados</span><div className="font-bold text-slate-200">{data.governance.canonical.accepted}</div></div>
+                <div><span className="text-slate-500">Rechazados</span><div className="font-bold text-slate-200">{data.governance.canonical.rejected}</div></div>
+                <div><span className="text-slate-500">Duplicados</span><div className="font-bold text-slate-200">{data.governance.canonical.duplicates}</div></div>
+              </div>
+
+              <div className="mt-4 break-all text-[11px] text-slate-500">
+                Fingerprint SHA-256: {data.governance.fingerprint}
+              </div>
+
+              {data.governance.provenance.missing.length > 0 && (
+                <div className="mt-4 rounded-md border border-amber-900/60 bg-amber-950/30 p-3 text-xs text-amber-300">
+                  Provenance incompleta: {data.governance.provenance.missing.join(", ")}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
             <h2 className="text-sm font-bold text-slate-200 mb-4">Selección analítica</h2>
