@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
-import type { CrimeIncidenceAnalyticalProjection } from "@/types/crimeIncidenceAnalyticalProjection";
+import type { CrimeIncidenceAnalyticsView } from "@/utils/crimeIncidenceAnalyticalProjection";
 
 interface CrimeIncidenceAnalyticsProps {
-  projection: CrimeIncidenceAnalyticalProjection;
+  projection: CrimeIncidenceAnalyticsView;
 }
 
 interface DistributionBucket {

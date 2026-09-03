@@ -67,3 +67,102 @@ export function projectCrimeIncidenceAnalytics(
     lineage: geography.lineage,
   };
 }
+
+export interface CrimeIncidenceAnalyticsView {
+  projectionType: "DESCRIPTIVE_SUMMARY";
+  analyticalLevel: "DESCRIPTIVE";
+  datasetReference: {
+    datasetId?: string;
+  };
+  geographicReference: {
+    coverageStatus: string;
+  };
+  temporalReference: {
+    query: {
+      start?: string | null;
+      end?: string | null;
+    };
+  };
+  metrics: CrimeIncidenceAnalyticalProjection["metrics"];
+  limitations: string[];
+}
+
+export interface StandaloneCrimeIncidenceAnalyticsInput {
+  incidents: readonly CanonicalCrimeIncident[];
+  datasetId: string;
+  coverageStatus: string;
+  temporalStart?: string | null;
+  temporalEnd?: string | null;
+  totalScanned?: number;
+}
+
+/**
+ * Projects ADR-022 descriptive metrics for the autonomous Incidencia module
+ * without introducing expediente or rector geography.
+ */
+export function projectStandaloneCrimeIncidenceAnalytics(
+  input: StandaloneCrimeIncidenceAnalyticsInput
+): CrimeIncidenceAnalyticsView {
+  const incidentFrequency = frequency(
+    input.incidents.map((record) => record.incidentType)
+  );
+
+  const totalRecords = input.incidents.length;
+  const totalScanned = input.totalScanned ?? totalRecords;
+
+  return {
+    projectionType: "DESCRIPTIVE_SUMMARY",
+    analyticalLevel: "DESCRIPTIVE",
+    datasetReference: {
+      datasetId: input.datasetId,
+    },
+    geographicReference: {
+      coverageStatus: input.coverageStatus,
+    },
+    temporalReference: {
+      query: {
+        start: input.temporalStart ?? null,
+        end: input.temporalEnd ?? null,
+      },
+    },
+    metrics: {
+      frequency: {
+        totalRecords,
+        byIncidentType: incidentFrequency,
+      },
+      percentage: {
+        basis: totalRecords,
+        byIncidentType: incidentFrequency.map((bucket) => ({
+          ...bucket,
+          percentage:
+            totalRecords === 0
+              ? 0
+              : Number(((bucket.count / totalRecords) * 100).toFixed(2)),
+        })),
+      },
+      distribution: {
+        byMunicipality: frequency(
+          input.incidents.map(
+            (record) => record.location.municipality ?? null
+          )
+        ),
+        byOccurredDate: frequency(
+          input.incidents.map((record) => record.occurredDate)
+        ),
+      },
+      aggregation: {
+        matchedRecords: totalRecords,
+        excludedRecords: Math.max(0, totalScanned - totalRecords),
+        recordsWithCoordinates: input.incidents.filter(
+          (record) =>
+            record.coordinates.lat !== null &&
+            record.coordinates.lng !== null
+        ).length,
+      },
+    },
+    limitations: [
+      "DESCRIPTIVE_PROJECTION_IS_NOT_EVIDENCE_FINDING_PROOF_CAUSALITY_OR_PREDICTION",
+      "STANDALONE_CRIME_INCIDENCE_ANALYTICS_WITHOUT_EXPEDIENT_CONTEXT",
+    ],
+  };
+}

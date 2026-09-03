@@ -113,4 +113,32 @@ describe("ADR-022.8E analytical visualization", () => {
     expect(source.indexOf("<CrimeIncidenceMap")).toBeLessThan(source.indexOf("<CrimeIncidenceAnalytics"));
     expect(source.indexOf("<CrimeIncidenceAnalytics")).toBeLessThan(source.indexOf("Resultados trazables"));
   });
+
+  test("standalone module renders the governed analytics component after the map and before records", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/app/incidencia/page.tsx"),
+      "utf8"
+    );
+
+    expect(source).toContain("projectStandaloneCrimeIncidenceAnalytics");
+    expect(source).toContain("<CrimeIncidenceAnalytics");
+    expect(source).toContain("standalone-crime-incidence-analytics");
+
+    expect(source.indexOf("<ProfessionalGeoMap"))
+      .toBeLessThan(source.indexOf("<CrimeIncidenceAnalytics"));
+
+    expect(source.indexOf("<CrimeIncidenceAnalytics"))
+      .toBeLessThan(source.indexOf("Registros seleccionados"));
+
+    for (const forbidden of [
+      "useProject",
+      "canonicalGeography",
+      "PhotoAlbum",
+      "CaptureAndAddPhoto",
+      "tacticalStreetViews",
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
+  });
+
 });

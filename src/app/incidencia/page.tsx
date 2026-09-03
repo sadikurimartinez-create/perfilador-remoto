@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ProfessionalGeoMap } from "@/components/maps/ProfessionalGeoMap";
+import { CrimeIncidenceAnalytics } from "@/components/crime-incidence/CrimeIncidenceAnalytics";
+import { projectStandaloneCrimeIncidenceAnalytics } from "@/utils/crimeIncidenceAnalyticalProjection";
 import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
 type IncidentRecord = {
@@ -201,6 +203,41 @@ export default function CrimeIncidencePage() {
     ]
   );
 
+  const analyticsProjection = useMemo(
+    () =>
+      projectStandaloneCrimeIncidenceAnalytics({
+        incidents: mapIncidents,
+        datasetId:
+          data?.governance?.datasetReference ??
+          data?.dataset ??
+          "INCIDENCIA_DELICTIVA",
+        coverageStatus:
+          data?.governance?.admission.accepted
+            ? "IN_COVERAGE"
+            : "UNKNOWN_COVERAGE",
+        temporalStart:
+          startDate ||
+          data?.governance?.provenance.temporalStart ||
+          null,
+        temporalEnd:
+          endDate ||
+          data?.governance?.provenance.temporalEnd ||
+          null,
+        totalScanned: records.length,
+      }),
+    [
+      mapIncidents,
+      data?.governance?.datasetReference,
+      data?.governance?.admission.accepted,
+      data?.governance?.provenance.temporalStart,
+      data?.governance?.provenance.temporalEnd,
+      data?.dataset,
+      startDate,
+      endDate,
+      records.length,
+    ]
+  );
+
   return (
     <div className="w-full p-4 md:p-6 space-y-6">
       <div>
@@ -361,6 +398,15 @@ export default function CrimeIncidencePage() {
               />
             </div>
           </div>
+
+          {data.governance?.admission.accepted && (
+            <div
+              className="rounded-xl border border-slate-800 bg-slate-950/40 overflow-hidden"
+              data-testid="standalone-crime-incidence-analytics"
+            >
+              <CrimeIncidenceAnalytics projection={analyticsProjection} />
+            </div>
+          )}
 
           <div className="rounded-xl border border-slate-800 bg-slate-950/40 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 text-sm font-bold text-slate-200">
