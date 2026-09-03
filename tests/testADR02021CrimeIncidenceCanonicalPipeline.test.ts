@@ -506,4 +506,27 @@ describe("ADR-020.21 - Crime incidence canonical pipeline", () => {
     expect(record.rejectionReason).toBeUndefined();
   });
 
+  it("acepta FECHA_REP como fecha canonica de incidencia", () => {
+    const record = normalizeCrimeRecord(
+      {
+        INCIDENTE: "Homicidio",
+        FECHA_REP: "2017-01-26",
+        HORA: "3",
+        MUNICIPIO: "COSIO",
+        NOM_ASEN: "EL REFUGIO DE PROVIDENCIA (PROVIDENCIA)",
+        NOM_VIAL: "INSURGENTES",
+        LONG: "-102.25575444",
+        LAT: "22.34797979",
+      },
+      "Homicidios 2017.csv"
+    );
+
+    expect(record.date).toBe("2017-01-26");
+    expect(record.incident).toBe("Homicidio");
+    expect(record.originalLat).toBeCloseTo(22.34797979);
+    expect(record.originalLng).toBeCloseTo(-102.25575444);
+    expect(record.isValid).toBe(true);
+    expect(record.rejectionReason).toBeUndefined();
+  });
+
 });
