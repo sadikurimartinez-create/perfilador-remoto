@@ -19,6 +19,8 @@ export interface NormalizedCrimeRecord {
   lat: number | null;
   lng: number | null;
   sourceFile: string;
+  sourceFingerprint?: string | null;
+  datasetVersion?: string | null;
   coverageStatus: CrimeCoverageStatus;
   geoValidationStatus: "VALID_GEOLOCATION" | "NOT_GEOREFERENCED" | "INVALID" | "PRESERVED_UNVERIFIED";
   geolocationSource: "SOURCE_RECORD";
@@ -195,6 +197,8 @@ export function normalizeCrimeRecord(row: RawCrimeRecord, sourceFile: string): N
   const time = normalizeCrimeTime(pick(row, ["HORA", "hora", "Hora"]));
   const originalLat = toFiniteNumber(pick(row, ["LAT", "lat", "Lat", "latitude", "Latitude"]));
   const originalLng = toFiniteNumber(pick(row, ["LONG", "LON", "lng", "lon", "Long", "Lon", "longitude", "Longitude"]));
+  const sourceFingerprint = pick(row, ["sourceFingerprint", "source_fingerprint"]);
+  const datasetVersion = pick(row, ["datasetVersion", "dataset_version"]);
   const coverageStatus = determineAguascalientesCoverage(originalLat, originalLng);
   const geo = validateGeoIntegrity({ latitude: originalLat, longitude: originalLng, source: "SOURCE_RECORD" });
   const geoStatus = geo.geolocationStatus ?? "INVALID";
@@ -234,6 +238,8 @@ export function normalizeCrimeRecord(row: RawCrimeRecord, sourceFile: string): N
     lat: isValid ? originalLat : null,
     lng: isValid ? originalLng : null,
     sourceFile,
+    sourceFingerprint: sourceFingerprint == null ? null : String(sourceFingerprint),
+    datasetVersion: datasetVersion == null ? null : String(datasetVersion),
     coverageStatus,
     geoValidationStatus: geoStatus,
     geolocationSource: "SOURCE_RECORD",
