@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ProfessionalGeoMap } from "@/components/maps/ProfessionalGeoMap";
+import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
 type IncidentRecord = {
   incidentType: string | null;
@@ -85,6 +87,95 @@ export default function CrimeIncidencePage() {
     return true;
   }), [records, municipality, neighborhood, street, incidentType, startDate, endDate]);
 
+  const mapIncidents = useMemo<CanonicalCrimeIncident[]>(() =>
+    filtered
+      .filter((record) =>
+        record.lat !== null &&
+        record.lng !== null &&
+        Number.isFinite(record.lat) &&
+        Number.isFinite(record.lng)
+      )
+      .map((record, index) => {
+        const lat = record.lat as number;
+        const lng = record.lng as number;
+        const inCoverage =
+          lat >= 21.0 &&
+          lat <= 22.8 &&
+          lng >= -103.2 &&
+          lng <= -101.5;
+        const coverageStatus = inCoverage ? "IN_COVERAGE" : "OUT_OF_COVERAGE";
+
+        return {
+          id: `${record.sourceFile}-${index}-${lat}-${lng}`,
+          incidentType: record.incidentType,
+          occurredDate: record.date,
+          occurredTime: record.time,
+          timeRange: null,
+          coordinates: {
+            lat,
+            lng,
+            originalLat: lat,
+            originalLng: lng,
+          },
+          location: {
+            ...(record.municipality ? { municipality: record.municipality } : {}),
+            ...(record.neighborhood ? { neighborhood: record.neighborhood } : {}),
+            ...(record.street ? { street: record.street } : {}),
+          },
+          source: {
+            querySource: "CSV_LEGACY_FALLBACK",
+            sourceStatus: "CSV_LEGACY_FALLBACK",
+            sourceFile: record.sourceFile,
+            datasetId: "INCIDENCIA_DELICTIVA",
+          },
+          coverage: {
+            geographic: coverageStatus,
+          },
+          geoValidation: "VALID_GEOLOCATION",
+          lineage: {
+            dataset: "INCIDENCIA_DELICTIVA",
+            querySource: "CSV_LEGACY_FALLBACK",
+            filters: {
+              municipality: municipality || null,
+              neighborhood: neighborhood || null,
+              street: street || null,
+              incidentType: incidentType || null,
+            },
+            timeRange: {
+              start: startDate || null,
+              end: endDate || null,
+              status:
+                startDate || endDate
+                  ? "KNOWN"
+                  : "TEMPORAL_COVERAGE_UNKNOWN",
+            },
+            geographicFilter: {
+              center: { lat, lng },
+              radiusMeters: 0,
+              coverageStatus,
+            },
+            recordSubset: {
+              totalScanned: records.length,
+              matched: filtered.length,
+              excluded: records.length - filtered.length,
+              duplicates: 0,
+              returnedRecords: filtered.length,
+            },
+          },
+        };
+      }),
+    [
+      filtered,
+      records.length,
+      municipality,
+      neighborhood,
+      street,
+      incidentType,
+      startDate,
+      endDate,
+    ]
+  );
+
   return (
     <div className="w-full p-4 md:p-6 space-y-6">
       <div>
@@ -147,6 +238,26 @@ export default function CrimeIncidencePage() {
               </select>
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200" />
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-800">
+              <div>
+                <h2 className="text-sm font-bold text-slate-200">Mapa de Incidencia Delictiva</h2>
+                <p className="text-xs text-slate-500">
+                  Visualización georreferenciada de los registros que cumplen la selección analítica vigente.
+                </p>
+              </div>
+              <div className="text-xs text-slate-400">
+                Eventos georreferenciados: <strong className="text-slate-200">{mapIncidents.length}</strong>
+              </div>
+            </div>
+
+            <div className="min-h-[520px]">
+              <ProfessionalGeoMap
+                crimeIncidents={mapIncidents}
+              />
             </div>
           </div>
 
