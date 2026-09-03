@@ -15,7 +15,7 @@ export default function IncidenciaUpdateAdminPage() {
 
       try {
 
-        const response = await fetch("/api/auth/session");
+        const response = await fetch("/api/auth/me");
 
         if (!response.ok) {
           setAuthorized(false);
@@ -24,7 +24,7 @@ export default function IncidenciaUpdateAdminPage() {
 
         const data = await response.json();
 
-        const role = data?.user?.role;
+        const role = data?.role;
 
         setAuthorized(
           role === "SUPER_ADMIN" ||
@@ -205,3 +205,4 @@ export default function IncidenciaUpdateAdminPage() {
   );
 
 }
+
