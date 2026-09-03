@@ -60,6 +60,13 @@ export default function HomePage() {
             Centro de Mando GEOINT
           </Link>
           <Link
+            href="/incidencia"
+            className="inline-flex items-center gap-2 rounded-md bg-amber-950/60 border border-amber-800/50 px-4 py-2 text-sm font-semibold text-amber-400 shadow-sm hover:bg-amber-900/50 transition-colors"
+          >
+            <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+            Incidencia Delictiva
+          </Link>
+          <Link
             href="/inundaciones"
             className="inline-flex items-center gap-2 rounded-md bg-blue-950/60 border border-blue-800/50 px-4 py-2 text-sm font-semibold text-blue-400 shadow-sm hover:bg-blue-900/50 transition-colors"
           >
