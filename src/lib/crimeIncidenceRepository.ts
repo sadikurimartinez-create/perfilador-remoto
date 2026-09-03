@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import path from "node:path";
 import Papa from "papaparse";
 import { getPool } from "@/lib/db";
@@ -156,22 +156,26 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
           hora,
           rango_horario,
           nom_asen,
-          fuente_archivo,
-          ST_Y(geometria::geometry) AS lat,
-          ST_X(geometria::geometry) AS lng,
+          i.fuente_archivo,
+          i.source_fingerprint,
+          d.dataset_version,
+          ST_Y(i.geometria::geometry) AS lat,
+          ST_X(i.geometria::geometry) AS lng,
           ST_Distance(
-            geometria,
+            i.geometria,
             ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
           ) AS distancia_m
-        FROM incidencia_estadistica
+        FROM incidencia_estadistica i
+        LEFT JOIN crime_incidence_datasets d
+          ON d.id = i.dataset_id
         WHERE ST_DWithin(
-          geometria,
+          i.geometria,
           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
           $3
         )
-          AND ($4::text IS NULL OR fecha::date >= $4::date)
-          AND ($5::text IS NULL OR fecha::date <= $5::date)
-          AND ($6::text[] IS NULL OR incidente = ANY($6::text[]))
+          AND ($4::text IS NULL OR i.fecha::date >= $4::date)
+          AND ($5::text IS NULL OR i.fecha::date <= $5::date)
+          AND ($6::text[] IS NULL OR i.incidente = ANY($6::text[]))
         ORDER BY distancia_m ASC
         LIMIT 500
       `,
@@ -193,6 +197,8 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
       geolocationSource: "SOURCE_RECORD",
       distancia_m: Number(row.distancia_m),
       fuente: row.fuente_archivo,
+      sourceFingerprint: row.source_fingerprint,
+      datasetVersion: row.dataset_version,
     }));
 
     return {
@@ -388,3 +394,9 @@ export async function queryCrimeIncidence(input: CrimeQueryInput): Promise<Crime
   };
   return { ...result, datasetIdentity: configuredDatasetIdentity(result) };
 }
+
+
+
+
+
+

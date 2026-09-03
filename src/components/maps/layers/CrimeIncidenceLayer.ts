@@ -2,13 +2,36 @@ import * as React from "react";
 import { InfoWindow, Marker } from "@react-google-maps/api";
 import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
+type CrimeIncidenceTraceFields = {
+  sourceFingerprint?: string | null;
+
+  datasetVersion?: string | null;
+};
+
 export interface CrimeIncidenceLayerPoint {
   technicalId: string;
+
   coordinates: CanonicalCrimeIncident["coordinates"];
+
   occurredDate: string | null;
+
+  occurredTime: string | null;
+
   incidentType: string | null;
+
   source: CanonicalCrimeIncident["source"];
+
   coverageStatus: CanonicalCrimeIncident["coverage"]["geographic"];
+
+  geoValidation: CanonicalCrimeIncident["geoValidation"];
+
+  lineage: CanonicalCrimeIncident["lineage"];
+
+  distanceMeters?: number;
+
+  sourceFingerprint?: string | null;
+
+  datasetVersion?: string | null;
 }
 
 interface CrimeIncidenceLayerProps {
@@ -27,14 +50,35 @@ export function getNextCrimeIncidenceRenderCount(current: number, total: number,
 export function toCrimeIncidenceLayerPoints(
   matchedRecords: readonly CanonicalCrimeIncident[]
 ): CrimeIncidenceLayerPoint[] {
-  return matchedRecords.map((incident) => ({
-    technicalId: incident.id,
-    coordinates: incident.coordinates,
-    occurredDate: incident.occurredDate,
-    incidentType: incident.incidentType,
-    source: incident.source,
-    coverageStatus: incident.coverage.geographic,
-  }));
+  return matchedRecords.map((incident) => {
+    const tracedIncident = incident as CanonicalCrimeIncident & CrimeIncidenceTraceFields;
+
+    return {
+      technicalId: incident.id,
+
+      coordinates: incident.coordinates,
+
+      occurredDate: incident.occurredDate,
+
+      occurredTime: incident.occurredTime,
+
+      incidentType: incident.incidentType,
+
+      source: incident.source,
+
+      coverageStatus: incident.coverage.geographic,
+
+      geoValidation: incident.geoValidation,
+
+      lineage: incident.lineage,
+
+      distanceMeters: incident.distanceMeters,
+
+      sourceFingerprint: tracedIncident.sourceFingerprint ?? null,
+
+      datasetVersion: tracedIncident.datasetVersion ?? null,
+    };
+  });
 }
 
 function label(value: string | null | undefined): string {
@@ -98,6 +142,8 @@ export function CrimeIncidenceLayer({
                 React.createElement("p", null, `Fecha: ${label(point.occurredDate)}`),
                 React.createElement("p", null, `Fuente: ${label(source)}`),
                 React.createElement("p", null, `Cobertura: ${label(point.coverageStatus)}`),
+                React.createElement("p", { className: "font-mono text-[10px]" }, `Dataset: ${label(point.datasetVersion)}`),
+                React.createElement("p", { className: "font-mono text-[10px]" }, `Fingerprint: ${label(point.sourceFingerprint)}`),
                 React.createElement("p", { className: "font-mono text-[10px]" }, `ID: ${point.technicalId}`),
                 React.createElement(
                   "p",
