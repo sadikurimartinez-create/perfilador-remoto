@@ -35,6 +35,7 @@ export default function CrimeIncidencePage() {
   const [incidentType, setIncidentType] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [showCrimePoints, setShowCrimePoints] = useState(false);
 
   useEffect(() => {
     fetch("/api/incidencia/analytics")
@@ -249,14 +250,46 @@ export default function CrimeIncidencePage() {
                   Visualización georreferenciada de los registros que cumplen la selección analítica vigente.
                 </p>
               </div>
-              <div className="text-xs text-slate-400">
-                Eventos georreferenciados: <strong className="text-slate-200">{mapIncidents.length}</strong>
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <div className="text-xs text-slate-400">
+                  Eventos disponibles: <strong className="text-slate-200">{mapIncidents.length}</strong>
+                </div>
+
+                <div className="text-xs text-slate-400">
+                  Pines visibles: <strong className="text-slate-200">{showCrimePoints ? mapIncidents.length : 0}</strong>
+                </div>
+
+                <details className="relative">
+                  <summary className="cursor-pointer select-none rounded-md border border-cyan-900/60 bg-slate-900 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-slate-800">
+                    Capas de Incidencia
+                  </summary>
+
+                  <div className="absolute right-0 z-50 mt-2 min-w-[260px] rounded-lg border border-slate-700 bg-slate-950 p-4 shadow-xl">
+                    <div className="mb-3 text-[11px] font-black uppercase tracking-wider text-cyan-400">
+                      Visualización
+                    </div>
+
+                    <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-200 hover:bg-slate-900">
+                      <input
+                        type="checkbox"
+                        checked={showCrimePoints}
+                        onChange={(event) => setShowCrimePoints(event.target.checked)}
+                        className="h-4 w-4 accent-cyan-500"
+                      />
+                      <span>Puntos de incidencia</span>
+                    </label>
+
+                    <div className="mt-3 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+                      Las capas aparecen desactivadas al abrir el mapa.
+                    </div>
+                  </div>
+                </details>
               </div>
             </div>
 
             <div className="min-h-[520px]">
               <ProfessionalGeoMap
-                crimeIncidents={mapIncidents}
+                crimeIncidents={showCrimePoints ? mapIncidents : []}
               />
             </div>
           </div>
