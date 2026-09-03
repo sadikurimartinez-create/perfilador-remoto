@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, FormEvent, useEffect } from "react";
@@ -525,6 +525,12 @@ export default function AdminPage() {
           className="text-sm font-semibold pb-2 border-b-2 border-transparent text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1"
         >
           📂 Inventario de Fuentes (IMFO)
+        </Link>
+        <Link
+          href="/admin/incidencia"
+          className="text-sm font-semibold pb-2 border-b-2 border-transparent text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1"
+        >
+          📊 Actualización Incidencia Delictiva
         </Link>
       </div>
 
@@ -1236,3 +1242,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
