@@ -17,6 +17,8 @@ import { evaluateCrimeDatasetAdmission } from "@/utils/crimeDatasetAdmissionGate
 import { buildCrimeSourceFingerprint } from "@/utils/crimeIncidenceSourceFingerprint.server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function text(record: RawCrimeRecord, keys: string[]): string | null {
   for (const key of keys) {
