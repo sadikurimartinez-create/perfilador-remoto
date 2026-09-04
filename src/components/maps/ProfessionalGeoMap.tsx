@@ -16,6 +16,9 @@ import StreetViewAutomaticLayer from "./layers/StreetViewAutomaticLayer";
 import FindingsLayer from "./layers/FindingsLayer";
 import StreetViewConeLayer from "./layers/StreetViewConeLayer";
 import CrimeIncidenceLayer from "./layers/CrimeIncidenceLayer";
+import StreetSelectionLayer, {
+  type StreetSelectionGeometry,
+} from "./layers/StreetSelectionLayer";
 import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
 
 // Contexto de Filtros
@@ -41,6 +44,7 @@ interface ProfessionalGeoMapProps {
   selectedSvId?: string;
   selectedFindingId?: string;
   crimeIncidents?: CanonicalCrimeIncident[];
+  selectedStreetGeometry?: StreetSelectionGeometry | null;
   crimeIncidenceMinimumHeight?: string;
   onCrimeIncidenceRenderProgress?: (rendered: number, total: number) => void;
   showLayerControls?: boolean;
@@ -87,6 +91,7 @@ export function ProfessionalGeoMap({
   selectedSvId,
   selectedFindingId,
   crimeIncidents = [],
+  selectedStreetGeometry = null,
   crimeIncidenceMinimumHeight,
   onCrimeIncidenceRenderProgress,
   showLayerControls = true,
@@ -175,6 +180,41 @@ export function ProfessionalGeoMap({
       mapInstance.setZoom(15);
     }
   }, [mapInstance, geografiaRectora]);
+
+  useEffect(() => {
+    if (
+      !mapInstance ||
+      !selectedStreetGeometry ||
+      selectedStreetGeometry.type !== "MultiLineString" ||
+      typeof google === "undefined"
+    ) {
+      return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    let validPoints = 0;
+
+    selectedStreetGeometry.coordinates.forEach((line) => {
+      line.forEach(([lng, lat]) => {
+        if (
+          Number.isFinite(lat) &&
+          Number.isFinite(lng)
+        ) {
+          bounds.extend({ lat, lng });
+          validPoints += 1;
+        }
+      });
+    });
+
+    if (validPoints >= 2) {
+      mapInstance.fitBounds(bounds, {
+        top: 60,
+        right: 60,
+        bottom: 60,
+        left: 60,
+      });
+    }
+  }, [mapInstance, selectedStreetGeometry]);
 
   const mapOptions = useMemo(() => ({
     styles: darkMapStyles,
@@ -330,6 +370,11 @@ export function ProfessionalGeoMap({
           visible={crimeIncidents.length > 0}
           matchedRecords={crimeIncidents}
           onRenderProgress={onCrimeIncidenceRenderProgress}
+        />
+
+        <StreetSelectionLayer
+          visible={Boolean(selectedStreetGeometry)}
+          geometry={selectedStreetGeometry}
         />
         
         <PoiLayer visible={layers.pois} pois={pois} selectedPoiId={selectedPoiId} onPoiSelect={onPoiSelect} />

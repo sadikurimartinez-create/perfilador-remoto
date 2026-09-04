@@ -21,6 +21,17 @@ export type CrimeQueryInput = {
   lat: number;
   lng: number;
   radiusMeters?: number;
+  spatialFilter?:
+    | {
+        type: "RADIUS";
+        lat: number;
+        lng: number;
+        radiusMeters?: number;
+      }
+    | {
+        type: "POLYGON";
+        coordinates: Array<[number, number]>;
+      };
   allowLegacyFallback?: boolean;
   startDate?: string | null;
   endDate?: string | null;
@@ -75,6 +86,87 @@ function pickExistingDir(...candidates: string[]) {
   return null;
 }
 
+function isValidGeoJsonPosition(position: [number, number]): boolean {
+  const [lng, lat] = position;
+  return (
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
+  );
+}
+
+function positionKey(position: [number, number]): string {
+  return `${position[0]},${position[1]}`;
+}
+
+function samePosition(left: [number, number], right: [number, number]): boolean {
+  return left[0] === right[0] && left[1] === right[1];
+}
+
+export function buildPostgisCrimeIncidenceSpatialQuery(input: CrimeQueryInput): {
+  selectDistanceSql: string;
+  whereSpatialSql: string;
+  spatialParams: unknown[];
+  radiusMeters: number;
+  centerLat: number;
+  centerLng: number;
+} {
+  if (input.spatialFilter?.type === "POLYGON") {
+    const coordinates = input.spatialFilter.coordinates;
+    if (coordinates.some((position) => !isValidGeoJsonPosition(position))) {
+      throw new Error("INVALID_POLYGON_COORDINATES");
+    }
+
+    const distinctCount = new Set(coordinates.map(positionKey)).size;
+    if (distinctCount < 3) {
+      throw new Error("INVALID_POLYGON_MINIMUM_DISTINCT_VERTICES");
+    }
+
+    const ring = samePosition(coordinates[0], coordinates[coordinates.length - 1])
+      ? coordinates
+      : [...coordinates, coordinates[0]];
+    const polygonGeoJson = JSON.stringify({
+      type: "Polygon",
+      coordinates: [ring],
+    });
+
+    return {
+      selectDistanceSql: "NULL::double precision AS distancia_m",
+      whereSpatialSql: "ST_Intersects(i.geometria, ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography)",
+      spatialParams: [polygonGeoJson],
+      radiusMeters: input.radiusMeters ?? 0,
+      centerLat: input.lat,
+      centerLng: input.lng,
+    };
+  }
+
+  const radiusFilter = input.spatialFilter?.type === "RADIUS" ? input.spatialFilter : null;
+  const centerLng = radiusFilter?.lng ?? input.lng;
+  const centerLat = radiusFilter?.lat ?? input.lat;
+  const radiusMeters = radiusFilter?.radiusMeters ?? input.radiusMeters ?? 1000;
+
+  return {
+    selectDistanceSql: `
+          ST_Distance(
+            i.geometria,
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+          ) AS distancia_m`,
+    whereSpatialSql: `
+          ST_DWithin(
+            i.geometria,
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            $3
+          )`,
+    spatialParams: [centerLng, centerLat, radiusMeters],
+    radiusMeters,
+    centerLat,
+    centerLng,
+  };
+}
+
 function emptyResult(params: {
   lat: number;
   lng: number;
@@ -110,7 +202,22 @@ function emptyResult(params: {
 }
 
 export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promise<CrimeQueryResult> {
-  const radiusMeters = input.radiusMeters ?? 1000;
+  let spatialQuery: ReturnType<typeof buildPostgisCrimeIncidenceSpatialQuery>;
+  try {
+    spatialQuery = buildPostgisCrimeIncidenceSpatialQuery(input);
+  } catch (error: any) {
+    return emptyResult({
+      ...input,
+      radiusMeters: input.radiusMeters ?? 0,
+      coverageStatus: "UNKNOWN_COVERAGE",
+      querySource: "POSTGIS",
+      sourceStatus: "FAILED",
+      dataset: "incidencia_estadistica",
+      error: error.message || String(error),
+    });
+  }
+
+  const radiusMeters = spatialQuery.radiusMeters;
   const coverageStatus = determineAguascalientesCoverage(input.lat, input.lng);
   if (coverageStatus === "OUT_OF_COVERAGE") {
     return emptyResult({
@@ -148,6 +255,9 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
 
   const client = await getPool().connect();
   try {
+    const startDateParamIndex = spatialQuery.spatialParams.length + 1;
+    const endDateParamIndex = spatialQuery.spatialParams.length + 2;
+    const incidentTypesParamIndex = spatialQuery.spatialParams.length + 3;
     const result = await client.query(
       `
         SELECT
@@ -161,25 +271,23 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
           d.dataset_version,
           ST_Y(i.geometria::geometry) AS lat,
           ST_X(i.geometria::geometry) AS lng,
-          ST_Distance(
-            i.geometria,
-            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-          ) AS distancia_m
+          ${spatialQuery.selectDistanceSql}
         FROM incidencia_estadistica i
         LEFT JOIN crime_incidence_datasets d
           ON d.id = i.dataset_id
-        WHERE ST_DWithin(
-          i.geometria,
-          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-          $3
-        )
-          AND ($4::text IS NULL OR i.fecha::date >= $4::date)
-          AND ($5::text IS NULL OR i.fecha::date <= $5::date)
-          AND ($6::text[] IS NULL OR i.incidente = ANY($6::text[]))
+        WHERE ${spatialQuery.whereSpatialSql}
+          AND ($${startDateParamIndex}::text IS NULL OR i.fecha::date >= $${startDateParamIndex}::date)
+          AND ($${endDateParamIndex}::text IS NULL OR i.fecha::date <= $${endDateParamIndex}::date)
+          AND ($${incidentTypesParamIndex}::text[] IS NULL OR i.incidente = ANY($${incidentTypesParamIndex}::text[]))
         ORDER BY distancia_m ASC
         LIMIT 500
       `,
-      [input.lng, input.lat, radiusMeters, input.startDate ?? null, input.endDate ?? null, input.incidentTypes?.length ? input.incidentTypes : null]
+      [
+        ...spatialQuery.spatialParams,
+        input.startDate ?? null,
+        input.endDate ?? null,
+        input.incidentTypes?.length ? input.incidentTypes : null,
+      ]
     );
 
     const data = result.rows.map((row: any) => ({

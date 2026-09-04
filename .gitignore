@@ -43,3 +43,8 @@ scripts/audit_*.js
 .env.production.decrypted
 .env.vercel
 .env.vercel.production
+
+# ADR local backups and temporary validation artifacts
+*.backup
+*.adr*
+_local_audit_backups/
