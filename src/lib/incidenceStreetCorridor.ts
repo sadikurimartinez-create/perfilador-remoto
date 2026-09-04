@@ -10,10 +10,15 @@ export const STREET_CORRIDOR_ALLOWED_WIDTHS_METERS = [
 export type StreetCorridorWidthMeters =
   (typeof STREET_CORRIDOR_ALLOWED_WIDTHS_METERS)[number];
 
-export type StreetCorridorPolygonGeometry = {
-  type: "Polygon";
-  coordinates: Array<Array<[number, number]>>;
-};
+export type StreetCorridorPolygonGeometry =
+  | {
+      type: "Polygon";
+      coordinates: Array<Array<[number, number]>>;
+    }
+  | {
+      type: "MultiPolygon";
+      coordinates: Array<Array<Array<[number, number]>>>;
+    };
 
 export type StreetCorridorResult = {
   widthMeters: StreetCorridorWidthMeters;
@@ -106,6 +111,22 @@ function isValidPolygonCoordinates(
   );
 }
 
+function isValidMultiPolygonCoordinates(
+  value: unknown
+): value is Array<Array<Array<[number, number]>>> {
+  if (!Array.isArray(value) || value.length === 0) {
+    return false;
+  }
+
+  return value.every(
+    (polygon) =>
+      Array.isArray(polygon) &&
+      polygon.length > 0 &&
+      isValidPolygonCoordinates(polygon)
+  );
+}
+
+
 export async function buildStreetAnalyticalCorridor(
   input: {
     geometry: IncidenceStreetMultiLineStringGeometry;
@@ -144,26 +165,43 @@ export async function buildStreetAnalyticalCorridor(
   if (typeof rawGeojson !== "string") {
     throw new Error("STREET_CORRIDOR_NOT_GENERATED");
   }
-
   const parsed = JSON.parse(rawGeojson) as {
     type?: unknown;
     coordinates?: unknown;
   };
 
   if (
-    parsed.type !== "Polygon" ||
-    !isValidPolygonCoordinates(parsed.coordinates)
+    parsed.type === "Polygon" &&
+    isValidPolygonCoordinates(parsed.coordinates)
   ) {
-    throw new Error("STREET_CORRIDOR_NON_POLYGON_RESULT");
+    return {
+      widthMeters,
+      sourceGeometry: input.geometry,
+      corridorGeometry: {
+        type: "Polygon",
+        coordinates: parsed.coordinates,
+      },
+      method: "POSTGIS_GEOGRAPHY_BUFFER",
+    };
   }
 
-  return {
-    widthMeters,
-    sourceGeometry: input.geometry,
-    corridorGeometry: {
-      type: "Polygon",
-      coordinates: parsed.coordinates,
-    },
-    method: "POSTGIS_GEOGRAPHY_BUFFER",
-  };
+  if (
+    parsed.type === "MultiPolygon" &&
+    isValidMultiPolygonCoordinates(parsed.coordinates)
+  ) {
+    return {
+      widthMeters,
+      sourceGeometry: input.geometry,
+      corridorGeometry: {
+        type: "MultiPolygon",
+        coordinates: parsed.coordinates,
+      },
+      method: "POSTGIS_GEOGRAPHY_BUFFER",
+    };
+  }
+
+  throw new Error("STREET_CORRIDOR_NON_POLYGON_RESULT");
 }
+
+
+

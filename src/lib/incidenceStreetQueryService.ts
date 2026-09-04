@@ -5,6 +5,7 @@ import {
 
 import {
   buildStreetAnalyticalCorridor,
+  type StreetCorridorResult,
   type StreetCorridorWidthMeters,
 } from "./incidenceStreetCorridor";
 
@@ -23,10 +24,7 @@ export type ExecuteStreetIncidenceQueryInput = {
 
 export type StreetIncidenceQueryResult = {
   widthMeters: StreetCorridorWidthMeters;
-  corridorGeometry: {
-    type: "Polygon";
-    coordinates: Array<Array<[number, number]>>;
-  };
+  corridorGeometry: StreetCorridorResult["corridorGeometry"];
   records: Awaited<ReturnType<typeof queryPostgisCrimeIncidence>>;
 };
 
@@ -61,6 +59,14 @@ function getStreetReferencePoint(
   throw new Error("STREET_QUERY_REFERENCE_POINT_NOT_FOUND");
 }
 
+function getCorridorExteriorRing(
+  corridorGeometry: StreetCorridorResult["corridorGeometry"]
+): Array<[number, number]> {
+  return corridorGeometry.type === "Polygon"
+    ? corridorGeometry.coordinates[0]
+    : corridorGeometry.coordinates[0][0];
+}
+
 export async function executeStreetIncidenceQuery(
   input: ExecuteStreetIncidenceQueryInput,
   dependencies: Dependencies = {}
@@ -84,7 +90,7 @@ export async function executeStreetIncidenceQuery(
     lng: referencePoint.lng,
     spatialFilter: {
       type: "POLYGON",
-      coordinates: corridor.corridorGeometry.coordinates[0],
+      coordinates: getCorridorExteriorRing(corridor.corridorGeometry),
     },
     allowLegacyFallback: false,
     startDate: input.startDate ?? null,

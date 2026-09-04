@@ -427,9 +427,11 @@ export default function CrimeIncidencePage() {
 
       if (payload.resolution.status === "RESOLVED") {
         setSelectedStreetCandidate(payload.resolution.candidate);
+        setSelectedStreetCandidates([
+          payload.resolution.candidate,
+        ]);
         return;
       }
-
       if (payload.resolution.status === "AMBIGUOUS") {
         setStreetCandidates(payload.resolution.candidates);
         setShowStreetCandidateModal(true);
@@ -915,3 +917,4 @@ export default function CrimeIncidencePage() {
     </div>
   );
 }
+
