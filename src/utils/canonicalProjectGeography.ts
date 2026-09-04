@@ -42,6 +42,15 @@ export interface CanonicalProjectGeography {
   limitations?: string[];
 }
 
+export type FirestoreSafeCanonicalGeometry =
+  | { type: "Point"; point: LatLngPoint }
+  | { type: "LineString"; points: LatLngPoint[] }
+  | { type: "Polygon"; rings: Array<{ points: LatLngPoint[] }> };
+
+export type FirestoreSafeCanonicalProjectGeography = Omit<CanonicalProjectGeography, "geometry"> & {
+  geometry: FirestoreSafeCanonicalGeometry;
+};
+
 export interface SweepGeographyContext {
   geographyId: string;
   geographyType: CanonicalGeographyType;
@@ -116,6 +125,94 @@ function buildGeometry(type: CanonicalGeographyType, points: LatLngPoint[]): Can
     return { type: "LineString", coordinates: points.map(toPosition) };
   }
   return { type: "Polygon", coordinates: [closeLogicalRing(points).map(toPosition)] };
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasLegacyCoordinates(geometry: unknown): geometry is CanonicalGeometry {
+  return isRecord(geometry) && Array.isArray(geometry.coordinates);
+}
+
+function readFirestoreSafePoint(value: unknown): LatLngPoint | null {
+  if (!isRecord(value)) return null;
+  const point = { lat: Number(value.lat), lng: Number(value.lng) };
+  return isValidLatLng(point) ? point : null;
+}
+
+export function serializeCanonicalGeographyForFirestore(
+  geography: CanonicalProjectGeography | null | undefined
+): FirestoreSafeCanonicalProjectGeography | null {
+  if (!geography) return null;
+
+  if (geography.geometry.type === "Point") {
+    return {
+      ...geography,
+      geometry: {
+        type: "Point",
+        point: fromPosition(geography.geometry.coordinates),
+      },
+    };
+  }
+
+  if (geography.geometry.type === "LineString") {
+    return {
+      ...geography,
+      geometry: {
+        type: "LineString",
+        points: geography.geometry.coordinates.map(fromPosition),
+      },
+    };
+  }
+
+  return {
+    ...geography,
+    geometry: {
+      type: "Polygon",
+      rings: geography.geometry.coordinates.map((ring) => ({
+        points: ring.map(fromPosition),
+      })),
+    },
+  };
+}
+
+export function deserializeCanonicalGeographyFromFirestore(
+  geography: CanonicalProjectGeography | FirestoreSafeCanonicalProjectGeography | null | undefined
+): CanonicalProjectGeography | null {
+  if (!geography) return null;
+  if (hasLegacyCoordinates(geography.geometry)) {
+    return rehydrateCanonicalProjectGeography(geography as CanonicalProjectGeography);
+  }
+
+  const safeGeography = geography as FirestoreSafeCanonicalProjectGeography;
+  const geometry = safeGeography.geometry;
+  if (geometry.type === "Point") {
+    const point = readFirestoreSafePoint(geometry.point);
+    if (!point) return null;
+    return rehydrateCanonicalProjectGeography({
+      ...safeGeography,
+      geometry: { type: "Point", coordinates: toPosition(point) },
+    });
+  }
+
+  if (geometry.type === "LineString") {
+    const points = Array.isArray(geometry.points) ? geometry.points.map(readFirestoreSafePoint).filter(Boolean) as LatLngPoint[] : [];
+    return rehydrateCanonicalProjectGeography({
+      ...safeGeography,
+      geometry: { type: "LineString", coordinates: points.map(toPosition) },
+    });
+  }
+
+  const rings = Array.isArray(geometry.rings)
+    ? geometry.rings.map((ring) => ({
+        points: Array.isArray(ring?.points) ? ring.points.map(readFirestoreSafePoint).filter(Boolean) as LatLngPoint[] : [],
+      }))
+    : [];
+  return rehydrateCanonicalProjectGeography({
+    ...safeGeography,
+    geometry: { type: "Polygon", coordinates: rings.map((ring) => ring.points.map(toPosition)) },
+  });
 }
 
 export function getCanonicalGeographyCoordinates(geography: CanonicalProjectGeography | null | undefined): LatLngPoint[] {

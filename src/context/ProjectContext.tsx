@@ -39,6 +39,8 @@ import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineag
 import {
   adaptLegacyProjectGeography,
   canonicalizeConfirmedDraftGeography,
+  deserializeCanonicalGeographyFromFirestore,
+  serializeCanonicalGeographyForFirestore,
   type CanonicalGeographyType,
   type CanonicalProjectGeography,
   type DraftProjectGeography,
@@ -514,7 +516,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         projectId: projectDocRef.id,
         draft: draftGeography!,
       });
+      const serializedCanonicalGeography = serializeCanonicalGeographyForFirestore(confirmedCanonicalGeography);
       const geographyPersistence = confirmedCanonicalGeography
+        ? {
+            canonicalGeography: serializedCanonicalGeography,
+            geographyId: confirmedCanonicalGeography.geographyId,
+            geographyValidationStatus: confirmedCanonicalGeography.validationStatus,
+          }
+        : {
+            canonicalGeography: null,
+            geographyId: null,
+            geographyValidationStatus: "INVALID" as const,
+          };
+      const geographyState = confirmedCanonicalGeography
         ? {
             canonicalGeography: confirmedCanonicalGeography,
             geographyId: confirmedCanonicalGeography.geographyId,
@@ -568,7 +582,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         estado: "ABIERTO",
         canonicalHypothesis: null,
         hypothesisRequirementSatisfied: false,
-        ...geographyPersistence,
+        ...geographyState,
       };
       setProject({
         ...newProjectState,
@@ -632,6 +646,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         throw new Error("El proyecto no existe en la base de datos.");
       }
       const projectData = projectSnap.data();
+      const storedCanonicalGeography = deserializeCanonicalGeographyFromFirestore(projectData.canonicalGeography ?? null);
       const creator = projectData.createdBy;
 
       // REGLAS DE ACCESO DE ROLES Y TEMPORALIDAD (FASE 3)
@@ -757,8 +772,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           fuente: "Mapa Táctico GEOINT",
           validado: true,
           createdAt: geo.createdAt || Date.now(),
-          geographyId: projectData.geographyId ?? projectData.canonicalGeography?.geographyId ?? null,
-          geographyType: projectData.canonicalGeography?.type ?? null,
+          geographyId: projectData.geographyId ?? storedCanonicalGeography?.geographyId ?? null,
+          geographyType: storedCanonicalGeography?.type ?? null,
         } as any));
         albumPhotos.push(...geoAlbumItems);
       } catch (geoErr) {
@@ -771,7 +786,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           geometryType: projectData.geometryType,
           latitude: projectData.latitude ?? null,
           longitude: projectData.longitude ?? null,
-          canonicalGeography: projectData.canonicalGeography ?? null,
+          canonicalGeography: storedCanonicalGeography,
         },
         { geographicEntities: geoEntities }
       );
@@ -1405,7 +1420,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
-      await updateDoc(projectRef, details);
+      const firestoreDetails = {
+        ...details,
+        ...(Object.prototype.hasOwnProperty.call(details, "canonicalGeography")
+          ? { canonicalGeography: serializeCanonicalGeographyForFirestore(details.canonicalGeography) }
+          : {}),
+      };
+      await updateDoc(projectRef, firestoreDetails);
       setProject((prev) => {
         if (!prev) return prev;
         const next = { ...prev, ...details };
