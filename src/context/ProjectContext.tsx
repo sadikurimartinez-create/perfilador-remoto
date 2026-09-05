@@ -64,6 +64,7 @@ import type {
   InstitutionalReportPublication,
 } from "@/utils/reportCertificationGate";
 import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
+import { normalizeInstitutionalBaseEvidence } from "@/utils/institutionalBaseEvidenceNormalizer";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -120,6 +121,8 @@ export type AlbumPhoto = {
   comentario: string;
   file?: File;
   evidenceId?: string;
+  traceabilityId?: string | null;
+  expedienteId?: string | null;
   sourceEvidenceId?: string | null;
   contextualizedAt?: number;
   contextualizedBy?: string;
@@ -141,6 +144,8 @@ export type AlbumPhoto = {
   evidenceRelationship?: EvidenceRelationship | null;
   geographyId?: string | null;
   geographyType?: CanonicalGeographyType | null;
+  coordinates?: { lat: number; lng: number } | null;
+  evidenceClass?: "INSTITUTIONAL_EVIDENCE" | "CONTEXTUAL_EVIDENCE";
   aiAnalyticalOutput?: AiAnalyticalOutput | null;
 
   // Extensión de Gobernanza Street View Evidence v2.1 y Contrato Determinista
@@ -722,6 +727,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             }
           }
 
+          const normalizedBaseEvidence = normalizeInstitutionalBaseEvidence({
+            id: photoDoc.id,
+            evidenceId: data.evidenceId || photoDoc.id,
+            sourceEvidenceId: data.sourceEvidenceId || data.evidenceId || photoDoc.id,
+            traceabilityId: data.traceabilityId || null,
+            expedienteId: data.expedienteId || data.projectId || projectId,
+            geographyId: data.geographyId ?? projectData.geographyId ?? storedCanonicalGeography?.geographyId ?? null,
+            geographyType: data.geographyType ?? storedCanonicalGeography?.type ?? null,
+            lat: data.lat ?? data.gpsLat ?? null,
+            lng: data.lng ?? data.gpsLng ?? null,
+            lineage: data.lineage || null,
+            lineageStatus: data.lineageStatus || null,
+            legacy: !data.traceabilityId || !data.sourceEvidenceId,
+          });
+
           return {
             id: photoDoc.id,
             previewUrl: rawUrl,
@@ -730,8 +750,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             tipo: data.tipo,
             comentario: data.comentario,
             deleted: data.deleted === true,
-            evidenceId: data.evidenceId || null,
-            sourceEvidenceId: data.sourceEvidenceId || null,
+            evidenceId: data.evidenceId || normalizedBaseEvidence.fields.evidenceId || null,
+            traceabilityId: data.traceabilityId || normalizedBaseEvidence.fields.traceabilityId,
+            expedienteId: data.expedienteId || data.projectId || normalizedBaseEvidence.fields.expedienteId,
+            sourceEvidenceId: data.sourceEvidenceId || normalizedBaseEvidence.fields.sourceEvidenceId,
             contextualizedAt: data.contextualizedAt || null,
             contextualizedBy: data.contextualizedBy || null,
             isContextualized: data.isContextualized || false,
@@ -744,15 +766,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             validado: data.validado === true,
             humanValidationStatus: data.humanValidationStatus || null,
             validationSource: data.validationSource || null,
-            lineage: data.lineage || null,
-            lineageStatus: data.lineageStatus || null,
+            lineage: data.lineage || normalizedBaseEvidence.fields.lineage,
+            lineageStatus: data.lineageStatus || normalizedBaseEvidence.fields.lineageStatus,
             gpsLat: data.gpsLat ?? null,
             gpsLng: data.gpsLng ?? null,
             gpsAccuracy: data.gpsAccuracy ?? null,
             gpsTimestamp: data.gpsTimestamp ?? null,
             diagnosticLogs: data.diagnosticLogs ?? null,
-            geographyId: data.geographyId ?? null,
+            geographyId: data.geographyId ?? normalizedBaseEvidence.fields.geographyId,
             geographyType: data.geographyType ?? null,
+            coordinates: normalizedBaseEvidence.fields.coordinates,
+            evidenceClass: normalizedBaseEvidence.evidenceClass,
           };
         })
         .filter((p) => !p.deleted) as any;
@@ -909,6 +933,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                          (metadata as any)?.tipo === "STREET_VIEW";
 
     const resolvedTipo = (metadata as any)?.tipo || (isStreetView ? "REMOTE_STREET_VIEW" : defaultTipo);
+    const normalizedBaseEvidence = normalizeInstitutionalBaseEvidence({
+      id: photoId,
+      evidenceId: photoId,
+      sourceEvidenceId: photoId,
+      expedienteId: project.id,
+      geographyId: project.canonicalGeography?.geographyId ?? null,
+      geographyType: project.canonicalGeography?.type ?? null,
+      lat,
+      lng,
+      legacy: false,
+    });
 
     // 3. Guardar metadatos en Firestore (con fallback local ante cuotas agotadas)
     try {
@@ -920,6 +955,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         lat,
         lng,
         projectId: project.id,
+        expedienteId: project.id,
+        evidenceId: normalizedBaseEvidence.fields.evidenceId,
+        sourceEvidenceId: normalizedBaseEvidence.fields.sourceEvidenceId,
+        traceabilityId: normalizedBaseEvidence.fields.traceabilityId,
+        lineage: normalizedBaseEvidence.fields.lineage,
+        lineageStatus: normalizedBaseEvidence.fields.lineageStatus,
+        coordinates: normalizedBaseEvidence.fields.coordinates,
+        evidenceClass: normalizedBaseEvidence.evidenceClass,
         createdAt: Date.now(),
         tipo: resolvedTipo,
         fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
@@ -974,6 +1017,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       comentario: metadata?.comentario || "",
       isIndependentPoi: metadata?.isIndependentPoi || false,
       file: compressedFile,
+      evidenceId: normalizedBaseEvidence.fields.evidenceId || undefined,
+      sourceEvidenceId: normalizedBaseEvidence.fields.sourceEvidenceId,
+      traceabilityId: normalizedBaseEvidence.fields.traceabilityId,
+      expedienteId: normalizedBaseEvidence.fields.expedienteId,
+      lineage: normalizedBaseEvidence.fields.lineage,
+      lineageStatus: normalizedBaseEvidence.fields.lineageStatus,
+      coordinates: normalizedBaseEvidence.fields.coordinates,
+      evidenceClass: normalizedBaseEvidence.evidenceClass,
       gpsAccuracy: metadata?.gpsAccuracy ?? null,
       gpsTimestamp: metadata?.gpsTimestamp ?? null,
       gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",

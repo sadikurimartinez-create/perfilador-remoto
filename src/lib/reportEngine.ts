@@ -19,6 +19,7 @@ import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
 import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
 import { classifyLegacyCompatibility, evaluateIntelligenceEligibility } from "@/utils/syntheticIntelligenceFirewall";
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
+import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
 
 
 
@@ -39,7 +40,42 @@ type FinalizeOptions = {
   sweeps?: any[];
   powerups?: any[];
   selectedAnnexes?: any;
+  exportMode?: ReportExportMode;
 };
+
+export type ReportExportMode = "DRAFT" | "CONTEXTUAL" | "LEGACY" | "INSTITUTIONAL";
+
+export interface InstitutionalExportAuthorizationOptions {
+  exportMode?: ReportExportMode;
+  institutionalReportInput?: InstitutionalReportInput | null;
+  traceabilityGate?: InstitutionalReportInput["traceabilityGate"] | null;
+  certificationGateResult?: { blockingReasons?: string[] | null } | null;
+}
+
+export function assertInstitutionalExportAuthorization(
+  options: InstitutionalExportAuthorizationOptions = {},
+  artifactType = "DOCUMENT"
+) {
+  if (options.exportMode !== "INSTITUTIONAL") return;
+
+  const institutionalReportInput = options.institutionalReportInput || null;
+  const traceabilityGate = options.traceabilityGate || institutionalReportInput?.traceabilityGate || null;
+  const certificationBlockers = options.certificationGateResult?.blockingReasons || [];
+
+  if (!institutionalReportInput) {
+    throw new Error(`${artifactType}_INSTITUTIONAL_EXPORT_BLOCKED:INSTITUTIONAL_REPORT_INPUT_REQUIRED`);
+  }
+  if (traceabilityGate?.eligibleForInstitutionalPublication !== true) {
+    throw new Error(`${artifactType}_INSTITUTIONAL_EXPORT_BLOCKED:TRACEABILITY_GATE_REQUIRED`);
+  }
+  if (certificationBlockers.length > 0) {
+    throw new Error(`${artifactType}_INSTITUTIONAL_EXPORT_BLOCKED:CERTIFICATION_GATE_BLOCKED:${certificationBlockers.join(",")}`);
+  }
+}
+
+export function assertInstitutionalPdfAuthorization(options: InstitutionalExportAuthorizationOptions = {}) {
+  assertInstitutionalExportAuthorization(options, "PDF");
+}
 
 export interface ReportLineageBoundaryResult {
   lineageStatus: LineageStatus;
@@ -82,7 +118,12 @@ export function isReportEngineEvidenceEligible(item: any): boolean {
   return classifyLegacyCompatibility(item).compatibleForReport;
 }
 
-export async function generatePdfProgrammatic(briefing: IntelligenceBriefing) {
+export async function generatePdfProgrammatic(
+  briefing: IntelligenceBriefing,
+  options: InstitutionalExportAuthorizationOptions = {}
+) {
+  assertInstitutionalPdfAuthorization(options);
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const logoSsp = await loadPublicImageAsDataUrl('/logos/logo-ssp.png');
   const logoCeipol = await loadPublicImageAsDataUrl('/logos/logo-ceipol.png');
@@ -919,8 +960,9 @@ export class ReportEngineKernelClass {
       case "EXECUTE_EXPORT":
         const activeId = payload?.activeId;
         const format = payload?.format || "ALL";
+        const exportMode: ReportExportMode = payload?.exportMode || this.context.exportMode || "DRAFT";
 
-        console.log("[REPORT ENGINE KERNEL] EXPORT TRIGGERED. Format:", format, "activeId:", activeId);
+        console.log("[REPORT ENGINE KERNEL] EXPORT TRIGGERED. Format:", format, "activeId:", activeId, "exportMode:", exportMode);
 
         if (this.state !== "VALIDATED") {
           console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_INVALID_STATE. Current State:", this.state);
@@ -934,6 +976,14 @@ export class ReportEngineKernelClass {
           console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_EXECUTION_ID_MISMATCH. Active:", this.executionId, "Requested:", activeId);
           throw new Error("EXPORT_BLOCKED_EXECUTION_ID_MISMATCH");
         }
+        assertInstitutionalExportAuthorization(
+          {
+            exportMode,
+            institutionalReportInput: this.context.editorialPayload?.institutionalReportInput || null,
+            certificationGateResult: this.context.editorialPayload?.certificationGateResult || null,
+          },
+          "REPORT_ENGINE"
+        );
 
         this.state = "EXPORT_EXECUTED";
         this.exportStatus = `EXPORTING_${format}`;
@@ -985,15 +1035,38 @@ export class ReportEngineKernelClass {
               adaptDocumentPackageForWord(documentPackage);
 
 
-            await exportToWord(
-              wordPayload,
-              documentPackage.projectName,
-              documentPackage.projectId,
-              documentPackage.user
-            );
+            if (exportMode === "INSTITUTIONAL") {
+              await exportToWord(
+                {
+                  ...this.context.project,
+                  ...this.context.editorialPayload,
+                  projectId: this.context.project.id || documentPackage.projectId,
+                  photoEvidence: this.context.album || [],
+                  album: this.context.album || [],
+                  mapSnapshots: this.context.mapSnapshots || [],
+                  sweeps: this.context.sweeps || [],
+                },
+                documentPackage.projectName,
+                documentPackage.projectId,
+                documentPackage.user,
+                { exportMode: "INSTITUTIONAL" }
+              );
+            } else {
+              await exportToWord(
+                wordPayload,
+                documentPackage.projectName,
+                documentPackage.projectId,
+                documentPackage.user,
+                { exportMode: "DRAFT" }
+              );
+            }
           }
           if (format === "PDF" || format === "ALL") {
-            await generatePdfProgrammatic(this.context.briefing);
+            await generatePdfProgrammatic(this.context.briefing, {
+              exportMode,
+              institutionalReportInput: this.context.editorialPayload?.institutionalReportInput || null,
+              certificationGateResult: this.context.editorialPayload?.certificationGateResult || null,
+            });
           }
 
           if (this.context.user && this.context.project.id) {
@@ -1043,8 +1116,8 @@ export class ReportEngineKernelClass {
     }
   }
 
-  async finalizeExport(format: "PDF" | "WORD", activeId: string) {
-    await this.dispatch("EXECUTE_EXPORT", { format, activeId });
+  async finalizeExport(format: "PDF" | "WORD", activeId: string, exportMode: ReportExportMode = "DRAFT") {
+    await this.dispatch("EXECUTE_EXPORT", { format, activeId, exportMode });
   }
 }
 
@@ -1098,8 +1171,9 @@ export const ReportEngine = {
     KernelGuard({ type: "DERIVE_LAYOUT", payload: { executionId: activeId } });
     KernelGuard({ type: "VALIDATE_KERNEL", payload: { executionId: activeId } });
     
-    await ReportEngineKernel.finalizeExport("WORD", activeId);
-    await ReportEngineKernel.finalizeExport("PDF", activeId);
+    const exportMode = options.exportMode || "DRAFT";
+    await ReportEngineKernel.finalizeExport("WORD", activeId, exportMode);
+    await ReportEngineKernel.finalizeExport("PDF", activeId, exportMode);
 
     if (options.markAsPrinted) {
       options.markAsPrinted();

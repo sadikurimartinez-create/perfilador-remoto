@@ -19,6 +19,8 @@ import {
 } from "@/types/geointGovernance";
 import { adaptEvidence, adaptFinding } from "@/services/geoint/canonicalEvidenceRegistry";
 import type { CanonicalReferenceSet } from "@/types/canonicalEvidenceRegistry";
+import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
+import { validateInstitutionalEvidenceTraceability } from "@/utils/institutionalEvidenceTraceabilityGuard";
 
 export interface StreetViewFinding {
   id: string;
@@ -56,6 +58,107 @@ export interface StreetViewFinding {
   usuarioRevision?: string;
   validationComment?: string;
   origenRevision?: "BARRIDO_AUTOMATICO" | "MANUAL";
+  supportingEvidenceIds?: string[];
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus | "COMPLETE" | "PARTIAL" | "LEGACY_PARTIAL" | "UNAVAILABLE";
+  geographyId?: string | null;
+}
+
+function present(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function resolveStreetViewFindingDedupKey(finding: Partial<StreetViewFinding>): string {
+  const traceabilityId = present(finding.traceabilityId);
+  const sourceEvidenceId = present(finding.sourceEvidenceId);
+  if (traceabilityId && sourceEvidenceId) return `${traceabilityId}::${sourceEvidenceId}`;
+  return `id::${present(finding.id) || present(finding.captureId) || "UNAVAILABLE"}`;
+}
+
+export function deduplicateStreetViewFindings(findings: StreetViewFinding[]): StreetViewFinding[] {
+  const seen = new Set<string>();
+  const result: StreetViewFinding[] = [];
+
+  for (const finding of findings) {
+    const key = resolveStreetViewFindingDedupKey(finding);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(finding);
+  }
+
+  return result;
+}
+
+export function normalizeStreetViewFindingForPersistence(
+  data: Partial<StreetViewFinding> & { expedienteId: string }
+): StreetViewFinding {
+  const id = data.id || data.captureId || `sv-finding-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const fechaCreacion = data.fechaCreacion || new Date().toISOString();
+  const rawLat: unknown = data.coordenadas?.lat;
+  const rawLng: unknown = data.coordenadas?.lng;
+  const lat = rawLat == null || rawLat === "" ? Number.NaN : Number(rawLat);
+  const lng = rawLng == null || rawLng === "" ? Number.NaN : Number(rawLng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error("STREETVIEW_FINDING_GEO_REQUIRED");
+  }
+
+  const traceabilityId =
+    present(data.traceabilityId) ||
+    buildGeointTraceabilityId("trace-finding", [data.expedienteId, id]);
+  const sourceEvidenceId =
+    present(data.sourceEvidenceId) ||
+    present(data.captureId) ||
+    present(data.evidenciaId);
+  const geographyId = present(data.geographyId) || null;
+  const normalizedStatus = normalizeGeointGovernanceStatus(data.estado || GeointGovernanceStatus.PENDING_REVIEW);
+  const lineageStatus = data.lineageStatus || (sourceEvidenceId && geographyId ? "COMPLETE" : "LEGACY_PARTIAL");
+
+  const finding: StreetViewFinding = {
+    id,
+    expedienteId: data.expedienteId,
+    traceabilityId,
+    ...(sourceEvidenceId ? { sourceEvidenceId } : {}),
+    ...(data.evidenciaId ? { evidenciaId: data.evidenciaId } : {}),
+    ...(data.captureId ? { captureId: data.captureId } : {}),
+    categoria: data.categoria || "RUTA_ACCESO",
+    coordenadas: {
+      lat,
+      lng
+    },
+    imagen: data.imagen || "",
+    heading: Number(data.heading || 0),
+    pitch: Number(data.pitch || 0),
+    fov: Number(data.fov || 90),
+    estado: normalizedStatus,
+    descripcion: data.descripcion || "",
+    observaciones_visual: data.observaciones_visual || "",
+    fechaCreacion,
+    usuarioRevision: data.usuarioRevision || "",
+    validationComment: data.validationComment || "",
+    origenRevision: data.origenRevision || "BARRIDO_AUTOMATICO",
+    supportingEvidenceIds: data.supportingEvidenceIds || (sourceEvidenceId ? [sourceEvidenceId] : []),
+    lineage: data.lineage || [],
+    lineageStatus,
+    geographyId,
+  };
+
+  if (normalizedStatus === GeointGovernanceStatus.APPROVED_EVIDENCE) {
+    const institutionalValidation = validateInstitutionalEvidenceTraceability({
+      traceabilityId: finding.traceabilityId,
+      sourceEvidenceId: finding.sourceEvidenceId,
+      geographyId: finding.geographyId,
+      expedienteId: finding.expedienteId,
+      lineageStatus: finding.lineageStatus,
+      coordenadas: finding.coordenadas,
+    });
+
+    if (!institutionalValidation.eligible) {
+      throw new Error(`STREETVIEW_FINDING_TRACEABILITY_INCOMPLETE: ${institutionalValidation.reasons.join("; ")}`);
+    }
+  }
+
+  return finding;
 }
 
 function getFirestoreInstance() {
@@ -75,7 +178,7 @@ export class StreetViewFindingService {
       sourceType: "STREET_VIEW",
       sourceId: finding.captureId,
       traceabilityId: finding.traceabilityId,
-      geographyId: (finding as StreetViewFinding & { geographyId?: string | null }).geographyId,
+      geographyId: finding.geographyId,
       legacy: !finding.sourceEvidenceId,
     });
     const evidenceRefs = evidenceRef ? [evidenceRef] : [];
@@ -88,7 +191,7 @@ export class StreetViewFindingService {
       sourceId: finding.sourceEvidenceId,
       supportingEvidenceRefs: evidenceRefs,
       traceabilityId: finding.traceabilityId,
-      geographyId: (finding as StreetViewFinding & { geographyId?: string | null }).geographyId,
+      geographyId: finding.geographyId,
       legacy: !finding.sourceEvidenceId,
     });
     return { evidenceRefs, findingRef };
@@ -101,57 +204,14 @@ export class StreetViewFindingService {
     data: Partial<StreetViewFinding> & { expedienteId: string }
   ): Promise<StreetViewFinding> {
     const db = getFirestoreInstance();
-    const id = data.id || data.captureId || `sv-finding-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const fechaCreacion = data.fechaCreacion || new Date().toISOString();
-    const rawLat: unknown = data.coordenadas?.lat;
-    const rawLng: unknown = data.coordenadas?.lng;
-    const lat = rawLat == null || rawLat === "" ? Number.NaN : Number(rawLat);
-    const lng = rawLng == null || rawLng === "" ? Number.NaN : Number(rawLng);
+    const finding = normalizeStreetViewFindingForPersistence(data);
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      throw new Error("STREETVIEW_FINDING_GEO_REQUIRED");
-    }
-
-    const finding: StreetViewFinding = {
-      id,
-      expedienteId: data.expedienteId,
-      traceabilityId:
-        (data as any).traceabilityId ||
-        buildGeointTraceabilityId("trace-finding", [data.expedienteId, id]),
-      ...((data as any).sourceEvidenceId || data.captureId || data.evidenciaId
-        ? {
-          sourceEvidenceId:
-            (data as any).sourceEvidenceId ||
-            data.captureId ||
-            data.evidenciaId,
-        }
-        : {}),
-      ...(data.evidenciaId ? { evidenciaId: data.evidenciaId } : {}),
-      ...(data.captureId ? { captureId: data.captureId } : {}),
-      categoria: data.categoria || "RUTA_ACCESO",
-      coordenadas: {
-        lat,
-        lng
-      },
-      imagen: data.imagen || "",
-      heading: Number(data.heading || 0),
-      pitch: Number(data.pitch || 0),
-      fov: Number(data.fov || 90),
-      estado: normalizeGeointGovernanceStatus(data.estado || GeointGovernanceStatus.PENDING_REVIEW),
-      descripcion: data.descripcion || "",
-      observaciones_visual: data.observaciones_visual || "",
-      fechaCreacion,
-      usuarioRevision: data.usuarioRevision || "",
-      validationComment: data.validationComment || "",
-      origenRevision: data.origenRevision || "BARRIDO_AUTOMATICO"
-    };
-
-    // Guardar en la subcolección del proyecto
-    const projectSubcolRef = doc(db, "projects", data.expedienteId, "streetview_findings", id);
+    // Fuente canonica de escritura: subcoleccion del expediente. La raiz se sincroniza para consultas legacy.
+    const projectSubcolRef = doc(db, "projects", data.expedienteId, "streetview_findings", finding.id);
     await setDoc(projectSubcolRef, finding, { merge: true });
 
-    // Guardar también en la colección raíz 'streetview_findings' para consultas directas por expedienteId
-    const rootColRef = doc(db, "streetview_findings", id);
+    // Compatibilidad: mirror raiz 'streetview_findings' para lectores existentes por expedienteId.
+    const rootColRef = doc(db, "streetview_findings", finding.id);
     await setDoc(rootColRef, finding, { merge: true });
 
     return finding;
@@ -163,7 +223,6 @@ export class StreetViewFindingService {
   static async getStreetViewFindingsByProject(expedienteId: string): Promise<StreetViewFinding[]> {
     const db = getFirestoreInstance();
     const findings: StreetViewFinding[] = [];
-    const seenIds = new Set<string>();
 
     try {
       // 1. Consultar subcolección projects/{expedienteId}/streetview_findings
@@ -173,10 +232,7 @@ export class StreetViewFindingService {
       subcolSnap.forEach((docSnap) => {
         const item = docSnap.data() as StreetViewFinding;
         const findingId = item.id || docSnap.id;
-        if (!seenIds.has(findingId)) {
-          seenIds.add(findingId);
-          findings.push({ ...item, id: findingId });
-        }
+        findings.push({ ...item, id: findingId });
       });
     } catch (err) {
       console.warn(`[StreetViewFindingService] Warn al leer subcolección del proyecto ${expedienteId}:`, err);
@@ -191,16 +247,13 @@ export class StreetViewFindingService {
       rootSnap.forEach((docSnap) => {
         const item = docSnap.data() as StreetViewFinding;
         const findingId = item.id || docSnap.id;
-        if (!seenIds.has(findingId)) {
-          seenIds.add(findingId);
-          findings.push({ ...item, id: findingId });
-        }
+        findings.push({ ...item, id: findingId });
       });
     } catch (err) {
       console.warn(`[StreetViewFindingService] Warn al leer colección raíz streetview_findings:`, err);
     }
 
-    return findings;
+    return deduplicateStreetViewFindings(findings);
   }
 
   /**

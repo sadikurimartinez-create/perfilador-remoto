@@ -9,6 +9,10 @@ import {
   renderGovernedExecutiveSummary,
 } from "@/utils/analyticalNarrativeGovernance";
 import { buildGovernedVisualProducts } from "@/utils/institutionalVisualProductGovernance";
+import {
+  validateInstitutionalReportTraceability,
+  type InstitutionalReportTraceabilityGateResult,
+} from "@/utils/institutionalReportTraceabilityGate";
 
 export type PublicationEligibility = "ELIGIBLE" | "ELIGIBLE_WITH_DISCLOSURE" | "INELIGIBLE";
 export type PublicationItemType =
@@ -75,6 +79,7 @@ export interface InstitutionalReportInput {
   exclusions: PublicationExclusion[];
   disclosures: PublicationDisclosure[];
   lineageSummary: ReportItemEligibilityAssessment["lineageRefs"] & { itemCount: number };
+  traceabilityGate: InstitutionalReportTraceabilityGateResult;
   publicationEligibility: PublicationEligibility;
   draft: false;
   certified: false;
@@ -422,26 +427,60 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   exclusions.push(...governedVisuals.exclusions);
   disclosures.push(...governedVisuals.disclosures);
 
+  const traceabilityGate = validateInstitutionalReportTraceability({
+    projectId: reportReadyAssessment.projectId,
+    evidence,
+    findings,
+    analyses,
+    streetView,
+  });
+  exclusions.push(...traceabilityGate.exclusions.map((item) => ({
+    itemId: item.itemId,
+    itemType: item.itemType as PublicationItemType,
+    reasonCode: item.reasonCode,
+    reason: item.reason,
+  })));
+
+  if (!traceabilityGate.eligibleForInstitutionalPublication) {
+    const reasons = [
+      ...traceabilityGate.reasons,
+      ...traceabilityGate.exclusions.map((item) => item.reasonCode),
+    ];
+    throw new Error(`INSTITUTIONAL_REPORT_TRACEABILITY_BLOCKED:${Array.from(new Set(reasons)).join(",")}`);
+  }
+
+  const excludedItemKeys = new Set(traceabilityGate.exclusions.map((item) => `${item.itemType}:${item.itemId}`));
+  const keepTraceable = (item: any, type: PublicationItemType) => !excludedItemKeys.has(`${type}:${itemId(item, type)}`);
+  const traceableEvidence = evidence.filter((item) => keepTraceable(item, "EVIDENCE"));
+  const traceableFindings = findings.filter((item) => keepTraceable(item, "FINDING"));
+  const traceableAnalyses = analyses.filter((item) => keepTraceable(item, "ANALYSIS"));
+  const traceableStreetView = streetView.filter((item) => keepTraceable(item, "STREET_VIEW"));
+  const traceableAssessments = assessments.filter((assessment) =>
+    assessment.eligibility !== "INELIGIBLE" &&
+    !excludedItemKeys.has(`${assessment.itemType}:${assessment.itemId}`)
+  );
+
   return {
     projectId: reportReadyAssessment.projectId,
     reportReadyAssessment,
     generatedAt: options.generatedAt || new Date().toISOString(),
     geography: project?.canonicalGeography || null,
     hypothesis: buildReportChapter0Hypothesis(project),
-    evidence,
-    findings,
+    evidence: traceableEvidence,
+    findings: traceableFindings,
     inferences,
-    analyses,
+    analyses: traceableAnalyses,
     conclusions,
     osint,
-    streetView,
+    streetView: traceableStreetView,
     temporalComparisons,
     specializedIntelligence,
     visualProducts,
     exclusions,
     disclosures,
-    lineageSummary: summarizeLineage(assessments.filter((assessment) => assessment.eligibility !== "INELIGIBLE")),
-    publicationEligibility: disclosures.length > 0 ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE",
+    lineageSummary: summarizeLineage(traceableAssessments),
+    traceabilityGate,
+    publicationEligibility: exclusions.length > 0 || disclosures.length > 0 ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE",
     draft: false,
     certified: false,
     published: false,

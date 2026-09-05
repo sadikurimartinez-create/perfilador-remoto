@@ -2315,7 +2315,7 @@ const hasMinimumPhotos =
       // 6. EXECUTE_EXPORT (WORD or PDF - Sequential Auto-completing)
       await KernelGuard({
         type: "EXECUTE_EXPORT",
-        payload: { format, activeId }
+        payload: { format, activeId, exportMode: "DRAFT" }
       });
 
       // Verify the final kernel state is COMPLETE
@@ -5706,7 +5706,8 @@ const hasMinimumPhotos =
                           h.editorialPayload,
                           h.poligono || 'Expediente',
                           h.projectId || 'EXP',
-                          user
+                          user,
+                          { exportMode: "DRAFT" }
                         );
                       } catch (err: any) {
                         alert("Error al generar Word: " + err.message);
@@ -5724,7 +5725,7 @@ const hasMinimumPhotos =
                           alert("Este expediente histórico no contiene el dictamen de PDF para regenerar.");
                           return;
                         }
-                        await generatePdfProgrammatic(h.briefing);
+                        await generatePdfProgrammatic(h.briefing, { exportMode: "DRAFT" });
                       } catch (err: any) {
                         alert("Error al generar PDF: " + err.message);
                       }

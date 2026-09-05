@@ -38,6 +38,7 @@ export interface GeoEvidence {
   expedienteId: string;
   traceabilityId: string;
   sourceEvidenceId: string;
+  geographyId?: string | null;
   source: GeoEvidenceSource;
   coordinates: {
     lat: number | null;

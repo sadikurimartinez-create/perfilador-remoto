@@ -461,7 +461,8 @@ export default function ProjectWorkspacePage() {
                             a.editorialPayload,
                             project?.nombre || (project as any)?.name || 'Expediente',
                             a.editorialPayload.projectId || project?.id || 'EXP',
-                            user
+                            user,
+                            { exportMode: "DRAFT" }
                           );
                           setToast({ type: "success", message: "Documento Word generado exitosamente." });
                         } catch (err: any) {
@@ -482,7 +483,7 @@ export default function ProjectWorkspacePage() {
                           }
                           const { generatePdfProgrammatic } = await import("@/lib/reportEngine");
 
-                          await generatePdfProgrammatic(a.briefing);
+                          await generatePdfProgrammatic(a.briefing, { exportMode: "DRAFT" });
                           setToast({ type: "success", message: "Documento PDF generado exitosamente." });
                         } catch (err: any) {
                           setToast({ type: "error", message: "Error al generar PDF: " + err.message });
