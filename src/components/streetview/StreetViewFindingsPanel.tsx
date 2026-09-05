@@ -14,6 +14,12 @@ import {
 import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
 import { buildStreetViewFindingLineage, validateLineage } from "@/utils/evidenceLineage";
 import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import {
+  approveGoogleCandidateFinding,
+  rejectGoogleCandidateFinding,
+  type GoogleCandidateFinding,
+  type GoogleIntelligenceEvidence,
+} from "@/utils/googleIntelligenceContract";
 
 export interface AnalyticalFinding {
   findingId: string;
@@ -84,6 +90,14 @@ export interface StreetViewFinding {
   lineageStatus?: LineageStatus;
   geographyId?: string | null;
   aiAnalyticalOutput?: AiAnalyticalOutput | null;
+  googleIntelligenceEvidence?: GoogleIntelligenceEvidence | null;
+  googleCandidateFinding?: GoogleCandidateFinding | null;
+  candidateType?: GoogleCandidateFinding["candidateType"];
+  observableFactors?: string[];
+  explanation?: string;
+  confidence?: GoogleCandidateFinding["confidence"];
+  confidenceBasis?: string;
+  limitations?: string[];
 }
 
 interface StreetViewFindingsPanelProps {
@@ -94,6 +108,36 @@ interface StreetViewFindingsPanelProps {
   validatorId?: string;
   validatorRole?: string;
   onTriggerTemporalComparison?: (candidate?: any) => void;
+}
+
+function getGoogleCandidateFinding(capture: any): GoogleCandidateFinding | null {
+  return capture?.googleCandidateFinding || capture?.metadata?.googleCandidateFinding || null;
+}
+
+function getGoogleEvidence(capture: any): GoogleIntelligenceEvidence | null {
+  return capture?.googleIntelligenceEvidence || capture?.metadata?.googleIntelligenceEvidence || null;
+}
+
+function getCandidateDisplay(capture: any) {
+  const candidate = getGoogleCandidateFinding(capture);
+  const evidence = getGoogleEvidence(capture);
+  const streetViewDate =
+    evidence?.metadata?.streetView?.captureDate ||
+    evidence?.observedAt ||
+    capture?.streetViewMetadata?.captureDate ||
+    capture?.captureDate ||
+    null;
+  return {
+    candidate,
+    evidence,
+    candidateType: candidate?.candidateType || capture?.candidateType || capture?.categoria_exploracion || capture?.categoria || "TACTICAL_OBSERVATION_POINT",
+    explanation: candidate?.explanation || capture?.explanation || capture?.comentario || capture?.descripcion || "",
+    observableFactors: candidate?.observableFactors || capture?.observableFactors || [],
+    confidence: candidate?.confidence ?? capture?.confidence ?? "UNKNOWN",
+    confidenceBasis: candidate?.confidenceBasis || capture?.confidenceBasis || "Base de confianza no disponible.",
+    limitations: candidate?.limitations || capture?.limitations || [],
+    streetViewDate,
+  };
 }
 
 export function StreetViewFindingsPanel({
@@ -157,6 +201,13 @@ export function StreetViewFindingsPanel({
     const lng = selectedCapture.longitude || selectedCapture.lng || selectedCapture.geometry?.lng || 0;
     const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename || `find-${Date.now()}`;
     const sourceEvidenceId = selectedCapture.sourceEvidenceId || selectedCapture.evidenceId || selectedCapture.evidenciaId || selectedCapture.captureId || null;
+    const candidate = getGoogleCandidateFinding(selectedCapture);
+    const approvedCandidate = candidate
+      ? approveGoogleCandidateFinding(candidate, {
+          validatedBy: validatorId ? { id: validatorId, role: validatorRole } : null,
+          validatedAt: new Date().toISOString(),
+        })
+      : null;
     const lineage = buildStreetViewFindingLineage({
       findingId: captureId,
       evidenceId: sourceEvidenceId,
@@ -201,6 +252,14 @@ export function StreetViewFindingsPanel({
           lineage,
           lineageStatus: lineageValidation.status,
           categoria: selectedCapture.categoria_exploracion || "RUTA_ACCESO",
+          candidateType: approvedCandidate?.candidateType || selectedCapture.candidateType,
+          observableFactors: approvedCandidate?.observableFactors || selectedCapture.observableFactors || [],
+          explanation: approvedCandidate?.explanation || selectedCapture.explanation,
+          confidence: approvedCandidate?.confidence ?? selectedCapture.confidence,
+          confidenceBasis: approvedCandidate?.confidenceBasis || selectedCapture.confidenceBasis,
+          limitations: approvedCandidate?.limitations || selectedCapture.limitations || [],
+          googleIntelligenceEvidence: getGoogleEvidence(selectedCapture),
+          googleCandidateFinding: approvedCandidate,
           coordenadas: { lat, lng },
           imagen: approvedEvidence.imageReference,
           heading: approvedEvidence.geometry?.heading,
@@ -258,6 +317,8 @@ export function StreetViewFindingsPanel({
     setErrorMessage(null);
 
     const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename;
+    const candidate = getGoogleCandidateFinding(selectedCapture);
+    const rejectedCandidate = candidate ? rejectGoogleCandidateFinding(candidate) : null;
 
     try {
       // Marcar hallazgo analítico como REJECTED_FINDING manteniendo antecedentes e historial (Regla 3 ADR-016)
@@ -271,7 +332,8 @@ export function StreetViewFindingsPanel({
           validationSource: "ADR_020_24_HUMAN_ACTION",
           rejectedBy: validatorId || null,
           rejectionDate: new Date().toISOString(),
-          rejectionComment: validationComment.trim() || "Descartado por el analista"
+          rejectionComment: validationComment.trim() || "Descartado por el analista",
+          googleCandidateFinding: rejectedCandidate,
         })
       }).catch((err) => console.warn("Muted rejection patch error:", err));
 
@@ -320,6 +382,7 @@ export function StreetViewFindingsPanel({
               const isSelected = selectedCapture && (selectedCapture.id === capId || selectedCapture.findingId === capId || selectedCapture.hash_md5 === capId);
               const lat = cap.latitude || cap.lat || cap.geometry?.lat;
               const lng = cap.longitude || cap.lng || cap.geometry?.lng;
+              const display = getCandidateDisplay(cap);
 
               return (
                 <div
@@ -349,6 +412,9 @@ export function StreetViewFindingsPanel({
                     <span className="text-[10px] text-slate-300 truncate block font-bold">
                       ID: {capId}
                     </span>
+                    <span className="text-[9px] text-amber-300 truncate block font-bold">
+                      {display.candidateType}
+                    </span>
                     <span className="text-[9px] text-slate-500 block font-mono">
                       LAT: {typeof lat === "number" ? lat.toFixed(4) : "N/A"} / LNG: {typeof lng === "number" ? lng.toFixed(4) : "N/A"}
                     </span>
@@ -364,6 +430,23 @@ export function StreetViewFindingsPanel({
           {selectedCapture ? (
             <div className="h-full flex flex-col justify-between">
               <div className="space-y-3">
+                {(() => {
+                  const display = getCandidateDisplay(selectedCapture);
+                  return (
+                    <div className="grid grid-cols-2 gap-2 text-[9px]">
+                      <div className="bg-emerald-950/30 border border-emerald-900/70 rounded-xl p-2">
+                        <p className="text-emerald-300 font-black uppercase tracking-wider">Observación</p>
+                        <p className="text-slate-300 mt-1">Fuente Google Street View vinculada a evidencia trazable.</p>
+                        <p className="text-slate-500 font-mono mt-1">Fecha SV: {display.streetViewDate || "N/D"}</p>
+                      </div>
+                      <div className="bg-amber-950/30 border border-amber-900/70 rounded-xl p-2">
+                        <p className="text-amber-300 font-black uppercase tracking-wider">Interpretación / Candidato</p>
+                        <p className="text-slate-200 font-bold mt-1">{display.candidateType}</p>
+                        <p className="text-slate-500 font-mono mt-1">Estado: {display.candidate?.validationStatus || selectedCapture.status || "PENDING_REVIEW"}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="relative rounded-xl overflow-hidden border border-slate-800 h-32 bg-black">
                   {(selectedCapture.file_url || selectedCapture.archivo_url || selectedCapture.imageReference) ? (
                     <img
@@ -382,6 +465,25 @@ export function StreetViewFindingsPanel({
                 </div>
 
                 <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800/60 space-y-1">
+                  {(() => {
+                    const display = getCandidateDisplay(selectedCapture);
+                    return (
+                      <div className="space-y-1.5 border-b border-slate-800/70 pb-2 mb-2">
+                        <p className="text-[9px] text-slate-300 leading-relaxed">
+                          <span className="text-amber-300 font-bold">Explicación:</span> {display.explanation || "Sin explicación canónica."}
+                        </p>
+                        <p className="text-[9px] text-slate-400">
+                          <span className="text-cyan-400 font-bold">Factores:</span> {display.observableFactors.length > 0 ? display.observableFactors.join(", ") : "N/D"}
+                        </p>
+                        <p className="text-[9px] text-slate-400">
+                          <span className="text-cyan-400 font-bold">Confianza:</span> {String(display.confidence)} · {display.confidenceBasis}
+                        </p>
+                        <p className="text-[9px] text-slate-500">
+                          <span className="text-red-300 font-bold">Limitaciones:</span> {display.limitations.length > 0 ? display.limitations.join(" ") : "No prueba conducta criminal ni uso actual sin validación."}
+                        </p>
+                      </div>
+                    );
+                  })()}
                   <p className="text-[9px] font-mono text-slate-400">
                     <span className="text-cyan-400 font-bold">Motor Generador:</span> {selectedCapture.generatedBy || "STREETVIEW_SWEEP_ENGINE"}
                   </p>

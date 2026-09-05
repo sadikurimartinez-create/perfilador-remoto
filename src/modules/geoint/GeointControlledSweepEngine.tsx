@@ -15,6 +15,12 @@ import {
   getCanonicalGeographyCoordinates,
   type CanonicalProjectGeography,
 } from "@/utils/canonicalProjectGeography";
+import { buildEvidenceLineage } from "@/utils/evidenceLineage";
+import {
+  adaptStreetViewToGoogleEvidence,
+  deriveExplainableStreetViewCandidateFinding,
+  type StreetViewObservableFactor,
+} from "@/utils/googleIntelligenceContract";
 
 interface GeointControlledSweepEngineProps {
   isOpen: boolean;
@@ -198,11 +204,59 @@ export function GeointControlledSweepEngine({
           }
 
           const findingId = `geoint-finding-${Date.now()}-${globalCount + 1}`;
+          const sourceEvidenceId = `sv-source-${Date.now()}-${globalCount + 1}`;
           const traceabilityId = buildGeointTraceabilityId("trace-adr018", [
             projectId,
             findingId,
+            sourceEvidenceId,
             panoramaKey,
           ]);
+          const lineage = buildEvidenceLineage({
+            sourceId: "GOOGLE_STREET_VIEW",
+            sourceReference: staticUrl,
+            evidenceId: sourceEvidenceId,
+            findingId,
+            geographyId: canonicalGeography.geographyId,
+            geographyType: canonicalGeography.type,
+          });
+          const observableFactors: StreetViewObservableFactor[] = [
+            "street view panorama available",
+            "canonical geography bounded",
+            "captured heading pitch fov",
+          ];
+          if (canonicalGeography.type === "CORRIDOR" || sweepType === "CORREDOR") {
+            observableFactors.push("access corridor proximity");
+          }
+
+          const googleIntelligenceEvidence = adaptStreetViewToGoogleEvidence({
+            evidenceId: sourceEvidenceId,
+            sourceEvidenceId,
+            traceabilityId,
+            expedienteId: projectId,
+            geographyId: canonicalGeography.geographyId,
+            coordinates: { lat: sweepLat, lng: sweepLng },
+            heading: sweepHeading,
+            pitch: sweepPitch,
+            fov: sweepFov,
+            imageReference: dataUrl,
+            lineage,
+            acquiredAt: new Date().toISOString(),
+            streetViewMetadata: {
+              heading: sweepHeading,
+              pitch: sweepPitch,
+              fov: sweepFov,
+              panoramaLat: sweepLat,
+              panoramaLng: sweepLng,
+              imageReference: dataUrl,
+            },
+          });
+          const googleCandidateFinding = deriveExplainableStreetViewCandidateFinding({
+            evidence: googleIntelligenceEvidence,
+            findingId,
+            observableFactors,
+            generatedBy: "GEOINT_CONTROLLED_SWEEP",
+            spatialDistanceMeters: distMeters,
+          });
 
           // Estructura de Datos Obligatoria ADR-018 v1.0 / ADR-019.15
           const payload: GeoIntSweepFindingPayload = {
@@ -210,7 +264,7 @@ export function GeointControlledSweepEngine({
             category: cat,
             status: GeointGovernanceStatus.PENDING_REVIEW,
             traceabilityId,
-            sourceEvidenceId: findingId,
+            sourceEvidenceId,
             geographyId: canonicalGeography.geographyId,
             geographyType: canonicalGeography.type,
             createdBy: analystName,
@@ -223,8 +277,16 @@ export function GeointControlledSweepEngine({
               fov: sweepFov,
             },
             file_url: dataUrl,
-            comentario: `[BARRIDO GEOINT CONTROLADO - ${catMeta.label}] Muestreo espacial periférico R=${radiusMeters}m (${distMeters.toFixed(1)}m del centro).`,
+            comentario: googleCandidateFinding.explanation,
             timestamp: new Date().toISOString(),
+            googleIntelligenceEvidence,
+            googleCandidateFinding,
+            candidateType: googleCandidateFinding.candidateType,
+            observableFactors: googleCandidateFinding.observableFactors,
+            explanation: googleCandidateFinding.explanation,
+            confidence: googleCandidateFinding.confidence,
+            confidenceBasis: googleCandidateFinding.confidenceBasis,
+            limitations: googleCandidateFinding.limitations,
             metadata: {
               sweepType,
               radiusMeters,
@@ -234,6 +296,8 @@ export function GeointControlledSweepEngine({
               distanceMeters: distMeters,
               nodeOrder: canonicalSample.nodeOrder,
               sweepGeographyContext,
+              googleIntelligenceEvidence,
+              googleCandidateFinding,
             },
           };
 

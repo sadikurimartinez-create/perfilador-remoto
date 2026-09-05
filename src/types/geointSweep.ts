@@ -2,6 +2,10 @@ import {
   GeointGovernanceStatus,
   GeointGovernanceStatusValue,
 } from "./geointGovernance";
+import type {
+  GoogleCandidateFinding,
+  GoogleIntelligenceEvidence,
+} from "@/utils/googleIntelligenceContract";
 
 /**
  * ADR-018 v1.0 — GEOINT Controlled Sweep Engine Types
@@ -78,6 +82,14 @@ export interface GeoIntSweepFindingPayload {
   file_url: string;
   comentario: string;
   timestamp: string;
+  googleIntelligenceEvidence?: GoogleIntelligenceEvidence;
+  googleCandidateFinding?: GoogleCandidateFinding;
+  candidateType?: GoogleCandidateFinding["candidateType"];
+  observableFactors?: string[];
+  explanation?: string;
+  confidence?: GoogleCandidateFinding["confidence"];
+  confidenceBasis?: string;
+  limitations?: string[];
   metadata?: {
     sweepType?: "RADIAL" | "CORREDOR" | "MULTICAPA";
     radiusMeters?: number;
@@ -87,6 +99,8 @@ export interface GeoIntSweepFindingPayload {
     distanceMeters?: number;
     nodeOrder?: number;
     sweepGeographyContext?: unknown;
+    googleIntelligenceEvidence?: GoogleIntelligenceEvidence;
+    googleCandidateFinding?: GoogleCandidateFinding;
   };
 }
 
