@@ -38,6 +38,7 @@ import { saveGeographicEntity, getGeographicEntities } from "@/services/geograph
 import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
 import {
   adaptLegacyProjectGeography,
+  buildImportedProjectCanonicalGeographyPatch,
   canonicalizeConfirmedDraftGeography,
   deserializeCanonicalGeographyFromFirestore,
   serializeCanonicalGeographyForFirestore,
@@ -1410,6 +1411,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
          throw new Error("No puedes sobrescribir un expediente de auditoría que pertenece a otro usuario.");
       }
 
+      const importedGeographyPatch = buildImportedProjectCanonicalGeographyPatch({
+        id: proj.id,
+        canonicalGeography: proj.canonicalGeography ?? null,
+        existingCanonicalGeography: snap.exists() ? snap.data().canonicalGeography ?? null : null,
+        geographyId: proj.geographyId ?? null,
+      });
+
       // Guardar en la nube (para que aparezca en la lista)
       await setDoc(projectRef, {
         name: proj.name,
@@ -1419,6 +1427,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdBy: username,
         lockedBy: null,
         photoCount: payload.photos.length,
+        ...importedGeographyPatch,
       }, { merge: true });
 
       // Guardar fotos en la subcolección

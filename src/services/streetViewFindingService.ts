@@ -274,6 +274,34 @@ export class StreetViewFindingService {
       delete payload.estado;
     }
 
+    if (payload.estado === GeointGovernanceStatus.APPROVED_EVIDENCE) {
+      const subcolRef = doc(db, "projects", expedienteId, "streetview_findings", findingId);
+      const rootColRef = doc(db, "streetview_findings", findingId);
+      const subcolSnap = await getDoc(subcolRef);
+      const rootSnap = subcolSnap.exists() ? null : await getDoc(rootColRef);
+      const existingData = subcolSnap.exists()
+        ? subcolSnap.data()
+        : rootSnap?.exists()
+          ? rootSnap.data()
+          : null;
+
+      if (!existingData) {
+        throw new Error("STREET_VIEW_FINDING_PROMOTION_BLOCKED: missing finding record");
+      }
+
+      try {
+        normalizeStreetViewFindingForPersistence({
+          ...(existingData as Partial<StreetViewFinding>),
+          ...payload,
+          id: findingId,
+          expedienteId,
+          estado: GeointGovernanceStatus.APPROVED_EVIDENCE,
+        });
+      } catch (err: any) {
+        throw new Error(`STREET_VIEW_FINDING_PROMOTION_BLOCKED: ${err?.message || "traceability validation failed"}`);
+      }
+    }
+
     try {
       const subcolRef = doc(db, "projects", expedienteId, "streetview_findings", findingId);
       await setDoc(subcolRef, payload, { merge: true });
