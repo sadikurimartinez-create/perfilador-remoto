@@ -10,9 +10,28 @@ export type PlaceSummary = {
   direccion: string;
   lat: number;
   lng: number;
+  types?: string[];
+  businessStatus?: string;
+  openingHours?: {
+    openNow?: boolean;
+    weekdayText?: string[];
+  };
+  rating?: number;
+  userRatingsTotal?: number;
   categoria: PlaceCategory;
   fuente: "GOOGLE_PLACES";
   resenasOsint?: string[];
+  reviews?: GooglePlaceReviewSummary[];
+};
+
+export type GooglePlaceReviewSummary = {
+  reviewId: string;
+  placeId: string;
+  text: string;
+  rating?: number;
+  publishedAt?: string | null;
+  relativeTimeDescription?: string | null;
+  sourceReference: string;
 };
 
 export type PlacesAnalysisResult = {
@@ -114,7 +133,7 @@ export async function searchPlacesAround(
       const dUrl = new URL(GOOGLE_PLACE_DETAILS_URL);
       dUrl.searchParams.set("key", apiKey);
       dUrl.searchParams.set("place_id", place.place_id);
-      dUrl.searchParams.set("fields", "reviews");
+      dUrl.searchParams.set("fields", "reviews,opening_hours,business_status,rating,user_ratings_total,types");
       dUrl.searchParams.set("language", "es");
       // Ordenar por las más recientes para detectar focos rojos actuales
       dUrl.searchParams.set("reviews_sort", "newest");
@@ -125,9 +144,22 @@ export async function searchPlacesAround(
           // Guardamos hasta 5 reseñas incluyendo calificación y fecha relativa
           place.reviews = dData.result.reviews
             .filter((r: any) => r.text && r.text.trim().length > 0)
-            .map((r: any) => `[${r.rating}⭐ | ${r.relative_time_description || 'Fecha desconocida'}] ${r.text.trim()}`)
+            .map((r: any, reviewIndex: number) => ({
+              reviewId: `google-review:${place.place_id}:${r.time || reviewIndex}:${String(r.text).slice(0, 32)}`,
+              placeId: place.place_id,
+              text: r.text.trim(),
+              rating: typeof r.rating === "number" ? r.rating : undefined,
+              publishedAt: typeof r.time === "number" ? new Date(r.time * 1000).toISOString() : null,
+              relativeTimeDescription: r.relative_time_description || null,
+              sourceReference: `google-place:${place.place_id}:review:${r.time || reviewIndex}`,
+            }))
             .slice(0, 5);
         }
+        if (dData.result?.opening_hours) place.opening_hours = dData.result.opening_hours;
+        if (dData.result?.business_status) place.business_status = dData.result.business_status;
+        if (typeof dData.result?.rating === "number") place.rating = dData.result.rating;
+        if (typeof dData.result?.user_ratings_total === "number") place.user_ratings_total = dData.result.user_ratings_total;
+        if (Array.isArray(dData.result?.types)) place.types = dData.result.types;
       }
     } catch (e) {
       console.warn("[googlePlaces] No se pudieron obtener reseñas para", place.place_id);
@@ -157,9 +189,22 @@ export async function searchPlacesAround(
       direccion: place.vicinity ?? place.formatted_address ?? "",
       lat: latP,
       lng: lngP,
+      types,
+      businessStatus: place.business_status,
+      openingHours: place.opening_hours
+        ? {
+            openNow: place.opening_hours.open_now,
+            weekdayText: place.opening_hours.weekday_text,
+          }
+        : undefined,
+      rating: typeof place.rating === "number" ? place.rating : undefined,
+      userRatingsTotal: typeof place.user_ratings_total === "number" ? place.user_ratings_total : undefined,
       categoria,
       fuente: "GOOGLE_PLACES",
-      resenasOsint: place.reviews ?? []
+      resenasOsint: (place.reviews ?? []).map((r: GooglePlaceReviewSummary) =>
+        `[${r.rating ?? "N/D"} | ${r.relativeTimeDescription || "Fecha desconocida"}] ${r.text}`
+      ),
+      reviews: place.reviews ?? [],
     };
 
     switch (categoria) {
