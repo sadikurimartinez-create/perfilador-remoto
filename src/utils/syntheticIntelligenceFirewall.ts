@@ -240,6 +240,10 @@ export function evaluateIntelligenceEligibility(
     blockingReasons.push("AI_GENERATED_REQUIRES_EXPLICIT_ANALYTICAL_ROLE");
   }
 
+  if (metadata.acquisitionMode === "LEGACY" && metadata.semanticRole === "DIAGNOSTIC") {
+    blockingReasons.push("LEGACY_DIAGNOSTIC_NOT_INSTITUTIONAL");
+  }
+
   if (metadata.acquisitionMode === "DERIVED" && (!metadata.lineage || metadata.lineage.length === 0)) {
     blockingReasons.push("DERIVED_REQUIRES_SOURCE_LINEAGE");
   }
@@ -254,7 +258,8 @@ export function evaluateIntelligenceEligibility(
     eligibleForHumanReview &&
     metadata.validationStatus !== "LEGACY_UNCLASSIFIED" &&
     metadata.acquisitionMode !== "SIMULATED" &&
-    metadata.acquisitionMode !== "UNKNOWN";
+    metadata.acquisitionMode !== "UNKNOWN" &&
+    !(metadata.acquisitionMode === "LEGACY" && metadata.semanticRole === "DIAGNOSTIC");
 
   return {
     eligibleForAnalysis: metadata.acquisitionMode !== "CONNECTIVITY_ONLY" && metadata.acquisitionMode !== "TEST",
@@ -278,7 +283,8 @@ export function isInstitutionalAnalysisEligibleIntelligence(
   return !eligibility.blockingReasons.some((reason) =>
     reason.startsWith("ACQUISITION_MODE_NOT_REPORTABLE:") ||
     reason === "SIMULATED_CONTENT_NOT_REPORTABLE" ||
-    reason === "CONNECTIVITY_ONLY_NOT_REPORTABLE"
+    reason === "CONNECTIVITY_ONLY_NOT_REPORTABLE" ||
+    reason === "LEGACY_DIAGNOSTIC_NOT_INSTITUTIONAL"
   );
 }
 

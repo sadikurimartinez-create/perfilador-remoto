@@ -19,6 +19,10 @@ export interface AiAnalyticalOutput {
   outputType: AiAnalyticalOutputType;
   acquisitionMode: AcquisitionMode;
   epistemicClass: AiEpistemicClass;
+  promptHash?: string | null;
+  promptVersion?: string | null;
+  promptId?: string | null;
+  inputIds?: string[];
   confidence: AiConfidenceValue;
   sourceReferences: string[];
   evidenceIds: string[];
@@ -43,6 +47,12 @@ function stableHash(value: string): string {
     hash = Math.imul(31, hash) + value.charCodeAt(i) | 0;
   }
   return Math.abs(hash).toString(36);
+}
+
+export const GENERATE_PROFILE_PROMPT_VERSION = "ADR-024.1:generate-profile:v1";
+
+export function hashAiPrompt(prompt: string): string {
+  return `prompt-${stableHash(prompt)}`;
 }
 
 function uniq(values: Array<string | null | undefined>): string[] {
@@ -80,6 +90,10 @@ export function createAiAnalyticalOutput(input: {
   outputId?: string | null;
   provider?: string | null;
   model?: string | null;
+  promptHash?: string | null;
+  promptVersion?: string | null;
+  promptId?: string | null;
+  inputIds?: Array<string | null | undefined>;
   confidence?: unknown;
   confidenceSource?: "PROVIDER" | "DETERMINISTIC_RULE" | "VALIDATED_RULE" | "HARDCODED" | "SYNTHETIC" | "UNKNOWN";
   sourceReferences?: Array<string | null | undefined>;
@@ -98,12 +112,17 @@ export function createAiAnalyticalOutput(input: {
   const findingIds = uniq(input.findingIds || []);
   const inferenceIds = uniq(input.inferenceIds || []);
   const comparedEvidenceIds = uniq(input.comparedEvidenceIds || []);
+  const inputIds = uniq(input.inputIds || []);
   const generatedAt = input.generatedAt || new Date().toISOString();
   const providerModel = [input.provider, input.model].filter(Boolean).join("/");
   const generatedBy = providerModel || "UNAVAILABLE";
   const outputId = input.outputId || `ai-output-${stableHash([
     input.outputType,
     generatedBy,
+    input.promptHash || "",
+    input.promptVersion || "",
+    input.promptId || "",
+    inputIds.join(","),
     sourceReferences.join(","),
     evidenceIds.join(","),
     findingIds.join(","),
@@ -124,6 +143,10 @@ export function createAiAnalyticalOutput(input: {
     outputType: input.outputType,
     acquisitionMode: "AI_GENERATED",
     epistemicClass: "AI_GENERATED",
+    promptHash: input.promptHash ?? null,
+    promptVersion: input.promptVersion ?? null,
+    promptId: input.promptId ?? null,
+    inputIds,
     confidence: normalizeConfidence(input),
     sourceReferences,
     evidenceIds,
@@ -141,6 +164,58 @@ export function createAiAnalyticalOutput(input: {
     generatedBy,
     limitations: input.limitations || [],
   };
+}
+
+export function createGenerateProfileAiAnalyticalOutput(input: {
+  outputType?: AiAnalyticalOutputType;
+  provider?: string | null;
+  model?: string | null;
+  prompt: string;
+  promptId?: string | null;
+  promptVersion?: string | null;
+  inputIds?: Array<string | null | undefined>;
+  sourceReferences?: Array<string | null | undefined>;
+  evidenceIds?: Array<string | null | undefined>;
+  findingIds?: Array<string | null | undefined>;
+  inferenceIds?: Array<string | null | undefined>;
+  geographyId?: string | null;
+  lineage?: CanonicalLineageNode[];
+  validationStatus?: EpistemicValidationStatus;
+  generatedAt?: string;
+  limitations?: string[];
+}): AiAnalyticalOutput {
+  const evidenceIds = uniq(input.evidenceIds || []);
+  const findingIds = uniq(input.findingIds || []);
+  const inferenceIds = uniq(input.inferenceIds || []);
+  const inputIds = uniq(input.inputIds || []);
+  const hasLineageSignal =
+    Boolean(input.lineage && input.lineage.length > 0) ||
+    evidenceIds.length > 0 ||
+    findingIds.length > 0 ||
+    inferenceIds.length > 0 ||
+    inputIds.length > 0;
+
+  return createAiAnalyticalOutput({
+    outputType: input.outputType || "ANALYSIS",
+    provider: input.provider,
+    model: input.model,
+    promptHash: hashAiPrompt(input.prompt || ""),
+    promptVersion: input.promptVersion || GENERATE_PROFILE_PROMPT_VERSION,
+    promptId: input.promptId || "generate-profile",
+    inputIds,
+    confidenceSource: "UNKNOWN",
+    sourceReferences: input.sourceReferences,
+    evidenceIds,
+    findingIds,
+    inferenceIds,
+    geographyId: input.geographyId,
+    lineage: input.lineage,
+    validationStatus: input.validationStatus,
+    generatedAt: input.generatedAt,
+    limitations: hasLineageSignal
+      ? input.limitations || []
+      : uniq([...(input.limitations || []), "INPUT_LINEAGE_INSUFFICIENT"]),
+  });
 }
 
 export function approveAiAnalyticalOutput(output: AiAnalyticalOutput, validation: { validatedBy?: any | null; validatedAt?: string | null }) {

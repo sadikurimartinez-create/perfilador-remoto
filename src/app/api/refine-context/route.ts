@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import {
+  createContextualizationAiReview,
+  createContextualizationReviewLedger,
+} from "@/utils/contextualizationReviewLedger";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,10 +14,116 @@ function formatCoord(n: number | null | undefined): string {
   return typeof n === "number" ? n.toFixed(5) : "N/A";
 }
 
+function stableTextId(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function collectIdsByKeys(value: unknown, keys: string[], limit = 60): string[] {
+  const keySet = new Set(keys.map((key) => key.toLowerCase()));
+  const ids: string[] = [];
+  const seen = new Set<unknown>();
+  const stack: unknown[] = [value];
+
+  while (stack.length > 0 && ids.length < limit) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        const id = stableTextId(item);
+        if (id && !ids.includes(id)) ids.push(id);
+        if (item && typeof item === "object") stack.push(item);
+      }
+      continue;
+    }
+
+    for (const [key, raw] of Object.entries(current as Record<string, unknown>)) {
+      if (keySet.has(key.toLowerCase())) {
+        const id = stableTextId(raw);
+        if (id && !ids.includes(id)) ids.push(id);
+      }
+      if (raw && typeof raw === "object") stack.push(raw);
+    }
+  }
+
+  return ids;
+}
+
+function normalizeAiJsonText(text: string): string {
+  const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const firstBrace = cleanText.indexOf("{");
+  const lastBrace = cleanText.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return cleanText.substring(firstBrace, lastBrace + 1);
+  }
+  return cleanText;
+}
+
+function suggestedTextFromResult(mode: string | undefined, result: any): string | null {
+  if (mode === "rss-news") return result?.data?.conclusionOperativa || null;
+  return typeof result?.suggestions === "string" ? result.suggestions : null;
+}
+
+function attachReviewLedger(result: any, input: {
+  body: any;
+  mode?: string;
+  prompt: string;
+  provider: string | null;
+  observations: string;
+  technicalStatus?: "COMPLETED" | "FAILED";
+  failureReason?: string | null;
+}) {
+  const aiReview = input.technicalStatus === "FAILED"
+    ? null
+    : createContextualizationAiReview({
+        mode: input.mode,
+        provider: input.provider,
+        model: GEMINI_MODEL,
+        prompt: input.prompt,
+        promptId: `refine-context:${input.mode || "default"}`,
+        inputIds: [
+          stableTextId(input.body.projectId) ? `project:${input.body.projectId}` : null,
+          stableTextId(input.body.traceabilityId),
+          stableTextId(input.body.sourceEvidenceId),
+        ],
+        evidenceIds: [
+          stableTextId(input.body.sourceEvidenceId),
+          ...collectIdsByKeys(input.body.photos, ["evidenceId", "sourceEvidenceId", "canonicalEvidenceId", "id"]),
+        ],
+        geographyId: stableTextId(input.body.geographyId) || stableTextId(input.body.canonicalGeography?.geographyId),
+        limitations: ["AI review is analytical support and cannot replace the original human contextualization."],
+      });
+
+  const reviewLedger = createContextualizationReviewLedger({
+    expedienteId: stableTextId(input.body.projectId),
+    geographyId: stableTextId(input.body.geographyId) || stableTextId(input.body.canonicalGeography?.geographyId),
+    sourceEvidenceId: stableTextId(input.body.sourceEvidenceId),
+    traceabilityId: stableTextId(input.body.traceabilityId),
+    mode: input.mode,
+    originalHumanText: input.body.originalHumanText ?? input.body.context,
+    aiReview,
+    observations: input.observations,
+    suggestedText: input.technicalStatus === "FAILED" ? null : suggestedTextFromResult(input.mode, result),
+    technicalStatus: input.technicalStatus,
+    failureReason: input.failureReason,
+  });
+
+  return {
+    ...result,
+    reviewLedger,
+  };
+}
+
 export async function POST(req: Request) {
   let requestMode: string | undefined;
+  let requestBody: any = {};
+  let requestPrompt = "";
   try {
     const body = await req.json();
+    requestBody = body;
     const { context, photos, mode, geometryType, projectDescription, region, analysisRadius } = body;
     requestMode = mode;
 
@@ -62,6 +172,7 @@ Devuelve ÚNICA Y EXCLUSIVAMENTE un objeto JSON válido con la siguiente estruct
 
 IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directamente con el carácter { y termínala con el carácter }.
 `.trim();
+      requestPrompt = promptRss;
 
       const apiKey = process.env.GEMINI_API_KEY || "";
       const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
@@ -78,19 +189,38 @@ IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directa
             const keepAlive = setInterval(() => {
               controller.enqueue(new TextEncoder().encode(" "));
             }, 4000);
+            let accumulatedText = "";
 
             try {
               for await (const item of streamingResp.stream) {
                 if (item.candidates?.[0]?.content?.parts?.[0]?.text) {
                   let text = item.candidates[0].content.parts[0].text;
                   text = text.replace(/```json/gi, '').replace(/```/g, '');
-                  controller.enqueue(new TextEncoder().encode(text));
+                  accumulatedText += text;
                 }
               }
+              const parsed = JSON.parse(normalizeAiJsonText(accumulatedText));
+              const governed = attachReviewLedger(parsed, {
+                body,
+                mode,
+                prompt: promptRss,
+                provider: "VertexAI",
+                observations: JSON.stringify(parsed),
+              });
+              controller.enqueue(new TextEncoder().encode(JSON.stringify(governed)));
             } catch (e: any) {
               console.error("Error durante el streaming de VertexAI:", e);
               const errorMsg = JSON.stringify({ success: false, error: e.message, data: { eventosCriticos: [], conclusionOperativa: "Fallo en el análisis de IA: " + e.message } });
-              controller.enqueue(new TextEncoder().encode(errorMsg));
+              const governed = attachReviewLedger(JSON.parse(errorMsg), {
+                body,
+                mode,
+                prompt: promptRss,
+                provider: "VertexAI",
+                observations: "",
+                technicalStatus: "FAILED",
+                failureReason: e.message,
+              });
+              controller.enqueue(new TextEncoder().encode(JSON.stringify(governed)));
             } finally {
               clearInterval(keepAlive);
               controller.close();
@@ -122,7 +252,15 @@ IMPORTANTE: No uses formato markdown (\`\`\`json). Comienza tu respuesta directa
 
         const stream = new ReadableStream({
           async start(controller) {
-            controller.enqueue(new TextEncoder().encode(cleanText));
+            const parsed = JSON.parse(normalizeAiJsonText(cleanText));
+            const governed = attachReviewLedger(parsed, {
+              body,
+              mode,
+              prompt: promptRss,
+              provider: "GeminiREST",
+              observations: JSON.stringify(parsed),
+            });
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(governed)));
             controller.close();
           }
         });
@@ -157,10 +295,12 @@ Mejora la redacción del siguiente contexto de evidencia de campo, dándole un t
 Texto original: """${context}""" \nCoordenadas:\n${coordsText}
 Devuelve un JSON con: {"score": <0-100 evaluando lógica original>, "suggestions": "<texto mejorado>"}`;
     }
+    requestPrompt = sysPrompt.trim();
 
     const apiKey = process.env.GEMINI_API_KEY || "";
     const useVertexAI = !!GCP_PRIVATE_KEY && GCP_PRIVATE_KEY.trim() !== "";
     let cleanText = "";
+    let provider: string | null = null;
 
     if (useVertexAI) {
       const authOptions = { credentials: { client_email: GCP_CLIENT_EMAIL, private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n") } };
@@ -168,6 +308,7 @@ Devuelve un JSON con: {"score": <0-100 evaluando lógica original>, "suggestions
       const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
       const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: sysPrompt.trim() }] }], generationConfig: { temperature: 0.2 } });
       cleanText = (result.response.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+      provider = "VertexAI";
     } else {
       if (!apiKey) {
         throw new Error("No se detectó GEMINI_API_KEY ni credenciales de Vertex AI.");
@@ -188,24 +329,44 @@ Devuelve un JSON con: {"score": <0-100 evaluando lógica original>, "suggestions
       }
       const resJson = await response.json();
       cleanText = (resJson.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+      provider = "GeminiREST";
     }
 
-    cleanText = cleanText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
-    // Robust parsing: extract outermost bracketed JSON structure
-    let jsonToParse = cleanText;
-    const firstBrace = cleanText.indexOf("{");
-    const lastBrace = cleanText.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      jsonToParse = cleanText.substring(firstBrace, lastBrace + 1);
-    }
-    
-    return NextResponse.json(JSON.parse(jsonToParse));
+    const parsed = JSON.parse(normalizeAiJsonText(cleanText));
+    return NextResponse.json(attachReviewLedger(parsed, {
+      body,
+      mode,
+      prompt: sysPrompt.trim(),
+      provider,
+      observations: JSON.stringify(parsed),
+    }));
   } catch (error: any) {
     console.error("[RSS Parser API] Error:", error);
     if (requestMode === "rss-news") {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+      return NextResponse.json(attachReviewLedger(
+        { success: false, error: error.message },
+        {
+          body: requestBody,
+          mode: requestMode,
+          prompt: requestPrompt,
+          provider: null,
+          observations: "",
+          technicalStatus: "FAILED",
+          failureReason: error.message,
+        }
+      ), { status: 500 });
     }
-    return NextResponse.json({ score: 0, suggestions: `Error del Servidor: ${error.message}` }, { status: 500 });
+    return NextResponse.json(attachReviewLedger(
+      { score: 0, suggestions: `Error del Servidor: ${error.message}` },
+      {
+        body: requestBody,
+        mode: requestMode,
+        prompt: requestPrompt,
+        provider: null,
+        observations: "",
+        technicalStatus: "FAILED",
+        failureReason: error.message,
+      }
+    ), { status: 500 });
   }
 }

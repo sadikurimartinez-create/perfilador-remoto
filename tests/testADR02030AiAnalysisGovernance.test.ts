@@ -5,6 +5,9 @@ import {
   approveAiAnalyticalOutput,
   canPromoteToFinding,
   createAiAnalyticalOutput,
+  createGenerateProfileAiAnalyticalOutput,
+  GENERATE_PROFILE_PROMPT_VERSION,
+  hashAiPrompt,
   isObservedFact,
   legacyAiOutput,
 } from "../src/utils/aiAnalysisGovernance";
@@ -161,5 +164,89 @@ describe("ADR-020.30 - AI analysis governance", () => {
     const source = readSource("src/components/PhotoAlbum.tsx");
     expect(source).toContain("lastAiHypothesisSuggestion");
     expect(source).toContain("no se certificó ni se generó dictamen automáticamente");
+  });
+
+  test("TEST 22 generate-profile AI output is governed and pending review", () => {
+    const output = createGenerateProfileAiAnalyticalOutput({
+      outputType: "ANALYSIS",
+      provider: "VertexAI",
+      model: "gemini-test",
+      prompt: "Prompt institucional",
+      promptId: "generate-profile:chapter-2",
+      inputIds: ["project:EXP-1"],
+      findingIds: ["FND-1"],
+    });
+    expect(output.acquisitionMode).toBe("AI_GENERATED");
+    expect(output.validationStatus).toBe("PENDING_REVIEW");
+    expect(output.generatedBy).toBe("VertexAI/gemini-test");
+    expect(output.promptVersion).toBe(GENERATE_PROFILE_PROMPT_VERSION);
+  });
+
+  test("TEST 23 generate-profile prompt hash is stable and prompt-sensitive", () => {
+    expect(hashAiPrompt("prompt A")).toBe(hashAiPrompt("prompt A"));
+    expect(hashAiPrompt("prompt A")).not.toBe(hashAiPrompt("prompt B"));
+    const output = createGenerateProfileAiAnalyticalOutput({
+      provider: "GeminiREST",
+      model: "gemini-test",
+      prompt: "prompt A",
+      findingIds: ["FND-1"],
+    });
+    expect(output.promptHash).toBe(hashAiPrompt("prompt A"));
+  });
+
+  test("TEST 24 generate-profile preserves input, evidence, finding and geography IDs", () => {
+    const output = createGenerateProfileAiAnalyticalOutput({
+      provider: "GeminiREST",
+      model: "gemini-test",
+      prompt: "Prompt con fuentes",
+      inputIds: ["project:EXP-1", "chapter:7"],
+      evidenceIds: ["EVI-1"],
+      findingIds: ["FND-1"],
+      geographyId: "geo-exp-polygon",
+    });
+    expect(output.inputIds).toEqual(["project:EXP-1", "chapter:7"]);
+    expect(output.evidenceIds).toEqual(["EVI-1"]);
+    expect(output.findingIds).toEqual(["FND-1"]);
+    expect(output.geographyId).toBe("geo-exp-polygon");
+  });
+
+  test("TEST 25 generate-profile output is not an observed fact or promotable finding", () => {
+    const output = createGenerateProfileAiAnalyticalOutput({
+      provider: "VertexAI",
+      model: "gemini-test",
+      prompt: "Analisis criminologico generado por IA",
+      findingIds: ["FND-1"],
+    });
+    expect(isObservedFact(output)).toBe(false);
+    expect(canPromoteToFinding(output)).toBe(false);
+  });
+
+  test("TEST 26 generate-profile fallback metadata remains explicit", () => {
+    const output = createGenerateProfileAiAnalyticalOutput({
+      provider: null,
+      model: "gemini-test",
+      prompt: "Prompt sin proveedor disponible",
+      limitations: ["GENERATION_ERROR:missing credentials"],
+    });
+    expect(output.generatedBy).toBe("gemini-test");
+    expect(output.limitations).toContain("GENERATION_ERROR:missing credentials");
+    expect(output.lineageStatus).toBe("UNSUPPORTED");
+  });
+
+  test("TEST 27 generate-profile marks insufficient lineage as limitation", () => {
+    const output = createGenerateProfileAiAnalyticalOutput({
+      provider: "GeminiREST",
+      model: "gemini-test",
+      prompt: "Prompt sin IDs de expediente",
+    });
+    expect(output.lineageStatus).toBe("UNSUPPORTED");
+    expect(output.limitations).toContain("INPUT_LINEAGE_INSUFFICIENT");
+  });
+
+  test("TEST 28 generate-profile API response attaches aiAnalyticalOutput", () => {
+    const source = readSource("src/app/api/generate-profile/route.ts");
+    expect(source).toContain("createGenerateProfileAiAnalyticalOutput");
+    expect(source).toContain("\"aiAnalyticalOutput\"");
+    expect(source).toContain("promptId = `generate-profile:chapter-${input.chapter}`");
   });
 });

@@ -219,14 +219,17 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
     try {
       const selected = album.filter((p: any) => selectedIds.includes(p.id));
       const photosToUse = selected.length > 0 ? selected : album.filter((p:any) => p.lat != null && p.lng != null);
-      const minimalPhotos = photosToUse.map((p: any) => ({ lat: p.lat, lng: p.lng, tipo: p.tipo || "", comentario: p.comentario || "" }));
+      const minimalPhotos = photosToUse.map((p: any) => ({ id: p.id, evidenceId: p.evidenceId || p.id, lat: p.lat, lng: p.lng, tipo: p.tipo || "", comentario: p.comentario || "" }));
       const res = await fetch("/api/refine-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           context: context + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la idoneidad técnica del contexto. Endurece tu criterio: el texto debe dar directrices claras para el procesamiento. Si es claro, score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE genera 3 sugerencias de refinamiento técnico usando estos Power-Ups según aplique: 1. IMAGEN/PDF: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 2. AUDIO: "Aplica Análisis de Diarización y Sentimiento". 3. GEOESPACIAL: "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 4. TEXTO: "Activa Extracción de Entidades Salientes". 5. HISTÓRICO: "Búsqueda Semántica en Discovery Engine". Explica por qué usar el término mejora la extracción. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO uses markdown.)`,
+          originalHumanText: context,
           photos: minimalPhotos,
           mode: "suggest",
+          projectId,
+          geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
           geometryType: project?.geometryType || "individual",
           projectDescription: project?.descripcion || "",
         }),
@@ -1337,6 +1340,8 @@ const hasMinimumPhotos =
       const photosContext = selectedPhotos.map(p => `[${p.tipo}] ${p.comentario}`).join(" | ");
       const instructionPhotos = `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA evaluando la evidencia de campo. Endurece tu criterio: busca indicaciones técnicas. Si el comentario describe bien el entorno y qué buscar, otorga score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE incluye en tus 'suggestions' 3 recomendaciones técnicas usando estos Power-Ups: 1. IMÁGENES: Sugiere "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 2. GEOESPACIAL: Sugiere "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 3. TEXTO: Sugiere "Activa Extracción de Entidades Salientes". Explica por qué esto afina a la IA. DEVUELVE UN JSON VÁLIDO con 'score' y 'suggestions'.)`;
       const minimalPhotos = selectedPhotos.map((p) => ({
+        id: p.id,
+        evidenceId: p.evidenceId || p.id,
         lat: p.lat,
         lng: p.lng,
         tipo: p.tipo || "",
@@ -1345,7 +1350,7 @@ const hasMinimumPhotos =
       const res = await fetch("/api/refine-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: photosContext + instructionPhotos, photos: minimalPhotos, mode: "validate-photos", geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
+        body: JSON.stringify({ context: photosContext + instructionPhotos, originalHumanText: photosContext, photos: minimalPhotos, mode: "validate-photos", projectId, geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null, geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
       });
       const textRes = await res.text();
       let data;
@@ -1784,8 +1789,11 @@ const hasMinimumPhotos =
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               context: "Resume el siguiente dictamen en un solo párrafo de máximo 40 palabras para usarlo en la carátula oficial. Dictamen:\n" + finalMarkdown.substring(0, 2000) + "\n\n(INSTRUCCIÓN: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con el resumen). NO agregues markdown ni comillas invertidas.)",
+              originalHumanText: finalMarkdown.substring(0, 2000),
               photos: [],
               mode: "suggest",
+              projectId,
+              geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
               geometryType: project?.geometryType || "individual",
               projectDescription: project?.descripcion || "",
             })
@@ -3273,6 +3281,8 @@ const hasMinimumPhotos =
                         }
                       }
                       const minimalPhotos = selected.map((p) => ({
+                        id: p.id,
+                        evidenceId: p.evidenceId || p.id,
                         lat: p.lat,
                         lng: p.lng,
                         tipo: p.tipo || "",
@@ -3294,8 +3304,11 @@ const hasMinimumPhotos =
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           context: fullContext,
+                          originalHumanText: analysisContext,
                           photos: minimalPhotos,
                           mode: "hypothesis-qa",
+                          projectId,
+                          geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
                           geometryType: project?.geometryType || "individual",
                           projectDescription: project?.descripcion || "",
                           analysisRadius,
@@ -4513,6 +4526,8 @@ const hasMinimumPhotos =
                       const selected = album.filter((p) => selectedIds.includes(p.id));
                       const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
                       const minimalPhotos = photosToUse.map((p) => ({
+                        id: p.id,
+                        evidenceId: p.evidenceId || p.id,
                         lat: p.lat,
                         lng: p.lng,
                         tipo: p.tipo || "",
@@ -4523,8 +4538,11 @@ const hasMinimumPhotos =
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           context: docContext + `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA. Evalúa la idoneidad técnica del documento. Endurece tu criterio: exige que el usuario guíe a las APIs. Si es claro, score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE genera 3 sugerencias de refinamiento técnico usando estos Power-Ups según el tipo de archivo: 1. AUDIO/VIDEO: "Aplica Análisis de Diarización y Sentimiento". 2. IMAGEN/PDF: "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 3. GEOESPACIAL: "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 4. TEXTO: "Activa Extracción de Entidades Salientes". 5. HISTÓRICO: "Búsqueda Semántica en Discovery Engine". Explica por qué esto mejora el análisis. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número) y 'suggestions' (string). NO agregues markdown.)`,
+                          originalHumanText: docContext,
                           photos: minimalPhotos,
                           mode: "suggest",
+                          projectId,
+                          geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
                           geometryType: project?.geometryType || "individual",
                           projectDescription: project?.descripcion || "",
                         }),
@@ -4629,6 +4647,8 @@ const hasMinimumPhotos =
                           const selected = album.filter((p) => selectedIds.includes(p.id));
                           const photosToUse = selected.length > 0 ? selected : album.filter(p => p.lat != null && p.lng != null);
                           const minimalPhotos = photosToUse.map((p) => ({
+                            id: p.id,
+                            evidenceId: p.evidenceId || p.id,
                             lat: p.lat,
                             lng: p.lng,
                             tipo: p.tipo || "",
@@ -4639,8 +4659,11 @@ const hasMinimumPhotos =
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ 
                               context: docSuggestions + `\n\n(INSTRUCCIÓN DEL SISTEMA: Evalúa la pertinencia técnica. Endurece el criterio. Score >= 80 si tiene sentido técnico. OBLIGATORIO: Asegura incluir 3 sugerencias usando Power-Ups como 'OCR Avanzado', 'Diarización', 'Extracción de Entidades' o 'Búsqueda Semántica'. DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con 'score' y 'suggestions'. NO agregues markdown.)`, 
+                              originalHumanText: docSuggestions,
                               photos: minimalPhotos,
                               mode: "audit",
+                              projectId,
+                              geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
                               geometryType: project?.geometryType || "individual",
                               projectDescription: project?.descripcion || "",
                             }),

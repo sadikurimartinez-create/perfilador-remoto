@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { proposeIntelligencePlan, IntelligencePlan } from "../utils/moiOrchestrator";
 import { runUnifiedCifaScan } from "../utils/cifaEngine";
 import { getAuthorizedSources, ImfoSource } from "../utils/imfoService";
-import { useProject } from "@/context/ProjectContext";
 import { DynamicPopup } from "./DynamicPopup";
 
 interface Props {
@@ -43,7 +42,6 @@ export const CifaCeipolPanel: React.FC<Props> = ({
   onAppendToAnalysis,
   onUpdateMapResults
 }) => {
-  const { registerSweep } = useProject();
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<IntelligencePlan | null>(null);
   const [results, setResults] = useState<any | null>(null);
@@ -123,21 +121,11 @@ export const CifaCeipolPanel: React.FC<Props> = ({
 
   const handleAppendHypothesis = async () => {
     if (!cifaDataConfirm) return;
-    const text = `[HIPÓTESIS DE INTELIGENCIA FUSIÓN CIFA-CEIPOL v3.0]\nTipo de Investigación: ${editableInvestigationType}\nPrioridad: ${editablePriority}\n\n${cifaDataConfirm}\n\n* Origen y Trazabilidad: Correlacionado automáticamente de ${selectedSources.length} fuentes OSINT autorizadas.`;
-    try {
-      await registerSweep({
-        engine: "Fusión CIFA-CEIPOL v3.0",
-        source: "OSINT",
-        type: "Directa",
-        relevance: "Alto",
-        data: text,
-        createVisualEvidence: false
-      });
-      setCifaDataConfirm(null);
-      setToast({ type: "success", message: "✓ Hipótesis OSINT guardada correctamente en el expediente" });
-    } catch (err: any) {
-      setToast({ type: "error", message: "❌ Error al registrar el barrido: " + err.message });
-    }
+    setCifaDataConfirm(null);
+    setToast({
+      type: "warning",
+      message: "CIFA opera como diagnóstico legacy simulado; no se persiste en el expediente ni alimenta el informe institucional.",
+    });
   };
 
   const getPriorityColor = (lvl: string) => {
@@ -163,7 +151,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
           subtitle="Fusión operativa, orquestación de motores y análisis de correlación multifuente"
           className="border-none pb-0"
           actions={
-            <CEIPOLBadge status="processing">Orquestador v3.0</CEIPOLBadge>
+            <CEIPOLBadge status="warning">SIMULADO / NO INSTITUCIONAL</CEIPOLBadge>
           }
         />
 
@@ -248,7 +236,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-800">
                     <div>
                       <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">Fuentes de Inteligencia Activas ({selectedSources.length}/{Object.keys(SOURCE_PLATFORM_LABELS).length})</h4>
-                      <p className="text-[10px] text-slate-400">Seleccione las plataformas y motores que participarán en el barrido táctico</p>
+                      <p className="text-[10px] text-slate-400">Seleccione motores de diagnóstico legacy. Sus resultados son simulados/no institucionales.</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 text-[10px]">
                       <button
@@ -599,8 +587,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         </div>
 
         <div className="flex justify-between items-center text-[10px] text-slate-400 mb-4 border-t border-slate-850 pt-2 font-sans">
-          <span>Fuentes: {selectedSources.length} OSINT</span>
-          <span className="text-cyan-400 font-bold uppercase tracking-wider">CEIPOL FUSIÓN v3.0</span>
+          <span>Fuentes: {selectedSources.length} OSINT simuladas</span>
+          <span className="text-amber-400 font-bold uppercase tracking-wider">LEGACY DIAGNÓSTICO</span>
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
@@ -616,7 +604,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             onClick={handleAppendHypothesis}
             className="px-4 py-2 text-xs font-bold shadow-md"
           >
-            Confirmar y Persistir
+            Mantener Diagnóstico
           </CEIPOLButton>
         </div>
       </DynamicPopup>

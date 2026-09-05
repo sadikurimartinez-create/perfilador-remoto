@@ -8,6 +8,20 @@ const GCP_LOCATION = process.env.GCP_LOCATION || "us-central1";
 const GCP_CLIENT_EMAIL = process.env.GCP_CLIENT_EMAIL || "";
 const GCP_PRIVATE_KEY = process.env.GCP_PRIVATE_KEY ? process.env.GCP_PRIVATE_KEY.replace(/\\n/g, '\n') : "";
 
+export const ADVANCED_FUSION_LEGACY_DIAGNOSTIC_METADATA = {
+  acquisitionMode: "LEGACY",
+  acquisitionStatus: "ACQUIRED",
+  semanticRole: "DIAGNOSTIC",
+  validationStatus: "PENDING_REVIEW",
+  isSimulated: false,
+  isDerived: true,
+  providerId: "ADVANCED_FUSION_LEGACY",
+  sourceId: "advancedFusion",
+  sourceType: "EXPERIMENTAL_AI_GROUNDING",
+  sourceReference: "src/utils/advancedFusion.ts",
+  lineage: [],
+};
+
 /**
  * FASE 1 & 4: Fusión Sensorial Multimodal y Automatización de Inteligencia (Grounding)
  * Utiliza gemini-1.5-pro para analizar la consistencia e inyecta Google Search en tiempo real.
@@ -51,7 +65,16 @@ ESTRUCTURA JSON REQUERIDA: { "discrepancia_detectada": boolean, "reporte_ia": "A
   });
 
   const rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-  return JSON.parse(rawText.replace(/```json/g, "").replace(/```/g, "").trim());
+  const parsed = JSON.parse(rawText.replace(/```json/g, "").replace(/```/g, "").trim());
+  return {
+    ...parsed,
+    institutionalUse: "BLOCKED_LEGACY_DIAGNOSTIC_NO_LINEAGE",
+    epistemicIntegrity: {
+      ...ADVANCED_FUSION_LEGACY_DIAGNOSTIC_METADATA,
+      providerName: "Advanced Fusion Gemini Grounding Legacy",
+      generatedAt: new Date().toISOString(),
+    },
+  };
 };
 
 /**
@@ -105,6 +128,13 @@ export const ingestAdvancedIntelligence = async (reportId: string, imageBase64: 
   
   return {
     status: "success",
+    institutionalUse: "BLOCKED_LEGACY_DIAGNOSTIC_NO_LINEAGE",
+    epistemicIntegrity: {
+      ...ADVANCED_FUSION_LEGACY_DIAGNOSTIC_METADATA,
+      providerName: "Advanced Fusion Ingest Legacy",
+      generatedAt: new Date().toISOString(),
+      resultCount: 1,
+    },
     vectorDimensions: vectorArray.length,
     intelligence: fusionData
   };

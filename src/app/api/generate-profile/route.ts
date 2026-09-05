@@ -30,6 +30,11 @@ import { IntelligenceContextBuilder } from "@/utils/intelligenceIntegrationContr
 import { ReportContextAdapter } from "@/utils/intelligenceIntegrationContract/reportContextAdapter";
 import { filterInstitutionalAnalysisEligibleIntelligence } from "@/utils/syntheticIntelligenceFirewall";
 import { canonicalizeDenuePoisForInstitutionalAnalysis, extractDenueRawPois } from "@/utils/denueCanonicalPoi";
+import {
+  GENERATE_PROFILE_PROMPT_VERSION,
+  createGenerateProfileAiAnalyticalOutput,
+  type AiAnalyticalOutputType
+} from "@/utils/aiAnalysisGovernance";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -96,6 +101,133 @@ function simplifyGangReport(gangData: any): any {
     return simplified;
   }
   return JSON.stringify(gangData).slice(0, 1500);
+}
+
+function stableTextId(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function collectIdsByKeys(value: unknown, keys: string[], limit = 80): string[] {
+  const keySet = new Set(keys.map((key) => key.toLowerCase()));
+  const ids: string[] = [];
+  const seen = new Set<unknown>();
+  const stack: unknown[] = [value];
+
+  while (stack.length > 0 && ids.length < limit) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        const id = stableTextId(item);
+        if (id && !ids.includes(id)) ids.push(id);
+        if (item && typeof item === "object") stack.push(item);
+      }
+      continue;
+    }
+
+    for (const [key, raw] of Object.entries(current as Record<string, unknown>)) {
+      if (keySet.has(key.toLowerCase())) {
+        const id = stableTextId(raw);
+        if (id && !ids.includes(id)) ids.push(id);
+      }
+      if (raw && typeof raw === "object") stack.push(raw);
+    }
+  }
+
+  return ids;
+}
+
+function resolveProfileGeographyId(safeBody: any, iic: any): string | null {
+  return stableTextId(safeBody.geographyId) ||
+    stableTextId(safeBody.canonicalGeography?.geographyId) ||
+    stableTextId(safeBody.canonicalGeography?.canonicalGeographyId) ||
+    stableTextId(safeBody.canonicalGeography?.id) ||
+    stableTextId(iic?.geographyId) ||
+    stableTextId(iic?.canonicalGeography?.geographyId) ||
+    stableTextId(iic?.canonicalGeography?.id);
+}
+
+function outputTypeForChapter(chapter: number): AiAnalyticalOutputType {
+  if (chapter === 1) return "SUMMARY";
+  if (chapter >= 11) return "CONCLUSION_SUGGESTION";
+  return "ANALYSIS";
+}
+
+function buildGenerateProfileOutputTrace(input: {
+  projectId: string;
+  chapter: number;
+  chapterLabel: string;
+  provider: string | null;
+  model: string;
+  prompt: string;
+  safeBody: any;
+  iic: any;
+  visualEvidenceMatrix: any;
+  territorialEvidenceMatrix: any;
+  aceReport: any;
+  cieData: any;
+  generationError?: string | null;
+}) {
+  const promptId = `generate-profile:chapter-${input.chapter}`;
+  const geographyId = resolveProfileGeographyId(input.safeBody, input.iic);
+  const evidenceIds = [
+    ...collectIdsByKeys(input.safeBody.evidenceIds, ["id", "evidenceId"]),
+    ...collectIdsByKeys(input.safeBody.photos, ["evidenceId", "sourceEvidenceId", "canonicalEvidenceId"]),
+    ...collectIdsByKeys(input.safeBody.streetViews, ["evidenceId", "sourceEvidenceId", "canonicalEvidenceId"]),
+    ...collectIdsByKeys(input.visualEvidenceMatrix, ["evidenceId", "sourceEvidenceId", "canonicalEvidenceId"]),
+  ];
+  const findingIds = [
+    ...collectIdsByKeys(input.safeBody.findingIds, ["id", "findingId"]),
+    ...collectIdsByKeys(input.safeBody.streetViews, ["findingId", "sourceFindingId", "canonicalFindingId"]),
+    ...collectIdsByKeys(input.visualEvidenceMatrix, ["findingId", "sourceFindingId", "canonicalFindingId"]),
+    ...collectIdsByKeys(input.territorialEvidenceMatrix, ["findingId", "sourceFindingId", "canonicalFindingId"]),
+    ...collectIdsByKeys(input.aceReport, ["findingId", "sourceFindingId", "canonicalFindingId"]),
+  ];
+  const inferenceIds = [
+    ...collectIdsByKeys(input.safeBody.inferenceIds, ["id", "inferenceId"]),
+    ...collectIdsByKeys(input.cieData, ["inferenceId", "sourceInferenceId", "canonicalInferenceId"]),
+    ...collectIdsByKeys(input.aceReport, ["inferenceId", "sourceInferenceId", "canonicalInferenceId"]),
+  ];
+  const inputIds = [
+    input.projectId ? `project:${input.projectId}` : null,
+    `chapter:${input.chapter}`,
+    promptId,
+    geographyId ? `geography:${geographyId}` : null,
+    stableTextId(input.safeBody.canonicalHypothesis?.hypothesisId),
+    stableTextId(input.safeBody.canonicalHypothesis?.id),
+    ...collectIdsByKeys(input.safeBody.inputIds, ["id", "inputId"]),
+    ...collectIdsByKeys(input.iic, ["contextId", "iicId", "integrationContextId"]),
+  ];
+  const limitations = [
+    !geographyId ? "GEOGRAPHY_ID_UNAVAILABLE" : null,
+    evidenceIds.length === 0 ? "EVIDENCE_IDS_UNAVAILABLE" : null,
+    findingIds.length === 0 ? "FINDING_IDS_UNAVAILABLE" : null,
+    input.generationError ? `GENERATION_ERROR:${input.generationError.slice(0, 180)}` : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return createGenerateProfileAiAnalyticalOutput({
+    outputType: outputTypeForChapter(input.chapter),
+    provider: input.provider,
+    model: input.model,
+    prompt: input.prompt,
+    promptId,
+    promptVersion: GENERATE_PROFILE_PROMPT_VERSION,
+    inputIds,
+    sourceReferences: [
+      "src/app/api/generate-profile/route.ts",
+      promptId,
+      input.chapterLabel,
+    ],
+    evidenceIds,
+    findingIds,
+    inferenceIds,
+    geographyId,
+    limitations,
+  });
 }
 
 async function callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
@@ -607,6 +739,8 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         }, 3000);
 
         let accumulatedText = "";
+        let generationProvider: string | null = streamingResp ? "VertexAI" : null;
+        let generationError: string | null = null;
 
         try {
           if (streamingResp) {
@@ -647,6 +781,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             if (!apiKey) {
               throw new Error("No se configuró la variable GEMINI_API_KEY ni credenciales válidas de Vertex AI.");
             }
+            generationProvider = "GeminiREST";
             console.log("[api/generate-profile] Calling Gemini REST API with Streaming Fallback...");
             let isFirstChunk = true;
             let totalLength = 0;
@@ -661,6 +796,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
                 isFirstChunk = false;
               }
               totalLength += cleanedChunk.length;
+              accumulatedText += cleanedChunk;
               const escapedChunk = JSON.stringify(cleanedChunk).slice(1, -1);
               controller.enqueue(encoder.encode(escapedChunk));
             });
@@ -677,12 +813,30 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             .replace(/\"/g, '\\"')
             .replace(/\n/g, "\\n")
             .replace(/\r/g, "\\r");
+          generationError = e.message || "Error desconocido";
           const errorMsg = "\\n\\n[Error de generación: " + escapedErr + "]";
+          accumulatedText += "\n\n[Error de generación: " + (e.message || "Error desconocido") + "]";
           controller.enqueue(encoder.encode(errorMsg));
         } finally {
           clearInterval(keepAlive);
-          // Cerrar el string del markdown y el JSON
-          controller.enqueue(encoder.encode('"}'));
+          const aiAnalyticalOutput = buildGenerateProfileOutputTrace({
+            projectId,
+            chapter,
+            chapterLabel: currentChapterLabel,
+            provider: generationProvider,
+            model: GEMINI_MODEL,
+            prompt: systemPrompt,
+            safeBody,
+            iic,
+            visualEvidenceMatrix,
+            territorialEvidenceMatrix,
+            aceReport,
+            cieData,
+            generationError,
+          });
+          const outputTrace = JSON.stringify(aiAnalyticalOutput);
+          // Cerrar el string del markdown y adjuntar trazabilidad institucional de la salida IA.
+          controller.enqueue(encoder.encode(`","aiAnalyticalOutput":${outputTrace}}`));
           controller.close();
         }
       }

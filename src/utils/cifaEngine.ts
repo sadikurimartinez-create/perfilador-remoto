@@ -29,6 +29,65 @@ import { logLearningAction, autoDiscoverSource } from './imfoService';
 import { getRegionalRSSFeeds } from '@/lib/osintSources';
 import { validateGeoIntegrity } from './geoIntegrityEngine';
 
+const CIFA_LEGACY_DIAGNOSTIC_METADATA = {
+  acquisitionMode: "MOCK",
+  acquisitionStatus: "ACQUIRED",
+  semanticRole: "DIAGNOSTIC",
+  validationStatus: "PENDING_REVIEW",
+  isSimulated: true,
+  providerId: "CIFA_LEGACY_DIAGNOSTIC",
+  sourceId: "cifa-legacy-mock",
+  sourceType: "LEGACY_MOCK_DIAGNOSTIC",
+  sourceReference: "src/utils/cifaEngine.ts",
+  geolocationSource: "SIMULATED_INPUT_COORDINATES",
+};
+
+function markCifaMockItem<T extends Record<string, any>>(item: T, sourceId: string, providerId: string, sourceName: string): T {
+  return {
+    ...item,
+    acquisitionMode: "MOCK",
+    semanticRole: "DIAGNOSTIC",
+    isSimulated: true,
+    providerId,
+    sourceId,
+    validationStatus: "PENDING_REVIEW",
+    sourceName,
+    epistemicIntegrity: {
+      ...CIFA_LEGACY_DIAGNOSTIC_METADATA,
+      providerId,
+      sourceId,
+      providerName: sourceName,
+      generatedAt: new Date().toISOString(),
+      query: null,
+      resultCount: 1,
+    },
+  };
+}
+
+function markCifaMockOutput(output: any, sourceId: string, providerId: string, sourceName: string): any {
+  if (Array.isArray(output)) {
+    return output.map((item) =>
+      item && typeof item === "object"
+        ? markCifaMockItem(item, sourceId, providerId, sourceName)
+        : item
+    );
+  }
+  if (output && typeof output === "object") {
+    const marked: any = markCifaMockItem(output, sourceId, providerId, sourceName);
+    for (const [key, value] of Object.entries(output)) {
+      if (Array.isArray(value)) {
+        marked[key] = value.map((item) =>
+          item && typeof item === "object"
+            ? markCifaMockItem(item, sourceId, providerId, sourceName)
+            : item
+        );
+      }
+    }
+    return marked;
+  }
+  return output;
+}
+
 // Fast parser for RSS feeds from the server (similar to Next.js route)
 async function fetchRssFeedData(url: string, name: string): Promise<any[]> {
   try {
@@ -185,8 +244,9 @@ export const runUnifiedCifaScan = async (
 
   const executeWithLearning = async (sourceId: string, sourceName: string, searchFunc: () => Promise<any>, mockGenerator: () => any) => {
     const sTime = Date.now();
-    console.log(`[CIFA Engine] Fast-mocking source: ${sourceName}`);
-    const res = mockGenerator();
+    console.log(`[CIFA Engine] LEGACY DIAGNOSTIC MOCK source: ${sourceName}`);
+    const providerId = `CIFA_MOCK_${sourceName.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+    const res = markCifaMockOutput(mockGenerator(), sourceId, providerId, sourceName);
     const duration = Date.now() - sTime;
     const count = Array.isArray(res) ? res.length : res?.resultadosWeb ? res.resultadosWeb.length : res ? 1 : 0;
     try {
@@ -420,6 +480,16 @@ export const runUnifiedCifaScan = async (
 
   return {
     success: true,
+    institutionalUse: "BLOCKED_LEGACY_MOCK_DIAGNOSTIC",
+    epistemicIntegrity: {
+      ...CIFA_LEGACY_DIAGNOSTIC_METADATA,
+      providerId: "CIFA_LEGACY_DIAGNOSTIC",
+      sourceId: "runUnifiedCifaScan",
+      providerName: "CIFA-CEIPOL Legacy Diagnostic Mock",
+      generatedAt: new Date().toISOString(),
+      query,
+      resultCount: totalPublications + totalDocuments + totalVideos + totalImages,
+    },
     correlation: correlationResult,
     coveragePanel,
     recommendations,

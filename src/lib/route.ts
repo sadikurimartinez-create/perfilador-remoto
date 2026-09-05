@@ -6,6 +6,19 @@ import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { getRegionalRSSFeeds } from "@/lib/osintSources";
 
+export const LEGACY_OSINT_ROUTE_METADATA = {
+  acquisitionMode: "LEGACY",
+  acquisitionStatus: "ACQUIRED",
+  semanticRole: "DIAGNOSTIC",
+  validationStatus: "PENDING_REVIEW",
+  isDerived: true,
+  providerId: "LEGACY_OSINT_ROUTE",
+  sourceId: "src-lib-route",
+  sourceType: "EXPERIMENTAL_OSINT_AI_CORRELATION",
+  sourceReference: "src/lib/route.ts",
+  lineage: [],
+};
+
 // Función ultra-rápida para extraer títulos y descripciones de un XML crudo sin librerías pesadas
 function parseRawRss(xmlText: string, sourceName: string, maxItems = 15) {
   const items = [...xmlText.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
@@ -16,7 +29,20 @@ function parseRawRss(xmlText: string, sourceName: string, maxItems = 15) {
     return {
       source: sourceName,
       title: titleMatch ? titleMatch[1].trim() : "Sin título",
-      description: descMatch ? descMatch[1].replace(/(<([^>]+)>)/gi, "").trim().substring(0, 300) : "Sin descripción"
+      description: descMatch ? descMatch[1].replace(/(<([^>]+)>)/gi, "").trim().substring(0, 300) : "Sin descripción",
+      acquisitionMode: "LEGACY",
+      semanticRole: "DIAGNOSTIC",
+      validationStatus: "PENDING_REVIEW",
+      providerId: "LEGACY_OSINT_ROUTE_RSS",
+      sourceId: sourceName,
+      epistemicIntegrity: {
+        ...LEGACY_OSINT_ROUTE_METADATA,
+        providerId: "LEGACY_OSINT_ROUTE_RSS",
+        sourceId: sourceName,
+        providerName: sourceName,
+        sourceType: "RSS_LEGACY_ROUTE_ITEM",
+        generatedAt: new Date().toISOString(),
+      },
     };
   });
 }
@@ -104,10 +130,40 @@ DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN JSON VÁLIDO CON EL SIGUIENTE FORMATO:
     const rawResponse = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
     const parsedResponse = JSON.parse(rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim());
 
-    return NextResponse.json({ success: true, data: parsedResponse });
+    return NextResponse.json({
+      success: true,
+      institutionalUse: "BLOCKED_LEGACY_DIAGNOSTIC_NO_LINEAGE",
+      epistemicIntegrity: {
+        ...LEGACY_OSINT_ROUTE_METADATA,
+        providerName: "Legacy OSINT RSS Parser",
+        generatedAt: new Date().toISOString(),
+        resultCount: allNews.length,
+      },
+      data: {
+        ...parsedResponse,
+        institutionalUse: "BLOCKED_LEGACY_DIAGNOSTIC_NO_LINEAGE",
+        epistemicIntegrity: {
+          ...LEGACY_OSINT_ROUTE_METADATA,
+          providerName: "Legacy OSINT RSS Parser Gemini Output",
+          generatedAt: new Date().toISOString(),
+          resultCount: Array.isArray(parsedResponse?.eventosCriticos) ? parsedResponse.eventosCriticos.length : null,
+        },
+      },
+      rawNews: allNews,
+    });
 
   } catch (error: any) {
     console.error("[OSINT RSS Parser] Error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      error: error.message,
+      institutionalUse: "BLOCKED_LEGACY_DIAGNOSTIC_NO_LINEAGE",
+      epistemicIntegrity: {
+        ...LEGACY_OSINT_ROUTE_METADATA,
+        acquisitionStatus: "FAILED",
+        providerName: "Legacy OSINT RSS Parser",
+        generatedAt: new Date().toISOString(),
+      },
+    }, { status: 500 });
   }
 }
