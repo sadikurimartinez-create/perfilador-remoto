@@ -26,8 +26,22 @@ export class AttractorAnalyzer {
     const validatedAttractors: EconomicAttractor[] = [];
 
     rawAttractors.forEach((item, idx) => {
-      const itemLat = item.lat || item.latitude || 0;
-      const itemLng = item.lng || item.longitude || 0;
+      const rawLat = item?.lat ?? item?.latitude ?? item?.coordinates?.lat;
+      const rawLng = item?.lng ?? item?.longitude ?? item?.coordinates?.lng;
+      const itemLat = typeof rawLat === "number" ? rawLat : Number(rawLat);
+      const itemLng = typeof rawLng === "number" ? rawLng : Number(rawLng);
+
+      if (
+        !Number.isFinite(itemLat) ||
+        !Number.isFinite(itemLng) ||
+        itemLat < -90 ||
+        itemLat > 90 ||
+        itemLng < -180 ||
+        itemLng > 180 ||
+        (itemLat === 0 && itemLng === 0)
+      ) {
+        return;
+      }
 
       // 1. Filtrado de radio métrico riguroso (Test 1 y Test 2)
       const distToCenter = this.getDistanceMeters(centerLat, centerLng, itemLat, itemLng);
@@ -63,6 +77,24 @@ export class AttractorAnalyzer {
         address: item.address || item.direccion || "Domicilio no especificado",
         lat: itemLat,
         lng: itemLng,
+        coordinates: item.coordinates || { lat: itemLat, lng: itemLng },
+        sourceEvidenceId: item.sourceEvidenceId,
+        traceabilityId: item.traceabilityId,
+        expedienteId: item.expedienteId,
+        geographyId: item.geographyId,
+        geographyType: item.geographyType,
+        source: item.source,
+        provider: item.provider,
+        epistemicIntegrity: item.epistemicIntegrity,
+        observedAt: item.observedAt,
+        acquiredAt: item.acquiredAt,
+        rawSourceReference: item.rawSourceReference,
+        sourceReference: item.sourceReference,
+        territorialStatus: item.territorialStatus,
+        publicationRole: item.publicationRole,
+        semanticRole: item.semanticRole,
+        evidenceDomain: item.evidenceDomain,
+        isCriminalEvidence: item.isCriminalEvidence === false ? false : undefined,
         distanceToHotspotMeters: parseFloat(minDistanceToHotspot.toFixed(1)),
         situationalInfluenceLevel,
         criminologicalRole: role

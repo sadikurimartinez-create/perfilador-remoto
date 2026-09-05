@@ -1651,6 +1651,7 @@ const hasMinimumPhotos =
                   multimodalContext,
                   // ADR-020.34: preserve missing geography type as UNKNOWN.
                   geometryType: project?.geometryType || null,
+                  canonicalGeography: project?.canonicalGeography || null,
                   projectDescription: project?.descripcion || "",
                   osintEngineData: automaticOsintData,
                   streetViews: svData,

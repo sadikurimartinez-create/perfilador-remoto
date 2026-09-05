@@ -1,6 +1,8 @@
 import {
   classifyLegacyCompatibility,
   evaluateIntelligenceEligibility,
+  filterInstitutionalAnalysisEligibleIntelligence,
+  isReportEligibleIntelligence,
 } from "../src/utils/syntheticIntelligenceFirewall";
 import { isReportEngineEvidenceEligible } from "../src/lib/reportEngine";
 import { runOSINTScan } from "../src/utils/osintEngine";
@@ -220,5 +222,115 @@ describe("ADR-020.17 FASE 1: Synthetic Intelligence Firewall", () => {
 
     expect(mockWithLegacyApproved).toBe(false);
     expect(simulatedWithLegacyApproved).toBe(false);
+  });
+
+  test("ADR-023.6 TEST-01 item MOCK de runOSINTScan no es elegible para aprobacion", async () => {
+    const result = await runOSINTScan({ locationName: "Aguascalientes" });
+    const mockItem = result.serp[0];
+    const eligibility = evaluateIntelligenceEligibility(mockItem);
+
+    expect(mockItem.epistemicIntegrity.acquisitionMode).toBe("MOCK");
+    expect(mockItem.epistemicIntegrity.semanticRole).toBe("DIAGNOSTIC");
+    expect(mockItem.epistemicIntegrity.isSimulated).toBe(true);
+    expect(eligibility.eligibleForApproval).toBe(false);
+  });
+
+  test("ADR-023.6 TEST-02 item MOCK de runOSINTScan no es elegible para reporte", async () => {
+    const result = await runOSINTScan({ locationName: "Aguascalientes" });
+    const mockItems = [
+      ...result.serp,
+      ...result.news,
+      ...result.denue,
+      ...result.googlePlaces,
+      result.webOSINT,
+      result.streetViewAnalysis,
+    ];
+
+    expect(mockItems.every((item) => item.epistemicIntegrity?.acquisitionMode === "MOCK")).toBe(true);
+    expect(mockItems.every((item) => isReportEligibleIntelligence(item) === false)).toBe(true);
+  });
+
+  test("ADR-023.6 TEST-03 SCINCE simulado no es elegible para reporte", async () => {
+    const { getScinceData } = await import("../src/lib/osintActions");
+    const result = await getScinceData(21.8818, -102.2916);
+    const eligibility = evaluateIntelligenceEligibility(result);
+
+    expect(result.epistemicIntegrity.acquisitionMode).toBe("SIMULATED");
+    expect(result.epistemicIntegrity.semanticRole).toBe("DIAGNOSTIC");
+    expect(result.epistemicIntegrity.isSimulated).toBe(true);
+    expect(eligibility.eligibleForReport).toBe(false);
+  });
+
+  test("ADR-023.6 TEST-04 CONNECTIVITY_ONLY no es elegible para reporte", () => {
+    const result = evaluateIntelligenceEligibility({
+      epistemicIntegrity: {
+        acquisitionMode: "CONNECTIVITY_ONLY",
+        acquisitionStatus: "ACQUIRED",
+        validationStatus: "APPROVED",
+        semanticRole: "DIAGNOSTIC",
+        isConnectivityOnly: true,
+      },
+    });
+
+    expect(result.eligibleForReport).toBe(false);
+    expect(result.blockingReasons).toContain("CONNECTIVITY_ONLY_NOT_REPORTABLE");
+  });
+
+  test("ADR-023.6 TEST-05 OBSERVED + APPROVED real no queda bloqueado", () => {
+    const realObserved = {
+      epistemicIntegrity: {
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: "ACQUIRED",
+        validationStatus: "APPROVED",
+        semanticRole: "SOURCE_FACT",
+        isSimulated: false,
+        sourceReference: "CEIPOL_FIELD",
+        traceabilityId: "trace-real-observed-0236",
+      },
+    };
+
+    const eligibility = evaluateIntelligenceEligibility(realObserved);
+
+    expect(eligibility.eligibleForApproval).toBe(true);
+    expect(eligibility.eligibleForReport).toBe(true);
+    expect(filterInstitutionalAnalysisEligibleIntelligence([realObserved])).toHaveLength(1);
+  });
+
+  test("ADR-023.6 TEST-06 consumidor institucional rechaza items MOCK y SIMULATED", async () => {
+    const osint = await runOSINTScan({ locationName: "Aguascalientes" });
+    const { getScinceData } = await import("../src/lib/osintActions");
+    const scince = await getScinceData(21.8818, -102.2916);
+    const realObserved = {
+      name: "Atractor real observado",
+      epistemicIntegrity: {
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: "ACQUIRED",
+        validationStatus: "APPROVED",
+        semanticRole: "SOURCE_FACT",
+        isSimulated: false,
+        sourceReference: "INEGI_DENUE",
+        traceabilityId: "trace-denue-real-0236",
+      },
+    };
+
+    const accepted = filterInstitutionalAnalysisEligibleIntelligence([
+      osint.denue[0],
+      scince,
+      realObserved,
+    ]);
+
+    expect(accepted).toEqual([realObserved]);
+  });
+
+  test("ADR-023.6 TEST-07 consumidor contextual conserva items MOCK/SIMULATED etiquetados", async () => {
+    const osint = await runOSINTScan({ locationName: "Aguascalientes" });
+    const { getScinceData } = await import("../src/lib/osintActions");
+    const scince = await getScinceData(21.8818, -102.2916);
+    const contextualItems = [osint.denue[0], scince];
+
+    expect(contextualItems).toHaveLength(2);
+    expect(contextualItems[0].epistemicIntegrity.acquisitionMode).toBe("MOCK");
+    expect(contextualItems[1].epistemicIntegrity.acquisitionMode).toBe("SIMULATED");
+    expect(contextualItems.every((item) => evaluateIntelligenceEligibility(item).eligibleForReport === false)).toBe(true);
   });
 });

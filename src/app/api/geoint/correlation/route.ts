@@ -18,3 +18,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const moduleName = (body?.module || "perfil") as "pandillas" | "perfil";
+    const items = Array.isArray(body?.items) ? body.items : [];
+    const report = MultiSourceCorrelationEngine.correlateInstitutionalEvidence(moduleName, items);
+    return NextResponse.json(report);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

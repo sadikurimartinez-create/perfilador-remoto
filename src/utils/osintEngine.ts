@@ -43,26 +43,85 @@ export const runOSINTScan = async (project: any) => {
     lineage: [],
   };
 
+  const diagnosticItemIntegrity = (
+    sourceId: string,
+    sourceType: string,
+    rawSourceReference: string,
+    resultCount: number | null = 1
+  ): EpistemicIntegrityMetadata => ({
+    ...syntheticEpistemicIntegrity,
+    sourceId,
+    sourceType,
+    sourceReference: "src/utils/osintEngine.ts:runOSINTScan",
+    rawSourceReference,
+    resultCount,
+  });
+
+  const tagDiagnosticItem = <T extends Record<string, any>>(
+    item: T,
+    sourceId: string,
+    sourceType: string,
+    rawSourceReference: string
+  ): T & { epistemicIntegrity: EpistemicIntegrityMetadata } => ({
+    ...item,
+    epistemicIntegrity: diagnosticItemIntegrity(sourceId, sourceType, rawSourceReference),
+  });
+
   console.log(`[Auto-OSINT] Instant OSINT scan for location: ${location} (coords: ${lat ?? "NO_GEO"}, ${lng ?? "NO_GEO"})`);
 
   // Fast, reliable, high-quality criminological data for Aguascalientes (CDS, CJNG, La Oficina)
   const mockSerp = [
-    { title: "Incidencia Delictiva y Homicidios en Aguascalientes", snippet: "Reportan detonaciones de arma de fuego en las inmediaciones de Pilar Blanco y Ojocaliente." },
-    { title: "Detenciones y Cateos de la FGE en Aguascalientes", snippet: "Aseguran vehículos y narcóticos durante cateo táctico en el sector oriente de la ciudad." }
+    tagDiagnosticItem(
+      { title: "Incidencia Delictiva y Homicidios en Aguascalientes", snippet: "Reportan detonaciones de arma de fuego en las inmediaciones de Pilar Blanco y Ojocaliente." },
+      "osint-engine-mock-serp-1",
+      "OSINT_SYNTHETIC_SERP_FIXTURE",
+      "mock:serp:incidencia-delictiva"
+    ),
+    tagDiagnosticItem(
+      { title: "Detenciones y Cateos de la FGE en Aguascalientes", snippet: "Aseguran vehículos y narcóticos durante cateo táctico en el sector oriente de la ciudad." },
+      "osint-engine-mock-serp-2",
+      "OSINT_SYNTHETIC_SERP_FIXTURE",
+      "mock:serp:detenciones-cateos"
+    )
   ];
 
   const mockNews = [
-    { title: "Operativo Conjunto de la SSPE y Guardia Nacional en Villas de Nuestra Señora", description: "Refuerzan patrullaje nocturno en nodos críticos tras reporte de robo de vehículos y asaltos peatonales." }
+    tagDiagnosticItem(
+      { title: "Operativo Conjunto de la SSPE y Guardia Nacional en Villas de Nuestra Señora", description: "Refuerzan patrullaje nocturno en nodos críticos tras reporte de robo de vehículos y asaltos peatonales." },
+      "osint-engine-mock-news-1",
+      "OSINT_SYNTHETIC_NEWS_FIXTURE",
+      "mock:news:operativo-conjunto"
+    )
   ];
 
   const mockDenue = [
-    { name: "Abarrotes y Vinos La Oficina", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
-    { name: "Taller Mecánico El Buda", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
-    { name: "Depósito de Cerveza Pilar Blanco", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity }
+    tagDiagnosticItem(
+      { name: "Abarrotes y Vinos La Oficina", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
+      "osint-engine-mock-denue-1",
+      "DENUE_SYNTHETIC_FIXTURE",
+      "mock:denue:abarrotes-vinos"
+    ),
+    tagDiagnosticItem(
+      { name: "Taller Mecánico El Buda", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
+      "osint-engine-mock-denue-2",
+      "DENUE_SYNTHETIC_FIXTURE",
+      "mock:denue:taller-mecanico"
+    ),
+    tagDiagnosticItem(
+      { name: "Depósito de Cerveza Pilar Blanco", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
+      "osint-engine-mock-denue-3",
+      "DENUE_SYNTHETIC_FIXTURE",
+      "mock:denue:deposito-cerveza"
+    )
   ];
 
   const mockGooglePlaces = [
-    { name: "Parque Recreativo Los Rodolfos", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity }
+    tagDiagnosticItem(
+      { name: "Parque Recreativo Los Rodolfos", lat: null, lng: null, geolocationIntegrity: syntheticPointIntegrity },
+      "osint-engine-mock-google-places-1",
+      "GOOGLE_PLACES_SYNTHETIC_FIXTURE",
+      "mock:google-places:parque-recreativo"
+    )
   ];
 
   const mockWebOSINT = {
@@ -74,12 +133,24 @@ export const runOSINTScan = async (project: any) => {
       antecedentesPoliciales: ["Robo calificado", "Narcomenudeo", "Portación de arma de fuego"],
       organizacionesVinculadas: ["Los Rodolfos / Clica Norte", "La Oficina"],
       perfilRiesgo: "Puntos críticos identificados como atractores de oportunidad delictiva por baja iluminación y rutas de escape hacia baldíos."
-    }
+    },
+    epistemicIntegrity: diagnosticItemIntegrity(
+      "osint-engine-mock-web-osint",
+      "OSINT_SYNTHETIC_WEB_FIXTURE",
+      "mock:web-osint:fixture",
+      1
+    ),
   };
 
   const mockStreetViewAnalysis = {
     analisis: "El análisis visual del entorno mediante imágenes de StreetView detectó grafitis de la banda 'Clica Norte' y acumulación de basura en los nodos de tránsito peatonal, lo que valida la Teoría de las Ventanas Rotas y una baja cohesión social en el radio de acción de 250 metros.",
-    imagenesBase64: []
+    imagenesBase64: [],
+    epistemicIntegrity: diagnosticItemIntegrity(
+      "osint-engine-mock-streetview-analysis",
+      "STREET_VIEW_SYNTHETIC_ANALYSIS_FIXTURE",
+      "mock:street-view-analysis:fixture",
+      1
+    ),
   };
 
   // Construcción del Mapa de Vínculos (Grafo Interactivo)

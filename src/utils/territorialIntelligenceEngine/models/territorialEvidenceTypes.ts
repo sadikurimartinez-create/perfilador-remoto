@@ -6,6 +6,24 @@ export interface EconomicAttractor {
   address: string;
   lat: number;
   lng: number;
+  coordinates?: { lat: number; lng: number };
+  sourceEvidenceId?: string;
+  traceabilityId?: string;
+  expedienteId?: string;
+  geographyId?: string;
+  geographyType?: string;
+  source?: string;
+  provider?: string;
+  epistemicIntegrity?: unknown;
+  observedAt?: string | null;
+  acquiredAt?: string | null;
+  rawSourceReference?: string;
+  sourceReference?: string;
+  territorialStatus?: string;
+  publicationRole?: "TERRITORIAL_CONTEXT";
+  semanticRole?: "SOURCE_FACT";
+  evidenceDomain?: "TERRITORIAL_CONTEXT";
+  isCriminalEvidence?: false;
   distanceToHotspotMeters: number;
   situationalInfluenceLevel: "HIGH" | "MEDIUM" | "LOW";
   criminologicalRole: string; // Exposición, concentración temporal, permanencia, movilidad

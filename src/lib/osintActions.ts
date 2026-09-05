@@ -3,6 +3,7 @@
 import { VertexAI } from "@google-cloud/vertexai";
 import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, EpistemicValidationStatus, IntelligenceSemanticRole } from "@/types/epistemicIntegrity";
+import { prepareDenueAcquisitionPois } from "@/utils/denueCanonicalPoi";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
 
 function osintEpistemicIntegrity(params: {
@@ -192,12 +193,16 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
         }),
       };
     }
+    const acquiredAt = new Date().toISOString();
+    const query = `${lat},${lng},${radio}`;
+    const pois = prepareDenueAcquisitionPois(data, { query, acquiredAt });
     const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
 
     return {
       exito: true,
       total: data.length,
+      pois,
       resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno.",
       epistemicIntegrity: osintEpistemicIntegrity({
         sourceId: "inegi-denue-api",
@@ -207,11 +212,11 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
         acquisitionMode: "OBSERVED",
         acquisitionStatus: data.length > 0 ? "ACQUIRED" : "NO_DATA",
         semanticRole: "SOURCE_FACT",
-        observedAt: new Date().toISOString(),
+        observedAt: acquiredAt,
         sourceReference: "src/lib/osintActions.ts:getDenueData",
         sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
         rawSourceReference: "denue:v1:consulta:Buscar:todos",
-        query: `${lat},${lng},${radio}`,
+        query,
         resultCount: data.length,
         geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
       }),

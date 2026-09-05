@@ -28,6 +28,8 @@ import { VisualEvidenceEngine } from "@/utils/visualEvidenceEngine";
 import { TerritorialIntelligenceEngine } from "@/utils/territorialIntelligenceEngine";
 import { IntelligenceContextBuilder } from "@/utils/intelligenceIntegrationContract/intelligenceContextBuilder";
 import { ReportContextAdapter } from "@/utils/intelligenceIntegrationContract/reportContextAdapter";
+import { filterInstitutionalAnalysisEligibleIntelligence } from "@/utils/syntheticIntelligenceFirewall";
+import { canonicalizeDenuePoisForInstitutionalAnalysis, extractDenueRawPois } from "@/utils/denueCanonicalPoi";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -363,11 +365,23 @@ export async function POST(req: Request) {
       lng !== null &&
       radius !== null
     ) {
-      const rawAttractors = safeBody.osintEngineData?.denue || safeBody.denueData || safeBody.attractors || [];
+      const rawAttractors =
+        extractDenueRawPois(safeBody.osintEngineData?.denue).length > 0
+          ? safeBody.osintEngineData?.denue
+          : extractDenueRawPois(safeBody.denueData).length > 0
+            ? safeBody.denueData
+            : safeBody.attractors || [];
+      const canonicalDenue = canonicalizeDenuePoisForInstitutionalAnalysis(rawAttractors, {
+        expedienteId: projectId,
+        canonicalGeography: safeBody.canonicalGeography ?? null,
+        radiusMeters: radius,
+        query: `${lat},${lng},${radius}`,
+      });
+      const institutionalAttractors = filterInstitutionalAnalysisEligibleIntelligence(canonicalDenue.institutionalPois);
       territorialEvidenceMatrix = TerritorialIntelligenceEngine.process(
         { id: projectId, nombre: projectName, lat, lng, radio: radius },
         tceData,
-        rawAttractors,
+        institutionalAttractors,
         safeBody.inegiData,
         safeBody.photos || [],
         sem.spatialEvidence?.hotspots || []

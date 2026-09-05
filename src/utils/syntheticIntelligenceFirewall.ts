@@ -270,3 +270,21 @@ export function evaluateIntelligenceEligibility(
 export function isReportEligibleIntelligence(item: EpistemicIntegrityCarrier | null | undefined): boolean {
   return evaluateIntelligenceEligibility(item).eligibleForReport;
 }
+
+export function isInstitutionalAnalysisEligibleIntelligence(
+  item: EpistemicIntegrityCarrier | null | undefined
+): boolean {
+  const eligibility = evaluateIntelligenceEligibility(item);
+  return !eligibility.blockingReasons.some((reason) =>
+    reason.startsWith("ACQUISITION_MODE_NOT_REPORTABLE:") ||
+    reason === "SIMULATED_CONTENT_NOT_REPORTABLE" ||
+    reason === "CONNECTIVITY_ONLY_NOT_REPORTABLE"
+  );
+}
+
+export function filterInstitutionalAnalysisEligibleIntelligence<T extends EpistemicIntegrityCarrier>(
+  items: T[] | null | undefined
+): T[] {
+  if (!Array.isArray(items)) return [];
+  return items.filter((item) => isInstitutionalAnalysisEligibleIntelligence(item));
+}
