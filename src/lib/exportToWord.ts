@@ -72,6 +72,13 @@ import {
   resolveVisibleNumeroExpediente,
   sanitizeExpedienteFilePart,
 } from "@/utils/documentIdentity";
+import { buildExecutiveGeointReportModel } from "@/utils/executiveGeointReportModel";
+import { buildExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
+import { buildExecutiveGeointReportDocumentModel } from "@/utils/executiveGeointReportDocumentModel";
+import {
+  buildExecutiveGeointWordVisualAssets,
+  renderExecutiveGeointWordDocument,
+} from "@/utils/executiveGeointWordRenderer";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -726,11 +733,49 @@ export async function exportToWord(
   projectName: string,
   reportNumber?: string,
   user?: any,
-  options: { exportMode?: "DRAFT" | "INSTITUTIONAL" } = {}
+  options: { exportMode?: "DRAFT" | "INSTITUTIONAL"; reportKind?: "LEGACY" | "EXECUTIVE_GEOINT" } = {}
 ) {
   const isInstitutionalExport = options.exportMode === "INSTITUTIONAL";
   // Sanitizar payload previo a la maquetación
   payload = sanitizeEditorialPayload(payload);
+
+  if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT") {
+    try {
+      const institutionalReportInput = buildInstitutionalReportInput(payload);
+      const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
+        documentIdentity: {
+          numeroExpediente: payload.numeroExpediente || reportNumber,
+          ceipolId: payload.ceipolId,
+          projectId: payload.projectId,
+          name: projectName,
+        },
+        nombreExpediente: projectName,
+        fecha: payload.date || payload.fecha || institutionalReportInput.generatedAt,
+        personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
+        clasificacion: payload.classification || payload.clasificacion,
+      });
+      const visualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
+      const executiveDocumentModel = buildExecutiveGeointReportDocumentModel(
+        executiveModel,
+        visualComposition,
+        institutionalReportInput,
+        {
+          numeroExpediente: payload.numeroExpediente || reportNumber,
+          ceipolId: payload.ceipolId,
+        }
+      );
+      const rendered = renderExecutiveGeointWordDocument(executiveDocumentModel, {
+        projectName,
+        ceipolId: payload.ceipolId,
+        visualAssetsById: buildExecutiveGeointWordVisualAssets(visualComposition),
+      });
+      const blob = await Packer.toBlob(rendered.document);
+      saveAs(blob, rendered.filename);
+      return;
+    } catch (err) {
+      console.warn("[FASE E] Ruta ejecutiva GEOINT no disponible; usando compatibilidad legacy controlada.", err);
+    }
+  }
 
   if (isInstitutionalExport) {
     try {
