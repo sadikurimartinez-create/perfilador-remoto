@@ -52,8 +52,8 @@ export const processEvidences = async (photos: any[]) => {
             image: { content: base64Data },
             features: [
               { type: "TEXT_DETECTION" }, 
-              { type: "FACE_DETECTION" }, 
-              { type: "LABEL_DETECTION" }
+              { type: "LABEL_DETECTION" },
+              { type: "OBJECT_LOCALIZATION" }
             ]
           }]
         });
@@ -61,13 +61,12 @@ export const processEvidences = async (photos: any[]) => {
         const data = visionRes.data.responses[0];
         extractedText = data.textAnnotations?.[0]?.description || "";
         labels = data.labelAnnotations?.map((l: any) => l.description) || [];
-        const faces = data.faceAnnotations || [];
 
         const textUpper = extractedText.toUpperCase();
         const judicialKeywords = ['FISCALÍA', 'PODER JUDICIAL', 'JUZGADO', 'AMPARO', 'MINISTERIO PÚBLICO', 'AVERIGUACIÓN', 'EXPEDIENTE', 'JUEZ', 'POLICÍA'];
         const hasJudicialText = judicialKeywords.some(kw => textUpper.includes(kw));
 
-        if (faces.length > 0 || hasJudicialText) {
+        if (hasJudicialText) {
           isHighPriority = true;
         }
       } catch (e) {

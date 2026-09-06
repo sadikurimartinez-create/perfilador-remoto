@@ -1,3 +1,10 @@
+import {
+  deriveGoogleVisionIntelligence,
+  GOOGLE_VISION_FEATURE_AUDIT,
+  type GoogleVisionFindingDerivationResult,
+  type GoogleVisionSourceContext,
+} from "@/utils/googleIntelligenceContract";
+
 export type BrokenWindowsIndicators = {
   basuraOEscombro: boolean;
   malezaOCrecimientoExcesivo: boolean;
@@ -12,12 +19,18 @@ export type VisionAnalysisResult = {
   indicadoresVentanasRotas: BrokenWindowsIndicators;
   etiquetasRelevantes: string[];
   textoDetectado: string[];
+  labels: Array<{ description: string; score?: number | null; topicality?: number | null }>;
+  localizedObjects: Array<{ name: string; score?: number | null; boundingGeometry?: unknown }>;
+  ocrObservations: Array<{ text: string; confidence?: number | null; language?: string | null; boundingGeometry?: unknown }>;
+  featureAudit: typeof GOOGLE_VISION_FEATURE_AUDIT;
+  googleVisionIntelligence?: GoogleVisionFindingDerivationResult;
   rawResponse?: unknown;
 };
 
 type VisionRequestOptions = {
   imageBase64?: string;
   imageGcsUri?: string;
+  sourceContext?: GoogleVisionSourceContext;
 };
 
 const BROKEN_WINDOWS_KEYWORDS = [
@@ -47,6 +60,12 @@ const BROKEN_WINDOWS_KEYWORDS = [
   "tent",
   "makeshift"
 ];
+
+export const ACTIVE_GOOGLE_VISION_FEATURES = [
+  { type: "LABEL_DETECTION", maxResults: 50 },
+  { type: "TEXT_DETECTION", maxResults: 10 },
+  { type: "OBJECT_LOCALIZATION", maxResults: 25 },
+] as const;
 
 function normalizeLabel(label: string): string {
   return label.toLowerCase();
@@ -141,16 +160,7 @@ export async function analyzeBrokenWindowsWithVision(
     requests: [
       {
         image,
-        features: [
-          {
-            type: "LABEL_DETECTION",
-            maxResults: 50
-          },
-          {
-            type: "TEXT_DETECTION",
-            maxResults: 10
-          }
-        ]
+        features: ACTIVE_GOOGLE_VISION_FEATURES
       }
     ]
   };
@@ -175,8 +185,14 @@ export async function analyzeBrokenWindowsWithVision(
   const data = (await response.json()) as any;
   const firstResponse = data.responses?.[0];
 
-  const labelAnnotations: string[] =
-    firstResponse?.labelAnnotations?.map((l: any) => l.description) ?? [];
+  const labels =
+    firstResponse?.labelAnnotations?.map((l: any) => ({
+      description: String(l.description || ""),
+      score: typeof l.score === "number" ? l.score : null,
+      topicality: typeof l.topicality === "number" ? l.topicality : null,
+    })) ?? [];
+
+  const labelAnnotations: string[] = labels.map((l: any) => l.description);
 
   // Filtrar solo las etiquetas cercanas a nuestros indicadores de Ventanas Rotas
   const etiquetasRelevantes = labelAnnotations.filter((label) =>
@@ -185,18 +201,45 @@ export async function analyzeBrokenWindowsWithVision(
     )
   );
 
-  const textoDetectado: string[] =
+  const ocrObservations =
     firstResponse?.textAnnotations
       ?.slice(1)
-      ?.map((t: any) => String(t.description))
+      ?.map((t: any) => ({
+        text: String(t.description || ""),
+        confidence: typeof t.confidence === "number" ? t.confidence : null,
+        language: t.locale ? String(t.locale) : null,
+        boundingGeometry: t.boundingPoly || null,
+      }))
       ?? [];
 
+  const textoDetectado: string[] = ocrObservations.map((t: any) => t.text).filter(Boolean);
+
+  const localizedObjects =
+    firstResponse?.localizedObjectAnnotations?.map((o: any) => ({
+      name: String(o.name || ""),
+      score: typeof o.score === "number" ? o.score : null,
+      boundingGeometry: o.boundingPoly || null,
+    })) ?? [];
+
   const indicadoresVentanasRotas = mapLabelsToIndicators(labelAnnotations);
+  const googleVisionIntelligence = options.sourceContext
+    ? deriveGoogleVisionIntelligence({
+        context: options.sourceContext,
+        texts: ocrObservations,
+        objects: localizedObjects,
+        labels,
+      })
+    : undefined;
 
   return {
     indicadoresVentanasRotas,
     etiquetasRelevantes,
     textoDetectado,
+    labels,
+    localizedObjects,
+    ocrObservations,
+    featureAudit: GOOGLE_VISION_FEATURE_AUDIT,
+    googleVisionIntelligence,
     rawResponse: data
   };
 }

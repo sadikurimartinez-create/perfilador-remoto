@@ -34,6 +34,169 @@ export type GoogleProviderFeature =
   | "GEOCODING"
   | "REVERSE_GEOCODING";
 
+export type GoogleVisionApiFeature =
+  | "LABEL_DETECTION"
+  | "TEXT_DETECTION"
+  | "DOCUMENT_TEXT_DETECTION"
+  | "OBJECT_LOCALIZATION"
+  | "LANDMARK_DETECTION"
+  | "LOGO_DETECTION"
+  | "WEB_DETECTION"
+  | "IMAGE_PROPERTIES"
+  | "SAFE_SEARCH_DETECTION"
+  | "FACE_DETECTION";
+
+export type GoogleVisionFeatureStatus = "ACTIVA" | "PARCIAL" | "LEGACY" | "NO_USADA";
+
+export type GoogleVisionObservationKind =
+  | "VISIBLE_TEXT"
+  | "SIGNAGE"
+  | "PHYSICAL_BARRIER"
+  | "ACCESS_POINT"
+  | "GATE"
+  | "FENCE"
+  | "ROAD"
+  | "VEHICLE"
+  | "BUILDING"
+  | "VISIBLE_OBJECT"
+  | "INFRASTRUCTURE"
+  | "LIGHTING_ELEMENT"
+  | "SURFACE_CONDITION"
+  | "VEGETATION"
+  | "PERSON_PRESENT"
+  | "UNVERIFIED_VISUAL_CLASSIFICATION"
+  | "WEB_CONTEXT_REFERENCE";
+
+export interface GoogleVisionFeatureAuditEntry {
+  feature: GoogleVisionApiFeature;
+  status: GoogleVisionFeatureStatus;
+  institutionalUse: string;
+  enabledByDefault: boolean;
+}
+
+export interface GoogleVisionTextDetection {
+  text: string;
+  confidence?: number | null;
+  language?: string | null;
+  boundingGeometry?: unknown;
+}
+
+export interface GoogleVisionObjectDetection {
+  name: string;
+  score?: number | null;
+  boundingGeometry?: unknown;
+}
+
+export interface GoogleVisionLabelDetection {
+  description: string;
+  score?: number | null;
+  topicality?: number | null;
+}
+
+export interface GoogleVisionObservation {
+  detectionId: string;
+  feature: Extract<GoogleVisionApiFeature, "TEXT_DETECTION" | "LABEL_DETECTION" | "OBJECT_LOCALIZATION">;
+  kind: GoogleVisionObservationKind;
+  value: string;
+  confidence: number | "UNKNOWN" | "UNAVAILABLE";
+  boundingGeometry?: unknown;
+  language?: string | null;
+  evidence: GoogleIntelligenceEvidence;
+}
+
+export interface GoogleVisionSourceContext {
+  sourceEvidenceId: string;
+  traceabilityId: string;
+  expedienteId: string;
+  geographyId: string;
+  imageReference: string;
+  lineage: CanonicalLineageNode[];
+  acquiredAt: string;
+  observedAt?: string | null;
+  coordinates?: GoogleCoordinates | null;
+  imageSourceType?: "IN_SITU" | "STREET_VIEW" | "UPLOADED_EVIDENCE" | "DRIVE_GOVERNED";
+  captureDate?: string | null;
+}
+
+export interface GoogleVisionFindingDerivationResult {
+  observations: GoogleVisionObservation[];
+  evidences: GoogleIntelligenceEvidence[];
+  candidateFindings: GoogleCandidateFinding[];
+  featureAudit: GoogleVisionFeatureAuditEntry[];
+}
+
+export interface GoogleVisionPoiComparisonSource {
+  sourceId: string;
+  providerId: "GOOGLE_PLACES" | "INEGI_DENUE";
+  name?: string | null;
+  activity?: string | null;
+  coordinates?: GoogleCoordinates | null;
+  sourceReference: string;
+}
+
+export const GOOGLE_VISION_FEATURE_AUDIT: GoogleVisionFeatureAuditEntry[] = [
+  {
+    feature: "LABEL_DETECTION",
+    status: "ACTIVA",
+    institutionalUse: "Clasificacion ML ambiental no criminologica; apoya indicadores visibles cuando hay sustento.",
+    enabledByDefault: true,
+  },
+  {
+    feature: "TEXT_DETECTION",
+    status: "ACTIVA",
+    institutionalUse: "OCR de texto visible como observacion ML, no como verdad semantica del contenido.",
+    enabledByDefault: true,
+  },
+  {
+    feature: "DOCUMENT_TEXT_DETECTION",
+    status: "NO_USADA",
+    institutionalUse: "Bajo valor para imagen territorial general; no se activa para controlar costo.",
+    enabledByDefault: false,
+  },
+  {
+    feature: "OBJECT_LOCALIZATION",
+    status: "ACTIVA",
+    institutionalUse: "Objetos fisicos localizados con score y geometria cuando Vision los devuelve.",
+    enabledByDefault: true,
+  },
+  {
+    feature: "LANDMARK_DETECTION",
+    status: "NO_USADA",
+    institutionalUse: "No hay caso gobernado actual que justifique activacion por defecto.",
+    enabledByDefault: false,
+  },
+  {
+    feature: "LOGO_DETECTION",
+    status: "NO_USADA",
+    institutionalUse: "Puede ser util para corroboracion POI futura, pero no se activa sin caso especifico.",
+    enabledByDefault: false,
+  },
+  {
+    feature: "WEB_DETECTION",
+    status: "NO_USADA",
+    institutionalUse: "Coincidencias web serian contexto de tercero no autoritativo; no se activa por costo y riesgo.",
+    enabledByDefault: false,
+  },
+  {
+    feature: "IMAGE_PROPERTIES",
+    status: "NO_USADA",
+    institutionalUse: "No aporta observaciones territoriales trazables suficientes para ADR-025.3C.",
+    enabledByDefault: false,
+  },
+  {
+    feature: "SAFE_SEARCH_DETECTION",
+    status: "NO_USADA",
+    institutionalUse: "Clasificacion tecnica de contenido; nunca indicador criminologico.",
+    enabledByDefault: false,
+  },
+  {
+    feature: "FACE_DETECTION",
+    status: "LEGACY",
+    institutionalUse: "Flujo historico aislado; no identifica personas ni se usa como indicador criminologico.",
+    enabledByDefault: false,
+  },
+];
+
 export type GoogleCandidateType =
   | "POTENTIAL_CONCEALMENT_AREA"
   | "POTENTIAL_SURVEILLANCE_POINT"
@@ -665,6 +828,395 @@ export function deriveExplainableStreetViewCandidateFinding(input: {
     confidenceBasis: confidence.confidenceBasis,
     limitations: confidence.limitations,
     generatedBy: input.generatedBy,
+  });
+}
+
+function stableToken(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "unknown";
+}
+
+function normalizeVisionValue(value: unknown): string {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function scoreOrUnknown(value: unknown): number | "UNKNOWN" {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return "UNKNOWN";
+  return Number(Math.max(0, Math.min(1, score)).toFixed(2));
+}
+
+function textLooksLikeSignage(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return /\b(abierto|cerrado|horario|entrada|salida|privado|prohibido|alto|stop|estacionamiento|ferreteria|farmacia|bar|tienda)\b/i.test(
+    normalized
+  );
+}
+
+const SENSITIVE_VISUAL_LABELS = new Set(["weapon", "gun", "knife", "rifle", "pistol", "firearm"]);
+
+function classifyVisionObject(value: string): GoogleVisionObservationKind {
+  const normalized = value.toLowerCase();
+  if (SENSITIVE_VISUAL_LABELS.has(normalized)) return "UNVERIFIED_VISUAL_CLASSIFICATION";
+  if (/\bgate\b|\bturnstile\b/.test(normalized)) return "GATE";
+  if (/\bfence\b|\bwall\b|\bbarrier\b|\bbollard\b/.test(normalized)) return "PHYSICAL_BARRIER";
+  if (/\bdoor\b|\bentrance\b|\baccess\b/.test(normalized)) return "ACCESS_POINT";
+  if (/\broad\b|\bstreet\b|\bsidewalk\b/.test(normalized)) return "ROAD";
+  if (/\bcar\b|\bvehicle\b|\bbus\b|\btruck\b|\bmotorcycle\b|\bbicycle\b/.test(normalized)) return "VEHICLE";
+  if (/\bbuilding\b|\bhouse\b|\bstore\b/.test(normalized)) return "BUILDING";
+  if (/\bperson\b|\bpeople\b|\bman\b|\bwoman\b/.test(normalized)) return "PERSON_PRESENT";
+  if (/\bsign\b|\bsignage\b/.test(normalized)) return "SIGNAGE";
+  return "VISIBLE_OBJECT";
+}
+
+function classifyVisionLabel(value: string): GoogleVisionObservationKind {
+  const normalized = value.toLowerCase();
+  if (SENSITIVE_VISUAL_LABELS.has(normalized)) return "UNVERIFIED_VISUAL_CLASSIFICATION";
+  if (/\bgraffiti\b|\bsign\b|\bsignage\b|\bbillboard\b/.test(normalized)) return "SIGNAGE";
+  if (/\bfence\b|\bwall\b|\bbarrier\b|\bgate\b/.test(normalized)) return "PHYSICAL_BARRIER";
+  if (/\bbuilding\b|\broad\b|\bstreet\b|\bsidewalk\b|\blight\b|\bstreet light\b/.test(normalized)) return "INFRASTRUCTURE";
+  if (/\bdark\b|\bnight\b|\blighting\b/.test(normalized)) return "LIGHTING_ELEMENT";
+  if (/\bvegetation\b|\bgrass\b|\bweed\b|\bshrub\b|\btree\b/.test(normalized)) return "VEGETATION";
+  if (/\bvehicle\b|\bcar\b|\bmotorcycle\b|\bperson\b|\bbar\b/.test(normalized)) return "VISIBLE_OBJECT";
+  if (/\bsurface\b|\bpavement\b|\bdirt\b|\bmud\b/.test(normalized)) return "SURFACE_CONDITION";
+  return "VISIBLE_OBJECT";
+}
+
+function candidateTypeForObservation(kind: GoogleVisionObservationKind): GoogleCandidateType {
+  if (kind === "VISIBLE_TEXT") return "VISIBLE_TEXT_INDICATOR";
+  if (kind === "SIGNAGE") return "SIGNAGE_INDICATOR";
+  if (kind === "PHYSICAL_BARRIER" || kind === "GATE" || kind === "FENCE") return "PHYSICAL_BARRIER_INDICATOR";
+  if (kind === "INFRASTRUCTURE" || kind === "ROAD" || kind === "BUILDING" || kind === "LIGHTING_ELEMENT" || kind === "SURFACE_CONDITION") {
+    return "INFRASTRUCTURE_INDICATOR";
+  }
+  return "VISIBLE_OBJECT_INDICATOR";
+}
+
+function visionProviderFeature(feature: GoogleVisionObservation["feature"]): GoogleProviderFeature {
+  if (feature === "TEXT_DETECTION") return "VISION_OCR";
+  if (feature === "OBJECT_LOCALIZATION") return "VISION_OBJECT";
+  return "VISION_LABEL";
+}
+
+function buildVisionLimitations(input: {
+  kind: GoogleVisionObservationKind;
+  value: string;
+  context: GoogleVisionSourceContext;
+}): string[] {
+  const limitations = [
+    "Google Vision registra una observacion ML sobre pixeles; no acredita conducta criminal, identidad personal ni actualidad por si sola.",
+    "El contenido OCR observado no se promueve como verdad semantica institucional sin validacion humana y corroboracion.",
+  ];
+  const value = input.value.toLowerCase();
+  if (input.kind === "PERSON_PRESENT") limitations.push("La presencia de persona no identifica a nadie ni implica sospecha.");
+  if (value.includes("vehicle") || value.includes("car") || value.includes("motorcycle")) limitations.push("La presencia de vehiculo no implica narcotrafico ni actividad ilicita.");
+  if (value.includes("graffiti")) limitations.push("Graffiti visible no implica pertenencia a pandilla ni delito.");
+  if (value === "bar" || value.includes("bar ")) limitations.push("La etiqueta bar no implica delito.");
+  if (input.kind === "UNVERIFIED_VISUAL_CLASSIFICATION") {
+    limitations.push("Clasificacion visual sensible o ambigua requiere revision humana, imagen fuente y corroboracion independiente.");
+  }
+  const date = input.context.captureDate || input.context.observedAt || null;
+  if (input.context.imageSourceType === "STREET_VIEW" && date) {
+    limitations.push(`La imagen fuente es historica (${date}); Vision hereda esa temporalidad y no acredita situacion actual.`);
+  }
+  if (input.context.imageSourceType === "IN_SITU") {
+    limitations.push("La foto in situ conserva su valor como evidencia fuente humana; Vision solo agrega observaciones AI/ML.");
+  }
+  return Array.from(new Set(limitations));
+}
+
+function makeVisionEvidence(input: {
+  context: GoogleVisionSourceContext;
+  feature: GoogleVisionObservation["feature"];
+  kind: GoogleVisionObservationKind;
+  value: string;
+  confidence: number | "UNKNOWN";
+  boundingGeometry?: unknown;
+  language?: string | null;
+  generatedAt?: string;
+}): GoogleVisionObservation {
+  const token = stableToken(`${input.feature}:${input.kind}:${input.value}`);
+  const detectionId = `vision-${stableToken(input.context.sourceEvidenceId)}-${token}`;
+  const providerFeature = visionProviderFeature(input.feature);
+  const observableFact =
+    input.feature === "TEXT_DETECTION"
+      ? `OBSERVED_BY_VISION:${input.kind}:detectedText:${input.value}`
+      : `OBSERVED_BY_VISION:${input.kind}:${input.value}`;
+  const evidence = createGoogleIntelligenceEvidence({
+    evidenceId: detectionId,
+    sourceEvidenceId: input.context.sourceEvidenceId,
+    traceabilityId: input.context.traceabilityId,
+    expedienteId: input.context.expedienteId,
+    geographyId: input.context.geographyId,
+    providerId: "GOOGLE_VISION",
+    providerFeature,
+    coordinates: input.context.coordinates ?? null,
+    observedAt: input.context.observedAt ?? input.context.captureDate ?? null,
+    acquiredAt: input.context.acquiredAt,
+    rawResponseRef: `google-vision:${input.feature}:${input.context.imageReference}`,
+    sourceReferences: [input.context.imageReference, input.context.sourceEvidenceId, "Google Cloud Vision"],
+    observableFacts: [observableFact],
+    limitations: buildVisionLimitations({ kind: input.kind, value: input.value, context: input.context }),
+    lineage: input.context.lineage,
+    validationStatus: "UNREVIEWED",
+    generatedAt: input.generatedAt,
+    metadata: {
+      vision: {
+        feature: input.feature,
+        observationKind: input.kind,
+        value: input.value,
+        confidence: input.confidence,
+        boundingGeometry: input.boundingGeometry,
+        language: input.language ?? null,
+        imageReference: input.context.imageReference,
+        sourceEvidenceId: input.context.sourceEvidenceId,
+        semanticContentStatus: "OBSERVED_BY_VISION_NOT_SOURCE_FACT",
+      },
+    },
+  });
+
+  return {
+    detectionId,
+    feature: input.feature,
+    kind: input.kind,
+    value: input.value,
+    confidence: input.confidence,
+    boundingGeometry: input.boundingGeometry,
+    language: input.language ?? null,
+    evidence,
+  };
+}
+
+export function deriveGoogleVisionIntelligence(input: {
+  context: GoogleVisionSourceContext;
+  texts?: GoogleVisionTextDetection[];
+  objects?: GoogleVisionObjectDetection[];
+  labels?: GoogleVisionLabelDetection[];
+  generatedBy?: string;
+  generatedAt?: string;
+}): GoogleVisionFindingDerivationResult {
+  const observations = new Map<string, GoogleVisionObservation>();
+  const addObservation = (observation: GoogleVisionObservation) => {
+    const key = `${observation.evidence.sourceEvidenceId}:${observation.feature}:${stableToken(observation.kind)}:${stableToken(observation.value)}`;
+    if (!observations.has(key)) observations.set(key, observation);
+  };
+
+  for (const text of input.texts || []) {
+    const value = normalizeVisionValue(text.text);
+    if (!value) continue;
+    addObservation(
+      makeVisionEvidence({
+        context: input.context,
+        feature: "TEXT_DETECTION",
+        kind: textLooksLikeSignage(value) ? "SIGNAGE" : "VISIBLE_TEXT",
+        value,
+        confidence: scoreOrUnknown(text.confidence),
+        boundingGeometry: text.boundingGeometry,
+        language: text.language ?? null,
+        generatedAt: input.generatedAt,
+      })
+    );
+  }
+
+  for (const object of input.objects || []) {
+    const value = normalizeVisionValue(object.name);
+    if (!value) continue;
+    addObservation(
+      makeVisionEvidence({
+        context: input.context,
+        feature: "OBJECT_LOCALIZATION",
+        kind: classifyVisionObject(value),
+        value,
+        confidence: scoreOrUnknown(object.score),
+        boundingGeometry: object.boundingGeometry,
+        generatedAt: input.generatedAt,
+      })
+    );
+  }
+
+  for (const label of input.labels || []) {
+    const value = normalizeVisionValue(label.description);
+    if (!value) continue;
+    addObservation(
+      makeVisionEvidence({
+        context: input.context,
+        feature: "LABEL_DETECTION",
+        kind: classifyVisionLabel(value),
+        value,
+        confidence: scoreOrUnknown(label.score),
+        generatedAt: input.generatedAt,
+      })
+    );
+  }
+
+  const observationList = Array.from(observations.values());
+  const candidateFindings: GoogleCandidateFinding[] = [];
+
+  for (const observation of observationList) {
+    const type =
+      observation.kind === "UNVERIFIED_VISUAL_CLASSIFICATION"
+        ? "VISIBLE_OBJECT_INDICATOR"
+        : candidateTypeForObservation(observation.kind);
+    const evidence = observation.evidence;
+    candidateFindings.push(
+      createGoogleCandidateFinding({
+        findingId: `${observation.detectionId}-candidate`,
+        candidateType: type,
+        providerId: "GOOGLE_VISION",
+        providerFeature: evidence.providerFeature,
+        sourceEvidenceId: evidence.sourceEvidenceId,
+        traceabilityId: evidence.traceabilityId,
+        expedienteId: evidence.expedienteId,
+        geographyId: evidence.geographyId,
+        coordinates: evidence.coordinates,
+        explanation:
+          `Vision detecto ${observation.kind} mediante ${observation.feature}: "${observation.value}". ` +
+          "Se conserva como candidato conservador sujeto a revision humana. " +
+          "No permite concluir identidad, conducta criminal, afiliacion, actualidad ni veracidad semantica del texto.",
+        observableFactors: [`${observation.feature}:${observation.kind}:${observation.value}`],
+        supportingEvidenceIds: [evidence.evidenceId],
+        sourceReferences: evidence.sourceReferences,
+        confidence: observation.confidence,
+        confidenceBasis:
+          typeof observation.confidence === "number"
+            ? `Score devuelto por Google Vision para ${observation.feature}: ${observation.confidence}.`
+            : `Google Vision no devolvio score util para ${observation.feature}; se conserva confianza UNKNOWN.`,
+        limitations: evidence.limitations,
+        lineage: evidence.lineage,
+        generatedBy: input.generatedBy || "ADR-025.3C_GOOGLE_VISION_INTELLIGENCE",
+        generatedAt: input.generatedAt,
+        metadata: { sourceEvidence: evidence, visionObservation: observation },
+      })
+    );
+  }
+
+  const hasAccess = observationList.some((o) => o.kind === "GATE" || o.kind === "ACCESS_POINT");
+  const hasBarrier = observationList.some((o) => o.kind === "PHYSICAL_BARRIER" || o.kind === "FENCE");
+  const hasSignage = observationList.some((o) => o.kind === "SIGNAGE");
+  if (hasAccess && hasBarrier && hasSignage) {
+    const supporting = observationList.filter((o) => ["GATE", "ACCESS_POINT", "PHYSICAL_BARRIER", "FENCE", "SIGNAGE"].includes(o.kind));
+    const confidenceValues = supporting.map((o) => (typeof o.confidence === "number" ? o.confidence : null)).filter((v): v is number => v != null);
+    const avgConfidence =
+      confidenceValues.length > 0
+        ? Number((confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length).toFixed(2))
+        : "UNKNOWN";
+    candidateFindings.push(
+      createGoogleCandidateFinding({
+        findingId: `vision-${stableToken(input.context.sourceEvidenceId)}-access-control-point-candidate`,
+        candidateType: "ACCESS_CONTROL_POINT",
+        providerId: "GOOGLE_VISION",
+        providerFeature: "VISION_OBJECT",
+        sourceEvidenceId: input.context.sourceEvidenceId,
+        traceabilityId: input.context.traceabilityId,
+        expedienteId: input.context.expedienteId,
+        geographyId: input.context.geographyId,
+        coordinates: input.context.coordinates ?? null,
+        explanation:
+          "Vision detecto una combinacion de factores visibles compatible con punto de control de acceso: acceso, barrera fisica y senalizacion. " +
+          "La combinacion permanece como candidate finding y no acredita control operativo, uso criminal ni actualidad sin revision PPC.",
+        observableFactors: supporting.map((o) => `${o.feature}:${o.kind}:${o.value}`),
+        supportingEvidenceIds: supporting.map((o) => o.evidence.evidenceId),
+        sourceReferences: [input.context.imageReference, input.context.sourceEvidenceId, "Google Cloud Vision"],
+        confidence: avgConfidence,
+        confidenceBasis:
+          confidenceValues.length > 0
+            ? `Promedio conservador de ${confidenceValues.length} score(s) Vision en factores combinados.`
+            : "Sin scores Vision suficientes; confianza UNKNOWN.",
+        limitations: Array.from(
+          new Set([
+            "Un hallazgo multifactor Vision requiere revision humana antes de correlacion institucional.",
+            "No acredita conducta criminal, identidad, intencion ni funcionamiento actual del acceso.",
+            ...(input.context.imageSourceType === "STREET_VIEW" && (input.context.captureDate || input.context.observedAt)
+              ? [`La imagen fuente es historica (${input.context.captureDate || input.context.observedAt}); no acredita situacion actual.`]
+              : []),
+          ])
+        ),
+        lineage: input.context.lineage,
+        generatedBy: input.generatedBy || "ADR-025.3C_GOOGLE_VISION_INTELLIGENCE",
+        generatedAt: input.generatedAt,
+        metadata: { sourceEvidence: supporting[0]?.evidence, visionMultifactor: supporting },
+      })
+    );
+  }
+
+  return {
+    observations: observationList,
+    evidences: observationList.map((observation) => observation.evidence),
+    candidateFindings,
+    featureAudit: GOOGLE_VISION_FEATURE_AUDIT,
+  };
+}
+
+function looseNameMatch(a: string, b: string): boolean {
+  const left = stableToken(a).replace(/-/g, " ");
+  const right = stableToken(b).replace(/-/g, " ");
+  return Boolean(left && right && (left.includes(right) || right.includes(left)));
+}
+
+function distanceMeters(a: GoogleCoordinates, b: GoogleCoordinates): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusMeters = 6371e3;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+export function deriveVisionPoiComparisonCandidate(input: {
+  visionTextEvidence: GoogleIntelligenceEvidence;
+  visibleText: string;
+  comparisonSource: GoogleVisionPoiComparisonSource;
+  maxDistanceMeters?: number;
+  generatedAt?: string;
+}): GoogleCandidateFinding | null {
+  const evidence = input.visionTextEvidence;
+  const sourceName = input.comparisonSource.name || input.comparisonSource.activity || "";
+  if (!looseNameMatch(input.visibleText, sourceName)) return null;
+  const maxDistance = input.maxDistanceMeters ?? 80;
+  const distance =
+    evidence.coordinates && input.comparisonSource.coordinates
+      ? distanceMeters(evidence.coordinates, input.comparisonSource.coordinates)
+      : null;
+  if (typeof distance === "number" && distance > maxDistance) return null;
+  const providerLabel = input.comparisonSource.providerId === "GOOGLE_PLACES" ? "Places" : "DENUE";
+
+  return createGoogleCandidateFinding({
+    findingId: `${evidence.evidenceId}-${stableToken(input.comparisonSource.sourceId)}-poi-corroboration`,
+    candidateType: "POI_SOURCE_CORROBORATION",
+    providerId: "GOOGLE_VISION",
+    providerFeature: "VISION_OCR",
+    sourceEvidenceId: evidence.sourceEvidenceId,
+    traceabilityId: evidence.traceabilityId,
+    expedienteId: evidence.expedienteId,
+    geographyId: evidence.geographyId,
+    coordinates: evidence.coordinates,
+    explanation:
+      `OCR visible observado por Vision guarda similitud textual con ${providerLabel}. ` +
+      "La coincidencia es una corroboracion candidata entre fuentes y no decide automaticamente cual fuente es correcta.",
+    observableFactors: [`VISION_OCR:${input.visibleText}`, `${input.comparisonSource.providerId}:${sourceName}`],
+    supportingEvidenceIds: [evidence.evidenceId, input.comparisonSource.sourceId],
+    sourceReferences: [...evidence.sourceReferences, input.comparisonSource.sourceReference],
+    confidence: typeof distance === "number" ? 0.64 : 0.56,
+    confidenceBasis:
+      typeof distance === "number"
+        ? `Similitud textual OCR/${providerLabel} con distancia aproximada ${distance.toFixed(1)}m.`
+        : `Similitud textual OCR/${providerLabel}; distancia no disponible, por eso se conserva confianza limitada.`,
+    limitations: [
+      "OCR no prueba veracidad, vigencia ni titularidad del establecimiento.",
+      `${providerLabel} se conserva como fuente independiente; no se modifica ni se sobreescribe.`,
+    ],
+    lineage: evidence.lineage,
+    generatedBy: "ADR-025.3C_GOOGLE_VISION_POI_COMPARISON",
+    generatedAt: input.generatedAt,
+    metadata: { sourceEvidence: evidence, comparisonSource: input.comparisonSource },
   });
 }
 

@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 import { analyzeBrokenWindowsWithVision } from "@/lib/googleVision";
+import type { CanonicalLineageNode } from "@/utils/evidenceLineage";
+import type { GoogleCoordinates } from "@/utils/googleIntelligenceContract";
 
 type VisionRequestBody = {
   imageBase64?: string;
   imageUrl?: string;
   expedienteId?: string;
+  sourceEvidenceId?: string;
+  traceabilityId?: string;
+  geographyId?: string;
+  imageReference?: string;
+  lineage?: CanonicalLineageNode[];
+  acquiredAt?: string;
+  observedAt?: string | null;
+  coordinates?: GoogleCoordinates | null;
+  imageSourceType?: "IN_SITU" | "STREET_VIEW" | "UPLOADED_EVIDENCE" | "DRIVE_GOVERNED";
+  captureDate?: string | null;
   mode?: "SINGLE" | "TEMPORAL_COMPARISON";
   primaryUrl?: string;
   contextualUrl?: string;
@@ -90,9 +102,34 @@ export async function POST(req: Request) {
     }
 
     // Fallback local neutro en caso de desconexión (únicamente características físicas)
+    const hasGovernedContext =
+      body.sourceEvidenceId &&
+      body.traceabilityId &&
+      body.expedienteId &&
+      body.geographyId &&
+      (body.imageReference || imageUrl) &&
+      Array.isArray(body.lineage) &&
+      body.lineage.length > 0 &&
+      body.acquiredAt;
+
     const visionResult = await analyzeBrokenWindowsWithVision({
       imageBase64,
       imageGcsUri: imageUrl,
+      sourceContext: hasGovernedContext
+        ? {
+            sourceEvidenceId: body.sourceEvidenceId!,
+            traceabilityId: body.traceabilityId!,
+            expedienteId: body.expedienteId!,
+            geographyId: body.geographyId!,
+            imageReference: body.imageReference || imageUrl!,
+            lineage: body.lineage!,
+            acquiredAt: body.acquiredAt!,
+            observedAt: body.observedAt ?? null,
+            coordinates: body.coordinates ?? null,
+            imageSourceType: body.imageSourceType,
+            captureDate: body.captureDate ?? null,
+          }
+        : undefined,
     });
 
     if (!visionResult) {
@@ -110,6 +147,11 @@ export async function POST(req: Request) {
         etiquetas: visionResult.etiquetasRelevantes || [],
         extractedText,
         indicadores: visionResult.indicadoresVentanasRotas,
+        featureAudit: visionResult.featureAudit,
+        labels: visionResult.labels,
+        localizedObjects: visionResult.localizedObjects,
+        ocrObservations: visionResult.ocrObservations,
+        googleVisionIntelligence: visionResult.googleVisionIntelligence,
       },
       { status: 200 }
     );
