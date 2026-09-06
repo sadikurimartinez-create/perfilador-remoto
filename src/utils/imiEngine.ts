@@ -19,6 +19,10 @@ export type UserDoc = {
   aniosSspe?: string;
 };
 
+export const IMI_OPERATIONAL_MATURITY_LABEL = "NIVEL DE MADUREZ OPERATIVA EN LA PLATAFORMA";
+export const INSUFFICIENT_INSTITUTIONAL_COMPARISON = "DATOS INSUFICIENTES PARA COMPARATIVO INSTITUCIONAL";
+export const PERFORMANCE_HISTORY_UNAVAILABLE = "HISTÓRICO DE DESEMPEÑO NO DISPONIBLE";
+
 export type ImiResult = {
   totalProjects: number;
   pAbiertos: number;
@@ -29,7 +33,14 @@ export type ImiResult = {
   geointProjects: number;
   osintQueriesCount: number;
   correlationActions: number;
+  validatedOsintResults: number;
+  validatedCorrelationResults: number;
+  validatedHypothesisSignals: number;
+  validatedContextSignals: number;
+  validatedEvidenceCount: number;
   hasOperationalActivity: boolean;
+  hasInstitutionalEvaluation: boolean;
+  partialMeasurements: string[];
 
   // Subíndices (0% si no existe evidencia)
   iccScore: number;
@@ -55,6 +66,180 @@ export type ImiResult = {
   currentLevel: "SIN EVALUACIÓN" | "Básico" | "Inicial" | "Intermedio" | "Avanzado" | "Experto";
 };
 
+export type InstitutionalComparisonResult = {
+  available: boolean;
+  message?: typeof INSUFFICIENT_INSTITUTIONAL_COMPARISON;
+  institutionalAverage: number | null;
+  stdDeviation: number | null;
+  percentile: number | null;
+  userRankString: string;
+  sampleSize: number;
+};
+
+export function belongsToUser(project: any, selectedUser: UserDoc): boolean {
+  const username = selectedUser.username || "";
+  const userId = selectedUser.id || "";
+  if (userId && project?.createdById === userId) return true;
+  return Boolean(username && (project?.createdBy === username || project?.author === username));
+}
+
+function isApproved(value: unknown): boolean {
+  return /APPROVED|VALIDADO|VALIDATED|SUPPORTED|ELIGIBLE|ADMITIDO|ADMITTED/i.test(String(value || ""));
+}
+
+function isInstitutionallyApproved(value: unknown): boolean {
+  return /^(APPROVED|VALIDADO|VALIDATED|ELIGIBLE|ADMITIDO|ADMITTED)$/i.test(String(value || "").trim());
+}
+
+function hasInstitutionalApprovalSignal(item: any): boolean {
+  return Boolean(
+    item?.approved === true ||
+    isInstitutionallyApproved(item?.status) ||
+    isInstitutionallyApproved(item?.humanValidationStatus) ||
+    isInstitutionallyApproved(item?.reviewStatus) ||
+    isInstitutionallyApproved(item?.publicationEligibility) ||
+    isInstitutionallyApproved(item?.validationStatus)
+  );
+}
+
+function hasCanonicalGeography(project: any): boolean {
+  const geo = project?.canonicalGeography;
+  const type = String(geo?.type || project?.canonicalGeographyType || "").toUpperCase();
+  const validationStatus = String(geo?.validationStatus || project?.canonicalGeographyValidationStatus || "").toUpperCase();
+  return Boolean(
+    geo?.geographyId &&
+    ["INDIVIDUAL", "POINT", "CORRIDOR", "POLYGON", "MULTIPOLYGON"].includes(type) &&
+    validationStatus === "VALID"
+  );
+}
+
+function validatedEvidenceItems(project: any): any[] {
+  const candidates = [
+    ...([] as any[]).concat(Array.isArray(project?.evidence) ? project.evidence : []),
+    ...([] as any[]).concat(Array.isArray(project?.attachedPhotos) ? project.attachedPhotos : []),
+    ...([] as any[]).concat(Array.isArray(project?.photoEvidence) ? project.photoEvidence : []),
+  ];
+  return candidates.filter((item) =>
+    item?.traceabilityIds?.length ||
+    item?.sourceEvidenceId ||
+    item?.geographyId ||
+    item?.lineage?.length ||
+    isApproved(item?.humanValidationStatus) ||
+    isApproved(item?.publicationEligibility)
+  );
+}
+
+function realEvidenceCount(project: any): number {
+  if (typeof project?.photoCount === "number") return Math.max(0, project.photoCount);
+  if (Array.isArray(project?.attachedPhotos)) return project.attachedPhotos.length;
+  if (Array.isArray(project?.evidenceUrls)) return project.evidenceUrls.length;
+  if (Array.isArray(project?.evidence)) return project.evidence.length;
+  return 0;
+}
+
+function hasValidatedContext(project: any): boolean {
+  return Boolean(
+    project?.contextualizationOutput ||
+    project?.reportReadyAssessment?.ready === true ||
+    isApproved(project?.institutionalReportEligibility) ||
+    isApproved(project?.publicationEligibility) ||
+    project?.findings?.some?.((finding: any) => finding?.traceabilityIds?.length || isApproved(finding?.humanValidationStatus))
+  );
+}
+
+function hasValidatedHypothesis(project: any): boolean {
+  const hypothesis = project?.canonicalHypothesis || project?.hypothesis;
+  return Boolean(
+    hypothesis?.supportingEvidenceIds?.length ||
+    hypothesis?.supportingFindingIds?.length ||
+    isApproved(hypothesis?.validationStatus) ||
+    isApproved(project?.hypothesisValidationStatus) ||
+    project?.hypothesisHistory?.some?.((item: any) => item?.supportingEvidenceIds?.length || isApproved(item?.validationStatus)) ||
+    project?.contradictions?.length
+  );
+}
+
+function validatedCorrelationCount(projects: any[], logs: any[]): number {
+  const fromProjects = projects.reduce((sum, project) => {
+    const convergence = project?.institutionalMultisourceConvergence || project?.multisourceAnalysis || {};
+    const approvedConvergences = Array.isArray(convergence?.convergencias)
+      ? convergence.convergencias.filter(hasInstitutionalApprovalSignal).length
+      : 0;
+    const approvedContradictions = Array.isArray(convergence?.contradicciones)
+      ? convergence.contradicciones.filter(hasInstitutionalApprovalSignal).length
+      : 0;
+    const approvedIndependentSources = Array.isArray(convergence?.fuentesIndependientes)
+      ? convergence.fuentesIndependientes.filter(hasInstitutionalApprovalSignal).length
+      : 0;
+    return sum + (
+      approvedConvergences +
+      approvedContradictions +
+      approvedIndependentSources +
+      (Array.isArray(project?.approvedCorrelations) ? project.approvedCorrelations.length : 0)
+    );
+  }, 0);
+  const fromLogs = logs.filter((log) => isInstitutionallyApproved(log?.validationStatus) && /correlaci|convergencia|contradicci/i.test(String(log?.action || log?.details || ""))).length;
+  return fromProjects + fromLogs;
+}
+
+function validatedOsintCount(projects: any[], logs: any[]): number {
+  const fromProjects = projects.reduce((sum, project) => {
+    const osintItems = Array.isArray(project?.osintEvidence) ? project.osintEvidence : Array.isArray(project?.osint) ? project.osint : [];
+    return sum + osintItems.filter((item: any) => item?.traceabilityIds?.length || item?.relatedFindingIds?.length || isApproved(item?.publicationEligibility)).length;
+  }, 0);
+  const fromLogs = logs.filter((log) => isApproved(log?.validationStatus) && /osint/i.test(String(log?.action || log?.details || ""))).length;
+  return fromProjects + fromLogs;
+}
+
+function humanValidationScore(projects: any[], returnedProjects: number): number {
+  const validated = projects.filter((project) =>
+    isApproved(project?.humanValidationStatus) ||
+    isApproved(project?.reviewStatus) ||
+    isApproved(project?.ppcDecisionStatus) ||
+    project?.reportReadyAssessment?.ready === true
+  ).length;
+  if (validated === 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((validated / projects.length) * 100 - returnedProjects * 10)));
+}
+
+export function calculateInstitutionalComparison(
+  selectedUser: UserDoc,
+  projects: any[] = [],
+  auditLogs: any[] = [],
+  allUsers: UserDoc[] = []
+): InstitutionalComparisonResult {
+  const evaluated = allUsers
+    .map((user) => ({ user, result: calculateUserImi(user, projects, auditLogs) }))
+    .filter(({ result }) => result.hasInstitutionalEvaluation);
+  const selectedResult = calculateUserImi(selectedUser, projects, auditLogs);
+  if (!selectedResult.hasInstitutionalEvaluation || evaluated.length < 2) {
+    return {
+      available: false,
+      message: INSUFFICIENT_INSTITUTIONAL_COMPARISON,
+      institutionalAverage: null,
+      stdDeviation: null,
+      percentile: null,
+      userRankString: INSUFFICIENT_INSTITUTIONAL_COMPARISON,
+      sampleSize: evaluated.length,
+    };
+  }
+  const scores = evaluated.map(({ result }) => result.imiFinal).sort((a, b) => a - b);
+  const institutionalAverage = Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10;
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - institutionalAverage, 2), 0) / scores.length;
+  const stdDeviation = Math.round(Math.sqrt(variance) * 10) / 10;
+  const position = scores.indexOf(selectedResult.imiFinal);
+  const percentile = scores.length > 1 ? Math.round((position / (scores.length - 1)) * 100) : 0;
+  const rank = scores.length - position;
+  return {
+    available: true,
+    institutionalAverage,
+    stdDeviation,
+    percentile,
+    userRankString: `${rank} de ${scores.length} analistas evaluados`,
+    sampleSize: scores.length,
+  };
+}
+
 export function calculateUserImi(
   selectedUser: UserDoc,
   projects: any[] = [],
@@ -64,9 +249,7 @@ export function calculateUserImi(
   const userId = selectedUser.id || "";
 
   // 1. Filtrado de proyectos pertenecientes al usuario
-  const userProjects = projects.filter(
-    (p) => p.createdBy === username || p.author === username || p.createdById === userId
-  );
+  const userProjects = projects.filter((p) => belongsToUser(p, selectedUser));
 
   const totalProjects = userProjects.length;
   const pAbiertos = userProjects.filter((p) => !p.estado || p.estado === "ABIERTO").length;
@@ -82,26 +265,13 @@ export function calculateUserImi(
   );
 
   // 3. Conteo de evidencias fotográficas reales
-  const evidenceCount = userProjects.reduce((sum, p) => {
-    if (p.photoCount !== undefined && p.photoCount !== null) {
-      return sum + Number(p.photoCount);
-    }
-    if (Array.isArray(p.attachedPhotos)) {
-      return sum + p.attachedPhotos.length;
-    }
-    if (Array.isArray(p.evidenceUrls)) {
-      return sum + p.evidenceUrls.length;
-    }
-    return sum;
-  }, 0);
+  const evidenceCount = userProjects.reduce((sum, p) => sum + realEvidenceCount(p), 0);
+  const validatedEvidenceCount = userProjects.reduce((sum, p) => sum + validatedEvidenceItems(p).length, 0);
 
   // 4. Proyectos con georreferenciación/GEOINT real
   const geointProjects = userProjects.filter(
     (p) =>
-      (p.geometryType && p.geometryType !== "individual") ||
-      p.latitud ||
-      p.coordenadas ||
-      p.hasGeoint === true
+      hasCanonicalGeography(p)
   ).length;
 
   // 5. Consultas OSINT en logs
@@ -120,6 +290,7 @@ export function calculateUserImi(
     const act = (log.action || log.details || "").toLowerCase();
     return osintKeywords.some((kw) => act.includes(kw));
   }).length;
+  const validatedOsintResults = validatedOsintCount(userProjects, userLogs);
 
   // 6. Acciones de correlación en logs
   const correlationActions = userLogs.filter((log) => {
@@ -129,12 +300,14 @@ export function calculateUserImi(
       act.includes("conexion") ||
       act.includes("correlación") ||
       act.includes("pandillas") ||
-      act.includes("mapa") ||
       act.includes("asociación") ||
       act.includes("cruce") ||
       act.includes("coincidencia")
     );
   }).length;
+  const validatedCorrelationResults = validatedCorrelationCount(userProjects, userLogs);
+  const validatedContextSignals = userProjects.filter(hasValidatedContext).length;
+  const validatedHypothesisSignals = userProjects.filter(hasValidatedHypothesis).length;
 
   // DETERMINACIÓN DE ACTIVIDAD OPERACIONAL COMPROBABLE (ADR-IMI-001)
   const hasOperationalActivity =
@@ -143,7 +316,20 @@ export function calculateUserImi(
     geointProjects > 0 ||
     osintQueriesCount > 0 ||
     correlationActions > 0 ||
+    validatedOsintResults > 0 ||
+    validatedCorrelationResults > 0 ||
+    validatedContextSignals > 0 ||
+    validatedHypothesisSignals > 0 ||
     userLogs.length > 0;
+  const hasInstitutionalEvaluation =
+    validatedEvidenceCount > 0 ||
+    geointProjects > 0 ||
+    validatedOsintResults > 0 ||
+    validatedCorrelationResults > 0 ||
+    validatedContextSignals > 0 ||
+    validatedHypothesisSignals > 0 ||
+    pValidados > 0;
+  const partialMeasurements: string[] = [];
 
   // REGLA OBLIGATORIA ADR-IMI-001: Si NO tiene evidencia operacional -> TODO ES 0%
   if (!hasOperationalActivity) {
@@ -157,7 +343,14 @@ export function calculateUserImi(
       geointProjects: 0,
       osintQueriesCount: 0,
       correlationActions: 0,
+      validatedOsintResults: 0,
+      validatedCorrelationResults: 0,
+      validatedHypothesisSignals: 0,
+      validatedContextSignals: 0,
+      validatedEvidenceCount: 0,
       hasOperationalActivity: false,
+      hasInstitutionalEvaluation: false,
+      partialMeasurements: [],
 
       // Subíndices en línea base cero (0%)
       iccScore: 0,
@@ -186,81 +379,59 @@ export function calculateUserImi(
 
   // --- CÁLCULO BASADO ÚNICAMENTE EN EVIDENCIA OPERACIONAL DEMOSTRADA ---
 
-  // A. ICC - Contexto (20%) - Basado en longitud descriptiva y terminología
+  // A. ICC - Contexto (20%) - Fuentes gobernadas de contextualización
   const avgDescLen =
     totalProjects > 0
       ? userProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / totalProjects
       : 0;
 
-  const analyticalKeywords = [
-    "vulnerabilidad", "atractor", "patrón", "riesgo", "osint", "geoint",
-    "hipótesis", "criminógeno", "acecho", "movilidad", "rutina", "rutinas",
-    "conexiones", "ambiente", "delictivo", "entorno", "focalizado", "análisis"
-  ];
-  let keywordMatches = 0;
-  userProjects.forEach((p) => {
-    const desc = (p.descripcion || "").toLowerCase();
-    analyticalKeywords.forEach((kw) => {
-      if (desc.includes(kw)) keywordMatches++;
-    });
-  });
+  const iccScore = validatedContextSignals > 0
+    ? Math.min(100, Math.round((validatedContextSignals / totalProjects) * 100))
+    : 0;
+  if (totalProjects > 0 && validatedContextSignals === 0) partialMeasurements.push("ICC: MEDICIÓN PARCIAL");
 
-  const iccScore =
-    totalProjects > 0
-      ? Math.min(100, Math.max(0, Math.round((avgDescLen / 250) * 50 + Math.min(50, keywordMatches * 5))))
-      : 0;
+  // B. ISH - Hipótesis (15%) - Validación y soporte gobernado
+  const ishScore = validatedHypothesisSignals > 0
+    ? Math.min(100, Math.max(0, Math.round((validatedHypothesisSignals / totalProjects) * 100 + pValidados * 5 - pDevueltos * 10)))
+    : 0;
+  if (totalProjects > 0 && validatedHypothesisSignals === 0) partialMeasurements.push("ISH: NO EVALUADO");
 
-  // B. ISH - Hipótesis (15%) - Conectores causales en descripciones
-  let logicalConnectives = 0;
-  userProjects.forEach((p) => {
-    const desc = (p.descripcion || "").toLowerCase();
-    ["porque", "debido a", "consecuencia", "por lo tanto", "causal", "hipótesis", "origen", "foco", "razon", "motivo", "factor"].forEach(
-      (conn) => {
-        if (desc.includes(conn)) logicalConnectives++;
-      }
-    );
-  });
-
-  const ishScore =
-    totalProjects > 0 && logicalConnectives > 0
-      ? Math.min(100, Math.max(0, Math.round(logicalConnectives * 15 + pValidados * 20 - pDevueltos * 10)))
-      : 0;
-
-  // C. ICA - Correlación (15%) - Vínculos y cruces en logs/proyectos
+  // C. ICA - Correlación (15%) - Relaciones institucionales reales
   const icaScore =
-    correlationActions > 0 || totalProjects > 1
-      ? Math.min(100, Math.max(0, Math.round(correlationActions * 25 + totalProjects * 10)))
+    validatedCorrelationResults > 0
+      ? Math.min(100, Math.max(0, Math.round(validatedCorrelationResults * 25)))
       : 0;
+  if (correlationActions > 0 && validatedCorrelationResults === 0) partialMeasurements.push("ICA: actividad sin correlación validada");
 
-  // D. IAA - Autonomía IA (10%) - Proyectos sin devoluciones por observaciones
-  const iaaScore =
-    totalProjects > 0
-      ? Math.min(100, Math.max(0, Math.round(100 - pDevueltos * 25)))
-      : 0;
+  // D. IAA - Gobernanza de Validación Analítica (10%)
+  const iaaScore = totalProjects > 0 ? humanValidationScore(userProjects, pDevueltos) : 0;
+  if (totalProjects > 0 && iaaScore === 0) partialMeasurements.push("IAA: MEDICIÓN PARCIAL");
 
   // E. ICE - Evidencia (10%) - Fotografías y documentos georreferenciados reales
   const iceScore =
-    totalProjects > 0 && evidenceCount > 0
-      ? Math.min(100, Math.max(0, Math.round((evidenceCount / (totalProjects * 2)) * 100)))
+    totalProjects > 0 && validatedEvidenceCount > 0
+      ? Math.min(100, Math.max(0, Math.round((validatedEvidenceCount / Math.max(1, evidenceCount)) * 100)))
       : 0;
+  if (evidenceCount > 0 && validatedEvidenceCount === 0) partialMeasurements.push("ICE: conteo real sin calidad trazable");
 
-  // F. IGEO - GEOINT (10%) - Polígonos y mapas trazados
+  // F. IGEO - GEOINT (10%) - Geografía canónica válida
   const igeoScore =
     geointProjects > 0
-      ? Math.min(100, Math.max(0, Math.round(geointProjects * 30 + totalProjects * 10)))
+      ? Math.min(100, Math.max(0, Math.round((geointProjects / totalProjects) * 100)))
       : 0;
 
-  // G. IOSINT - OSINT (10%) - Consultas en registros externos
+  // G. IOSINT - OSINT (10%) - Resultados explotados y validados
   const iosintScore =
-    osintQueriesCount > 0
-      ? Math.min(100, Math.max(0, Math.round(osintQueriesCount * 30 + totalProjects * 5)))
+    validatedOsintResults > 0
+      ? Math.min(100, Math.max(0, Math.round(validatedOsintResults * 25)))
       : 0;
+  if (osintQueriesCount > 0 && validatedOsintResults === 0) partialMeasurements.push("IOSINT: consulta registrada sin resultado validado");
 
   // H. IPI - Productividad (10%) - Expedientes cerrados y validados
   const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
   const ipiScore =
-    totalProjects > 0
-      ? Math.min(100, Math.max(0, Math.round(completionRate * 60 + pValidados * 20 + totalProjects * 5)))
+    pValidados > 0
+      ? Math.min(100, Math.max(0, Math.round(completionRate * 70 + pValidados * 10)))
       : 0;
 
   // --- MODIFICADORES BASADOS ÚNICAMENTE EN VOLUMEN DE TRABAJO OPERATIVO (SIN ANTIGÜEDAD) ---
@@ -342,7 +513,14 @@ export function calculateUserImi(
     geointProjects,
     osintQueriesCount,
     correlationActions,
+    validatedOsintResults,
+    validatedCorrelationResults,
+    validatedHypothesisSignals,
+    validatedContextSignals,
+    validatedEvidenceCount,
     hasOperationalActivity: true,
+    hasInstitutionalEvaluation,
+    partialMeasurements,
 
     iccScore,
     ishScore,

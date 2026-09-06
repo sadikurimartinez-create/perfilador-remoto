@@ -9,14 +9,14 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
-  LineChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
   Tooltip,
   Legend,
-  Line,
 } from "recharts";
+import {
+  calculateUserImi,
+  IMI_OPERATIONAL_MATURITY_LABEL,
+  PERFORMANCE_HISTORY_UNAVAILABLE,
+} from "../utils/imiEngine";
 
 type UserDoc = {
   id: string;
@@ -39,214 +39,91 @@ type SecaiDashboardProps = {
 };
 
 export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashboardProps) {
-  // 1. Filtrar proyectos y logs reales del usuario seleccionado
-  const userProjects = projects.filter((p) => p.createdBy === selectedUser.username);
-  const totalProjects = userProjects.length;
-  const pAbiertos = userProjects.filter((p) => !p.estado || p.estado === "ABIERTO").length;
-  const pRevision = userProjects.filter((p) => p.estado === "EN REVISIÓN").length;
-  const pDevueltos = userProjects.filter((p) => p.estado === "DEVUELTO").length;
-  const pValidados = userProjects.filter((p) => p.estado === "CERRADO" || p.estado === "VALIDADO").length;
-
-  const userLogs = auditLogs.filter(
-    (log) => log.user === selectedUser.username || log.userId === selectedUser.id
-  );
-
-  // 2. Motor de cálculo de indicadores de desempeño (SECAI)
-  // A. Índice de Calidad de Contextualización (ICC)
-  const avgDescLen =
-    totalProjects > 0
-      ? userProjects.reduce((sum, p) => sum + (p.descripcion?.length || 0), 0) / totalProjects
-      : 0;
-
-  const analyticalKeywords = [
-    "vulnerabilidad",
-    "atractor",
-    "patrón",
-    "riesgo",
-    "osint",
-    "geoint",
-    "hipótesis",
-    "criminógeno",
-    "acecho",
-    "movilidad",
-    "rutina",
-    "rutinas",
-    "conexiones",
-    "ambiente",
-  ];
-  let keywordMatches = 0;
-  userProjects.forEach((p) => {
-    const desc = (p.descripcion || "").toLowerCase();
-    analyticalKeywords.forEach((kw) => {
-      if (desc.includes(kw)) keywordMatches++;
-    });
-  });
-
-  const iccScore = Math.max(
-    10,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 45 // Valor inicial preventivo para que no empiece en cero absoluto si no tiene proyectos
-        : Math.round((avgDescLen / 250) * 55 + Math.min(45, keywordMatches * 4))
-    )
-  );
+  const imi = calculateUserImi(selectedUser, projects, auditLogs);
+  const {
+    totalProjects,
+    pDevueltos,
+    pValidados,
+    evidenceCount,
+    validatedEvidenceCount,
+    validatedContextSignals,
+    validatedHypothesisSignals,
+    validatedCorrelationResults,
+    validatedOsintResults,
+    iccScore,
+    ishScore,
+    icaScore,
+    iaaScore,
+    iceScore,
+    igeoScore,
+    iosintScore,
+    ipiScore,
+    imiFinal,
+    hasInstitutionalEvaluation,
+    partialMeasurements,
+  } = imi;
+  const iciScore = imiFinal;
+  const igScore = igeoScore;
+  const ivaScore = hasInstitutionalEvaluation ? Math.round((iceScore + iosintScore + icaScore) / 3) : 0;
+  const finalIdoneidad = imiFinal;
 
   const getIccLevel = (score: number) => {
-    if (score >= 90) return "Experto";
+    if (score === 0) return "NO EVALUADO";
+    if (score >= 90) return "MADUREZ AVANZADA";
     if (score >= 75) return "Avanzado";
     if (score >= 50) return "Adecuado";
     if (score >= 30) return "Básico";
     return "Deficiente";
   };
 
-  // B. Índice de Valor Analítico (IVA)
-  const projectsWithReport = userProjects.filter(
-    (p) => p.reportSummary || p.aiReport || p.perfilCompletoCompleto || p.hasAIAnalysis
-  ).length;
-  const ivaScore = Math.max(
-    15,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 50
-        : Math.round((projectsWithReport / totalProjects) * 60 + Math.min(40, totalProjects * 8))
-    )
-  );
-
-  // C. Índice de Solidez Hipotética (ISH)
-  let logicalConnectives = 0;
-  userProjects.forEach((p) => {
-    const desc = (p.descripcion || "").toLowerCase();
-    ["porque", "debido a", "consecuencia", "por lo tanto", "causal", "hipótesis", "origen", "foco"].forEach(
-      (conn) => {
-        if (desc.includes(conn)) logicalConnectives++;
-      }
-    );
-  });
-  const ishScore = Math.max(
-    20,
-    Math.min(
-      100,
-      totalProjects === 0
-        ? 48
-        : Math.round(50 + logicalConnectives * 6 + pValidados * 8 - pDevueltos * 5)
-    )
-  );
-
-  // D. Índice de Correlación Analítica (ICA)
-  const correlationActions = userLogs.filter((log) => {
-    const act = (log.action || log.details || "").toLowerCase();
-    return (
-      act.includes("vínculo") ||
-      act.includes("conexion") ||
-      act.includes("correlación") ||
-      act.includes("pandillas") ||
-      act.includes("mapa")
-    );
-  }).length;
-  const icaScore = Math.max(
-    20,
-    Math.min(100, totalProjects === 0 ? 52 : Math.round(45 + correlationActions * 8 + totalProjects * 4))
-  );
-
-  // E. Idoneidad Analítica Alcanzada (Histórica)
-  const initialIdoneidad = 60; // Base inicial estándar
-  const finalIdoneidad = Math.max(
-    25,
-    Math.min(100, Math.round(60 + pValidados * 9 - pDevueltos * 4))
-  );
-  const idoneidadIncrement = finalIdoneidad - initialIdoneidad;
-
-  // F. Índice de Autonomía Analítica (IAA) (Interacción con IA)
-  // Menor cantidad de devoluciones por fallos analíticos e ingresos con descripciones detalladas = mayor autonomía
-  const iaaScore = Math.max(
-    30,
-    Math.min(100, Math.round(100 - pDevueltos * 6 + Math.min(20, avgDescLen / 12)))
-  );
-
-  // G. Índice de Captura de Evidencia (ICE)
-  const estimatedEvidence = userProjects.reduce((sum, p) => sum + (p.photoCount || 3), 0);
-  const iceScore = Math.max(
-    15,
-    Math.min(100, totalProjects === 0 ? 40 : Math.round((estimatedEvidence / 20) * 100))
-  );
-
-  // H. Índice de Productividad Investigativa (IPI)
-  const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
-  const ipiScore = Math.max(
-    10,
-    Math.min(100, totalProjects === 0 ? 45 : Math.round(completionRate * 60 + pValidados * 8))
-  );
-
-  // I. Índice GEOINT (IG)
-  const geointProjects = userProjects.filter((p) => p.geometryType && p.geometryType !== "individual").length;
-  const igScore = Math.max(
-    15,
-    Math.min(100, totalProjects === 0 ? 50 : Math.round(50 + geointProjects * 15 + totalProjects * 3))
-  );
-
-  // J. Índice de Competencia Investigativa (ICI) (Global)
-  const iciScore = Math.round((iccScore + ishScore + icaScore + igScore) / 4);
-
   // 3. Competencias Específicas para Radar
   const radarData = [
-    { subject: "GEOINT", Analista: igScore, Promedio: 68 },
-    { subject: "OSINT", Analista: icaScore, Promedio: 72 },
-    { subject: "Análisis Criminal", Analista: iciScore, Promedio: 75 },
-    { subject: "Correlación", Analista: icaScore, Promedio: 70 },
-    { subject: "Hipótesis", Analista: ishScore, Promedio: 65 },
-    { subject: "Contextualización", Analista: iccScore, Promedio: 74 },
-    { subject: "Gestión Evidencia", Analista: iceScore, Promedio: 78 },
-  ];
-
-  // 4. Datos Históricos de Evolución Mensual (Mapeo Simulado de últimos 6 meses basado en score actual)
-  const monthlyData = [
-    { name: "Ene", Analista: Math.max(30, iciScore - 12), Promedio: 69 },
-    { name: "Feb", Analista: Math.max(30, iciScore - 8), Promedio: 70 },
-    { name: "Mar", Analista: Math.max(30, iciScore - 5), Promedio: 71 },
-    { name: "Abr", Analista: Math.max(30, iciScore - 2), Promedio: 71 },
-    { name: "May", Analista: iciScore, Promedio: 72 },
-    { name: "Jun", Analista: finalIdoneidad, Promedio: 73 },
+    { subject: "GEOINT", Analista: igScore },
+    { subject: "OSINT", Analista: iosintScore },
+    { subject: "Análisis", Analista: iciScore },
+    { subject: "Correlación", Analista: icaScore },
+    { subject: "Hipótesis", Analista: ishScore },
+    { subject: "Contexto", Analista: iccScore },
+    { subject: "Evidencia", Analista: iceScore },
   ];
 
   // 5. Motor de Fortalezas Automático (Sustentado en Métricas Reales)
   const autoFortalezas: string[] = [];
-  if (iccScore >= 75) autoFortalezas.push("Excelente capacidad de contextualización y narrativa del entorno (ICC alto).");
-  if (ishScore >= 75) autoFortalezas.push("Hipótesis criminales sólidas, coherentes y con nexos causales demostrados (ISH alto).");
-  if (iaaScore >= 80) autoFortalezas.push("Alta autonomía analítica en el procesamiento de evidencia y menor dependencia de rectificación asistida (IAA destacado).");
-  if (iceScore >= 70) autoFortalezas.push("Ingreso de evidencia de campo exhaustivo y completo (ICE sobresaliente).");
-  if (icaScore >= 70) autoFortalezas.push("Alta precisión y proactividad en el establecimiento de correlaciones y vínculos históricos (ICA destacado).");
-  if (igScore >= 75) autoFortalezas.push("Excelente capacidad de análisis geoespacial y modelado espacial táctico (IG alto).");
+  if (iccScore >= 75) autoFortalezas.push("Contextualización gobernada disponible en expedientes evaluados.");
+  if (ishScore >= 75) autoFortalezas.push("Hipótesis con soporte o validación institucional registrada.");
+  if (iaaScore >= 80) autoFortalezas.push("Gobernanza de validación analítica con revisión humana registrada.");
+  if (iceScore >= 70) autoFortalezas.push("Evidencia trazable disponible en expedientes evaluados.");
+  if (icaScore >= 70) autoFortalezas.push("Correlaciones institucionales validadas disponibles.");
+  if (igScore >= 75) autoFortalezas.push("Geografía canónica válida en expedientes evaluados.");
 
   if (autoFortalezas.length === 0) {
-    autoFortalezas.push("Capacidad de análisis regular bajo estándares institucionales.");
-    autoFortalezas.push("Integración correcta de la evidencia asignada.");
+    autoFortalezas.push("SIN EVALUACIÓN: no existen señales gobernadas suficientes para emitir fortalezas automáticas.");
   }
 
   // 6. Motor de Áreas de Fortalecimiento Automático (Vinculado a Métricas)
   const autoAreasFortalecimiento: string[] = [];
-  if (iccScore < 70) autoAreasFortalecimiento.push("Incrementar la profundidad, narrativa y detalle en las contextualizaciones de campo.");
-  if (ishScore < 70) autoAreasFortalecimiento.push("Mejorar la precisión estructural de las hipótesis, ligando la causa con el impacto ambiental.");
-  if (icaScore < 70) autoAreasFortalecimiento.push("Incrementar la calidad de las correlaciones analíticas cruzando más variables espaciales.");
-  if (iaaScore < 70) autoAreasFortalecimiento.push("Reducir la dependencia de IA mediante la formulación de descripciones iniciales más robustas.");
-  if (iceScore < 60) autoAreasFortalecimiento.push("Aumentar la captura de evidencia descriptiva y documental en cada expediente.");
-  if (igScore < 65) autoAreasFortalecimiento.push("Fortalecer la competencia de mapeo de polígonos complejos y barridos de geointeligencia.");
+  if (iccScore < 70) autoAreasFortalecimiento.push("Registrar contextualizaciones gobernadas o elegibilidad institucional verificable.");
+  if (ishScore < 70) autoAreasFortalecimiento.push("Vincular hipótesis con evidencias, hallazgos o validación humana registrada.");
+  if (icaScore < 70) autoAreasFortalecimiento.push("Formalizar convergencias, contradicciones o correlaciones institucionales aprobadas.");
+  if (iaaScore < 70) autoAreasFortalecimiento.push("Completar revisión humana, validación y cierre de flujo institucional.");
+  if (iceScore < 60) autoAreasFortalecimiento.push("Registrar evidencia real con trazabilidad, geografía o validación humana.");
+  if (igScore < 65) autoAreasFortalecimiento.push("Asociar geografía canónica válida al expediente.");
 
   if (autoAreasFortalecimiento.length === 0) {
-    autoAreasFortalecimiento.push("Sostener la tendencia actual de mejora analítica.");
-    autoAreasFortalecimiento.push("Explorar técnicas avanzadas de cartografía predictiva.");
+    autoAreasFortalecimiento.push("Mantener captura de señales gobernadas en expedientes posteriores.");
   }
 
   // 7. Alertas Tempranas del Analista
   const alerts: { text: string; type: "warning" | "danger" }[] = [];
-  if (iaaScore < 50) alerts.push({ text: "Dependencia excesiva en la re-generación asistida de IA (IAA inferior a 50%).", type: "warning" });
-  if (iccScore < 50) alerts.push({ text: "Calidad de contextualizaciones de campo insuficiente o con descripciones demasiado breves.", type: "danger" });
+  const completionRate = totalProjects > 0 ? pValidados / totalProjects : 0;
+  if (iaaScore < 50) alerts.push({ text: "Gobernanza de validación analítica insuficiente o no evaluada.", type: "warning" });
+  if (iccScore < 50) alerts.push({ text: "Contextualización gobernada insuficiente o no evaluada.", type: "danger" });
   if (pDevueltos > pValidados && totalProjects > 2) alerts.push({ text: "Tasa de expedientes devueltos superior a expedientes validados.", type: "danger" });
   if (totalProjects > 0 && completionRate < 0.3) alerts.push({ text: "Bajo índice de conclusión y cierre de carpetas de investigación.", type: "warning" });
 
   const getCompetenceLevel = (score: number) => {
-    if (score >= 90) return "Experto";
+    if (score === 0) return "NO EVALUADO";
+    if (score >= 90) return "MADUREZ AVANZADA";
     if (score >= 75) return "Avanzado";
     if (score >= 50) return "Intermedio";
     if (score >= 30) return "Básico";
@@ -255,7 +132,7 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
 
   const getCompetenceColor = (level: string) => {
     switch (level) {
-      case "Experto": return "bg-fuchsia-950/40 text-fuchsia-300 border-fuchsia-700/60";
+      case "MADUREZ AVANZADA": return "bg-fuchsia-950/40 text-fuchsia-300 border-fuchsia-700/60";
       case "Avanzado": return "bg-sky-950/40 text-sky-300 border-sky-700/60";
       case "Intermedio": return "bg-emerald-950/40 text-emerald-300 border-emerald-700/60";
       case "Básico": return "bg-amber-950/40 text-amber-300 border-amber-700/60";
@@ -286,7 +163,7 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
             </p>
           </div>
           <div className="text-center">
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Nivel Integrado</p>
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{IMI_OPERATIONAL_MATURITY_LABEL}</p>
             <span className={`inline-block text-xs font-bold uppercase mt-1 px-2.5 py-0.5 rounded-md border ${getCompetenceColor(getCompetenceLevel(iciScore))}`}>
               {getCompetenceLevel(iciScore)}
             </span>
@@ -338,8 +215,8 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
               <span className="font-semibold text-slate-200">{getIccLevel(iccScore)}</span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Promedio Caracteres:</span>
-              <span className="font-semibold text-slate-200">{Math.round(avgDescLen)} carácteres</span>
+              <span>Señales gobernadas:</span>
+              <span className="font-semibold text-slate-200">{validatedContextSignals}</span>
             </div>
             <div className="w-full bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
               <div className="bg-sky-500 h-full rounded-full" style={{ width: `${iccScore}%` }} />
@@ -358,13 +235,13 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
           </div>
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Dictámenes Generados:</span>
-              <span className="font-semibold text-slate-200">{projectsWithReport} de {totalProjects}</span>
+              <span>Resultados validados:</span>
+              <span className="font-semibold text-slate-200">{validatedOsintResults + validatedCorrelationResults}</span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-400">
               <span>Tasa Conversión OSINT:</span>
               <span className="font-semibold text-slate-200">
-                {totalProjects > 0 ? Math.round((projectsWithReport / totalProjects) * 100) : 0}%
+                {ivaScore}%
               </span>
             </div>
             <div className="w-full bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
@@ -384,14 +261,14 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
           </div>
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Coherencia Lógica:</span>
+              <span>Soporte gobernado:</span>
               <span className="font-semibold text-slate-200">
-                {ishScore >= 75 ? "Sólida y Estructurada" : "En Fortalecimiento"}
+                {ishScore > 0 ? "Disponible" : "NO EVALUADO"}
               </span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Variables Explicativas:</span>
-              <span className="font-semibold text-slate-200">{logicalConnectives} conectores</span>
+              <span>Hipótesis verificadas:</span>
+              <span className="font-semibold text-slate-200">{validatedHypothesisSignals}</span>
             </div>
             <div className="w-full bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
               <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${ishScore}%` }} />
@@ -410,12 +287,12 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
           </div>
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Vínculos Históricos:</span>
-              <span className="font-semibold text-slate-200">{correlationActions} detectados</span>
+              <span>Relaciones validadas:</span>
+              <span className="font-semibold text-slate-200">{validatedCorrelationResults}</span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Análisis de Redes:</span>
-              <span className="font-semibold text-slate-200">{icaScore >= 70 ? "Avanzado" : "Regular"}</span>
+              <span>Estado:</span>
+              <span className="font-semibold text-slate-200">{icaScore > 0 ? "Evaluado" : "NO EVALUADO"}</span>
             </div>
             <div className="w-full bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
               <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${icaScore}%` }} />
@@ -427,18 +304,18 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
         <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Autonomía Analítica</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Gobernanza de Validación Analítica</p>
               <h4 className="text-lg font-black text-slate-100 tracking-tight">IAA</h4>
             </div>
             <span className="text-amber-400 font-black text-xl">{iaaScore}%</span>
           </div>
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Dependencia de IA:</span>
-              <span className="font-semibold text-slate-200">{iaaScore >= 75 ? "Baja" : "Moderada"}</span>
+              <span>Validación humana:</span>
+              <span className="font-semibold text-slate-200">{iaaScore > 0 ? "Registrada" : "NO EVALUADA"}</span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Correcciones Requeridas:</span>
+              <span>Devoluciones:</span>
               <span className="font-semibold text-slate-200">{pDevueltos} devoluciones</span>
             </div>
             <div className="w-full bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
@@ -451,21 +328,19 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
         <CEIPOLCard variant="glass" className="p-5 flex flex-col justify-between shadow-lg">
           <div className="flex items-start justify-between border-b border-slate-800 pb-2 mb-3">
             <div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Idoneidad Alcanzada</p>
-              <h4 className="text-lg font-black text-slate-100 tracking-tight">Evolución</h4>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Madurez Operativa</p>
+              <h4 className="text-lg font-black text-slate-100 tracking-tight">Evaluación</h4>
             </div>
             <span className="text-cyan-400 font-black text-xl">{finalIdoneidad}%</span>
           </div>
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Idoneidad Inicial:</span>
-              <span className="font-semibold text-slate-200">{initialIdoneidad}%</span>
+              <span>Estado:</span>
+              <span className="font-semibold text-slate-200">{hasInstitutionalEvaluation ? "EVALUADO" : "SIN EVALUACIÓN"}</span>
             </div>
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>Incremento Neto:</span>
-              <span className={`font-semibold ${idoneidadIncrement >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {idoneidadIncrement >= 0 ? `+${idoneidadIncrement}%` : `${idoneidadIncrement}%`}
-              </span>
+              <span>Medición:</span>
+              <span className="font-semibold text-amber-300">{partialMeasurements.length > 0 ? "PARCIAL" : "COMPLETA"}</span>
             </div>
             <div className="w-full bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
               <div className="bg-cyan-500 h-full rounded-full" style={{ width: `${finalIdoneidad}%` }} />
@@ -479,7 +354,7 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
         {/* Radar Chart Panel */}
         <CEIPOLCard variant="glass" className="p-5 shadow-lg space-y-4">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
-            Radar de Competencias Analíticas
+            Radar de Indicadores Operativos
           </h4>
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -494,13 +369,6 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
                   fill="#c084fc"
                   fillOpacity={0.25}
                 />
-                <Radar
-                  name="Promedio SSP"
-                  dataKey="Promedio"
-                  stroke="#94a3b8"
-                  fill="#94a3b8"
-                  fillOpacity={0.1}
-                />
                 <Legend />
               </RadarChart>
             </ResponsiveContainer>
@@ -510,39 +378,12 @@ export function SecaiDashboard({ selectedUser, projects, auditLogs }: SecaiDashb
         {/* Line Chart Panel */}
         <CEIPOLCard variant="glass" className="p-5 shadow-lg space-y-4">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
-            Evolución Mensual e Idoneidad Histórica
+            Histórico de Desempeño
           </h4>
-          <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 10 }} />
-                <YAxis stroke="#64748b" domain={[0, 100]} tick={{ fontSize: 10 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    color: "#f8fafc",
-                  }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="Analista"
-                  stroke="#38bdf8"
-                  strokeWidth={3}
-                  activeDot={{ r: 8 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="Promedio"
-                  stroke="#e2e8f0"
-                  strokeDasharray="5 5"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="h-[280px] flex items-center justify-center text-center rounded-xl border border-slate-800 bg-slate-950/40 px-6">
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
+              {PERFORMANCE_HISTORY_UNAVAILABLE}
+            </p>
           </div>
         </CEIPOLCard>
       </div>

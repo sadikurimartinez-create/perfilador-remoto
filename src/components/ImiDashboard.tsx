@@ -20,7 +20,14 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { calculateUserImi, UserDoc } from "../utils/imiEngine";
+import {
+  calculateInstitutionalComparison,
+  calculateUserImi,
+  IMI_OPERATIONAL_MATURITY_LABEL,
+  INSUFFICIENT_INSTITUTIONAL_COMPARISON,
+  PERFORMANCE_HISTORY_UNAVAILABLE,
+  UserDoc,
+} from "../utils/imiEngine";
 
 type ImiDashboardProps = {
   selectedUser: UserDoc;
@@ -75,40 +82,13 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
     return "text-red-400 border-red-500/30 bg-red-950/20";
   };
 
-  // --- COMPARATIVOS INSTITUCIONALES (ÚNICAMENTE SI TIENE EVIDENCIA) ---
-  let institutionalAverage = 0;
-  let stdDeviation = 0;
-  let percentile = 0;
-  let userRankString = "Sin evaluación";
-
-  if (hasOperationalActivity) {
-    if (allUsers.length > 1) {
-      const otherScores = allUsers.map((u) => {
-        const seed = u.username.charCodeAt(0) + u.name.length;
-        return 55 + (seed % 35);
-      });
-      const allScores = [...otherScores, imiFinal].sort((a, b) => a - b);
-      const sum = allScores.reduce((s, val) => s + val, 0);
-      institutionalAverage = Math.round((sum / allScores.length) * 10) / 10;
-
-      const variance =
-        allScores.reduce((s, val) => s + Math.pow(val - institutionalAverage, 2), 0) /
-        allScores.length;
-      stdDeviation = Math.round(Math.sqrt(variance) * 10) / 10;
-
-      const position = allScores.indexOf(imiFinal);
-      percentile = Math.round((position / (allScores.length - 1)) * 100);
-
-      const rank = allScores.length - position;
-      userRankString = `${rank} de ${allScores.length} analistas`;
-    } else {
-      institutionalAverage = 71.2;
-      percentile = 0;
-      userRankString = "1 de 1 analistas";
-    }
-  }
-
-  const deviation = hasOperationalActivity ? Math.round((imiFinal - institutionalAverage) * 10) / 10 : 0;
+  const institutionalComparison = calculateInstitutionalComparison(selectedUser, projects, auditLogs, allUsers);
+  const institutionalAverage = institutionalComparison.institutionalAverage;
+  const percentile = institutionalComparison.percentile;
+  const userRankString = institutionalComparison.userRankString;
+  const deviation = institutionalComparison.available && institutionalAverage !== null
+    ? Math.round((imiFinal - institutionalAverage) * 10) / 10
+    : null;
 
   // --- ALERTAS DE RENDIMIENTO AUTOMÁTICAS (ADR-IMI-001) ---
   const warnings: { text: string; severity: "info" | "warning" | "danger" }[] = [];
@@ -119,7 +99,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
       severity: "info"
     });
   } else {
-    if (deviation < -10) {
+    if (deviation !== null && deviation < -10) {
       warnings.push({
         text: `Tu IMI está por debajo del promedio institucional (${deviation} puntos de desviación). Se sugiere capacitación.`,
         severity: "danger"
@@ -174,39 +154,15 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
       );
   }
 
-  // --- HISTORIAL DE EVOLUCIÓN HISTÓRICA ---
-  const historicalData = !hasOperationalActivity
-    ? [
-        { period: "Hace 365 días", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
-        { period: "Hace 180 días", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
-        { period: "Hace 90 días", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
-        { period: "Actual", General: 0, Operativo: 0, Estratégico: 0, Promedio: 0 },
-      ]
-    : [
-        { period: "Hace 365 días", General: Math.max(0, imiFinal - 18), Operativo: Math.max(0, imiOperativo - 12), Estratégico: Math.max(0, imiEstrategico - 22), Promedio: 66 },
-        { period: "Hace 180 días", General: Math.max(0, imiFinal - 10), Operativo: Math.max(0, imiOperativo - 6), Estratégico: Math.max(0, imiEstrategico - 14), Promedio: 68 },
-        { period: "Hace 90 días", General: Math.max(0, imiFinal - 4), Operativo: Math.max(0, imiOperativo - 2), Estratégico: Math.max(0, imiEstrategico - 6), Promedio: 70 },
-        { period: "Actual", General: imiFinal, Operativo: imiOperativo, Estratégico: imiEstrategico, Promedio: Math.round(institutionalAverage) },
-      ];
-
-  const filteredHistory =
-    timeFilter === "30"
-      ? historicalData.slice(2)
-      : timeFilter === "90"
-      ? historicalData.slice(2)
-      : timeFilter === "180"
-      ? historicalData.slice(1)
-      : historicalData;
-
   const radarData = [
-    { subject: "Contexto (ICC)", Analista: iccScore, Promedio: hasOperationalActivity ? 72 : 0 },
-    { subject: "Hipótesis (ISH)", Analista: ishScore, Promedio: hasOperationalActivity ? 68 : 0 },
-    { subject: "Correlación (ICA)", Analista: icaScore, Promedio: hasOperationalActivity ? 70 : 0 },
-    { subject: "Evidencia (ICE)", Analista: iceScore, Promedio: hasOperationalActivity ? 74 : 0 },
-    { subject: "GEOINT (IGEO)", Analista: igeoScore, Promedio: hasOperationalActivity ? 65 : 0 },
-    { subject: "OSINT (IOSINT)", Analista: iosintScore, Promedio: hasOperationalActivity ? 69 : 0 },
-    { subject: "Productividad (IPI)", Analista: ipiScore, Promedio: hasOperationalActivity ? 73 : 0 },
-    { subject: "Autonomía (IAA)", Analista: iaaScore, Promedio: hasOperationalActivity ? 78 : 0 },
+    { subject: "Contexto (ICC)", Analista: iccScore },
+    { subject: "Hipótesis (ISH)", Analista: ishScore },
+    { subject: "Correlación (ICA)", Analista: icaScore },
+    { subject: "Evidencia (ICE)", Analista: iceScore },
+    { subject: "GEOINT (IGEO)", Analista: igeoScore },
+    { subject: "OSINT (IOSINT)", Analista: iosintScore },
+    { subject: "Productividad (IPI)", Analista: ipiScore },
+    { subject: "Gobernanza (IAA)", Analista: iaaScore },
   ];
 
   return (
@@ -283,8 +239,9 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                       imiFinal
                     )}`}
                   >
-                    {currentLevel}
+                    {currentLevel === "Experto" ? "MADUREZ AVANZADA" : currentLevel}
                   </span>
+                  <p className="text-[9px] text-slate-500 mt-1">{IMI_OPERATIONAL_MATURITY_LABEL}</p>
                 </div>
               </div>
 
@@ -482,7 +439,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
               <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[10px] text-slate-500 font-bold">Autonomía IA (10%)</span>
+                    <span className="text-[10px] text-slate-500 font-bold">Gobernanza de Validación Analítica (10%)</span>
                     <p className="text-sm font-black text-slate-200">IAA</p>
                   </div>
                   <span className="text-amber-400 font-extrabold text-base">{iaaScore}%</span>
@@ -570,13 +527,6 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                       fill="#0284c7"
                       fillOpacity={0.25}
                     />
-                    <Radar
-                      name="Promedio Inst."
-                      dataKey="Promedio"
-                      stroke="#f472b6"
-                      fill="#db2777"
-                      fillOpacity={0.12}
-                    />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "#0f172a",
@@ -602,19 +552,19 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                     Ranking Interno
                   </span>
                   <span className="text-base font-black text-slate-100 block mt-2">
-                    {hasOperationalActivity ? userRankString : "Sin evaluación"}
+                    {institutionalComparison.available ? userRankString : INSUFFICIENT_INSTITUTIONAL_COMPARISON}
                   </span>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Posición en la SSP</span>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Sólo con muestra real evaluada</span>
                 </div>
                 <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-center">
                   <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest block">
                     Percentil Alcanzado
                   </span>
                   <span className="text-2xl font-black text-sky-400 block mt-1">
-                    {hasOperationalActivity ? `${percentile}%` : "N/A"}
+                    {institutionalComparison.available ? `${percentile}%` : "N/A"}
                   </span>
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    {hasOperationalActivity ? `Mejor que el ${percentile}%` : "Sin actividad registrada"}
+                    {institutionalComparison.available ? `Muestra real: ${institutionalComparison.sampleSize}` : "Sin comparativo institucional"}
                   </span>
                 </div>
                 <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-center">
@@ -622,24 +572,24 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                     Media Institucional
                   </span>
                   <span className="text-lg font-black text-slate-300 block mt-2">
-                    {hasOperationalActivity ? `${institutionalAverage}%` : "N/A"}
+                    {institutionalComparison.available ? `${institutionalAverage}%` : "N/A"}
                   </span>
                   <span className="text-[10px] text-slate-400 mt-1 block">Puntuación promedio</span>
                 </div>
                 <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-center">
                   <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest block">
-                    Desviación Estándar
+                    Desviación
                   </span>
                   <span
                     className={`text-lg font-black block mt-2 ${
-                      !hasOperationalActivity
+                      deviation === null
                         ? "text-slate-400"
                         : deviation >= 0
                         ? "text-emerald-400"
                         : "text-rose-400"
                     }`}
                   >
-                    {!hasOperationalActivity ? "N/A" : deviation >= 0 ? `+${deviation}` : `${deviation}`}
+                    {deviation === null ? "N/A" : deviation >= 0 ? `+${deviation}` : `${deviation}`}
                   </span>
                   <span className="text-[10px] text-slate-400 mt-1 block">Respecto a la media</span>
                 </div>
@@ -651,15 +601,15 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                   <span>Desviación respecto al promedio:</span>
                   <span
                     className={
-                      !hasOperationalActivity
+                      deviation === null
                         ? "text-amber-400"
                         : deviation >= 0
                         ? "text-emerald-400"
                         : "text-rose-400"
                     }
                   >
-                    {!hasOperationalActivity
-                      ? "SIN EVALUACIÓN — Sin evidencia operacional"
+                    {deviation === null
+                      ? INSUFFICIENT_INSTITUTIONAL_COMPARISON
                       : deviation >= 0
                       ? `Sobresaliente (+${deviation} pts)`
                       : `Recomendación de mejora (${deviation} pts)`}
@@ -667,7 +617,7 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 </div>
                 <div className="relative w-full h-2 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
                   <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-slate-600 z-10" />
-                  {hasOperationalActivity && (
+                  {deviation !== null && (
                     <div
                       className={`absolute top-0 bottom-0 rounded-full ${
                         deviation >= 0 ? "bg-emerald-500" : "bg-rose-500"
@@ -689,72 +639,11 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">
                 Evolución Histórica de Madurez Investigativa
               </h4>
-              <div className="flex bg-slate-950 border border-slate-800 rounded-lg p-0.5 gap-0.5">
-                {[
-                  { value: "90", label: "90 días" },
-                  { value: "180", label: "180 días" },
-                  { value: "365", label: "1 año" }
-                ].map((opt) => (
-                  <CEIPOLButton
-                    key={opt.value}
-                    variant={timeFilter === opt.value ? "primary" : "secondary"}
-                    onClick={() => setTimeFilter(opt.value as any)}
-                    className="px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-                  >
-                    {opt.label}
-                  </CEIPOLButton>
-                ))}
-              </div>
             </div>
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={filteredHistory} margin={{ top: 10, right: 15, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="period" stroke="#64748b" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#64748b" domain={[0, 100]} tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#0f172a",
-                      borderColor: "#334155",
-                      borderRadius: "8px",
-                      color: "#f8fafc",
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    name="IMI General"
-                    dataKey="General"
-                    stroke="#38bdf8"
-                    strokeWidth={3}
-                    activeDot={{ r: 8 }}
-                  />
-                  <Line
-                    type="monotone"
-                    name="IMI Operativo"
-                    dataKey="Operativo"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    strokeDasharray="4 2"
-                  />
-                  <Line
-                    type="monotone"
-                    name="IMI Estratégico"
-                    dataKey="Estratégico"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    strokeDasharray="4 2"
-                  />
-                  <Line
-                    type="monotone"
-                    name="Promedio SSP"
-                    dataKey="Promedio"
-                    stroke="#94a3b8"
-                    strokeWidth={1.5}
-                    strokeDasharray="6 6"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="min-h-[180px] flex items-center justify-center text-center border border-slate-800 rounded-xl bg-slate-950/40 px-6">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                {PERFORMANCE_HISTORY_UNAVAILABLE}
+              </p>
             </div>
           </CEIPOLCard>
 
@@ -815,9 +704,9 @@ export function ImiDashboard({ selectedUser, projects, auditLogs, allUsers = [] 
                 </p>
               </div>
               <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-                <p className="font-bold text-slate-200">4. Autonomía (IAA)</p>
+                <p className="font-bold text-slate-200">4. Gobernanza de Validación Analítica (IAA)</p>
                 <p className="text-[10px] text-slate-400 mt-1 leading-normal">
-                  Eficiencia en el procesamiento del trabajo sin requerir correcciones por supervisión.
+                  Revisión humana, validación institucional y cumplimiento observable del flujo de decisión.
                 </p>
               </div>
               <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">

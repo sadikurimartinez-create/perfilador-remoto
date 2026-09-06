@@ -386,7 +386,7 @@ export function GeographicWorkspace() {
               onClick={() => handleTriggerTemporalComparison()}
               className="py-2 px-3.5 bg-amber-950 border border-amber-800/80 hover:bg-amber-900 text-amber-300 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-md shadow-amber-950/40 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <span>RELOJ</span> Comparación IA
+              <span>RELOJ</span> Comparación Temporal
             </button>
           </div>
         </div>

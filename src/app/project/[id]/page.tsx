@@ -59,13 +59,18 @@ export default function ProjectWorkspacePage() {
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
+  const [pendingDeleteAnalysisId, setPendingDeleteAnalysisId] = useState<string | null>(null);
+  const [deletePasswordInput, setDeletePasswordInput] = useState("");
+  const [deleteAnalysisStep, setDeleteAnalysisStep] = useState<"password" | "institutional" | "final">("password");
+  const [pendingPhotoDeleteId, setPendingPhotoDeleteId] = useState<string | null>(null);
+  const [pendingUnlinkGeo, setPendingUnlinkGeo] = useState(false);
 
   const handleExitWorkspace = (e: React.MouseEvent, targetUrl: string) => {
     if (project && project.sweeps) {
       const pending = project.sweeps.filter((s: any) => s.status === "Pendiente");
       if (pending.length > 0) {
         e.preventDefault();
-        alert(`⚠️ Bloqueo de Gobernanza Operativa:\n\nExisten ${pending.length} barridos de información pendientes de integrar o descartar en la Hipótesis Central.\n\nPor favor, resuélvalos en el panel de Evidencia y Entorno antes de salir.`);
+        setToast({ type: "warning", message: `Bloqueo de gobernanza operativa: existen ${pending.length} barridos pendientes de integrar o descartar.` });
         setActiveWorkspaceTab("environmental");
         return;
       }
@@ -73,15 +78,13 @@ export default function ProjectWorkspacePage() {
     router.push(targetUrl);
   };
 
-  const verifyAndPasswordCheck = async (): Promise<boolean> => {
+  const verifyAndPasswordCheck = async (passwordEntered: string): Promise<boolean> => {
     if (!user || !user.username) {
-      alert("No hay ningún usuario autenticado en la sesión actual.");
+      setToast({ type: "error", message: "No hay ningún usuario autenticado en la sesión actual." });
       return false;
     }
-    const passwordEntered = window.prompt("Por favor, introduzca su contraseña de usuario para autorizar la eliminación:");
-    if (passwordEntered === null) return false;
     if (!passwordEntered.trim()) {
-      alert("La contraseña no puede estar vacía.");
+      setToast({ type: "warning", message: "La contraseña no puede estar vacía." });
       return false;
     }
     try {
@@ -94,39 +97,58 @@ export default function ProjectWorkspacePage() {
       );
       const snap = await getDocs(q);
       if (snap.empty) {
-        alert("No se encontró el registro del usuario actual.");
+        setToast({ type: "error", message: "No se encontró el registro del usuario actual." });
         return false;
       }
       const docSnap = snap.docs[0];
       const data = docSnap.data() as { passwordHash?: string };
       if (data.passwordHash !== passwordEntered) {
-        alert("Contraseña incorrecta. Autorización denegada.");
+        setToast({ type: "error", message: "Contraseña incorrecta. Autorización denegada." });
         return false;
       }
       return true;
     } catch (err) {
       console.error("Error al validar contraseña:", err);
-      alert("Error de comunicación al validar credenciales.");
+      setToast({ type: "error", message: "Error de comunicación al validar credenciales." });
       return false;
     }
   };
 
   const handleDeleteAnalysis = async (analysisId: string) => {
-    const verified = await verifyAndPasswordCheck();
+    setPendingDeleteAnalysisId(analysisId);
+    setDeletePasswordInput("");
+    setDeleteAnalysisStep("password");
+  };
+
+  const cancelDeleteAnalysis = () => {
+    setPendingDeleteAnalysisId(null);
+    setDeletePasswordInput("");
+    setDeleteAnalysisStep("password");
+  };
+
+  const confirmDeleteAnalysisPassword = async () => {
+    if (!pendingDeleteAnalysisId) return;
+    const verified = await verifyAndPasswordCheck(deletePasswordInput);
     if (!verified) return;
+    setDeleteAnalysisStep("institutional");
+  };
 
-    const confirm1 = window.confirm("⚠️ PRIMERA CONFIRMACIÓN: ¿Está totalmente seguro de eliminar definitivamente este dictamen oficial guardado de este expediente?");
-    if (!confirm1) return;
+  const confirmDeleteAnalysisInstitutional = () => {
+    if (!pendingDeleteAnalysisId) return;
+    setDeleteAnalysisStep("final");
+  };
 
-    const confirm2 = window.confirm("🚨 SEGUNDA CONFIRMACIÓN DE SEGURIDAD: Esta acción es irreversible. ¿Confirmar eliminación definitiva?");
-    if (!confirm2) return;
-
+  const confirmDeleteAnalysisFinal = async () => {
+    if (!pendingDeleteAnalysisId) return;
     try {
       const db = getDb();
-      await deleteDoc(doc(db, "analyses", analysisId));
-      alert("El dictamen oficial ha sido eliminado correctamente.");
+      await deleteDoc(doc(db, "analyses", pendingDeleteAnalysisId));
+      setPendingDeleteAnalysisId(null);
+      setDeletePasswordInput("");
+      setDeleteAnalysisStep("password");
+      setToast({ type: "success", message: "El dictamen oficial ha sido eliminado correctamente." });
     } catch (err: any) {
-      alert("Error al eliminar el dictamen: " + err.message);
+      setToast({ type: "error", message: "Error al eliminar el dictamen: " + err.message });
     }
   };
 
@@ -141,10 +163,7 @@ export default function ProjectWorkspacePage() {
     // Allowing letters, numbers, hyphens, and underscores for the sections
     const geoIdRegex = /^CEIPOL-GEO-[A-Z0-9Ñ_.-]+-[A-Z0-9_.-]+-[A-Z0-9_.-]+$/i;
     if (!geoIdRegex.test(trimmedId)) {
-      alert("❌ El ID de geointeligencia ingresado no cumple con el formato obligatorio endurecido:\n\n" +
-            "CEIPOL-GEO-[NOMBRE]-[RIESGO]-[ID]\n\n" +
-            "Ejemplo válido: CEIPOL-GEO-PANDILLAX-ALTO-ABC12\n\n" +
-            "Por favor, verifique el código y vuelva a intentarlo.");
+      setToast({ type: "warning", message: "El ID de geointeligencia debe cumplir el formato CEIPOL-GEO-[NOMBRE]-[RIESGO]-[ID]." });
       return;
     }
 
@@ -152,7 +171,7 @@ export default function ProjectWorkspacePage() {
     try {
       const gang = await PandillasService.getGangByGeoReportId(trimmedId);
       if (!gang) {
-        alert("❌ No se encontró ningún informe de geointeligencia con ese ID en la base de datos.");
+        setToast({ type: "warning", message: "No se encontró ningún informe de geointeligencia con ese ID." });
         setIsLinking(false);
         return;
       }
@@ -164,10 +183,10 @@ export default function ProjectWorkspacePage() {
       });
       await loadProject(project.id);
       setGeoInputId("");
-      alert("✅ ¡Informe de Geointeligencia vinculado con éxito!");
+      setToast({ type: "success", message: "Informe de Geointeligencia vinculado con éxito." });
     } catch (err) {
       console.error(err);
-      alert("❌ Error al vincular el informe.");
+      setToast({ type: "error", message: "Error al vincular el informe." });
     } finally {
       setIsLinking(false);
     }
@@ -175,7 +194,11 @@ export default function ProjectWorkspacePage() {
 
   const handleUnlinkGeoReport = async () => {
     if (!project) return;
-    if (!confirm("¿Está seguro de desvincular este informe de geointeligencia?")) return;
+    setPendingUnlinkGeo(true);
+  };
+
+  const confirmUnlinkGeoReport = async () => {
+    if (!project) return;
     setIsLinking(true);
     try {
       const db = getDb();
@@ -185,10 +208,11 @@ export default function ProjectWorkspacePage() {
         linkedGangReport: null,
       });
       await loadProject(project.id);
-      alert("✅ Informe de Geointeligencia desvinculado con éxito.");
+      setPendingUnlinkGeo(false);
+      setToast({ type: "success", message: "Informe de Geointeligencia desvinculado con éxito." });
     } catch (err) {
       console.error(err);
-      alert("❌ Error al desvincular el informe.");
+      setToast({ type: "error", message: "Error al desvincular el informe." });
     } finally {
       setIsLinking(false);
     }
@@ -249,13 +273,20 @@ export default function ProjectWorkspacePage() {
   }, [projectId]);
 
   const handleDeletePhoto = async (id: string) => {
-    if (!confirm("¿Eliminar esta fotografía del expediente?")) return;
+    setPendingPhotoDeleteId(id);
+  };
+
+  const confirmDeletePhoto = async () => {
+    if (!pendingPhotoDeleteId) return;
+    const id = pendingPhotoDeleteId;
     const photo = album.find((p) => p.id === id);
     if (photo?.previewUrl?.startsWith("blob:")) {
       URL.revokeObjectURL(photo.previewUrl);
     }
     await db.photos.delete(id);
     removePhotoFromAlbum(id);
+    setPendingPhotoDeleteId(null);
+    setToast({ type: "success", message: "Fotografía eliminada del expediente." });
   };
 
   const handleRenameActiveProject = async () => {
@@ -263,10 +294,10 @@ export default function ProjectWorkspacePage() {
     try {
       await renameProject(project.id, renameInput.trim());
       setIsRenaming(false);
-      alert("Nombre del expediente modificado correctamente.");
+      setToast({ type: "success", message: "Nombre del expediente modificado correctamente." });
     } catch (err: any) {
       console.error("Error al renombrar expediente:", err);
-      alert("Error al renombrar: " + err.message);
+      setToast({ type: "error", message: "Error al renombrar: " + err.message });
     }
   };
 
@@ -370,9 +401,6 @@ export default function ProjectWorkspacePage() {
             </div>
             <p className="text-xs text-slate-400 mt-0.5 font-mono tracking-tight text-blue-300/90">
               Número de expediente: {resolveVisibleNumeroExpediente(project)}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-0.5 font-mono tracking-tight">
-              ID técnico: {project.id}
             </p>
           </div>
           <button
@@ -606,6 +634,105 @@ export default function ProjectWorkspacePage() {
                 className="px-4 py-2 text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg shadow-lg transition-colors"
               >
                 Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingDeleteAnalysisId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-red-900/60 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-2">Eliminar dictamen oficial</h3>
+            {deleteAnalysisStep === "password" && (
+              <>
+                <p className="text-xs text-slate-300 mb-4">
+                  Esta acción elimina definitivamente el dictamen guardado. Ingresa tu contraseña para autorizar la revisión de eliminación.
+                </p>
+                <input
+                  type="password"
+                  value={deletePasswordInput}
+                  onChange={(e) => setDeletePasswordInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-red-500 rounded-lg p-2.5 text-sm text-slate-100 outline-none mb-5"
+                  placeholder="Contraseña de autorización"
+                />
+              </>
+            )}
+            {deleteAnalysisStep === "institutional" && (
+              <p className="text-xs text-slate-300 mb-5">
+                Contraseña validada. Confirma institucionalmente que deseas continuar con la eliminación del dictamen oficial.
+              </p>
+            )}
+            {deleteAnalysisStep === "final" && (
+              <p className="text-xs text-red-200 mb-5">
+                Confirmación final requerida. Al seleccionar eliminar definitivamente se ejecutará el borrado permanente del dictamen oficial.
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={cancelDeleteAnalysis}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              {deleteAnalysisStep === "password" && (
+                <button
+                  type="button"
+                  onClick={confirmDeleteAnalysisPassword}
+                  className="px-4 py-2 text-xs font-bold bg-red-700 hover:bg-red-600 text-white rounded-lg shadow-lg transition-colors"
+                >
+                  Validar Contraseña
+                </button>
+              )}
+              {deleteAnalysisStep === "institutional" && (
+                <button
+                  type="button"
+                  onClick={confirmDeleteAnalysisInstitutional}
+                  className="px-4 py-2 text-xs font-bold bg-red-700 hover:bg-red-600 text-white rounded-lg shadow-lg transition-colors"
+                >
+                  Confirmar Eliminación
+                </button>
+              )}
+              {deleteAnalysisStep === "final" && (
+                <button
+                  type="button"
+                  onClick={confirmDeleteAnalysisFinal}
+                  className="px-4 py-2 text-xs font-bold bg-red-700 hover:bg-red-600 text-white rounded-lg shadow-lg transition-colors"
+                >
+                  Eliminar Definitivamente
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingPhotoDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-2">Eliminar fotografía</h3>
+            <p className="text-xs text-slate-300 mb-5">Confirma la eliminación de esta fotografía del expediente.</p>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setPendingPhotoDeleteId(null)} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+                Cancelar
+              </button>
+              <button type="button" onClick={confirmDeletePhoto} className="px-4 py-2 text-xs font-bold bg-red-700 hover:bg-red-600 text-white rounded-lg shadow-lg transition-colors">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingUnlinkGeo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div role="dialog" aria-modal="true" className="cursor-anchored-dialog bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-bold text-white mb-2">Desvincular informe GEOINT</h3>
+            <p className="text-xs text-slate-300 mb-5">Confirma la desvinculación del informe de geointeligencia asociado a este expediente.</p>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setPendingUnlinkGeo(false)} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+                Cancelar
+              </button>
+              <button type="button" onClick={confirmUnlinkGeoReport} className="px-4 py-2 text-xs font-bold bg-sky-700 hover:bg-sky-600 text-white rounded-lg shadow-lg transition-colors">
+                Desvincular
               </button>
             </div>
           </div>
