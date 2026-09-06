@@ -26,6 +26,14 @@ export interface ExecutiveGeointWordVisualAsset {
   height?: number;
 }
 
+export type ExecutiveGeointWordImageResolver = (
+  reference: string,
+  maxWidth: number,
+  maxHeight: number,
+  narrative?: string,
+  evidenceId?: string
+) => Promise<ExecutiveGeointWordVisualAsset | null>;
+
 export interface ExecutiveGeointWordRenderResult {
   document: Document;
   children: any[];
@@ -49,6 +57,10 @@ interface RenderOptions {
   projectName?: string;
   ceipolId?: string;
   visualAssetsById?: Record<string, ExecutiveGeointWordVisualAsset | null | undefined>;
+}
+
+interface VisualAssetBuildOptions {
+  resolveImage?: ExecutiveGeointWordImageResolver;
 }
 
 const TECHNICAL_VISIBLE_TERMS =
@@ -168,16 +180,49 @@ function visualAssetFromDataUrl(reference: string | null | undefined): Executive
   };
 }
 
-export function buildExecutiveGeointWordVisualAssets(
-  visualComposition: ExecutiveVisualComposition
-): Record<string, ExecutiveGeointWordVisualAsset> {
+function isResolvableExternalReference(reference: string | null | undefined): reference is string {
+  return Boolean(reference && /^(https?:\/\/|blob:|\/|\.\/|\.\.\/|[A-Za-z]:\\)/.test(reference));
+}
+
+async function resolveGovernedVisualReference(
+  reference: string | null | undefined,
+  options: VisualAssetBuildOptions,
+  maxWidth: number,
+  maxHeight: number,
+  narrative: string,
+  evidenceId: string
+): Promise<ExecutiveGeointWordVisualAsset | null> {
+  const dataUrlAsset = visualAssetFromDataUrl(reference);
+  if (dataUrlAsset) return dataUrlAsset;
+  if (!isResolvableExternalReference(reference) || !options.resolveImage) return null;
+  return options.resolveImage(reference, maxWidth, maxHeight, narrative, evidenceId);
+}
+
+export async function buildExecutiveGeointWordVisualAssets(
+  visualComposition: ExecutiveVisualComposition,
+  options: VisualAssetBuildOptions = {}
+): Promise<Record<string, ExecutiveGeointWordVisualAsset>> {
   const assets: Record<string, ExecutiveGeointWordVisualAsset> = {};
-  const principalAsset = visualAssetFromDataUrl(visualComposition.principalTerritorialMap.visualReference);
-  if (principalAsset && visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL") {
-    assets[visualComposition.principalTerritorialMap.mapId] = principalAsset;
+  if (visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL") {
+    const principalAsset = await resolveGovernedVisualReference(
+      visualComposition.principalTerritorialMap.visualReference,
+      options,
+      500,
+      280,
+      visualComposition.principalTerritorialMap.caption,
+      visualComposition.principalTerritorialMap.mapId
+    );
+    if (principalAsset) assets[visualComposition.principalTerritorialMap.mapId] = principalAsset;
   }
   for (const visual of visualComposition.secondaryVisuals) {
-    const asset = visualAssetFromDataUrl(visual.visualReference);
+    const asset = await resolveGovernedVisualReference(
+      visual.visualReference,
+      options,
+      420,
+      240,
+      visual.caption,
+      visual.visualId
+    );
     if (asset) assets[visual.visualId] = asset;
   }
   return assets;

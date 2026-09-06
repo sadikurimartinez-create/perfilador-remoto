@@ -150,14 +150,14 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(renderExecutiveGeointWordDocument(model).renderAudit.incompleteSections).toContain("territorial-situation");
   });
 
-  test("7 mapa READY se intenta renderizar", () => {
-    const assets = buildExecutiveGeointWordVisualAssets(visualComposition("READY_FROM_GOVERNED_VISUAL"));
+  test("7 mapa READY se intenta renderizar", async () => {
+    const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("READY_FROM_GOVERNED_VISUAL"));
     const audit = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit;
     expect(audit.renderedVisualIds).toContain("principal-territorial-map");
   });
 
-  test("8 NO_CANONICAL_GEOGRAPHY no fabrica mapa", () => {
-    const assets = buildExecutiveGeointWordVisualAssets(visualComposition("NO_CANONICAL_GEOGRAPHY"));
+  test("8 NO_CANONICAL_GEOGRAPHY no fabrica mapa", async () => {
+    const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("NO_CANONICAL_GEOGRAPHY"));
     const audit = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit;
     expect(audit.renderedVisualIds).not.toContain("principal-territorial-map");
     expect(audit.geometryGenerated).toBe(false);
@@ -248,5 +248,89 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(text).toContain("buildExecutiveVisualComposition");
     expect(text).toContain("buildExecutiveGeointReportDocumentModel");
     expect(text).toContain("renderExecutiveGeointWordDocument");
+  });
+
+  test("27 data URL se resuelve y renderiza", async () => {
+    const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("READY_FROM_GOVERNED_VISUAL"));
+    const audit = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit;
+    expect(Object.keys(assets)).toContain("principal-territorial-map");
+    expect(audit.renderedVisualIds).toContain("principal-territorial-map");
+  });
+
+  test("28 HTTP/HTTPS visual gobernado se convierte mediante resolver", async () => {
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    composition.principalTerritorialMap.visualReference = "https://example.test/map.png";
+    const resolver = jest.fn(async () => ({ data: new Uint8Array([1, 2, 3]), type: "png" as const, width: 500, height: 280 }));
+    const assets = await buildExecutiveGeointWordVisualAssets(composition, { resolveImage: resolver });
+    expect(resolver).toHaveBeenCalledWith("https://example.test/map.png", 500, 280, "Caption institucional", "principal-territorial-map");
+    expect(assets["principal-territorial-map"]).toBeTruthy();
+  });
+
+  test("29 visual no seleccionado nunca se descarga ni renderiza", async () => {
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    const resolver = jest.fn(async () => ({ data: new Uint8Array([1]), type: "png" as const }));
+    await buildExecutiveGeointWordVisualAssets(composition, { resolveImage: resolver });
+    expect(resolver).not.toHaveBeenCalledWith(expect.stringContaining("not-selected"), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+  });
+
+  test("30 fallo HTTP no fabrica visual", async () => {
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    composition.principalTerritorialMap.visualReference = "https://example.test/missing.png";
+    const assets = await buildExecutiveGeointWordVisualAssets(composition, { resolveImage: async () => null });
+    const audit = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit;
+    expect(assets["principal-territorial-map"]).toBeUndefined();
+    expect(audit.missingVisualAssetIds).toContain("principal-territorial-map");
+  });
+
+  test("31 principal map READY con asset disponible queda renderedVisualIds", async () => {
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    composition.principalTerritorialMap.visualReference = "https://example.test/map.png";
+    const assets = await buildExecutiveGeointWordVisualAssets(composition, {
+      resolveImage: async () => ({ data: new Uint8Array([1, 2]), type: "png" as const }),
+    });
+    expect(renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit.renderedVisualIds).toContain("principal-territorial-map");
+  });
+
+  test("32 principal map READY con adquisicion fallida queda missingVisualAssetIds", async () => {
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    composition.principalTerritorialMap.visualReference = "https://example.test/map.png";
+    const assets = await buildExecutiveGeointWordVisualAssets(composition, { resolveImage: async () => null });
+    expect(renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit.missingVisualAssetIds).toContain("principal-territorial-map");
+  });
+
+  test("33 NO_CANONICAL_GEOGRAPHY no intenta generar imagen", async () => {
+    const composition = visualComposition("NO_CANONICAL_GEOGRAPHY");
+    composition.principalTerritorialMap.visualReference = "https://example.test/map.png";
+    const resolver = jest.fn(async () => ({ data: new Uint8Array([1]), type: "png" as const }));
+    await buildExecutiveGeointWordVisualAssets(composition, { resolveImage: resolver });
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
+  test("34 MAP_RENDER_REQUIRED no fabrica geometria ni mapa", async () => {
+    const composition = visualComposition("MAP_RENDER_REQUIRED");
+    composition.principalTerritorialMap.visualReference = "https://example.test/map.png";
+    const resolver = jest.fn(async () => ({ data: new Uint8Array([1]), type: "png" as const }));
+    const assets = await buildExecutiveGeointWordVisualAssets(composition, { resolveImage: resolver });
+    expect(assets["principal-territorial-map"]).toBeUndefined();
+    expect(renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit.geometryGenerated).toBe(false);
+  });
+
+  test("35 visual budget no aumenta", async () => {
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    const before = composition.visualBudget.used;
+    await buildExecutiveGeointWordVisualAssets(composition);
+    expect(composition.visualBudget.used).toBe(before);
+  });
+
+  test("36 renderer no hace llamadas IA", () => {
+    expect(source("src/utils/executiveGeointWordRenderer.ts")).not.toMatch(/generateContent|openai|gemini|chatCompletion|responses/i);
+  });
+
+  test("37 modelo documental no se muta tras resolver y renderizar", async () => {
+    const model = documentModel();
+    const before = JSON.stringify(model);
+    const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("READY_FROM_GOVERNED_VISUAL"));
+    renderExecutiveGeointWordDocument(model, { visualAssetsById: assets });
+    expect(JSON.stringify(model)).toBe(before);
   });
 });

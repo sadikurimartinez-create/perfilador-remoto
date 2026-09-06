@@ -767,7 +767,18 @@ export async function exportToWord(
       const rendered = renderExecutiveGeointWordDocument(executiveDocumentModel, {
         projectName,
         ceipolId: payload.ceipolId,
-        visualAssetsById: buildExecutiveGeointWordVisualAssets(visualComposition),
+        visualAssetsById: await buildExecutiveGeointWordVisualAssets(visualComposition, {
+          resolveImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
+            const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId);
+            if (!resolved) return null;
+            return {
+              data: resolved.data,
+              width: resolved.width,
+              height: resolved.height,
+              type: resolved.type as any,
+            };
+          },
+        }),
       });
       const blob = await Packer.toBlob(rendered.document);
       saveAs(blob, rendered.filename);
