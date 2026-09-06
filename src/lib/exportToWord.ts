@@ -79,6 +79,8 @@ import {
   buildExecutiveGeointWordVisualAssets,
   renderExecutiveGeointWordDocument,
 } from "@/utils/executiveGeointWordRenderer";
+import { buildExecutiveGeointTechnicalAnnexModel } from "@/utils/executiveGeointTechnicalAnnexModel";
+import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executiveGeointTechnicalAnnexWordRenderer";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -733,7 +735,7 @@ export async function exportToWord(
   projectName: string,
   reportNumber?: string,
   user?: any,
-  options: { exportMode?: "DRAFT" | "INSTITUTIONAL"; reportKind?: "LEGACY" | "EXECUTIVE_GEOINT" } = {}
+  options: { exportMode?: "DRAFT" | "INSTITUTIONAL"; reportKind?: "LEGACY" | "EXECUTIVE_GEOINT" | "EXECUTIVE_GEOINT_TECHNICAL_ANNEX" } = {}
 ) {
   const isInstitutionalExport = options.exportMode === "INSTITUTIONAL";
   // Sanitizar payload previo a la maquetación
@@ -785,6 +787,54 @@ export async function exportToWord(
       return;
     } catch (err) {
       console.warn("[FASE E] Ruta ejecutiva GEOINT no disponible; usando compatibilidad legacy controlada.", err);
+    }
+  }
+
+  if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT_TECHNICAL_ANNEX") {
+    try {
+      const institutionalReportInput = buildInstitutionalReportInput(payload);
+      const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
+        documentIdentity: {
+          numeroExpediente: payload.numeroExpediente || reportNumber,
+          ceipolId: payload.ceipolId,
+          projectId: payload.projectId,
+          name: projectName,
+        },
+        nombreExpediente: projectName,
+        fecha: payload.date || payload.fecha || institutionalReportInput.generatedAt,
+        personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
+        clasificacion: payload.classification || payload.clasificacion,
+      });
+      const visualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
+      const executiveDocumentModel = buildExecutiveGeointReportDocumentModel(
+        executiveModel,
+        visualComposition,
+        institutionalReportInput,
+        {
+          numeroExpediente: payload.numeroExpediente || reportNumber,
+          ceipolId: payload.ceipolId,
+        }
+      );
+      const annexModel = buildExecutiveGeointTechnicalAnnexModel(
+        institutionalReportInput,
+        executiveModel,
+        visualComposition,
+        executiveDocumentModel,
+        {
+          numeroExpediente: payload.numeroExpediente || reportNumber,
+          ceipolId: payload.ceipolId,
+          nombreExpediente: projectName,
+          fecha: payload.date || payload.fecha || institutionalReportInput.generatedAt,
+          personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
+          clasificacion: payload.classification || payload.clasificacion,
+        }
+      );
+      const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, { projectName });
+      const blob = await Packer.toBlob(rendered.document);
+      saveAs(blob, rendered.filename);
+      return;
+    } catch (err) {
+      console.warn("[FASE F] Anexo tecnico GEOINT no disponible; usando compatibilidad legacy controlada.", err);
     }
   }
 
