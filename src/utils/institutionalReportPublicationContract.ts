@@ -475,6 +475,10 @@ export function buildInstitutionalReportInput(project: any, options: { generated
 
   const traceabilityGate = validateInstitutionalReportTraceability({
     projectId: reportReadyAssessment.projectId,
+    evidence,
+    findings,
+    analyses,
+    streetView,
     analyticalProducts: predictiveAnalyticalProducts,
   });
   exclusions.push(...traceabilityGate.exclusions.map((item) => ({
