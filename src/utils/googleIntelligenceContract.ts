@@ -134,6 +134,69 @@ export interface GoogleVisionPoiComparisonSource {
   sourceReference: string;
 }
 
+export type GoogleMobilityObservationFactor =
+  | "DIRECT_ACCESS"
+  | "INDIRECT_ACCESS"
+  | "MULTIPLE_ACCESS_PATHS"
+  | "LIMITED_ACCESS"
+  | "ROUTE_REDUNDANCY"
+  | "ROUTE_DIVERGENCE"
+  | "HIGH_CONNECTIVITY"
+  | "LOW_CONNECTIVITY"
+  | "DISTANCE_FACTOR"
+  | "TRAVEL_TIME_FACTOR"
+  | "TOPOGRAPHIC_FACTOR"
+  | "TEMPORAL_MOBILITY_CONTEXT";
+
+export interface GoogleRoutePoint {
+  lat: number;
+  lng: number;
+  label?: string | null;
+  sourceId?: string | null;
+}
+
+export interface GoogleRouteObservation {
+  routeId?: string | null;
+  origin: GoogleRoutePoint;
+  destination: GoogleRoutePoint;
+  waypoints?: GoogleRoutePoint[];
+  polyline?: string | null;
+  distanceMeters?: number | null;
+  durationSeconds?: number | null;
+  staticDurationSeconds?: number | null;
+  trafficDurationSeconds?: number | null;
+  travelMode?: string | null;
+  routeLabels?: string[];
+  warnings?: string[];
+  legs?: unknown[];
+  steps?: unknown[];
+  alternatives?: GoogleRouteObservation[];
+}
+
+export interface GoogleElevationProfile {
+  sampleCoordinates: GoogleCoordinates[];
+  elevationMeters: number[];
+  elevationGain?: number | null;
+  elevationLoss?: number | null;
+  maxSlope?: number | null;
+  meanSlope?: number | null;
+  sampleCount?: number | null;
+}
+
+export interface GoogleMobilitySourceContext {
+  sourceEvidenceId: string;
+  traceabilityId: string;
+  expedienteId: string;
+  geographyId: string;
+  lineage: CanonicalLineageNode[];
+  acquiredAt: string;
+  providerFeature: Extract<GoogleProviderFeature, "ROUTES" | "ROUTES_MATRIX" | "ELEVATION">;
+  coordinates?: GoogleCoordinates | null;
+  sourceReference?: string | null;
+  canonicalGeographyCompatible?: boolean;
+  temporalValidity?: string | null;
+}
+
 export const GOOGLE_VISION_FEATURE_AUDIT: GoogleVisionFeatureAuditEntry[] = [
   {
     feature: "LABEL_DETECTION",
@@ -231,7 +294,15 @@ export type GoogleCandidateType =
   | "SLOPE_INDICATOR"
   | "ELEVATION_DIFFERENCE"
   | "TOPOGRAPHIC_BARRIER_CANDIDATE"
-  | "POTENTIAL_ELEVATION_ADVANTAGE";
+  | "POTENTIAL_ELEVATION_ADVANTAGE"
+  | "MULTIPLE_ACCESS_PATHS"
+  | "LIMITED_ACCESS"
+  | "ROUTE_REDUNDANCY"
+  | "ROUTE_DIVERGENCE"
+  | "ACCESS_POINT_CORROBORATION"
+  | "TOPOGRAPHIC_ACCESS_CONSTRAINT"
+  | "TOPOGRAPHIC_MOBILITY_FACTOR"
+  | "FUNCTIONAL_CONNECTIVITY_INDICATOR";
 
 export interface GoogleCoordinates {
   lat: number;
@@ -1220,6 +1291,344 @@ export function deriveVisionPoiComparisonCandidate(input: {
   });
 }
 
+function isValidGooglePoint(point: GoogleRoutePoint | GoogleCoordinates | null | undefined): point is GoogleRoutePoint {
+  if (!point) return false;
+  const lat = Number(point.lat);
+  const lng = Number(point.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
+}
+
+function routePointRef(point: GoogleRoutePoint): string {
+  const label = present(point.label) ? `${present(point.label)}:` : "";
+  return `${label}${Number(point.lat).toFixed(6)},${Number(point.lng).toFixed(6)}`;
+}
+
+function routeSignature(route: GoogleRouteObservation, providerFeature: GoogleProviderFeature): string {
+  const waypoints = (route.waypoints || []).map(routePointRef).join("|");
+  return stableToken(
+    [
+      providerFeature,
+      routePointRef(route.origin),
+      routePointRef(route.destination),
+      waypoints,
+      route.travelMode || "UNKNOWN_TRAVEL_MODE",
+    ].join(":")
+  );
+}
+
+function routeEvidenceFacts(route: GoogleRouteObservation): string[] {
+  return nonEmpty([
+    `origin:${routePointRef(route.origin)}`,
+    `destination:${routePointRef(route.destination)}`,
+    route.distanceMeters != null ? `distanceMeters:${route.distanceMeters}` : null,
+    route.durationSeconds != null ? `durationSeconds:${route.durationSeconds}` : null,
+    route.staticDurationSeconds != null ? `staticDurationSeconds:${route.staticDurationSeconds}` : null,
+    route.trafficDurationSeconds != null ? `trafficDurationSeconds:${route.trafficDurationSeconds}` : null,
+    route.travelMode ? `travelMode:${route.travelMode}` : null,
+    route.polyline ? "polyline:present" : null,
+    route.alternatives?.length ? `alternativeRoutes:${route.alternatives.length}` : null,
+  ]);
+}
+
+function routeLimitations(context: GoogleMobilitySourceContext, route: GoogleRouteObservation): string[] {
+  return nonEmpty([
+    "La respuesta de ruta es un hecho observado del proveedor; no es interpretacion criminologica.",
+    "Distancia, duracion y alternativa vial no prueban fuga, evasion, persecucion ni conducta criminal.",
+    route.trafficDurationSeconds == null ? "No se conserva trafico real; no se fabrican niveles de congestion ni trafficDuration." : null,
+    context.temporalValidity ? `Validez temporal: ${context.temporalValidity}.` : "La ruta calculada no prueba condicion futura permanente.",
+    context.canonicalGeographyCompatible === false ? "La ruta no es compatible con canonicalGeography y no debe promocionarse silenciosamente." : null,
+  ]);
+}
+
+export function adaptGoogleRouteToEvidence(input: {
+  route: GoogleRouteObservation;
+  context: GoogleMobilitySourceContext;
+  evidenceId?: string;
+  generatedAt?: string;
+}): GoogleIntelligenceEvidence | null {
+  if (!isValidGooglePoint(input.route.origin) || !isValidGooglePoint(input.route.destination)) return null;
+  const signature = routeSignature(input.route, input.context.providerFeature);
+  const evidenceId = input.evidenceId || `google-route-${signature}`;
+  return createGoogleIntelligenceEvidence({
+    evidenceId,
+    sourceEvidenceId: input.context.sourceEvidenceId,
+    traceabilityId: input.context.traceabilityId,
+    expedienteId: input.context.expedienteId,
+    geographyId: input.context.geographyId,
+    providerId: "GOOGLE_ROUTES",
+    providerFeature: input.context.providerFeature,
+    coordinates: input.context.coordinates ?? input.route.origin,
+    observedAt: input.context.acquiredAt,
+    acquiredAt: input.context.acquiredAt,
+    rawResponseRef: input.context.sourceReference || `google-directions:${signature}`,
+    sourceReferences: [input.context.sourceReference || "Google Directions API", input.context.sourceEvidenceId],
+    observableFacts: routeEvidenceFacts(input.route),
+    limitations: routeLimitations(input.context, input.route),
+    lineage: input.context.lineage,
+    validationStatus: "UNREVIEWED",
+    generatedAt: input.generatedAt,
+    metadata: {
+      route: {
+        ...input.route,
+        routeId: input.route.routeId || evidenceId,
+        dedupeSignature: signature,
+        canonicalGeographyCompatible: input.context.canonicalGeographyCompatible !== false,
+        fabricatedTraffic: false,
+        fabricatedDuration: input.route.durationSeconds == null,
+      },
+    },
+  });
+}
+
+function slopeProfile(input: GoogleElevationProfile): Required<Pick<GoogleElevationProfile, "elevationGain" | "elevationLoss" | "maxSlope" | "meanSlope" | "sampleCount">> {
+  let gain = 0;
+  let loss = 0;
+  const slopes: number[] = [];
+  for (let i = 1; i < input.elevationMeters.length; i++) {
+    const prevCoord = input.sampleCoordinates[i - 1];
+    const nextCoord = input.sampleCoordinates[i];
+    const prevElevation = input.elevationMeters[i - 1];
+    const nextElevation = input.elevationMeters[i];
+    if (!isValidGooglePoint(prevCoord) || !isValidGooglePoint(nextCoord)) continue;
+    const delta = nextElevation - prevElevation;
+    if (delta > 0) gain += delta;
+    if (delta < 0) loss += Math.abs(delta);
+    const horizontal = distanceMeters(prevCoord, nextCoord);
+    if (horizontal > 0) slopes.push(Math.abs(delta) / horizontal);
+  }
+  const maxSlope = slopes.length ? Math.max(...slopes) : 0;
+  const meanSlope = slopes.length ? slopes.reduce((sum, value) => sum + value, 0) / slopes.length : 0;
+  return {
+    elevationGain: Number(gain.toFixed(2)),
+    elevationLoss: Number(loss.toFixed(2)),
+    maxSlope: Number(maxSlope.toFixed(4)),
+    meanSlope: Number(meanSlope.toFixed(4)),
+    sampleCount: input.sampleCoordinates.length,
+  };
+}
+
+export function adaptGoogleElevationToEvidence(input: {
+  profile: GoogleElevationProfile;
+  context: Omit<GoogleMobilitySourceContext, "providerFeature"> & { providerFeature?: "ELEVATION" };
+  evidenceId?: string;
+  generatedAt?: string;
+}): GoogleIntelligenceEvidence | null {
+  if (input.profile.sampleCoordinates.length === 0 || input.profile.elevationMeters.length === 0) return null;
+  if (input.profile.sampleCoordinates.length !== input.profile.elevationMeters.length) return null;
+  if (!input.profile.sampleCoordinates.every(isValidGooglePoint)) return null;
+  if (!input.profile.elevationMeters.every((value) => Number.isFinite(Number(value)))) return null;
+  const calculated = slopeProfile(input.profile);
+  const profile = {
+    ...input.profile,
+    elevationGain: input.profile.elevationGain ?? calculated.elevationGain,
+    elevationLoss: input.profile.elevationLoss ?? calculated.elevationLoss,
+    maxSlope: input.profile.maxSlope ?? calculated.maxSlope,
+    meanSlope: input.profile.meanSlope ?? calculated.meanSlope,
+    sampleCount: input.profile.sampleCount ?? calculated.sampleCount,
+  };
+  const signature = stableToken(
+    profile.sampleCoordinates.map((coord) => `${coord.lat.toFixed(6)},${coord.lng.toFixed(6)}`).join("|")
+  );
+  return createGoogleIntelligenceEvidence({
+    evidenceId: input.evidenceId || `google-elevation-${signature}`,
+    sourceEvidenceId: input.context.sourceEvidenceId,
+    traceabilityId: input.context.traceabilityId,
+    expedienteId: input.context.expedienteId,
+    geographyId: input.context.geographyId,
+    providerId: "GOOGLE_ELEVATION",
+    providerFeature: "ELEVATION",
+    coordinates: input.context.coordinates ?? profile.sampleCoordinates[0],
+    observedAt: input.context.acquiredAt,
+    acquiredAt: input.context.acquiredAt,
+    rawResponseRef: input.context.sourceReference || `google-elevation:${signature}`,
+    sourceReferences: [input.context.sourceReference || "Google Elevation API", input.context.sourceEvidenceId],
+    observableFacts: nonEmpty([
+      `sampleCount:${profile.sampleCount}`,
+      `elevationMeters:${profile.elevationMeters.join(",")}`,
+      `elevationGain:${profile.elevationGain}`,
+      `elevationLoss:${profile.elevationLoss}`,
+      `maxSlope:${profile.maxSlope}`,
+      `meanSlope:${profile.meanSlope}`,
+    ]),
+    limitations: nonEmpty([
+      "Elevation y pendiente son medidas fisicas; no acreditan riesgo criminal, ruta de fuga ni intencion humana.",
+      input.context.canonicalGeographyCompatible === false ? "Perfil topografico fuera de canonicalGeography; no debe promocionarse silenciosamente." : null,
+    ]),
+    lineage: input.context.lineage,
+    validationStatus: "UNREVIEWED",
+    generatedAt: input.generatedAt,
+    metadata: {
+      elevation: {
+        ...profile,
+        fabricatedSlope: false,
+        canonicalGeographyCompatible: input.context.canonicalGeographyCompatible !== false,
+      },
+    },
+  });
+}
+
+export function deriveGoogleRouteMobilityFindings(input: {
+  routeEvidence?: GoogleIntelligenceEvidence | null;
+  elevationEvidence?: GoogleIntelligenceEvidence | null;
+  generatedBy?: string;
+  generatedAt?: string;
+  fieldStatus?: "corroboratedByField" | "contradictedByField" | null;
+}): GoogleCandidateFinding[] {
+  const findings: GoogleCandidateFinding[] = [];
+  const route = input.routeEvidence?.metadata?.route as GoogleRouteObservation & {
+    canonicalGeographyCompatible?: boolean;
+    fabricatedTraffic?: boolean;
+    fabricatedDuration?: boolean;
+  } | undefined;
+  const routeEvidence = input.routeEvidence || null;
+
+  if (routeEvidence && route) {
+    const factors: GoogleMobilityObservationFactor[] = [];
+    if (typeof route.distanceMeters === "number") factors.push("DISTANCE_FACTOR");
+    if (typeof route.durationSeconds === "number") factors.push("TRAVEL_TIME_FACTOR");
+    if ((route.alternatives || []).length > 0) {
+      factors.push("MULTIPLE_ACCESS_PATHS", "ROUTE_REDUNDANCY");
+      const distances = [route, ...(route.alternatives || [])]
+        .map((r) => (typeof r.distanceMeters === "number" ? r.distanceMeters : null))
+        .filter((value): value is number => value != null);
+      if (distances.length >= 2 && Math.max(...distances) - Math.min(...distances) > 75) factors.push("ROUTE_DIVERGENCE");
+    }
+    if (route.trafficDurationSeconds != null) factors.push("TEMPORAL_MOBILITY_CONTEXT");
+
+    if (factors.length > 0 && route.fabricatedDuration !== true) {
+      const candidateType: GoogleCandidateType = factors.includes("ROUTE_DIVERGENCE")
+        ? "ROUTE_DIVERGENCE"
+        : factors.includes("MULTIPLE_ACCESS_PATHS")
+          ? "MULTIPLE_ACCESS_PATHS"
+          : "ACCESSIBILITY_CORRIDOR";
+      findings.push(
+        createGoogleCandidateFinding({
+          findingId: `${routeEvidence.evidenceId}-mobility-candidate`,
+          candidateType,
+          providerId: "GOOGLE_ROUTES",
+          providerFeature: routeEvidence.providerFeature,
+          sourceEvidenceId: routeEvidence.sourceEvidenceId,
+          traceabilityId: routeEvidence.traceabilityId,
+          expedienteId: routeEvidence.expedienteId,
+          geographyId: routeEvidence.geographyId,
+          coordinates: routeEvidence.coordinates,
+          explanation:
+            `La ruta observada por Google conecta ${routePointRef(route.origin)} con ${routePointRef(route.destination)} ` +
+            `con distancia ${route.distanceMeters ?? "UNAVAILABLE"}m y duracion ${route.durationSeconds ?? "UNAVAILABLE"}s. ` +
+            "Los factores de movilidad son contextuales y no declaran ruta de fuga, evasion ni conducta criminal.",
+          observableFactors: factors,
+          supportingEvidenceIds: [routeEvidence.evidenceId],
+          sourceReferences: routeEvidence.sourceReferences,
+          confidence: route.alternatives?.length ? 0.67 : 0.58,
+          confidenceBasis:
+            `Basado en respuesta de ruta completa, ${route.alternatives?.length || 0} alternativa(s), distancia/duracion disponibles y trazabilidad conservada.`,
+          limitations: routeEvidence.limitations,
+          lineage: routeEvidence.lineage,
+          generatedBy: input.generatedBy || "ADR-025.3D_GOOGLE_ROUTE_MOBILITY",
+          generatedAt: input.generatedAt,
+          metadata: {
+            sourceEvidence: routeEvidence,
+            canonicalGeographyCompatible: route.canonicalGeographyCompatible !== false,
+            fieldStatus: input.fieldStatus ?? null,
+          },
+        })
+      );
+    }
+  }
+
+  const elevationEvidence = input.elevationEvidence || null;
+  const elevation = elevationEvidence?.metadata?.elevation as (GoogleElevationProfile & {
+    canonicalGeographyCompatible?: boolean;
+    fabricatedSlope?: boolean;
+  }) | undefined;
+  if (elevationEvidence && elevation && elevation.fabricatedSlope !== true && typeof elevation.maxSlope === "number") {
+    findings.push(
+      createGoogleCandidateFinding({
+        findingId: `${elevationEvidence.evidenceId}-topographic-candidate`,
+        candidateType: elevation.maxSlope >= 0.08 ? "TOPOGRAPHIC_ACCESS_CONSTRAINT" : "TOPOGRAPHIC_MOBILITY_FACTOR",
+        providerId: "GOOGLE_ELEVATION",
+        providerFeature: "ELEVATION",
+        sourceEvidenceId: elevationEvidence.sourceEvidenceId,
+        traceabilityId: elevationEvidence.traceabilityId,
+        expedienteId: elevationEvidence.expedienteId,
+        geographyId: elevationEvidence.geographyId,
+        coordinates: elevationEvidence.coordinates,
+        explanation:
+          `Elevation conserva ${elevation.sampleCount} muestra(s), ganancia ${elevation.elevationGain}m, perdida ${elevation.elevationLoss}m y pendiente maxima ${elevation.maxSlope}. ` +
+          "La pendiente es un factor fisico contextual; no implica criminalidad ni ruta de fuga.",
+        observableFactors: ["TOPOGRAPHIC_FACTOR"],
+        supportingEvidenceIds: [elevationEvidence.evidenceId],
+        sourceReferences: elevationEvidence.sourceReferences,
+        confidence: elevation.sampleCount && elevation.sampleCount >= 3 ? 0.66 : 0.54,
+        confidenceBasis: `Basado en ${elevation.sampleCount} muestra(s) reales de elevacion y calculo deterministico de pendiente.`,
+        limitations: elevationEvidence.limitations,
+        lineage: elevationEvidence.lineage,
+        generatedBy: input.generatedBy || "ADR-025.3D_GOOGLE_ELEVATION_MOBILITY",
+        generatedAt: input.generatedAt,
+        metadata: {
+          sourceEvidence: elevationEvidence,
+          canonicalGeographyCompatible: elevation.canonicalGeographyCompatible !== false,
+          fieldStatus: input.fieldStatus ?? null,
+        },
+      })
+    );
+  }
+
+  return findings;
+}
+
+export function deriveGoogleMobilityCrossSourceCandidate(input: {
+  routeEvidence: GoogleIntelligenceEvidence;
+  supportingEvidence: GoogleIntelligenceEvidence;
+  sourceKind: "STREET_VIEW" | "VISION" | "PLACES" | "DENUE" | "FIELD";
+  candidateType?: Extract<GoogleCandidateType, "ACCESS_POINT_CORROBORATION" | "FUNCTIONAL_CONNECTIVITY_INDICATOR" | "ACCESS_CONTROL_POINT">;
+  generatedAt?: string;
+}): GoogleCandidateFinding {
+  const route = input.routeEvidence.metadata?.route as GoogleRouteObservation | undefined;
+  const defaultType: GoogleCandidateType =
+    input.sourceKind === "PLACES" || input.sourceKind === "DENUE"
+      ? "FUNCTIONAL_CONNECTIVITY_INDICATOR"
+      : input.sourceKind === "VISION"
+        ? "ACCESS_CONTROL_POINT"
+        : "ACCESS_POINT_CORROBORATION";
+  return createGoogleCandidateFinding({
+    findingId: `${input.routeEvidence.evidenceId}-${stableToken(input.sourceKind)}-${stableToken(input.supportingEvidence.evidenceId)}-cross-source`,
+    candidateType: input.candidateType || (defaultType as any),
+    providerId: "GOOGLE_ROUTES",
+    providerFeature: input.routeEvidence.providerFeature,
+    sourceEvidenceId: input.routeEvidence.sourceEvidenceId,
+    traceabilityId: input.routeEvidence.traceabilityId,
+    expedienteId: input.routeEvidence.expedienteId,
+    geographyId: input.routeEvidence.geographyId,
+    coordinates: input.routeEvidence.coordinates,
+    explanation:
+      `Route evidence se contrasta con ${input.sourceKind}; origen ${route ? routePointRef(route.origin) : "UNAVAILABLE"} y destino ${route ? routePointRef(route.destination) : "UNAVAILABLE"}. ` +
+      "La corroboracion conserva ambas evidencias y permanece pendiente de revision humana.",
+    observableFactors: [
+      `ROUTE:${input.routeEvidence.evidenceId}`,
+      `${input.sourceKind}:${input.supportingEvidence.evidenceId}`,
+    ],
+    supportingEvidenceIds: [input.routeEvidence.evidenceId, input.supportingEvidence.evidenceId],
+    sourceReferences: [...input.routeEvidence.sourceReferences, ...input.supportingEvidence.sourceReferences],
+    confidence: 0.62,
+    confidenceBasis: "Coincidencia contextual entre ruta trazable y evidencia externa; no se eleva por lenguaje criminalizante.",
+    limitations: [
+      "La corroboracion entre fuentes no autoaprueba hallazgos ni sustituye evidencia humana.",
+      "Alta conectividad o accesibilidad no implica conducta delictiva.",
+    ],
+    lineage: input.routeEvidence.lineage,
+    generatedBy: "ADR-025.3D_GOOGLE_MOBILITY_CROSS_SOURCE",
+    generatedAt: input.generatedAt,
+    metadata: {
+      sourceEvidence: input.routeEvidence,
+      supportingEvidence: input.supportingEvidence,
+      canonicalGeographyCompatible: input.routeEvidence.metadata?.route
+        ? (input.routeEvidence.metadata.route as any).canonicalGeographyCompatible !== false
+        : true,
+    },
+  });
+}
+
 function correlationBlockingReasons(candidate: GoogleCandidateFinding): string[] {
   const reasons: string[] = [];
   const validation = evaluateHumanValidation(candidate);
@@ -1232,6 +1641,10 @@ function correlationBlockingReasons(candidate: GoogleCandidateFinding): string[]
   if (!present(candidate.geographyId)) reasons.push("MISSING_GEOGRAPHY_ID");
   if (!Array.isArray(candidate.lineage) || candidate.lineage.length === 0) reasons.push("MISSING_LINEAGE");
   if (candidate.lineageStatus !== "SUPPORTED") reasons.push(`INVALID_LINEAGE_STATUS:${candidate.lineageStatus}`);
+  if (candidate.metadata?.canonicalGeographyCompatible === false) reasons.push("CANONICAL_GEOGRAPHY_INCOMPATIBLE");
+  if (candidate.metadata?.fabricatedTraffic === true) reasons.push("FABRICATED_TRAFFIC_BLOCKED");
+  if (candidate.metadata?.fabricatedDuration === true) reasons.push("FABRICATED_DURATION_BLOCKED");
+  if (candidate.metadata?.fabricatedSlope === true) reasons.push("FABRICATED_SLOPE_BLOCKED");
 
   return Array.from(new Set(reasons));
 }

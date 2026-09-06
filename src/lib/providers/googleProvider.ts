@@ -79,9 +79,11 @@ export class GoogleProvider implements IProvider {
           throw new Error("Google Places query returned null.");
         }
       } else if (action === "routes") {
-        // Validate Routes API with directions search
-        const destLat = params?.destLat || 21.8818;
-        const destLng = params?.destLng || -102.2950;
+        const destLat = Number(params?.destLat);
+        const destLng = Number(params?.destLng);
+        if (!Number.isFinite(destLat) || !Number.isFinite(destLng)) {
+          throw new Error("Google Directions requiere destLat/destLng trazables; no se usa destino hardcoded.");
+        }
         const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${lat},${lng}&destination=${destLat},${destLng}&key=${key}`;
         const res = await fetch(url);
         if (!res.ok) {
@@ -91,11 +93,15 @@ export class GoogleProvider implements IProvider {
         data = {
           routes: json.routes?.map((r: any) => ({
             summary: r.summary,
+            overview_polyline: r.overview_polyline,
+            warnings: r.warnings || [],
             legs: r.legs?.map((l: any) => ({
               distance: l.distance,
               duration: l.duration,
+              duration_in_traffic: l.duration_in_traffic,
               start_address: l.start_address,
-              end_address: l.end_address
+              end_address: l.end_address,
+              steps: l.steps
             }))
           })) || []
         };
@@ -115,8 +121,8 @@ export class GoogleProvider implements IProvider {
         if (!res.ok) throw new Error(`Google Elevation API returned HTTP ${res.status}`);
         const json = await res.json();
         data = {
-          elevation: json.results?.[0]?.elevation || 0,
-          resolution: json.results?.[0]?.resolution || 0
+          elevation: json.results?.[0]?.elevation ?? null,
+          resolution: json.results?.[0]?.resolution ?? null
         };
       } else if (action === "streetview_metadata") {
         // Safe check for Street View imagery availability

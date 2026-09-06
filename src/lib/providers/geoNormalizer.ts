@@ -88,8 +88,11 @@ export class GeoDataNormalizerEngine {
         } else if (action === "routes") {
           dataType = "infrastructure";
           geomType = "LineString";
-          geomCoords = rawData?.routes?.[0]?.legs?.[0]?.polyline || [[lng, lat]];
-          payload = rawData;
+          geomCoords = rawData?.routes?.[0]?.legs?.[0]?.polyline || [];
+          payload = {
+            ...rawData,
+            institutionalUse: rawData?.routes?.[0]?.legs?.[0]?.polyline ? "ROUTE_GEOMETRY_OBSERVED" : "DEGRADED_NO_ROUTE_GEOMETRY",
+          };
         } else if (action === "elevation") {
           dataType = "hydrology"; // terrain-related for water run-off calculations
           payload = rawData;

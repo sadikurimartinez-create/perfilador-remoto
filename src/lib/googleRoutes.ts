@@ -8,6 +8,7 @@ export type RouteEscapeAnalysis = {
   resumen: string;
   rawDirections?: unknown;
   rawElevation?: unknown;
+  institutionalUse?: "DEGRADED_NO_DESTINATION" | "MOBILITY_CONTEXT_ONLY";
 };
 
 const DIRECTIONS_BASE_URL =
@@ -46,7 +47,8 @@ function inferFastRoad(summary: string): boolean {
 
 export async function analyzeEscapeRoutes(
   lat: number,
-  lng: number
+  lng: number,
+  destination?: { lat: number; lng: number }
 ): Promise<RouteEscapeAnalysis | null> {
   const apiKey = getMapsApiKey();
   if (!apiKey) {
@@ -56,10 +58,22 @@ export async function analyzeEscapeRoutes(
     return null;
   }
 
-  // Para un análisis inicial, generamos una ruta corta hacia un punto
-  // a ~1km al norte, simplemente para obtener la red vial próxima.
-  const targetLat = lat + 0.009; // ~1km en latitud
-  const targetLng = lng;
+  if (!destination || !Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) {
+    return {
+      tieneConexionAViasRapidas: false,
+      tieneCallesSinPavimentarOCaminoRural: false,
+      proximidadACaracteristicasTopograficas: {
+        barrancaOCauce: false,
+        pendientePronunciada: false
+      },
+      resumen:
+        "No se calculó ruta institucional: falta destino trazable vinculado a geometría, POI, evidencia, nodo territorial o selección PPC. No se usan destinos arbitrarios.",
+      institutionalUse: "DEGRADED_NO_DESTINATION"
+    };
+  }
+
+  const targetLat = destination.lat;
+  const targetLng = destination.lng;
 
   const directionsUrl = new URL(DIRECTIONS_BASE_URL);
   directionsUrl.searchParams.set("origin", `${lat},${lng}`);
@@ -115,29 +129,28 @@ export async function analyzeEscapeRoutes(
     pendientePronunciada = diff > 15; // diferencia de >15m en ~1km
   }
 
-  // Sin datos directos de "barranca", usamos la combinación pendiente + calles no pavimentadas como proxy.
-  barrancaOCauce = pendientePronunciada && tieneCallesSinPavimentarOCaminoRural;
+  barrancaOCauce = false;
 
   const resumenPartes: string[] = [];
   if (tieneConexionAViasRapidas) {
     resumenPartes.push(
-      "El punto se conecta rápidamente con vías rápidas o carreteras principales."
+      "La ruta observada conecta con vías rápidas o carreteras principales."
     );
   }
   if (tieneCallesSinPavimentarOCaminoRural) {
     resumenPartes.push(
-      "Se detecta presencia de caminos sin pavimentar o rutas rurales cercanas."
+      "La ruta observada contiene texto compatible con caminos sin pavimentar o rurales."
     );
   }
   if (barrancaOCauce) {
     resumenPartes.push(
-      "La combinación de pendiente y caminos rurales sugiere posibles cauces o barrancas utilizados como rutas de escape."
+      "La combinación de pendiente y caminos rurales se conserva sólo como contexto físico de movilidad."
     );
   }
 
   const resumen =
     resumenPartes.join(" ") ||
-    "No se detectaron patrones claros de rutas de escape a partir de los datos disponibles.";
+    "No se detectaron factores medibles de movilidad territorial a partir de los datos disponibles.";
 
   return {
     tieneConexionAViasRapidas,
@@ -148,6 +161,7 @@ export async function analyzeEscapeRoutes(
     },
     resumen,
     rawDirections: directionsJson,
-    rawElevation: elevationJson
+    rawElevation: elevationJson,
+    institutionalUse: "MOBILITY_CONTEXT_ONLY"
   };
 }
