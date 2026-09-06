@@ -66,6 +66,10 @@ import type {
 } from "@/utils/reportCertificationGate";
 import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
 import { normalizeInstitutionalBaseEvidence } from "@/utils/institutionalBaseEvidenceNormalizer";
+import {
+  buildNumeroExpedienteFields,
+  resolvePerfiladorIniciales,
+} from "@/utils/documentIdentity";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -208,6 +212,11 @@ export type Project = {
   linkedGeoReportId?: string | null;
   linkedGangReport?: any | null;
   ceipolId?: string;
+  numeroExpediente?: string;
+  numeroExpedienteAsignadoAt?: number;
+  numeroExpedienteSequence?: number;
+  perfiladorIniciales?: string;
+  numeroExpedienteVersion?: string;
   estado?: string;
   status?: "ACTIVO" | "ARCHIVADO";
   contextoIncidencia?: string;
@@ -346,6 +355,9 @@ type ProjectContextValue = {
     module: string;
     projectId?: string;
     projectName?: string;
+    numeroExpediente?: string;
+    ceipolId?: string;
+    perfiladorIniciales?: string;
     result?: "ÉXITO" | "FALLO" | "BLOQUEADO";
     details: string;
   }) => Promise<void>;
@@ -461,6 +473,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     module: string;
     projectId?: string;
     projectName?: string;
+    numeroExpediente?: string;
+    ceipolId?: string;
+    perfiladorIniciales?: string;
     result?: "ÉXITO" | "FALLO" | "BLOQUEADO";
     details: string;
   }) => {
@@ -480,6 +495,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         module: params.module,
         projectId: params.projectId || "",
         projectName: params.projectName || "",
+        numeroExpediente: params.numeroExpediente || "",
+        ceipolId: params.ceipolId || "",
+        perfiladorIniciales: params.perfiladorIniciales || "",
         ip,
         timestamp: Date.now(),
         date: dateStr,
@@ -517,7 +535,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         throw new Error("Debe definir, validar y confirmar la geografía antes de crear el expediente.");
       }
 
+      const perfiladorIniciales = resolvePerfiladorIniciales(user);
       let ceipolId = "";
+      let numeroExpedienteFields!: ReturnType<typeof buildNumeroExpedienteFields>;
       const confirmedCanonicalGeography = canonicalGeography || canonicalizeConfirmedDraftGeography({
         projectId: projectDocRef.id,
         draft: draftGeography!,
@@ -559,11 +579,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         const month = (now.getMonth() + 1).toString().padStart(2, "0");
         const year = now.getFullYear();
         ceipolId = `CEIPOL/${nextCount.toString().padStart(6, "0")}/${day}/${month}/${year}`;
+        numeroExpedienteFields = buildNumeroExpedienteFields({
+          createdAt: now,
+          sequence: nextCount,
+          perfiladorIniciales,
+        });
 
         transaction.set(counterRef, { count: nextCount });
 
         transaction.set(projectDocRef, {
           ceipolId,
+          ...numeroExpedienteFields,
           name: nombre.trim() || "Sin nombre",
           geometryType,
           descripcion: descripcion || "",
@@ -585,6 +611,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         descripcion: descripcion || "",
         createdBy: user?.username || "Usuario Local",
         ceipolId,
+        ...numeroExpedienteFields,
         estado: "ABIERTO",
         canonicalHypothesis: null,
         hypothesisRequirementSatisfied: false,
@@ -605,8 +632,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         action: "CREAR",
         module: "Expedientes",
         projectId: projectDocRef.id,
-        projectName: ceipolId,
-        details: `Creado expediente oficial con folio ${ceipolId} y nombre descriptivo "${nombre}".`
+        projectName: numeroExpedienteFields.numeroExpediente,
+        numeroExpediente: numeroExpedienteFields.numeroExpediente,
+        ceipolId,
+        perfiladorIniciales,
+        details: `Creado expediente oficial ${numeroExpedienteFields.numeroExpediente} con folio legacy ${ceipolId} y nombre descriptivo "${nombre}".`
       });
       return projectDocRef.id;
     } catch (err: any) {
@@ -1427,6 +1457,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdBy: username,
         lockedBy: null,
         photoCount: payload.photos.length,
+        ...(proj.ceipolId ? { ceipolId: proj.ceipolId } : {}),
+        ...(proj.numeroExpediente ? { numeroExpediente: proj.numeroExpediente } : {}),
+        ...(proj.numeroExpedienteAsignadoAt ? { numeroExpedienteAsignadoAt: proj.numeroExpedienteAsignadoAt } : {}),
+        ...(proj.numeroExpedienteSequence ? { numeroExpedienteSequence: proj.numeroExpedienteSequence } : {}),
+        ...(proj.perfiladorIniciales ? { perfiladorIniciales: proj.perfiladorIniciales } : {}),
+        ...(proj.numeroExpedienteVersion ? { numeroExpedienteVersion: proj.numeroExpedienteVersion } : {}),
         ...importedGeographyPatch,
       }, { merge: true });
 

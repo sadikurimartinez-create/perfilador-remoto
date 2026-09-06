@@ -27,6 +27,7 @@ import {
 import { getDb } from "@/lib/firebase";
 import { exportToWord } from "@/lib/exportToWord";
 import { CEIPOLToast } from "@/components/ui/CEIPOLToast";
+import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 
 type CloudAnalysis = {
   id: string;
@@ -368,7 +369,10 @@ export default function ProjectWorkspacePage() {
               )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5 font-mono tracking-tight text-blue-300/90">
-              ID expediente: {project.id}
+              Número de expediente: {resolveVisibleNumeroExpediente(project)}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-mono tracking-tight">
+              ID técnico: {project.id}
             </p>
           </div>
           <button
@@ -460,7 +464,7 @@ export default function ProjectWorkspacePage() {
                           await exportToWord(
                             a.editorialPayload,
                             project?.nombre || (project as any)?.name || 'Expediente',
-                            a.editorialPayload.projectId || project?.id || 'EXP',
+                            resolveVisibleNumeroExpediente(a.editorialPayload || project),
                             user,
                             { exportMode: "DRAFT" }
                           );

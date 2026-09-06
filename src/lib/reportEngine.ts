@@ -20,6 +20,7 @@ import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
 import { classifyLegacyCompatibility, evaluateIntelligenceEligibility } from "@/utils/syntheticIntelligenceFirewall";
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
+import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 
 
 
@@ -449,7 +450,15 @@ export async function generatePdfProgrammatic(
     doc.text(`Página ${idx + 1} de ${briefing.pages.length}`, PAGE.width - PAGE.margin, PAGE.height - 6, { align: 'right' });
   });
 
-  doc.save(`Dictamen_Inteligencia_Territorial_${briefing.fileNumber}.pdf`);
+  const coverExpediente = briefing.pages
+    .find((page) => page.mode === "cover")
+    ?.bullets?.find((bullet) => bullet.startsWith("Expediente:"))
+    ?.replace(/^Expediente:\s*/i, "");
+  doc.save(buildNumeroExpedienteFilename({
+    numeroExpediente: briefing.fileNumber,
+    projectName: coverExpediente || briefing.title,
+    extension: "pdf",
+  }));
 }
 
 export type KernelState =
@@ -1033,6 +1042,10 @@ export class ReportEngineKernelClass {
 
             const wordPayload =
               adaptDocumentPackageForWord(documentPackage);
+            const documentNumber = resolveVisibleNumeroExpediente({
+              numeroExpediente: this.context.editorialPayload?.numeroExpediente || this.context.project?.numeroExpediente || this.context.reportNumber,
+              ceipolId: this.context.editorialPayload?.ceipolId || this.context.project?.ceipolId,
+            });
 
 
             if (exportMode === "INSTITUTIONAL") {
@@ -1041,21 +1054,28 @@ export class ReportEngineKernelClass {
                   ...this.context.project,
                   ...this.context.editorialPayload,
                   projectId: this.context.project.id || documentPackage.projectId,
+                  numeroExpediente: documentNumber === "NO ASIGNADO" ? undefined : documentNumber,
+                  ceipolId: this.context.project.ceipolId || this.context.editorialPayload?.ceipolId,
                   photoEvidence: this.context.album || [],
                   album: this.context.album || [],
                   mapSnapshots: this.context.mapSnapshots || [],
                   sweeps: this.context.sweeps || [],
                 },
                 documentPackage.projectName,
-                documentPackage.projectId,
+                documentNumber,
                 documentPackage.user,
                 { exportMode: "INSTITUTIONAL" }
               );
             } else {
               await exportToWord(
-                wordPayload,
+                {
+                  ...wordPayload,
+                  projectId: this.context.project.id || wordPayload.projectId,
+                  numeroExpediente: documentNumber === "NO ASIGNADO" ? undefined : documentNumber,
+                  ceipolId: this.context.project.ceipolId || wordPayload.ceipolId,
+                },
                 documentPackage.projectName,
-                documentPackage.projectId,
+                documentNumber,
                 documentPackage.user,
                 { exportMode: "DRAFT" }
               );

@@ -67,6 +67,11 @@ import {
 } from "@/utils/documentEvidenceIntegrationEngine";
 import { EvidenceAdapterEngine } from "@/utils/evidence/EvidenceAdapterEngine";
 import { EvidenceFallbackRenderer } from "@/document-engine/renderers/EvidenceFallbackRenderer";
+import {
+  buildNumeroExpedienteFilename,
+  resolveVisibleNumeroExpediente,
+  sanitizeExpedienteFilePart,
+} from "@/utils/documentIdentity";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -433,9 +438,9 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
   if (!payload.projectName || payload.projectName.trim().length === 0) {
     throw new Error("El nombre del proyecto no está definido.");
   }
-  const isFirestoreId = reportNumber ? (!reportNumber.includes("/") && reportNumber.length >= 15) : false;
-  if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
-    throw new Error(`el número de expediente de portada (${payload.projectId}) no coincide con el expediente analizado (${reportNumber}).`);
+  const visibleNumeroExpediente = resolveVisibleNumeroExpediente(payload);
+  if (reportNumber && visibleNumeroExpediente !== "NO ASIGNADO" && visibleNumeroExpediente !== reportNumber) {
+    throw new Error(`el número de expediente de portada (${visibleNumeroExpediente}) no coincide con el expediente analizado (${reportNumber}).`);
   }
 
   // 2. Capítulos (orden correcto, sin capítulos vacíos)
@@ -868,9 +873,8 @@ export async function exportToWord(
 
   // CoverDataValidator, FinalReportConsistencyCheck & ExecutiveReportQualityGate
   try {
-    const isFirestoreId = reportNumber ? (!reportNumber.includes("/") && reportNumber.length >= 15) : false;
-    if (reportNumber && payload.projectId && payload.projectId !== reportNumber && !isFirestoreId) {
-      throw new Error("el número de expediente de portada (" + payload.projectId + ") no coincide con el expediente analizado (" + reportNumber + ").");
+    if (reportNumber && visibleNumeroExpediente !== "NO ASIGNADO" && visibleNumeroExpediente !== reportNumber) {
+      throw new Error("el número de expediente de portada (" + visibleNumeroExpediente + ") no coincide con el expediente analizado (" + reportNumber + ").");
     }
     if (!isInstitutionalExport) {
       FinalReportConsistencyCheck(payload, reportNumber);
@@ -903,7 +907,11 @@ export async function exportToWord(
     throw new Error(msg);
   }
 
-  const safeName = projectName.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "SinNombre";
+  const visibleNumeroExpediente = resolveVisibleNumeroExpediente({
+    numeroExpediente: payload.numeroExpediente || reportNumber,
+    ceipolId: payload.ceipolId,
+  });
+  const safeName = sanitizeExpedienteFilePart(projectName, "SinNombre");
   validateAndPaveChapters(payload);
 
   // 1. CARGA DE LOGOS
@@ -1144,7 +1152,7 @@ export async function exportToWord(
           }),
           new TableCell({
             borders: metaBorders, width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F5F7FA", type: ShadingType.CLEAR },
-            children: [new Paragraph({ children: [new TextRun({ text: "NÚMERO EXP:", bold: true, size: 16 }), new TextRun({ text: ` ${payload.projectId}`, size: 16 })] })]
+            children: [new Paragraph({ children: [new TextRun({ text: "NÚMERO DE EXPEDIENTE:", bold: true, size: 16 }), new TextRun({ text: ` ${visibleNumeroExpediente}`, size: 16 })] })]
           })
         ]
       }),
@@ -2553,7 +2561,7 @@ export async function exportToWord(
           first: HeaderFooterManager.createFirstPageHeader(),
         },
         footers: {
-          default: HeaderFooterManager.createDefaultFooter(payload.date, safeName),
+          default: HeaderFooterManager.createDefaultFooter(payload.date, visibleNumeroExpediente),
           first: HeaderFooterManager.createFirstPageFooter(),
         },
         children: elements,
@@ -2562,5 +2570,10 @@ export async function exportToWord(
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `Dictamen_Inteligencia_Territorial_${safeName}.docx`);
+  saveAs(blob, buildNumeroExpedienteFilename({
+    numeroExpediente: visibleNumeroExpediente,
+    ceipolId: payload.ceipolId,
+    projectName,
+    extension: "docx",
+  }));
 }

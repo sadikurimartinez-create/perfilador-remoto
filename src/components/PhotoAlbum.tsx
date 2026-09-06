@@ -27,6 +27,7 @@ import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
 import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
+import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import {
   adaptDenueScinceSource,
   canAdmitSourceToInstitutionalContext,
@@ -1089,6 +1090,10 @@ export function PhotoAlbum({
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [reportSummary, setReportSummary] = useState("");
   const [reportNumber, setReportNumber] = useState("");
+  const visibleNumeroExpediente = useMemo(
+    () => resolveVisibleNumeroExpediente(project),
+    [project?.numeroExpediente, project?.ceipolId]
+  );
 
   const [isHypothesisValidatedInWorkspace, setIsHypothesisValidatedInWorkspace] = useState(false);
   const [selectedAnnexes, setSelectedAnnexes] = useState({
@@ -1179,13 +1184,9 @@ export function PhotoAlbum({
 
   useEffect(() => {
     if (project?.id) {
-      const loadNextReportNum = async () => {
-        const num = await getNextReportNumber(project.id);
-        setReportNumber(num);
-      };
-      void loadNextReportNum();
+      setReportNumber(visibleNumeroExpediente);
     }
-  }, [project?.id, historyDossiers.length]);
+  }, [project?.id, visibleNumeroExpediente]);
 
   useEffect(() => {
     if (project && project.reportSummary && !reportSummary) {
@@ -2292,7 +2293,7 @@ const hasMinimumPhotos =
           mapSnapshots: sortedSnapshotsToExport,
           riskLevel: profileRiskLevel ?? undefined,
           scinceDemographics: (analysisResult as any)?.scinceDemographics,
-          reportNumber: reportNumber || (project?.id ? String(project.id) : "") || "DICTAMEN_CRIMINOLOGICO",
+          reportNumber: reportNumber || visibleNumeroExpediente,
           reportSummary,
           user: { id: user?.id ? String(user.id) : "unknown", username: user?.username || "Usuario", role: user?.role || "USER" },
           markAsPrinted: !isReadOnly ? markAsPrinted : undefined,
@@ -5337,7 +5338,7 @@ const hasMinimumPhotos =
                         <p className="text-[10px] font-semibold text-slate-400">SECRETARÍA DE SEGURIDAD PÚBLICA / CEIPOL</p>
                         <div className="grid grid-cols-2 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-left text-[10px] text-slate-350">
                           <p><strong>Expediente:</strong> {project?.nombre || "Polígono"}</p>
-                          <p><strong>Número:</strong> {project?.id || "EXP_TACTICO"}</p>
+                          <p><strong>Número de expediente:</strong> {visibleNumeroExpediente}</p>
                           <p><strong>Analista:</strong> {user?.username || "Analista"}</p>
                           <p><strong>Fecha:</strong> {new Date().toLocaleDateString("es-MX")}</p>
                           <p><strong>Geometría:</strong> {project?.geometryType?.toUpperCase() || "POLÍGONO"}</p>
@@ -5729,7 +5730,7 @@ const hasMinimumPhotos =
                         await exportToWord(
                           h.editorialPayload,
                           h.poligono || 'Expediente',
-                          h.projectId || 'EXP',
+                          resolveVisibleNumeroExpediente(h.editorialPayload || h),
                           user,
                           { exportMode: "DRAFT" }
                         );

@@ -15,6 +15,7 @@ import { HypothesisConfidenceAssessment } from './hypothesisConfidenceCalibratio
 import { OperationalDecisionObject } from './hypothesisDecisionIntelligenceEngine';
 import { PhotoEvidenceGovernanceEngine } from './photoEvidenceGovernanceEngine';
 import { isValidStreetViewImage } from './streetViewValidator';
+import { resolveVisibleNumeroExpediente } from './documentIdentity';
 
 
 import {
@@ -297,6 +298,8 @@ export const generateFallbackChart = (type: 'delitos' | 'atractores' | 'riesgo')
 export interface IntelligenceReportPayload {
   projectName: string;
   projectId: string;
+  ceipolId?: string;
+  numeroExpediente?: string;
   date: string;
   analyst: string;
   geometryType: string;
@@ -578,7 +581,11 @@ export const buildIntelligenceEditorialPayload = async (
   const rawConclusionsText = extractSection(rawContent, 11);
 
   const projectName = project?.nombre || project?.name || "Zona de Estudio";
-  const projectId = reportNumber || (project?.id ? String(project.id) : "EXP-2026-XXXXX");
+  const projectId = project?.id ? String(project.id) : "EXP-2026-XXXXX";
+  const numeroExpediente = resolveVisibleNumeroExpediente({
+    numeroExpediente: project?.numeroExpediente || reportNumber,
+    ceipolId: project?.ceipolId,
+  });
   const date = new Date().toLocaleDateString("es-MX");
   const analyst = analystName || project?.analyst || "Analista CEIPOL Táctico";
   const geometryType = project?.geometryType || "polígono";
@@ -1184,6 +1191,8 @@ export const buildIntelligenceEditorialPayload = async (
   return {
     projectName,
     projectId,
+    ceipolId: project?.ceipolId,
+    numeroExpediente,
     date,
     analyst,
     geometryType,
@@ -1245,7 +1254,7 @@ export const buildIntelligenceBriefing = (
     summary: payload.executiveSummary,
     bullets: [
       `Expediente: ${payload.projectName}`,
-      `Número de Expediente: ${payload.projectId}`,
+      `Número de Expediente: ${resolveVisibleNumeroExpediente(payload)}`,
       `Fecha: ${payload.date}`,
       `Analista Responsable: ${payload.analyst}`,
       `Geometría de Cobertura: ${safeUpperCase(payload.geometryType, "POLÍGONO")}`,
@@ -1350,7 +1359,7 @@ export const buildIntelligenceBriefing = (
 
   if (certifiedOsint) {
     if (certifiedOsint.validatedByACE === false) {
-      osintText = `RECOMENDACIÓN INSTITUCIONAL DE DESCARTE:\n\nEl análisis del Capítulo 7 (OSINT) para el expediente ${payload.projectId} ha sido SUSPENDIDO de forma oficial. Las fuentes de datos abiertas recopiladas no superaron los criterios de consistencia analítica, madurez técnica o trazabilidad digital de la gobernanza de la SSPE.\n\nEVIDENCIA:\nNo certificada por inconsistencia de procedencia o violación de estilo.\n\nANÁLISIS:\nAnálisis suspendido temporalmente por inconsistencia metodológica o lingüística.\n\nIMPLICACIÓN OPERATIVA:\nNo habilitado para visualización o publicación oficial. Se requiere auditoría del lote original.`;
+      osintText = `RECOMENDACIÓN INSTITUCIONAL DE DESCARTE:\n\nEl análisis del Capítulo 7 (OSINT) para el expediente ${resolveVisibleNumeroExpediente(payload)} ha sido SUSPENDIDO de forma oficial. Las fuentes de datos abiertas recopiladas no superaron los criterios de consistencia analítica, madurez técnica o trazabilidad digital de la gobernanza de la SSPE.\n\nEVIDENCIA:\nNo certificada por inconsistencia de procedencia o violación de estilo.\n\nANÁLISIS:\nAnálisis suspendido temporalmente por inconsistencia metodológica o lingüística.\n\nIMPLICACIÓN OPERATIVA:\nNo habilitado para visualización o publicación oficial. Se requiere auditoría del lote original.`;
     } else {
       const hallazgosBullets = certifiedOsint.analyticalFindings.map((f: string) => `- ${f}`).join("\n");
       const territorialBullets = certifiedOsint.territorialSummary.map((t: string) => `- ${t}`).join("\n");
@@ -1381,7 +1390,7 @@ export const buildIntelligenceBriefing = (
 
   if (certifiedGim) {
     if (certifiedGim.validatedByACE === false) {
-      pandillasText = `RECOMENDACIÓN INSTITUCIONAL DE DESCARTE:\n\nEl análisis territorial del Capítulo 8 para el expediente ${payload.projectId} ha sido SUSPENDIDO de forma oficial. Los datos levantados en campo no superaron los criterios de consistencia analítica o neutralidad lingüística establecidos por la gobernanza de la SSPE.\n\nEVIDENCIA:\nNo certificada por inconsistencia o violación de estilo.\n\nANÁLISIS:\n${certifiedGim.analyticalFindings[0]}\n\nIMPLICACIÓN OPERATIVA:\n${certifiedGim.limitations[0]}`;
+      pandillasText = `RECOMENDACIÓN INSTITUCIONAL DE DESCARTE:\n\nEl análisis territorial del Capítulo 8 para el expediente ${resolveVisibleNumeroExpediente(payload)} ha sido SUSPENDIDO de forma oficial. Los datos levantados en campo no superaron los criterios de consistencia analítica o neutralidad lingüística establecidos por la gobernanza de la SSPE.\n\nEVIDENCIA:\nNo certificada por inconsistencia o violación de estilo.\n\nANÁLISIS:\n${certifiedGim.analyticalFindings[0]}\n\nIMPLICACIÓN OPERATIVA:\n${certifiedGim.limitations[0]}`;
     } else {
       const hallazgosBullets = certifiedGim.analyticalFindings.map((f: string) => `- ${f}`).join("\n");
       const evidenciaBullets = certifiedGim.evidenceSummary.map((e: string) => `- ${e}`).join("\n");
@@ -1532,7 +1541,7 @@ Se requiere registrar obligatoriamente los resultados e impacto en la incidencia
 
   return {
     title: 'INFORME DE GEOINTELIGENCIA OPERATIVA',
-    fileNumber: payload.projectId,
+    fileNumber: resolveVisibleNumeroExpediente(payload),
     generatedAt: new Date().toISOString(),
     classification: 'CONFIDENCIAL - EXCLUSIVO SSPE-CEIPOL',
     globalRisk,

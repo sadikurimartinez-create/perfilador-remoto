@@ -1,4 +1,5 @@
 import { CEIPOLReportContext } from "../utils/intelligenceIntegrationContract/models/reportContextTypes";
+import { resolveVisibleNumeroExpediente } from "../utils/documentIdentity";
 
 export type ReportContext = CEIPOLReportContext;
 
@@ -73,7 +74,7 @@ export const ExecutiveSummaryPrompt = (ctx: ReportContext): string => {
   const tie = iic.evidenceSources.TIE;
 
   const projectName = tie?.projectName || sem.metadata?.projectId || "Zona de Estudio";
-  const projectId = iic.metadata.projectId;
+  const numeroExpediente = resolveVisibleNumeroExpediente(iic.metadata as any);
   const analysisRadius = sem.metadata?.analysisRadiusMeters || 250;
   const geometryType = tie?.urbanStructure?.streetGridType || "polígono";
 
@@ -81,7 +82,7 @@ export const ExecutiveSummaryPrompt = (ctx: ReportContext): string => {
 ${GLOBAL_CONTEXT_RULE}
 
 --- INICIO MÓDULO: RESUMEN EJECUTIVO (PORTADA) ---
-Genera el Resumen Ejecutivo del "Informe de Geointeligencia Operativa" para el expediente "${projectName}" (Número de Expediente: ${projectId}).
+Genera el Resumen Ejecutivo del "Informe de Geointeligencia Operativa" para el expediente "${projectName}" (Número de Expediente: ${numeroExpediente}).
 
 El resumen ejecutivo debe ser sumamente analítico y formal, con un máximo de 250 palabras, y estructurarse bajo los siguientes cuatro apartados explícitos de forma exclusiva, sin incluir recomendaciones operativas o acciones a tomar:
 

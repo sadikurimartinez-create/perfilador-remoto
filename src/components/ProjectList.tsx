@@ -20,6 +20,7 @@ import {
 import { getDb } from "@/lib/firebase";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import {
   buildDraftGeographyPreview,
   confirmDraftProjectGeography,
@@ -47,6 +48,11 @@ type ProjectWithCount = {
   deadlineAt?: number;
   printedAt?: number | null;
   ceipolId?: string;
+  numeroExpediente?: string;
+  numeroExpedienteAsignadoAt?: number;
+  numeroExpedienteSequence?: number;
+  perfiladorIniciales?: string;
+  numeroExpedienteVersion?: string;
 };
 
 type PendingProjectPhoto = {
@@ -286,6 +292,12 @@ export function ProjectList() {
             geometryType: data.geometryType || "individual",
             analysisContent: data.analysisContent || "",
             deadlineAt: data.deadlineAt || 0,
+            ceipolId: data.ceipolId || "",
+            numeroExpediente: data.numeroExpediente || "",
+            numeroExpedienteAsignadoAt: data.numeroExpedienteAsignadoAt || undefined,
+            numeroExpedienteSequence: data.numeroExpedienteSequence || undefined,
+            perfiladorIniciales: data.perfiladorIniciales || "",
+            numeroExpedienteVersion: data.numeroExpedienteVersion || "",
           } as ProjectWithCount;
         })
         .filter((p) => !p.deleted);
@@ -1048,6 +1060,12 @@ export function ProjectList() {
                           year: "numeric",
                         })}
                       </p>
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <span className="font-semibold text-slate-300">Número de expediente:</span>
+                            <span className="font-mono text-blue-300">
+                              {resolveVisibleNumeroExpediente(p)}
+                            </span>
+                          </p>
                           <p className="text-xs text-slate-400 flex items-center gap-1.5">
                             <span aria-hidden="true">📸</span>
                         {photoCountDisplay}{" "}
