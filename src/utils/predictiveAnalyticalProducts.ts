@@ -316,7 +316,7 @@ export function buildPredictiveAnalyticalProduct(input: {
     limitations: [
       "Producto prospectivo, no SOURCE_FACT y no conclusion penal.",
       "No predice culpabilidad, reincidencia individual, intencion criminal ni conducta de personas identificables.",
-      "No afirma que ocurrira un delito ni expresa porcentajes de probabilidad criminal.",
+      "No afirma ocurrencia futura de delitos ni expresa porcentajes de probabilidad criminal.",
       ...(historicalOnly ? ["Datos historicos no sostienen escenario actual sin verificacion reciente."] : []),
       ...(scenario === "INSUFFICIENT_EVIDENCE" ? ["Evidencia insuficiente para escenario prospectivo robusto."] : []),
     ],

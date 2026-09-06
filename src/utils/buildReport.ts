@@ -1,6 +1,15 @@
 import { ConsolidatedReport } from '../types/Report';
+import {
+  renderPredictiveProductsForInstitutionalReport,
+  selectPredictiveProductsForInstitutionalReport,
+} from './institutionalPredictiveProductIntegration';
 
 export const buildReport = (project: any): ConsolidatedReport => {
+  const predictiveSelection = selectPredictiveProductsForInstitutionalReport(project, {
+    expedienteId: project?.projectId || project?.id || project?.expedienteId || null,
+    geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
+    canonicalGeographyType: project?.canonicalGeography?.type || null,
+  });
   const report: any = {
     projectId: project.id || '',
     projectName: project.name || 'Sin nombre',
@@ -34,6 +43,10 @@ export const buildReport = (project: any): ConsolidatedReport => {
     conclusions: [],
 
     recommendations: [],
+
+    predictiveAnalyticalProducts: predictiveSelection.products,
+    prospectiveAnalysis: renderPredictiveProductsForInstitutionalReport(predictiveSelection.products),
+    predictiveProductExclusions: predictiveSelection.exclusions,
 
     analyst: project.analyst || 'CEIPOL',
   };

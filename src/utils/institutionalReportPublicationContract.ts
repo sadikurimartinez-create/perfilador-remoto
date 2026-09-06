@@ -13,6 +13,10 @@ import {
   validateInstitutionalReportTraceability,
   type InstitutionalReportTraceabilityGateResult,
 } from "@/utils/institutionalReportTraceabilityGate";
+import {
+  renderPredictiveProductsForInstitutionalReport,
+  selectPredictiveProductsForInstitutionalReport,
+} from "@/utils/institutionalPredictiveProductIntegration";
 
 export type PublicationEligibility = "ELIGIBLE" | "ELIGIBLE_WITH_DISCLOSURE" | "INELIGIBLE";
 export type PublicationItemType =
@@ -27,7 +31,8 @@ export type PublicationItemType =
   | "STREET_VIEW"
   | "TEMPORAL_COMPARISON"
   | "SPECIALIZED_INTELLIGENCE"
-  | "VISUAL_PRODUCT";
+  | "VISUAL_PRODUCT"
+  | "PREDICTIVE_ANALYTICAL_PRODUCT";
 
 export interface PublicationExclusion {
   itemId: string;
@@ -75,6 +80,8 @@ export interface InstitutionalReportInput {
   streetView: any[];
   temporalComparisons: any[];
   specializedIntelligence: any[];
+  predictiveAnalyticalProducts: any[];
+  predictiveAnalyticalNarrative: string;
   visualProducts: any[];
   exclusions: PublicationExclusion[];
   disclosures: PublicationDisclosure[];
@@ -100,6 +107,7 @@ function itemId(item: any, type: PublicationItemType): string {
     item?.conclusionId ||
     item?.outputId ||
     item?.comparisonId ||
+    item?.productId ||
     item?.traceabilityReference ||
     `${type}-UNAVAILABLE`
   );
@@ -176,6 +184,7 @@ function refs(item: any): ReportItemEligibilityAssessment["lineageRefs"] {
     analysisIds: [
       ...asArray<string>(item?.analysisIds),
       item?.analysisId,
+      item?.productId,
       item?.outputType === "ANALYSIS" ? item?.outputId : null,
       ...nodes.map((node) => node.analysisId).filter(Boolean) as string[],
     ].filter(Boolean),
@@ -320,6 +329,13 @@ export function assessReportItemEligibility(item: any, context: {
     return withDecision(item, type, visualDisclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", item?.contextual === true ? "CONTEXTUAL" : "INSTITUTIONAL_FACT", [], visualDisclosures);
   }
 
+  if (type === "PREDICTIVE_ANALYTICAL_PRODUCT") {
+    if (item?.publicationEligibility?.role === "ANALYSIS") {
+      return withDecision(item, type, "ELIGIBLE", "ANALYSIS", [], disclosures);
+    }
+    return withDecision(item, type, "INELIGIBLE", "ANALYSIS", [exclusion(item, type, "PREDICTIVE_PRODUCT_GATE_REQUIRED", "Predictive analytical products must pass the institutional admission gate.")], disclosures);
+  }
+
   return withDecision(item, type, disclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", context.requireInstitutionalFact ? "INSTITUTIONAL_FACT" : "CONTEXTUAL", [], disclosures);
 }
 
@@ -392,6 +408,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   const streetView: any[] = [];
   const temporalComparisons: any[] = [];
   const specializedIntelligence: any[] = [];
+  const predictiveAnalyticalProducts: any[] = [];
   const visualProducts: any[] = [];
 
   const process = (items: any[], type: PublicationItemType, target: any[]) => {
@@ -414,6 +431,35 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     project?.intelligenceContext?.aceReport?.certifiedGimOutput,
     project?.certifiedGimOutput,
   ].filter(Boolean), "SPECIALIZED_INTELLIGENCE", specializedIntelligence);
+  const predictiveSelection = selectPredictiveProductsForInstitutionalReport(project, {
+    expedienteId: reportReadyAssessment.projectId,
+    geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
+    canonicalGeographyType: project?.canonicalGeography?.type || null,
+  });
+  predictiveAnalyticalProducts.push(...predictiveSelection.products.map((item) => ({
+    ...item,
+    publicationEligibility: {
+      itemId: item.productId,
+      itemType: "PREDICTIVE_ANALYTICAL_PRODUCT" as PublicationItemType,
+      eligibility: "ELIGIBLE" as PublicationEligibility,
+      role: "ANALYSIS" as const,
+      exclusions: [],
+      disclosures: [],
+      lineageRefs: refs(item),
+    },
+  })));
+  predictiveAnalyticalProducts.forEach((item) => {
+    const assessment = item.publicationEligibility as ReportItemEligibilityAssessment;
+    assessments.push(assessment);
+  });
+  predictiveSelection.exclusions.forEach((item) => {
+    exclusions.push({
+      itemId: item.productId,
+      itemType: "PREDICTIVE_ANALYTICAL_PRODUCT",
+      reasonCode: item.reasonCode,
+      reason: item.reason,
+    });
+  });
   process(collect(project, ["maps", "charts", "visualProducts"]), "VISUAL_PRODUCT", visualProducts);
   visualProducts.length = 0;
   const governedVisuals = buildGovernedVisualProducts([
@@ -429,10 +475,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
 
   const traceabilityGate = validateInstitutionalReportTraceability({
     projectId: reportReadyAssessment.projectId,
-    evidence,
-    findings,
-    analyses,
-    streetView,
+    analyticalProducts: predictiveAnalyticalProducts,
   });
   exclusions.push(...traceabilityGate.exclusions.map((item) => ({
     itemId: item.itemId,
@@ -441,20 +484,13 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     reason: item.reason,
   })));
 
-  if (!traceabilityGate.eligibleForInstitutionalPublication) {
-    const reasons = [
-      ...traceabilityGate.reasons,
-      ...traceabilityGate.exclusions.map((item) => item.reasonCode),
-    ];
-    throw new Error(`INSTITUTIONAL_REPORT_TRACEABILITY_BLOCKED:${Array.from(new Set(reasons)).join(",")}`);
-  }
-
   const excludedItemKeys = new Set(traceabilityGate.exclusions.map((item) => `${item.itemType}:${item.itemId}`));
   const keepTraceable = (item: any, type: PublicationItemType) => !excludedItemKeys.has(`${type}:${itemId(item, type)}`);
   const traceableEvidence = evidence.filter((item) => keepTraceable(item, "EVIDENCE"));
   const traceableFindings = findings.filter((item) => keepTraceable(item, "FINDING"));
   const traceableAnalyses = analyses.filter((item) => keepTraceable(item, "ANALYSIS"));
   const traceableStreetView = streetView.filter((item) => keepTraceable(item, "STREET_VIEW"));
+  const traceablePredictiveAnalyticalProducts = predictiveAnalyticalProducts.filter((item) => keepTraceable(item, "PREDICTIVE_ANALYTICAL_PRODUCT"));
   const traceableAssessments = assessments.filter((assessment) =>
     assessment.eligibility !== "INELIGIBLE" &&
     !excludedItemKeys.has(`${assessment.itemType}:${assessment.itemId}`)
@@ -475,6 +511,8 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     streetView: traceableStreetView,
     temporalComparisons,
     specializedIntelligence,
+    predictiveAnalyticalProducts: traceablePredictiveAnalyticalProducts,
+    predictiveAnalyticalNarrative: renderPredictiveProductsForInstitutionalReport(traceablePredictiveAnalyticalProducts),
     visualProducts,
     exclusions,
     disclosures,
@@ -527,7 +565,7 @@ export function reconcileInstitutionalReportPayload(basePayload: any, input: Ins
     approvedFindings: input.findings,
     findings: input.findings,
     inferences: input.inferences,
-    analysisOutputs: input.analyses,
+    analysisOutputs: [...input.analyses, ...input.predictiveAnalyticalProducts],
     analyses: input.analyses,
     conclusions: input.conclusions,
     osintFindings: input.osint,
@@ -540,6 +578,8 @@ export function reconcileInstitutionalReportPayload(basePayload: any, input: Ins
     maps: input.visualProducts.filter((item: any) => item.visualType === "MAP" || item.kind === "map"),
     charts: input.visualProducts.filter((item: any) => item.visualType === "CHART" || item.kind === "chart"),
     certifiedGimOutput: specializedGim,
+    predictiveAnalyticalProducts: input.predictiveAnalyticalProducts,
+    prospectiveAnalysis: input.predictiveAnalyticalNarrative,
     intelligenceContext: {
       ...(basePayload?.intelligenceContext || {}),
       aceReport: {

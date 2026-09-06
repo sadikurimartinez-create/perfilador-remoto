@@ -1451,6 +1451,11 @@ export async function exportToWord(
   elements.push(createTitle("CAPÍTULO 3: ANÁLISIS TERRITORIAL CARTOGRÁFICO"));
   elements.push(...renderEditorialText(payload.mapsText || "", true));
 
+  if (payload.prospectiveAnalysis && String(payload.prospectiveAnalysis).trim()) {
+    elements.push(createTitle("ANÁLISIS PROSPECTIVO INSTITUCIONAL"));
+    elements.push(...renderEditorialText(payload.prospectiveAnalysis, true));
+  }
+
   // Regla de Gobernanza de Mapas: Los mapas solamente deben aparecer cuando el capítulo requiere análisis espacial,
   // existe relación narrativa legítima y existe un dato cartográfico certificado. Se eliminan decorativos, repetidos y sin explicación analítica.
   const certifiedMaps: any[] = [];

@@ -3,6 +3,7 @@ import {
   type InstitutionalEvidenceTraceabilityInput,
 } from "@/utils/institutionalEvidenceTraceabilityGuard";
 import { validateLineage, type CanonicalLineageNode } from "@/utils/evidenceLineage";
+import { evaluatePredictiveProductAdmission } from "@/utils/institutionalPredictiveProductIntegration";
 
 export type InstitutionalReportTraceabilityStatus =
   | "INSTITUTIONAL_PUBLICATION_ELIGIBLE"
@@ -13,7 +14,8 @@ export type InstitutionalReportTraceabilityItemType =
   | "EVIDENCE"
   | "FINDING"
   | "ANALYSIS"
-  | "STREET_VIEW";
+  | "STREET_VIEW"
+  | "PREDICTIVE_ANALYTICAL_PRODUCT";
 
 export interface InstitutionalReportTraceabilityExclusion {
   itemId: string;
@@ -38,6 +40,7 @@ export interface InstitutionalReportTraceabilityGateInput {
   findings?: any[];
   analyses?: any[];
   streetView?: any[];
+  analyticalProducts?: any[];
 }
 
 export interface InstitutionalReportTraceabilityGateResult {
@@ -65,6 +68,12 @@ export interface InstitutionalReportTraceabilityGateResult {
     excluded: number;
   };
   streetViewSummary: {
+    total: number;
+    eligible: number;
+    contextualOnly: number;
+    excluded: number;
+  };
+  analyticalProductSummary: {
     total: number;
     eligible: number;
     contextualOnly: number;
@@ -100,6 +109,7 @@ function itemId(item: any, type: InstitutionalReportTraceabilityItemType): strin
     item?.findingId ||
     item?.analysisId ||
     item?.outputId ||
+    item?.productId ||
     item?.traceabilityId ||
     `${type}-UNAVAILABLE`
   );
@@ -281,6 +291,21 @@ function evaluateAnalysis(item: any): InstitutionalReportTraceabilityItemResult 
   };
 }
 
+function evaluateAnalyticalProduct(item: any): InstitutionalReportTraceabilityItemResult {
+  const admission = evaluatePredictiveProductAdmission(item);
+  return {
+    itemId: itemId(item, "PREDICTIVE_ANALYTICAL_PRODUCT"),
+    itemType: "PREDICTIVE_ANALYTICAL_PRODUCT",
+    eligible: admission.admissible,
+    contextualOnly: item?.humanReviewStatus === "CONTEXTUALIZED",
+    reasons: admission.reasons,
+    missingFields: admission.reasons
+      .filter((reason) => reason.includes("MISSING") || reason.includes("INVALID_LINEAGE"))
+      .map((reason) => reason.replace(/^PREDICTIVE_PRODUCT_/, "").toLowerCase()),
+    exclusionCodes: admission.reasons.length ? admission.reasons : [],
+  };
+}
+
 function summarize(
   results: InstitutionalReportTraceabilityItemResult[],
   type: InstitutionalReportTraceabilityItemType
@@ -315,12 +340,14 @@ export function validateInstitutionalReportTraceability(
   const findings = asArray(input.findings);
   const analyses = asArray(input.analyses);
   const streetView = asArray(input.streetView);
+  const analyticalProducts = asArray(input.analyticalProducts);
 
   const itemResults = [
     ...evidence.map((item) => evaluateEvidence(item, "EVIDENCE")),
     ...findings.map(evaluateFinding),
     ...analyses.map(evaluateAnalysis),
     ...streetView.map((item) => evaluateEvidence(item, "STREET_VIEW")),
+    ...analyticalProducts.map(evaluateAnalyticalProduct),
   ];
 
   const exclusions = exclusionsFrom(itemResults);
@@ -329,6 +356,7 @@ export function validateInstitutionalReportTraceability(
   ).length;
   const eligibleFindingCount = itemResults.filter((item) => item.itemType === "FINDING" && item.eligible).length;
   const eligibleAnalysisCount = itemResults.filter((item) => item.itemType === "ANALYSIS" && item.eligible).length;
+  const eligibleAnalyticalProductCount = itemResults.filter((item) => item.itemType === "PREDICTIVE_ANALYTICAL_PRODUCT" && item.eligible).length;
 
   const reasons: string[] = [];
   if (evidence.length + streetView.length > 0 && eligibleEvidenceCount === 0) {
@@ -339,6 +367,9 @@ export function validateInstitutionalReportTraceability(
   }
   if (analyses.length > 0 && eligibleAnalysisCount === 0) {
     reasons.push("institutional analysis lineage missing");
+  }
+  if (analyticalProducts.length > 0 && eligibleAnalyticalProductCount === 0) {
+    reasons.push("institutional analytical product governance missing");
   }
 
   const eligibleForInstitutionalPublication = reasons.length === 0;
@@ -358,6 +389,7 @@ export function validateInstitutionalReportTraceability(
     findingSummary: summarize(itemResults, "FINDING"),
     analysisSummary: summarize(itemResults, "ANALYSIS"),
     streetViewSummary: summarize(itemResults, "STREET_VIEW"),
+    analyticalProductSummary: summarize(itemResults, "PREDICTIVE_ANALYTICAL_PRODUCT"),
     itemResults,
   };
 }
