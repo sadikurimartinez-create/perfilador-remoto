@@ -28,7 +28,7 @@ const CANDIDATE_LIMITATIONS = [
   "PHOTO_GPS_IS_CANDIDATE_NOT_VERTEX",
 ] as const;
 
-export function buildHaciendaSanMarcosHistoricalCandidates(
+function buildHaciendaSanMarcosHistoricalCandidates(
   projectId: string
 ): HistoricalGeographyCandidate[] {
   return HACIENDA_SAN_MARCOS_GPS_POINTS.map((point, index) => ({
