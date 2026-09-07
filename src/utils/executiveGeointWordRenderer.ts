@@ -11,6 +11,8 @@ import type {
   ExecutiveGeointReportDocumentModel,
 } from "@/utils/executiveGeointReportDocumentModel";
 import type { ExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
+import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
+import { buildExecutiveCanonicalTerritorialMapSpec } from "@/utils/executiveCanonicalTerritorialMap";
 import {
   FlowControlManager,
   HeaderFooterManager,
@@ -61,6 +63,10 @@ interface RenderOptions {
 
 interface VisualAssetBuildOptions {
   resolveImage?: ExecutiveGeointWordImageResolver;
+  resolvePrincipalMapImage?: ExecutiveGeointWordImageResolver;
+  strictPrincipalMapAssets?: boolean;
+  canonicalGeography?: CanonicalProjectGeography | null;
+  googleStaticMapsApiKey?: string;
 }
 
 const TECHNICAL_VISIBLE_TERMS =
@@ -174,9 +180,13 @@ function visualAssetFromDataUrl(reference: string | null | undefined): Executive
   if (!match) return null;
   const [, type, base64] = match;
   const buffer = Buffer.from(base64, "base64");
+  const pngWidth = buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG" ? buffer.readUInt32BE(16) : undefined;
+  const pngHeight = buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG" ? buffer.readUInt32BE(20) : undefined;
   return {
     data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
     type: type.toLowerCase() as ExecutiveGeointWordVisualAsset["type"],
+    width: pngWidth,
+    height: pngHeight,
   };
 }
 
@@ -198,17 +208,51 @@ async function resolveGovernedVisualReference(
   return options.resolveImage(reference, maxWidth, maxHeight, narrative, evidenceId);
 }
 
+function principalMapAssetLooksReal(asset: ExecutiveGeointWordVisualAsset | null): asset is ExecutiveGeointWordVisualAsset {
+  if (!asset?.data) return false;
+  const byteLength = asset.data instanceof Uint8Array ? asset.data.byteLength : asset.data.byteLength;
+  if (byteLength < 1024) return false;
+  if (asset.width !== undefined && asset.width < 300) return false;
+  if (asset.height !== undefined && asset.height < 180) return false;
+  return true;
+}
+
+async function resolvePrincipalTerritorialMapReference(
+  reference: string | null | undefined,
+  options: VisualAssetBuildOptions,
+  narrative: string,
+  evidenceId: string
+): Promise<ExecutiveGeointWordVisualAsset | null> {
+  const resolverOptions = {
+    ...options,
+    resolveImage: options.resolvePrincipalMapImage || options.resolveImage,
+  };
+  const asset = await resolveGovernedVisualReference(reference, resolverOptions, 500, 280, narrative, evidenceId);
+  if (!options.strictPrincipalMapAssets) return asset;
+  return principalMapAssetLooksReal(asset) ? asset : null;
+}
+
 export async function buildExecutiveGeointWordVisualAssets(
   visualComposition: ExecutiveVisualComposition,
   options: VisualAssetBuildOptions = {}
 ): Promise<Record<string, ExecutiveGeointWordVisualAsset>> {
   const assets: Record<string, ExecutiveGeointWordVisualAsset> = {};
   if (visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL") {
-    const principalAsset = await resolveGovernedVisualReference(
+    const principalAsset = await resolvePrincipalTerritorialMapReference(
       visualComposition.principalTerritorialMap.visualReference,
       options,
-      500,
-      280,
+      visualComposition.principalTerritorialMap.caption,
+      visualComposition.principalTerritorialMap.mapId
+    );
+    if (principalAsset) assets[visualComposition.principalTerritorialMap.mapId] = principalAsset;
+  }
+  if (visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED" && options.canonicalGeography) {
+    const mapSpec = buildExecutiveCanonicalTerritorialMapSpec(options.canonicalGeography, {
+      apiKey: options.googleStaticMapsApiKey,
+    });
+    const principalAsset = await resolvePrincipalTerritorialMapReference(
+      mapSpec.imageUrl,
+      options,
       visualComposition.principalTerritorialMap.caption,
       visualComposition.principalTerritorialMap.mapId
     );
@@ -226,6 +270,14 @@ export async function buildExecutiveGeointWordVisualAssets(
     if (asset) assets[visual.visualId] = asset;
   }
   return assets;
+}
+
+export function assertExecutiveGeointPrincipalMapRendered(renderResult: ExecutiveGeointWordRenderResult) {
+  const rendered = renderResult.renderAudit.renderedVisualIds.includes("principal-territorial-map");
+  const missing = renderResult.renderAudit.missingVisualAssetIds.includes("principal-territorial-map");
+  if (!rendered || missing) {
+    throw new Error("EXECUTIVE_GEOINT_BLOCKED:PRINCIPAL_TERRITORIAL_MAP_REQUIRED");
+  }
 }
 
 export function renderExecutiveGeointWordDocument(

@@ -76,6 +76,7 @@ import { buildExecutiveGeointReportModel } from "@/utils/executiveGeointReportMo
 import { buildExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportDocumentModel } from "@/utils/executiveGeointReportDocumentModel";
 import {
+  assertExecutiveGeointPrincipalMapRendered,
   buildExecutiveGeointWordVisualAssets,
   renderExecutiveGeointWordDocument,
 } from "@/utils/executiveGeointWordRenderer";
@@ -104,20 +105,57 @@ async function renderGovernanceFallbackCanvas(
   maxWidth: number,
   maxHeight: number
 ): Promise<{ data: ArrayBuffer; width: number; height: number } | null> {
-
   console.warn(
     `[ADR-013.3] Evidencia visual excluida. Motivo: ${reasonType}. ID: ${evidenceId}`
   );
 
-  return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 600;
+  canvas.height = 380;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, 0, 600, 380);
+  ctx.strokeStyle = "#94a3b8";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(15, 15, 570, 350);
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 13px Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("EVIDENCIA VISUAL EXCLUIDA POR GOBERNANZA", 300, 165);
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 11px Arial, sans-serif";
+  ctx.fillText(`${reasonType} | ${evidenceId}`, 300, 195);
+
+  const fallbackBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      async (outBlob) => {
+        if (!outBlob) {
+          reject(new Error("No governance fallback blob"));
+          return;
+        }
+        resolve(await outBlob.arrayBuffer());
+      },
+      "image/png"
+    );
+  });
+  const ratio = Math.min(maxWidth / 600, maxHeight / 380);
+  return { data: fallbackBuffer, width: Math.round(600 * ratio), height: Math.round(380 * ratio) };
 }
 
-async function getImageDimensionsAndBuffer(
+export async function getImageDimensionsAndBuffer(
   imageUrl: string, 
   maxWidth = 500, 
   maxHeight = 320,
   narrative = "",
-  evidenceId = ""
+  evidenceId = "",
+  options: {
+    disableFallback?: boolean;
+    minimumWidth?: number;
+    minimumHeight?: number;
+    minimumBytes?: number;
+  } = {}
 ): Promise<{ data: ArrayBuffer; width: number; height: number; type: string } | null> {
   if (!imageUrl || typeof imageUrl !== "string") return null;
   let objectUrl: string | null = null;
@@ -218,6 +256,10 @@ async function getImageDimensionsAndBuffer(
     const scaledWidth = Math.round(origWidth * ratio);
     const scaledHeight = Math.round(origHeight * ratio);
 
+    if ((options.minimumWidth && scaledWidth < options.minimumWidth) || (options.minimumHeight && scaledHeight < options.minimumHeight)) {
+      return null;
+    }
+
     const canvas = document.createElement("canvas");
     canvas.width = origWidth;
     canvas.height = origHeight;
@@ -257,6 +299,7 @@ async function getImageDimensionsAndBuffer(
       const validation = EvidenceImageValidationEngine.validateImage(stampedBuffer, imageUrl, narrative);
       if (!validation.valid) {
         console.warn(`[EvidenceImageValidationEngine] Imagen invalidada. Razón: ${validation.reason}`);
+        if (options.disableFallback) return null;
         const fallbackReason = validation.fallbackReason || "IMAGE_CORRUPTED";
         return await renderGovernanceFallbackCanvas(
           fallbackReason,
@@ -270,6 +313,7 @@ async function getImageDimensionsAndBuffer(
       const dupCheck = ImageFingerprintService.registerAndCheckDuplicate(imageUrl, stampedBuffer);
       if (dupCheck.duplicate) {
         console.warn(`[ImageFingerprintService] Duplicado detectado (${dupCheck.type}). Excluyendo de compilación.`);
+        if (options.disableFallback) return null;
         return await renderGovernanceFallbackCanvas(
           "IMAGE_DUPLICATED",
           evidenceId || "N/D",
@@ -281,8 +325,12 @@ async function getImageDimensionsAndBuffer(
 
     const resolvedExt = resolveImageExtension(undefined, imageUrl, stampedBuffer);
     const resolvedType = resolvedExt.replace(".", "");
+    if (options.minimumBytes && stampedBuffer.byteLength < options.minimumBytes) {
+      return null;
+    }
     return { data: stampedBuffer, width: scaledWidth, height: scaledHeight, type: resolvedType };
   } catch (err) {
+    if (options.disableFallback) return null;
     console.error("Watermark/dimension calc failed, aplicando fallback de placeholder táctico institucional local:", err);
     
     try {
@@ -770,6 +818,24 @@ export async function exportToWord(
         projectName,
         ceipolId: payload.ceipolId,
         visualAssetsById: await buildExecutiveGeointWordVisualAssets(visualComposition, {
+          canonicalGeography: institutionalReportInput.geography,
+          googleStaticMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY,
+          strictPrincipalMapAssets: true,
+          resolvePrincipalMapImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
+            const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, {
+              disableFallback: true,
+              minimumWidth: 300,
+              minimumHeight: 180,
+              minimumBytes: 1024,
+            });
+            if (!resolved) return null;
+            return {
+              data: resolved.data,
+              width: resolved.width,
+              height: resolved.height,
+              type: resolved.type as any,
+            };
+          },
           resolveImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
             const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId);
             if (!resolved) return null;
@@ -782,11 +848,14 @@ export async function exportToWord(
           },
         }),
       });
+      assertExecutiveGeointPrincipalMapRendered(rendered);
       const blob = await Packer.toBlob(rendered.document);
       saveAs(blob, rendered.filename);
       return;
     } catch (err) {
-      console.warn("[FASE E] Ruta ejecutiva GEOINT no disponible; usando compatibilidad legacy controlada.", err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.startsWith("EXECUTIVE_GEOINT_BLOCKED:")) throw err instanceof Error ? err : new Error(message);
+      throw new Error(`EXECUTIVE_GEOINT_BLOCKED:${message}`);
     }
   }
 
