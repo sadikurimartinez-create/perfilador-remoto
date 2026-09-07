@@ -39,6 +39,7 @@ import { ReportCertificationGate } from "@/utils/reportCertificationGate";
 import { renderHypothesisTrajectory } from "@/utils/hypothesisTrajectoryRenderer";
 import { buildReportChapter0Hypothesis } from "@/utils/hypothesisGovernance";
 import { assessReportReadiness } from "@/utils/reportReadyGovernance";
+import { TCE_DEFAULT_FALLBACK } from "@/utils/territorialContextEngine";
 import {
   buildInstitutionalReportInput,
   reconcileInstitutionalReportPayload,
@@ -521,6 +522,7 @@ function FinalReportConsistencyCheck(payload: any, reportNumber?: string) {
     pandillasAnalysis: "No existe análisis validado de actores territoriales o pandillas disponible para este expediente. No se infieren presencia, control, marcas territoriales, vínculos o fronteras sin evidencia suficiente.",
     conclusionesText: "No existen conclusiones operativas validadas disponibles para este expediente. La ausencia de información suficiente impide emitir recomendaciones sustantivas o afirmar causas, riesgos o prioridades de intervención."
   };
+  const emptyChaptersAlerts: string[] = [];
 
   for (const ch of requiredChapters) {
     const text = payload[ch.key];
