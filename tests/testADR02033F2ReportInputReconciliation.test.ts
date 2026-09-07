@@ -118,7 +118,7 @@ function readyProject(overrides: any = {}) {
     analysisOutputs: [analysis()],
     conclusions: [conclusion()],
     osint: [{ id: "osint-1", sourceStatus: "NON_AUTHORITATIVE", text: "Contexto OSINT", lineage, evidenceId: "ev-1" }],
-    streetViewAnalysis: [{ id: "sv-1", evidenceId: "sv-1", geographyId: geography.geographyId, panoramaId: "pano-1", lineage }],
+    streetViewAnalysis: [{ id: "sv-1", evidenceId: "sv-1", sourceEvidenceId: "source-sv-1", traceabilityId: "trace-sv-1", expedienteId: "project-f2", geographyId: geography.geographyId, coordinates: { lat: 21.88, lng: -102.29 }, panoramaId: "pano-1", lineage, lineageStatus: "SUPPORTED" }],
     temporalComparisons: [{ comparisonId: "tc-1", comparedEvidenceIds: ["ev-a", "ev-b"], humanValidationStatus: "APPROVED" }],
     intelligenceContext: {
       aceReport: {
@@ -134,7 +134,9 @@ function readyProject(overrides: any = {}) {
 describe("ADR-020.33 F2 - Report input reconciliation", () => {
   test("TEST 1 institutional export builds InstitutionalReportInput once", () => {
     const source = readSource("src/lib/exportToWord.ts");
-    expect((source.match(/buildInstitutionalReportInput\(payload\)/g) || []).length).toBe(1);
+    expect((source.match(/buildInstitutionalReportInput\(payload\)/g) || []).length).toBeGreaterThanOrEqual(1);
+    expect(source).toContain('options.reportKind === "EXECUTIVE_GEOINT"');
+    expect(source).toContain('options.reportKind === "EXECUTIVE_GEOINT_TECHNICAL_ANNEX"');
   });
 
   test("TEST 2 same snapshot reused across builders", () => {

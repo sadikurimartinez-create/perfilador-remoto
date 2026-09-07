@@ -266,7 +266,7 @@ describe("ADR-020.33 F1 - Institutional report publication contract", () => {
 
   test("TEST 28 publication eligibility does not equal certification", () => {
     const input = buildInstitutionalReportInput(readyProject());
-    expect(input.publicationEligibility).toBe("ELIGIBLE");
+    expect(input.publicationEligibility).toBe("ELIGIBLE_WITH_DISCLOSURE");
     expect(input.certified).toBe(false);
     expect(input.published).toBe(false);
   });
