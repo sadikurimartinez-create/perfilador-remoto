@@ -1046,6 +1046,11 @@ export async function exportToWord(
     }));
   }
 
+  const visibleNumeroExpediente = resolveVisibleNumeroExpediente({
+    numeroExpediente: payload.numeroExpediente || reportNumber,
+    ceipolId: payload.ceipolId,
+  });
+
   // CoverDataValidator, FinalReportConsistencyCheck & ExecutiveReportQualityGate
   try {
     if (reportNumber && visibleNumeroExpediente !== "NO ASIGNADO" && visibleNumeroExpediente !== reportNumber) {
@@ -1082,10 +1087,7 @@ export async function exportToWord(
     throw new Error(msg);
   }
 
-  const visibleNumeroExpediente = resolveVisibleNumeroExpediente({
-    numeroExpediente: payload.numeroExpediente || reportNumber,
-    ceipolId: payload.ceipolId,
-  });
+
   const safeName = sanitizeExpedienteFilePart(projectName, "SinNombre");
   validateAndPaveChapters(payload);
 
