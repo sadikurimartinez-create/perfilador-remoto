@@ -192,11 +192,17 @@ export function HistoricalGeographyReconciliationPanel({
                     <p className="font-black uppercase text-slate-200">
                       {isSelected ? `Orden ${order}` : "Candidato"} | {candidate.sourceType} | {candidate.confidence}
                     </p>
+                    <p className="mt-1 font-mono text-[11px] text-cyan-300">
+                      ID: {candidate.candidateId}
+                    </p>
                     <p className="mt-1 font-mono text-[11px] text-slate-400">
                       {candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}
                     </p>
                     <p className="mt-1 truncate text-[11px] text-slate-500">
-                      {candidate.sourcePhotoId || candidate.sourceEvidenceId || candidate.sourceObjectPath || "Fuente sin identificador visible"}
+                      {candidate.sourcePhotoId ||
+                        candidate.sourceEvidenceId ||
+                        candidate.sourceObjectPath ||
+                        "Fuente histórica sin vínculo fotográfico certificado"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1">
