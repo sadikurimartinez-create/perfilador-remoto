@@ -234,12 +234,27 @@ export type Project = {
   geographyId?: string | null;
   geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";
   historicalGeographyReconciliation?: HistoricalGeographyReconciliation | null;
+  historicalProjectRecoveryOrigin?: HistoricalProjectRecoveryOrigin | null;
   canonicalHypothesis?: CanonicalProjectHypothesis | null;
   hypothesisRequirementSatisfied?: boolean;
   reportReadyAssessment?: ReportReadyAssessment | null;
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;
+};
+
+export type HistoricalProjectRecoveryOrigin = {
+  recoveryType: "HISTORICAL_PROJECT_RECOVERY";
+  sourceProjectId: string;
+  sourceProjectName?: string | null;
+  sourceGeometryType?: string | null;
+  recoveryReason: string;
+  recoveredAt: number;
+  recoveredBy: {
+    id?: string | null;
+    username?: string | null;
+    name?: string | null;
+  };
 };
 
 export type PerPhotoFinding = {
@@ -294,6 +309,15 @@ type ProjectContextValue = {
     descripcion?: string;
     canonicalGeography?: CanonicalProjectGeography | null;
     draftGeography?: DraftProjectGeography | null;
+  }) => Promise<string>;
+  createHistoricalRecoveryProject: (params: {
+    nombre: string;
+    geometryType: "individual" | "lineal" | "poligono";
+    sourceProjectId: string;
+    sourceProjectName?: string | null;
+    sourceGeometryType?: string | null;
+    recoveryReason: string;
+    descripcion?: string;
   }) => Promise<string>;
   assignHistoricalNumeroExpediente:
     (projectId: string) =>
@@ -659,6 +683,157 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       throw err;
     }
   }, [user, logAuditAction]);
+
+  const createHistoricalRecoveryProject = useCallback(async ({
+    nombre,
+    geometryType,
+    sourceProjectId,
+    sourceProjectName,
+    sourceGeometryType,
+    recoveryReason,
+    descripcion,
+  }: {
+    nombre: string;
+    geometryType: "individual" | "lineal" | "poligono";
+    sourceProjectId: string;
+    sourceProjectName?: string | null;
+    sourceGeometryType?: string | null;
+    recoveryReason: string;
+    descripcion?: string;
+  }) => {
+    if (!user) {
+      throw new Error("HISTORICAL_RECOVERY_AUTH_REQUIRED");
+    }
+    if (isReadOnly) {
+      throw new Error("HISTORICAL_RECOVERY_READ_ONLY");
+    }
+    if (!["individual", "lineal", "poligono"].includes(geometryType)) {
+      throw new Error("HISTORICAL_RECOVERY_INVALID_GEOMETRY_TYPE");
+    }
+
+    const sourceId = sourceProjectId.trim();
+    const reason = recoveryReason.trim();
+    if (!sourceId) throw new Error("HISTORICAL_RECOVERY_SOURCE_PROJECT_ID_REQUIRED");
+    if (!reason) throw new Error("HISTORICAL_RECOVERY_REASON_REQUIRED");
+
+    try {
+      const firestore = getDb();
+      const counterRef = doc(firestore, "counters", "projects");
+      const projectCol = collection(firestore, "projects");
+      const projectDocRef = doc(projectCol);
+      const perfiladorIniciales = resolvePerfiladorIniciales(user);
+      let ceipolId = "";
+      let numeroExpedienteFields!: ReturnType<typeof buildNumeroExpedienteFields>;
+      const recoveredAt = Date.now();
+      const historicalProjectRecoveryOrigin: HistoricalProjectRecoveryOrigin = {
+        recoveryType: "HISTORICAL_PROJECT_RECOVERY",
+        sourceProjectId: sourceId,
+        sourceProjectName: sourceProjectName ?? null,
+        sourceGeometryType: sourceGeometryType ?? null,
+        recoveryReason: reason,
+        recoveredAt,
+        recoveredBy: {
+          id: user?.id != null ? String(user.id) : null,
+          username: user?.username ?? null,
+          name: user?.name ?? null,
+        },
+      };
+
+      await runTransaction(firestore, async (transaction) => {
+        const counterSnap = await transaction.get(counterRef);
+        const currentCount = counterSnap.exists() ? counterSnap.data().count || 0 : 0;
+        const nextCount = currentCount + 1;
+
+        const now = new Date(recoveredAt);
+        const day = now.getDate().toString().padStart(2, "0");
+        const month = (now.getMonth() + 1).toString().padStart(2, "0");
+        const year = now.getFullYear();
+        ceipolId = `CEIPOL/${nextCount.toString().padStart(6, "0")}/${day}/${month}/${year}`;
+        numeroExpedienteFields = buildNumeroExpedienteFields({
+          createdAt: now,
+          sequence: nextCount,
+          perfiladorIniciales,
+          assignedAt: recoveredAt,
+        });
+
+        transaction.set(counterRef, { count: nextCount });
+        transaction.set(projectDocRef, {
+          ceipolId,
+          ...numeroExpedienteFields,
+          name: nombre.trim() || "Recuperación histórica",
+          geometryType,
+          descripcion: descripcion || "",
+          createdAt: recoveredAt,
+          createdBy: user?.username || "Usuario Local",
+          lockedBy: null,
+          photoCount: 0,
+          estado: "ABIERTO",
+          canonicalHypothesis: null,
+          hypothesisRequirementSatisfied: false,
+          canonicalGeography: null,
+          geographyId: null,
+          geographyValidationStatus: "INVALID",
+          historicalGeographyReconciliation: null,
+          historicalProjectRecoveryOrigin,
+        });
+      });
+
+      const newProjectState = {
+        id: projectDocRef.id,
+        nombre: nombre.trim() || "Recuperación histórica",
+        geometryType,
+        descripcion: descripcion || "",
+        createdBy: user?.username || "Usuario Local",
+        ceipolId,
+        ...numeroExpedienteFields,
+        estado: "ABIERTO",
+        canonicalHypothesis: null,
+        hypothesisRequirementSatisfied: false,
+        canonicalGeography: null,
+        geographyId: null,
+        geographyValidationStatus: "INVALID" as const,
+        historicalGeographyReconciliation: null,
+        historicalProjectRecoveryOrigin,
+      };
+
+      setProject({
+        ...newProjectState,
+        reportReadyAssessment: assessReportReadiness(newProjectState),
+      });
+      setAlbum([]);
+      setSelectedIds([]);
+      setAnalysisResultState(null);
+      setDocuments([]);
+      setIsReadOnly(false);
+
+      await logAuditAction({
+        action: "CREAR_EXPEDIENTE_RECUPERACION_HISTORICA",
+        module: "Expedientes",
+        projectId: projectDocRef.id,
+        projectName: numeroExpedienteFields.numeroExpediente,
+        numeroExpediente: numeroExpedienteFields.numeroExpediente,
+        ceipolId,
+        perfiladorIniciales,
+        details: JSON.stringify({
+          newProjectId: projectDocRef.id,
+          recoveryType: historicalProjectRecoveryOrigin.recoveryType,
+          sourceProjectId: historicalProjectRecoveryOrigin.sourceProjectId,
+          numeroExpediente: numeroExpedienteFields.numeroExpediente,
+          geometryType,
+          sourceProjectName: historicalProjectRecoveryOrigin.sourceProjectName,
+          sourceGeometryType: historicalProjectRecoveryOrigin.sourceGeometryType,
+          recoveryReason: historicalProjectRecoveryOrigin.recoveryReason,
+          recoveredAt: historicalProjectRecoveryOrigin.recoveredAt,
+        }),
+      });
+
+      return projectDocRef.id;
+    } catch (err: any) {
+      console.error("Error creando expediente de recuperación histórica:", err);
+      alert("Error al crear expediente de recuperación histórica: " + err.message);
+      throw err;
+    }
+  }, [user, isReadOnly, logAuditAction]);
 
   const assignHistoricalNumeroExpediente = useCallback(async (projectId: string) => {
     const fields = await assignNumeroExpedienteToExistingProject(projectId, user);
@@ -2483,6 +2658,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       selectedIds,
       analysisResult,
       createProject,
+      createHistoricalRecoveryProject,
       assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
@@ -2539,6 +2715,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       selectedIds,
       analysisResult,
       createProject,
+      createHistoricalRecoveryProject,
       assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
