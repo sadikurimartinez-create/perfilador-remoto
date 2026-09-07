@@ -28,6 +28,13 @@ import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
 import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
+import { assessReportReadiness } from "@/utils/reportReadyGovernance";
+import {
+  buildInstitutionalProductExportOptions,
+  buildInstitutionalProductExportPayload,
+  buildInstitutionalProductsViewModel,
+  type InstitutionalReportKind,
+} from "@/utils/institutionalProductsUi";
 import {
   adaptDenueScinceSource,
   canAdmitSourceToInstitutionalContext,
@@ -984,7 +991,7 @@ export function PhotoAlbum({
   const [isSweepsListExpanded, setIsSweepsListExpanded] = useState(true);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
-  const [activeReportTab, setActiveReportTab] = useState<"edit" | "preview">("edit");
+  const [activeReportTab, setActiveReportTab] = useState<"institutional" | "edit" | "preview">("institutional");
   const [previewPageIdx, setPreviewPageIdx] = useState<number>(0);
   const [kernelState, setKernelState] = useState(ReportEngineKernel.getState());
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -1117,6 +1124,54 @@ export function PhotoAlbum({
   });
 
   const [sweepsComments, setSweepsComments] = useState("");
+  const reportReadyAssessment = useMemo(() => {
+    const liveProject = {
+      ...(project || {}),
+      album,
+      photoEvidence: (project as any)?.photoEvidence || album,
+      documents,
+      analysisOutputs: (project as any)?.analysisOutputs || (analysisResult as any)?.analysisOutputs || [],
+      findings: (project as any)?.findings || (analysisResult as any)?.findings || [],
+    };
+    return (project as any)?.reportReadyAssessment || assessReportReadiness(liveProject);
+  }, [project, album, documents, analysisResult]);
+  const institutionalProducts = useMemo(
+    () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),
+    [reportReadyAssessment, project]
+  );
+
+  const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
+    if (!institutionalProducts.readyForInstitutionalReport) {
+      setError(institutionalProducts.pendingMessages.join(" ") || "El expediente aún no está habilitado para emitir productos institucionales.");
+      return;
+    }
+    setIsSavingAnalysis(true);
+    setError(null);
+    try {
+      await exportToWord(
+        buildInstitutionalProductExportPayload(project, {
+          projectId,
+          user,
+          editableProfile,
+          aiProfile,
+          reportSummary,
+          reportReadyAssessment,
+          album,
+          documents,
+          mapSnapshots,
+          analysisResult,
+        }),
+        project?.nombre || "Expediente",
+        institutionalProducts.numeroExpediente,
+        user,
+        buildInstitutionalProductExportOptions(reportKind)
+      );
+    } catch (err: any) {
+      setError(err?.message || "No fue posible generar el producto institucional.");
+    } finally {
+      setIsSavingAnalysis(false);
+    }
+  }, [institutionalProducts, project, projectId, user, editableProfile, aiProfile, reportSummary, reportReadyAssessment, album, documents, mapSnapshots, analysisResult]);
 
   // 🔒 5. REACT RENDER ISOLATION LAYER
   useEffect(() => {
@@ -5064,21 +5119,108 @@ const hasMinimumPhotos =
             <div className="flex border-b border-slate-800/80 gap-4 mb-4">
               <button
                 type="button"
+                onClick={() => setActiveReportTab("institutional")}
+                className={`pb-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeReportTab === "institutional" ? "border-b-2 border-cyan-500 text-cyan-400" : "text-slate-400 hover:text-slate-200"}`}
+              >
+                Productos Institucionales
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveReportTab("edit")}
                 className={`pb-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeReportTab === "edit" ? "border-b-2 border-cyan-500 text-cyan-400" : "text-slate-400 hover:text-slate-200"}`}
               >
-                📝 Editar Dictamen
+                Editar Dictamen
               </button>
               <button
                 type="button"
                 onClick={() => setActiveReportTab("preview")}
                 className={`pb-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeReportTab === "preview" ? "border-b-2 border-cyan-500 text-cyan-400" : "text-slate-400 hover:text-slate-200"}`}
               >
-                👁️ Vista Previa Institucional
+                Vista Previa Institucional
               </button>
             </div>
 
-            {activeReportTab === "edit" ? (
+            {activeReportTab === "institutional" ? (
+              <div className="space-y-5">
+                <div className="bg-slate-950/70 p-5 rounded-xl border border-cyan-500/20 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                    <div>
+                      <h4 className="text-xs font-black text-cyan-400 uppercase tracking-wider">
+                        Productos Institucionales
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-medium mt-1">
+                        Estado del expediente para emisión documental institucional.
+                      </p>
+                    </div>
+                    <div className="text-left md:text-right text-[10px] text-slate-350 space-y-1">
+                      <p>
+                        <strong>{institutionalProducts.hasInstitutionalIdentity ? "Número de expediente:" : "Identidad institucional:"}</strong>{" "}
+                        {institutionalProducts.numeroExpediente}
+                      </p>
+                      <p className="font-black text-slate-100 uppercase tracking-wider">{institutionalProducts.statusLabel}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                    {institutionalProducts.readinessChecks.map((item) => (
+                      <div key={item.label} className="flex items-center gap-2 bg-slate-950/60 border border-slate-850 rounded-lg px-3 py-2 text-slate-300">
+                        <span className={item.complete ? "text-emerald-400" : "text-amber-400"}>{item.complete ? "✓" : "!"}</span>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {institutionalProducts.pendingMessages.length > 0 && (
+                    <div className="bg-amber-950/25 border border-amber-500/20 rounded-xl p-3.5 space-y-2">
+                      <p className="text-[10px] font-black text-amber-300 uppercase tracking-wider">Motivos pendientes</p>
+                      <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-100/90">
+                        {institutionalProducts.pendingMessages.map((message) => (
+                          <li key={message}>{message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <CEIPOLButton
+                      variant="confirm"
+                      size="sm"
+                      disabled={isSavingAnalysis || institutionalProducts.actions.executiveReport.disabled}
+                      title={institutionalProducts.pendingMessages.join(" ")}
+                      onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)}
+                    >
+                      {institutionalProducts.actions.executiveReport.label}
+                    </CEIPOLButton>
+                    <CEIPOLButton
+                      variant="primary"
+                      size="sm"
+                      disabled={isSavingAnalysis || institutionalProducts.actions.technicalAnnex.disabled}
+                      title={institutionalProducts.pendingMessages.join(" ")}
+                      onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)}
+                    >
+                      {institutionalProducts.actions.technicalAnnex.label}
+                    </CEIPOLButton>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800/80 space-y-3">
+                  <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                    Producto Histórico / Dictamen Actual
+                  </h4>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    El dictamen tradicional permanece disponible en las pestañas de edición, vista previa y descarga histórica.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <CEIPOLButton variant="secondary" size="sm" onClick={() => setActiveReportTab("edit")}>
+                      Editar Dictamen
+                    </CEIPOLButton>
+                    <CEIPOLButton variant="secondary" size="sm" onClick={() => setActiveReportTab("preview")}>
+                      Ver Dictamen Actual
+                    </CEIPOLButton>
+                  </div>
+                </div>
+              </div>
+            ) : activeReportTab === "edit" ? (
               <>
                 {/* 1. EDICIÓN DEL CUERPO DEL DICTAMEN */}
                 <div className="space-y-2">
