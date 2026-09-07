@@ -18,6 +18,7 @@ import { ExecutiveIntelligenceSummaryEngine } from "@/utils/executiveIntelligenc
 import { QualityAssuranceEngine } from "@/utils/qualityAssuranceEngine";
 import { ReportCertificationEngine } from "@/utils/reportCertificationEngine";
 import { classifyLegacyCompatibility, evaluateIntelligenceEligibility } from "@/utils/syntheticIntelligenceFirewall";
+import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
 import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
@@ -117,6 +118,46 @@ export function isReportEngineEvidenceEligible(item: any): boolean {
   if (hasExplicitEpistemicContract) return false;
 
   return classifyLegacyCompatibility(item).compatibleForReport;
+}
+
+export function isReportEnginePhotoEvidenceEligible(item: any): boolean {
+  if (!item) return false;
+
+  const evidenceId = item.evidenceId || item.id;
+  if (!evidenceId) return false;
+
+  const validation = evaluateHumanValidation(item?.multimodalEvidence || item);
+  if (
+    validation.status === "REJECTED" ||
+    validation.status === "RETURNED_FOR_REANALYSIS"
+  ) {
+    return false;
+  }
+
+  const epistemic = item.epistemicIntegrity || item.epistemic || {};
+  const acquisitionMode = String(
+    epistemic.acquisitionMode || item.acquisitionMode || ""
+  ).toUpperCase();
+
+  if (
+    acquisitionMode === "SIMULATED" ||
+    acquisitionMode === "MOCK" ||
+    acquisitionMode === "TEST" ||
+    acquisitionMode === "CONNECTIVITY_ONLY"
+  ) {
+    return false;
+  }
+
+  if (
+    epistemic.isSimulated === true ||
+    item.isSimulated === true ||
+    epistemic.isConnectivityOnly === true ||
+    item.isConnectivityOnly === true
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 export async function generatePdfProgrammatic(
@@ -663,7 +704,7 @@ export class ReportEngineKernelClass {
 
         this.context.project = payload.project;
         this.context.content = cleanContent;
-        this.context.album = (payload.album || []).filter(isReportEngineEvidenceEligible);
+        this.context.album = (payload.album || []).filter(isReportEnginePhotoEvidenceEligible);
         this.context.mapSnapshots = payload.mapSnapshots || [];
         this.context.riskLevel = payload.riskLevel;
         this.context.reportSummary = payload.reportSummary;
