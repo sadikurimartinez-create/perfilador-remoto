@@ -94,3 +94,75 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No se pudo actualizar el perfil." }, { status: 500 });
   }
 }
+
+const PERFILADOR_INICIALES_PATTERN = /^[A-ZÑ]{2,5}$/;
+
+// PATCH: Registrar únicamente iniciales institucionales PPC sin desbloquear el perfil.
+export async function PATCH(req: Request) {
+  try {
+    const cookieStore = cookies();
+    const sessionCookie = cookieStore.get("ceipol_session");
+
+    if (!sessionCookie || !sessionCookie.value) {
+      return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+    }
+
+    const payload = verifySession(sessionCookie.value);
+    if (!payload || !payload.username) {
+      return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const initials = String(body?.perfiladorIniciales || "").trim().toLocaleUpperCase("es-MX");
+    if (!initials) {
+      return NextResponse.json({ error: "PERFILADOR_INICIALES_REQUERIDAS" }, { status: 400 });
+    }
+    if (!PERFILADOR_INICIALES_PATTERN.test(initials)) {
+      return NextResponse.json({ error: "PERFILADOR_INICIALES_INVALIDAS" }, { status: 400 });
+    }
+
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `
+      SELECT profile
+      FROM users
+      WHERE username = $1
+      LIMIT 1
+    `,
+      [payload.username]
+    );
+
+    const user = rows[0];
+    if (!user) {
+      return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
+    }
+
+    const existingProfile = user.profile || {};
+    if (String(existingProfile.perfiladorIniciales || "").trim()) {
+      return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
+    }
+
+    const updatedProfile = {
+      ...existingProfile,
+      perfiladorIniciales: initials,
+      updatedAt: Date.now(),
+    };
+
+    await pool.query(
+      `
+      UPDATE users
+      SET profile = $1
+      WHERE username = $2
+    `,
+      [JSON.stringify(updatedProfile), payload.username]
+    );
+
+    return NextResponse.json({
+      success: true,
+      profile: updatedProfile,
+    });
+  } catch (err) {
+    console.error("[api/auth/profile] Error en PATCH profile:", err);
+    return NextResponse.json({ error: "No se pudo registrar las iniciales institucionales." }, { status: 500 });
+  }
+}

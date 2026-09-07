@@ -53,8 +53,13 @@ export default function PerfilPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [perfiladorIniciales, setPerfiladorIniciales] = useState("");
+  const [isRegisteringInitials, setIsRegisteringInitials] = useState(false);
+  const [initialsMessage, setInitialsMessage] = useState("");
 
   const isLocked = !!(user as any)?.perfilCompleto;
+  const registeredPerfiladorIniciales = String((user as any)?.perfiladorIniciales || (user as any)?.profile?.perfiladorIniciales || "").trim().toLocaleUpperCase("es-MX");
+  const canRegisterPerfiladorIniciales = isLocked && !registeredPerfiladorIniciales;
 
   useEffect(() => {
     if (user) {
@@ -73,8 +78,9 @@ export default function PerfilPage() {
         maestriaCual: (user as any).maestriaCual || "",
         fotografia: (user as any).fotografia || "",
       });
+      setPerfiladorIniciales(registeredPerfiladorIniciales);
     }
-  }, [user]);
+  }, [user, registeredPerfiladorIniciales]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (isLocked) return;
@@ -130,6 +136,45 @@ export default function PerfilPage() {
     }
   };
 
+  const handleRegisterPerfiladorIniciales = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !canRegisterPerfiladorIniciales) return;
+
+    const normalized = perfiladorIniciales.trim().toLocaleUpperCase("es-MX");
+    if (!/^[A-ZÑ]{2,5}$/.test(normalized)) {
+      setInitialsMessage("PERFILADOR_INICIALES_INVALIDAS");
+      return;
+    }
+
+    setIsRegisteringInitials(true);
+    setInitialsMessage("");
+
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ perfiladorIniciales: normalized }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "No se pudo registrar las iniciales institucionales.");
+      }
+
+      setPerfiladorIniciales(normalized);
+      setInitialsMessage("Iniciales institucionales registradas correctamente.");
+      if (refreshUser) {
+        await refreshUser();
+      }
+    } catch (error: any) {
+      setInitialsMessage("Error al registrar iniciales: " + error.message);
+    } finally {
+      setIsRegisteringInitials(false);
+    }
+  };
+
   return (
     <div className="w-full mt-4 space-y-6">
       <header className="space-y-4">
@@ -179,6 +224,62 @@ export default function PerfilPage() {
                 </p>
               </div>
             </div>
+          )}
+
+          {isLocked && (
+            <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-sky-300">
+                    Iniciales de la persona perfiladora criminológica (PPC)
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Registro institucional requerido para folios y expedientes. No modifica los datos históricos del perfil.
+                  </p>
+                </div>
+                {registeredPerfiladorIniciales && (
+                  <div className="min-w-36 rounded-md border border-slate-700 bg-slate-950 px-4 py-2 text-center">
+                    <span className="block text-[10px] font-bold uppercase text-slate-500">Registradas</span>
+                    <strong className="text-lg tracking-widest text-slate-100">{registeredPerfiladorIniciales}</strong>
+                  </div>
+                )}
+              </div>
+
+              {canRegisterPerfiladorIniciales && (
+                <form onSubmit={handleRegisterPerfiladorIniciales} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="max-w-xs">
+                    <label htmlFor="perfiladorIniciales" className="block text-sm font-medium text-slate-300 mb-1">
+                      perfiladorIniciales
+                    </label>
+                    <input
+                      type="text"
+                      id="perfiladorIniciales"
+                      name="perfiladorIniciales"
+                      value={perfiladorIniciales}
+                      onChange={(e) => setPerfiladorIniciales(e.target.value.toLocaleUpperCase("es-MX"))}
+                      minLength={2}
+                      maxLength={5}
+                      pattern="[A-ZÑ]{2,5}"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-md px-4 py-2 text-sm uppercase tracking-widest text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                      placeholder="PPC"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isRegisteringInitials}
+                    className="px-4 py-2 rounded-md bg-sky-600 hover:bg-sky-500 text-sm font-semibold text-white shadow-lg shadow-sky-900/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {isRegisteringInitials ? "Registrando..." : "Registrar iniciales institucionales"}
+                  </button>
+                </form>
+              )}
+
+              {initialsMessage && (
+                <p className={`mt-3 text-xs font-semibold ${initialsMessage.includes("Error") || initialsMessage.includes("INVALIDAS") ? "text-red-300" : "text-emerald-300"}`}>
+                  {initialsMessage}
+                </p>
+              )}
+            </section>
           )}
 
           <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg space-y-5">
