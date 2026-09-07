@@ -27,6 +27,12 @@ type Props = {
   confirmedBy?: HistoricalGeographyHumanActor | null;
 };
 
+type ForensicCandidateMetadata = {
+  forensicSequence?: number | null;
+  forensicBasis?: string | null;
+  spatialGroupId?: string | null;
+};
+
 function buildReconciliationId(projectId: string, candidates: HistoricalGeographyCandidate[]) {
   const suffix = candidates.map((candidate) => candidate.candidateId).join("-").replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48);
   return `hgr-${projectId}-${suffix || "empty"}`;
@@ -74,6 +80,12 @@ export function HistoricalGeographyReconciliationPanel({
     () => applySelectedOrder(reconciliation.candidates, selectedIds),
     [reconciliation.candidates, selectedIds]
   );
+  const uniqueSpatialPositionCount = React.useMemo(() => {
+    const groupIds = candidates
+      .map((candidate) => String((candidate as HistoricalGeographyCandidate & ForensicCandidateMetadata).spatialGroupId || "").trim())
+      .filter(Boolean);
+    return groupIds.length > 0 ? new Set(groupIds).size : candidates.length;
+  }, [candidates]);
   const canConfirm = !canonicalGeographyExists && selectedCandidates.length >= 2 && !isPersisting;
 
   React.useEffect(() => {
@@ -171,7 +183,10 @@ export function HistoricalGeographyReconciliationPanel({
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Reconciliacion historica de geografia</p>
           <p className="mt-1 text-xs text-slate-400">
-            Candidatos: {candidates.length} | Seleccionados: {selectedIds.length} | Descartados: {discardedIds.length}
+            Candidatos: {candidates.length} | Posiciones espaciales únicas: {uniqueSpatialPositionCount} | Seleccionados: {selectedIds.length} | Descartados: {discardedIds.length}
+          </p>
+          <p className="mt-1 text-[11px] text-amber-300">
+            La secuencia forense es una referencia auxiliar. La geometría sólo se vuelve canónica tras confirmación humana explícita.
           </p>
         </div>
         <span className={`rounded border px-2 py-1 text-[10px] font-black uppercase ${canonicalGeographyExists ? "border-emerald-800 text-emerald-300" : "border-amber-800 text-amber-300"}`}>
@@ -182,6 +197,7 @@ export function HistoricalGeographyReconciliationPanel({
       <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_280px]">
         <ol className="space-y-2">
           {reconciliation.candidates.map((candidate) => {
+            const forensic = candidate as HistoricalGeographyCandidate & ForensicCandidateMetadata;
             const isSelected = selectedIds.includes(candidate.candidateId);
             const isDiscarded = discardedIds.includes(candidate.candidateId) || candidate.status === "DISCARDED";
             const order = selectedIds.indexOf(candidate.candidateId) + 1;
@@ -204,6 +220,13 @@ export function HistoricalGeographyReconciliationPanel({
                         candidate.sourceObjectPath ||
                         "Fuente histórica sin vínculo fotográfico certificado"}
                     </p>
+                    {(forensic.forensicSequence || forensic.spatialGroupId || forensic.forensicBasis) && (
+                      <div className="mt-2 space-y-1 text-[11px] text-slate-300">
+                        {forensic.forensicSequence && <p>Secuencia forense: {forensic.forensicSequence}</p>}
+                        {forensic.spatialGroupId && <p>Grupo espacial: {forensic.spatialGroupId}</p>}
+                        {forensic.forensicBasis && <p>Base forense: {forensic.forensicBasis}</p>}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-1">
                     <CEIPOLButton size="sm" variant={isSelected ? "warning" : "secondary"} disabled={canonicalGeographyExists || isDiscarded} onClick={() => toggleCandidate(candidate.candidateId)}>

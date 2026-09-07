@@ -13,6 +13,7 @@ describe("QA-06.03D.4B historical geography reconciliation UI", () => {
   const projectMap = source("src/components/ProjectMap.tsx");
   const projectContext = source("src/context/ProjectContext.tsx");
   const domain = source("src/utils/historicalGeographyReconciliation.ts");
+  const haciendaCaller = source("src/app/admin/historical-recovery/hacienda-san-marcos/page.tsx");
   const historicalResolutionBlock = workspace.slice(
     workspace.indexOf("const persistedHistoricalCandidates"),
     workspace.indexOf("React.useEffect(() => {\n    setHistoricalMapCandidates")
@@ -144,5 +145,29 @@ describe("QA-06.03D.4B historical geography reconciliation UI", () => {
     expect(projectContext).toContain("persistHistoricalGeographyReconciliationForProject");
     expect(domain).toContain("export function confirmHistoricalGeographyReconciliation");
     expect(domain).toContain("source: \"HISTORICAL_RECONCILIATION\"");
+  });
+
+  test("Hacienda caller keeps seven distinct candidates with five spatial groups", () => {
+    expect(haciendaCaller.match(/candidateId: `hacienda-gps-/g)?.length).toBe(1);
+    expect(haciendaCaller).toContain("padStart(2, \"0\")");
+    expect(haciendaCaller).toContain("forensicSequence: index + 1");
+    expect(haciendaCaller).toContain("Secuencia temporal de objeto Storage + coincidencia GPS EXIF exacta");
+    expect(haciendaCaller.match(/spatialGroupId: "hacienda-node-/g)?.length).toBe(7);
+    expect(haciendaCaller.match(/spatialGroupId: "hacienda-node-02"/g)?.length).toBe(2);
+    expect(haciendaCaller.match(/spatialGroupId: "hacienda-node-03"/g)?.length).toBe(2);
+    expect(haciendaCaller).not.toContain("deduplicateHistoricalGeographyCandidates");
+  });
+
+  test("panel shows forensic metadata as auxiliary governance without auto-selection", () => {
+    expect(panel).toContain("Posiciones espaciales únicas");
+    expect(panel).toContain("uniqueSpatialPositionCount");
+    expect(panel).toContain("new Set(groupIds).size");
+    expect(panel).toContain("Secuencia forense:");
+    expect(panel).toContain("Grupo espacial:");
+    expect(panel).toContain("Base forense:");
+    expect(panel).toContain("La secuencia forense es una referencia auxiliar");
+    expect(panel).toContain("La geometría sólo se vuelve canónica tras confirmación humana explícita");
+    expect(panel).toContain("setSelectedIds([])");
+    expect(panel).toContain("Previsualizacion - no geografia canonica");
   });
 });

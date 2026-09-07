@@ -12,13 +12,13 @@ const RECOVERY_PROJECT_NAME = "Hacienda San Marcos — Recuperación Histórica"
 const RECOVERY_REASON = "Recuperación institucional controlada de expediente histórico purgado; reconstrucción de geografía únicamente mediante evidencia GPS histórica y validación humana.";
 
 const HACIENDA_SAN_MARCOS_GPS_POINTS = [
-  { lat: 21.8053055556, lng: -102.2704138889 },
-  { lat: 21.8055277778, lng: -102.2707416667 },
-  { lat: 21.8055277778, lng: -102.2707416667 },
-  { lat: 21.8051805556, lng: -102.27055 },
-  { lat: 21.8051805556, lng: -102.27055 },
-  { lat: 21.8054694444, lng: -102.2701916667 },
-  { lat: 21.8070805556, lng: -102.270475 },
+  { lat: 21.8053055556, lng: -102.2704138889, spatialGroupId: "hacienda-node-01" },
+  { lat: 21.8055277778, lng: -102.2707416667, spatialGroupId: "hacienda-node-02" },
+  { lat: 21.8055277778, lng: -102.2707416667, spatialGroupId: "hacienda-node-02" },
+  { lat: 21.8051805556, lng: -102.27055, spatialGroupId: "hacienda-node-03" },
+  { lat: 21.8051805556, lng: -102.27055, spatialGroupId: "hacienda-node-03" },
+  { lat: 21.8054694444, lng: -102.2701916667, spatialGroupId: "hacienda-node-04" },
+  { lat: 21.8070805556, lng: -102.270475, spatialGroupId: "hacienda-node-05" },
 ] as const;
 
 const CANDIDATE_LIMITATIONS = [
@@ -28,9 +28,15 @@ const CANDIDATE_LIMITATIONS = [
   "PHOTO_GPS_IS_CANDIDATE_NOT_VERTEX",
 ] as const;
 
+const FORENSIC_BASIS = "Secuencia temporal de objeto Storage + coincidencia GPS EXIF exacta";
+
 function buildHaciendaSanMarcosHistoricalCandidates(
   projectId: string
-): HistoricalGeographyCandidate[] {
+): Array<HistoricalGeographyCandidate & {
+  forensicSequence: number;
+  forensicBasis: string;
+  spatialGroupId: string;
+}> {
   return HACIENDA_SAN_MARCOS_GPS_POINTS.map((point, index) => ({
     candidateId: `hacienda-gps-${String(index + 1).padStart(2, "0")}`,
     projectId,
@@ -44,6 +50,9 @@ function buildHaciendaSanMarcosHistoricalCandidates(
     status: "DISCOVERED",
     confidence: "HIGH",
     limitations: [...CANDIDATE_LIMITATIONS],
+    forensicSequence: index + 1,
+    forensicBasis: FORENSIC_BASIS,
+    spatialGroupId: point.spatialGroupId,
     sourceRefs: [
       {
         sourceType: "IN_SITU_PHOTO_GPS",
