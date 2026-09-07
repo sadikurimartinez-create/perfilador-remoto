@@ -66,20 +66,58 @@ function buildHaciendaSanMarcosHistoricalCandidates(
 }
 
 export default function HaciendaSanMarcosHistoricalRecoveryPage() {
-  const { project, createHistoricalRecoveryProject } = useProject();
+  const { project, createHistoricalRecoveryProject, findHistoricalRecoveryProjectsBySource, loadProject } = useProject();
   const [createdProjectId, setCreatedProjectId] = React.useState<string | null>(null);
+  const [resumedProjectId, setResumedProjectId] = React.useState<string | null>(null);
+  const [resumeNumeroExpediente, setResumeNumeroExpediente] = React.useState<string | null>(null);
+  const [recoveryCount, setRecoveryCount] = React.useState(0);
+  const [isLookingUpRecovery, setIsLookingUpRecovery] = React.useState(true);
   const [isCreating, setIsCreating] = React.useState(false);
   const [creationArmed, setCreationArmed] = React.useState(false);
   const [error, setError] = React.useState("");
   const createInFlightRef = React.useRef(false);
+  const activeRecoveryProjectId = resumedProjectId || createdProjectId;
+  const hasExistingRecovery = Boolean(resumedProjectId);
 
   const candidates = React.useMemo(
-    () => createdProjectId ? buildHaciendaSanMarcosHistoricalCandidates(createdProjectId) : [],
-    [createdProjectId]
+    () => activeRecoveryProjectId ? buildHaciendaSanMarcosHistoricalCandidates(activeRecoveryProjectId) : [],
+    [activeRecoveryProjectId]
   );
 
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function resumeExistingRecovery() {
+      setIsLookingUpRecovery(true);
+      setError("");
+      try {
+        const recoveries = await findHistoricalRecoveryProjectsBySource(SOURCE_PROJECT_ID);
+        if (cancelled) return;
+        setRecoveryCount(recoveries.length);
+        const recovery = recoveries[0] || null;
+        if (recovery) {
+          setResumedProjectId(recovery.id);
+          setResumeNumeroExpediente(recovery.numeroExpediente || null);
+          await loadProject(recovery.id);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "No fue posible buscar recuperaciones historicas existentes.");
+        }
+      } finally {
+        if (!cancelled) setIsLookingUpRecovery(false);
+      }
+    }
+
+    void resumeExistingRecovery();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [findHistoricalRecoveryProjectsBySource, loadProject]);
+
   const handleCreateRecoveryProject = async () => {
-    if (!creationArmed || isCreating || createInFlightRef.current || createdProjectId) return;
+    if (!creationArmed || hasExistingRecovery || isCreating || createInFlightRef.current || createdProjectId) return;
     createInFlightRef.current = true;
     setIsCreating(true);
     setError("");
@@ -94,6 +132,7 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
         descripcion: "Caller operativo temporal QA-06.03E.3 para reconciliacion historica con validacion humana.",
       });
       setCreatedProjectId(newProjectId);
+      await loadProject(newProjectId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No fue posible crear el expediente de recuperacion.");
     } finally {
@@ -121,7 +160,7 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
             <input
               type="checkbox"
               checked={creationArmed}
-              disabled={isCreating || Boolean(createdProjectId)}
+              disabled={isLookingUpRecovery || hasExistingRecovery || isCreating || Boolean(createdProjectId)}
               onChange={(event) => setCreationArmed(event.target.checked)}
             />
             Confirmo crear un expediente institucional nuevo de recuperación histórica
@@ -129,22 +168,31 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
           <button
             type="button"
             onClick={handleCreateRecoveryProject}
-            disabled={!creationArmed || isCreating || Boolean(createdProjectId)}
+            disabled={isLookingUpRecovery || hasExistingRecovery || !creationArmed || isCreating || Boolean(createdProjectId)}
             className="border border-cyan-700 bg-cyan-950 px-4 py-2 font-black uppercase tracking-wide text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isCreating ? "Creando..." : "Crear expediente de recuperacion"}
+            {isLookingUpRecovery ? "Buscando recuperación..." : isCreating ? "Creando..." : "Crear expediente de recuperacion"}
           </button>
           {error && <span className="font-semibold text-red-300">{error}</span>}
         </div>
-        {createdProjectId && (
+        {hasExistingRecovery && (
+          <div className="mt-4 border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-100">
+            <strong className="block font-black uppercase">RECUPERACIÓN EXISTENTE REANUDADA</strong>
+            <span>{resumeNumeroExpediente || project?.numeroExpediente || "Numero expediente no disponible"}</span>
+            {recoveryCount > 1 && (
+              <span className="ml-3 font-black text-amber-200">MULTIPLE_RECOVERIES_DETECTED: se usa la más antigua por recoveredAt/createdAt/secuencia.</span>
+            )}
+          </div>
+        )}
+        {activeRecoveryProjectId && (
           <div className="mt-4 grid gap-2 text-xs text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <span className="block text-slate-500">Nuevo projectId</span>
-              <strong className="break-all text-slate-100">{createdProjectId}</strong>
+              <strong className="break-all text-slate-100">{activeRecoveryProjectId}</strong>
             </div>
             <div>
               <span className="block text-slate-500">Numero expediente</span>
-              <strong className="text-slate-100">{project?.id === createdProjectId ? project.numeroExpediente || "Asignado no disponible" : "Pendiente"}</strong>
+              <strong className="text-slate-100">{project?.id === activeRecoveryProjectId ? project.numeroExpediente || resumeNumeroExpediente || "Asignado no disponible" : resumeNumeroExpediente || "Pendiente"}</strong>
             </div>
             <div>
               <span className="block text-slate-500">Source projectId</span>
@@ -158,7 +206,7 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
         )}
       </section>
 
-      {createdProjectId && (
+      {activeRecoveryProjectId && (
         <GeographicWorkspace historicalGeographyCandidatesInput={candidates} />
       )}
     </main>

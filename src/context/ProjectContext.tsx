@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode
 } from "react";
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, orderBy, getDocs, deleteDoc, runTransaction } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, orderBy, where, getDocs, deleteDoc, runTransaction } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
@@ -319,6 +319,7 @@ type ProjectContextValue = {
     recoveryReason: string;
     descripcion?: string;
   }) => Promise<string>;
+  findHistoricalRecoveryProjectsBySource: (sourceProjectId: string) => Promise<Project[]>;
   assignHistoricalNumeroExpediente:
     (projectId: string) =>
       Promise<Awaited<ReturnType<typeof assignNumeroExpedienteToExistingProject>>>;
@@ -834,6 +835,57 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       throw err;
     }
   }, [user, isReadOnly, logAuditAction]);
+
+  const findHistoricalRecoveryProjectsBySource = useCallback(async (sourceProjectId: string): Promise<Project[]> => {
+    const sourceId = sourceProjectId.trim();
+    if (!sourceId) return [];
+
+    const firestore = getDb();
+    const projectsRef = collection(firestore, "projects");
+    const recoveryQuery = query(
+      projectsRef,
+      where("historicalProjectRecoveryOrigin.sourceProjectId", "==", sourceId)
+    );
+    const snap = await getDocs(recoveryQuery);
+
+    return snap.docs
+      .map((projectDoc) => {
+        const data = projectDoc.data() as any;
+        const loadedProject = {
+          id: projectDoc.id,
+          nombre: data.name || data.nombre || "",
+          geometryType: data.geometryType || "individual",
+          descripcion: data.descripcion || "",
+          createdBy: data.createdBy,
+          ceipolId: data.ceipolId,
+          numeroExpediente: data.numeroExpediente,
+          numeroExpedienteAsignadoAt: data.numeroExpedienteAsignadoAt,
+          numeroExpedienteSequence: data.numeroExpedienteSequence,
+          perfiladorIniciales: data.perfiladorIniciales,
+          numeroExpedienteVersion: data.numeroExpedienteVersion,
+          estado: data.estado,
+          status: data.status,
+          createdAt: data.createdAt,
+          canonicalGeography: deserializeCanonicalGeographyFromFirestore(data.canonicalGeography ?? null),
+          geographyId: data.geographyId ?? null,
+          geographyValidationStatus: data.geographyValidationStatus ?? "INVALID",
+          historicalGeographyReconciliation: data.historicalGeographyReconciliation ?? null,
+          historicalProjectRecoveryOrigin: data.historicalProjectRecoveryOrigin ?? null,
+          canonicalHypothesis: data.canonicalHypothesis ?? null,
+          hypothesisRequirementSatisfied: data.hypothesisRequirementSatisfied ?? false,
+        } as Project & { createdAt?: number };
+        return loadedProject;
+      })
+      .sort((a: any, b: any) => {
+        const aTime = Number(a.historicalProjectRecoveryOrigin?.recoveredAt ?? a.createdAt ?? Number.MAX_SAFE_INTEGER);
+        const bTime = Number(b.historicalProjectRecoveryOrigin?.recoveredAt ?? b.createdAt ?? Number.MAX_SAFE_INTEGER);
+        if (aTime !== bTime) return aTime - bTime;
+        const aSequence = Number(a.numeroExpedienteSequence ?? Number.MAX_SAFE_INTEGER);
+        const bSequence = Number(b.numeroExpedienteSequence ?? Number.MAX_SAFE_INTEGER);
+        if (aSequence !== bSequence) return aSequence - bSequence;
+        return String(a.numeroExpediente || a.id).localeCompare(String(b.numeroExpediente || b.id));
+      });
+  }, []);
 
   const assignHistoricalNumeroExpediente = useCallback(async (projectId: string) => {
     const fields = await assignNumeroExpedienteToExistingProject(projectId, user);
@@ -2659,6 +2711,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       analysisResult,
       createProject,
       createHistoricalRecoveryProject,
+      findHistoricalRecoveryProjectsBySource,
       assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
@@ -2716,6 +2769,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       analysisResult,
       createProject,
       createHistoricalRecoveryProject,
+      findHistoricalRecoveryProjectsBySource,
       assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,

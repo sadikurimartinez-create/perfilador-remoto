@@ -7,6 +7,11 @@ function source(relativePath: string) {
 
 describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
   const page = source("src/app/admin/historical-recovery/hacienda-san-marcos/page.tsx");
+  const projectContext = source("src/context/ProjectContext.tsx");
+  const finderBlock = projectContext.slice(
+    projectContext.indexOf("const findHistoricalRecoveryProjectsBySource"),
+    projectContext.indexOf("const assignHistoricalNumeroExpediente")
+  );
 
   test("uses the controlled historical source identity and lineal receiver", () => {
     expect(page).toContain("const SOURCE_PROJECT_ID = \"XLeeM0Xz5bemDlwgn8eP\"");
@@ -55,7 +60,7 @@ describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
   test("candidate projectId is the new receiver, not the historical source id", () => {
     expect(page).toContain("buildHaciendaSanMarcosHistoricalCandidates(\n  projectId: string");
     expect(page).toContain("projectId,");
-    expect(page).toContain("createdProjectId ? buildHaciendaSanMarcosHistoricalCandidates(createdProjectId) : []");
+    expect(page).toContain("activeRecoveryProjectId ? buildHaciendaSanMarcosHistoricalCandidates(activeRecoveryProjectId) : []");
     expect(page).not.toContain("projectId: SOURCE_PROJECT_ID");
     expect(page).not.toContain("projectId: \"XLeeM0Xz5bemDlwgn8eP\"");
   });
@@ -94,15 +99,17 @@ describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
     expect(page).toContain("orden requiere decisión humana");
     expect(page).toContain("Crear expediente de recuperacion");
     expect(page).toContain("PENDIENTE DE RECONCILIACION HUMANA");
+    expect(page).toContain("RECUPERACIÓN EXISTENTE REANUDADA");
+    expect(page).toContain("MULTIPLE_RECOVERIES_DETECTED");
   });
 
   test("protects creation against double click and creation failure", () => {
     expect(page).toContain("const [creationArmed, setCreationArmed] = React.useState(false)");
     expect(page).toContain("const createInFlightRef = React.useRef(false)");
-    expect(page).toContain("if (!creationArmed || isCreating || createInFlightRef.current || createdProjectId) return");
+    expect(page).toContain("if (!creationArmed || hasExistingRecovery || isCreating || createInFlightRef.current || createdProjectId) return");
     expect(page).toContain("createInFlightRef.current = true");
     expect(page).toContain("createInFlightRef.current = false");
-    expect(page).toContain("disabled={!creationArmed || isCreating || Boolean(createdProjectId)}");
+    expect(page).toContain("disabled={isLookingUpRecovery || hasExistingRecovery || !creationArmed || isCreating || Boolean(createdProjectId)}");
     expect(page).toContain("setError(err instanceof Error ? err.message");
     expect(page.indexOf("const newProjectId = await createHistoricalRecoveryProject")).toBeLessThan(
       page.indexOf("setCreatedProjectId(newProjectId)")
@@ -110,11 +117,13 @@ describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
   });
 
   test("uses createHistoricalRecoveryProject as the only creation mechanism", () => {
-    expect(page).toContain("const { project, createHistoricalRecoveryProject } = useProject()");
+    expect(page).toContain("createHistoricalRecoveryProject");
+    expect(page).toContain("findHistoricalRecoveryProjectsBySource");
+    expect(page).toContain("loadProject");
     expect(page).toContain("await createHistoricalRecoveryProject({");
     expect(page).toContain("onClick={handleCreateRecoveryProject}");
     expect(page).toContain("Confirmo crear un expediente institucional nuevo de recuperación histórica");
-    expect(page).not.toContain("useEffect");
+    expect(page.indexOf("React.useEffect")).toBeLessThan(page.indexOf("const handleCreateRecoveryProject"));
     expect(page).not.toContain("createProject(");
     expect(page).not.toContain("addDoc(");
     expect(page).not.toContain("setDoc(");
@@ -127,5 +136,38 @@ describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
     expect(page).not.toContain("confirmHistoricalGeographyReconciliation");
     expect(page).not.toContain("selectHistoricalGeographyCandidates");
     expect(page).not.toContain("discardHistoricalGeographyCandidates");
+  });
+
+  test("resumes persisted recovery by historical lineage instead of ephemeral createdProjectId", () => {
+    expect(page).toContain("findHistoricalRecoveryProjectsBySource(SOURCE_PROJECT_ID)");
+    expect(page).toContain("setResumedProjectId(recovery.id)");
+    expect(page).toContain("setResumeNumeroExpediente(recovery.numeroExpediente || null)");
+    expect(page).toContain("await loadProject(recovery.id)");
+    expect(page).toContain("const activeRecoveryProjectId = resumedProjectId || createdProjectId");
+    expect(page).toContain("<GeographicWorkspace historicalGeographyCandidatesInput={candidates} />");
+    expect(page).not.toContain("cs3Uig15ZRAqEiFoJR4y");
+  });
+
+  test("existing or multiple recoveries block automatic creation of another recovery", () => {
+    expect(page).toContain("const hasExistingRecovery = Boolean(resumedProjectId)");
+    expect(page).toContain("setRecoveryCount(recoveries.length)");
+    expect(page).toContain("recoveryCount > 1");
+    expect(page).toContain("se usa la más antigua por recoveredAt/createdAt/secuencia");
+    expect(page).toContain("disabled={isLookingUpRecovery || hasExistingRecovery || isCreating || Boolean(createdProjectId)}");
+    expect(page).toContain("disabled={isLookingUpRecovery || hasExistingRecovery || !creationArmed || isCreating || Boolean(createdProjectId)}");
+  });
+
+  test("ProjectContext finds recoveries with read-only Firestore query by sourceProjectId", () => {
+    expect(projectContext).toContain("findHistoricalRecoveryProjectsBySource: (sourceProjectId: string) => Promise<Project[]>");
+    expect(projectContext).toContain("findHistoricalRecoveryProjectsBySource,");
+    expect(finderBlock).toContain("where(\"historicalProjectRecoveryOrigin.sourceProjectId\", \"==\", sourceId)");
+    expect(finderBlock).toContain("const snap = await getDocs(recoveryQuery)");
+    expect(finderBlock).toContain("deserializeCanonicalGeographyFromFirestore");
+    expect(finderBlock).toContain("recoveredAt ?? a.createdAt");
+    expect(finderBlock).toContain("numeroExpedienteSequence");
+    expect(finderBlock).not.toContain("setDoc");
+    expect(finderBlock).not.toContain("addDoc");
+    expect(finderBlock).not.toContain("updateDoc");
+    expect(finderBlock).not.toContain("runTransaction");
   });
 });
