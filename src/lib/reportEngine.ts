@@ -43,9 +43,17 @@ type FinalizeOptions = {
   powerups?: any[];
   selectedAnnexes?: any;
   exportMode?: ReportExportMode;
+  reportKind?: InstitutionalReportKind;
 };
 
 export type ReportExportMode = "DRAFT" | "CONTEXTUAL" | "LEGACY" | "INSTITUTIONAL";
+export type InstitutionalReportKind = "EXECUTIVE_GEOINT" | "EXECUTIVE_GEOINT_TECHNICAL_ANNEX";
+
+export function assertInstitutionalReportKind(reportKind: unknown): asserts reportKind is InstitutionalReportKind {
+  if (reportKind !== "EXECUTIVE_GEOINT" && reportKind !== "EXECUTIVE_GEOINT_TECHNICAL_ANNEX") {
+    throw new Error("INSTITUTIONAL_REPORT_KIND_REQUIRED");
+  }
+}
 
 export interface InstitutionalExportAuthorizationOptions {
   exportMode?: ReportExportMode;
@@ -715,6 +723,7 @@ export class ReportEngineKernelClass {
         this.context.scinceDemographics = payload.scinceDemographics;
         this.context.reportNumber = payload.reportNumber;
         this.context.selectedAnnexes = payload.selectedAnnexes;
+        this.context.reportKind = payload.reportKind;
         this.context.includeOsintAppendix = payload.includeOsintAppendix;
         this.context.intelligenceContext = payload.intelligenceContext;
 
@@ -1011,6 +1020,7 @@ export class ReportEngineKernelClass {
         const activeId = payload?.activeId;
         const format = payload?.format || "ALL";
         const exportMode: ReportExportMode = payload?.exportMode || this.context.exportMode || "DRAFT";
+        const reportKind = payload?.reportKind || this.context.reportKind;
 
         console.log("[REPORT ENGINE KERNEL] EXPORT TRIGGERED. Format:", format, "activeId:", activeId, "exportMode:", exportMode);
 
@@ -1025,6 +1035,9 @@ export class ReportEngineKernelClass {
         if (this.executionId !== activeId) {
           console.error("[REPORT ENGINE KERNEL] EXPORT_BLOCKED_EXECUTION_ID_MISMATCH. Active:", this.executionId, "Requested:", activeId);
           throw new Error("EXPORT_BLOCKED_EXECUTION_ID_MISMATCH");
+        }
+        if (exportMode === "INSTITUTIONAL") {
+          assertInstitutionalReportKind(reportKind);
         }
         assertInstitutionalExportAuthorization(
           {
@@ -1105,7 +1118,7 @@ export class ReportEngineKernelClass {
                 documentPackage.projectName,
                 documentNumber,
                 documentPackage.user,
-                { exportMode: "INSTITUTIONAL" }
+                { exportMode: "INSTITUTIONAL", reportKind }
               );
             } else {
               await exportToWord(
@@ -1181,8 +1194,8 @@ export class ReportEngineKernelClass {
     }
   }
 
-  async finalizeExport(format: "PDF" | "WORD", activeId: string, exportMode: ReportExportMode = "DRAFT") {
-    await this.dispatch("EXECUTE_EXPORT", { format, activeId, exportMode });
+  async finalizeExport(format: "PDF" | "WORD", activeId: string, exportMode: ReportExportMode = "DRAFT", reportKind?: InstitutionalReportKind) {
+    await this.dispatch("EXECUTE_EXPORT", { format, activeId, exportMode, reportKind });
   }
 }
 
