@@ -80,7 +80,8 @@ describe("QA-06.03D.4B historical geography reconciliation UI", () => {
   });
 
   test("GeographicWorkspace resolves empty candidates without external input or persisted reconciliation", () => {
-    expect(workspace).toContain("const persistedHistoricalCandidates = project?.historicalGeographyReconciliation?.candidates ?? []");
+    expect(workspace).toContain("const EMPTY_HISTORICAL_CANDIDATES: HistoricalGeographyCandidate[] = []");
+    expect(workspace).toContain("const persistedHistoricalCandidates = project?.historicalGeographyReconciliation?.candidates ?? EMPTY_HISTORICAL_CANDIDATES");
     expect(workspace).toContain("historicalGeographyCandidatesInput = []");
     expect(workspace).toContain("return persistedHistoricalCandidates");
   });
@@ -169,5 +170,18 @@ describe("QA-06.03D.4B historical geography reconciliation UI", () => {
     expect(panel).toContain("La geometría sólo se vuelve canónica tras confirmación humana explícita");
     expect(panel).toContain("setSelectedIds([])");
     expect(panel).toContain("Previsualizacion - no geografia canonica");
+  });
+
+  test("selection is not reset by equivalent candidate array reconstruction", () => {
+    expect(panel).toContain("function buildCandidatesSignature");
+    expect(panel).toContain("const candidatesSignature = React.useMemo(() => buildCandidatesSignature(candidates), [candidates])");
+    expect(panel).toContain("}, [projectId, candidatesSignature, onPreviewChange])");
+    expect(panel).not.toContain("}, [projectId, candidates, onPreviewChange])");
+    expect(workspace).toContain("EMPTY_HISTORICAL_CANDIDATES");
+    expect(workspace).toContain("project?.id");
+    expect(workspace).not.toContain("    project,\n  ]");
+    expect(panel).toContain("setSelectedIds(selectableIds)");
+    expect(panel).toContain("Seleccionados: {selectedIds.length}");
+    expect(panel).not.toContain("canonicalizeConfirmedHistoricalGeographyReconciliation");
   });
 });

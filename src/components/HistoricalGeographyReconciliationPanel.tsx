@@ -43,6 +43,19 @@ function applySelectedOrder(candidates: HistoricalGeographyCandidate[], selected
   return selectedIds.map((candidateId) => byId.get(candidateId)).filter((candidate): candidate is HistoricalGeographyCandidate => Boolean(candidate));
 }
 
+function buildCandidatesSignature(candidates: HistoricalGeographyCandidate[]) {
+  return candidates
+    .map((candidate) => [
+      candidate.candidateId,
+      candidate.projectId,
+      candidate.lat,
+      candidate.lng,
+      candidate.sourceType,
+      (candidate as HistoricalGeographyCandidate & ForensicCandidateMetadata).spatialGroupId || "",
+    ].join(":"))
+    .join("|");
+}
+
 export function HistoricalGeographyReconciliationPanel({
   projectId,
   candidates,
@@ -64,6 +77,7 @@ export function HistoricalGeographyReconciliationPanel({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [isPersisting, setIsPersisting] = React.useState(false);
   const [feedback, setFeedback] = React.useState("");
+  const candidatesSignature = React.useMemo(() => buildCandidatesSignature(candidates), [candidates]);
 
   React.useEffect(() => {
     setSelectedIds([]);
@@ -74,7 +88,7 @@ export function HistoricalGeographyReconciliationPanel({
       candidates,
     }));
     onPreviewChange?.([]);
-  }, [projectId, candidates, onPreviewChange]);
+  }, [projectId, candidatesSignature, onPreviewChange]);
 
   const selectedCandidates = React.useMemo(
     () => applySelectedOrder(reconciliation.candidates, selectedIds),

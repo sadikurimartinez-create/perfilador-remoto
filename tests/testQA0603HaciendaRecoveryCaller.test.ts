@@ -97,8 +97,12 @@ describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
   });
 
   test("protects creation against double click and creation failure", () => {
-    expect(page).toContain("disabled={isCreating || Boolean(createdProjectId)}");
-    expect(page).toContain("if (isCreating || createdProjectId) return");
+    expect(page).toContain("const [creationArmed, setCreationArmed] = React.useState(false)");
+    expect(page).toContain("const createInFlightRef = React.useRef(false)");
+    expect(page).toContain("if (!creationArmed || isCreating || createInFlightRef.current || createdProjectId) return");
+    expect(page).toContain("createInFlightRef.current = true");
+    expect(page).toContain("createInFlightRef.current = false");
+    expect(page).toContain("disabled={!creationArmed || isCreating || Boolean(createdProjectId)}");
     expect(page).toContain("setError(err instanceof Error ? err.message");
     expect(page.indexOf("const newProjectId = await createHistoricalRecoveryProject")).toBeLessThan(
       page.indexOf("setCreatedProjectId(newProjectId)")
@@ -108,6 +112,9 @@ describe("QA-06.03E.3B Hacienda San Marcos recovery caller", () => {
   test("uses createHistoricalRecoveryProject as the only creation mechanism", () => {
     expect(page).toContain("const { project, createHistoricalRecoveryProject } = useProject()");
     expect(page).toContain("await createHistoricalRecoveryProject({");
+    expect(page).toContain("onClick={handleCreateRecoveryProject}");
+    expect(page).toContain("Confirmo crear un expediente institucional nuevo de recuperación histórica");
+    expect(page).not.toContain("useEffect");
     expect(page).not.toContain("createProject(");
     expect(page).not.toContain("addDoc(");
     expect(page).not.toContain("setDoc(");

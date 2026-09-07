@@ -26,6 +26,7 @@ import type { HistoricalGeographyCandidate } from "@/utils/historicalGeographyRe
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
+const EMPTY_HISTORICAL_CANDIDATES: HistoricalGeographyCandidate[] = [];
 
 function presentToken(value: unknown): string | undefined {
   const normalized = String(value ?? "").trim().toUpperCase();
@@ -258,7 +259,7 @@ export function GeographicWorkspace({
     [expedienteId, inSituGeoreferencedPhotos.length, findings.length, project?.canonicalGeography]
   );
 
-  const persistedHistoricalCandidates = project?.historicalGeographyReconciliation?.candidates ?? [];
+  const persistedHistoricalCandidates = project?.historicalGeographyReconciliation?.candidates ?? EMPTY_HISTORICAL_CANDIDATES;
 
   const historicalGeographyCandidates = React.useMemo(() => {
     if (project && historicalGeographyCandidatesInput.length > 0) {
@@ -269,7 +270,7 @@ export function GeographicWorkspace({
   }, [
     historicalGeographyCandidatesInput,
     persistedHistoricalCandidates,
-    project,
+    project?.id,
   ]);
 
   React.useEffect(() => {

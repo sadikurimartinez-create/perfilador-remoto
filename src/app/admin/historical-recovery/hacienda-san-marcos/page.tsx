@@ -69,7 +69,9 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
   const { project, createHistoricalRecoveryProject } = useProject();
   const [createdProjectId, setCreatedProjectId] = React.useState<string | null>(null);
   const [isCreating, setIsCreating] = React.useState(false);
+  const [creationArmed, setCreationArmed] = React.useState(false);
   const [error, setError] = React.useState("");
+  const createInFlightRef = React.useRef(false);
 
   const candidates = React.useMemo(
     () => createdProjectId ? buildHaciendaSanMarcosHistoricalCandidates(createdProjectId) : [],
@@ -77,7 +79,8 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
   );
 
   const handleCreateRecoveryProject = async () => {
-    if (isCreating || createdProjectId) return;
+    if (!creationArmed || isCreating || createInFlightRef.current || createdProjectId) return;
+    createInFlightRef.current = true;
     setIsCreating(true);
     setError("");
     try {
@@ -94,6 +97,7 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "No fue posible crear el expediente de recuperacion.");
     } finally {
+      createInFlightRef.current = false;
       setIsCreating(false);
     }
   };
@@ -113,10 +117,19 @@ export default function HaciendaSanMarcosHistoricalRecoveryPage() {
           confirmación expresa dentro del flujo de reconciliación.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex max-w-xl items-center gap-2 border border-amber-800 bg-amber-950/30 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-amber-100">
+            <input
+              type="checkbox"
+              checked={creationArmed}
+              disabled={isCreating || Boolean(createdProjectId)}
+              onChange={(event) => setCreationArmed(event.target.checked)}
+            />
+            Confirmo crear un expediente institucional nuevo de recuperación histórica
+          </label>
           <button
             type="button"
             onClick={handleCreateRecoveryProject}
-            disabled={isCreating || Boolean(createdProjectId)}
+            disabled={!creationArmed || isCreating || Boolean(createdProjectId)}
             className="border border-cyan-700 bg-cyan-950 px-4 py-2 font-black uppercase tracking-wide text-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCreating ? "Creando..." : "Crear expediente de recuperacion"}
