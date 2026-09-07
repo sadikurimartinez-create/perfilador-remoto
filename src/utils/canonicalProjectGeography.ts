@@ -5,7 +5,8 @@ export type CanonicalGeographySource =
   | "MAP_VECTOR"
   | "LEGACY_PROJECT_FIELDS"
   | "LEGACY_GEOGRAPHIC_ENTITIES"
-  | "HISTORICAL_RECONCILIATION";
+  | "HISTORICAL_RECONCILIATION"
+  | "HUMAN_MAP_VERTEX";
 
 export type CanonicalGeographyValidationStatus = "VALID" | "PARTIAL" | "INVALID";
 
@@ -42,6 +43,11 @@ export interface CanonicalProjectGeography {
     closedRing?: boolean;
   };
   limitations?: string[];
+  sourceRefs?: Array<{
+    type: "TERRITORIAL_VERTEX";
+    id: string;
+    order: number;
+  }>;
 }
 
 export type FirestoreSafeCanonicalGeometry =

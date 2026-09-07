@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMemo, useState, useEffect } from "react";
-import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import { MockMap } from "../MockMap";
 import { MapLayerManager, DEFAULT_LAYERS_STATE, MapLayersState } from "./MapLayerManager";
 
@@ -49,9 +49,13 @@ interface ProfessionalGeoMapProps {
   selectedStreetGeometry?: StreetSelectionGeometry | null;
   historicalCandidates?: HistoricalGeographyCandidate[];
   historicalPreviewPath?: Array<{ lat: number; lng: number }>;
+  territorialVertices?: Array<{ id: string; lat: number; lng: number; order: number }>;
+  territorialPreviewPath?: Array<{ lat: number; lng: number }>;
+  isTerritorialVertexCaptureEnabled?: boolean;
   selectedHistoricalCandidateIds?: string[];
   discardedHistoricalCandidateIds?: string[];
   onHistoricalCandidateSelect?: (candidateId: string) => void;
+  onTerritorialVertexAdd?: (lat: number, lng: number) => void;
   crimeIncidenceMinimumHeight?: string;
   onCrimeIncidenceRenderProgress?: (rendered: number, total: number) => void;
   showLayerControls?: boolean;
@@ -101,9 +105,13 @@ export function ProfessionalGeoMap({
   selectedStreetGeometry = null,
   historicalCandidates = [],
   historicalPreviewPath = [],
+  territorialVertices = [],
+  territorialPreviewPath = [],
+  isTerritorialVertexCaptureEnabled = false,
   selectedHistoricalCandidateIds = [],
   discardedHistoricalCandidateIds = [],
   onHistoricalCandidateSelect,
+  onTerritorialVertexAdd,
   crimeIncidenceMinimumHeight,
   onCrimeIncidenceRenderProgress,
   showLayerControls = true,
@@ -371,6 +379,10 @@ export function ProfessionalGeoMap({
         center={mapCenter}
         zoom={15}
         options={mapOptions}
+        onClick={(event) => {
+          if (!isTerritorialVertexCaptureEnabled || !event.latLng) return;
+          onTerritorialVertexAdd?.(event.latLng.lat(), event.latLng.lng());
+        }}
         onLoad={setMapInstance}
         onUnmount={() => setMapInstance(null)}
       >
@@ -397,6 +409,42 @@ export function ProfessionalGeoMap({
           previewPath={historicalPreviewPath}
           onCandidateSelect={onHistoricalCandidateSelect}
         />
+
+        {territorialPreviewPath.length >= 2 && (
+          <Polyline
+            path={territorialPreviewPath}
+            options={{
+              strokeColor: "#fb7185",
+              strokeOpacity: 0.95,
+              strokeWeight: 4,
+              clickable: false,
+              zIndex: 120,
+            }}
+          />
+        )}
+
+        {territorialVertices.map((vertex) => (
+          <Marker
+            key={`territorial-vertex-${vertex.id}`}
+            position={{ lat: vertex.lat, lng: vertex.lng }}
+            title={`Vertice territorial ${vertex.order}`}
+            label={{
+              text: String(vertex.order),
+              color: "#ffffff",
+              fontSize: "11px",
+              fontWeight: "bold",
+            }}
+            icon={typeof google !== "undefined" ? {
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: "#e11d48",
+              fillOpacity: 0.95,
+              strokeColor: "#fecdd3",
+              strokeWeight: 2,
+              scale: 9,
+            } : undefined}
+            zIndex={260}
+          />
+        ))}
         
         <PoiLayer visible={layers.pois} pois={pois} selectedPoiId={selectedPoiId} onPoiSelect={onPoiSelect} />
         

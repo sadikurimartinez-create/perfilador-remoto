@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/firebase";
-import { collection, addDoc, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, query, orderBy, setDoc, updateDoc } from "firebase/firestore";
 
 export interface GeographicEntity {
   id?: string;
@@ -17,6 +17,8 @@ export interface GeographicEntity {
     isIndependentPoi?: boolean;
     isVertex?: boolean;
     tipo?: string;
+    order?: number;
+    source?: "HUMAN_MAP_VERTEX" | string;
     [key: string]: any;
   };
 }
@@ -30,12 +32,13 @@ export async function saveGeographicEntity(entity: GeographicEntity): Promise<st
   try {
     const firestore = getDb();
     const colRef = collection(firestore, "projects", entity.projectId, "geographicEntities");
-    const docRef = await addDoc(colRef, {
+    const docRef = doc(colRef, entityId);
+    await setDoc(docRef, {
       ...entity,
       id: entityId,
       createdAt: entity.createdAt || Date.now(),
     });
-    return docRef.id;
+    return entityId;
   } catch (err) {
     console.warn("[GeographicEntityService] Fallback local ante almacenamiento offline/cuota:", err);
     return entityId;
@@ -51,9 +54,23 @@ export async function getGeographicEntities(projectId: string): Promise<Geograph
     const colRef = collection(firestore, "projects", projectId, "geographicEntities");
     const q = query(colRef, orderBy("createdAt", "asc"));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as GeographicEntity));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as GeographicEntity));
   } catch (err) {
     console.warn("[GeographicEntityService] Error al cargar entidades geográficas:", err);
     return [];
   }
+}
+
+export async function updateGeographicEntityMetadata(
+  projectId: string,
+  entityId: string,
+  metadata: GeographicEntity["metadata"]
+): Promise<void> {
+  const firestore = getDb();
+  await updateDoc(doc(firestore, "projects", projectId, "geographicEntities", entityId), { metadata });
+}
+
+export async function deleteGeographicEntity(projectId: string, entityId: string): Promise<void> {
+  const firestore = getDb();
+  await deleteDoc(doc(firestore, "projects", projectId, "geographicEntities", entityId));
 }

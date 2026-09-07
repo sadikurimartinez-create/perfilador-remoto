@@ -4,6 +4,7 @@ import * as React from "react";
 import { useState, useEffect } from "react";
 import { ProfessionalGeoMap } from "./maps/ProfessionalGeoMap";
 import HistoricalGeographyReconciliationPanel from "./HistoricalGeographyReconciliationPanel";
+import TerritorialVertexReconciliationPanel, { type TerritorialVertex } from "./TerritorialVertexReconciliationPanel";
 import { StreetViewFindingsPanel, StreetViewFinding } from "./streetview/StreetViewFindingsPanel";
 import { StreetViewEvidenceRibbon } from "./streetview/StreetViewEvidenceRibbon";
 import { AnalyticsDashboard } from "./analytics/AnalyticsDashboard";
@@ -15,6 +16,12 @@ import { useAuth } from "@/context/AuthContext";
 import { UniversalEvidenceComparison } from "@/types/geointTemporalComparison";
 import { GeointGovernanceStatus, GeointGovernanceStatusValue } from "@/types/geointGovernance";
 import { buildStreetViewFindingFromTemporalComparison } from "@/services/geoint/temporalComparisonBridge";
+import {
+  deleteGeographicEntity,
+  getGeographicEntities,
+  saveGeographicEntity,
+  updateGeographicEntityMetadata,
+} from "@/services/geographicEntityService";
 import {
   buildSweepGeographyContext,
   getCanonicalGeographyCoordinates,
@@ -133,7 +140,7 @@ export type GeographicWorkspaceProps = {
 export function GeographicWorkspace({
   historicalGeographyCandidatesInput = [],
 }: GeographicWorkspaceProps = {}) {
-  const { project, album, registerSweep, persistHistoricalGeographyReconciliationForProject } = useProject();
+  const { project, album, registerSweep, updateProjectDetails, persistHistoricalGeographyReconciliationForProject } = useProject();
   const { user } = useAuth();
   const expedienteId = project?.id || "EXP-2026";
 
@@ -147,6 +154,9 @@ export function GeographicWorkspace({
   const [historicalMapCandidates, setHistoricalMapCandidates] = useState<HistoricalGeographyCandidate[]>([]);
   const [selectedHistoricalCandidateIds, setSelectedHistoricalCandidateIds] = useState<string[]>([]);
   const [discardedHistoricalCandidateIds, setDiscardedHistoricalCandidateIds] = useState<string[]>([]);
+  const [territorialVertices, setTerritorialVertices] = useState<TerritorialVertex[]>([]);
+  const [territorialPreviewPath, setTerritorialPreviewPath] = useState<Array<{ lat: number; lng: number }>>([]);
+  const [isTerritorialVertexCaptureEnabled, setIsTerritorialVertexCaptureEnabled] = useState(false);
 
   // Estados de control modal para motores GEOINT ADR-018 y ADR-019
   const [isSweepEngineOpen, setIsSweepEngineOpen] = useState(false);
@@ -284,6 +294,40 @@ export function GeographicWorkspace({
     setHistoricalPreviewCandidates([]);
   }, [historicalGeographyCandidates]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function loadTerritorialVertices() {
+      if (!project?.id) {
+        setTerritorialVertices([]);
+        return;
+      }
+      const entities = await getGeographicEntities(project.id);
+      if (cancelled) return;
+      setTerritorialVertices(entities
+        .filter((entity) => entity.type === "VERTEX" || entity.metadata?.isVertex === true)
+        .map((entity, index) => ({
+          ...entity,
+          id: entity.id || `territorial-vertex-${index + 1}`,
+          type: "VERTEX" as const,
+          metadata: {
+            ...(entity.metadata || {}),
+            isVertex: true as const,
+            isIndependentPoi: false as const,
+            order: Number(entity.metadata?.order || index + 1),
+            source: "HUMAN_MAP_VERTEX" as const,
+          },
+        }))
+        .sort((a, b) => Number(a.metadata.order) - Number(b.metadata.order)));
+    }
+
+    void loadTerritorialVertices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.id]);
+
   const historicalPreviewPath = React.useMemo(
     () => historicalPreviewCandidates.map((candidate) => ({ lat: candidate.lat, lng: candidate.lng })),
     [historicalPreviewCandidates]
@@ -298,6 +342,93 @@ export function GeographicWorkspace({
     setSelectedHistoricalCandidateIds(nextSelectedIds);
     setDiscardedHistoricalCandidateIds(nextDiscardedIds);
   }, []);
+
+  const handleTerritorialVertexAdd = React.useCallback(async (lat: number, lng: number) => {
+    if (!project || project.geometryType !== "lineal" || project.canonicalGeography?.validationStatus === "VALID") return;
+    const order = territorialVertices.length + 1;
+    const createdAt = Date.now();
+    const entityId = await saveGeographicEntity({
+      projectId: project.id,
+      lat,
+      lng,
+      type: "VERTEX",
+      geometryType: project.geometryType,
+      source: "HUMAN_MAP_VERTEX",
+      createdBy: user?.username || "Usuario Local",
+      createdAt,
+      metadata: {
+        name: `Vertice territorial ${order}`,
+        comentario: "Vertice territorial definido manualmente en mapa.",
+        isIndependentPoi: false,
+        isVertex: true,
+        tipo: "Corredor",
+        order,
+        source: "HUMAN_MAP_VERTEX",
+      },
+    });
+    setTerritorialVertices((prev) => [
+      ...prev,
+      {
+        id: entityId,
+        projectId: project.id,
+        lat,
+        lng,
+        type: "VERTEX",
+        geometryType: project.geometryType,
+        source: "HUMAN_MAP_VERTEX",
+        createdBy: user?.username || "Usuario Local",
+        createdAt,
+        metadata: {
+          name: `Vertice territorial ${order}`,
+          comentario: "Vertice territorial definido manualmente en mapa.",
+          isIndependentPoi: false,
+          isVertex: true,
+          tipo: "Corredor",
+          order,
+          source: "HUMAN_MAP_VERTEX",
+        },
+      },
+    ]);
+  }, [project, territorialVertices.length, user?.username]);
+
+  const handleTerritorialVertexReorder = React.useCallback(async (nextVertices: TerritorialVertex[]) => {
+    if (!project) return;
+    await Promise.all(nextVertices.map((vertex, index) =>
+      updateGeographicEntityMetadata(project.id, vertex.id, {
+        ...vertex.metadata,
+        order: index + 1,
+        isVertex: true,
+        isIndependentPoi: false,
+        source: "HUMAN_MAP_VERTEX",
+      })
+    ));
+    setTerritorialVertices(nextVertices.map((vertex, index) => ({
+      ...vertex,
+      metadata: { ...vertex.metadata, order: index + 1 },
+    })));
+  }, [project]);
+
+  const handleTerritorialVertexRemove = React.useCallback(async (vertexId: string) => {
+    if (!project) return;
+    await deleteGeographicEntity(project.id, vertexId);
+    const remaining = territorialVertices
+      .filter((vertex) => vertex.id !== vertexId)
+      .map((vertex, index) => ({
+        ...vertex,
+        metadata: { ...vertex.metadata, order: index + 1 },
+      }));
+    setTerritorialVertices(remaining);
+    await Promise.all(remaining.map((vertex) => updateGeographicEntityMetadata(project.id, vertex.id, vertex.metadata)));
+  }, [project, territorialVertices]);
+
+  const handleTerritorialGeographyConfirm = React.useCallback(async (canonicalGeography: CanonicalProjectGeography) => {
+    await updateProjectDetails({
+      canonicalGeography,
+      geographyId: canonicalGeography.geographyId,
+      geographyValidationStatus: canonicalGeography.validationStatus,
+    });
+    setIsTerritorialVertexCaptureEnabled(false);
+  }, [updateProjectDetails]);
 
   // Sincronizar hallazgos del expediente desde el backend al cargar
   useEffect(() => {
@@ -455,8 +586,17 @@ export function GeographicWorkspace({
             findings={findings}
             historicalCandidates={historicalMapCandidates}
             historicalPreviewPath={historicalPreviewPath}
+            territorialVertices={territorialVertices.map((vertex) => ({
+              id: vertex.id,
+              lat: vertex.lat,
+              lng: vertex.lng,
+              order: vertex.metadata.order,
+            }))}
+            territorialPreviewPath={territorialPreviewPath}
+            isTerritorialVertexCaptureEnabled={isTerritorialVertexCaptureEnabled}
             selectedHistoricalCandidateIds={selectedHistoricalCandidateIds}
             discardedHistoricalCandidateIds={discardedHistoricalCandidateIds}
+            onTerritorialVertexAdd={handleTerritorialVertexAdd}
             onPoiSelect={handlePoiSelect}
             onStreetViewSelect={handleStreetViewSelect}
             onFindingSelect={handleFindingSelect}
@@ -468,6 +608,20 @@ export function GeographicWorkspace({
 
         {/* ZONA 2 — EVIDENCIAS Y Convalidación HUMANA (Horizontal, Debajo del Mapa) */}
         <div className="w-full bg-slate-950 p-5 space-y-5">
+          {project && project.geometryType === "lineal" && (
+            <TerritorialVertexReconciliationPanel
+              projectId={project.id}
+              vertices={territorialVertices}
+              canonicalGeographyExists={project.canonicalGeography?.validationStatus === "VALID"}
+              isCaptureEnabled={isTerritorialVertexCaptureEnabled}
+              onCaptureEnabledChange={setIsTerritorialVertexCaptureEnabled}
+              onReorder={handleTerritorialVertexReorder}
+              onRemove={handleTerritorialVertexRemove}
+              onPreviewChange={setTerritorialPreviewPath}
+              onConfirm={handleTerritorialGeographyConfirm}
+            />
+          )}
+
           {project && historicalGeographyCandidates.length > 0 && (
             <HistoricalGeographyReconciliationPanel
               projectId={project.id}
