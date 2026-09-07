@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
+import { getFirebaseServerDb } from "@/lib/firebaseServer";
+import { collection, getDocs, query, updateDoc, where } from "firebase/firestore";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +99,50 @@ export async function POST(req: Request) {
 
 const PERFILADOR_INICIALES_PATTERN = /^[A-ZÑ]{2,5}$/;
 
+async function registerPerfiladorInicialesInFirebase(username: string, initials: string) {
+  const db = getFirebaseServerDb();
+  const usersRef = collection(db, "users");
+  const q = query(usersRef, where("username", "==", username.trim()));
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
+  }
+
+  const docSnap = snap.docs[0];
+  const firebaseUser = docSnap.data() as { profile?: Record<string, unknown>; [key: string]: any };
+  const hasNestedProfile =
+    firebaseUser.profile &&
+    typeof firebaseUser.profile === "object" &&
+    !Array.isArray(firebaseUser.profile);
+  const existingProfile = hasNestedProfile ? firebaseUser.profile || {} : firebaseUser;
+
+  if (String(existingProfile.perfiladorIniciales || "").trim()) {
+    return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
+  }
+
+  const updatedProfile = {
+    ...existingProfile,
+    perfiladorIniciales: initials,
+    updatedAt: Date.now(),
+  };
+
+  if (hasNestedProfile) {
+    await updateDoc(docSnap.ref, { profile: updatedProfile });
+  } else {
+    await updateDoc(docSnap.ref, {
+      perfiladorIniciales: initials,
+      updatedAt: updatedProfile.updatedAt,
+    });
+  }
+
+  return NextResponse.json({
+    success: true,
+    profile: updatedProfile,
+    storage: "FIREBASE_FALLBACK",
+  });
+}
+
 // PATCH: Registrar únicamente iniciales institucionales PPC sin desbloquear el perfil.
 export async function PATCH(req: Request) {
   try {
@@ -121,46 +167,52 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "PERFILADOR_INICIALES_INVALIDAS" }, { status: 400 });
     }
 
-    const pool = getPool();
-    const { rows } = await pool.query(
-      `
-      SELECT profile
-      FROM users
-      WHERE username = $1
-      LIMIT 1
-    `,
-      [payload.username]
-    );
+    try {
+      const pool = getPool();
+      const { rows } = await pool.query(
+        `
+        SELECT profile
+        FROM users
+        WHERE username = $1
+        LIMIT 1
+      `,
+        [payload.username]
+      );
 
-    const user = rows[0];
-    if (!user) {
-      return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
+      const user = rows[0];
+      if (!user) {
+        return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
+      }
+
+      const existingProfile = user.profile || {};
+      if (String(existingProfile.perfiladorIniciales || "").trim()) {
+        return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
+      }
+
+      const updatedProfile = {
+        ...existingProfile,
+        perfiladorIniciales: initials,
+        updatedAt: Date.now(),
+      };
+
+      await pool.query(
+        `
+        UPDATE users
+        SET profile = $1
+        WHERE username = $2
+      `,
+        [JSON.stringify(updatedProfile), payload.username]
+      );
+
+      return NextResponse.json({
+        success: true,
+        profile: updatedProfile,
+        storage: "POSTGRESQL",
+      });
+    } catch (pgErr) {
+      console.warn("[api/auth/profile] PostgreSQL PATCH failed. Falling back to Firebase...", pgErr);
+      return await registerPerfiladorInicialesInFirebase(payload.username, initials);
     }
-
-    const existingProfile = user.profile || {};
-    if (String(existingProfile.perfiladorIniciales || "").trim()) {
-      return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
-    }
-
-    const updatedProfile = {
-      ...existingProfile,
-      perfiladorIniciales: initials,
-      updatedAt: Date.now(),
-    };
-
-    await pool.query(
-      `
-      UPDATE users
-      SET profile = $1
-      WHERE username = $2
-    `,
-      [JSON.stringify(updatedProfile), payload.username]
-    );
-
-    return NextResponse.json({
-      success: true,
-      profile: updatedProfile,
-    });
   } catch (err) {
     console.error("[api/auth/profile] Error en PATCH profile:", err);
     return NextResponse.json({ error: "No se pudo registrar las iniciales institucionales." }, { status: 500 });

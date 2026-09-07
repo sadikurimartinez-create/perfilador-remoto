@@ -77,4 +77,47 @@ describe("QA-06.03E.3F.4 perfiladorIniciales profile registration", () => {
     expect(profileRoute).toContain("WHERE username = $2");
     expect(profileRoute).toContain("[JSON.stringify(updatedProfile), payload.username]");
   });
+
+  test("PATCH keeps PostgreSQL as primary storage and reports it", () => {
+    expect(patchRoute).toContain("const pool = getPool()");
+    expect(patchRoute).toContain("SELECT profile");
+    expect(patchRoute).toContain("UPDATE users");
+    expect(patchRoute).toContain("storage: \"POSTGRESQL\"");
+  });
+
+  test("PATCH has Firebase fallback after PostgreSQL failure", () => {
+    expect(profileRoute).toContain("getFirebaseServerDb");
+    expect(profileRoute).toContain("registerPerfiladorInicialesInFirebase");
+    expect(patchRoute).toContain("catch (pgErr)");
+    expect(patchRoute).toContain("return await registerPerfiladorInicialesInFirebase(payload.username, initials)");
+    expect(profileRoute).toContain("storage: \"FIREBASE_FALLBACK\"");
+  });
+
+  test("Firebase fallback uses authenticated username and does not create users", () => {
+    expect(profileRoute).toContain("where(\"username\", \"==\", username.trim())");
+    expect(profileRoute).toContain("getDocs(q)");
+    expect(profileRoute).toContain("snap.empty");
+    expect(profileRoute).toContain("Usuario no encontrado.");
+    expect(profileRoute).not.toContain("addDoc");
+  });
+
+  test("Firebase fallback preserves existing data and writes only initials fields when profile is flat", () => {
+    expect(profileRoute).toContain("const existingProfile = hasNestedProfile ? firebaseUser.profile || {} : firebaseUser");
+    expect(profileRoute).toContain("...existingProfile");
+    expect(profileRoute).toContain("perfiladorIniciales: initials");
+    expect(profileRoute).toContain("updatedAt: Date.now()");
+    expect(profileRoute).toContain("await updateDoc(docSnap.ref, {");
+    expect(profileRoute).toContain("perfiladorIniciales: initials");
+    expect(profileRoute).toContain("updatedAt: updatedProfile.updatedAt");
+  });
+
+  test("auth profile patch does not modify login or me routes", () => {
+    const loginRoute = source("src/app/api/auth/login/route.ts");
+    const meRoute = source("src/app/api/auth/me/route.ts");
+
+    expect(loginRoute).toContain("[api/auth/login]");
+    expect(loginRoute).toContain("addDoc(usersRef");
+    expect(meRoute).toContain("[api/auth/me]");
+    expect(meRoute).toContain("getFirebaseServerDb");
+  });
 });
