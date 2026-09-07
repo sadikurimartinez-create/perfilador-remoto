@@ -4,7 +4,8 @@ export type CanonicalGeographySource =
   | "PROJECT_CREATION"
   | "MAP_VECTOR"
   | "LEGACY_PROJECT_FIELDS"
-  | "LEGACY_GEOGRAPHIC_ENTITIES";
+  | "LEGACY_GEOGRAPHIC_ENTITIES"
+  | "HISTORICAL_RECONCILIATION";
 
 export type CanonicalGeographyValidationStatus = "VALID" | "PARTIAL" | "INVALID";
 

@@ -61,6 +61,11 @@ import {
 } from "@/services/institutionalReportCertificationService";
 import { institutionalReportPublicationService } from "@/services/institutionalReportPublicationService";
 import { assignNumeroExpedienteToExistingProject } from "@/services/historicalNumeroExpedienteAssignmentService";
+import {
+  buildHistoricalGeographyReconciliationAuditDetails,
+  persistHistoricalGeographyReconciliation,
+} from "@/services/historicalGeographyReconciliationService";
+import type { HistoricalGeographyReconciliation } from "@/utils/historicalGeographyReconciliation";
 import type {
   InstitutionalReportCertification,
   InstitutionalReportPublication,
@@ -228,6 +233,7 @@ export type Project = {
   canonicalGeography?: CanonicalProjectGeography | null;
   geographyId?: string | null;
   geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";
+  historicalGeographyReconciliation?: HistoricalGeographyReconciliation | null;
   canonicalHypothesis?: CanonicalProjectHypothesis | null;
   hypothesisRequirementSatisfied?: boolean;
   reportReadyAssessment?: ReportReadyAssessment | null;
@@ -366,6 +372,10 @@ type ProjectContextValue = {
     details: string;
   }) => Promise<void>;
   updateProjectDetails: (details: Partial<Project>) => Promise<void>;
+  persistHistoricalGeographyReconciliationForProject: (
+    projectId: string,
+    reconciliation: HistoricalGeographyReconciliation
+  ) => Promise<Awaited<ReturnType<typeof persistHistoricalGeographyReconciliation>>>;
   saveHumanHypothesis: (text: string) => Promise<CanonicalProjectHypothesis>;
   requestInstitutionalReportCertification: (params: {
     institutionalReportInput: InstitutionalReportInput;
@@ -1567,6 +1577,93 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [project, isReadOnly, logAuditAction, album, documents]);
 
+  const persistHistoricalGeographyReconciliationForProject = useCallback(async (
+    projectId: string,
+    reconciliation: HistoricalGeographyReconciliation
+  ) => {
+    const projectName = project?.id === projectId ? project.ceipolId || project.nombre : "";
+    const blockedAuditBase = {
+      action: "RECONCILIAR_GEOGRAFIA_HISTORICA",
+      module: "Geografía",
+      projectId,
+      projectName,
+      numeroExpediente: project?.id === projectId ? project.numeroExpediente : undefined,
+      ceipolId: project?.id === projectId ? project.ceipolId : undefined,
+      perfiladorIniciales: project?.id === projectId ? project.perfiladorIniciales : undefined,
+      result: "BLOQUEADO" as const,
+    };
+
+    try {
+      if (!user) {
+        throw new Error("HISTORICAL_GEOGRAPHY_AUTH_REQUIRED");
+      }
+      if (isReadOnly) {
+        throw new Error("HISTORICAL_GEOGRAPHY_READ_ONLY");
+      }
+      if (reconciliation.status !== "CONFIRMED") {
+        throw new Error("HISTORICAL_GEOGRAPHY_NOT_CONFIRMED");
+      }
+
+      const result = await persistHistoricalGeographyReconciliation({
+        projectId,
+        reconciliation,
+      });
+
+      setProject((prev) => {
+        if (!prev || prev.id !== projectId) return prev;
+        const updatedProject = {
+          ...prev,
+          canonicalGeography: result.canonicalGeography,
+          geographyId: result.geographyId,
+          geographyValidationStatus: result.geographyValidationStatus,
+          historicalGeographyReconciliation: result.historicalGeographyReconciliation,
+        };
+        return {
+          ...updatedProject,
+          reportReadyAssessment: assessReportReadiness({ ...updatedProject, album, documents }),
+        };
+      });
+
+      await logAuditAction({
+        action: "RECONCILIAR_GEOGRAFIA_HISTORICA",
+        module: "Geografía",
+        projectId,
+        projectName,
+        numeroExpediente: project?.id === projectId ? project.numeroExpediente : undefined,
+        ceipolId: project?.id === projectId ? project.ceipolId : undefined,
+        perfiladorIniciales: project?.id === projectId ? project.perfiladorIniciales : undefined,
+        result: "ÉXITO",
+        details: JSON.stringify({
+          ...buildHistoricalGeographyReconciliationAuditDetails({ reconciliation: result.historicalGeographyReconciliation }),
+          geographyId: result.geographyId,
+          sourceRefs: result.sourceRefs,
+          source: "HISTORICAL_RECONCILIATION",
+          forensicDeclaration: "GPS histórico tratado como candidato de reconciliación; no promovido automáticamente a VERTEX.",
+        }),
+      });
+
+      return result;
+    } catch (err) {
+      const errorCode = err instanceof Error ? err.message : "HISTORICAL_GEOGRAPHY_UNKNOWN_ERROR";
+      await logAuditAction({
+        ...blockedAuditBase,
+        result: "BLOQUEADO",
+        details: JSON.stringify({
+          reconciliationId: reconciliation.reconciliationId,
+          projectId,
+          errorCode,
+          confirmedCandidateIds: reconciliation.confirmedCandidateIds,
+          confirmedBy: reconciliation.confirmedBy ?? null,
+          confirmedAt: reconciliation.confirmedAt ?? null,
+          limitations: reconciliation.limitations,
+          source: "HISTORICAL_RECONCILIATION",
+          forensicDeclaration: "GPS histórico tratado como candidato de reconciliación; no promovido automáticamente a VERTEX.",
+        }),
+      });
+      throw err;
+    }
+  }, [project, user, isReadOnly, logAuditAction, album, documents]);
+
   const saveHumanHypothesis = useCallback(async (text: string): Promise<CanonicalProjectHypothesis> => {
     if (!project || isReadOnly) throw new Error("No hay expediente activo o es de solo lectura.");
     const trimmedText = text.trim();
@@ -2419,6 +2516,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       savePhotoContextualization,
       logAuditAction,
       updateProjectDetails,
+      persistHistoricalGeographyReconciliationForProject,
       saveHumanHypothesis,
       requestInstitutionalReportCertification,
       certifyInstitutionalReportByHumanAction,
@@ -2474,6 +2572,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       savePhotoContextualization,
       logAuditAction,
       updateProjectDetails,
+      persistHistoricalGeographyReconciliationForProject,
       saveHumanHypothesis,
       requestInstitutionalReportCertification,
       certifyInstitutionalReportByHumanAction,
