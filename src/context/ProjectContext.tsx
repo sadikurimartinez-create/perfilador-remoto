@@ -60,6 +60,7 @@ import {
   institutionalReportCertificationService,
 } from "@/services/institutionalReportCertificationService";
 import { institutionalReportPublicationService } from "@/services/institutionalReportPublicationService";
+import { assignNumeroExpedienteToExistingProject } from "@/services/historicalNumeroExpedienteAssignmentService";
 import type {
   InstitutionalReportCertification,
   InstitutionalReportPublication,
@@ -288,6 +289,9 @@ type ProjectContextValue = {
     canonicalGeography?: CanonicalProjectGeography | null;
     draftGeography?: DraftProjectGeography | null;
   }) => Promise<string>;
+  assignHistoricalNumeroExpediente:
+    (projectId: string) =>
+      Promise<Awaited<ReturnType<typeof assignNumeroExpedienteToExistingProject>>>;
 
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
@@ -645,6 +649,27 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       throw err;
     }
   }, [user, logAuditAction]);
+
+  const assignHistoricalNumeroExpediente = useCallback(async (projectId: string) => {
+    const fields = await assignNumeroExpedienteToExistingProject(projectId, user);
+
+    setProject(prev => {
+      if (!prev || prev.id !== projectId) return prev;
+
+      const updatedProject = {
+        ...prev,
+        ...fields
+      };
+
+      return {
+        ...updatedProject,
+        reportReadyAssessment:
+          assessReportReadiness(updatedProject)
+      };
+    });
+
+    return fields;
+  }, [user]);
 
   const closeProject = useCallback(() => {
     setProject(null);
@@ -2361,6 +2386,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       selectedIds,
       analysisResult,
       createProject,
+      assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
       addPhotoToAlbum,
@@ -2415,6 +2441,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       selectedIds,
       analysisResult,
       createProject,
+      assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
       addPhotoToAlbum,
