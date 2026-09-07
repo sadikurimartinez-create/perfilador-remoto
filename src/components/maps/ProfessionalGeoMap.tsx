@@ -16,10 +16,12 @@ import StreetViewAutomaticLayer from "./layers/StreetViewAutomaticLayer";
 import FindingsLayer from "./layers/FindingsLayer";
 import StreetViewConeLayer from "./layers/StreetViewConeLayer";
 import CrimeIncidenceLayer from "./layers/CrimeIncidenceLayer";
+import HistoricalGeographyCandidateLayer from "./layers/HistoricalGeographyCandidateLayer";
 import StreetSelectionLayer, {
   type StreetSelectionGeometry,
 } from "./layers/StreetSelectionLayer";
 import type { CanonicalCrimeIncident } from "@/types/crimeIncidenceWorkspace";
+import type { HistoricalGeographyCandidate } from "@/utils/historicalGeographyReconciliation";
 
 // Contexto de Filtros
 import { useOptionalAnalyticsFilter } from "../analytics/AnalyticsFilterContext";
@@ -45,6 +47,11 @@ interface ProfessionalGeoMapProps {
   selectedFindingId?: string;
   crimeIncidents?: CanonicalCrimeIncident[];
   selectedStreetGeometry?: StreetSelectionGeometry | null;
+  historicalCandidates?: HistoricalGeographyCandidate[];
+  historicalPreviewPath?: Array<{ lat: number; lng: number }>;
+  selectedHistoricalCandidateIds?: string[];
+  discardedHistoricalCandidateIds?: string[];
+  onHistoricalCandidateSelect?: (candidateId: string) => void;
   crimeIncidenceMinimumHeight?: string;
   onCrimeIncidenceRenderProgress?: (rendered: number, total: number) => void;
   showLayerControls?: boolean;
@@ -92,6 +99,11 @@ export function ProfessionalGeoMap({
   selectedFindingId,
   crimeIncidents = [],
   selectedStreetGeometry = null,
+  historicalCandidates = [],
+  historicalPreviewPath = [],
+  selectedHistoricalCandidateIds = [],
+  discardedHistoricalCandidateIds = [],
+  onHistoricalCandidateSelect,
   crimeIncidenceMinimumHeight,
   onCrimeIncidenceRenderProgress,
   showLayerControls = true,
@@ -375,6 +387,15 @@ export function ProfessionalGeoMap({
         <StreetSelectionLayer
           visible={Boolean(selectedStreetGeometry)}
           geometry={selectedStreetGeometry}
+        />
+
+        <HistoricalGeographyCandidateLayer
+          visible={historicalCandidates.length > 0}
+          candidates={historicalCandidates}
+          selectedCandidateIds={selectedHistoricalCandidateIds}
+          discardedCandidateIds={discardedHistoricalCandidateIds}
+          previewPath={historicalPreviewPath}
+          onCandidateSelect={onHistoricalCandidateSelect}
         />
         
         <PoiLayer visible={layers.pois} pois={pois} selectedPoiId={selectedPoiId} onPoiSelect={onPoiSelect} />

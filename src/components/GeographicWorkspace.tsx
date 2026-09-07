@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { ProfessionalGeoMap } from "./maps/ProfessionalGeoMap";
+import HistoricalGeographyReconciliationPanel from "./HistoricalGeographyReconciliationPanel";
 import { StreetViewFindingsPanel, StreetViewFinding } from "./streetview/StreetViewFindingsPanel";
 import { StreetViewEvidenceRibbon } from "./streetview/StreetViewEvidenceRibbon";
 import { AnalyticsDashboard } from "./analytics/AnalyticsDashboard";
@@ -21,6 +22,7 @@ import {
   type CanonicalProjectGeography,
 } from "@/utils/canonicalProjectGeography";
 import { isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
+import type { HistoricalGeographyCandidate } from "@/utils/historicalGeographyReconciliation";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
@@ -123,8 +125,14 @@ export function calculateSweepPreparation(input: {
   };
 }
 
-export function GeographicWorkspace() {
-  const { project, album, registerSweep } = useProject();
+export type GeographicWorkspaceProps = {
+  historicalGeographyCandidatesInput?: HistoricalGeographyCandidate[];
+};
+
+export function GeographicWorkspace({
+  historicalGeographyCandidatesInput = [],
+}: GeographicWorkspaceProps = {}) {
+  const { project, album, registerSweep, persistHistoricalGeographyReconciliationForProject } = useProject();
   const { user } = useAuth();
   const expedienteId = project?.id || "EXP-2026";
 
@@ -134,6 +142,10 @@ export function GeographicWorkspace() {
 
   const [captures, setCaptures] = useState<any[]>(INITIAL_SV_AUTOMATIC);
   const [findings, setFindings] = useState<StreetViewFinding[]>([]);
+  const [historicalPreviewCandidates, setHistoricalPreviewCandidates] = useState<HistoricalGeographyCandidate[]>([]);
+  const [historicalMapCandidates, setHistoricalMapCandidates] = useState<HistoricalGeographyCandidate[]>([]);
+  const [selectedHistoricalCandidateIds, setSelectedHistoricalCandidateIds] = useState<string[]>([]);
+  const [discardedHistoricalCandidateIds, setDiscardedHistoricalCandidateIds] = useState<string[]>([]);
 
   // Estados de control modal para motores GEOINT ADR-018 y ADR-019
   const [isSweepEngineOpen, setIsSweepEngineOpen] = useState(false);
@@ -245,6 +257,46 @@ export function GeographicWorkspace() {
       }),
     [expedienteId, inSituGeoreferencedPhotos.length, findings.length, project?.canonicalGeography]
   );
+
+  const persistedHistoricalCandidates = project?.historicalGeographyReconciliation?.candidates ?? [];
+
+  const historicalGeographyCandidates = React.useMemo(() => {
+    if (project && historicalGeographyCandidatesInput.length > 0) {
+      return historicalGeographyCandidatesInput.filter((candidate) => candidate.projectId === project.id);
+    }
+
+    return persistedHistoricalCandidates;
+  }, [
+    historicalGeographyCandidatesInput,
+    persistedHistoricalCandidates,
+    project,
+  ]);
+
+  React.useEffect(() => {
+    setHistoricalMapCandidates(historicalGeographyCandidates);
+    setSelectedHistoricalCandidateIds([]);
+    setDiscardedHistoricalCandidateIds(
+      historicalGeographyCandidates
+        .filter((candidate) => candidate.status === "DISCARDED")
+        .map((candidate) => candidate.candidateId)
+    );
+    setHistoricalPreviewCandidates([]);
+  }, [historicalGeographyCandidates]);
+
+  const historicalPreviewPath = React.useMemo(
+    () => historicalPreviewCandidates.map((candidate) => ({ lat: candidate.lat, lng: candidate.lng })),
+    [historicalPreviewCandidates]
+  );
+
+  const handleHistoricalCandidateStateChange = React.useCallback((
+    nextCandidates: HistoricalGeographyCandidate[],
+    nextSelectedIds: string[],
+    nextDiscardedIds: string[]
+  ) => {
+    setHistoricalMapCandidates(nextCandidates);
+    setSelectedHistoricalCandidateIds(nextSelectedIds);
+    setDiscardedHistoricalCandidateIds(nextDiscardedIds);
+  }, []);
 
   // Sincronizar hallazgos del expediente desde el backend al cargar
   useEffect(() => {
@@ -400,6 +452,10 @@ export function GeographicWorkspace() {
             streetViewManual={[]}
             streetViewAutomatic={captures}
             findings={findings}
+            historicalCandidates={historicalMapCandidates}
+            historicalPreviewPath={historicalPreviewPath}
+            selectedHistoricalCandidateIds={selectedHistoricalCandidateIds}
+            discardedHistoricalCandidateIds={discardedHistoricalCandidateIds}
             onPoiSelect={handlePoiSelect}
             onStreetViewSelect={handleStreetViewSelect}
             onFindingSelect={handleFindingSelect}
@@ -411,6 +467,24 @@ export function GeographicWorkspace() {
 
         {/* ZONA 2 — EVIDENCIAS Y Convalidación HUMANA (Horizontal, Debajo del Mapa) */}
         <div className="w-full bg-slate-950 p-5 space-y-5">
+          {project && historicalGeographyCandidates.length > 0 && (
+            <HistoricalGeographyReconciliationPanel
+              projectId={project.id}
+              candidates={historicalGeographyCandidates}
+              canonicalGeographyExists={project.canonicalGeography?.validationStatus === "VALID"}
+              onPreviewChange={setHistoricalPreviewCandidates}
+              onCandidateStateChange={handleHistoricalCandidateStateChange}
+              onPersist={(reconciliation) =>
+                persistHistoricalGeographyReconciliationForProject(project.id, reconciliation)
+              }
+              confirmedBy={{
+                id: user?.id ?? null,
+                username: user?.username ?? null,
+                name: user?.name ?? null,
+              }}
+            />
+          )}
+
           {/* 2.1 Cintilla Inteligente de Evidencias Compatibles (R ≤ 50m) */}
           <StreetViewEvidenceRibbon
             expedienteId={expedienteId}
