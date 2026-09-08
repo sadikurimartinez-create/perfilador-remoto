@@ -45,6 +45,12 @@ type StreetCandidate = {
   neighborhoods: StreetCandidateNeighborhood[];
 };
 
+type OfficialStreetOption = {
+  value: string;
+  label: string;
+  neighborhoodCode: string | null;
+};
+
 type StreetCandidatesApiResponse = {
   success: boolean;
   resolution?:
@@ -100,6 +106,7 @@ export default function CrimeIncidencePage() {
   const [streetCorridorWidth, setStreetCorridorWidth] = useState<15 | 30 | 50>(30);
   const [streetCandidateLoading, setStreetCandidateLoading] = useState(false);
   const [streetCandidates, setStreetCandidates] = useState<StreetCandidate[]>([]);
+  const [officialStreetOptions, setOfficialStreetOptions] = useState<OfficialStreetOption[]>([]);
   const [selectedStreetCandidate, setSelectedStreetCandidate] = useState<StreetCandidate | null>(null);
   const [selectedStreetCandidates, setSelectedStreetCandidates] = useState<StreetCandidate[]>([]);
   const activeStreetSet = selectedStreetCandidates;
@@ -240,16 +247,6 @@ export default function CrimeIncidencePage() {
     [records, municipality]
   );
 
-  const streets = useMemo(() =>
-    Array.from(new Set(records
-      .filter((record) => !municipality || record.municipality === municipality)
-      .filter((record) => !neighborhood || record.neighborhood === neighborhood)
-      .map((record) => record.street)
-      .filter(Boolean)))
-      .sort() as string[],
-    [records, municipality, neighborhood]
-  );
-
   const incidentTypes = useMemo(() =>
     Array.from(new Set(records.map((record) => record.incidentType).filter(Boolean)))
       .sort() as string[],
@@ -259,12 +256,12 @@ export default function CrimeIncidencePage() {
   const filtered = useMemo(() => records.filter((record) => {
     if (municipality && record.municipality !== municipality) return false;
     if (neighborhood && record.neighborhood !== neighborhood) return false;
-    if (street && record.street !== street) return false;
+    if (street && activeStreetSet.length > 0 && record.street !== street) return false;
     if (incidentType && record.incidentType !== incidentType) return false;
     if (startDate && record.date && record.date < startDate) return false;
     if (endDate && record.date && record.date > endDate) return false;
     return true;
-  }), [records, municipality, neighborhood, street, incidentType, startDate, endDate]);
+  }), [records, municipality, neighborhood, street, activeStreetSet.length, incidentType, startDate, endDate]);
 
   const mapIncidents = useMemo<CanonicalCrimeIncident[]>(() =>
     filtered
@@ -392,16 +389,78 @@ export default function CrimeIncidencePage() {
 
   const clearStreetResolution = () => {
     setSelectedStreetCandidate(null);
+    setSelectedStreetCandidates([]);
     setStreetCandidates([]);
     setStreetResolutionError(null);
     setShowStreetCandidateModal(false);
+    setStreetQueryRecords([]);
+    setStreetQueryError(null);
+    setStreetQuerySource(null);
+  };
+
+  const handleMunicipalityChange = (value: string) => {
+    setMunicipality(value);
+    setNeighborhood("");
+    setStreet("");
+    setOfficialStreetOptions([]);
+    clearStreetResolution();
+  };
+
+  const handleNeighborhoodChange = (value: string) => {
+    setNeighborhood(value);
+    setStreet("");
+    setOfficialStreetOptions([]);
+    clearStreetResolution();
+  };
+
+  const buildOfficialStreetOptions = (
+    candidates: StreetCandidate[]
+  ): OfficialStreetOption[] => {
+    const options = new Map<string, OfficialStreetOption>();
+
+    for (const candidate of candidates) {
+      const value = candidate.nomvial.trim();
+
+      if (!value) continue;
+
+      const matchingNeighborhood =
+        candidate.neighborhoods.find(
+          (item) => item.nomAsen === neighborhood
+        ) ?? candidate.neighborhoods[0] ?? null;
+
+      const key = `${value}:${matchingNeighborhood?.cvegeo ?? candidate.candidateId}`;
+
+      options.set(key, {
+        value,
+        label: matchingNeighborhood
+          ? `${value} - ${matchingNeighborhood.nomAsen}`
+          : value,
+        neighborhoodCode: matchingNeighborhood?.cvegeo ?? null,
+      });
+    }
+
+    return Array.from(options.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "es")
+    );
+  };
+
+  const handleStreetInputChange = (value: string) => {
+    setStreet(value);
+    clearStreetResolution();
   };
 
   const handleStreetChange = async (value: string) => {
-    setStreet(value);
+    const selectedValue = value.trim();
+    const selectedOfficialStreetOption =
+      officialStreetOptions.find(
+        (option) => option.value === selectedValue
+      ) ?? null;
+
+    setStreet(selectedValue);
+    setOfficialStreetOptions([]);
     clearStreetResolution();
 
-    if (!value) {
+    if (!selectedValue) {
       return;
     }
 
@@ -414,8 +473,11 @@ export default function CrimeIncidencePage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          street: value,
+          street: selectedValue,
           municipality: municipality || "Aguascalientes",
+          neighborhood: neighborhood || null,
+          neighborhoodCode:
+            selectedOfficialStreetOption?.neighborhoodCode ?? null,
         }),
       });
 
@@ -426,6 +488,11 @@ export default function CrimeIncidencePage() {
       }
 
       if (payload.resolution.status === "RESOLVED") {
+        setOfficialStreetOptions(
+          buildOfficialStreetOptions([
+            payload.resolution.candidate,
+          ])
+        );
         setSelectedStreetCandidate(payload.resolution.candidate);
         setSelectedStreetCandidates([
           payload.resolution.candidate,
@@ -433,6 +500,9 @@ export default function CrimeIncidencePage() {
         return;
       }
       if (payload.resolution.status === "AMBIGUOUS") {
+        setOfficialStreetOptions(
+          buildOfficialStreetOptions(payload.resolution.candidates)
+        );
         setStreetCandidates(payload.resolution.candidates);
         setShowStreetCandidateModal(true);
         return;
@@ -586,22 +656,35 @@ export default function CrimeIncidencePage() {
           <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
             <h2 className="text-sm font-bold text-slate-200 mb-4">Selección analítica</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <select value={municipality} onChange={(e) => { setMunicipality(e.target.value); setNeighborhood(""); setStreet(""); clearStreetResolution(); }} className="bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200">
+              <select value={municipality} onChange={(e) => handleMunicipalityChange(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200">
                 <option value="">Todo el Estado</option>
                 {municipalities.map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
-              <select value={neighborhood} onChange={(e) => { setNeighborhood(e.target.value); setStreet(""); clearStreetResolution(); }} className="bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200">
+              <select value={neighborhood} onChange={(e) => handleNeighborhoodChange(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200">
                 <option value="">Todas las colonias</option>
                 {neighborhoods.map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
-              <select
+              <input
+                  list="official-street-options"
                   value={street}
-                  onChange={(e) => void handleStreetChange(e.target.value)}
+                  onChange={(e) => handleStreetInputChange(e.target.value)}
+                  onBlur={(e) => void handleStreetChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  disabled={!neighborhood}
+                  placeholder={neighborhood ? "Buscar vialidad oficial" : "Seleccione colonia"}
                   className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-sm text-slate-200"
-                >
-                  <option value="">Todas las calles</option>
-                  {streets.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
+                />
+              <datalist id="official-street-options">
+                {officialStreetOptions.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </datalist>
 
           {selectedStreetCandidate && (
             <div className="mt-3">
@@ -889,6 +972,7 @@ export default function CrimeIncidencePage() {
                     type="button"
                     onClick={() => {
                       setStreet("");
+                      setOfficialStreetOptions([]);
                       clearStreetResolution();
                     }}
                     className="rounded-md border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:bg-slate-900"

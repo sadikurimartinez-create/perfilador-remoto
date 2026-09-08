@@ -29,6 +29,8 @@ export type IncidenceStreetCandidate = {
 export type IncidenceStreetCandidateLookupInput = {
   street: string;
   municipality?: string | null;
+  neighborhood?: string | null;
+  neighborhoodCode?: string | null;
 };
 
 export type IncidenceStreetCandidateLookupResult =
@@ -96,6 +98,45 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "es")
   );
+}
+
+function normalizedOptionalLookupText(
+  value: string | null | undefined
+): string | null {
+  const normalized = normalizeStreetLookupText(value ?? "");
+  return normalized || null;
+}
+
+function normalizedOptionalCode(
+  value: string | null | undefined
+): string | null {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
+function neighborhoodMatchesInput(
+  neighborhood: IncidenceStreetNeighborhoodReference,
+  input: {
+    normalizedNeighborhood: string | null;
+    neighborhoodCode: string | null;
+  }
+): boolean {
+  if (
+    input.neighborhoodCode &&
+    neighborhood.cvegeo.trim() === input.neighborhoodCode
+  ) {
+    return true;
+  }
+
+  if (
+    input.normalizedNeighborhood &&
+    normalizeStreetLookupText(neighborhood.nomAsen) ===
+      input.normalizedNeighborhood
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function buildDcahStreetIntersectionQuery(): string {
@@ -189,6 +230,12 @@ export class InegiGaiaStreetCandidateProvider
 
     const normalizedStreet =
       normalizeStreetLookupText(input.street);
+    const normalizedNeighborhood =
+      normalizedOptionalLookupText(input.neighborhood);
+    const neighborhoodCode =
+      normalizedOptionalCode(input.neighborhoodCode);
+    const shouldFilterByNeighborhood =
+      Boolean(normalizedNeighborhood || neighborhoodCode);
 
     if (!normalizedStreet) {
       return {
@@ -364,6 +411,18 @@ export class InegiGaiaStreetCandidateProvider
               Number.isFinite(item.metersInside) &&
               item.metersInside > 0.01
           );
+
+      if (
+        shouldFilterByNeighborhood &&
+        !neighborhoods.some((item) =>
+          neighborhoodMatchesInput(item, {
+            normalizedNeighborhood,
+            neighborhoodCode,
+          })
+        )
+      ) {
+        continue;
+      }
 
       candidates.push({
         candidateId,

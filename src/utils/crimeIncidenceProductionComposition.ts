@@ -4,6 +4,7 @@ import type { CrimeExpedientGeographyContext } from "@/types/crimeIncidenceGeogr
 import type { CrimeIncidenceQueryRequest } from "@/types/crimeIncidenceQueryGovernance";
 import type { CrimeIncidenceQueryGeometry } from "@/types/crimeIncidenceWorkspace";
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
+import type { IncidenceCanonicalSpatialQuery } from "@/lib/incidenceSpatialTypes";
 import { projectCrimeIncidenceAnalytics } from "@/utils/crimeIncidenceAnalyticalProjection";
 import { createCrimeIncidenceExportContract } from "@/utils/crimeIncidenceExportGovernance";
 import { resolveCrimeIncidenceGeography } from "@/utils/crimeIncidenceGeographicResolution";
@@ -62,6 +63,31 @@ function expedientGeography(
   return { ...base, geographyType: "POLYGON", polygon: queryGeometry };
 }
 
+export function createIncidenceCanonicalSpatialQueryFromQueryGeometry(
+  expedienteId: string,
+  queryGeometry: CrimeIncidenceQueryGeometry
+): IncidenceCanonicalSpatialQuery {
+  return {
+    geometry: queryGeometry.geometry,
+    mode: queryGeometry.mode,
+    source: "EXPEDIENT",
+    metadata: {
+      queryId: `crime-incidence-production:${expedienteId}`,
+      expedienteId,
+      sourceReference: `expedient:${expedienteId}`,
+      territoryType: queryGeometry.mode,
+      radiusMeters:
+        queryGeometry.mode === "POINT_RADIUS"
+          ? queryGeometry.radiusMeters
+          : null,
+      corridorWidthMeters:
+        queryGeometry.mode === "CORRIDOR_COVERAGE"
+          ? queryGeometry.corridorWidthMeters
+          : null,
+    },
+  };
+}
+
 export async function composeCrimeIncidenceProductionWorkspace(
   input: CrimeIncidenceProductionCompositionInput
 ): Promise<CrimeIncidenceWorkspaceBindingResult> {
@@ -81,16 +107,16 @@ export async function composeCrimeIncidenceProductionWorkspace(
       incidentTypes: [],
       geographicCoverage: null,
     };
-    const pointCoordinates = queryGeometry.mode === "POINT_RADIUS" ? queryGeometry.geometry.coordinates : null;
+    const canonicalSpatialQuery =
+      createIncidenceCanonicalSpatialQueryFromQueryGeometry(
+        input.expedienteId,
+        queryGeometry
+      );
     const response = await fetcher("/api/incidencia", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...(pointCoordinates ? { lat: pointCoordinates[1], lng: pointCoordinates[0] } : {}),
-        queryGeometry,
-        radiusMeters: queryGeometry.mode === "POINT_RADIUS"
-          ? queryGeometry.radiusMeters
-          : queryGeometry.mode === "CORRIDOR_COVERAGE" ? queryGeometry.corridorWidthMeters : null,
+        canonicalSpatialQuery,
         startDate: filters.temporal.start,
         endDate: filters.temporal.end,
         incidentTypes: filters.incidentTypes,

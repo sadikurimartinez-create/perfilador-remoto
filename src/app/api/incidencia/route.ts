@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import { queryCrimeIncidence } from "@/lib/crimeIncidenceRepository";
+import {
+  buildCrimeQueryInputFromCanonicalSpatialQuery,
+} from "@/lib/incidenceSpatialQueryAdapter";
+import { buildStreetAnalyticalCorridor } from "@/lib/incidenceStreetCorridor";
+import type {
+  IncidenceCanonicalSpatialQuery,
+  IncidenceLineStringGeometry,
+} from "@/lib/incidenceSpatialTypes";
 
 export const runtime = "nodejs";
 
@@ -7,6 +15,7 @@ type IncidenciaRequestBody = {
   lat?: number;
   lng?: number;
   radiusMeters?: number;
+  canonicalSpatialQuery?: IncidenceCanonicalSpatialQuery | null;
   allowLegacyFallback?: boolean;
   startDate?: string | null;
   endDate?: string | null;
@@ -19,32 +28,84 @@ function toFiniteNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+async function prepareCanonicalSpatialQueryForAdapter(
+  query: IncidenceCanonicalSpatialQuery
+): Promise<IncidenceCanonicalSpatialQuery> {
+  if (query.mode !== "CORRIDOR_COVERAGE" || query.geometry.type !== "LineString") {
+    return query;
+  }
+
+  const lineString = query.geometry as IncidenceLineStringGeometry;
+  const corridor = await buildStreetAnalyticalCorridor({
+    geometry: {
+      type: "MultiLineString",
+      coordinates: [lineString.coordinates],
+    },
+    widthMeters: query.metadata.corridorWidthMeters,
+  });
+
+  return {
+    ...query,
+    geometry: corridor.corridorGeometry,
+    metadata: {
+      ...query.metadata,
+      corridorWidthMeters: corridor.widthMeters,
+      limitations: [
+        ...(query.metadata.limitations ?? []),
+        "CORRIDOR_LINESTRING_BUFFERED_WITH_POSTGIS_GEOGRAPHY",
+      ],
+    },
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as IncidenciaRequestBody;
+    let spatialQueryMetadata: Record<string, unknown> | null = null;
+    let queryInput = null;
+
+    if (body.canonicalSpatialQuery) {
+      const canonicalSpatialQuery = await prepareCanonicalSpatialQueryForAdapter(
+        body.canonicalSpatialQuery
+      );
+      const adapted = buildCrimeQueryInputFromCanonicalSpatialQuery(
+        canonicalSpatialQuery,
+        {
+          allowLegacyFallback: body.allowLegacyFallback,
+          startDate: body.startDate ?? null,
+          endDate: body.endDate ?? null,
+          incidentTypes: Array.isArray(body.incidentTypes) ? body.incidentTypes : [],
+          requestedCoverage: body.requestedCoverage ?? null,
+        }
+      );
+      spatialQueryMetadata = adapted.metadata;
+      queryInput = adapted.crimeQueryInput;
+    }
+
     const lat = toFiniteNumber(body.lat);
     const lng = toFiniteNumber(body.lng);
-
-    if (lat == null || lng == null) {
+    if (!queryInput && (lat == null || lng == null)) {
       return NextResponse.json(
         { success: false, error: "Se requieren lat y lng válidos." },
         { status: 400 }
       );
     }
 
-    const result = await queryCrimeIncidence({
-      lat,
-      lng,
-      radiusMeters: toFiniteNumber(body.radiusMeters) ?? 1000,
-      allowLegacyFallback: body.allowLegacyFallback,
-      startDate: body.startDate ?? null,
-      endDate: body.endDate ?? null,
-      incidentTypes: Array.isArray(body.incidentTypes) ? body.incidentTypes : [],
-      requestedCoverage: body.requestedCoverage ?? null,
-    });
+    const result = await queryCrimeIncidence(
+      queryInput ?? {
+        lat: lat as number,
+        lng: lng as number,
+        radiusMeters: toFiniteNumber(body.radiusMeters) ?? 1000,
+        allowLegacyFallback: body.allowLegacyFallback,
+        startDate: body.startDate ?? null,
+        endDate: body.endDate ?? null,
+        incidentTypes: Array.isArray(body.incidentTypes) ? body.incidentTypes : [],
+        requestedCoverage: body.requestedCoverage ?? null,
+      }
+    );
 
     return NextResponse.json(
-      result,
+      spatialQueryMetadata ? { ...result, spatialQueryMetadata } : result,
       {
         headers: {
           "Access-Control-Allow-Origin": "*",

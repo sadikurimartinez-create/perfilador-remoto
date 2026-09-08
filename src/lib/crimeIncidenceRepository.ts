@@ -51,6 +51,9 @@ export type CrimeQueryResult = {
   error?: string;
 };
 
+export const CSV_LEGACY_POLYGON_UNSUPPORTED_ERROR =
+  "CSV_LEGACY_FALLBACK_POLYGON_NOT_SUPPORTED_NO_GEOMETRY_DEGRADATION";
+
 function configuredDatasetIdentity(result: CrimeQueryResult): CrimeDatasetIdentity {
   return buildCrimeIncidenceDatasetIdentity({
     config: readCrimeIncidenceDatasetProvenanceConfig(),
@@ -362,6 +365,18 @@ export function queryCsvLegacyCrimeIncidence(input: CrimeQueryInput): CrimeQuery
     });
   }
 
+  if (input.spatialFilter?.type === "POLYGON") {
+    return emptyResult({
+      ...input,
+      radiusMeters,
+      coverageStatus,
+      querySource: "CSV_LEGACY_FALLBACK",
+      sourceStatus: "FAILED",
+      dataset: "incidencia_csv_files",
+      error: CSV_LEGACY_POLYGON_UNSUPPORTED_ERROR,
+    });
+  }
+
   if (input.requestedCoverage && input.requestedCoverage !== coverageStatus) {
     return emptyResult({
       ...input,
@@ -491,7 +506,7 @@ export async function queryCrimeIncidence(input: CrimeQueryInput): Promise<Crime
   const legacy = queryCsvLegacyCrimeIncidence(input);
   const result: CrimeQueryResult = {
     ...legacy,
-    error: postgis.error,
+    error: legacy.error || postgis.error,
     lineage: {
       ...legacy.lineage,
       filters: {

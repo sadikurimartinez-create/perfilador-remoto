@@ -7,6 +7,8 @@ import {
 type StreetCandidatesRequestBody = {
   street?: unknown;
   municipality?: unknown;
+  neighborhood?: unknown;
+  neighborhoodCode?: unknown;
 };
 
 export type StreetCandidatesHandlerDependencies = {
@@ -14,6 +16,8 @@ export type StreetCandidatesHandlerDependencies = {
     input: {
       street: string;
       municipality?: string | null;
+      neighborhood?: string | null;
+      neighborhoodCode?: string | null;
     }
   ) => Promise<IncidenceStreetCandidateLookupResult>;
 };
@@ -36,6 +40,8 @@ export async function handleStreetCandidatesPost(
 
     const street = normalizedOptionalText(body.street);
     const municipality = normalizedOptionalText(body.municipality);
+    const neighborhood = normalizedOptionalText(body.neighborhood);
+    const neighborhoodCode = normalizedOptionalText(body.neighborhoodCode);
 
     if (!street) {
       return NextResponse.json(
@@ -56,6 +62,8 @@ export async function handleStreetCandidatesPost(
     const result = await resolveStreetCandidates({
       street,
       municipality,
+      neighborhood,
+      neighborhoodCode,
     });
 
     return NextResponse.json(

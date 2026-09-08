@@ -184,6 +184,109 @@ describe("ADR-020.21 Fase 2 - Canonical persistence and query reconciliation", (
     expect(result.lineage.filters.postgisStatus).toBe("NOT_CONFIGURED");
   });
 
+  test("TEST C1 POLYGON cannot degrade to radial CSV legacy fallback", async () => {
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(
+      legacyFile,
+      "INCIDENTE,FECHA,HORA,LAT,LONG\nRobo,2026-07-01,7,21.8818,-102.2916\n",
+      "utf8"
+    );
+    const { queryCrimeIncidence, CSV_LEGACY_POLYGON_UNSUPPORTED_ERROR } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      radiusMeters: 1000,
+      spatialFilter: {
+        type: "POLYGON",
+        coordinates: [
+          [-102.30, 21.88],
+          [-102.29, 21.88],
+          [-102.29, 21.89],
+          [-102.30, 21.88],
+        ],
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.querySource).toBe("CSV_LEGACY_FALLBACK");
+    expect(result.sourceStatus).toBe("FAILED");
+    expect(result.coverageStatus).toBe("IN_COVERAGE");
+    expect(result.data).toEqual([]);
+    expect(result.error).toBe(CSV_LEGACY_POLYGON_UNSUPPORTED_ERROR);
+    expect(result.lineage.querySource).toBe("CSV_LEGACY_FALLBACK");
+    expect(result.lineage.filters.postgisStatus).toBe("NOT_CONFIGURED");
+  });
+
+  test("TEST C2 POINT RADIUS keeps legacy CSV fallback behavior", async () => {
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(
+      legacyFile,
+      "INCIDENTE,FECHA,HORA,LAT,LONG\nRobo,2026-07-01,7,21.8818,-102.2916\n",
+      "utf8"
+    );
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      spatialFilter: {
+        type: "RADIUS",
+        lat: 21.8818,
+        lng: -102.2916,
+        radiusMeters: 1000,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.querySource).toBe("CSV_LEGACY_FALLBACK");
+    expect(result.sourceStatus).toBe("CSV_LEGACY_FALLBACK");
+    expect(result.data).toHaveLength(1);
+    expect(result.lineage.querySource).toBe("CSV_LEGACY_FALLBACK");
+  });
+
+  test("TEST C3 POLYGON uses PostGIS when canonical database is available", async () => {
+    process.env.DATABASE_URL = "postgresql://configured-for-test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          incidente: "Robo",
+          fecha: "2026-07-01",
+          hora: "07:00:00",
+          rango_horario: "Matutino",
+          nom_asen: "Centro",
+          fuente_archivo: "db.csv",
+          source_fingerprint: "f".repeat(64),
+          dataset_version: "2026-TEST-v1",
+          lat: 21.8818,
+          lng: -102.2916,
+          distancia_m: null,
+        },
+      ],
+    });
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      spatialFilter: {
+        type: "POLYGON",
+        coordinates: [
+          [-102.30, 21.88],
+          [-102.29, 21.88],
+          [-102.29, 21.89],
+          [-102.30, 21.88],
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.querySource).toBe("POSTGIS");
+    expect(result.sourceStatus).toBe("POSTGIS_AVAILABLE");
+    expect(result.data).toHaveLength(1);
+    expect(String(mockQuery.mock.calls[0][0])).toContain("ST_Intersects");
+  });
+
   test("TEST D CSV fallback cannot be presented as PostGIS response", async () => {
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(
