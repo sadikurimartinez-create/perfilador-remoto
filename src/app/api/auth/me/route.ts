@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifySession } from "@/utils/authCrypto";
+import { signSession, verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
 import { getFirebaseServerDb } from "@/lib/firebaseServer";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
 export const dynamic = "force-dynamic";
+const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 2;
 
 const AUTH_PROFILE_FIELDS = new Set([
   "passwordHash",
@@ -64,7 +65,28 @@ function sanitizeInstitutionalProfile(profile: Record<string, any>) {
   return sanitized;
 }
 
-export async function GET() {
+function renewSessionCookie(req: Request, payload: any) {
+  const protocol = req.headers.get("x-forwarded-proto");
+  const isSecure = protocol === "https";
+  const sessionToken = signSession({
+    id: payload.id,
+    username: payload.username,
+    role: payload.role,
+    name: payload.name,
+  });
+
+  cookies().set({
+    name: "ceipol_session",
+    value: sessionToken,
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
+  });
+}
+
+export async function GET(req: Request) {
   try {
     const cookieStore = cookies();
     const sessionCookie = cookieStore.get("ceipol_session");
@@ -77,6 +99,7 @@ export async function GET() {
     if (!payload || !payload.username) {
       return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
     }
+    renewSessionCookie(req, payload);
 
     let pgUser = null;
     let pgError = null;

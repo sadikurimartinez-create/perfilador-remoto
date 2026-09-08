@@ -27,6 +27,11 @@ import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
 import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
+import {
+  GENERATE_PROFILE_SESSION_EXPIRED_MESSAGE,
+  assertGenerateProfileServerSession,
+  shouldRetryGenerateProfileRequest,
+} from "@/utils/generateProfileAuthPolicy";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { assessReportReadiness } from "@/utils/reportReadyGovernance";
 import {
@@ -609,7 +614,7 @@ export function PhotoAlbum({
   projectId,
   onSaveAnalysisToCloud,
 }: PhotoAlbumProps = {}) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const {
     project,
     album: rawAlbum,
@@ -1528,6 +1533,17 @@ const hasMinimumPhotos =
       setShowConfigModal(false);
       return;
     }
+    try {
+      if (refreshUser) {
+        await refreshUser();
+      }
+      await assertGenerateProfileServerSession();
+    } catch (err: any) {
+      console.warn("[confirmAndGenerateProfile] Sesión no válida para generar informe:", err);
+      setError(err?.message || GENERATE_PROFILE_SESSION_EXPIRED_MESSAGE);
+      setShowConfigModal(false);
+      return;
+    }
     setShowConfigModal(false);
     setError(null);
     setIsGeneratingAI(true);
@@ -1730,6 +1746,9 @@ const hasMinimumPhotos =
 
               addLog(`⚠️ Intento ${attempt} fallido con status ${res.status}.`);
               console.warn(`[confirmAndGenerateProfile] Intento ${attempt} fallido con status ${res.status}.`);
+              if (!shouldRetryGenerateProfileRequest(res.status, attempt, retries)) {
+                break;
+              }
             } catch (err) {
               addLog(`⚠️ Intento ${attempt} fallido por error de red/fetch.`);
               console.warn(`[confirmAndGenerateProfile] Intento ${attempt} arrojó error de red/fetch:`, err);
