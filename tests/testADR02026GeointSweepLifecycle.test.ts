@@ -9,6 +9,7 @@ import {
   rehydrateGeointSweepLifecycleRecord,
   transitionGeointSweepLifecycle,
 } from "../src/utils/geointSweepLifecycle";
+import { containsUndefinedDeep, makeFirestoreSafe } from "../src/utils/firestoreSafe";
 
 describe("ADR-020.26 - GEOINT Sweep lifecycle integration", () => {
   test("TEST 1 valid progression reaches CERTIFIED only through valid transitions", () => {
@@ -249,5 +250,135 @@ describe("ADR-020.26 - GEOINT Sweep lifecycle integration", () => {
     expect(updateSweepBlock).toContain("...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {})");
     expect(registerSweepBlock).not.toContain("lineageStatus: lifecycle.lineageStatus,");
     expect(updateSweepBlock).not.toContain("lineageStatus: lifecycle.lineageStatus,");
+  });
+
+  test("TEST 15 Firestore-safe boundary strips undefined deeply and preserves supported values", () => {
+    const capturedAt = new Date("2026-08-29T12:00:00.000Z");
+    class FirestoreValueLike {
+      constructor(public readonly value: string) {}
+    }
+    const firestoreValue = new FirestoreValueLike("preserved-prototype");
+
+    const payload = makeFirestoreSafe({
+      sweeps: [
+        {
+          id: "legacy-sweep",
+          status: "Pendiente",
+          omittedTopLevel: undefined,
+          nullable: null,
+          capturedAt,
+          firestoreValue,
+          metadata: {
+            keep: "ok",
+            drop: undefined,
+            nested: {
+              keepNull: null,
+              dropNested: undefined,
+            },
+          },
+          lineage: [
+            undefined,
+            { id: "lineage-1", source: "legacy", drop: undefined },
+          ],
+        },
+      ],
+    });
+
+    expect(containsUndefinedDeep(payload)).toBe(false);
+    expect("omittedTopLevel" in payload.sweeps[0]).toBe(false);
+    expect("drop" in payload.sweeps[0].metadata).toBe(false);
+    expect("dropNested" in payload.sweeps[0].metadata.nested).toBe(false);
+    expect(payload.sweeps[0].nullable).toBeNull();
+    expect(payload.sweeps[0].capturedAt).toBe(capturedAt);
+    expect(payload.sweeps[0].firestoreValue).toBe(firestoreValue);
+    expect(payload.sweeps[0].lineage).toEqual([{ id: "lineage-1", source: "legacy" }]);
+  });
+
+  test("TEST 16 registerSweep/updateSweep payloads rewrite sweeps without undefined at any depth", () => {
+    const lifecycle = createHumanTriggeredRunningSweepLifecycle({
+      sweepId: "sweep-new",
+      expedienteId: "exp-firestore-safe",
+    });
+    const legacySweep = {
+      id: "legacy-sweep",
+      relevance: "Media",
+      metadata: {
+        ok: true,
+        unsupported: undefined,
+      },
+      provenance: [
+        { source: "legacy-csv", extra: undefined },
+        undefined,
+      ],
+    };
+    const newSweep = {
+      id: "sweep-new",
+      engine: "SCINCE",
+      source: "INEGI",
+      type: "Contextual",
+      status: "Pendiente",
+      relevance: "Alta",
+      data: "dato real",
+      context: "",
+      timestamp: 1,
+      lifecycle,
+      lifecycleStatus: lifecycle.status,
+      lifecycleVersion: lifecycle.version,
+      lineageStatus: undefined,
+      retryPolicy: undefined,
+    };
+
+    const registerPayload = {
+      sweeps: makeFirestoreSafe([legacySweep, newSweep]),
+    };
+
+    expect(containsUndefinedDeep(registerPayload)).toBe(false);
+    expect("unsupported" in registerPayload.sweeps[0].metadata).toBe(false);
+    expect(registerPayload.sweeps[0].provenance).toEqual([{ source: "legacy-csv" }]);
+    expect("lineageStatus" in registerPayload.sweeps[1]).toBe(false);
+    expect("retryPolicy" in registerPayload.sweeps[1]).toBe(false);
+
+    const updates = makeFirestoreSafe({
+      relevance: undefined,
+      status: "Integrado",
+      metadata: {
+        reviewed: true,
+        drop: undefined,
+      },
+    });
+    const updatedSweep = {
+      ...legacySweep,
+      ...updates,
+    };
+    const updatePayload = {
+      sweeps: makeFirestoreSafe([updatedSweep, newSweep]),
+    };
+
+    expect(containsUndefinedDeep(updatePayload)).toBe(false);
+    expect(updatePayload.sweeps[0].relevance).toBe("Media");
+    expect(updatePayload.sweeps[0].metadata).toEqual({ reviewed: true });
+  });
+
+  test("TEST 17 ProjectContext persists sweeps through the Firestore-safe boundary", () => {
+    const projectContext = fs.readFileSync(
+      path.join(process.cwd(), "src/context/ProjectContext.tsx"),
+      "utf8"
+    );
+    const registerSweepBlock = projectContext.slice(
+      projectContext.indexOf("const registerSweep = useCallback"),
+      projectContext.indexOf("const updateSweep = useCallback")
+    );
+    const updateSweepBlock = projectContext.slice(
+      projectContext.indexOf("const updateSweep = useCallback"),
+      projectContext.indexOf("const inSituOrchestrationItems = useMemo")
+    );
+
+    expect(projectContext).toContain('import { makeFirestoreSafe } from "@/utils/firestoreSafe";');
+    expect(registerSweepBlock).toContain("const updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];");
+    expect(registerSweepBlock).toContain("transaction.update(projectRef, updateData);");
+    expect(updateSweepBlock).toContain("const firestoreSafeUpdates = makeFirestoreSafe(updates) as Partial<SweepIntegrationItem>;");
+    expect(updateSweepBlock).toContain("updatedSweeps = makeFirestoreSafe(serverSweeps.map");
+    expect(updateSweepBlock).toContain("transaction.update(projectRef, {");
+    expect(updateSweepBlock).toContain("sweeps: updatedSweeps");
   });
 });

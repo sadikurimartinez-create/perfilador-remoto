@@ -76,6 +76,7 @@ import {
   buildNumeroExpedienteFields,
   resolvePerfiladorIniciales,
 } from "@/utils/documentIdentity";
+import { makeFirestoreSafe } from "@/utils/firestoreSafe";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -2447,7 +2448,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       geographyType: params.geographyType ?? project.canonicalGeography?.type ?? null,
     };
 
-    const updatedSweeps = [...currentSweeps, newSweep];
+    const updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];
 
       try {
       const firestore = getDb();
@@ -2552,11 +2553,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const sweepToUpdate = currentSweeps.find(s => s.id === sweepId);
     if (!sweepToUpdate) throw new Error("Barrido no encontrado.");
 
-    let lifecycle = updates.lifecycle || sweepToUpdate.lifecycle || null;
+    const firestoreSafeUpdates = makeFirestoreSafe(updates) as Partial<SweepIntegrationItem>;
+    let lifecycle = firestoreSafeUpdates.lifecycle || sweepToUpdate.lifecycle || null;
     const validationTimestamp = new Date().toISOString();
     const validatorIdentity = buildRealValidatorIdentity(user);
 
-    if (updates.status === "Integrado" && lifecycle && lifecycle.status !== "CERTIFIED") {
+    if (firestoreSafeUpdates.status === "Integrado" && lifecycle && lifecycle.status !== "CERTIFIED") {
       if (lifecycle.status === "RUNNING") {
         lifecycle = transitionGeointSweepLifecycle(lifecycle, "COLLECTING", {
           expectedVersion: lifecycle.version,
@@ -2573,30 +2575,30 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
       if (lifecycle.status === "ANALYZING") {
         lifecycle = markGeointSweepReadyForHumanReview(lifecycle, {
-          aiQualityScore: updates.aiQualityScore ?? lifecycle.aiQualityScore ?? 0,
+          aiQualityScore: firestoreSafeUpdates.aiQualityScore ?? lifecycle.aiQualityScore ?? 0,
           expectedVersion: lifecycle.version,
           now: validationTimestamp,
         });
       }
       lifecycle = certifyGeointSweepWithHumanApproval(lifecycle, {
-        validatedAt: updates.validatedAt || validationTimestamp,
-        validatedBy: updates.validatedBy ?? validatorIdentity,
+        validatedAt: firestoreSafeUpdates.validatedAt || validationTimestamp,
+        validatedBy: firestoreSafeUpdates.validatedBy ?? validatorIdentity,
         expectedVersion: lifecycle.version,
       });
     }
 
-    if (updates.status === "Rechazado" && lifecycle && lifecycle.status !== "FAILED") {
+    if (firestoreSafeUpdates.status === "Rechazado" && lifecycle && lifecycle.status !== "FAILED") {
       lifecycle = rejectGeointSweepWithHumanDecision(lifecycle, {
-        reason: updates.justification || "HUMAN_REJECTED_SWEEP",
-        validatedAt: updates.validatedAt || validationTimestamp,
-        validatedBy: updates.validatedBy ?? validatorIdentity,
+        reason: firestoreSafeUpdates.justification || "HUMAN_REJECTED_SWEEP",
+        validatedAt: firestoreSafeUpdates.validatedAt || validationTimestamp,
+        validatedBy: firestoreSafeUpdates.validatedBy ?? validatorIdentity,
         expectedVersion: lifecycle.version,
       });
     }
 
     const updatedSweep = {
       ...sweepToUpdate,
-      ...updates,
+      ...firestoreSafeUpdates,
       ...(lifecycle ? {
         lifecycle,
         lifecycleStatus: lifecycle.status,
@@ -2615,7 +2617,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {}),
       } : {}),
     } as SweepIntegrationItem;
-    let updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);
+    let updatedSweeps = makeFirestoreSafe(currentSweeps.map(s => s.id === sweepId ? updatedSweep : s)) as SweepIntegrationItem[];
 
 
     try {
@@ -2635,7 +2637,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           throw new Error(`GEOINT_SWEEP_VERSION_CONFLICT:${serverVersion}:LOCAL_${localVersion}`);
         }
 
-        updatedSweeps = serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s);
+        updatedSweeps = makeFirestoreSafe(serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s)) as SweepIntegrationItem[];
         transaction.update(projectRef, {
           sweeps: updatedSweeps
         });
