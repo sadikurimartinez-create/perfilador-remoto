@@ -118,6 +118,29 @@ function getGoogleEvidence(capture: any): GoogleIntelligenceEvidence | null {
   return capture?.googleIntelligenceEvidence || capture?.metadata?.googleIntelligenceEvidence || null;
 }
 
+function resolveFiniteNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function resolveApiError(payload: any, fallback: string): string {
+  if (payload?.error && payload?.details) return `${payload.error}: ${payload.details}`;
+  if (payload?.error) return String(payload.error);
+  if (payload?.details) return String(payload.details);
+  return fallback;
+}
+
+async function readApiResponse(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(resolveApiError(payload, fallback));
+  }
+  return payload;
+}
+
 function getCandidateDisplay(capture: any) {
   const candidate = getGoogleCandidateFinding(capture);
   const evidence = getGoogleEvidence(capture);
@@ -194,13 +217,20 @@ export function StreetViewFindingsPanel({
       return;
     }
 
+    const lat = resolveFiniteNumber(selectedCapture.latitude, selectedCapture.lat, selectedCapture.geometry?.lat, selectedCapture.coordenadas?.lat);
+    const lng = resolveFiniteNumber(selectedCapture.longitude, selectedCapture.lng, selectedCapture.geometry?.lng, selectedCapture.coordenadas?.lng);
+    if (lat === null || lng === null) {
+      setErrorMessage("El hallazgo Street View no contiene geolocalización válida para convalidación.");
+      return;
+    }
+
+    const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename || `find-${Date.now()}`;
+    const sourceEvidenceId = selectedCapture.sourceEvidenceId || selectedCapture.evidenceId || selectedCapture.evidenciaId || selectedCapture.captureId || captureId;
+    const geographyId = selectedCapture.geographyId || selectedCapture.canonicalGeography?.geographyId || selectedCapture.metadata?.geographyId || null;
+    const geographyType = selectedCapture.geographyType || selectedCapture.canonicalGeography?.type || selectedCapture.metadata?.geographyType || null;
+
     setIsSubmitting(true);
     setErrorMessage(null);
-
-    const lat = selectedCapture.latitude || selectedCapture.lat || selectedCapture.geometry?.lat || 0;
-    const lng = selectedCapture.longitude || selectedCapture.lng || selectedCapture.geometry?.lng || 0;
-    const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename || `find-${Date.now()}`;
-    const sourceEvidenceId = selectedCapture.sourceEvidenceId || selectedCapture.evidenceId || selectedCapture.evidenciaId || selectedCapture.captureId || null;
     const candidate = getGoogleCandidateFinding(selectedCapture);
     const approvedCandidate = candidate
       ? approveGoogleCandidateFinding(candidate, {
@@ -212,6 +242,8 @@ export function StreetViewFindingsPanel({
       findingId: captureId,
       evidenceId: sourceEvidenceId,
       sourceReference: selectedCapture.panoId || selectedCapture.sourceReference || selectedCapture.imageReference || selectedCapture.file_url,
+      geographyId,
+      geographyType,
     });
     const lineageValidation = validateLineage(lineage);
 
@@ -239,7 +271,7 @@ export function StreetViewFindingsPanel({
 
     try {
       // 1. Registrar la evidencia aprobada en el backend
-      await fetch("/api/streetview/findings", {
+      const postResponse = await fetch("/api/streetview/findings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -260,6 +292,7 @@ export function StreetViewFindingsPanel({
           limitations: approvedCandidate?.limitations || selectedCapture.limitations || [],
           googleIntelligenceEvidence: getGoogleEvidence(selectedCapture),
           googleCandidateFinding: approvedCandidate,
+          geographyId,
           coordenadas: { lat, lng },
           imagen: approvedEvidence.imageReference,
           heading: approvedEvidence.geometry?.heading,
@@ -272,10 +305,11 @@ export function StreetViewFindingsPanel({
           usuarioRevision: validatorId || null,
           origenRevision: "BARRIDO_AUTOMATICO"
         })
-      }).catch((err) => console.warn("Muted fetch error:", err));
+      });
+      const postPayload = await readApiResponse(postResponse, "Error al registrar hallazgo de StreetView");
 
       // 2. Actualizar estado del hallazgo analítico origen
-      await fetch(`/api/expedientes/${expedienteId}/evidencias/streetview/${captureId}`, {
+      const patchResponse = await fetch(`/api/expedientes/${expedienteId}/evidencias/streetview/${captureId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -289,13 +323,14 @@ export function StreetViewFindingsPanel({
           validatedBy: validatorId || null,
           validationDate: approvedEvidence.validationDate
         })
-      }).catch((err) => console.warn("Muted patch error:", err));
+      });
+      await readApiResponse(patchResponse, "Error al actualizar evidencia StreetView");
 
       if (onCaptureStatusChange) {
         onCaptureStatusChange(captureId, GeointGovernanceStatus.APPROVED_EVIDENCE);
       }
       if (onFindingCreated) {
-        onFindingCreated(approvedEvidence);
+        onFindingCreated(postPayload?.finding || approvedEvidence);
       }
 
       // Remover de la lista de pendientes local
@@ -304,7 +339,7 @@ export function StreetViewFindingsPanel({
       setValidationComment("");
     } catch (err) {
       console.error("Error al aprobar hallazgo (ADR-016):", err);
-      setErrorMessage("Error de red al registrar la convalidación. Intente nuevamente.");
+      setErrorMessage(err instanceof Error ? err.message : "Error de red al registrar la convalidación. Intente nuevamente.");
     } finally {
       setIsSubmitting(false);
     }

@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { StreetViewFindingService } from "@/services/streetViewFindingService";
+import {
+  isSyntheticStreetViewReviewer,
+  resolveStreetViewSessionIdentity,
+} from "@/utils/streetViewApiAuth";
+
+function streetViewPatchStatus(message: string): number {
+  if (message.startsWith("STREET_VIEW_FINDING_PROMOTION_BLOCKED")) return 400;
+  return 500;
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -18,21 +28,21 @@ export async function PATCH(
 
     const body = await req.json();
     const estado = body.estado || body.estado_revision || body.status || "PENDIENTE_REVISION";
-    const usuarioRevision = String(
-      body.usuarioRevision || body.validatedBy || body.rejectedBy || ""
-    ).trim();
+    const reviewerFromClient = body.usuarioRevision || body.validatedBy || body.rejectedBy;
     const validationComment = body.validationComment || body.rejectionComment || body.comentario || "";
-    const syntheticReviewerIds = new Set([
-      "ANALISTA",
-      "ANALISTA CEIPOL",
-      "US-CEIPOL-ANALISTA",
-      "UNAVAILABLE",
-    ]);
 
-    if (!usuarioRevision || syntheticReviewerIds.has(usuarioRevision.toUpperCase())) {
+    if (isSyntheticStreetViewReviewer(reviewerFromClient)) {
       return NextResponse.json(
-        { error: "La identidad real de la persona revisora es obligatoria para registrar una validaci?n humana." },
+        { error: "STREETVIEW_HUMAN_IDENTITY_SYNTHETIC" },
         { status: 400 }
+      );
+    }
+
+    const identity = resolveStreetViewSessionIdentity(cookies().get("ceipol_session")?.value);
+    if (!identity) {
+      return NextResponse.json(
+        { error: "INVALID_SESSION" },
+        { status: 401 }
       );
     }
 
@@ -41,7 +51,7 @@ export async function PATCH(
       captureId,
       {
         estado,
-        usuarioRevision,
+        usuarioRevision: identity.username,
         validationComment
       }
     );
@@ -54,9 +64,10 @@ export async function PATCH(
     });
   } catch (error: any) {
     console.error("[API PATCH streetview capture] Error:", error);
+    const details = error?.message || "INTERNAL_STREETVIEW_EVIDENCE_ERROR";
     return NextResponse.json(
-      { error: "Error al actualizar evidencia StreetView", details: error?.message },
-      { status: 500 }
+      { error: streetViewPatchStatus(details) === 500 ? "Error al actualizar evidencia StreetView" : details, details },
+      { status: streetViewPatchStatus(details) }
     );
   }
 }

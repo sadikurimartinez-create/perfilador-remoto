@@ -58,6 +58,11 @@ export interface StreetViewFinding {
   usuarioRevision?: string;
   validationComment?: string;
   origenRevision?: "BARRIDO_AUTOMATICO" | "MANUAL";
+  createdBy?: string;
+  validatedBy?: any;
+  validationDate?: string;
+  humanValidationStatus?: string;
+  validationSource?: string;
   supportingEvidenceIds?: string[];
   lineage?: CanonicalLineageNode[];
   lineageStatus?: LineageStatus | "COMPLETE" | "PARTIAL" | "LEGACY_PARTIAL" | "UNAVAILABLE";
@@ -99,19 +104,21 @@ export function normalizeStreetViewFindingForPersistence(
   const lat = rawLat == null || rawLat === "" ? Number.NaN : Number(rawLat);
   const lng = rawLng == null || rawLng === "" ? Number.NaN : Number(rawLng);
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || (lat === 0 && lng === 0)) {
     throw new Error("STREETVIEW_FINDING_GEO_REQUIRED");
   }
 
+  const normalizedStatus = normalizeGeointGovernanceStatus(data.estado || GeointGovernanceStatus.PENDING_REVIEW);
   const traceabilityId =
     present(data.traceabilityId) ||
-    buildGeointTraceabilityId("trace-finding", [data.expedienteId, id]);
+    (normalizedStatus === GeointGovernanceStatus.APPROVED_EVIDENCE
+      ? ""
+      : buildGeointTraceabilityId("trace-finding", [data.expedienteId, id]));
   const sourceEvidenceId =
     present(data.sourceEvidenceId) ||
     present(data.captureId) ||
     present(data.evidenciaId);
   const geographyId = present(data.geographyId) || null;
-  const normalizedStatus = normalizeGeointGovernanceStatus(data.estado || GeointGovernanceStatus.PENDING_REVIEW);
   const lineageStatus = data.lineageStatus || (sourceEvidenceId && geographyId ? "COMPLETE" : "LEGACY_PARTIAL");
 
   const finding: StreetViewFinding = {
@@ -137,6 +144,11 @@ export function normalizeStreetViewFindingForPersistence(
     usuarioRevision: data.usuarioRevision || "",
     validationComment: data.validationComment || "",
     origenRevision: data.origenRevision || "BARRIDO_AUTOMATICO",
+    ...(data.createdBy ? { createdBy: data.createdBy } : {}),
+    ...(data.validatedBy ? { validatedBy: data.validatedBy } : {}),
+    ...(data.validationDate ? { validationDate: data.validationDate } : {}),
+    ...(data.humanValidationStatus ? { humanValidationStatus: data.humanValidationStatus } : {}),
+    ...(data.validationSource ? { validationSource: data.validationSource } : {}),
     supportingEvidenceIds: data.supportingEvidenceIds || (sourceEvidenceId ? [sourceEvidenceId] : []),
     lineage: data.lineage || [],
     lineageStatus,
