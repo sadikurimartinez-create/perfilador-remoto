@@ -209,4 +209,45 @@ describe("ADR-020.26 - GEOINT Sweep lifecycle integration", () => {
     expect(JSON.stringify(withoutIdentity)).not.toContain("system");
     expect(JSON.stringify(withoutIdentity)).not.toContain("unknown-user");
   });
+
+  test("TEST 14 Firestore sweep lifecycle omits undefined optional fields by construction", () => {
+    const running = createHumanTriggeredRunningSweepLifecycle({
+      sweepId: "sweep-firestore-safe",
+      expedienteId: "exp-firestore-safe",
+    });
+
+    expect("lineageStatus" in running).toBe(false);
+    expect("retryPolicy" in running).toBe(false);
+
+    const withLineageStatus = createGeointSweepLifecycleRecord({
+      sweepId: "sweep-lineage",
+      expedienteId: "exp-lineage",
+      lineageStatus: "SUPPORTED",
+    });
+    expect(withLineageStatus.lineageStatus).toBe("SUPPORTED");
+
+    const failed = transitionGeointSweepLifecycle(running, "FAILED", {
+      expectedVersion: running.version,
+      reason: "PROVIDER_TIMEOUT",
+      retryPolicy: { allowRetry: true, maxAttempts: 2 },
+    });
+    expect(failed.retryPolicy).toEqual({ allowRetry: true, maxAttempts: 2 });
+
+    const projectContext = fs.readFileSync(
+      path.join(process.cwd(), "src/context/ProjectContext.tsx"),
+      "utf8"
+    );
+    const registerSweepBlock = projectContext.slice(
+      projectContext.indexOf("const registerSweep = useCallback"),
+      projectContext.indexOf("const updateSweep = useCallback")
+    );
+    const updateSweepBlock = projectContext.slice(
+      projectContext.indexOf("const updateSweep = useCallback"),
+      projectContext.indexOf("const value = useMemo")
+    );
+    expect(registerSweepBlock).toContain("...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {})");
+    expect(updateSweepBlock).toContain("...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {})");
+    expect(registerSweepBlock).not.toContain("lineageStatus: lifecycle.lineageStatus,");
+    expect(updateSweepBlock).not.toContain("lineageStatus: lifecycle.lineageStatus,");
+  });
 });

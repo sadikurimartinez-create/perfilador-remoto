@@ -2442,7 +2442,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       outputEvidenceIds: lifecycle.outputEvidenceIds,
       outputFindingIds: lifecycle.outputFindingIds,
       lineage: lifecycle.lineage,
-      lineageStatus: lifecycle.lineageStatus,
+      ...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {}),
       geographyId: params.geographyId ?? project.canonicalGeography?.geographyId ?? null,
       geographyType: params.geographyType ?? project.canonicalGeography?.type ?? null,
     };
@@ -2612,7 +2612,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         outputEvidenceIds: lifecycle.outputEvidenceIds,
         outputFindingIds: lifecycle.outputFindingIds,
         lineage: lifecycle.lineage,
-        lineageStatus: lifecycle.lineageStatus,
+        ...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {}),
       } : {}),
     } as SweepIntegrationItem;
     let updatedSweeps = currentSweeps.map(s => s.id === sweepId ? updatedSweep : s);

@@ -186,7 +186,7 @@ export function createGeointSweepLifecycleRecord(input: {
     outputEvidenceIds: input.outputEvidenceIds || [],
     outputFindingIds: input.outputFindingIds || [],
     lineage: input.lineage || [],
-    lineageStatus: input.lineageStatus,
+    ...(input.lineageStatus !== undefined ? { lineageStatus: input.lineageStatus } : {}),
     transitionHistory: [{ fromStatus: null, toStatus: "REQUESTED", at: now, reason: "HUMAN_REQUEST" }],
   };
   return record;
@@ -218,8 +218,10 @@ export function transitionGeointSweepLifecycle(
 
   const now = options.now || isoNow();
   const nextAttempt = record.status === "FAILED" && toStatus === "REQUESTED" ? record.attempt + 1 : record.attempt;
+  const retryPolicy = options.retryPolicy || record.retryPolicy;
+  const { retryPolicy: _recordRetryPolicy, ...recordWithoutRetryPolicy } = record;
   return {
-    ...record,
+    ...recordWithoutRetryPolicy,
     status: toStatus,
     version: record.version + 1,
     updatedAt: now,
@@ -229,7 +231,7 @@ export function transitionGeointSweepLifecycle(
     attempt: nextAttempt,
     previousStatus: record.status,
     failureReason: toStatus === "FAILED" ? options.reason ?? "SWEEP_FAILED" : record.failureReason ?? null,
-    retryPolicy: options.retryPolicy || record.retryPolicy,
+    ...(retryPolicy !== undefined ? { retryPolicy } : {}),
     transitionHistory: [
       ...record.transitionHistory,
       { fromStatus: record.status, toStatus, at: now, reason: options.reason ?? null },
