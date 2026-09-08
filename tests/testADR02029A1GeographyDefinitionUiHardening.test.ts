@@ -17,6 +17,7 @@ function readSource(relativePath: string) {
 const p1 = { lat: 21.881, lng: -102.291 };
 const p2 = { lat: 21.882, lng: -102.292 };
 const p3 = { lat: 21.883, lng: -102.293 };
+const p4 = { lat: 21.884, lng: -102.294 };
 const photoPoint = { lat: 22.5, lng: -101.5 };
 
 describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI hardening", () => {
@@ -149,7 +150,8 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     expect(source).toContain("if (geometryType === \"lineal\") return 2");
     expect(source).toContain("if (geometryType === \"poligono\") return 3");
     expect(source).toContain("return 1");
-    expect(source).toContain("!hasRequiredRectorPhotos || !creationPreview.canConfirm");
+    expect(source).toContain("const hasRequiredPhotosToCreate = validRectorPhotoCount(photosToCreate) >= requiredRectorPhotos");
+    expect(source).toContain("!hasRequiredPhotosToCreate || !creationPreview.canConfirm");
   });
 
   test("TEST 19 rector photos drive individual, corridor, and polygon draft points", () => {
@@ -158,5 +160,51 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     expect(source).toContain("geometryType === \"individual\" ? points.slice(-1) : points");
     expect(source).toContain("photo.gpsSource !== \"NO_GPS\"");
     expect(source).toContain("isValidLatLng({ lat: photo.lat, lng: photo.lng })");
+  });
+
+  test("TEST 20 pending project photo bridge preserves metadata without widening upload metadata", () => {
+    const projectList = readSource("src/components/ProjectList.tsx");
+    const capture = readSource("src/components/CaptureAndAddPhoto.tsx");
+    const bridgeUpload = capture.slice(
+      capture.indexOf("uploadAndAddPhoto(item.file, item.lat as number, item.lng as number"),
+      capture.indexOf("if (legacyFiles.length > 0)")
+    );
+
+    expect(projectList).toContain("(window as any).pendingProjectPhotos = photosToCreate.map(p => ({ ...p }))");
+    expect(projectList).not.toContain("pendingProjectPhotos = pendingPhotos.map(p => p.file)");
+    expect(capture).toContain("interface PendingProjectPhotoBridgeItem");
+    expect(capture).toContain("isPendingProjectPhotoBridgeItem");
+    expect(capture).toContain("typeof item.lat === \"number\"");
+    expect(capture).toContain("typeof item.lng === \"number\"");
+    expect(capture).toContain("Number.isFinite(item.lat)");
+    expect(capture).toContain("Number.isFinite(item.lng)");
+    expect(bridgeUpload).toContain("uploadAndAddPhoto(item.file, item.lat as number, item.lng as number");
+    expect(bridgeUpload).toContain("gpsSource: item.gpsSource || \"PENDING_PROJECT_GPS\"");
+    expect(bridgeUpload).not.toContain("captureSource: item.captureSource");
+  });
+
+  test("TEST 21 four polygon rector photos remain four points", () => {
+    const draft = updateDraftProjectGeography(createDraftProjectGeography("poligono"), [p1, p2, p3, p4]);
+    const preview = buildDraftGeographyPreview(confirmDraftProjectGeography(draft));
+    expect(preview.canConfirm).toBe(true);
+    expect(preview.points).toHaveLength(4);
+    expect(preview.points).toEqual([p1, p2, p3, p4]);
+  });
+
+  test("TEST 22 pending photo state and creation are guarded against stale/double execution", () => {
+    const source = readSource("src/components/ProjectList.tsx");
+    expect(source).toContain("pendingPhotosRef");
+    expect(source).toContain("pendingPhotosRef.current");
+    expect(source).toContain("isCreatingProjectRef");
+    expect(source).toContain("if (isCreatingProjectRef.current) return");
+    expect(source).toContain("isCreatingProjectRef.current = true");
+    expect(source).toContain("disabled={!nombreInput.trim() || isCreatingProject}");
+  });
+
+  test("TEST 23 legacy File pending bridge still uses processFiles fallback", () => {
+    const capture = readSource("src/components/CaptureAndAddPhoto.tsx");
+    expect(capture).toContain("function isLegacyFile");
+    expect(capture).toContain("legacyFiles");
+    expect(capture).toContain("processFiles(legacyFiles, false)");
   });
 });

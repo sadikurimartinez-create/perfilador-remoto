@@ -181,10 +181,13 @@ export function ProjectList() {
   const [draftLngInput, setDraftLngInput] = useState("");
   const [draftFeedback, setDraftFeedback] = useState("");
   const [draftWasConfirmed, setDraftWasConfirmed] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const isCreatingProjectRef = useRef(false);
   const draftPreview = buildDraftGeographyPreview(draftGeography);
   const geometryConfirmed = draftGeography.confirmed && draftPreview.canConfirm;
   const [isListening, setIsListening] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<PendingProjectPhoto[]>([]);
+  const pendingPhotosRef = useRef<PendingProjectPhoto[]>([]);
   const requiredRectorPhotos = minimumRectorPhotoCount(geometryType);
   const currentRectorPhotos = validRectorPhotoCount(pendingPhotos);
   const hasRequiredRectorPhotos = currentRectorPhotos >= requiredRectorPhotos;
@@ -406,7 +409,8 @@ export function ProjectList() {
       } satisfies PendingProjectPhoto;
     }));
 
-    const allPendingPhotos = [...pendingPhotos, ...newItems];
+    const allPendingPhotos = [...pendingPhotosRef.current, ...newItems];
+    pendingPhotosRef.current = allPendingPhotos;
     setPendingPhotos(allPendingPhotos);
 
     const rectorPoints = buildDraftPointsFromRectorPhotos(allPendingPhotos, geometryType);
@@ -440,6 +444,7 @@ export function ProjectList() {
     const updated = [...pendingPhotos];
     URL.revokeObjectURL(updated[index].url);
     updated.splice(index, 1);
+    pendingPhotosRef.current = updated;
     setPendingPhotos(updated);
     const rectorPoints = buildDraftPointsFromRectorPhotos(updated, geometryType);
     setDraftGeography(updateDraftProjectGeography(draftGeography, rectorPoints));
@@ -463,7 +468,10 @@ export function ProjectList() {
     setDraftLngInput("");
     setDraftFeedback("");
     pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
+    pendingPhotosRef.current = [];
     setPendingPhotos([]);
+    isCreatingProjectRef.current = false;
+    setIsCreatingProject(false);
     setShowPrompt(true);
   };
 
@@ -575,22 +583,29 @@ export function ProjectList() {
   };
   const handleConfirmarNombre = async () => {
     const nombre = nombreInput.trim();
+    if (isCreatingProjectRef.current) return;
     if (!nombre || !user) return;
+    isCreatingProjectRef.current = true;
+    setIsCreatingProject(true);
     try {
-      const rectorPoints = buildDraftPointsFromRectorPhotos(pendingPhotos, geometryType);
+      const photosToCreate = pendingPhotosRef.current;
+      const rectorPoints = buildDraftPointsFromRectorPhotos(photosToCreate, geometryType);
       const creationDraft = updateDraftProjectGeography(draftGeography, rectorPoints);
       const creationPreview = buildDraftGeographyPreview(creationDraft);
-      if (!hasRequiredRectorPhotos || !creationPreview.canConfirm) {
+      const hasRequiredPhotosToCreate = validRectorPhotoCount(photosToCreate) >= requiredRectorPhotos;
+      if (!hasRequiredPhotosToCreate || !creationPreview.canConfirm) {
         setDraftFeedback(
           `Debe capturar ${requiredRectorPhotos} fotografía(s) rectora(s) con coordenadas válidas antes de crear el expediente.`
         );
+        isCreatingProjectRef.current = false;
+        setIsCreatingProject(false);
         return;
       }
       const confirmedDraftGeography = geometryConfirmed
         ? draftGeography
         : confirmDraftProjectGeography(creationDraft);
-      if (pendingPhotos.length > 0) {
-        (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
+      if (photosToCreate.length > 0) {
+        (window as any).pendingProjectPhotos = photosToCreate.map(p => ({ ...p }));
       }
 
       const newId = await createProject({
@@ -599,15 +614,20 @@ export function ProjectList() {
         descripcion: "",
         draftGeography: confirmedDraftGeography,
       });
-      pendingPhotos.forEach(p => URL.revokeObjectURL(p.url));
+      photosToCreate.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);
       setNombreInput("");
+      pendingPhotosRef.current = [];
       setPendingPhotos([]);
       setGeometryType("individual");
       setDraftWasConfirmed(false);
       router.push(`/project/${newId}`);
+      isCreatingProjectRef.current = false;
+      setIsCreatingProject(false);
     } catch (err: any) {
       delete (window as any).pendingProjectPhotos;
+      isCreatingProjectRef.current = false;
+      setIsCreatingProject(false);
       console.error("Error creando proyecto:", err);
       alert("Error al crear expediente: " + err.message);
     }
@@ -1485,10 +1505,10 @@ export function ProjectList() {
             <button
               type="button"
               onClick={() => void handleConfirmarNombre()}
-              disabled={!nombreInput.trim()}
+              disabled={!nombreInput.trim() || isCreatingProject}
               className="btn-primary flex-1 py-2.5 text-sm font-semibold"
             >
-              Crear e ingresar
+              {isCreatingProject ? "Creando..." : "Crear e ingresar"}
             </button>
             <button
               type="button"

@@ -117,6 +117,32 @@ interface ManualQueueItem {
   gpsTimestamp: number | null;
 }
 
+interface PendingProjectPhotoBridgeItem {
+  file: File;
+  captureSource?: "CAMERA_IN_SITU" | "GALLERY_IMPORT";
+  lat?: number | null;
+  lng?: number | null;
+  gpsSource?: string;
+  gpsAccuracy?: number | null;
+  gpsTimestamp?: number | null;
+}
+
+function isLegacyFile(value: unknown): value is File {
+  return typeof File !== "undefined" && value instanceof File;
+}
+
+function isPendingProjectPhotoBridgeItem(value: unknown): value is PendingProjectPhotoBridgeItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as PendingProjectPhotoBridgeItem;
+  return (
+    isLegacyFile(item.file) &&
+    typeof item.lat === "number" &&
+    typeof item.lng === "number" &&
+    Number.isFinite(item.lat) &&
+    Number.isFinite(item.lng)
+  );
+}
+
 export function CaptureAndAddPhoto() {
   const { uploadAndAddPhoto, project, album, uploadDocument } = useProject();
   const minimumPhotos = {
@@ -349,11 +375,30 @@ export function CaptureAndAddPhoto() {
     const pending = (window as any).pendingProjectPhotos;
     if (project && pending && pending.length > 0 && !pendingProcessed.current) {
       pendingProcessed.current = true;
-      const filesToProcess = [...pending];
+      const pendingItems = Array.isArray(pending) ? [...pending] : [];
       delete (window as any).pendingProjectPhotos;
       
       setTimeout(() => {
-        processFiles(filesToProcess, false);
+        const enrichedItems = pendingItems.filter(isPendingProjectPhotoBridgeItem);
+        const legacyFiles = pendingItems.filter(isLegacyFile);
+
+        void Promise.all(enrichedItems.map((item) =>
+          uploadAndAddPhoto(item.file, item.lat as number, item.lng as number, {
+            gpsAccuracy: item.gpsAccuracy ?? null,
+            gpsTimestamp: item.gpsTimestamp ?? null,
+            gpsSource: item.gpsSource || "PENDING_PROJECT_GPS",
+            gpsLat: item.lat,
+            gpsLng: item.lng,
+            validado: true,
+          })
+        )).catch((err) => {
+          console.error("[CaptureAndAddPhoto] Error subiendo fotografía pendiente:", err);
+          setError(err instanceof Error ? err.message : "Error al subir fotografía pendiente.");
+        });
+
+        if (legacyFiles.length > 0) {
+          processFiles(legacyFiles, false);
+        }
       }, 500);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
