@@ -62,6 +62,41 @@ describe("QA-06.03E.3F.4 perfiladorIniciales profile registration", () => {
     expect(catchBranch).not.toContain("setUser(JSON.parse(stored))");
   });
 
+  test("auth me route reconciles historical Firestore profiles only when PostgreSQL profile is incomplete", () => {
+    const meRoute = source("src/app/api/auth/me/route.ts");
+    const pgUserBranch = meRoute.slice(
+      meRoute.indexOf("if (pgUser) {"),
+      meRoute.indexOf("// 2. Fallback simétrico")
+    );
+
+    expect(meRoute).toContain("function hasCompletedInstitutionalProfile");
+    expect(meRoute).toContain("profile.perfilCompleto === true");
+    expect(pgUserBranch).toContain("if (!hasCompletedInstitutionalProfile(pgProfile))");
+    expect(pgUserBranch).toContain("where(\"username\", \"==\", payload.username.trim())");
+    expect(pgUserBranch).toContain("if (hasCompletedInstitutionalProfile(historicalProfile))");
+    expect(pgUserBranch).toContain("UPDATE users");
+    expect(pgUserBranch).toContain("SET profile = $1");
+    expect(pgUserBranch).toContain("WHERE username = $2");
+    expect(pgUserBranch).toContain("[JSON.stringify(historicalProfile), payload.username]");
+  });
+
+  test("auth me route sanitizes authentication fields and does not invent completed profiles", () => {
+    const meRoute = source("src/app/api/auth/me/route.ts");
+    const reconciliationHelpers = meRoute.slice(
+      meRoute.indexOf("const AUTH_PROFILE_FIELDS"),
+      meRoute.indexOf("export async function GET")
+    );
+
+    for (const field of ["passwordHash", "password_hash", "username", "role", "createdAt", "id"]) {
+      expect(reconciliationHelpers).toContain(`\"${field}\"`);
+      expect(reconciliationHelpers).toContain("delete sanitized[field]");
+    }
+
+    expect(reconciliationHelpers).toContain("INSTITUTIONAL_PROFILE_FIELDS");
+    expect(reconciliationHelpers).toContain("perfilCompleto");
+    expect(meRoute).not.toContain("perfilCompleto: true");
+  });
+
   test("PATCH route exists and requires valid session", () => {
     expect(profileRoute).toContain("export async function PATCH(req: Request)");
     expect(profileRoute).toContain("ceipol_session");

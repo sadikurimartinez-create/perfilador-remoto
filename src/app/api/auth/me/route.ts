@@ -7,6 +7,63 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 
 export const dynamic = "force-dynamic";
 
+const AUTH_PROFILE_FIELDS = new Set([
+  "passwordHash",
+  "password_hash",
+  "username",
+  "role",
+  "createdAt",
+  "id",
+]);
+
+const INSTITUTIONAL_PROFILE_FIELDS = [
+  "nombre",
+  "apellidoPaterno",
+  "apellidoMaterno",
+  "grado",
+  "id_empleado",
+  "adscripcionAnterior",
+  "aniosSspe",
+  "bachillerato",
+  "licenciatura",
+  "licenciaturaCual",
+  "maestria",
+  "maestriaCual",
+  "fotografia",
+  "perfilCompleto",
+  "perfiladorIniciales",
+  "updatedAt",
+];
+
+function hasCompletedInstitutionalProfile(profile: Record<string, any> | null | undefined) {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return false;
+  if (profile.perfilCompleto === true) return true;
+  return ["nombre", "apellidoPaterno", "apellidoMaterno", "grado", "id_empleado"].every((field) =>
+    String(profile[field] || "").trim()
+  );
+}
+
+function resolveFirestoreProfile(data: { profile?: Record<string, unknown>; [key: string]: any }) {
+  const hasNestedProfile =
+    data.profile &&
+    typeof data.profile === "object" &&
+    !Array.isArray(data.profile);
+  return hasNestedProfile ? data.profile || {} : data;
+}
+
+function sanitizeInstitutionalProfile(profile: Record<string, any>) {
+  const sanitized: Record<string, any> = {};
+  for (const field of INSTITUTIONAL_PROFILE_FIELDS) {
+    if (profile[field] !== undefined) {
+      sanitized[field] = profile[field];
+    }
+  }
+  for (const field of AUTH_PROFILE_FIELDS) {
+    delete sanitized[field];
+  }
+  return sanitized;
+}
+
 export async function GET() {
   try {
     const cookieStore = cookies();
@@ -44,6 +101,40 @@ export async function GET() {
     
     // Si el usuario se encuentra registrado en PostgreSQL
     if (pgUser) {
+      const pgProfile = pgUser.profile || {};
+      if (!hasCompletedInstitutionalProfile(pgProfile)) {
+        const db = getFirebaseServerDb();
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("username", "==", payload.username.trim()));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const historicalProfile = sanitizeInstitutionalProfile(
+            resolveFirestoreProfile(snap.docs[0].data() as { profile?: Record<string, unknown>; [key: string]: any })
+          );
+
+          if (hasCompletedInstitutionalProfile(historicalProfile)) {
+            const pool = getPool();
+            await pool.query(
+              `
+              UPDATE users
+              SET profile = $1
+              WHERE username = $2
+            `,
+              [JSON.stringify(historicalProfile), payload.username]
+            );
+
+            return NextResponse.json({
+              id: pgUser.id,
+              username: pgUser.username,
+              role: pgUser.role,
+              name: pgUser.name,
+              profile: historicalProfile
+            });
+          }
+        }
+      }
+
       return NextResponse.json({
         id: pgUser.id,
         username: pgUser.username,
