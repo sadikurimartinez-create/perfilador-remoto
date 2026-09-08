@@ -52,22 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           console.warn(`[AuthContext] Backend session refresh returned status ${res.status}.`);
         }
-        // Fallback resiliente: si el backend no responde o no está autenticado, pero tenemos una sesión en caché, la respetamos
-        const stored = typeof window !== "undefined" ? window.localStorage.getItem("perfilador.currentUser") : null;
-        if (stored) {
-          setUser(JSON.parse(stored));
-        } else {
-          setUser(null);
-        }
+        window.localStorage.removeItem("perfilador.currentUser");
+        setUser(null);
       }
     } catch (err) {
       console.warn("[AuthContext] Usuario no autenticado o sesión no disponible:", err);
-      const stored = typeof window !== "undefined" ? window.localStorage.getItem("perfilador.currentUser") : null;
-      if (stored) {
-        setUser(JSON.parse(stored));
-      } else {
-        setUser(null);
-      }
+      window.localStorage.removeItem("perfilador.currentUser");
+      setUser(null);
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,7 @@ function source(relativePath: string) {
 describe("QA-06.03E.3F.4 perfiladorIniciales profile registration", () => {
   const profilePage = source("src/app/perfil/page.tsx");
   const profileRoute = source("src/app/api/auth/profile/route.ts");
+  const authContext = source("src/context/AuthContext.tsx");
   const patchRoute = profileRoute.slice(profileRoute.indexOf("export async function PATCH"));
 
   test("UI exposes perfiladorIniciales without hardcoded initials", () => {
@@ -39,6 +40,26 @@ describe("QA-06.03E.3F.4 perfiladorIniciales profile registration", () => {
     expect(profilePage).toContain("registeredPerfiladorIniciales");
     expect(profilePage).toContain("Registradas");
     expect(profilePage).toContain("setPerfiladorIniciales(normalized)");
+  });
+
+  test("AuthContext does not restore cached users when server session is not confirmed", () => {
+    const refreshUser = authContext.slice(
+      authContext.indexOf("const refreshUser = async () => {"),
+      authContext.indexOf("useEffect(() => {")
+    );
+    const nonOkBranch = refreshUser.slice(refreshUser.indexOf("} else {"), refreshUser.indexOf("} catch (err)"));
+    const catchBranch = refreshUser.slice(refreshUser.indexOf("} catch (err)"));
+
+    expect(refreshUser).toContain("const res = await fetch(\"/api/auth/me\")");
+    expect(refreshUser).toContain("window.localStorage.setItem(\"perfilador.currentUser\", JSON.stringify(mergedUser))");
+    expect(nonOkBranch).toContain("if (res.status === 401)");
+    expect(nonOkBranch).toContain("window.localStorage.removeItem(\"perfilador.currentUser\")");
+    expect(nonOkBranch).toContain("setUser(null)");
+    expect(catchBranch).toContain("window.localStorage.removeItem(\"perfilador.currentUser\")");
+    expect(catchBranch).toContain("setUser(null)");
+    expect(nonOkBranch).not.toContain("window.localStorage.getItem(\"perfilador.currentUser\")");
+    expect(catchBranch).not.toContain("window.localStorage.getItem(\"perfilador.currentUser\")");
+    expect(catchBranch).not.toContain("setUser(JSON.parse(stored))");
   });
 
   test("PATCH route exists and requires valid session", () => {
