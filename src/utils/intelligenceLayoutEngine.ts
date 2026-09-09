@@ -704,6 +704,245 @@ const buildPandillasTraceabilityEntry = (assessment: PandillasEvidenceAssessment
   return null;
 };
 
+export type EditorialEvidenceState =
+  | "EVIDENCE_SUFFICIENT"
+  | "EVIDENCE_LIMITED"
+  | "EVIDENCE_EMPTY"
+  | "EVIDENCE_UNAVAILABLE"
+  | "EVIDENCE_INELIGIBLE"
+  | "NO_EVIDENCE";
+
+export type RecommendationClass =
+  | "EVIDENCE_DERIVED"
+  | "GENERIC_NON_FACTUAL"
+  | "NOT_PERMITTED";
+
+export const EDITORIAL_INSUFFICIENT_EVIDENCE_TEXT =
+  "No se dispone de evidencia gobernada suficiente para formular conclusiones operativas especificas en este rubro.";
+
+export const EDITORIAL_EMPTY_EVIDENCE_TEXT =
+  "La consulta realizada no identifico coincidencias dentro del universo y parametros analizados.";
+
+interface EditorialEvidenceAssessment {
+  state: EditorialEvidenceState;
+  reasons: string[];
+  facts: string[];
+  provenance: string[];
+}
+
+interface EvidenceBoundConclusions {
+  hallazgosCriticos: string[];
+  riesgosInmediatos: string[];
+  escenariosFuturos: string[];
+  recomendacionesTacticas: string[];
+  recomendacionesEstrategicas: string[];
+}
+
+const isIneligibleEditorialSource = (item: any): boolean => {
+  const markers = [
+    item?.source,
+    item?.sourceId,
+    item?.provider,
+    item?.providerId,
+    item?.sourceStatus,
+    item?.acquisitionMode,
+    item?.origin_type,
+    item?.epistemicIntegrity?.acquisitionMode,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toUpperCase());
+
+  return markers.some((value) =>
+    value.includes("SCINCE_LOCAL_SIMULATOR") ||
+    value.includes("CIFA_LEGACY_DIAGNOSTIC") ||
+    value.includes("SIMULATED") ||
+    value.includes("MOCK") ||
+    value.includes("CONNECTIVITY_ONLY")
+  );
+};
+
+const normalizeEditorialStatus = (item: any): string => String(
+  item?.queryStatus ||
+  item?.sweepStatus ||
+  item?.sourceStatus ||
+  item?.providerStatus ||
+  item?.denueStatus ||
+  item?.status ||
+  ""
+).toUpperCase();
+
+const hasGovernedSuccessStatus = (item: any): boolean => {
+  const status = normalizeEditorialStatus(item);
+  return status === "SUCCESS" ||
+    status === "SUCCESS_WITH_DATA" ||
+    status === "POSTGIS_AVAILABLE" ||
+    status === "AUTHORITATIVE" ||
+    status === "APPROVED_EVIDENCE" ||
+    status === "APPROVED" ||
+    status === "APROBADO";
+};
+
+const hasEditorialEmptyStatus = (item: any): boolean => normalizeEditorialStatus(item) === "EMPTY" ||
+  normalizeEditorialStatus(item) === "SUCCESS_EMPTY";
+
+const hasEditorialUnavailableStatus = (item: any): boolean => [
+  "NOT_CONFIGURED",
+  "TIMEOUT",
+  "PROVIDER_ERROR",
+  "AUTH_ERROR",
+  "VALIDATION_ERROR",
+  "INVALID_RESPONSE",
+  "FAILED",
+].includes(normalizeEditorialStatus(item));
+
+const getIncidentType = (incident: any): string =>
+  firstNonEmpty(
+    incident?.incidentType,
+    incident?.tipo,
+    incident?.delito,
+    incident?.classification,
+    "incidencia documentada"
+  );
+
+const getIncidentDate = (incident: any): string =>
+  firstNonEmpty(incident?.occurredDate, incident?.fecha, incident?.date, "");
+
+const extractEditorialSuccessFacts = (item: any): string[] => {
+  const result = getObjectValue(item?.result) || getObjectValue(item?.data) || getObjectValue(item?.raw) || item;
+  const facts: string[] = [];
+
+  pushFact(facts, "hallazgo", result?.hallazgo || result?.finding || result?.text || result?.summary);
+  pushFact(facts, "descripcion", result?.descripcion || result?.description);
+  pushFact(facts, "zona", result?.zona || result?.zonaInfluencia || result?.area || result?.sector);
+  pushFact(facts, "confidence", result?.confidence ?? result?.confidenceScore);
+
+  return facts;
+};
+
+export const assessEditorialEvidence = (input: {
+  incidents?: any[];
+  sweeps?: any[];
+  album?: any[];
+}): EditorialEvidenceAssessment => {
+  const incidents = (input.incidents || []).filter((incident) => !isIneligibleEditorialSource(incident));
+  const sweeps = (input.sweeps || []).filter((sweep) => !isIneligibleEditorialSource(sweep));
+  const album = (input.album || []).filter((photo) => !isIneligibleEditorialSource(photo));
+  const facts: string[] = [];
+  const provenance: string[] = [];
+
+  if (incidents.length > 0) {
+    const incidentTypes = incidents.map(getIncidentType).filter(Boolean);
+    const topType = incidentTypes[0] || "incidencia documentada";
+    pushFact(facts, "incidencia", `${incidents.length} registro(s) gobernado(s); patron observado: ${topType}`);
+    pushFact(provenance, "incidenceSource", incidents[0]?.sourceStatus || incidents[0]?.querySource || "INCIDENCIA_GOVERNED");
+    pushFact(provenance, "incidenceEvidenceId", incidents[0]?.evidenceId || incidents[0]?.id);
+    pushFact(provenance, "incidenceDate", getIncidentDate(incidents[0]));
+  }
+
+  for (const sweep of sweeps) {
+    if (hasGovernedSuccessStatus(sweep)) {
+      const sweepFacts = extractEditorialSuccessFacts(sweep);
+      if (sweepFacts.length > 0) {
+        facts.push(...sweepFacts.map((fact) => `${sweep.engine || sweep.source || "fuente gobernada"}: ${fact}`));
+      }
+      pushFact(provenance, "source", sweep.source || sweep.engine);
+      pushFact(provenance, "provider", sweep.provider || sweep.providerId);
+      pushFact(provenance, "status", normalizeEditorialStatus(sweep));
+      pushFact(provenance, "traceabilityId", sweep.traceabilityId || sweep.traceabilityReference);
+    }
+  }
+
+  if (album.length > 0) {
+    pushFact(facts, "evidencia visual", `${album.length} registro(s) fotografico(s) gobernado(s)`);
+    pushFact(provenance, "photoEvidenceId", album[0]?.evidenceId || album[0]?.id);
+  }
+
+  if (facts.length > 0) {
+    return { state: "EVIDENCE_SUFFICIENT", reasons: [], facts, provenance };
+  }
+
+  const allItems = [...(input.incidents || []), ...(input.sweeps || []), ...(input.album || [])];
+  if (allItems.some(isIneligibleEditorialSource)) {
+    return { state: "EVIDENCE_INELIGIBLE", reasons: ["SOURCE_INELIGIBLE"], facts: [], provenance };
+  }
+  if (allItems.some(hasEditorialUnavailableStatus)) {
+    return { state: "EVIDENCE_UNAVAILABLE", reasons: ["SOURCE_UNAVAILABLE"], facts: [], provenance };
+  }
+  if (allItems.some(hasEditorialEmptyStatus)) {
+    return { state: "EVIDENCE_EMPTY", reasons: ["EMPTY_RESULT"], facts: [], provenance };
+  }
+
+  return { state: "NO_EVIDENCE", reasons: ["NO_GOVERNED_EVIDENCE"], facts: [], provenance };
+};
+
+export const classifyEditorialRecommendation = (
+  recommendation: string,
+  assessment: EditorialEvidenceAssessment
+): RecommendationClass => {
+  const text = recommendation.toLowerCase();
+  const specificMarkers = [
+    "patrullaje",
+    "operativo",
+    "corredor",
+    "horario",
+    "22:00",
+    "02:00",
+    "zona",
+    "centro de gravedad",
+    "coordenad",
+  ];
+  if (assessment.state === "EVIDENCE_SUFFICIENT") return "EVIDENCE_DERIVED";
+  if (specificMarkers.some((marker) => text.includes(marker))) return "NOT_PERMITTED";
+  return "GENERIC_NON_FACTUAL";
+};
+
+export const buildEvidenceBoundConclusions = (assessment: EditorialEvidenceAssessment): EvidenceBoundConclusions => {
+  if (assessment.state === "EVIDENCE_SUFFICIENT") {
+    const firstFact = assessment.facts[0] || "Evidencia gobernada disponible.";
+    return {
+      hallazgosCriticos: assessment.facts.map((fact) => `Hallazgo evidence-bound: ${fact}`),
+      riesgosInmediatos: [`Riesgo operativo limitado al patron observado en evidencia gobernada: ${firstFact}`],
+      escenariosFuturos: ["Escenario sujeto a actualizacion con nueva evidencia gobernada y validacion institucional."],
+      recomendacionesTacticas: [`[Evidence-Derived] Priorizar revision operativa del patron documentado: ${firstFact}`],
+      recomendacionesEstrategicas: ["[Generic-Non-Factual] Mantener ciclo de recoleccion, validacion y trazabilidad antes de ampliar conclusiones."]
+    };
+  }
+
+  const baseText = assessment.state === "EVIDENCE_EMPTY"
+    ? EDITORIAL_EMPTY_EVIDENCE_TEXT
+    : EDITORIAL_INSUFFICIENT_EVIDENCE_TEXT;
+
+  return {
+    hallazgosCriticos: [baseText],
+    riesgosInmediatos: [baseText],
+    escenariosFuturos: ["No se formula escenario especifico sin evidencia gobernada suficiente."],
+    recomendacionesTacticas: ["[Generic-Non-Factual] Mantener documentacion, validacion humana y trazabilidad antes de ejecutar medidas operativas especificas."],
+    recomendacionesEstrategicas: ["[Generic-Non-Factual] Fortalecer la disponibilidad de fuentes gobernadas sin presumir patrones, horarios, zonas ni actores."]
+  };
+};
+
+export const buildEvidenceBoundExecutiveSummary = (assessment: EditorialEvidenceAssessment): string => {
+  if (assessment.state === "EVIDENCE_SUFFICIENT") {
+    const facts = assessment.facts.slice(0, 3).join(" | ");
+    return `Resumen evidence-bound: ${facts}. Provenance: ${assessment.provenance.join(" | ") || "sin identificadores adicionales"}.`;
+  }
+  if (assessment.state === "EVIDENCE_EMPTY") {
+    return `${EDITORIAL_EMPTY_EVIDENCE_TEXT} No se formulan conclusiones operativas especificas fuera de ese alcance.`;
+  }
+  return EDITORIAL_INSUFFICIENT_EVIDENCE_TEXT;
+};
+
+const buildEvidenceBoundConclusionsText = (
+  assessment: EditorialEvidenceAssessment,
+  conclusions: EvidenceBoundConclusions
+): string => {
+  const evidence = assessment.provenance.length > 0
+    ? assessment.provenance.map((item) => `- ${item}`).join("\n")
+    : `- Estado editorial: ${assessment.state}.`;
+
+  return `HALLAZGO:\n${conclusions.hallazgosCriticos.map((item) => `- ${item}`).join("\n")}\n\nEVIDENCIA:\n${evidence}\n\nANÁLISIS:\nLas conclusiones y recomendaciones se limitan al estado editorial ${assessment.state}. Los resultados EMPTY, errores de proveedor y fuentes simuladas no se transforman en hechos positivos.\n\nIMPLICACIÓN OPERATIVA:\n${conclusions.recomendacionesTacticas.concat(conclusions.recomendacionesEstrategicas).map((item) => `- ${item}`).join("\n")}`;
+};
+
 /**
  * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v9.0)
  */
@@ -1163,91 +1402,11 @@ export const buildIntelligenceEditorialPayload = async (
     context: cleanTechnicalJargon(s.context || "Sin contexto de integración.")
   }));
 
-  // Bloque IX: Conclusiones
-  const conclusiones = {
-    hallazgosCriticos: [] as string[],
-    riesgosInmediatos: [] as string[],
-    escenariosFuturos: [] as string[],
-    recomendacionesTacticas: [] as string[],
-    recomendacionesEstrategicas: [] as string[]
-  };
+  // Bloque IX: Conclusiones evidence-bound
+  const editorialEvidence = assessEditorialEvidence({ incidents, sweeps, album });
+  const conclusiones = buildEvidenceBoundConclusions(editorialEvidence);
 
-  // Precalentamiento de conclusiones cuantitativas basadas en SIE y SEM
-  conclusiones.hallazgosCriticos.push(
-    `Concentración criminal de ${sem.metadata.totalCanonicalIncidents} eventos identificados en el sector, con un nivel de riesgo predictivo del ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}%.`
-  );
-  conclusiones.riesgosInmediatos.push(
-    `Probabilidad de repetición delictiva semanal estimada en ${(sem.predictiveEvidence.poissonProbability * 100).toFixed(0)}% bajo el modelo de Poisson (Nivel de confianza: ${sem.predictiveEvidence.confidenceMetrics.statisticalConfidence.toFixed(0)}%).`
-  );
-  conclusiones.recomendacionesTacticas.push(
-    `[Acción Inmediata 0-30 días] Focalizar presencia y patrullaje dinámico en el centro de gravedad (${stats.spatialAnalysis.centerOfGravity.lat.toFixed(4)}, ${stats.spatialAnalysis.centerOfGravity.lng.toFixed(4)}) durante periodos críticos: ${sem.temporalEvidence.criticalPeriods.join(", ") || "No definido"}.`
-  );
-  conclusiones.recomendacionesTacticas.push(
-    `[Acción Inmediata 0-30 días] Desplegar patrullajes preventivos para contener la dispersión espacial estimada en ${stats.spatialAnalysis.dispersionMeters.toFixed(0)} metros.`
-  );
-
-  if (rawConclusionsText && rawConclusionsText.trim().length > 10) {
-    const lines = rawConclusionsText.split("\n").map(l => l.trim()).filter(Boolean);
-    let currentCategory: 'inmediata' | 'preventiva' | 'estrategica' | 'other' = 'other';
-    for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (lower.includes("inmediata") || lower.includes("0-30") || lower.includes("0 a 30")) {
-        currentCategory = 'inmediata';
-        continue;
-      } else if (lower.includes("preventiva") || lower.includes("30-90") || lower.includes("30 a 90")) {
-        currentCategory = 'preventiva';
-        continue;
-      } else if (lower.includes("estratégica") || lower.includes("estrategica") || lower.includes("90 días") || lower.includes("90 dias")) {
-        currentCategory = 'estrategica';
-        continue;
-      }
-
-      if (line.startsWith("-") || line.startsWith("*") || line.match(/^\d+\./)) {
-        const cleanLine = line.replace(/^[-*\d.]+\s*/, "").trim();
-        if (cleanLine.length > 5) {
-          if (currentCategory === 'inmediata') {
-            conclusiones.recomendacionesTacticas.push(`[Acción Inmediata 0-30 días] ${cleanLine}`);
-          } else if (currentCategory === 'preventiva') {
-            conclusiones.recomendacionesEstrategicas.push(`[Acción Preventiva 30-90 días] ${cleanLine}`);
-          } else if (currentCategory === 'estrategica') {
-            conclusiones.escenariosFuturos.push(`[Acción Estratégica >90 días] ${cleanLine}`);
-          } else {
-            conclusiones.hallazgosCriticos.push(cleanLine);
-          }
-        }
-      }
-    }
-  }
-
-  // Fallback default bullets if parsing results in empty lists
-  if (conclusiones.recomendacionesTacticas.length <= 2) {
-    conclusiones.recomendacionesTacticas.push(
-      "[Acción Inmediata 0-30 días] Sincronizar las bitácoras de patrullaje dinámico nocturno en las zonas de riesgo.",
-      "[Acción Inmediata 0-30 días] Desplegar presencia disuasiva en los nodos viales identificados."
-    );
-  }
-  if (conclusiones.recomendacionesEstrategicas.length === 0) {
-    conclusiones.recomendacionesEstrategicas = [
-      "[Acción Preventiva 30-90 días] Gestionar la reparación del alumbrado público dañado en el cuadrante.",
-      "[Acción Preventiva 30-90 días] Promover la inspección de giros comerciales con venta de alcohol."
-    ];
-  }
-  if (conclusiones.escenariosFuturos.length === 0) {
-    conclusiones.escenariosFuturos = [
-      "[Acción Estratégica >90 días] Implementar políticas de diseño ambiental (CPTED) y recuperación de predios baldíos.",
-      "[Acción Estratégica >90 días] Fomentar la participación ciudadana y la vigilancia comunitaria formal."
-    ];
-  }
-  if (conclusiones.hallazgosCriticos.length <= 1) {
-    conclusiones.hallazgosCriticos.push(
-      "Deficiencias notables de alumbrado perimetral detectadas en el relevamiento de campo.",
-      "Predios baldíos sin cerramientos adecuados que incrementan la vulnerabilidad de escape."
-    );
-  }
-
-  const executiveSummary = cleanTechnicalJargon(
-    rawExecSummary || project?.reportSummary || "Dictamen estratégico de geointeligencia operativa perimetral."
-  ).slice(0, 800);
+  const executiveSummary = buildEvidenceBoundExecutiveSummary(editorialEvidence).slice(0, 800);
 
   let finalHypothesis = cleanTechnicalJargon(rawHypothesis);
   if (!finalHypothesis || finalHypothesis.length < 50) {
@@ -1302,16 +1461,7 @@ export const buildIntelligenceEditorialPayload = async (
 
   const formattedPandillasAnalysis = pandillasAnalysis;
 
-  const formattedConclusionesText = formatToFourPartStructure(
-    cleanTechnicalJargon(rawConclusionsText) || "Conclusiones tácticas de la geointeligencia delictiva.",
-    projectName,
-    date,
-    locationStr,
-    "Recomendaciones tácticas y estratégicas para neutralizar los factores de oportunidad delictiva.",
-    "Censo criminológico territorial y bitácora de auditoría de este expediente oficial.",
-    "La oportuna corrección de los facilitadores físicos anulará la vulnerabilidad del sector ante la delincuencia de oportunidad.",
-    "Ejecutar acciones tácticas inmediatas en 0-30 días y preventivas en 30-90 días según el dictamen."
-  );
+  const formattedConclusionesText = buildEvidenceBoundConclusionsText(editorialEvidence, conclusiones);
 
   const hypothesisLifecycle: InvestigationHypothesis = {
     id: `H-${projectId}`,
