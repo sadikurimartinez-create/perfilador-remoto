@@ -251,3 +251,93 @@ describe("P4-G Gemini REST transient provider retry", () => {
     );
   });
 });
+
+describe("P4-H Gemini REST governed model failover", () => {
+  test("TEST P4-H-1 route configura modelo secundario gobernado", () => {
+    const source = routeSource();
+
+    expect(source).toContain("GEMINI_FALLBACK_MODEL");
+    expect(source).toContain("streamGeminiRestApiWithFailover(");
+  });
+
+  test("TEST P4-H-2 failover exige error HTTP pre-stream transitorio", () => {
+    const source = routeSource();
+
+    expect(source).toContain(
+      "error instanceof GeminiRestPreStreamHttpError",
+    );
+    expect(source).toContain("error.retryable");
+    expect(source).toContain("fallbackModel !== primaryModel");
+  });
+
+  test("TEST P4-H-3 secondary se invoca solo desde wrapper de failover", () => {
+    const source = routeSource();
+
+    expect(source).toContain(
+      "await streamGeminiRestApi(prompt, fallbackModel, apiKey, onChunk);",
+    );
+    expect(source).toContain(
+      "Gemini REST primary exhausted; failing over:",
+    );
+  });
+
+  test("TEST P4-H-4 caller conserva modelo realmente utilizado", () => {
+    const source = routeSource();
+
+    expect(source).toContain(
+      "generationModel = await streamGeminiRestApiWithFailover(",
+    );
+
+    const traceMatches = source.match(/model:\s*generationModel,/g) || [];
+    expect(traceMatches).toHaveLength(2);
+  });
+
+  test("TEST P4-H-5 P4-G sigue abriendo reader despues de decisiones pre-stream", () => {
+    const source = routeSource();
+
+    const retryIndex = source.indexOf(
+      "shouldRetryGenerateProfileProviderHttpStatus(",
+    );
+    const readerIndex = source.indexOf(
+      "const reader = response.body?.getReader();",
+    );
+
+    expect(retryIndex).toBeGreaterThan(-1);
+    expect(readerIndex).toBeGreaterThan(-1);
+    expect(retryIndex).toBeLessThan(readerIndex);
+  });
+
+  test("TEST P4-H-7 registra secondary antes de intentar su stream", () => {
+    const source = routeSource();
+
+    const modelAttemptIndex = source.indexOf(
+      "onModelAttempt(fallbackModel);",
+    );
+
+    const fallbackStreamIndex = source.indexOf(
+      "await streamGeminiRestApi(prompt, fallbackModel, apiKey, onChunk);",
+    );
+
+    expect(modelAttemptIndex).toBeGreaterThan(-1);
+    expect(fallbackStreamIndex).toBeGreaterThan(-1);
+    expect(modelAttemptIndex).toBeLessThan(fallbackStreamIndex);
+
+    expect(source).toContain(
+      "(modelName) => {",
+    );
+    expect(source).toContain(
+      "generationModel = modelName;",
+    );
+  });
+  test("TEST P4-H-6 errores no transitorios siguen sin habilitar retry", () => {
+    for (const status of [400, 401, 403, 404, 422]) {
+      expect(
+        shouldRetryGenerateProfileProviderHttpStatus(
+          status,
+          1,
+          GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+        ),
+      ).toBe(false);
+    }
+  });
+});

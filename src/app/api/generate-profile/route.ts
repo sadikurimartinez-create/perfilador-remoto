@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { VertexAI } from "@google-cloud/vertexai";
-import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import {
   ReportContext,
   ExecutiveSummaryPrompt,
@@ -261,6 +261,20 @@ async function callGeminiRestApi(prompt: string, modelName: string, apiKey: stri
   return text;
 }
 
+class GeminiRestPreStreamHttpError extends Error {
+  readonly status: number;
+  readonly modelName: string;
+  readonly retryable: boolean;
+
+  constructor(status: number, modelName: string, responseBody: string, retryable: boolean) {
+    super(`Gemini REST API returned ${status}: ${responseBody}`);
+    this.name = "GeminiRestPreStreamHttpError";
+    this.status = status;
+    this.modelName = modelName;
+    this.retryable = retryable;
+  }
+}
+
 async function streamGeminiRestApi(
   prompt: string,
   modelName: string,
@@ -293,7 +307,16 @@ async function streamGeminiRestApi(
       attempt,
       GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
     )) {
-      throw new Error(`Gemini REST API returned ${status}: ${errText}`);
+      throw new GeminiRestPreStreamHttpError(
+        status,
+        modelName,
+        errText,
+        shouldRetryGenerateProfileProviderHttpStatus(
+          status,
+          1,
+          GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+        ),
+      );
     }
 
     const retryDelayMs = getGenerateProfileProviderRetryDelayMs(attempt);
@@ -337,6 +360,41 @@ async function streamGeminiRestApi(
       lastIndex = regex.lastIndex;
     }
     buffer = buffer.slice(lastIndex);
+  }
+}
+
+async function streamGeminiRestApiWithFailover(
+  prompt: string,
+  primaryModel: string,
+  fallbackModel: string,
+  apiKey: string,
+  onChunk: (text: string) => void,
+  onModelAttempt: (modelName: string) => void,
+): Promise<string> {
+  try {
+    onModelAttempt(primaryModel);
+    await streamGeminiRestApi(prompt, primaryModel, apiKey, onChunk);
+    return primaryModel;
+  } catch (error) {
+    const canFailover =
+      error instanceof GeminiRestPreStreamHttpError &&
+      error.retryable &&
+      Boolean(fallbackModel) &&
+      fallbackModel !== primaryModel;
+
+    if (!canFailover) {
+      throw error;
+    }
+
+    console.warn("[api/generate-profile] Gemini REST primary exhausted; failing over:", {
+      primaryModel,
+      fallbackModel,
+      status: error.status,
+    });
+
+    onModelAttempt(fallbackModel);
+    await streamGeminiRestApi(prompt, fallbackModel, apiKey, onChunk);
+    return fallbackModel;
   }
 }
 
@@ -751,6 +809,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         let keepAlive: ReturnType<typeof setInterval> | null = null;
         let accumulatedText = "";
         let generationProvider: string | null = streamingResp ? "VertexAI" : null;
+          let generationModel = GEMINI_MODEL;
         let generationError: string | null = null;
         let generationStatus: GenerateProfileChapterStatus = "GENERATED";
         let terminalEvent: GenerateProfileTerminalEvent | null = null;
@@ -826,7 +885,12 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             console.log("[api/generate-profile] Calling Gemini REST API with Streaming Fallback...");
             let isFirstChunk = true;
             let totalLength = 0;
-            await streamGeminiRestApi(systemPrompt, GEMINI_MODEL, apiKey, (chunkText) => {
+            generationModel = await streamGeminiRestApiWithFailover(
+              systemPrompt,
+              GEMINI_MODEL,
+              GEMINI_FALLBACK_MODEL,
+              apiKey,
+              (chunkText) => {
               let cleanedChunk = chunkText;
               if (isFirstChunk) {
                 if (cleanedChunk.startsWith("```markdown")) {
@@ -839,7 +903,11 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
               totalLength += cleanedChunk.length;
               accumulatedText += cleanedChunk;
               finalizer.writeMarkdownChunk(cleanedChunk);
-            });
+            },
+              (modelName) => {
+                generationModel = modelName;
+              },
+            );
 
             console.log(`\n[AI RESPONSE] ----------------------------------------`);
             console.log(`Capítulo: ${chapter} - ${currentChapterLabel}`);
@@ -873,7 +941,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
               chapter,
               chapterLabel: currentChapterLabel,
               provider: generationProvider,
-              model: GEMINI_MODEL,
+              model: generationModel,
               prompt: systemPrompt,
               safeBody,
               iic,
@@ -890,7 +958,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             aiAnalyticalOutput = {
               outputType: outputTypeForChapter(chapter),
               provider: generationProvider,
-              model: GEMINI_MODEL,
+              model: generationModel,
               promptId: `generate-profile:chapter-${chapter}`,
               limitations: ["AI_ANALYTICAL_OUTPUT_TRACE_UNAVAILABLE"],
             };

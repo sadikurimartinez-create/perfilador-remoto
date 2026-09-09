@@ -15,3 +15,11 @@ export const GEMINI_MODEL =
   (typeof g.GEMINI_MODEL === "string" && g.GEMINI_MODEL.trim().length > 0
     ? g.GEMINI_MODEL.trim().replace(/^models\//, '')
     : DEFAULT_GEMINI_MODEL).replace(/^models\//, '');
+
+/** Modelo secundario gobernado para failover REST P4-H. */
+const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-3.7-flash";
+
+export const GEMINI_FALLBACK_MODEL =
+  (typeof g.GEMINI_FALLBACK_MODEL === "string" && g.GEMINI_FALLBACK_MODEL.trim().length > 0
+    ? g.GEMINI_FALLBACK_MODEL.trim().replace(/^models\//, '')
+    : DEFAULT_GEMINI_FALLBACK_MODEL).replace(/^models\//, '');
