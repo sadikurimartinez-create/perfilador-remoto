@@ -16,6 +16,7 @@ import { OperationalDecisionObject } from './hypothesisDecisionIntelligenceEngin
 import { PhotoEvidenceGovernanceEngine } from './photoEvidenceGovernanceEngine';
 import { isValidStreetViewImage } from './streetViewValidator';
 import { resolveVisibleNumeroExpediente } from './documentIdentity';
+import type { PandillasSweepStatus } from '../modules/pandillas/pandillas.sweepStatus';
 
 
 import {
@@ -528,6 +529,181 @@ export function resolveProjectGeolocationForReport(project: any, sourceReference
   };
 }
 
+export type PandillasEvidenceState =
+  | "EVIDENCE_PRESENT"
+  | "EVIDENCE_EMPTY"
+  | "EVIDENCE_UNAVAILABLE"
+  | "EVIDENCE_INELIGIBLE"
+  | "NO_EVIDENCE";
+
+const PANDILLAS_TERMINAL_STATUSES: PandillasSweepStatus[] = [
+  "SUCCESS",
+  "EMPTY",
+  "NOT_CONFIGURED",
+  "TIMEOUT",
+  "PROVIDER_ERROR",
+  "VALIDATION_ERROR",
+];
+
+export const PANDILLAS_INSUFFICIENT_EVIDENCE_TEXT =
+  "No se dispone de evidencia gobernada suficiente para establecer presencia, influencia o actividad de pandillas en el area analizada.";
+
+export const PANDILLAS_EMPTY_EVIDENCE_TEXT =
+  "El barrido de Pandillas no identifico coincidencias gobernadas en la consulta realizada. Esta ausencia se limita al alcance de la consulta ejecutada.";
+
+export interface PandillasEvidenceAssessment {
+  state: PandillasEvidenceState;
+  status?: PandillasSweepStatus;
+  sweep?: any;
+  facts: string[];
+  provenance: string[];
+}
+
+const getObjectValue = (value: any): any | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? value : null;
+
+const isPandillasSweepCandidate = (sweep: any): boolean => {
+  const markers = [
+    sweep?.engine,
+    sweep?.source,
+    sweep?.sourceType,
+    sweep?.provider,
+    sweep?.type,
+    sweep?.module,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+
+  return markers.some((value) =>
+    value.includes("pandilla") ||
+    value.includes("gang") ||
+    value.includes("gim")
+  );
+};
+
+const normalizePandillasStatus = (sweep: any): PandillasSweepStatus | undefined => {
+  const candidates = [
+    sweep?.sweepStatus,
+    sweep?.statusP1E,
+    sweep?.result?.sweepStatus,
+    sweep?.data?.sweepStatus,
+    sweep?.raw?.sweepStatus,
+    sweep?.context?.sweepStatus,
+  ];
+  const status = candidates
+    .map((value) => typeof value === "string" ? value.toUpperCase() : "")
+    .find((value) => PANDILLAS_TERMINAL_STATUSES.includes(value as PandillasSweepStatus));
+  return status as PandillasSweepStatus | undefined;
+};
+
+const pushFact = (facts: string[], label: string, value: any) => {
+  if (value === undefined || value === null || value === "") return;
+  if (Array.isArray(value)) {
+    const rendered = value
+      .filter((item) => item !== undefined && item !== null && String(item).trim())
+      .map((item) => String(item).trim())
+      .join("; ");
+    if (rendered) facts.push(`${label}: ${rendered}`);
+    return;
+  }
+  facts.push(`${label}: ${String(value).trim()}`);
+};
+
+const extractPandillasFacts = (sweep: any): string[] => {
+  const result = getObjectValue(sweep?.result) || getObjectValue(sweep?.data) || getObjectValue(sweep?.raw) || sweep;
+  const facts: string[] = [];
+
+  pushFact(facts, "grupo reportado", result?.nombre || result?.name || result?.grupo || result?.gangName);
+  pushFact(facts, "zona reportada", result?.zonaInfluencia || result?.territorio || result?.area || result?.sector);
+  pushFact(facts, "hallazgo", result?.hallazgo || result?.finding || result?.hallazgos || result?.findings);
+  pushFact(facts, "descripcion", result?.descripcion || result?.description || result?.summary);
+  pushFact(facts, "integrantes registrados", result?.integrantes || result?.members);
+  pushFact(facts, "confidence", result?.confidence ?? result?.confidenceScore);
+
+  return facts;
+};
+
+const extractPandillasProvenance = (sweep: any, status?: PandillasSweepStatus): string[] => {
+  const provenance: string[] = [];
+  pushFact(provenance, "sweepStatus", status);
+  pushFact(provenance, "provider", sweep?.provider || sweep?.sourceProvider);
+  pushFact(provenance, "source", sweep?.source || sweep?.engine);
+  pushFact(provenance, "generatedAt", sweep?.generatedAt || sweep?.createdAt || sweep?.timestamp);
+  pushFact(provenance, "model", sweep?.model);
+  pushFact(provenance, "traceabilityId", sweep?.traceabilityId || sweep?.traceabilityReference);
+  pushFact(provenance, "evidenceIds", sweep?.evidenceIds || sweep?.outputEvidenceIds);
+  return provenance;
+};
+
+export const assessPandillasEvidence = (sweeps: any[] = []): PandillasEvidenceAssessment => {
+  const pandillasSweeps = (sweeps || []).filter(isPandillasSweepCandidate);
+  if (pandillasSweeps.length === 0) {
+    return { state: "NO_EVIDENCE", facts: [], provenance: [] };
+  }
+
+  for (const sweep of pandillasSweeps) {
+    const status = normalizePandillasStatus(sweep);
+    if (!status) continue;
+
+    const facts = extractPandillasFacts(sweep);
+    const provenance = extractPandillasProvenance(sweep, status);
+
+    if (status === "SUCCESS") {
+      return { state: "EVIDENCE_PRESENT", status, sweep, facts, provenance };
+    }
+    if (status === "EMPTY") {
+      return { state: "EVIDENCE_EMPTY", status, sweep, facts: [], provenance };
+    }
+    return { state: "EVIDENCE_UNAVAILABLE", status, sweep, facts: [], provenance };
+  }
+
+  return { state: "EVIDENCE_INELIGIBLE", facts: [], provenance: [] };
+};
+
+const renderPandillasProvenance = (provenance: string[]): string =>
+  provenance.length > 0 ? provenance.map((item) => `- ${item}`).join("\n") : "- Sin provenance gobernado disponible.";
+
+export const buildEvidenceBoundPandillasNarrative = (sweeps: any[] = []): string => {
+  const assessment = assessPandillasEvidence(sweeps);
+
+  if (assessment.state === "EVIDENCE_PRESENT") {
+    const facts = assessment.facts.length > 0
+      ? assessment.facts.map((fact) => `- ${fact}`).join("\n")
+      : "- El resultado SUCCESS no contiene atributos narrables suficientes para afirmar presencia, influencia o actividad especifica.";
+
+    return `HALLAZGO:\n${facts}\n\nEVIDENCIA:\n${renderPandillasProvenance(assessment.provenance)}\n\nANÁLISIS:\nLa narrativa se limita a los atributos presentes en el resultado gobernado del barrido de Pandillas. No se agregan atributos ausentes ni inferencias contextuales no sustentadas.\n\nIMPLICACIÓN OPERATIVA:\nUsar estos datos solo dentro del alcance, fuente y estado terminal reportados por el barrido gobernado.`;
+  }
+
+  if (assessment.state === "EVIDENCE_EMPTY") {
+    return `HALLAZGO:\n${PANDILLAS_EMPTY_EVIDENCE_TEXT}\n\nEVIDENCIA:\n${renderPandillasProvenance(assessment.provenance)}\n\nANÁLISIS:\nEl resultado EMPTY se interpreta unicamente como ausencia de coincidencias dentro del alcance de la consulta ejecutada; no equivale a inexistencia absoluta de pandillas.\n\nIMPLICACIÓN OPERATIVA:\nNo elevar el capitulo a hecho positivo sin un nuevo barrido gobernado con hallazgos verificables.`;
+  }
+
+  const statusDetail = assessment.status ? ` Estado terminal recibido: ${assessment.status}.` : "";
+  return `HALLAZGO:\n${PANDILLAS_INSUFFICIENT_EVIDENCE_TEXT}\n\nEVIDENCIA:\nNo existe barrido gobernado SUCCESS o EMPTY que habilite narrativa factual de Pandillas.${statusDetail}\n\nANÁLISIS:\nLas menciones lexicales en markdown, CIFA, SCINCE u otros contextos diagnosticos no constituyen corroboracion institucional de Pandillas.\n\nIMPLICACIÓN OPERATIVA:\nMantener el capitulo en condicion de evidencia insuficiente hasta contar con resultado gobernado admisible.`;
+};
+
+const buildPandillasTraceabilityEntry = (assessment: PandillasEvidenceAssessment) => {
+  if (assessment.state === "EVIDENCE_PRESENT") {
+    return {
+      componente: "Motor de Pandillas",
+      fuente: assessment.sweep?.source || assessment.sweep?.provider || "Barrido gobernado de Pandillas",
+      metodo: "Evaluacion evidence-bound P1-E",
+      hallazgo: assessment.facts[0] || "Resultado SUCCESS sin atributos narrables",
+      impacto: `Estado: ${assessment.status}`
+    };
+  }
+  if (assessment.state === "EVIDENCE_EMPTY") {
+    return {
+      componente: "Motor de Pandillas",
+      fuente: assessment.sweep?.source || assessment.sweep?.provider || "Barrido gobernado de Pandillas",
+      metodo: "Evaluacion evidence-bound P1-E",
+      hallazgo: "Sin coincidencias gobernadas en la consulta ejecutada",
+      impacto: `Estado: ${assessment.status}`
+    };
+  }
+  return null;
+};
+
 /**
  * CAPA EDITORIAL DE INTELIGENCIA (EDITORIAL LAYER v9.0)
  */
@@ -657,7 +833,7 @@ export const buildIntelligenceEditorialPayload = async (
   };
 
   // Bloque II: Matriz de Trazabilidad Analítica
-  const hasPandillaMention = rawContent.toLowerCase().includes("pandilla") || rawContent.toLowerCase().includes("clica") || sweeps.some(s => s.engine?.toLowerCase().includes("pandillas"));
+  const pandillasEvidence = assessPandillasEvidence(sweeps);
   const trazabilidadMatrix = Object.keys(hieData.traceability).map(key => {
     const item = hieData.traceability[key];
     return {
@@ -669,27 +845,13 @@ export const buildIntelligenceEditorialPayload = async (
     };
   });
 
-  if (hasPandillaMention) {
-    trazabilidadMatrix.push({
-      componente: "Motor de Pandillas",
-      fuente: "Censo Local Pandillas",
-      metodo: "Análisis de territorialidad",
-      hallazgo: "Zona de influencia activa identificada",
-      impacto: "Disponibilidad: Media"
-    });
-  }
+  const pandillasTraceabilityEntry = buildPandillasTraceabilityEntry(pandillasEvidence);
+  if (pandillasTraceabilityEntry) trazabilidadMatrix.push(pandillasTraceabilityEntry);
 
 
 
   // Pandillas territorial analysis
-  let pandillasAnalysis = cleanTechnicalJargon(extractSection(rawContent, 9));
-  if (!pandillasAnalysis || pandillasAnalysis.length < 10) {
-    if (hasPandillaMention) {
-      pandillasAnalysis = "El análisis territorial identificó dinámicas delictivas asociadas a grupos locales con influencia en el polígono estudiado, principalmente en conductas de oportunidad y consumo de sustancias en la vía pública, lo que impacta la percepción de seguridad.";
-    } else {
-      pandillasAnalysis = "No se identificó presencia territorial directa asociada al área analizada.";
-    }
-  }
+  const pandillasAnalysis = buildEvidenceBoundPandillasNarrative(sweeps);
 
   // Helper para extraer la interpretación de mapas generada por Gemini
   const parseMapsInterpretation = (rawMapsText: string, mapIdx: number): string => {
@@ -1138,16 +1300,7 @@ export const buildIntelligenceEditorialPayload = async (
     ? osintSynthesized
     : formatToFourPartStructure(osintSynthesized, projectName, date, locationStr);
 
-  const formattedPandillasAnalysis = formatToFourPartStructure(
-    pandillasAnalysis,
-    projectName,
-    date,
-    locationStr,
-    "Presencia probable de grupos locales no estructurados vinculados a conductas delictivas menores.",
-    "Monitoreo de graffiti/marcas de territorio e inteligencia de campo registrada en la base de datos.",
-    "Las agrupaciones aprovechan predios baldíos sin cerramientos como puntos de reunión y zonas de resguardo temporal.",
-    "Notificar formalmente a dueños de baldíos para cerramientos y coordinar remoción de graffiti."
-  );
+  const formattedPandillasAnalysis = pandillasAnalysis;
 
   const formattedConclusionesText = formatToFourPartStructure(
     cleanTechnicalJargon(rawConclusionsText) || "Conclusiones tácticas de la geointeligencia delictiva.",
