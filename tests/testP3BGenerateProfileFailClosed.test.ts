@@ -6,6 +6,9 @@ import {
   buildGenerateProfileCompleteEvent,
   buildGenerateProfileErrorEvent,
   classifyGenerateProfileProviderError,
+  GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+  getGenerateProfileProviderRetryDelayMs,
+  shouldRetryGenerateProfileProviderHttpStatus,
 } from "../src/utils/generateProfileChapterProtocol";
 import { shouldRetryGenerateProfileRequest } from "../src/utils/generateProfileAuthPolicy";
 
@@ -153,5 +156,98 @@ describe("P3-B generate-profile fail-closed chapter protocol", () => {
     expect(appendIndex).toBeGreaterThan(assertIndex);
     expect(source).toContain("setAiProfile(safeMarkdown)");
     expect(source).toContain("setEditableProfile(safeMarkdown)");
+  });
+});
+
+describe("P4-G Gemini REST transient provider retry", () => {
+  test("TEST P4-G-1 statuses transitorios son retryable antes del limite", () => {
+    for (const status of [429, 500, 502, 503, 504]) {
+      expect(
+        shouldRetryGenerateProfileProviderHttpStatus(
+          status,
+          1,
+          GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+        ),
+      ).toBe(true);
+
+      expect(
+        shouldRetryGenerateProfileProviderHttpStatus(
+          status,
+          2,
+          GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+        ),
+      ).toBe(true);
+    }
+  });
+
+  test("TEST P4-G-2 tercer intento nunca vuelve a reintentar", () => {
+    for (const status of [429, 500, 502, 503, 504]) {
+      expect(
+        shouldRetryGenerateProfileProviderHttpStatus(
+          status,
+          3,
+          GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("TEST P4-G-3 errores no transitorios no se reintentan", () => {
+    for (const status of [400, 401, 403, 404, 422]) {
+      expect(
+        shouldRetryGenerateProfileProviderHttpStatus(
+          status,
+          1,
+          GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("TEST P4-G-4 backoff gobernado es 1s y 2s", () => {
+    expect(getGenerateProfileProviderRetryDelayMs(1)).toBe(1000);
+    expect(getGenerateProfileProviderRetryDelayMs(2)).toBe(2000);
+  });
+
+  test("TEST P4-G-5 route aplica retry antes de abrir el reader del stream", () => {
+    const source = routeSource();
+
+    const retryIndex = source.indexOf(
+      "shouldRetryGenerateProfileProviderHttpStatus(",
+    );
+    const readerIndex = source.indexOf(
+      "const reader = response.body?.getReader();",
+    );
+
+    expect(retryIndex).toBeGreaterThan(-1);
+    expect(readerIndex).toBeGreaterThan(-1);
+    expect(retryIndex).toBeLessThan(readerIndex);
+  });
+
+  test("TEST P4-G-6 route limita proveedor a tres intentos", () => {
+    const source = routeSource();
+
+    expect(source).toContain(
+      "attempt <= GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS",
+    );
+    expect(GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS).toBe(3);
+  });
+
+  test("TEST P4-G-7 fail-closed P3-B permanece activo tras agotar retry", () => {
+    const status = classifyGenerateProfileProviderError(
+      new Error('Gemini REST API returned 503: {"status":"UNAVAILABLE"}'),
+    );
+
+    expect(status).toBe("PROVIDER_ERROR");
+
+    const payload = {
+      markdown: "",
+      generationStatus: status,
+      terminalEvent: buildGenerateProfileErrorEvent(status),
+    };
+
+    expect(() => assertGenerateProfileChapterAccepted(payload)).toThrow(
+      GENERATE_PROFILE_CHAPTER_ERROR_MESSAGE,
+    );
   });
 });

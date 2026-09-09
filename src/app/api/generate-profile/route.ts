@@ -40,6 +40,9 @@ import {
   buildGenerateProfileCompleteEvent,
   buildGenerateProfileErrorEvent,
   classifyGenerateProfileProviderError,
+  GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+  getGenerateProfileProviderRetryDelayMs,
+  shouldRetryGenerateProfileProviderHttpStatus,
   type GenerateProfileChapterStatus,
   type GenerateProfileTerminalEvent,
 } from "@/utils/generateProfileChapterProtocol";
@@ -265,18 +268,50 @@ async function streamGeminiRestApi(
   onChunk: (text: string) => void
 ): Promise<void> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?key=${apiKey}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.15 }
-    })
-  });
-  if (!response.ok) {
+
+  let response: Response | null = null;
+
+  for (let attempt = 1; attempt <= GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS; attempt += 1) {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.15 }
+      })
+    });
+
+    if (response.ok) {
+      break;
+    }
+
+    const status = response.status;
     const errText = await response.text();
-    throw new Error(`Gemini REST API returned ${response.status}: ${errText}`);
+
+    if (!shouldRetryGenerateProfileProviderHttpStatus(
+      status,
+      attempt,
+      GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+    )) {
+      throw new Error(`Gemini REST API returned ${status}: ${errText}`);
+    }
+
+    const retryDelayMs = getGenerateProfileProviderRetryDelayMs(attempt);
+
+    console.warn("[api/generate-profile] Gemini REST transient failure; retrying:", {
+      status,
+      attempt,
+      maxAttempts: GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+      retryDelayMs,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, retryDelayMs));
   }
+
+  if (!response || !response.ok) {
+    throw new Error("Gemini REST API exhausted retry attempts without a successful response.");
+  }
+
   const reader = response.body?.getReader();
   if (!reader) throw new Error("No response body stream available.");
 

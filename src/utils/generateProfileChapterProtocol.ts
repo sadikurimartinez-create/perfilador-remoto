@@ -126,6 +126,24 @@ export function createGenerateProfileStreamJsonFinalizer(
   };
 }
 
+export const GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS = 3;
+
+export function shouldRetryGenerateProfileProviderHttpStatus(
+  status: number,
+  attempt: number,
+  maxAttempts: number = GENERATE_PROFILE_PROVIDER_MAX_ATTEMPTS,
+): boolean {
+  if (!Number.isInteger(attempt) || attempt < 1 || attempt >= maxAttempts) {
+    return false;
+  }
+
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+export function getGenerateProfileProviderRetryDelayMs(attempt: number): number {
+  if (attempt <= 1) return 1000;
+  return 2000;
+}
 export function classifyGenerateProfileProviderError(error: unknown): Exclude<GenerateProfileChapterStatus, "GENERATED" | "EMPTY_VALID"> {
   const raw = error instanceof Error ? error.message : String(error || "");
   const message = raw.toLowerCase();
