@@ -1141,7 +1141,7 @@ export function PhotoAlbum({
       analysisOutputs: (project as any)?.analysisOutputs || (analysisResult as any)?.analysisOutputs || [],
       findings: (project as any)?.findings || (analysisResult as any)?.findings || [],
     };
-    return (project as any)?.reportReadyAssessment || assessReportReadiness(liveProject);
+    return assessReportReadiness(liveProject);
   }, [project, album, documents, analysisResult]);
   const institutionalProducts = useMemo(
     () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),

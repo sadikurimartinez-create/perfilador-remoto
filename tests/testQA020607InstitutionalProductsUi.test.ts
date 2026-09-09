@@ -269,4 +269,17 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(handler).not.toContain("/api/generate-profile");
     expect(photoAlbum).toContain('[REPORT PRODUCT] LEGACY_DICTAMEN');
   });
+
+  test("32 gate de productos institucionales se recalcula desde estado vivo", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const start = photoAlbum.indexOf("const reportReadyAssessment = useMemo(() => {");
+    const end = photoAlbum.indexOf("const institutionalProducts = useMemo", start);
+    const gateBlock = photoAlbum.slice(start, end);
+
+    expect(gateBlock).toContain("album");
+    expect(gateBlock).toContain("documents");
+    expect(gateBlock).toContain("analysisResult");
+    expect(gateBlock).toContain("return assessReportReadiness(liveProject);");
+    expect(gateBlock).not.toContain("project as any)?.reportReadyAssessment || assessReportReadiness");
+  });
 });
