@@ -3877,13 +3877,24 @@ const hasMinimumPhotos =
                   const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
 
                   const data = await getDenueData(centerLat, centerLng, 500);
-                  if (data.exito) {
+                  const denueStatus = data.denueStatus || (data.exito ? "SUCCESS" : "PROVIDER_ERROR");
+                  if (denueStatus === "SUCCESS") {
                     const newContext = `[INTELIGENCIA COMERCIAL - INEGI DENUE] A 500 metros del epicentro se detectaron ${data.total} negocios formales. Destacan: ${data.resumen}. Observaciones tácticas: Este mapeo permite cruzar giros antagónicos (ej. bares cerca de escuelas) y detectar vulnerabilidades o atractores de riesgo en la zona.`;
                     const sourceItem = adaptDenueScinceSource({
                       expedienteId: project?.id,
                       integrity: data.epistemicIntegrity,
                     });
+                    if (!canAdmitSourceToInstitutionalContext(sourceItem)) {
+                      setError("DENUE no cuenta con elegibilidad institucional para incorporarse al expediente.");
+                      return;
+                    }
                     setDenueDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
+                  } else if (denueStatus === "EMPTY") {
+                    setError("SIN ESTABLECIMIENTOS DENUE EN LA GEOMETRÍA CONSULTADA");
+                  } else if (denueStatus === "NOT_CONFIGURED") {
+                    setError("DENUE no está configurado en este entorno.");
+                  } else if (denueStatus === "AUTH_ERROR") {
+                    setError("Credencial DENUE inválida o no autorizada.");
                   } else {
                     setError(data.error || "Error al consultar INEGI DENUE.");
                   }

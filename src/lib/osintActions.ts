@@ -6,6 +6,25 @@ import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, Ep
 import { prepareDenueAcquisitionPois } from "@/utils/denueCanonicalPoi";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
 
+export type DenueQueryStatus =
+  | "SUCCESS"
+  | "EMPTY"
+  | "NOT_CONFIGURED"
+  | "AUTH_ERROR"
+  | "PROVIDER_ERROR"
+  | "INVALID_RESPONSE"
+  | "NOT_ELIGIBLE";
+
+const DENUE_STATUS_MESSAGES: Record<DenueQueryStatus, string> = {
+  SUCCESS: "DENUE consultado correctamente.",
+  EMPTY: "SIN ESTABLECIMIENTOS DENUE EN LA GEOMETRÍA CONSULTADA",
+  NOT_CONFIGURED: "DENUE no está configurado en este entorno.",
+  AUTH_ERROR: "Credencial DENUE inválida o no autorizada.",
+  PROVIDER_ERROR: "Error del proveedor INEGI DENUE.",
+  INVALID_RESPONSE: "Respuesta inválida del proveedor INEGI DENUE.",
+  NOT_ELIGIBLE: "DENUE requiere coordenadas GPS válidas del expediente.",
+};
+
 function osintEpistemicIntegrity(params: {
   sourceId: string;
   providerId: string;
@@ -140,91 +159,108 @@ export async function getScinceData(lat: number, lng: number) {
 
 export async function getDenueData(lat: number, lng: number, radio: number = 500) {
   try {
-    if (!lat || !lng) throw new Error("Faltan coordenadas");
+    const query = `${lat},${lng},${radio}`;
+    const denueIntegrity = (params: {
+      acquisitionStatus: AcquisitionStatus;
+      observedAt?: string | null;
+      generatedAt?: string | null;
+      resultCount: number;
+    }) => osintEpistemicIntegrity({
+      sourceId: "inegi-denue-api",
+      providerId: "INEGI_DENUE",
+      providerName: "INEGI DENUE API Publica",
+      sourceType: "DENUE",
+      acquisitionMode: "OBSERVED",
+      acquisitionStatus: params.acquisitionStatus,
+      semanticRole: "SOURCE_FACT",
+      observedAt: params.observedAt ?? null,
+      generatedAt: params.generatedAt ?? undefined,
+      sourceReference: "src/lib/osintActions.ts:getDenueData",
+      sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
+      rawSourceReference: "denue:v1:consulta:Buscar:todos",
+      query,
+      resultCount: params.resultCount,
+      geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
+    });
+
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+      return {
+        exito: false,
+        denueStatus: "NOT_ELIGIBLE" as DenueQueryStatus,
+        error: DENUE_STATUS_MESSAGES.NOT_ELIGIBLE,
+        epistemicIntegrity: denueIntegrity({
+          acquisitionStatus: "FAILED",
+          generatedAt: new Date().toISOString(),
+          resultCount: 0,
+        }),
+      };
+    }
     const token = process.env.INEGI_DENUE_TOKEN;
     if (!token) {
       return {
         exito: false,
-        error: "Proveedor INEGI DENUE no configurado.",
-        epistemicIntegrity: osintEpistemicIntegrity({
-          sourceId: "inegi-denue-api",
-          providerId: "INEGI_DENUE",
-          providerName: "INEGI DENUE API Publica",
-          sourceType: "DENUE",
-          acquisitionMode: "OBSERVED",
+        denueStatus: "NOT_CONFIGURED" as DenueQueryStatus,
+        error: DENUE_STATUS_MESSAGES.NOT_CONFIGURED,
+        epistemicIntegrity: denueIntegrity({
           acquisitionStatus: "NOT_CONFIGURED",
-          semanticRole: "SOURCE_FACT",
-          observedAt: null,
           generatedAt: new Date().toISOString(),
-          sourceReference: "src/lib/osintActions.ts:getDenueData",
-          sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
-          rawSourceReference: "denue:v1:consulta:Buscar:todos",
-          query: `${lat},${lng},${radio}`,
           resultCount: 0,
-          geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
         }),
       };
     }
     const url = `https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar/todos/${lat},${lng}/${radio}/${token}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Error de la API de INEGI: ${res.status}`);
+    if (!res.ok) {
+      return {
+        exito: false,
+        denueStatus: (res.status === 401 || res.status === 403 ? "AUTH_ERROR" : "PROVIDER_ERROR") as DenueQueryStatus,
+        error: res.status === 401 || res.status === 403
+          ? DENUE_STATUS_MESSAGES.AUTH_ERROR
+          : `${DENUE_STATUS_MESSAGES.PROVIDER_ERROR} HTTP ${res.status}`,
+        epistemicIntegrity: denueIntegrity({
+          acquisitionStatus: "FAILED",
+          generatedAt: new Date().toISOString(),
+          resultCount: 0,
+        }),
+      };
+    }
     
     const data = await res.json();
     if (!Array.isArray(data)) {
       return {
-        exito: true,
+        exito: false,
+        denueStatus: "INVALID_RESPONSE" as DenueQueryStatus,
         total: 0,
-        resumen: "No se encontraron negocios.",
-        epistemicIntegrity: osintEpistemicIntegrity({
-          sourceId: "inegi-denue-api",
-          providerId: "INEGI_DENUE",
-          providerName: "INEGI DENUE API Publica",
-          sourceType: "DENUE",
-          acquisitionMode: "OBSERVED",
-          acquisitionStatus: "NO_DATA",
-          semanticRole: "SOURCE_FACT",
-          observedAt: new Date().toISOString(),
-          sourceReference: "src/lib/osintActions.ts:getDenueData",
-          sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
-          rawSourceReference: "denue:v1:consulta:Buscar:todos",
-          query: `${lat},${lng},${radio}`,
+        error: DENUE_STATUS_MESSAGES.INVALID_RESPONSE,
+        epistemicIntegrity: denueIntegrity({
+          acquisitionStatus: "FAILED",
+          generatedAt: new Date().toISOString(),
           resultCount: 0,
-          geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
         }),
       };
     }
     const acquiredAt = new Date().toISOString();
-    const query = `${lat},${lng},${radio}`;
     const pois = prepareDenueAcquisitionPois(data, { query, acquiredAt });
     const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
 
     return {
       exito: true,
+      denueStatus: (data.length > 0 ? "SUCCESS" : "EMPTY") as DenueQueryStatus,
       total: data.length,
       pois,
-      resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : "Ninguno.",
-      epistemicIntegrity: osintEpistemicIntegrity({
-        sourceId: "inegi-denue-api",
-        providerId: "INEGI_DENUE",
-        providerName: "INEGI DENUE API Publica",
-        sourceType: "DENUE",
-        acquisitionMode: "OBSERVED",
+      resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : DENUE_STATUS_MESSAGES.EMPTY,
+      epistemicIntegrity: denueIntegrity({
         acquisitionStatus: data.length > 0 ? "ACQUIRED" : "NO_DATA",
-        semanticRole: "SOURCE_FACT",
         observedAt: acquiredAt,
-        sourceReference: "src/lib/osintActions.ts:getDenueData",
-        sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
-        rawSourceReference: "denue:v1:consulta:Buscar:todos",
-        query,
         resultCount: data.length,
-        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
       }),
     };
   } catch (error: any) {
     return {
       exito: false,
-      error: error.message || "Error interno del servidor al consultar DENUE.",
+      denueStatus: "PROVIDER_ERROR" as DenueQueryStatus,
+      error: error.message || DENUE_STATUS_MESSAGES.PROVIDER_ERROR,
       epistemicIntegrity: osintEpistemicIntegrity({
         sourceId: "inegi-denue-api",
         providerId: "INEGI_DENUE",

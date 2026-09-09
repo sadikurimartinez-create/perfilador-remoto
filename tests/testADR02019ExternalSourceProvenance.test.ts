@@ -62,6 +62,8 @@ describe("ADR-020.19 - External source provenance", () => {
     const provenance = result.epistemicIntegrity;
 
     expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("NOT_CONFIGURED");
+    expect(result.error).toBe("DENUE no está configurado en este entorno.");
     expect(result.total).toBeUndefined();
     expect(provenance.providerId).toBe("INEGI_DENUE");
     expect(provenance.sourceType).toBe("DENUE");
@@ -81,6 +83,8 @@ describe("ADR-020.19 - External source provenance", () => {
     const provenance = result.epistemicIntegrity;
 
     expect(result.exito).toBe(true);
+    expect(result.denueStatus).toBe("SUCCESS");
+    expect(result.total).toBe(1);
     expect(provenance.providerId).toBe("INEGI_DENUE");
     expect(provenance.providerName).toBe("INEGI DENUE API Publica");
     expect(provenance.sourceType).toBe("DENUE");
@@ -151,7 +155,9 @@ describe("ADR-020.19 - External source provenance", () => {
     const provenance = result.epistemicIntegrity;
 
     expect(result.exito).toBe(true);
+    expect(result.denueStatus).toBe("EMPTY");
     expect(result.total).toBe(0);
+    expect(result.resumen).toBe("SIN ESTABLECIMIENTOS DENUE EN LA GEOMETRÍA CONSULTADA");
     expect(provenance.providerId).toBe("INEGI_DENUE");
     expect(provenance.acquisitionStatus).toBe("NO_DATA");
     expect(provenance.query).toBe("21.8818,-102.2916,350");
@@ -170,8 +176,66 @@ describe("ADR-020.19 - External source provenance", () => {
     const provenance = result.epistemicIntegrity;
 
     expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("PROVIDER_ERROR");
     expect(provenance.acquisitionStatus).toBe("FAILED");
     expect(provenance.resultCount).toBe(0);
+  });
+
+  test("TEST P2-H-2 DENUE token invalido 401/403 returns AUTH_ERROR", async () => {
+    (global as any).fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+    });
+    const { getDenueData } = await import("../src/lib/osintActions");
+
+    const result = await getDenueData(21.8818, -102.2916, 500);
+
+    expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("AUTH_ERROR");
+    expect(result.error).toBe("Credencial DENUE inválida o no autorizada.");
+    expect(result.epistemicIntegrity.acquisitionStatus).toBe("FAILED");
+  });
+
+  test("TEST P2-H-3 DENUE provider 500 returns PROVIDER_ERROR", async () => {
+    (global as any).fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    });
+    const { getDenueData } = await import("../src/lib/osintActions");
+
+    const result = await getDenueData(21.8818, -102.2916, 500);
+
+    expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("PROVIDER_ERROR");
+    expect(result.error).toContain("HTTP 500");
+    expect(result.epistemicIntegrity.resultCount).toBe(0);
+  });
+
+  test("TEST P2-H-4 DENUE invalid provider payload returns INVALID_RESPONSE", async () => {
+    (global as any).fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ error: "not-array" }),
+    });
+    const { getDenueData } = await import("../src/lib/osintActions");
+
+    const result = await getDenueData(21.8818, -102.2916, 500);
+
+    expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("INVALID_RESPONSE");
+    expect(result.total).toBe(0);
+    expect(result.epistemicIntegrity.acquisitionStatus).toBe("FAILED");
+  });
+
+  test("TEST P2-H-5 DENUE no usa coordenadas default si falta geo valida", async () => {
+    (global as any).fetch = jest.fn();
+    const { getDenueData } = await import("../src/lib/osintActions");
+
+    const result = await getDenueData(Number.NaN, -102.2916, 500);
+
+    expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("NOT_ELIGIBLE");
+    expect(result.error).toBe("DENUE requiere coordenadas GPS válidas del expediente.");
+    expect((global as any).fetch).not.toHaveBeenCalled();
   });
 
   test("TEST 7 legacy object without provenance is preserved without fabricated provider fields", () => {
@@ -226,5 +290,64 @@ describe("ADR-020.19 - External source provenance", () => {
 
     expect(source).not.toMatch(/INEGI_DENUE_TOKEN\s*\|\|/);
     expect(source).not.toMatch(/const\s+token\s*=.*\|\|\s*["'][0-9a-f-]{24,}["']/i);
+  });
+
+  test("TEST P2-H-6 PhotoAlbum SUCCESS abre confirmacion DENUE", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+
+    expect(source).toContain('if (denueStatus === "SUCCESS")');
+    expect(source).toContain("setDenueDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem })");
+  });
+
+  test("TEST P2-H-7 PhotoAlbum EMPTY no abre confirmacion como si hubiera datos", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+
+    expect(source).toContain('} else if (denueStatus === "EMPTY")');
+    expect(source).toContain("SIN ESTABLECIMIENTOS DENUE EN LA GEOMETRÍA CONSULTADA");
+  });
+
+  test("TEST P2-H-8 PhotoAlbum NOT_CONFIGURED no abre confirmacion", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+
+    expect(source).toContain('} else if (denueStatus === "NOT_CONFIGURED")');
+    expect(source).toContain("DENUE no está configurado en este entorno.");
+  });
+
+  test("TEST P2-H-9 PhotoAlbum AUTH_ERROR es visible", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+
+    expect(source).toContain('} else if (denueStatus === "AUTH_ERROR")');
+    expect(source).toContain("Credencial DENUE inválida o no autorizada.");
+  });
+
+  test("TEST P2-H-10 eligibility real DENUE se preserva", async () => {
+    const { adaptDenueScinceSource, canAdmitSourceToInstitutionalContext } = await import("../src/services/geoint/denueScinceOrchestrationAdapter");
+
+    const item = adaptDenueScinceSource({
+      integrity: {
+        sourceId: "inegi-denue-api",
+        providerId: "INEGI_DENUE",
+        sourceType: "DENUE",
+        acquisitionMode: "OBSERVED",
+        acquisitionStatus: "ACQUIRED",
+        query: "21.88,-102.29,500",
+      },
+    });
+
+    expect(item?.eligibility).toBe("ELIGIBLE");
+    expect(canAdmitSourceToInstitutionalContext(item)).toBe(true);
+  });
+
+  test("TEST P2-H-11 DENUE no fabrica datos cuando no esta configurado", async () => {
+    delete process.env.INEGI_DENUE_TOKEN;
+    (global as any).fetch = jest.fn();
+    const { getDenueData } = await import("../src/lib/osintActions");
+
+    const result = await getDenueData(21.8818, -102.2916, 500);
+
+    expect(result.exito).toBe(false);
+    expect(result.denueStatus).toBe("NOT_CONFIGURED");
+    expect(result.pois).toBeUndefined();
+    expect(result.total).toBeUndefined();
   });
 });
