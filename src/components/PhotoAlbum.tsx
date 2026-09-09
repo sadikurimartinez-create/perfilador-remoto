@@ -33,6 +33,7 @@ import {
   assertGenerateProfileServerSession,
   shouldRetryGenerateProfileRequest,
 } from "@/utils/generateProfileAuthPolicy";
+import { assertGenerateProfileChapterAccepted } from "@/utils/generateProfileChapterProtocol";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { assessReportReadiness } from "@/utils/reportReadyGovernance";
 import {
@@ -1819,6 +1820,16 @@ const hasMinimumPhotos =
             throw new Error(`El servidor devolvió una respuesta vacía o incompleta en el capítulo ${ch}.`);
           }
 
+          let acceptedMarkdown = "";
+          try {
+            acceptedMarkdown = assertGenerateProfileChapterAccepted(chapterData);
+          } catch (chapterErr) {
+            const safeMarkdown = finalMarkdown.trim();
+            setAiProfile(safeMarkdown);
+            setEditableProfile(safeMarkdown);
+            throw chapterErr;
+          }
+
           if (!data) {
             data = { meta: {} };
           }
@@ -1828,8 +1839,8 @@ const hasMinimumPhotos =
               ...chapterData.meta
             };
           }
-          data.markdown = chapterData.markdown;
-          let chunkMarkdown = chapterData.markdown || "";
+          data.markdown = acceptedMarkdown;
+          let chunkMarkdown = acceptedMarkdown;
           if (chunkMarkdown.startsWith("```markdown")) {
             chunkMarkdown = chunkMarkdown.replace(/^```markdown\s*/i, "").replace(/\s*```$/g, "").trim();
           } else if (chunkMarkdown.startsWith("```")) {

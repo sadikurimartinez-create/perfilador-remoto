@@ -35,6 +35,13 @@ import {
   createGenerateProfileAiAnalyticalOutput,
   type AiAnalyticalOutputType
 } from "@/utils/aiAnalysisGovernance";
+import {
+  buildGenerateProfileCompleteEvent,
+  buildGenerateProfileErrorEvent,
+  classifyGenerateProfileProviderError,
+  type GenerateProfileChapterStatus,
+  type GenerateProfileTerminalEvent,
+} from "@/utils/generateProfileChapterProtocol";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -741,6 +748,8 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         let accumulatedText = "";
         let generationProvider: string | null = streamingResp ? "VertexAI" : null;
         let generationError: string | null = null;
+        let generationStatus: GenerateProfileChapterStatus = "GENERATED";
+        let terminalEvent: GenerateProfileTerminalEvent | null = null;
 
         try {
           if (streamingResp) {
@@ -807,16 +816,23 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             console.log(`Longitud del Markdown generado: ${totalLength} caracteres`);
             console.log(`------------------------------------------------------\n`);
           }
+
+          if (!accumulatedText.trim()) {
+            throw new Error("INVALID_PROVIDER_RESPONSE_EMPTY_MARKDOWN");
+          }
+
+          terminalEvent = buildGenerateProfileCompleteEvent(accumulatedText);
+          generationStatus = terminalEvent.status;
         } catch (e: any) {
-          const escapedErr = (e.message || "Error desconocido")
-            .replace(/\\/g, "\\\\")
-            .replace(/\"/g, '\\"')
-            .replace(/\n/g, "\\n")
-            .replace(/\r/g, "\\r");
-          generationError = e.message || "Error desconocido";
-          const errorMsg = "\\n\\n[Error de generación: " + escapedErr + "]";
-          accumulatedText += "\n\n[Error de generación: " + (e.message || "Error desconocido") + "]";
-          controller.enqueue(encoder.encode(errorMsg));
+          generationStatus = classifyGenerateProfileProviderError(e);
+          generationError = generationStatus;
+          terminalEvent = buildGenerateProfileErrorEvent(generationStatus);
+          console.error("[api/generate-profile] Provider generation failed:", {
+            chapter,
+            chapterLabel: currentChapterLabel,
+            status: generationStatus,
+            message: e?.message || String(e),
+          });
         } finally {
           clearInterval(keepAlive);
           const aiAnalyticalOutput = buildGenerateProfileOutputTrace({
@@ -836,7 +852,9 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           });
           const outputTrace = JSON.stringify(aiAnalyticalOutput);
           // Cerrar el string del markdown y adjuntar trazabilidad institucional de la salida IA.
-          controller.enqueue(encoder.encode(`","aiAnalyticalOutput":${outputTrace}}`));
+          controller.enqueue(encoder.encode(
+            `","generationStatus":${JSON.stringify(generationStatus)},"terminalEvent":${JSON.stringify(terminalEvent)},"aiAnalyticalOutput":${outputTrace}}`
+          ));
           controller.close();
         }
       }
