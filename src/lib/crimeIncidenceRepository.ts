@@ -1,6 +1,7 @@
 ﻿import fs from "node:fs";
 import path from "node:path";
 import Papa from "papaparse";
+import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db";
 import {
   buildCrimeQueryLineage,
@@ -256,8 +257,9 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
     });
   }
 
-  const client = await getPool().connect();
+  let client: PoolClient | null = null;
   try {
+    client = await getPool().connect();
     const startDateParamIndex = spatialQuery.spatialParams.length + 1;
     const endDateParamIndex = spatialQuery.spatialParams.length + 2;
     const incidentTypesParamIndex = spatialQuery.spatialParams.length + 3;
@@ -346,7 +348,7 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
       error: error.message || String(error),
     });
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

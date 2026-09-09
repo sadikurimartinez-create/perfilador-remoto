@@ -222,4 +222,43 @@ describe("P1-I - PhotoAlbum incidencia canonical spatial query", () => {
     expect(block).toContain("selectedCrimeCategoryFilters: activeDelitos");
     expect(block).toContain("allowLegacyFallback: true");
   });
+
+  test("T12 P4-E PhotoAlbum distingue transporte completado de exito de negocio", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+    const block = source.slice(
+      source.indexOf("const [mapRes, incidenciaRes] = await Promise.all"),
+      source.indexOf("// Empaquetar las instrucciones de la Evidencia Multimodal")
+    );
+
+    expect(block).toContain("APIs iniciales completaron transporte");
+    expect(block).not.toContain("APIs territoriales e incidencia resueltas");
+    expect(block).toContain("const incidenciaStatus = incidenciaJson.resultStatus || (incidenciaRes.ok ? \"SUCCESS\" : \"ERROR\")");
+    expect(block).toContain("Incidencia: ${incidenciaStatus}");
+  });
+
+  test("T13 P4-E PhotoAlbum no consume incidencia con business error como cero delitos", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+    const block = source.slice(
+      source.indexOf("let incidenciaLocal: any[] = []"),
+      source.indexOf("// Empaquetar las instrucciones de la Evidencia Multimodal")
+    );
+
+    expect(block).toContain("incidenciaRes.ok && incidenciaJson.success !== false");
+    expect(block).toContain("incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30)");
+    expect(block.indexOf("incidenciaRes.ok && incidenciaJson.success !== false")).toBeLessThan(
+      block.indexOf("incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30)")
+    );
+    expect(block).toContain("incidenciaError: incidenciaJson.error || incidenciaRes.statusText");
+  });
+
+  test("T14 P4-E SUCCESS_EMPTY se conserva como vacio valido distinguible", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+    const block = source.slice(
+      source.indexOf("let incidenciaLocal: any[] = []"),
+      source.indexOf("// Empaquetar las instrucciones de la Evidencia Multimodal")
+    );
+
+    expect(block).toContain("incidenciaStatus === \"SUCCESS_EMPTY\"");
+    expect(block).toContain("incidenciaStatus,");
+  });
 });

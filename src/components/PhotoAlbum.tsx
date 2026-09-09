@@ -1645,8 +1645,8 @@ const hasMinimumPhotos =
         incidenciaResPromise
       ]);
 
-      addLog("APIs territoriales e incidencia resueltas. La generacion del perfil no inicio un barrido OSINT.");
-      console.log("[confirmAndGenerateProfile] 2. APIs iniciales resueltas.");
+      addLog("APIs iniciales completaron transporte. La generacion del perfil no inicio un barrido OSINT.");
+      console.log("[confirmAndGenerateProfile] 2. APIs iniciales completaron transporte.");
 
       let currentAnalysisResult = analysisResult;
       let svData: any[] = [];
@@ -1667,22 +1667,36 @@ const hasMinimumPhotos =
       let incidenciaLocal: any[] = [];
       let incidenciaCompleta: any[] = [];
       let bibliografiaLocal = "";
-      if (incidenciaRes && incidenciaRes.ok) {
+      if (incidenciaRes) {
         try {
           const incText = await incidenciaRes.text();
           if (incText) {
             const incidenciaJson = JSON.parse(incText) as any;
-            incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
-            incidenciaCompleta = incidenciaJson.data ?? [];
-            bibliografiaLocal = incidenciaJson.bibliografia ?? "";
-            setDebugData((prev: any) => ({
-              ...(prev ?? {}),
-              incidencia: incidenciaLocal,
-              bibliografia: bibliografiaLocal,
-            }));
+            const incidenciaStatus = incidenciaJson.resultStatus || (incidenciaRes.ok ? "SUCCESS" : "ERROR");
+            addLog(`Incidencia: ${incidenciaStatus}`);
+            if (incidenciaRes.ok && incidenciaJson.success !== false && (incidenciaStatus === "SUCCESS_WITH_DATA" || incidenciaStatus === "SUCCESS_EMPTY" || incidenciaStatus === "SUCCESS")) {
+              incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
+              incidenciaCompleta = incidenciaJson.data ?? [];
+              bibliografiaLocal = incidenciaJson.bibliografia ?? "";
+              setDebugData((prev: any) => ({
+                ...(prev ?? {}),
+                incidencia: incidenciaLocal,
+                bibliografia: bibliografiaLocal,
+                incidenciaStatus,
+              }));
+            } else {
+              console.warn("[confirmAndGenerateProfile] Incidencia no disponible como resultado de negocio:", incidenciaStatus, incidenciaJson.error || incidenciaRes.statusText);
+              setDebugData((prev: any) => ({
+                ...(prev ?? {}),
+                incidencia: [],
+                incidenciaStatus,
+                incidenciaError: incidenciaJson.error || incidenciaRes.statusText,
+              }));
+            }
           }
         } catch (err) {
           console.warn("JSON Parse Error en incidenciaRes:", err);
+          addLog("Incidencia: BUSINESS_ERROR");
         }
       }
 

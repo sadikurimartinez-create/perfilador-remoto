@@ -1352,4 +1352,93 @@ describe("ADR-020.21 Fase 2 - Canonical persistence and query reconciliation", (
 
     errorSpy.mockRestore();
   });
+
+  test("TEST P4-E1 PostGIS connect rejection returns governed error result", async () => {
+    process.env.DATABASE_URL = "postgresql://configured-for-test";
+    mockConnect.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      allowLegacyFallback: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.querySource).toBe("POSTGIS");
+    expect(result.sourceStatus).toBe("FAILED");
+    expect(result.data).toEqual([]);
+    expect(result.error).toBe("ECONNREFUSED");
+    expect(result.lineage.recordSubset.returnedRecords).toBe(0);
+    expect(mockRelease).not.toHaveBeenCalled();
+  });
+
+  test("TEST P4-E2 PostGIS query failure releases acquired client and is not SUCCESS_EMPTY", async () => {
+    process.env.DATABASE_URL = "postgresql://configured-for-test";
+    mockQuery.mockRejectedValueOnce(new Error("query failed"));
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      allowLegacyFallback: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.sourceStatus).toBe("FAILED");
+    expect(result.error).toBe("query failed");
+    expect(result.data).toEqual([]);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  test("TEST P4-E3 valid PostGIS empty query remains governed empty success", async () => {
+    process.env.DATABASE_URL = "postgresql://configured-for-test";
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      allowLegacyFallback: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.querySource).toBe("POSTGIS");
+    expect(result.sourceStatus).toBe("POSTGIS_AVAILABLE");
+    expect(result.data).toEqual([]);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  test("TEST P4-E4 valid PostGIS rows remain governed success with data", async () => {
+    process.env.DATABASE_URL = "postgresql://configured-for-test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          incidente: "Robo",
+          fecha: "2026-07-01",
+          hora: "07:00:00",
+          rango_horario: "Matutino",
+          nom_asen: "Centro",
+          fuente_archivo: "db.csv",
+          source_fingerprint: "f".repeat(64),
+          dataset_version: "2026-TEST-v1",
+          lat: 21.8818,
+          lng: -102.2916,
+          distancia_m: 25,
+        },
+      ],
+    });
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      allowLegacyFallback: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.sourceStatus).toBe("POSTGIS_AVAILABLE");
+    expect(result.data).toHaveLength(1);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
 });

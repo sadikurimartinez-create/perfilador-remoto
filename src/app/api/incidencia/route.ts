@@ -44,6 +44,18 @@ function toFiniteNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function incidenceErrorHttpStatus(message: string): number {
+  if (
+    message.includes("INVALID") ||
+    message.includes("REQUIRES") ||
+    message.includes("UNSUPPORTED") ||
+    message.includes("STREET_CORRIDOR")
+  ) {
+    return 400;
+  }
+  return 500;
+}
+
 async function prepareCanonicalSpatialQueryForAdapter(
   query: IncidenceCanonicalSpatialQuery
 ): Promise<IncidenceCanonicalSpatialQuery> {
@@ -138,10 +150,19 @@ export async function POST(req: Request) {
     );
   } catch (err: any) {
     console.error("[api/incidencia] Error inesperado:", err);
+    const message = err?.message || String(err);
     return NextResponse.json(
-      { success: false, error: `Error interno: ${err.message || err}` },
       {
-        status: 500,
+        success: false,
+        resultStatus: "ERROR",
+        querySource: "NONE",
+        sourceStatus: "FAILED",
+        coverageStatus: "UNKNOWN_COVERAGE",
+        data: [],
+        error: message,
+      },
+      {
+        status: incidenceErrorHttpStatus(message),
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "POST, OPTIONS",
