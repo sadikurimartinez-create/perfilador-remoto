@@ -84,6 +84,15 @@ function mockResponse(status: number, body: any): Response {
   } as any;
 }
 
+function readPandillasUiSource() {
+  return fs.readFileSync(path.join(process.cwd(), "src/modules/pandillas/pandillas.ui.tsx"), "utf8");
+}
+
+function targetedSweepBlock() {
+  const source = readPandillasUiSource();
+  return source.slice(source.indexOf("const handleExecuteTargetedSweep = async"), source.indexOf("const handleResetForm ="));
+}
+
 describe("P1-E Pandillas non-blocking lifecycle", () => {
   beforeEach(() => {
     jest.useRealTimers();
@@ -163,7 +172,7 @@ describe("P1-E Pandillas non-blocking lifecycle", () => {
   });
 
   test("TEST 7 - no existe retry automático no humano", () => {
-    const source = fs.readFileSync(path.join(process.cwd(), "src/modules/pandillas/pandillas.ui.tsx"), "utf8");
+    const source = readPandillasUiSource();
 
     expect(source).not.toContain("setTimeout(handleExecuteTargetedSweep");
     expect(source).not.toContain("setInterval(handleExecuteTargetedSweep");
@@ -171,13 +180,13 @@ describe("P1-E Pandillas non-blocking lifecycle", () => {
   });
 
   test("TEST 8 - finally apaga loading en todos los cierres", () => {
-    const source = fs.readFileSync(path.join(process.cwd(), "src/modules/pandillas/pandillas.ui.tsx"), "utf8");
+    const source = readPandillasUiSource();
 
     expect(source).toMatch(/finally\s*{[\s\S]*setIsAnalyzing\(false\)/);
   });
 
   test("TEST 9 - el progreso simulado no oculta el mensaje final gobernado", () => {
-    const source = fs.readFileSync(path.join(process.cwd(), "src/modules/pandillas/pandillas.ui.tsx"), "utf8");
+    const source = readPandillasUiSource();
 
     expect(source).toContain("setAnalyzeStep(PANDILLAS_SWEEP_MESSAGES[sweepStatus as PandillasSweepStatus])");
     expect(source).toContain("setAnalyzeStep(message)");
@@ -234,5 +243,79 @@ describe("P1-E Pandillas non-blocking lifecycle", () => {
     expect(body.sweepStatus).toBe("NOT_CONFIGURED");
     expect(body.ficha).toBeUndefined();
     expect(body.grafo).toBeUndefined();
+  });
+
+  test("TEST 13 P4-B setIsAnalyzing true queda cubierto por un único try/finally posterior", () => {
+    const block = targetedSweepBlock();
+    const loadingIndex = block.indexOf("setIsAnalyzing(true);");
+    const tryIndex = block.indexOf("try {");
+    const finallyIndex = block.indexOf("finally");
+    const offIndex = block.indexOf("setIsAnalyzing(false)");
+
+    expect(loadingIndex).toBeGreaterThan(-1);
+    expect(tryIndex).toBeGreaterThan(loadingIndex);
+    expect(finallyIndex).toBeGreaterThan(tryIndex);
+    expect(offIndex).toBeGreaterThan(finallyIndex);
+    expect(block.match(/try\s*{/g)).toHaveLength(1);
+    expect(block.match(/finally\s*{/g)).toHaveLength(1);
+  });
+
+  test("TEST 14 P4-B pasos visuales y delays estan dentro del try/finally", () => {
+    const block = targetedSweepBlock();
+    const tryIndex = block.indexOf("try {");
+    const stepsIndex = block.indexOf("const steps = [");
+    const delayIndex = block.indexOf("await new Promise(r => setTimeout");
+    const finallyIndex = block.indexOf("finally");
+
+    expect(stepsIndex).toBeGreaterThan(tryIndex);
+    expect(delayIndex).toBeGreaterThan(stepsIndex);
+    expect(delayIndex).toBeLessThan(finallyIndex);
+  });
+
+  test("TEST 15 P4-B excepciones pre-provider pasan por catch gobernado", () => {
+    const block = targetedSweepBlock();
+    const tryIndex = block.indexOf("try {");
+    const adapterIndex = block.indexOf("const canonicalPandillasInput = adaptPandillasCanonicalInput");
+    const providerIndex = block.indexOf("const result = await PandillasEngine.executeFullSweep");
+    const catchIndex = block.indexOf("catch (err: any)");
+
+    expect(adapterIndex).toBeGreaterThan(tryIndex);
+    expect(adapterIndex).toBeLessThan(providerIndex);
+    expect(catchIndex).toBeGreaterThan(providerIndex);
+    expect(block).toContain("const status = err instanceof PandillasSweepError ? err.sweepStatus : \"PROVIDER_ERROR\";");
+    expect(block).toContain("setAnalyzeStep(message);");
+  });
+
+  test("TEST 16 P4-B todos los estados terminales P1-E siguen mapeados en UI", () => {
+    const block = targetedSweepBlock();
+    const source = readPandillasUiSource();
+
+    for (const status of ["SUCCESS", "EMPTY", "NOT_CONFIGURED", "TIMEOUT", "PROVIDER_ERROR", "VALIDATION_ERROR"]) {
+      expect(source).toContain(`${status}:`);
+    }
+    expect(block).toContain("setAnalyzeStep(PANDILLAS_SWEEP_MESSAGES[sweepStatus as PandillasSweepStatus])");
+    expect(block).toContain("PANDILLAS_SWEEP_MESSAGES[status as PandillasSweepStatus]");
+  });
+
+  test("TEST 17 P4-B provider nunca responde termina por timeout de servicio", async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn((_url, init: any) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+    })) as any;
+
+    const pending = PandillasService.analyzeGang(gang, "contexto", { timeoutMs: 10 });
+    const assertion = expect(pending).rejects.toMatchObject({ sweepStatus: "TIMEOUT", httpStatus: 504 });
+    await jest.advanceTimersByTimeAsync(10);
+
+    await assertion;
+  });
+
+  test("TEST 18 P4-B no hay auto-run ni retry infinito desde mount", () => {
+    const source = readPandillasUiSource();
+    const effects = source.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/g) || [];
+
+    expect(effects.join("\n")).not.toContain("handleExecuteTargetedSweep");
+    expect(source).not.toContain("while (isAnalyzing");
+    expect(source).not.toContain("setInterval(");
   });
 });

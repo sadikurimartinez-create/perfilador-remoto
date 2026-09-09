@@ -1388,23 +1388,23 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
     setIsAnalyzing(true);
     setAnalysisResult(null);
 
-    const steps = [
-      "Iniciando Mapeador de Geointeligencia Criminal...",
-      "Resolviendo demarcación territorial de Aguascalientes...",
-      "Inyectando catálogo del dataset local 'Domiclios Pandillas.csv'...",
-      `Iniciando rastreador OSINT especializado en: ${barridoTarget === "all" ? "Toda la pandilla" : barridoTarget === "member" ? "Integrante específico" : barridoTarget === "zone" ? "Zona de influencia" : "Polígono delimitado"}...`,
-      "Conectando con endpoints gubernamentales de INEGI SCINCE para demografía...",
-      "Extrayendo puntos comerciales activos en INEGI DENUE...",
-      "Disparando Vertex AI Gemini 2.5 Pro con habilitación de búsqueda Google Search real...",
-      "Sintetizando redes de vínculos y calculando vectores territoriales..."
-    ];
-
-    for (let i = 0; i < steps.length; i++) {
-      setAnalyzeStep(steps[i]);
-      await new Promise(r => setTimeout(r, 700 + Math.random() * 400));
-    }
-
     try {
+      const steps = [
+        "Iniciando Mapeador de Geointeligencia Criminal...",
+        "Resolviendo demarcación territorial de Aguascalientes...",
+        "Inyectando catálogo del dataset local 'Domiclios Pandillas.csv'...",
+        `Iniciando rastreador OSINT especializado en: ${barridoTarget === "all" ? "Toda la pandilla" : barridoTarget === "member" ? "Integrante específico" : barridoTarget === "zone" ? "Zona de influencia" : "Polígono delimitado"}...`,
+        "Conectando con endpoints gubernamentales de INEGI SCINCE para demografía...",
+        "Extrayendo puntos comerciales activos en INEGI DENUE...",
+        "Disparando Vertex AI Gemini 2.5 Pro con habilitación de búsqueda Google Search real...",
+        "Sintetizando redes de vínculos y calculando vectores territoriales..."
+      ];
+
+      for (let i = 0; i < steps.length; i++) {
+        setAnalyzeStep(steps[i]);
+        await new Promise(r => setTimeout(r, 700 + Math.random() * 400));
+      }
+
       let filterPrompt = `BARRIDO ESPECÍFICO DIRIGIDO A: `;
       if (barridoTarget === "all") {
         filterPrompt += `Toda la Pandilla: "${nombre}"`;
