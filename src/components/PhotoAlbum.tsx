@@ -12,6 +12,7 @@ import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
+import { buildExpedientIncidenceCanonicalSpatialQuery } from "@/lib/projectIncidenceCanonicalSpatialQuery";
 
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
@@ -3976,36 +3977,26 @@ const hasMinimumPhotos =
         ) : (
           <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
             <p className="text-xs text-slate-300 flex-1">
-              {selectedIds.length > 0
-                ? `El barrido buscará delitos a 1 km del centro de las ${selectedIds.length} fotos seleccionadas.`
-                : album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")
-                ? "El barrido buscará delitos a 1 km del centro del polígono/corredor del proyecto."
-                : "⚠️ Seleccione al menos una fotografía o agregue vértices al mapa para establecer el centro de búsqueda."}
+              {project?.canonicalGeography?.validationStatus === "VALID"
+                ? `El barrido usará la geometría canónica ${project.canonicalGeography.type} del expediente.`
+                : "⚠️ Confirme una geografía canónica válida del expediente antes de ejecutar incidencia."}
             </p>
             <CEIPOLButton
               variant="primary"
               loading={isCheckingIncidencia}
-              disabled={isReadOnly || (!(project?.latitude && project?.longitude) && selectedIds.length === 0 && !album.some(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI"))}
+              disabled={isReadOnly || project?.canonicalGeography?.validationStatus !== "VALID"}
               onClick={async () => {
-                let queryLat = Number(project?.latitude);
-                let queryLng = Number(project?.longitude);
-
-                if (isNaN(queryLat) || isNaN(queryLng) || queryLat === 0) {
-                  if (analysisPolygon && analysisPolygon.length > 0) {
-                    queryLat = analysisPolygon.reduce((acc, p) => acc + p.lat, 0) / analysisPolygon.length;
-                    queryLng = analysisPolygon.reduce((acc, p) => acc + p.lng, 0) / analysisPolygon.length;
-                  } else {
-                    const selectedPhotos = album.filter(p => selectedIds.includes(p.id) && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
-                    const vertices = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI");
-                    const photosToUse = selectedPhotos.length > 0 ? selectedPhotos : vertices;
-
-                    if (photosToUse.length === 0) {
-                      alert("⚠️ Debe establecer las coordenadas del proyecto en el mapa (trazar polígono/vértices) o seleccionar al menos una fotografía con coordenadas GPS.");
-                      return;
-                    }
-                    queryLat = photosToUse.reduce((acc, p) => acc + Number(p.lat), 0) / photosToUse.length;
-                    queryLng = photosToUse.reduce((acc, p) => acc + Number(p.lng), 0) / photosToUse.length;
-                  }
+                let canonicalSpatialQuery;
+                try {
+                  canonicalSpatialQuery = buildExpedientIncidenceCanonicalSpatialQuery({
+                    expedienteId: projectId,
+                    canonicalGeography: project?.canonicalGeography,
+                    radiusMeters: 1000,
+                    corridorWidthMeters: 1000,
+                  });
+                } catch (geoErr: any) {
+                  setError(geoErr.message || "INCIDENCE_CANONICAL_GEOGRAPHY_REQUIRED");
+                  return;
                 }
 
                 if (incidents.length > 0) {
@@ -4019,9 +4010,23 @@ const hasMinimumPhotos =
                   const res = await fetch("/api/incidencia", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ lat: queryLat, lng: queryLng })
+                    body: JSON.stringify({
+                      canonicalSpatialQuery,
+                      allowLegacyFallback: true,
+                      incidentTypes: [],
+                      selectedCrimeCategoryFilters: activeDelitos,
+                    })
                   });
                   const data = await res.json();
+                  if (!res.ok || data.resultStatus === "ERROR" || data.resultStatus === "SOURCE_UNAVAILABLE" || data.resultStatus === "UNSUPPORTED_GEOMETRY" || data.resultStatus === "FALLBACK_BLOCKED" || !data.success) {
+                    setError(data.error || data.resultStatus || "Error al obtener la incidencia delictiva.");
+                    return;
+                  }
+                  if (data.resultStatus === "SUCCESS_EMPTY") {
+                    setIncidents([]);
+                    setToast({ type: "info", message: "Sin registros de incidencia para la geometría y período consultados." });
+                    return;
+                  }
                   if (data.success && data.data) {
                     setIncidents(data.data);
                     if (projectId) {

@@ -23,6 +23,22 @@ type IncidenciaRequestBody = {
   requestedCoverage?: "IN_COVERAGE" | "OUT_OF_COVERAGE" | "UNKNOWN_COVERAGE" | null;
 };
 
+function incidenceResultStatus(result: Awaited<ReturnType<typeof queryCrimeIncidence>>) {
+  if (result.error === "CSV_LEGACY_FALLBACK_POLYGON_NOT_SUPPORTED_NO_GEOMETRY_DEGRADATION") {
+    return "FALLBACK_BLOCKED";
+  }
+  if (result.sourceStatus === "FAILED" || result.sourceStatus === "NOT_CONFIGURED") {
+    return "ERROR";
+  }
+  if (result.coverageStatus === "OUT_OF_COVERAGE") {
+    return "SOURCE_UNAVAILABLE";
+  }
+  if (result.success && result.data.length === 0) {
+    return "SUCCESS_EMPTY";
+  }
+  return "SUCCESS_WITH_DATA";
+}
+
 function toFiniteNumber(v: unknown): number | null {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isFinite(n) ? n : null;
@@ -104,8 +120,14 @@ export async function POST(req: Request) {
       }
     );
 
+    const responseBody = {
+      ...result,
+      resultStatus: incidenceResultStatus(result),
+      ...(spatialQueryMetadata ? { spatialQueryMetadata } : {}),
+    };
+
     return NextResponse.json(
-      spatialQueryMetadata ? { ...result, spatialQueryMetadata } : result,
+      responseBody,
       {
         headers: {
           "Access-Control-Allow-Origin": "*",
