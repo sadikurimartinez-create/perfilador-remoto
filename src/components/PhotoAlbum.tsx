@@ -5132,7 +5132,7 @@ const hasMinimumPhotos =
                   <>Re-procesando Dictamen Criminológico...</>
                 ) : (
                   <>
-                    <span>📄</span> Regenerar / Actualizar Informe Oficial
+                    <span>📄</span> Regenerar Dictamen Histórico
                   </>
                 )}
               </button>
@@ -5748,7 +5748,7 @@ const hasMinimumPhotos =
             <div className="bg-slate-950/80 border border-emerald-500/20 rounded-xl p-5 space-y-3 shadow-inner">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5 animate-pulse uppercase tracking-wider">
-                  ✅ INFORME GENERADO CORRECTAMENTE
+                  ✅ DICTAMEN HISTÓRICO GENERADO CORRECTAMENTE
                 </span>
                 <span className="text-[10px] text-slate-500 font-medium tracking-wider">Versión: v9.0 | Gobernanza Algorítmica</span>
               </div>
@@ -5791,7 +5791,7 @@ const hasMinimumPhotos =
                     size="sm"
                     onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
                   >
-                    🔄 Regenerar Informe
+                    🔄 Regenerar Dictamen Histórico
                   </CEIPOLButton>
                 </div>
                 
