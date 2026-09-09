@@ -147,9 +147,12 @@ export function buildInstitutionalProductsViewModel(
       { label: "Geografía territorial", complete: assessment.geographyReady },
       { label: "Hipótesis humana", complete: assessment.hypothesisReady },
       { label: "Evidencia admisible", complete: assessment.evidenceReady },
+      { label: "Hallazgos", complete: assessment.findingsReady },
       { label: "Análisis validado", complete: assessment.analysisReady },
       { label: "Trazabilidad", complete: assessment.lineageReady },
       { label: "Revisión humana", complete: assessment.humanValidationReady },
+      { label: "Integridad forense", complete: assessment.forensicIntegrityReady },
+      { label: "Integridad de fuente", complete: assessment.sourceIntegrityReady },
     ],
     pendingMessages,
     actions: {

@@ -1147,6 +1147,24 @@ export function PhotoAlbum({
     () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),
     [reportReadyAssessment, project]
   );
+  useEffect(() => {
+    console.info("[REPORT READY]", {
+      projectId: projectId || project?.id || reportReadyAssessment.projectId,
+      readyForInstitutionalReport: institutionalProducts.readyForInstitutionalReport,
+      hasInstitutionalIdentity: institutionalProducts.hasInstitutionalIdentity,
+      geographyReady: reportReadyAssessment.geographyReady,
+      hypothesisReady: reportReadyAssessment.hypothesisReady,
+      evidenceReady: reportReadyAssessment.evidenceReady,
+      findingsReady: reportReadyAssessment.findingsReady,
+      analysisReady: reportReadyAssessment.analysisReady,
+      lineageReady: reportReadyAssessment.lineageReady,
+      humanValidationReady: reportReadyAssessment.humanValidationReady,
+      forensicIntegrityReady: reportReadyAssessment.forensicIntegrityReady,
+      sourceIntegrityReady: reportReadyAssessment.sourceIntegrityReady,
+      blockingReasonCodes: reportReadyAssessment.blockingReasons.map((reason: any) => reason.code),
+      unresolvedItemCodes: reportReadyAssessment.unresolvedItems.map((reason: any) => reason.code),
+    });
+  }, [projectId, project?.id, reportReadyAssessment, institutionalProducts.readyForInstitutionalReport, institutionalProducts.hasInstitutionalIdentity]);
 
   const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
     if (!institutionalProducts.readyForInstitutionalReport) {
@@ -5151,6 +5169,37 @@ const hasMinimumPhotos =
               >
                 <span>📎</span> {institutionalProducts.actions.technicalAnnex.label}
               </button>
+              {!institutionalProducts.readyForInstitutionalReport && (
+                <div className="rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-3">
+                  <div>
+                    <p className="text-[10px] text-cyan-200 font-black uppercase tracking-wider">
+                      ESTADO DEL INFORME INSTITUCIONAL
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {institutionalProducts.readinessChecks.map((check) => (
+                        <div key={check.label} className="flex items-center gap-2 text-[11px] text-slate-300">
+                          <span className={check.complete ? "text-emerald-300" : "text-rose-300"}>
+                            {check.complete ? "✓" : "✗"}
+                          </span>
+                          <span>{check.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {institutionalProducts.pendingMessages.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-amber-300 font-black uppercase tracking-wider">
+                        MOTIVOS PENDIENTES:
+                      </p>
+                      <ul className="mt-2 space-y-1 text-[11px] text-amber-100">
+                        {institutionalProducts.pendingMessages.map((message) => (
+                          <li key={message}>- {message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 space-y-3">
                 <button
                   type="button"

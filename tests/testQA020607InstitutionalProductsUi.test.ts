@@ -282,4 +282,36 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(gateBlock).toContain("return assessReportReadiness(liveProject);");
     expect(gateBlock).not.toContain("project as any)?.reportReadyAssessment || assessReportReadiness");
   });
+
+  test("33 view model representa los 10 checks de report ready", () => {
+    const model = buildInstitutionalProductsViewModel(assessment(), "06092026-0007-JMG");
+    expect(model.readinessChecks.map((item) => item.label)).toEqual([
+      "Identidad institucional",
+      "Geografía territorial",
+      "Hipótesis humana",
+      "Evidencia admisible",
+      "Hallazgos",
+      "Análisis validado",
+      "Trazabilidad",
+      "Revisión humana",
+      "Integridad forense",
+      "Integridad de fuente",
+    ]);
+  });
+
+  test("34 panel diagnóstico y telemetría exponen bloqueo sin bypass", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("Productos Institucionales"), photoAlbum.indexOf("<DynamicPopup"));
+
+    expect(canonicalCta).toContain("ESTADO DEL INFORME INSTITUCIONAL");
+    expect(canonicalCta).toContain("MOTIVOS PENDIENTES:");
+    expect(canonicalCta).toContain("institutionalProducts.readinessChecks.map");
+    expect(photoAlbum).toContain('console.info("[REPORT READY]", {');
+    expect(photoAlbum).toContain("blockingReasonCodes");
+    expect(photoAlbum).toContain("unresolvedItemCodes");
+    expect(canonicalCta).not.toContain("disabled={false}");
+    expect(canonicalCta).not.toContain("readyForInstitutionalReport: true");
+    expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
+    expect(canonicalCta).toContain("showLegacyReportTools &&");
+  });
 });
