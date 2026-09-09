@@ -250,11 +250,18 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
     const helper = source("src/utils/institutionalProductsUi.ts");
     const handler = photoAlbum.slice(photoAlbum.indexOf("const handleInstitutionalProductExport"), photoAlbum.indexOf("}, [institutionalProducts"));
+    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("const [showLegacyReportTools"), photoAlbum.indexOf("<DynamicPopup"));
 
     expect(helper).toContain("Generar Informe Ejecutivo GEOINT");
     expect(helper).toContain('reportKind: "EXECUTIVE_GEOINT"');
+    expect(photoAlbum).toContain("const [showLegacyReportTools, setShowLegacyReportTools] = useState(false)");
+    expect(canonicalCta).toContain("Productos Institucionales");
+    expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
+    expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)");
+    expect(canonicalCta).toContain("Mostrar herramientas históricas");
+    expect(canonicalCta).toContain("showLegacyReportTools &&");
     expect(photoAlbum).toContain("Regenerar Dictamen Histórico Legacy");
-    expect(photoAlbum).toContain("Producto histórico / legacy (DRAFT)");
+    expect(photoAlbum).toContain("Histórico / Compatibilidad");
     expect(photoAlbum).toContain("PROCESAMIENTO LEGACY DE DICTAMEN HISTÓRICO - GEOINT v8.0");
     expect(photoAlbum).not.toContain("Regenerar / Actualizar Informe Oficial");
     expect(handler).toContain("[REPORT PRODUCT]");

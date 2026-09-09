@@ -999,6 +999,7 @@ export function PhotoAlbum({
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
   const [activeReportTab, setActiveReportTab] = useState<"institutional" | "edit" | "preview">("institutional");
+  const [showLegacyReportTools, setShowLegacyReportTools] = useState(false);
   const [previewPageIdx, setPreviewPageIdx] = useState<number>(0);
   const [kernelState, setKernelState] = useState(ReportEngineKernel.getState());
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -5123,24 +5124,59 @@ const hasMinimumPhotos =
               </div>
             </div>
 
-            <div className="flex flex-col items-end gap-2 pt-4 border-t border-slate-800">
-              <p className="text-[10px] text-amber-300 font-black uppercase tracking-wider">
-                Producto histórico / legacy (DRAFT)
-              </p>
+            <div className="flex flex-col items-stretch gap-3 pt-4 border-t border-slate-800">
+              <div className="space-y-1">
+                <p className="text-[10px] text-cyan-300 font-black uppercase tracking-wider">
+                  Productos Institucionales
+                </p>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Ruta canónica de emisión documental: Informe Ejecutivo GEOINT y Anexo Técnico.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); void confirmAndGenerateProfile(); }}
-                disabled={isGeneratingAI}
-                className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 font-black px-8 py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)}
+                disabled={isSavingAnalysis || institutionalProducts.actions.executiveReport.disabled}
+                title={institutionalProducts.pendingMessages.join(" ")}
+                className="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black px-8 py-4 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {isGeneratingAI ? (
-                  <>Re-procesando Dictamen Histórico Legacy...</>
-                ) : (
-                  <>
-                    <span>📄</span> Regenerar Dictamen Histórico Legacy
-                  </>
-                )}
+                <span>📄</span> {institutionalProducts.actions.executiveReport.label}
               </button>
+              <button
+                type="button"
+                onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)}
+                disabled={isSavingAnalysis || institutionalProducts.actions.technicalAnnex.disabled}
+                title={institutionalProducts.pendingMessages.join(" ")}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-cyan-200 border border-cyan-500/40 font-black px-8 py-3 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <span>📎</span> {institutionalProducts.actions.technicalAnnex.label}
+              </button>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLegacyReportTools((prev) => !prev)}
+                  className="w-full flex items-center justify-between gap-3 text-left text-[10px] text-amber-300 font-black uppercase tracking-wider"
+                >
+                  <span>Histórico / Compatibilidad</span>
+                  <span>{showLegacyReportTools ? "Ocultar herramientas históricas" : "Mostrar herramientas históricas"}</span>
+                </button>
+                {showLegacyReportTools && (
+                  <button
+                    type="button"
+                    onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); void confirmAndGenerateProfile(); }}
+                    disabled={isGeneratingAI}
+                    className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 font-black px-6 py-3 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isGeneratingAI ? (
+                      <>Re-procesando Dictamen Histórico Legacy...</>
+                    ) : (
+                      <>
+                        <span>📄</span> Regenerar Dictamen Histórico Legacy
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
     </section>
@@ -5759,45 +5795,56 @@ const hasMinimumPhotos =
               </div>
               
               <div className="flex flex-wrap gap-2 justify-between items-center pt-1 border-t border-slate-800/60">
-                <div className="flex flex-wrap gap-2">
-                  <CEIPOLButton
-                    variant="confirm"
-                    size="sm"
-                    disabled={isSavingAnalysis}
-                    onClick={() => handleFinalizeAndExport("PDF")}
+                <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowLegacyReportTools((prev) => !prev)}
+                    className="text-left text-[10px] text-amber-300 font-black uppercase tracking-wider"
                   >
-                    📄 Descargar PDF
-                  </CEIPOLButton>
-                  <CEIPOLButton
-                    variant="primary"
-                    size="sm"
-                    disabled={isSavingAnalysis}
-                    onClick={() => handleFinalizeAndExport("WORD")}
-                  >
-                    📝 Descargar Word
-                  </CEIPOLButton>
-                  <CEIPOLButton
-                    variant="warning"
-                    size="sm"
-                    disabled={isSavingExpediente}
-                    onClick={() => handleSaveExpediente()}
-                  >
-                    💾 Guardar Expediente
-                  </CEIPOLButton>
-                  <CEIPOLButton
-                    variant="secondary"
-                    size="sm"
-                    onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); handleConsultarHistorial(); }}
-                  >
-                    📂 Consultar Historial
-                  </CEIPOLButton>
-                  <CEIPOLButton
-                    variant="secondary"
-                    size="sm"
-                    onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
-                  >
-                    🔄 Regenerar Dictamen Histórico Legacy
-                  </CEIPOLButton>
+                    {showLegacyReportTools ? "Ocultar herramientas históricas" : "Mostrar herramientas históricas"}
+                  </button>
+                  {showLegacyReportTools && (
+                    <div className="flex flex-wrap gap-2">
+                      <CEIPOLButton
+                        variant="confirm"
+                        size="sm"
+                        disabled={isSavingAnalysis}
+                        onClick={() => handleFinalizeAndExport("PDF")}
+                      >
+                        📄 Descargar PDF histórico
+                      </CEIPOLButton>
+                      <CEIPOLButton
+                        variant="primary"
+                        size="sm"
+                        disabled={isSavingAnalysis}
+                        onClick={() => handleFinalizeAndExport("WORD")}
+                      >
+                        📝 Descargar Word histórico
+                      </CEIPOLButton>
+                      <CEIPOLButton
+                        variant="warning"
+                        size="sm"
+                        disabled={isSavingExpediente}
+                        onClick={() => handleSaveExpediente()}
+                      >
+                        💾 Guardar Expediente
+                      </CEIPOLButton>
+                      <CEIPOLButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); handleConsultarHistorial(); }}
+                      >
+                        📂 Consultar Historial
+                      </CEIPOLButton>
+                      <CEIPOLButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
+                      >
+                        🔄 Regenerar Dictamen Histórico Legacy
+                      </CEIPOLButton>
+                    </div>
+                  )}
                 </div>
                 
                 <CEIPOLButton
