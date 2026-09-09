@@ -1152,6 +1152,7 @@ export function PhotoAlbum({
       setError(institutionalProducts.pendingMessages.join(" ") || "El expediente aún no está habilitado para emitir productos institucionales.");
       return;
     }
+    console.info(`[REPORT PRODUCT] ${reportKind}`);
     setIsSavingAnalysis(true);
     setError(null);
     try {
@@ -1507,6 +1508,7 @@ const hasMinimumPhotos =
   };
 
   const confirmAndGenerateProfile = async (hypothesisOverride?: any) => {
+    console.info("[REPORT PRODUCT] LEGACY_DICTAMEN");
     const hypothesisGate = canProceedWithInstitutionalAnalysis(
       hypothesisOverride ? { canonicalHypothesis: hypothesisOverride } : project
     );
@@ -5121,18 +5123,21 @@ const hasMinimumPhotos =
               </div>
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-slate-800">
+            <div className="flex flex-col items-end gap-2 pt-4 border-t border-slate-800">
+              <p className="text-[10px] text-amber-300 font-black uppercase tracking-wider">
+                Producto histórico / legacy (DRAFT)
+              </p>
               <button
                 type="button"
                 onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); void confirmAndGenerateProfile(); }}
                 disabled={isGeneratingAI}
-                className="w-full md:w-auto bg-sky-500 hover:bg-sky-400 text-slate-950 font-black px-8 py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 font-black px-8 py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isGeneratingAI ? (
-                  <>Re-procesando Dictamen Criminológico...</>
+                  <>Re-procesando Dictamen Histórico Legacy...</>
                 ) : (
                   <>
-                    <span>📄</span> Regenerar Dictamen Histórico
+                    <span>📄</span> Regenerar Dictamen Histórico Legacy
                   </>
                 )}
               </button>
@@ -5285,10 +5290,10 @@ const hasMinimumPhotos =
 
                 <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800/80 space-y-3">
                   <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">
-                    Producto Histórico / Dictamen Actual
+                    Producto Histórico / Dictamen Legacy DRAFT
                   </h4>
                   <p className="text-[11px] text-slate-400 font-medium">
-                    El dictamen tradicional permanece disponible en las pestañas de edición, vista previa y descarga histórica.
+                    El dictamen tradicional permanece disponible para consulta histórica; no corresponde al Informe Ejecutivo GEOINT vigente.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <CEIPOLButton variant="secondary" size="sm" onClick={() => setActiveReportTab("edit")}>
@@ -5748,7 +5753,7 @@ const hasMinimumPhotos =
             <div className="bg-slate-950/80 border border-emerald-500/20 rounded-xl p-5 space-y-3 shadow-inner">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5 animate-pulse uppercase tracking-wider">
-                  ✅ DICTAMEN HISTÓRICO GENERADO CORRECTAMENTE
+                  ✅ DICTAMEN HISTÓRICO LEGACY GENERADO CORRECTAMENTE
                 </span>
                 <span className="text-[10px] text-slate-500 font-medium tracking-wider">Versión: v9.0 | Gobernanza Algorítmica</span>
               </div>
@@ -5791,7 +5796,7 @@ const hasMinimumPhotos =
                     size="sm"
                     onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
                   >
-                    🔄 Regenerar Dictamen Histórico
+                    🔄 Regenerar Dictamen Histórico Legacy
                   </CEIPOLButton>
                 </div>
                 
@@ -6292,7 +6297,7 @@ const hasMinimumPhotos =
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-black text-sky-400 uppercase tracking-widest flex items-center gap-2">
-                ⚙️ PROCESAMIENTO DE DICTAMEN IA - GEOINT v8.0
+                ⚙️ PROCESAMIENTO LEGACY DE DICTAMEN HISTÓRICO - GEOINT v8.0
               </h3>
               <div className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 bg-sky-500 rounded-full animate-ping"></span>

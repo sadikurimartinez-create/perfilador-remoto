@@ -145,7 +145,7 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
     expect(photoAlbum).toContain("const handleFinalizeAndExport");
     expect(photoAlbum).toContain('payload: { format, activeId, exportMode: "DRAFT" }');
-    expect(photoAlbum).toContain("Producto Histórico / Dictamen Actual");
+    expect(photoAlbum).toContain("Producto Histórico / Dictamen Legacy DRAFT");
   });
 
   test("17 no raw enums visibles en view model", () => {
@@ -241,8 +241,25 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
 
   test("30 Producto Historico permanece disponible", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
-    expect(photoAlbum).toContain("Producto Histórico / Dictamen Actual");
+    expect(photoAlbum).toContain("Producto Histórico / Dictamen Legacy DRAFT");
     expect(photoAlbum).toContain("Editar Dictamen");
     expect(photoAlbum).toContain("Ver Dictamen Actual");
+  });
+
+  test("31 CTA legacy queda rotulado como historico y separado del producto ejecutivo", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const helper = source("src/utils/institutionalProductsUi.ts");
+    const handler = photoAlbum.slice(photoAlbum.indexOf("const handleInstitutionalProductExport"), photoAlbum.indexOf("}, [institutionalProducts"));
+
+    expect(helper).toContain("Generar Informe Ejecutivo GEOINT");
+    expect(helper).toContain('reportKind: "EXECUTIVE_GEOINT"');
+    expect(photoAlbum).toContain("Regenerar Dictamen Histórico Legacy");
+    expect(photoAlbum).toContain("Producto histórico / legacy (DRAFT)");
+    expect(photoAlbum).toContain("PROCESAMIENTO LEGACY DE DICTAMEN HISTÓRICO - GEOINT v8.0");
+    expect(photoAlbum).not.toContain("Regenerar / Actualizar Informe Oficial");
+    expect(handler).toContain("[REPORT PRODUCT]");
+    expect(handler).not.toContain("confirmAndGenerateProfile");
+    expect(handler).not.toContain("/api/generate-profile");
+    expect(photoAlbum).toContain('[REPORT PRODUCT] LEGACY_DICTAMEN');
   });
 });
