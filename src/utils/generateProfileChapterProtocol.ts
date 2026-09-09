@@ -24,6 +24,108 @@ export const GENERATE_PROFILE_CHAPTER_ERROR_MESSAGE =
 
 const ERROR_MARKER = "[Error de generación:";
 
+type StreamControllerLike = {
+  enqueue: (chunk: Uint8Array) => void;
+  close: () => void;
+};
+
+export function safeGenerateProfileJsonStringify(value: unknown, fallback: unknown = null): string {
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_key, current) => {
+      if (typeof current === "bigint") return current.toString();
+      if (current instanceof Error) {
+        return {
+          name: current.name,
+          message: current.message,
+        };
+      }
+      if (current && typeof current === "object") {
+        if (seen.has(current)) return "[Circular]";
+        seen.add(current);
+      }
+      return current;
+    });
+  } catch {
+    return JSON.stringify(fallback);
+  }
+}
+
+export function buildGenerateProfileTerminalJsonSuffix(input: {
+  generationStatus: GenerateProfileChapterStatus;
+  terminalEvent: GenerateProfileTerminalEvent;
+  aiAnalyticalOutput: unknown;
+}): string {
+  return `","generationStatus":${safeGenerateProfileJsonStringify(input.generationStatus, "INTERNAL_ERROR")},"terminalEvent":${safeGenerateProfileJsonStringify(input.terminalEvent, buildGenerateProfileErrorEvent("INTERNAL_ERROR"))},"aiAnalyticalOutput":${safeGenerateProfileJsonStringify(input.aiAnalyticalOutput, null)}}`;
+}
+
+export function createGenerateProfileStreamJsonFinalizer(
+  controller: StreamControllerLike,
+  encoder = new TextEncoder()
+) {
+  let closed = false;
+  let opened = false;
+  let finalized = false;
+
+  const enqueueRaw = (raw: string) => {
+    if (closed) return false;
+    controller.enqueue(encoder.encode(raw));
+    return true;
+  };
+
+  const closeOnce = () => {
+    if (closed) return false;
+    closed = true;
+    try {
+      controller.close();
+    } catch {}
+    return true;
+  };
+
+  return {
+    open(meta: unknown) {
+      if (opened || closed) return false;
+      const metaPart = safeGenerateProfileJsonStringify(meta, {});
+      enqueueRaw(`{"meta":${metaPart},"markdown":"`);
+      opened = true;
+      return true;
+    },
+    writeKeepAlive() {
+      return enqueueRaw(" ");
+    },
+    writeMarkdownChunk(text: string) {
+      if (!opened) this.open({});
+      const escapedText = JSON.stringify(text).slice(1, -1);
+      return enqueueRaw(escapedText);
+    },
+    finalize(input: {
+      generationStatus: GenerateProfileChapterStatus;
+      terminalEvent: GenerateProfileTerminalEvent;
+      aiAnalyticalOutput: unknown;
+    }) {
+      if (finalized) return false;
+      finalized = true;
+      try {
+        if (!opened) {
+          enqueueRaw(
+            `{"meta":{},"markdown":""${buildGenerateProfileTerminalJsonSuffix(input).slice(1)}`
+          );
+        } else {
+          enqueueRaw(buildGenerateProfileTerminalJsonSuffix(input));
+        }
+      } catch {
+        // If the transport is already closed by the runtime, only prevent double-close/enqueue.
+      } finally {
+        closeOnce();
+      }
+      return true;
+    },
+    getState() {
+      return { closed, opened, finalized };
+    },
+  };
+}
+
 export function classifyGenerateProfileProviderError(error: unknown): Exclude<GenerateProfileChapterStatus, "GENERATED" | "EMPTY_VALID"> {
   const raw = error instanceof Error ? error.message : String(error || "");
   const message = raw.toLowerCase();

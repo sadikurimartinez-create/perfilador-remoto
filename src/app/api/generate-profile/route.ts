@@ -36,6 +36,7 @@ import {
   type AiAnalyticalOutputType
 } from "@/utils/aiAnalysisGovernance";
 import {
+  createGenerateProfileStreamJsonFinalizer,
   buildGenerateProfileCompleteEvent,
   buildGenerateProfileErrorEvent,
   classifyGenerateProfileProviderError,
@@ -709,42 +710,10 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
       }
     }
 
-    const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        // Enviar un espacio en blanco inmediatamente para evitar el Timeout (504) de Vercel
-        controller.enqueue(encoder.encode(" "));
-
-        let safeSieDataForClient = null;
-        if (sieData) {
-          const { exclusionLogs, ...rest } = sieData;
-          safeSieDataForClient = rest;
-        }
-
-        const metaPart = JSON.stringify({
-          riskLevel: generalRisk.toLowerCase(),
-          summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
-          incidenciaDetalles: safeBody.incidenciaLocal || [],
-          pois: [],
-          inegiDemographics: null,
-          tacticalStreetViews: safeBody.streetViews || [],
-          sieData: safeSieDataForClient,
-          tceData: tceData,
-          hieData: hieData,
-          ...(aceReport != null ? { aceReport } : {})
-        });
-        
-        // Enviar el inicio del JSON (el navegador tolera el espacio en blanco inicial)
-        const jsonStart = `{"meta":${metaPart},"markdown":"`;
-        controller.enqueue(encoder.encode(jsonStart));
-
-        // Mantener activo el stream enviando pulsos en caso de cualquier micro-retraso
-        const keepAlive = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode(" "));
-          } catch {}
-        }, 3000);
-
+        const finalizer = createGenerateProfileStreamJsonFinalizer(controller);
+        let keepAlive: ReturnType<typeof setInterval> | null = null;
         let accumulatedText = "";
         let generationProvider: string | null = streamingResp ? "VertexAI" : null;
         let generationError: string | null = null;
@@ -752,6 +721,35 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
         let terminalEvent: GenerateProfileTerminalEvent | null = null;
 
         try {
+          // Enviar un espacio en blanco inmediatamente para evitar el Timeout (504) de Vercel
+          finalizer.writeKeepAlive();
+
+          let safeSieDataForClient = null;
+          if (sieData) {
+            const { exclusionLogs, ...rest } = sieData;
+            safeSieDataForClient = rest;
+          }
+
+          finalizer.open({
+            riskLevel: generalRisk.toLowerCase(),
+            summary: `Dictamen táctico del expediente con enfoque en Criminología Ambiental. Nivel de riesgo sugerido: ${generalRisk}.`,
+            incidenciaDetalles: safeBody.incidenciaLocal || [],
+            pois: [],
+            inegiDemographics: null,
+            tacticalStreetViews: safeBody.streetViews || [],
+            sieData: safeSieDataForClient,
+            tceData: tceData,
+            hieData: hieData,
+            ...(aceReport != null ? { aceReport } : {})
+          });
+
+          // Mantener activo el stream enviando pulsos en caso de cualquier micro-retraso
+          keepAlive = setInterval(() => {
+            try {
+              finalizer.writeKeepAlive();
+            } catch {}
+          }, 3000);
+
           if (streamingResp) {
             let hasCleanedMarkdownHeader = false;
             for await (const item of streamingResp.stream) {
@@ -769,8 +767,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
                 }
 
                 accumulatedText += text;
-                const escapedText = JSON.stringify(text).slice(1, -1);
-                controller.enqueue(encoder.encode(escapedText));
+                finalizer.writeMarkdownChunk(text);
               }
             }
 
@@ -806,8 +803,7 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
               }
               totalLength += cleanedChunk.length;
               accumulatedText += cleanedChunk;
-              const escapedChunk = JSON.stringify(cleanedChunk).slice(1, -1);
-              controller.enqueue(encoder.encode(escapedChunk));
+              finalizer.writeMarkdownChunk(cleanedChunk);
             });
 
             console.log(`\n[AI RESPONSE] ----------------------------------------`);
@@ -834,28 +830,41 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
             message: e?.message || String(e),
           });
         } finally {
-          clearInterval(keepAlive);
-          const aiAnalyticalOutput = buildGenerateProfileOutputTrace({
-            projectId,
-            chapter,
-            chapterLabel: currentChapterLabel,
-            provider: generationProvider,
-            model: GEMINI_MODEL,
-            prompt: systemPrompt,
-            safeBody,
-            iic,
-            visualEvidenceMatrix,
-            territorialEvidenceMatrix,
-            aceReport,
-            cieData,
-            generationError,
+          if (keepAlive) clearInterval(keepAlive);
+          let aiAnalyticalOutput: unknown = null;
+          try {
+            aiAnalyticalOutput = buildGenerateProfileOutputTrace({
+              projectId,
+              chapter,
+              chapterLabel: currentChapterLabel,
+              provider: generationProvider,
+              model: GEMINI_MODEL,
+              prompt: systemPrompt,
+              safeBody,
+              iic,
+              visualEvidenceMatrix,
+              territorialEvidenceMatrix,
+              aceReport,
+              cieData,
+              generationError,
+            });
+          } catch (traceErr) {
+            generationStatus = "INTERNAL_ERROR";
+            generationError = generationStatus;
+            terminalEvent = buildGenerateProfileErrorEvent(generationStatus);
+            aiAnalyticalOutput = {
+              outputType: outputTypeForChapter(chapter),
+              provider: generationProvider,
+              model: GEMINI_MODEL,
+              promptId: `generate-profile:chapter-${chapter}`,
+              limitations: ["AI_ANALYTICAL_OUTPUT_TRACE_UNAVAILABLE"],
+            };
+          }
+          finalizer.finalize({
+            generationStatus,
+            terminalEvent: terminalEvent || buildGenerateProfileErrorEvent("INTERNAL_ERROR"),
+            aiAnalyticalOutput,
           });
-          const outputTrace = JSON.stringify(aiAnalyticalOutput);
-          // Cerrar el string del markdown y adjuntar trazabilidad institucional de la salida IA.
-          controller.enqueue(encoder.encode(
-            `","generationStatus":${JSON.stringify(generationStatus)},"terminalEvent":${JSON.stringify(terminalEvent)},"aiAnalyticalOutput":${outputTrace}}`
-          ));
-          controller.close();
         }
       }
     });
