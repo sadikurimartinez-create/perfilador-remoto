@@ -1,4 +1,8 @@
-import { GeointEventOutboxService, type GeointOutboxEventPayload } from "@/services/geoint/geointEventOutboxService";
+import {
+  GeointEventOutboxService,
+  type GeointOutboxEventPayload,
+  type PreparedGeointOutboxEvent,
+} from "@/services/geoint/geointEventOutboxService";
 import type {
   GeointSweepLifecycleRecord,
   GeointSweepLifecycleStatus,
@@ -90,7 +94,19 @@ export async function enqueueSweepLifecycleEventsInTransaction(
   record: GeointSweepLifecycleRecord,
   options: { actor: string; source?: string }
 ) {
-  const enqueued = [];
+  const prepared = await prepareSweepLifecycleEventsInTransaction(transaction, db, record, options);
+  return commitPreparedSweepLifecycleEventsInTransaction(transaction, prepared);
+}
+
+export async function prepareSweepLifecycleEventsInTransaction(
+  transaction: {
+    get: (ref: any) => Promise<{ exists: () => boolean; data: () => any }>;
+  },
+  db: any,
+  record: GeointSweepLifecycleRecord,
+  options: { actor: string; source?: string }
+): Promise<PreparedGeointOutboxEvent[]> {
+  const prepared = [];
   for (const transition of record.transitionHistory || []) {
     const payload = buildSweepLifecycleOutboxPayload({
       record,
@@ -99,7 +115,18 @@ export async function enqueueSweepLifecycleEventsInTransaction(
       source: options.source,
     });
     if (!payload) continue;
-    enqueued.push(await GeointEventOutboxService.enqueueEventInTransaction(transaction, db, payload));
+    prepared.push(await GeointEventOutboxService.prepareEventInTransaction(transaction, db, payload));
   }
-  return enqueued;
+  return prepared;
+}
+
+export function commitPreparedSweepLifecycleEventsInTransaction(
+  transaction: {
+    set: (ref: any, data: any, options?: any) => void;
+  },
+  preparedEvents: PreparedGeointOutboxEvent[]
+) {
+  return preparedEvents.map((prepared) =>
+    GeointEventOutboxService.commitPreparedEventInTransaction(transaction, prepared)
+  );
 }

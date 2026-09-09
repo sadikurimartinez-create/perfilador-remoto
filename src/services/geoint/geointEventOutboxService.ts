@@ -36,6 +36,16 @@ export interface GeointOutboxEventPayload {
   metadata?: Record<string, any>;
 }
 
+export interface PreparedGeointOutboxEvent {
+  entry: GeointEventOutboxEntry;
+  exists: boolean;
+  outboxDocRef: any;
+  fingerprintRef: any;
+  fingerprint: string;
+  eventId: string;
+  payload: GeointOutboxEventPayload;
+}
+
 const RETRYABLE_OUTBOX_STATUSES: GeointEventOutboxEntry["status"][] = ["CREATED", "QUEUED"];
 const TERMINAL_OUTBOX_STATUSES: GeointEventOutboxEntry["status"][] = ["COMPLETED", "FAILED", "REJECTED"];
 
@@ -72,6 +82,17 @@ export class GeointEventOutboxService {
     db: any,
     payload: GeointOutboxEventPayload
   ): Promise<GeointEventOutboxEntry> {
+    const prepared = await GeointEventOutboxService.prepareEventInTransaction(transaction, db, payload);
+    return GeointEventOutboxService.commitPreparedEventInTransaction(transaction, prepared);
+  }
+
+  static async prepareEventInTransaction(
+    transaction: {
+      get: (ref: any) => Promise<{ exists: () => boolean; data: () => any }>;
+    },
+    db: any,
+    payload: GeointOutboxEventPayload
+  ): Promise<PreparedGeointOutboxEvent> {
     const fingerprint = GeointEventFingerprintService.generateEventFingerprint({
       expedienteId: payload.expedienteId,
       traceabilityId: payload.traceabilityId,
@@ -90,7 +111,15 @@ export class GeointEventOutboxService {
     const outboxSnap = await transaction.get(outboxDocRef);
 
     if (outboxSnap.exists()) {
-      return normalizeOutboxEntry(outboxSnap.data() as GeointEventOutboxEntry);
+      return {
+        entry: normalizeOutboxEntry(outboxSnap.data() as GeointEventOutboxEntry),
+        exists: true,
+        outboxDocRef,
+        fingerprintRef,
+        fingerprint,
+        eventId,
+        payload,
+      };
     }
 
     const outboxEntry: GeointEventOutboxEntry = {
@@ -121,23 +150,42 @@ export class GeointEventOutboxService {
       errorMessage: null,
     };
 
-    transaction.set(outboxDocRef, {
-      ...outboxEntry,
-      createdAt: serverTimestamp(),
-    });
-
-    transaction.set(fingerprintRef, {
+    return {
+      entry: outboxEntry,
+      exists: false,
+      outboxDocRef,
+      fingerprintRef,
       fingerprint,
       eventId,
-      expedienteId: payload.expedienteId,
-      traceabilityId: payload.traceabilityId,
-      eventType: payload.eventType,
-      entityId: payload.entityId,
-      status: payload.status,
+      payload,
+    };
+  }
+
+  static commitPreparedEventInTransaction(
+    transaction: {
+      set: (ref: any, data: any, options?: any) => void;
+    },
+    prepared: PreparedGeointOutboxEvent
+  ): GeointEventOutboxEntry {
+    if (prepared.exists) return prepared.entry;
+
+    transaction.set(prepared.outboxDocRef, {
+      ...prepared.entry,
       createdAt: serverTimestamp(),
     });
 
-    return outboxEntry;
+    transaction.set(prepared.fingerprintRef, {
+      fingerprint: prepared.fingerprint,
+      eventId: prepared.eventId,
+      expedienteId: prepared.payload.expedienteId,
+      traceabilityId: prepared.payload.traceabilityId,
+      eventType: prepared.payload.eventType,
+      entityId: prepared.payload.entityId,
+      status: prepared.payload.status,
+      createdAt: serverTimestamp(),
+    });
+
+    return prepared.entry;
   }
 
   /**

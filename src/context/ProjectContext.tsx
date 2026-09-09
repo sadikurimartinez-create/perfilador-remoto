@@ -16,7 +16,10 @@ import { doc, getDoc, setDoc, collection, addDoc, updateDoc, increment, query, o
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db } from "@/lib/localDb";
 import { getDb } from "@/lib/firebase";
-import { enqueueSweepLifecycleEventsInTransaction } from "@/services/geoint/geointSweepLifecycleEventService";
+import {
+  commitPreparedSweepLifecycleEventsInTransaction,
+  prepareSweepLifecycleEventsInTransaction,
+} from "@/services/geoint/geointSweepLifecycleEventService";
 import { createStoredRawMultimodalEvidence, type MultimodalEvidenceContract } from "@/utils/multimodalEvidenceContract";
 import { deriveInSituPhotoOrchestrationItem, isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
 import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
@@ -2459,11 +2462,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       };
 
       await runTransaction(firestore, async (transaction) => {
-        transaction.update(projectRef, updateData);
-        await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, lifecycle, {
+        const preparedLifecycleEvents = await prepareSweepLifecycleEventsInTransaction(transaction, firestore, lifecycle, {
           actor: buildGeointSweepEventActor(user),
           source: "ProjectContext.registerSweep",
         });
+        transaction.update(projectRef, updateData);
+        commitPreparedSweepLifecycleEventsInTransaction(transaction, preparedLifecycleEvents);
       });
 
       // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
@@ -2638,15 +2642,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
 
         updatedSweeps = makeFirestoreSafe(serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s)) as SweepIntegrationItem[];
+        const preparedLifecycleEvents = updatedSweep.lifecycle
+          ? await prepareSweepLifecycleEventsInTransaction(transaction, firestore, updatedSweep.lifecycle, {
+              actor: buildGeointSweepEventActor(user),
+              source: "ProjectContext.updateSweep",
+            })
+          : [];
         transaction.update(projectRef, {
           sweeps: updatedSweeps
         });
-        if (updatedSweep.lifecycle) {
-          await enqueueSweepLifecycleEventsInTransaction(transaction, firestore, updatedSweep.lifecycle, {
-            actor: buildGeointSweepEventActor(user),
-            source: "ProjectContext.updateSweep",
-          });
-        }
+        commitPreparedSweepLifecycleEventsInTransaction(transaction, preparedLifecycleEvents);
       });
 
       setProject(prev => prev ? { ...prev, sweeps: updatedSweeps } : prev);

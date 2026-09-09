@@ -5,7 +5,9 @@ import { GeointEventLogService } from "../src/services/geoint/geointEventLogServ
 import { GeointOutboxDispatcher } from "../src/services/geoint/geointOutboxDispatcher";
 import {
   buildSweepLifecycleOutboxPayload,
+  commitPreparedSweepLifecycleEventsInTransaction,
   enqueueSweepLifecycleEventsInTransaction,
+  prepareSweepLifecycleEventsInTransaction,
 } from "../src/services/geoint/geointSweepLifecycleEventService";
 import {
   certifyGeointSweepWithHumanApproval,
@@ -53,6 +55,30 @@ function createTransaction() {
   return {
     get: async (ref: string) => getSnapshot(ref),
     set: (ref: string, data: any, options?: { merge?: boolean }) => setData(ref, data, options),
+  };
+}
+
+function createStrictOrderedTransaction() {
+  const operations: string[] = [];
+  let hasWritten = false;
+  return {
+    operations,
+    get: async (ref: string) => {
+      if (hasWritten) throw new Error(`READ_AFTER_WRITE:${ref}`);
+      operations.push(`get:${ref}`);
+      return getSnapshot(ref);
+    },
+    set: (ref: string, data: any, options?: { merge?: boolean }) => {
+      hasWritten = true;
+      operations.push(`set:${ref}`);
+      setData(ref, data, options);
+    },
+    update: (ref: string, data: any) => {
+      hasWritten = true;
+      operations.push(`update:${ref}`);
+      if (ref.startsWith("projects/")) return;
+      setData(ref, data, { merge: true });
+    },
   };
 }
 
@@ -273,9 +299,11 @@ describe("ADR-020.28 - Sweep lifecycle / Outbox integration", () => {
     const contextSource = readSource("src/context/ProjectContext.tsx");
     const eventServiceSource = readSource("src/services/geoint/geointSweepLifecycleEventService.ts");
 
-    expect(contextSource).toContain("enqueueSweepLifecycleEventsInTransaction");
+    expect(contextSource).toContain("prepareSweepLifecycleEventsInTransaction");
+    expect(contextSource).toContain("commitPreparedSweepLifecycleEventsInTransaction");
     expect(contextSource).not.toContain("persistGeointEvent");
-    expect(eventServiceSource).toContain("GeointEventOutboxService.enqueueEventInTransaction");
+    expect(eventServiceSource).toContain("GeointEventOutboxService.prepareEventInTransaction");
+    expect(eventServiceSource).toContain("GeointEventOutboxService.commitPreparedEventInTransaction");
     expect(eventServiceSource).not.toContain("GeointEventLogService");
   });
 
@@ -308,5 +336,96 @@ describe("ADR-020.28 - Sweep lifecycle / Outbox integration", () => {
 
     expect(rehydrated.status).toBe("RUNNING");
     expect(getOutboxEntries()).toHaveLength(countBefore);
+  });
+
+  test("TEST 18 P4-D registerSweep prepares lifecycle outbox reads before project update writes", () => {
+    const source = readSource("src/context/ProjectContext.tsx");
+    const registerSweepBlock = source.slice(
+      source.indexOf("const registerSweep = useCallback"),
+      source.indexOf("const updateSweep = useCallback")
+    );
+
+    const prepareIndex = registerSweepBlock.indexOf("const preparedLifecycleEvents = await prepareSweepLifecycleEventsInTransaction");
+    const updateIndex = registerSweepBlock.indexOf("transaction.update(projectRef, updateData);");
+    const commitIndex = registerSweepBlock.indexOf("commitPreparedSweepLifecycleEventsInTransaction(transaction, preparedLifecycleEvents);");
+
+    expect(prepareIndex).toBeGreaterThan(-1);
+    expect(updateIndex).toBeGreaterThan(prepareIndex);
+    expect(commitIndex).toBeGreaterThan(updateIndex);
+  });
+
+  test("TEST 19 P4-D updateSweep keeps all transaction reads before project and outbox writes", () => {
+    const source = readSource("src/context/ProjectContext.tsx");
+    const updateSweepBlock = source.slice(
+      source.indexOf("const updateSweep = useCallback"),
+      source.indexOf("const value = useMemo")
+    );
+
+    const projectReadIndex = updateSweepBlock.indexOf("const projectSnap = await transaction.get(projectRef);");
+    const prepareIndex = updateSweepBlock.indexOf("const preparedLifecycleEvents = updatedSweep.lifecycle");
+    const updateIndex = updateSweepBlock.indexOf("transaction.update(projectRef, {");
+    const commitIndex = updateSweepBlock.indexOf("commitPreparedSweepLifecycleEventsInTransaction(transaction, preparedLifecycleEvents);");
+
+    expect(projectReadIndex).toBeGreaterThan(-1);
+    expect(prepareIndex).toBeGreaterThan(projectReadIndex);
+    expect(updateIndex).toBeGreaterThan(prepareIndex);
+    expect(commitIndex).toBeGreaterThan(updateIndex);
+  });
+
+  test("TEST 20 P4-D strict transaction allows prepare reads before commit writes", async () => {
+    const lifecycle = createHumanTriggeredRunningSweepLifecycle({ sweepId: "sweep-20", expedienteId: "exp-20", traceabilityId: "trace-20" });
+    const transaction = createStrictOrderedTransaction();
+
+    const prepared = await prepareSweepLifecycleEventsInTransaction(transaction, {}, lifecycle, { actor: "operator-20" });
+    transaction.update("projects/exp-20", { sweeps: [{ id: "sweep-20" }] });
+    commitPreparedSweepLifecycleEventsInTransaction(transaction, prepared);
+
+    expect(transaction.operations.filter((op) => op.startsWith("get:")).length).toBe(4);
+    expect(transaction.operations.indexOf("update:projects/exp-20")).toBe(4);
+    expect(getOutboxEntries()).toHaveLength(2);
+  });
+
+  test("TEST 21 P4-D strict transaction rejects historical read after write ordering", async () => {
+    const lifecycle = createHumanTriggeredRunningSweepLifecycle({ sweepId: "sweep-21", expedienteId: "exp-21", traceabilityId: "trace-21" });
+    const transaction = createStrictOrderedTransaction();
+
+    transaction.update("projects/exp-21", { sweeps: [{ id: "sweep-21" }] });
+
+    await expect(
+      prepareSweepLifecycleEventsInTransaction(transaction, {}, lifecycle, { actor: "operator-21" })
+    ).rejects.toThrow("READ_AFTER_WRITE");
+    expect(getOutboxEntries()).toHaveLength(0);
+  });
+
+  test("TEST 22 P4-D duplicate lifecycle transition remains idempotent without extra writes", async () => {
+    const lifecycle = createHumanTriggeredRunningSweepLifecycle({ sweepId: "sweep-22", expedienteId: "exp-22", traceabilityId: "trace-22" });
+    await enqueueSweepLifecycleEventsInTransaction(createTransaction(), {}, lifecycle, { actor: "operator-22" });
+    const firstOutboxIds = getOutboxEntries().map((entry) => entry.outboxId).sort();
+    const transaction = createStrictOrderedTransaction();
+
+    const prepared = await prepareSweepLifecycleEventsInTransaction(transaction, {}, lifecycle, { actor: "operator-22" });
+    commitPreparedSweepLifecycleEventsInTransaction(transaction, prepared);
+
+    expect(getOutboxEntries()).toHaveLength(2);
+    expect(getOutboxEntries().map((entry) => entry.outboxId).sort()).toEqual(firstOutboxIds);
+    expect(transaction.operations.some((op) => op.startsWith("set:"))).toBe(false);
+  });
+
+  test("TEST 23 P4-D registerSweep/updateSweep keep Firestore-safe sweep assembly", () => {
+    const source = readSource("src/context/ProjectContext.tsx");
+    const registerSweepBlock = source.slice(
+      source.indexOf("const registerSweep = useCallback"),
+      source.indexOf("const updateSweep = useCallback")
+    );
+    const updateSweepBlock = source.slice(
+      source.indexOf("const updateSweep = useCallback"),
+      source.indexOf("const value = useMemo")
+    );
+
+    expect(registerSweepBlock).toContain("const updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];");
+    expect(updateSweepBlock).toContain("const firestoreSafeUpdates = makeFirestoreSafe(updates) as Partial<SweepIntegrationItem>;");
+    expect(updateSweepBlock).toContain("updatedSweeps = makeFirestoreSafe(serverSweeps.map");
+    expect(registerSweepBlock).toContain("...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {})");
+    expect(updateSweepBlock).toContain("...(lifecycle.lineageStatus !== undefined ? { lineageStatus: lifecycle.lineageStatus } : {})");
   });
 });
