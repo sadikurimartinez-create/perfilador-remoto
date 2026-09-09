@@ -7,6 +7,7 @@ import {
   adaptSweepPayloadToGeoEvidence,
 } from "@/utils/geoResolver";
 import {
+  buildGeointTraceabilityId,
   GeointGovernanceStatus,
   GeointGovernanceStatusValue,
   normalizeGeointGovernanceStatus,
@@ -45,6 +46,7 @@ export interface ApprovedEvidence {
   evidenceId: string;
   projectId: string;
   originalFindingId: string;
+  traceabilityId: string;
   validatedBy: string | null;
   validatorRole: string;
   validationDate: string;
@@ -122,6 +124,13 @@ function resolveFiniteNumber(...values: unknown[]): number | null {
   for (const value of values) {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function resolvePresentString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   return null;
 }
@@ -224,10 +233,31 @@ export function StreetViewFindingsPanel({
       return;
     }
 
-    const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename || `find-${Date.now()}`;
-    const sourceEvidenceId = selectedCapture.sourceEvidenceId || selectedCapture.evidenceId || selectedCapture.evidenciaId || selectedCapture.captureId || captureId;
-    const geographyId = selectedCapture.geographyId || selectedCapture.canonicalGeography?.geographyId || selectedCapture.metadata?.geographyId || null;
-    const geographyType = selectedCapture.geographyType || selectedCapture.canonicalGeography?.type || selectedCapture.metadata?.geographyType || null;
+    const captureId = resolvePresentString(selectedCapture.id, selectedCapture.findingId, selectedCapture.hash_md5, selectedCapture.filename);
+    if (!captureId) {
+      setErrorMessage("El hallazgo Street View no contiene identificador real de captura para convalidación.");
+      return;
+    }
+
+    const sourceEvidenceId = resolvePresentString(selectedCapture.sourceEvidenceId, selectedCapture.evidenceId, selectedCapture.evidenciaId, selectedCapture.captureId);
+    if (!sourceEvidenceId) {
+      setErrorMessage("El hallazgo Street View no contiene evidencia fuente real para convalidación.");
+      return;
+    }
+
+    const geographyId = resolvePresentString(selectedCapture.geographyId, selectedCapture.canonicalGeography?.geographyId, selectedCapture.metadata?.geographyId);
+    if (!geographyId) {
+      setErrorMessage("El hallazgo Street View no contiene geografía canónica para convalidación.");
+      return;
+    }
+
+    const geographyType = resolvePresentString(selectedCapture.geographyType, selectedCapture.canonicalGeography?.type, selectedCapture.metadata?.geographyType);
+    const traceabilityId = resolvePresentString(selectedCapture.traceabilityId) || buildGeointTraceabilityId("trace-streetview-finding", [
+      expedienteId,
+      captureId,
+      sourceEvidenceId,
+      geographyId,
+    ]);
 
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -249,10 +279,11 @@ export function StreetViewFindingsPanel({
 
     // Construcción de la nueva entidad approvedEvidence (ADR-016)
     const approvedEvidence: ApprovedEvidence = {
-      evidenceId: `evi-approved-${Date.now()}`,
+      evidenceId: `evi-approved-${captureId}`,
       projectId: expedienteId,
       originalFindingId: captureId,
       sourceEvidenceId,
+      traceabilityId,
       validatedBy: validatorId || null,
       validatorRole: validatorRole,
       validationDate: new Date().toISOString(),
@@ -278,6 +309,7 @@ export function StreetViewFindingsPanel({
           ...approvedEvidence,
           id: approvedEvidence.evidenceId,
           expedienteId,
+          traceabilityId,
           captureId,
           sourceEvidenceId,
           supportingEvidenceIds: sourceEvidenceId ? [sourceEvidenceId] : [],

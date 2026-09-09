@@ -19,7 +19,7 @@ import {
 } from "@/types/geointGovernance";
 import { adaptEvidence, adaptFinding } from "@/services/geoint/canonicalEvidenceRegistry";
 import type { CanonicalReferenceSet } from "@/types/canonicalEvidenceRegistry";
-import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
+import { buildStreetViewFindingLineage, validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 import { validateInstitutionalEvidenceTraceability } from "@/utils/institutionalEvidenceTraceabilityGuard";
 
 export interface StreetViewFinding {
@@ -92,6 +92,72 @@ export function deduplicateStreetViewFindings(findings: StreetViewFinding[]): St
   }
 
   return result;
+}
+
+export type HistoricalStreetViewFindingClassification =
+  | "HISTORICAL_RECOVERABLE"
+  | "HISTORICAL_INCOMPLETE"
+  | "HISTORICAL_UNRECOVERABLE";
+
+export function classifyHistoricalStreetViewFinding(
+  data: Partial<StreetViewFinding> & { expedienteId?: string }
+): { classification: HistoricalStreetViewFindingClassification; reasons: string[] } {
+  const reasons: string[] = [];
+  const id = present(data.id) || present(data.captureId);
+  const expedienteId = present(data.expedienteId);
+  const sourceEvidenceId = present(data.sourceEvidenceId) || present(data.captureId) || present(data.evidenciaId);
+  const geographyId = present(data.geographyId);
+  const hasContext = Boolean(present(data.fechaCreacion) || present(data.descripcion) || present(data.observaciones_visual));
+  const lat = Number(data.coordenadas?.lat);
+  const lng = Number(data.coordenadas?.lng);
+  const hasValidGeo = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
+
+  if (!id) reasons.push("missing finding id");
+  if (!expedienteId) reasons.push("missing expedienteId");
+  if (!sourceEvidenceId) reasons.push("missing sourceEvidenceId");
+  if (!geographyId) reasons.push("missing geographyId");
+  if (!hasValidGeo) reasons.push("invalid coordinates");
+  if (!hasContext) reasons.push("missing historical context");
+
+  if (reasons.length === 0) return { classification: "HISTORICAL_RECOVERABLE", reasons };
+  if (id && expedienteId && sourceEvidenceId && hasValidGeo) return { classification: "HISTORICAL_INCOMPLETE", reasons };
+  return { classification: "HISTORICAL_UNRECOVERABLE", reasons };
+}
+
+export function recoverHistoricalStreetViewFindingForApproval(
+  data: Partial<StreetViewFinding> & { expedienteId: string }
+): Partial<StreetViewFinding> & { expedienteId: string } {
+  if (present(data.traceabilityId)) return data;
+
+  const classification = classifyHistoricalStreetViewFinding(data);
+  if (classification.classification !== "HISTORICAL_RECOVERABLE") return data;
+
+  const id = present(data.id) || present(data.captureId)!;
+  const sourceEvidenceId = present(data.sourceEvidenceId) || present(data.captureId) || present(data.evidenciaId)!;
+  const geographyId = present(data.geographyId)!;
+  const lineage = data.lineage?.length
+    ? data.lineage
+    : buildStreetViewFindingLineage({
+        findingId: id,
+        evidenceId: sourceEvidenceId,
+        sourceReference: data.imagen,
+        geographyId,
+      });
+  const lineageStatus = validateLineage(lineage).status;
+
+  return {
+    ...data,
+    id,
+    sourceEvidenceId,
+    traceabilityId: buildGeointTraceabilityId("trace-streetview-historical", [
+      data.expedienteId,
+      id,
+      sourceEvidenceId,
+      geographyId,
+    ]),
+    lineage,
+    lineageStatus,
+  };
 }
 
 export function normalizeStreetViewFindingForPersistence(
@@ -302,13 +368,18 @@ export class StreetViewFindingService {
       }
 
       try {
-        normalizeStreetViewFindingForPersistence({
+        const approvalFinding = recoverHistoricalStreetViewFindingForApproval({
           ...(existingData as Partial<StreetViewFinding>),
           ...payload,
           id: findingId,
           expedienteId,
           estado: GeointGovernanceStatus.APPROVED_EVIDENCE,
         });
+        normalizeStreetViewFindingForPersistence(approvalFinding);
+        if (approvalFinding.traceabilityId) payload.traceabilityId = approvalFinding.traceabilityId;
+        if (approvalFinding.sourceEvidenceId) payload.sourceEvidenceId = approvalFinding.sourceEvidenceId;
+        if (approvalFinding.lineage) payload.lineage = approvalFinding.lineage;
+        if (approvalFinding.lineageStatus) payload.lineageStatus = approvalFinding.lineageStatus;
       } catch (err: any) {
         throw new Error(`STREET_VIEW_FINDING_PROMOTION_BLOCKED: ${err?.message || "traceability validation failed"}`);
       }

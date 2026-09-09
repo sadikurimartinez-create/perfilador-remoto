@@ -1,5 +1,9 @@
 import { GeointGovernanceStatus } from "../src/types/geointGovernance";
-import { StreetViewFindingService, type StreetViewFinding } from "../src/services/streetViewFindingService";
+import {
+  classifyHistoricalStreetViewFinding,
+  StreetViewFindingService,
+  type StreetViewFinding,
+} from "../src/services/streetViewFindingService";
 import { POST } from "../src/app/api/streetview/findings/route";
 import { PATCH } from "../src/app/api/expedientes/[id]/evidencias/streetview/[captureId]/route";
 import fs from "node:fs";
@@ -268,5 +272,129 @@ describe("P1-D - Street View persistence", () => {
       expect.objectContaining({ id: "sv-p1d-1" }),
       { merge: true }
     );
+  });
+
+  test("T13 P4-C UI envia traceabilityId canonico antes de APPROVED_EVIDENCE", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
+      "utf8"
+    );
+    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
+
+    expect(approveBlock).toContain("const traceabilityId = resolvePresentString(selectedCapture.traceabilityId) || buildGeointTraceabilityId");
+    expect(approveBlock).toContain("traceabilityId,");
+    expect(approveBlock.indexOf("const traceabilityId = resolvePresentString")).toBeLessThan(
+      approveBlock.indexOf("estado: GeointGovernanceStatus.APPROVED_EVIDENCE")
+    );
+  });
+
+  test("T14 P4-C UI exige sourceEvidenceId real y no lo deriva de un fallback temporal", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
+      "utf8"
+    );
+    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
+
+    expect(approveBlock).toContain("const sourceEvidenceId = resolvePresentString(selectedCapture.sourceEvidenceId, selectedCapture.evidenceId, selectedCapture.evidenciaId, selectedCapture.captureId);");
+    expect(approveBlock).toContain("El hallazgo Street View no contiene evidencia fuente real");
+    expect(approveBlock).not.toContain("|| captureId");
+    expect(approveBlock).not.toContain("`find-${Date.now()}`");
+  });
+
+  test("T15 P4-C historical recoverable se adapta conservadoramente durante PATCH", async () => {
+    firestoreDocs.set(subcollectionPath("exp-p1d", "legacy-recoverable"), completeFinding({
+      id: "legacy-recoverable",
+      traceabilityId: "" as any,
+      sourceEvidenceId: undefined,
+      captureId: "capture-historical-real",
+      geographyId: "geo-p1d",
+      estado: GeointGovernanceStatus.PENDING_REVIEW,
+      fechaCreacion: "2026-09-01T10:00:00.000Z",
+      lineage: [],
+      lineageStatus: "LEGACY_PARTIAL",
+    }));
+
+    const response = await PATCH(
+      requestWithBody({
+        status: GeointGovernanceStatus.APPROVED_EVIDENCE,
+        validationComment: "Aprobacion historica recuperable.",
+      }),
+      { params: { id: "exp-p1d", captureId: "legacy-recoverable" } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(firestoreDocs.get(subcollectionPath("exp-p1d", "legacy-recoverable"))).toMatchObject({
+      estado: GeointGovernanceStatus.APPROVED_EVIDENCE,
+      sourceEvidenceId: "capture-historical-real",
+      geographyId: "geo-p1d",
+      lineageStatus: "SUPPORTED",
+      usuarioRevision: "perfilador.real",
+    });
+    expect(firestoreDocs.get(subcollectionPath("exp-p1d", "legacy-recoverable")).traceabilityId).toContain("trace-streetview-historical");
+  });
+
+  test("T16 P4-C historical incomplete no se autoaprueba", async () => {
+    firestoreDocs.set(subcollectionPath("exp-p1d", "legacy-incomplete"), completeFinding({
+      id: "legacy-incomplete",
+      traceabilityId: "" as any,
+      sourceEvidenceId: undefined,
+      captureId: "capture-incomplete-real",
+      geographyId: null,
+      estado: GeointGovernanceStatus.PENDING_REVIEW,
+      fechaCreacion: "2026-09-01T10:00:00.000Z",
+      lineageStatus: "LEGACY_PARTIAL",
+    }));
+
+    const response = await PATCH(
+      requestWithBody({
+        status: GeointGovernanceStatus.APPROVED_EVIDENCE,
+        validationComment: "Intento historico incompleto.",
+      }),
+      { params: { id: "exp-p1d", captureId: "legacy-incomplete" } }
+    );
+    const body = await responseJson(response);
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain("STREET_VIEW_FINDING_PROMOTION_BLOCKED");
+    expect(firestoreDocs.get(subcollectionPath("exp-p1d", "legacy-incomplete")).estado).toBe(GeointGovernanceStatus.PENDING_REVIEW);
+  });
+
+  test("T17 P4-C historical unrecoverable queda clasificado como bloqueado", () => {
+    const result = classifyHistoricalStreetViewFinding({
+      expedienteId: "exp-p1d",
+      id: "legacy-unrecoverable",
+      categoria: "RUTA_ACCESO",
+      coordenadas: { lat: null as any, lng: null as any },
+      estado: GeointGovernanceStatus.PENDING_REVIEW,
+    });
+
+    expect(result.classification).toBe("HISTORICAL_UNRECOVERABLE");
+    expect(result.reasons).toEqual(expect.arrayContaining(["missing sourceEvidenceId", "missing geographyId", "invalid coordinates"]));
+  });
+
+  test("T18 P4-C no inventa coordenadas ni identidad humana en aprobacion UI/API", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
+      "utf8"
+    );
+    const route = fs.readFileSync(path.join(process.cwd(), "src/app/api/streetview/findings/route.ts"), "utf8");
+    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
+
+    expect(approveBlock).toContain("if (lat === null || lng === null)");
+    expect(approveBlock).not.toContain("|| 21.885");
+    expect(approveBlock).not.toContain("|| -102.291");
+    expect(route).toContain("resolveStreetViewSessionIdentity");
+    expect(route).toContain("usuarioRevision: identity.username");
+    expect(route).toContain("validatedBy: streetViewValidatedBy(identity)");
+  });
+
+  test("T19 P4-C report/export conserva traceabilityId real de Street View", () => {
+    const reportInput = fs.readFileSync(
+      path.join(process.cwd(), "src/utils/executiveGeointReportModel.ts"),
+      "utf8"
+    );
+
+    expect(reportInput).toContain("input.streetView");
+    expect(reportInput).toContain("traceabilityId");
   });
 });
