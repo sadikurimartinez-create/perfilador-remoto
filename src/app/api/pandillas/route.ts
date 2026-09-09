@@ -10,12 +10,35 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 import { matchPandillasDatasetRows } from "@/modules/pandillas/pandillas.fusion";
 import { GangEntity } from "@/modules/pandillas/pandillas.mapper";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
+import { PANDILLAS_PROVIDER_TIMEOUT_MS } from "@/modules/pandillas/pandillas.sweepStatus";
+
+function providerTimeoutError(): Error {
+  const error = new Error("PANDILLAS_PROVIDER_TIMEOUT");
+  error.name = "PandillasProviderTimeout";
+  return error;
+}
+
+async function withProviderTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(providerTimeoutError()), PANDILLAS_PROVIDER_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 async function callGeminiRestApi(prompt: string, modelName: string, apiKey: string): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const signal = AbortSignal.timeout(PANDILLAS_PROVIDER_TIMEOUT_MS);
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal,
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
@@ -86,6 +109,13 @@ export async function POST(req: Request) {
       archivosAnexos = [],
       contextoUsuario = ""
     } = body;
+
+    if (typeof nombre !== "string" || !nombre.trim()) {
+      return NextResponse.json(
+        { error: "PANDILLAS_VALIDATION_ERROR", sweepStatus: "VALIDATION_ERROR", isAiGenerated: false },
+        { status: 400 }
+      );
+    }
 
     const manualGang: GangEntity = {
       nombre,
@@ -244,6 +274,7 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
     
     let parsedResult: any = null;
     let isAiGenerated = false;
+    let providerProvenance: any = null;
 
     if (useVertexAI) {
       try {
@@ -259,19 +290,26 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
           tools: [{ googleSearch: {} } as any],
         });
         
-        const result = await model.generateContent({
+        const result = await withProviderTimeout(model.generateContent({
           contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.2,
             responseMimeType: "application/json"
           }
-        });
+        }));
         const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
         console.log("[API Pandillas] Respuesta cruda de Vertex AI recibida.");
         const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
         parsedResult = JSON.parse(cleanJson);
         isAiGenerated = true;
+        providerProvenance = {
+          provider: "VERTEX_AI",
+          model: GEMINI_MODEL,
+          generatedAt: new Date().toISOString(),
+          source: "PANDILLAS_SWEEP_PROVIDER",
+        };
       } catch (vertexErr: any) {
+        if (vertexErr?.name === "PandillasProviderTimeout") throw vertexErr;
         console.warn("[API Pandillas] Vertex AI generation failed, falling back to REST API:", vertexErr.message);
       }
     }
@@ -285,20 +323,38 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
           const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
           parsedResult = JSON.parse(cleanJson);
           isAiGenerated = true;
+          providerProvenance = {
+            provider: "GEMINI_REST",
+            model: GEMINI_MODEL,
+            generatedAt: new Date().toISOString(),
+            source: "PANDILLAS_SWEEP_PROVIDER",
+          };
         } catch (restErr: any) {
+          if (restErr?.name === "AbortError") throw providerTimeoutError();
           console.error("[API Pandillas] Gemini REST API fallback failed:", restErr.message);
         }
       }
     }
 
     if (isAiGenerated && parsedResult) {
-      return NextResponse.json({ ...overwriteAiSpatialOutputWithSourceCoordinates(parsedResult, seedAddresses), isAiGenerated: true });
+      const governedResult = overwriteAiSpatialOutputWithSourceCoordinates(parsedResult, seedAddresses);
+      const isEmpty =
+        (governedResult?.grafo?.nodos || []).length === 0 &&
+        (governedResult?.mapa?.geolocalizacion || []).length === 0 &&
+        (governedResult?.alertas || []).length === 0;
+      return NextResponse.json({
+        ...governedResult,
+        isAiGenerated: true,
+        sweepStatus: isEmpty ? "EMPTY" : "SUCCESS",
+        providerProvenance,
+      });
     } else {
       console.warn("[API Pandillas] Los servicios de IA no están disponibles. El análisis queda NOT_READY.");
       return NextResponse.json(
         {
           error: "No fue posible generar un análisis gobernado de pandillas.",
           analysisReadiness: "NOT_READY",
+          sweepStatus: "NOT_CONFIGURED",
           isAiGenerated: false
         },
         { status: 503 }
@@ -307,8 +363,14 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
 
   } catch (error: any) {
     console.error("[API Pandillas] Error general en el endpoint:", error);
+    if (error?.name === "PandillasProviderTimeout" || error?.message === "PANDILLAS_PROVIDER_TIMEOUT") {
+      return NextResponse.json(
+        { error: "PANDILLAS_PROVIDER_TIMEOUT", sweepStatus: "TIMEOUT", isAiGenerated: false },
+        { status: 504 }
+      );
+    }
     return NextResponse.json(
-      { error: "Error interno al procesar el análisis de pandillas.", details: error.message },
+      { error: "Error interno al procesar el análisis de pandillas.", details: error.message, sweepStatus: "PROVIDER_ERROR" },
       { status: 500 }
     );
   }

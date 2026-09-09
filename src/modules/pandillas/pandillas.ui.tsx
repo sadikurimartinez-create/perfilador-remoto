@@ -15,6 +15,7 @@ import {
 } from "./pandillas.mapper";
 import { PandillasService } from "./pandillas.service";
 import { PandillasEngine } from "./pandillas.engine";
+import { PandillasSweepError, type PandillasSweepStatus } from "./pandillas.sweepStatus";
 import { adaptPandillasCanonicalInput } from "@/services/geoint/pandillasCanonicalInputAdapter";
 import { GoogleMap, Polygon, Polyline, Marker, Circle, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
 import { GangGISAnalysisLayer, GISRelationshipLine } from "@/lib/providers/gangGISAnalysisLayer";
@@ -49,6 +50,15 @@ const WMS_LAYERS_CATALOG = [
   { id: "m_localidad_p_g", name: "m_localidad_p_g", title: "📍 Localidades", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" },
   { id: "m_municipio_g", name: "m_municipio_g", title: "🏢 Límites Municipales", category: "organizacion_territorial", providerUrl: "https://geoportal.inegi.org.mx/geoserver/m_ageb_m_g/wms" }
 ];
+
+const PANDILLAS_SWEEP_MESSAGES: Record<PandillasSweepStatus, string> = {
+  SUCCESS: "Barrido de pandillas completado.",
+  EMPTY: "SIN COINCIDENCIAS EN INVENTARIO DE PANDILLAS",
+  NOT_CONFIGURED: "NOT_CONFIGURED: proveedor IA de Pandillas no configurado.",
+  TIMEOUT: "TIMEOUT: el barrido de Pandillas excedió el tiempo máximo controlado.",
+  PROVIDER_ERROR: "PROVIDER_ERROR: el proveedor de Pandillas no completó el análisis.",
+  VALIDATION_ERROR: "VALIDATION_ERROR: faltan datos obligatorios para ejecutar el barrido.",
+};
 
 const darkMapStyles = [
   { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
@@ -1430,22 +1440,32 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
       };
 
       const result = await PandillasEngine.executeFullSweep(inputGang, filterPrompt);
+      const sweepStatus = (result as any).sweepStatus || ((result as any).exito === false ? "VALIDATION_ERROR" : "SUCCESS");
+      if (!["SUCCESS", "EMPTY"].includes(sweepStatus)) {
+        throw new PandillasSweepError(sweepStatus as any, PANDILLAS_SWEEP_MESSAGES[sweepStatus as PandillasSweepStatus] || "PROVIDER_ERROR");
+      }
       setAnalysisResult(result);
+      setAnalyzeStep(PANDILLAS_SWEEP_MESSAGES[sweepStatus as PandillasSweepStatus]);
       
-      const resultSummary = `[MESA DE INTELIGENCIA DE PANDILLAS (AI)]\nObjetivo: ${nombre}\nTipo de Barrido: ${filterPrompt}\nNivel de Peligrosidad Estimado: ${peligrosidad}\nIntegrantes Capturados: ${integrantes.length}\nModus Operandi Analizado: ${modusOperandi}\n\nResumen del Diagnóstico de Inteligencia: El barrido unificó la información de pandillas locales y generó modelos de red y distribución de riesgo territorial.`;
+      const resultSummary = `[MESA DE INTELIGENCIA DE PANDILLAS (AI)]\nObjetivo: ${nombre}\nTipo de Barrido: ${filterPrompt}\nEstado del Barrido: ${sweepStatus}\nNivel de Peligrosidad Estimado: ${peligrosidad}\nIntegrantes Capturados: ${integrantes.length}\nModus Operandi Analizado: ${modusOperandi}\n\nResumen del Diagnóstico de Inteligencia: El barrido unificó la información de pandillas locales y generó modelos de red y distribución de riesgo territorial.`;
 
-      await registerSweep({
-        engine: "Mesa de Inteligencia de Pandillas (AI)",
-        source: "GEOINT",
-        type: "Contextualizada",
-        relevance: "Alto",
-        data: resultSummary,
-        initialContext: filterPrompt,
-        createVisualEvidence: false
-      } as any);
+      if (sweepStatus === "SUCCESS" || sweepStatus === "EMPTY") {
+        await registerSweep({
+          engine: "Mesa de Inteligencia de Pandillas (AI)",
+          source: "GEOINT",
+          type: "Contextualizada",
+          relevance: "Alto",
+          data: resultSummary,
+          initialContext: filterPrompt,
+          createVisualEvidence: false
+        } as any);
+      }
     } catch (err: any) {
       console.error(err);
-      alert("❌ Falló el motor de barrido Vertex AI: " + err.message);
+      const status = err instanceof PandillasSweepError ? err.sweepStatus : "PROVIDER_ERROR";
+      const message = PANDILLAS_SWEEP_MESSAGES[status as PandillasSweepStatus] || err.message || PANDILLAS_SWEEP_MESSAGES.PROVIDER_ERROR;
+      setAnalyzeStep(message);
+      alert(`❌ ${message}`);
     } finally {
       setIsAnalyzing(false);
     }
