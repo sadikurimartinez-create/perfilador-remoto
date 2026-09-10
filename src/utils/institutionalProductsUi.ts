@@ -124,6 +124,17 @@ export function collectInstitutionalReadinessMessages(assessment: Pick<ReportRea
   return [...messages.values()];
 }
 
+export function shouldShowInstitutionalAnalysisCreationTrigger(
+  assessment: Pick<ReportReadyAssessment, "evidenceReady" | "findingsReady" | "analysisReady">,
+  options: { candidateCount: number; isReadOnly?: boolean }
+): boolean {
+  return options.isReadOnly !== true
+    && options.candidateCount === 0
+    && assessment.evidenceReady === true
+    && assessment.findingsReady === true
+    && assessment.analysisReady === false;
+}
+
 export function buildInstitutionalProductsViewModel(
   assessment: ReportReadyAssessment,
   projectOrNumeroExpediente: { numeroExpediente?: unknown } | string | null | undefined

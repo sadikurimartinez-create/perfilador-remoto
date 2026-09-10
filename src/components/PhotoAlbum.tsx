@@ -40,6 +40,7 @@ import {
   buildInstitutionalProductExportOptions,
   buildInstitutionalProductExportPayload,
   buildInstitutionalProductsViewModel,
+  shouldShowInstitutionalAnalysisCreationTrigger,
   type InstitutionalReportKind,
 } from "@/utils/institutionalProductsUi";
 import {
@@ -1183,6 +1184,10 @@ export function PhotoAlbum({
     () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),
     [reportReadyAssessment, project]
   );
+  const showInstitutionalAnalysisCreationTrigger = useMemo(() => shouldShowInstitutionalAnalysisCreationTrigger(
+    reportReadyAssessment,
+    { candidateCount: reportAnalysisCandidates.length, isReadOnly }
+  ), [reportReadyAssessment, reportAnalysisCandidates.length, isReadOnly]);
   useEffect(() => {
     console.info("[REPORT READY]", {
       projectId: projectId || project?.id || reportReadyAssessment.projectId,
@@ -1220,6 +1225,21 @@ export function PhotoAlbum({
       })),
     });
   }, [projectId, project?.id, reportReadyAssessment.projectId, reportAnalysisCandidates, acceptedReportAnalysisCount]);
+  useEffect(() => {
+    console.info("[INSTITUTIONAL ANALYSIS CTA]", {
+      projectId: projectId || project?.id || reportReadyAssessment.projectId,
+      visible: showInstitutionalAnalysisCreationTrigger,
+      evidenceReady: reportReadyAssessment.evidenceReady,
+      findingsReady: reportReadyAssessment.findingsReady,
+      analysisReady: reportReadyAssessment.analysisReady,
+      candidateCount: reportAnalysisCandidates.length,
+      acceptedCount: acceptedReportAnalysisCount,
+      blockingConditionCodes: [
+        ...reportReadyAssessment.blockingReasons.map((reason: any) => reason.code),
+        ...reportReadyAssessment.unresolvedItems.map((reason: any) => reason.code),
+      ],
+    });
+  }, [projectId, project?.id, reportReadyAssessment, showInstitutionalAnalysisCreationTrigger, reportAnalysisCandidates.length, acceptedReportAnalysisCount]);
 
   const buildValidatorIdentity = useCallback(() => {
     if (!user) return null;
@@ -1286,6 +1306,15 @@ export function PhotoAlbum({
         analysisOutputs: approvedAnalysisOutputs,
         iaAnalysis: nextAnalysisResult,
       } as any);
+      console.info("[INSTITUTIONAL ANALYSIS CREATED]", {
+        projectId: project?.id || projectId || reportReadyAssessment.projectId,
+        candidateCount: approvedAnalysisOutputs.length,
+        acceptedCount: approvedAnalysisOutputs.filter((item: any) => {
+          const supported = item.lineageStatus === "SUPPORTED" || item.lineageStatus === "PARTIALLY_SUPPORTED";
+          const reviewed = item.validationStatus === "APPROVED" || item.humanValidationStatus === "APPROVED";
+          return supported && reviewed;
+        }).length,
+      });
     } catch (err: any) {
       setError(err?.message || "No fue posible crear el análisis institucional revisado.");
     } finally {
@@ -1302,6 +1331,7 @@ export function PhotoAlbum({
     analysisResult,
     setAnalysisResult,
     updateProjectDetails,
+    reportReadyAssessment.projectId,
   ]);
 
   const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
@@ -5354,7 +5384,7 @@ const hasMinimumPhotos =
                       {isApprovingReportAnalysis ? "Confirmando revisión..." : "Confirmar revisión humana del análisis"}
                     </button>
                   )}
-                  {reportAnalysisCandidates.length === 0 && institutionalAnalysisEvidenceIds.length > 0 && institutionalAnalysisFindingIds.length > 0 && !isReadOnly && (
+                  {showInstitutionalAnalysisCreationTrigger && (
                     <button
                       type="button"
                       onClick={() => void handleCreateInstitutionalAnalysis()}

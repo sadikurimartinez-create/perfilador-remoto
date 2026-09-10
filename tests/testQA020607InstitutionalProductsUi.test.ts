@@ -7,6 +7,7 @@ import {
   buildInstitutionalProductsViewModel,
   collectInstitutionalReadinessMessages,
   resolveInstitutionalNumeroExpediente,
+  shouldShowInstitutionalAnalysisCreationTrigger,
   translateInstitutionalReadinessStatus,
 } from "../src/utils/institutionalProductsUi";
 
@@ -338,10 +339,56 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("Productos Institucionales"), photoAlbum.indexOf("<DynamicPopup"));
 
     expect(photoAlbum).toContain("createInstitutionalReviewedAnalysisOutput");
+    expect(photoAlbum).toContain("shouldShowInstitutionalAnalysisCreationTrigger");
+    expect(photoAlbum).toContain('console.info("[INSTITUTIONAL ANALYSIS CTA]", {');
+    expect(photoAlbum).toContain('console.info("[INSTITUTIONAL ANALYSIS CREATED]", {');
     expect(handler).toContain("analysisOutputs: approvedAnalysisOutputs");
     expect(handler).toContain("iaAnalysis: nextAnalysisResult");
     expect(handler).not.toContain("confirmAndGenerateProfile");
     expect(handler).not.toContain("/api/generate-profile");
     expect(canonicalCta).toContain("Crear análisis institucional revisado");
+  });
+
+  test("37 estado productivo con solo analysisReady false muestra trigger institucional", () => {
+    const productiveState = readyAssessment({
+      analysisReady: false,
+      readyForInstitutionalReport: false,
+      status: "NOT_READY",
+      blockingReasons: [reason("SUPPORTED_ANALYSIS_MISSING")],
+    });
+
+    expect(shouldShowInstitutionalAnalysisCreationTrigger(productiveState, {
+      candidateCount: 0,
+      isReadOnly: false,
+    })).toBe(true);
+  });
+
+  test("38 analysisReady true no pide crear otro análisis", () => {
+    expect(shouldShowInstitutionalAnalysisCreationTrigger(readyAssessment(), {
+      candidateCount: 1,
+      isReadOnly: false,
+    })).toBe(false);
+  });
+
+  test("39 falta evidencia bloquea trigger de análisis institucional", () => {
+    expect(shouldShowInstitutionalAnalysisCreationTrigger(assessment({
+      evidenceReady: false,
+      findingsReady: true,
+      analysisReady: false,
+    }), {
+      candidateCount: 0,
+      isReadOnly: false,
+    })).toBe(false);
+  });
+
+  test("40 falta hallazgo bloquea trigger de análisis institucional", () => {
+    expect(shouldShowInstitutionalAnalysisCreationTrigger(assessment({
+      evidenceReady: true,
+      findingsReady: false,
+      analysisReady: false,
+    }), {
+      candidateCount: 0,
+      isReadOnly: false,
+    })).toBe(false);
   });
 });
