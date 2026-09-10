@@ -242,6 +242,8 @@ export type Project = {
   canonicalHypothesis?: CanonicalProjectHypothesis | null;
   hypothesisRequirementSatisfied?: boolean;
   reportReadyAssessment?: ReportReadyAssessment | null;
+  findings?: any[];
+  approvedFindings?: any[];
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;

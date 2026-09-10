@@ -481,9 +481,81 @@ export function GeographicWorkspace({
     );
   };
 
-  const handleFindingCreated = async (newFinding: StreetViewFinding) => {
+  const reconcileFindingIntoProject = React.useCallback(async (savedFinding: StreetViewFinding) => {
+    const findingId =
+      savedFinding?.id ||
+      (savedFinding as any)?.findingId ||
+      (savedFinding as any)?.traceabilityId;
+
+    if (!findingId) {
+      console.warn(
+        "[GEOINT FINDING RECONCILIATION BLOCKED] Hallazgo sin identidad canónica.",
+        savedFinding
+      );
+      return;
+    }
+
+    setFindings((prev) => {
+      const withoutDuplicate = prev.filter((item) => {
+        const currentId =
+          item?.id ||
+          (item as any)?.findingId ||
+          (item as any)?.traceabilityId;
+
+        return currentId !== findingId;
+      });
+
+      return [...withoutDuplicate, savedFinding];
+    });
+
+    const isApprovedFinding =
+      savedFinding?.estado === GeointGovernanceStatus.APPROVED_EVIDENCE ||
+      String((savedFinding as any)?.humanValidationStatus || "").toUpperCase() === "APPROVED";
+
+    if (!isApprovedFinding) {
+      console.info("[GEOINT FINDING PENDING HUMAN REVIEW]", {
+        projectId: project?.id || expedienteId,
+        findingId,
+        estado: savedFinding?.estado || null,
+        humanValidationStatus: (savedFinding as any)?.humanValidationStatus || null,
+      });
+      return;
+    }
+
+    const existingApprovedFindings = Array.isArray(project?.approvedFindings)
+      ? project.approvedFindings
+      : [];
+
+    const reconciledApprovedFindings = [
+      ...existingApprovedFindings.filter((item: any) => {
+        const currentId =
+          item?.id ||
+          item?.findingId ||
+          item?.traceabilityId;
+
+        return currentId !== findingId;
+      }),
+      savedFinding,
+    ];
+
+    await updateProjectDetails({
+      approvedFindings: reconciledApprovedFindings,
+    });
+
+    console.info("[GEOINT FINDING RECONCILED]", {
+      projectId: project?.id || expedienteId,
+      findingId,
+      approvedFindingsCount: reconciledApprovedFindings.length,
+    });
+  }, [project?.id, project?.approvedFindings, expedienteId, updateProjectDetails]);
+
+  const persistFindingAndReconcile = React.useCallback(async (newFinding: StreetViewFinding) => {
     try {
-      console.log("[AUDIT ADR-019.5 v1.3] Disparando handleFindingCreated con payload:", newFinding);
+      console.log(
+        "[AUDIT ADR-019.5 v1.3] Persistiendo hallazgo nuevo:",
+        newFinding
+      );
+
       const res = await fetch("/api/streetview/findings", {
         method: "POST",
         headers: {
@@ -498,16 +570,20 @@ export function GeographicWorkspace({
 
       const responseData = await res.json();
       const savedFinding = responseData.finding || responseData;
-      console.log("[AUDIT ADR-019.5 v1.3] Hallazgo guardado con éxito en Firestore:", savedFinding);
 
-      setFindings((prev) => [
-        ...prev,
+      console.log(
+        "[AUDIT ADR-019.5 v1.3] Hallazgo guardado con éxito en Firestore:",
         savedFinding
-      ]);
+      );
+
+      await reconcileFindingIntoProject(savedFinding);
     } catch (err) {
-      console.warn("[AUDIT ADR-019.5 v1.3] Error al guardar hallazgo en Firestore:", err);
+      console.warn(
+        "[AUDIT ADR-019.5 v1.3] Error al guardar hallazgo en Firestore:",
+        err
+      );
     }
-  };
+  }, [reconcileFindingIntoProject]);
 
   console.debug("[GEOINT DEBUG]", {
     albumPhotosCount: album?.length || 0,
@@ -656,7 +732,7 @@ export function GeographicWorkspace({
               expedienteId={expedienteId}
               captures={captures}
               onCaptureStatusChange={handleCaptureStatusChange}
-              onFindingCreated={handleFindingCreated}
+              onFindingCreated={reconcileFindingIntoProject}
               onTriggerTemporalComparison={handleTriggerTemporalComparison}
             />
           </div>
@@ -713,7 +789,7 @@ export function GeographicWorkspace({
               setActiveTemporalCandidate(null);
             }}
             onComparisonGenerated={(cmp: UniversalEvidenceComparison) => {
-              handleFindingCreated(buildStreetViewFindingFromTemporalComparison(cmp));
+              void persistFindingAndReconcile(buildStreetViewFindingFromTemporalComparison(cmp));
             }}
           />
         )}
