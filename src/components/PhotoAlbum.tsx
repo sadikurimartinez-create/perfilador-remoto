@@ -26,7 +26,7 @@ import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoram
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
-import { approveAiAnalyticalOutput, createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import { approveAiAnalyticalOutput, createAiAnalyticalOutput, createInstitutionalReviewedAnalysisOutput } from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
 import {
   GENERATE_PROFILE_SESSION_EXPIRED_MESSAGE,
@@ -1161,6 +1161,24 @@ export function PhotoAlbum({
       return supported && reviewed;
     }).length;
   }, [reportAnalysisCandidates]);
+  const institutionalAnalysisEvidenceIds = useMemo(() => {
+    return Array.from(new Set([
+      ...(((project as any)?.evidence || []) as any[]),
+      ...(((project as any)?.evidences || []) as any[]),
+      ...(((project as any)?.photoEvidence || []) as any[]),
+      ...(album || []),
+      ...(documents || []),
+    ].map((item: any) => item?.evidenceId || item?.id || item?.multimodalEvidence?.evidenceId).filter(Boolean)));
+  }, [project, album, documents]);
+  const institutionalAnalysisFindingIds = useMemo(() => {
+    return Array.from(new Set([
+      ...(((project as any)?.findings || []) as any[]),
+      ...(((project as any)?.approvedFindings || []) as any[]),
+      ...(((analysisResult as any)?.findings || []) as any[]),
+    ].filter((item: any) => item && item.usedInReport !== false)
+      .map((item: any) => item?.findingId || item?.id)
+      .filter(Boolean)));
+  }, [project, analysisResult]);
   const institutionalProducts = useMemo(
     () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),
     [reportReadyAssessment, project]
@@ -1240,6 +1258,51 @@ export function PhotoAlbum({
       setIsApprovingReportAnalysis(false);
     }
   }, [isReadOnly, reportAnalysisCandidates, analysisResult, setAnalysisResult, updateProjectDetails, buildValidatorIdentity]);
+
+  const handleCreateInstitutionalAnalysis = useCallback(async () => {
+    if (isReadOnly || reportAnalysisCandidates.length > 0) return;
+    setIsApprovingReportAnalysis(true);
+    try {
+      const output = createInstitutionalReviewedAnalysisOutput({
+        projectId: String(project?.id || projectId || "UNAVAILABLE"),
+        geographyId: (project as any)?.geographyId || (project as any)?.canonicalGeography?.geographyId || null,
+        geographyType: (project as any)?.canonicalGeography?.type || (project as any)?.geometryType || null,
+        evidenceIds: institutionalAnalysisEvidenceIds,
+        findingIds: institutionalAnalysisFindingIds,
+        sourceReferences: ["src/components/PhotoAlbum.tsx:handleCreateInstitutionalAnalysis"],
+        validatedAt: new Date().toISOString(),
+        validatedBy: buildValidatorIdentity(),
+      });
+      const approvedAnalysisOutputs = [
+        ...reportAnalysisCandidates.filter((item: any) => (item.outputId || item.analysisId || item.id) !== output.outputId),
+        output,
+      ];
+      const nextAnalysisResult = {
+        ...((analysisResult as any) || {}),
+        analysisOutputs: approvedAnalysisOutputs,
+      };
+      setAnalysisResult(nextAnalysisResult as any);
+      await updateProjectDetails({
+        analysisOutputs: approvedAnalysisOutputs,
+        iaAnalysis: nextAnalysisResult,
+      } as any);
+    } catch (err: any) {
+      setError(err?.message || "No fue posible crear el análisis institucional revisado.");
+    } finally {
+      setIsApprovingReportAnalysis(false);
+    }
+  }, [
+    isReadOnly,
+    reportAnalysisCandidates,
+    project,
+    projectId,
+    institutionalAnalysisEvidenceIds,
+    institutionalAnalysisFindingIds,
+    buildValidatorIdentity,
+    analysisResult,
+    setAnalysisResult,
+    updateProjectDetails,
+  ]);
 
   const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
     if (!institutionalProducts.readyForInstitutionalReport) {
@@ -5289,6 +5352,16 @@ const hasMinimumPhotos =
                       className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
                     >
                       {isApprovingReportAnalysis ? "Confirmando revisión..." : "Confirmar revisión humana del análisis"}
+                    </button>
+                  )}
+                  {reportAnalysisCandidates.length === 0 && institutionalAnalysisEvidenceIds.length > 0 && institutionalAnalysisFindingIds.length > 0 && !isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateInstitutionalAnalysis()}
+                      disabled={isApprovingReportAnalysis}
+                      className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
+                    >
+                      {isApprovingReportAnalysis ? "Creando análisis..." : "Crear análisis institucional revisado"}
                     </button>
                   )}
                 </div>

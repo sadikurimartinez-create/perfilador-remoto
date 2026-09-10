@@ -331,4 +331,17 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(photoAlbum).toContain("approveAiAnalyticalOutput");
     expect(photoAlbum).not.toContain("analysisReady = true");
   });
+
+  test("36 trigger institucional crea analysisOutputs sin depender del legacy", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const handler = photoAlbum.slice(photoAlbum.indexOf("const handleCreateInstitutionalAnalysis"), photoAlbum.indexOf("const handleInstitutionalProductExport"));
+    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("Productos Institucionales"), photoAlbum.indexOf("<DynamicPopup"));
+
+    expect(photoAlbum).toContain("createInstitutionalReviewedAnalysisOutput");
+    expect(handler).toContain("analysisOutputs: approvedAnalysisOutputs");
+    expect(handler).toContain("iaAnalysis: nextAnalysisResult");
+    expect(handler).not.toContain("confirmAndGenerateProfile");
+    expect(handler).not.toContain("/api/generate-profile");
+    expect(canonicalCta).toContain("Crear análisis institucional revisado");
+  });
 });

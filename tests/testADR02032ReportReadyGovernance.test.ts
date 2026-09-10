@@ -1,4 +1,4 @@
-import { createAiAnalyticalOutput } from "../src/utils/aiAnalysisGovernance";
+import { createAiAnalyticalOutput, createInstitutionalReviewedAnalysisOutput } from "../src/utils/aiAnalysisGovernance";
 import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildEvidenceLineage } from "../src/utils/evidenceLineage";
 import { createComputedFileIntegrity, createHashUnavailableIntegrity } from "../src/utils/forensicFileIntegrity";
@@ -301,5 +301,31 @@ describe("ADR-020.32 - Report Ready governance", () => {
     expect(assessment.humanValidationReady).toBe(true);
     expect(assessment.analysisReady).toBe(false);
     expect(assessment.blockingReasons.some((r) => r.code === "SUPPORTED_ANALYSIS_MISSING")).toBe(true);
+  });
+
+  test("TEST 33 institutional producer persistence hydration makes analysisReady without legacy", () => {
+    const produced = createInstitutionalReviewedAnalysisOutput({
+      projectId: "project-1",
+      geographyId: geography.geographyId,
+      evidenceIds: ["ev-1"],
+      findingIds: ["find-1"],
+      sourceReferences: ["src/components/PhotoAlbum.tsx:handleCreateInstitutionalAnalysis"],
+      validatedBy: { id: "u-1" },
+      validatedAt: "2026-09-09T12:00:00.000Z",
+    });
+    const persistedProject = readyProject({
+      analysisOutputs: [produced],
+      iaAnalysis: { analysisOutputs: [produced] },
+    });
+    const hydratedProject = {
+      ...persistedProject,
+      analysisOutputs: persistedProject.iaAnalysis.analysisOutputs,
+    };
+    const assessment = assessReportReadiness(hydratedProject);
+
+    expect(produced.promptId).toBe("institutional-analysis-review");
+    expect(produced.sourceReferences).not.toContain("generate-profile");
+    expect(assessment.analysisReady).toBe(true);
+    expect(assessment.readyForInstitutionalReport).toBe(true);
   });
 });

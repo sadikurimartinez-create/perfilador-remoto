@@ -41,6 +41,16 @@ export interface AiAnalyticalOutput {
   limitations: string[];
 }
 
+export interface InstitutionalReviewedAnalysisOutput extends Omit<AiAnalyticalOutput, "acquisitionMode" | "epistemicClass"> {
+  acquisitionMode: "DERIVED";
+  epistemicClass: "HUMAN_GOVERNED_ANALYSIS";
+  humanValidationStatus: "APPROVED";
+  validationSource: "ADR_020_24_HUMAN_ACTION";
+  validatedBy: any | null;
+  validatedAt: string;
+  usedInReport: true;
+}
+
 function stableHash(value: string): string {
   let hash = 0;
   for (let i = 0; i < value.length; i++) {
@@ -216,6 +226,100 @@ export function createGenerateProfileAiAnalyticalOutput(input: {
       ? input.limitations || []
       : uniq([...(input.limitations || []), "INPUT_LINEAGE_INSUFFICIENT"]),
   });
+}
+
+export function createInstitutionalReviewedAnalysisOutput(input: {
+  projectId: string;
+  geographyId?: string | null;
+  geographyType?: string | null;
+  evidenceIds: Array<string | null | undefined>;
+  findingIds: Array<string | null | undefined>;
+  sourceReferences?: Array<string | null | undefined>;
+  validatedBy?: any | null;
+  validatedAt?: string | null;
+  generatedAt?: string | null;
+  limitations?: string[];
+}): InstitutionalReviewedAnalysisOutput {
+  const evidenceIds = uniq(input.evidenceIds);
+  const findingIds = uniq(input.findingIds);
+  if (evidenceIds.length === 0) throw new Error("INSTITUTIONAL_ANALYSIS_EVIDENCE_REQUIRED");
+  if (findingIds.length === 0) throw new Error("INSTITUTIONAL_ANALYSIS_FINDING_REQUIRED");
+
+  const generatedAt = input.generatedAt || new Date().toISOString();
+  const validatedAt = input.validatedAt || generatedAt;
+  const outputId = `institutional-analysis-${stableHash([
+    input.projectId,
+    input.geographyId || "",
+    evidenceIds.join(","),
+    findingIds.join(","),
+  ].join("|"))}`;
+  const lineage: CanonicalLineageNode[] = [
+    ...(input.geographyId ? [{
+      id: input.geographyId,
+      type: "GEOGRAPHY" as const,
+      geographyId: input.geographyId,
+      geographyType: input.geographyType ?? null,
+    }] : []),
+    ...evidenceIds.map((evidenceId) => ({
+      id: evidenceId,
+      type: "EVIDENCE" as const,
+      evidenceId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
+    })),
+    ...findingIds.map((findingId) => ({
+      id: findingId,
+      type: "FINDING" as const,
+      findingId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
+      supportingEvidenceIds: evidenceIds,
+    })),
+    {
+      id: outputId,
+      type: "ANALYSIS" as const,
+      analysisId: outputId,
+      geographyId: input.geographyId ?? null,
+      geographyType: input.geographyType ?? null,
+      supportingFindingIds: findingIds,
+      supportingInferenceIds: [],
+    },
+  ];
+
+  return {
+    outputId,
+    outputType: "ANALYSIS",
+    acquisitionMode: "DERIVED",
+    epistemicClass: "HUMAN_GOVERNED_ANALYSIS",
+    promptHash: null,
+    promptVersion: null,
+    promptId: "institutional-analysis-review",
+    inputIds: uniq([`project:${input.projectId}`, input.geographyId ? `geography:${input.geographyId}` : null]),
+    confidence: "UNKNOWN",
+    sourceReferences: uniq([
+      "src/utils/aiAnalysisGovernance.ts:createInstitutionalReviewedAnalysisOutput",
+      ...(input.sourceReferences || []),
+    ]),
+    evidenceIds,
+    findingIds,
+    inferenceIds: [],
+    derivedFromFindingIds: [],
+    supportingFindingIds: findingIds,
+    supportingInferenceIds: [],
+    comparedEvidenceIds: [],
+    geographyId: input.geographyId ?? null,
+    lineage,
+    lineageStatus: validateLineage(lineage).status,
+    validationStatus: "APPROVED",
+    humanValidationStatus: "APPROVED",
+    validationSource: "ADR_020_24_HUMAN_ACTION",
+    validatedBy: input.validatedBy ?? null,
+    validatedAt,
+    generatedAt,
+    generatedBy: "INSTITUTIONAL_ANALYSIS_REVIEW",
+    limitations: input.limitations || [],
+    usedInReport: true,
+  };
 }
 
 export function approveAiAnalyticalOutput(output: AiAnalyticalOutput, validation: { validatedBy?: any | null; validatedAt?: string | null }) {

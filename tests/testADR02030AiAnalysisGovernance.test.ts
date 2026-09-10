@@ -6,6 +6,7 @@ import {
   canPromoteToFinding,
   createAiAnalyticalOutput,
   createGenerateProfileAiAnalyticalOutput,
+  createInstitutionalReviewedAnalysisOutput,
   GENERATE_PROFILE_PROMPT_VERSION,
   hashAiPrompt,
   isObservedFact,
@@ -248,5 +249,23 @@ describe("ADR-020.30 - AI analysis governance", () => {
     expect(source).toContain("createGenerateProfileAiAnalyticalOutput");
     expect(source).toContain("aiAnalyticalOutput");
     expect(source).toContain("promptId = `generate-profile:chapter-${input.chapter}`");
+  });
+
+  test("TEST 29 institutional reviewed analysis is derived, supported and human approved", () => {
+    const output = createInstitutionalReviewedAnalysisOutput({
+      projectId: "project-1",
+      geographyId: "geo-exp-polygon",
+      evidenceIds: ["EVI-1"],
+      findingIds: ["FND-1"],
+      validatedBy: { id: "u-1" },
+      validatedAt: "2026-09-09T12:00:00.000Z",
+    });
+
+    expect(output.outputType).toBe("ANALYSIS");
+    expect(output.acquisitionMode).toBe("DERIVED");
+    expect(output.lineageStatus).toBe("SUPPORTED");
+    expect(output.validationStatus).toBe("APPROVED");
+    expect(output.humanValidationStatus).toBe("APPROVED");
+    expect(output.usedInReport).toBe(true);
   });
 });
