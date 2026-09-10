@@ -244,6 +244,8 @@ export type Project = {
   reportReadyAssessment?: ReportReadyAssessment | null;
   findings?: any[];
   approvedFindings?: any[];
+  approvedFindingRefs?: any[];
+  streetViewFindingRefs?: any[];
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;

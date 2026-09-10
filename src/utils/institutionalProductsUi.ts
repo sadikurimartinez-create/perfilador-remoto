@@ -177,6 +177,8 @@ function canonicalFindingItems(input: {
   return [
     ...asArray(project.findings),
     ...asArray(project.approvedFindings),
+    ...asArray(project.approvedFindingRefs),
+    ...asArray(project.streetViewFindingRefs),
     ...asArray(project.streetViewAnalysis).filter((item: any) => item?.findingId || item?.usedInReport),
     ...asArray(input.analysisResult?.findings),
   ].filter((item: any) => item && item?.usedInReport !== false);

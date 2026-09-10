@@ -81,6 +81,8 @@ function collectFindings(project: any): any[] {
   return [
     ...asArray(project?.findings),
     ...asArray(project?.approvedFindings),
+    ...asArray(project?.approvedFindingRefs),
+    ...asArray(project?.streetViewFindingRefs),
     ...asArray(project?.streetViewAnalysis).filter((item: any) => item?.findingId || item?.usedInReport),
   ];
 }
@@ -229,7 +231,7 @@ export function assessReportReadiness(project: any, options: { assessedAt?: stri
       analysisReady = false;
       add(blockingReasons, "ANALYSIS", "ANALYSIS_UNSUPPORTED_OR_UNTRACEABLE", "Analysis used by report must have supported lineage.", id);
     }
-    if (item.acquisitionMode === "AI_GENERATED" && !isHumanApproved(item)) {
+    if (!isHumanApproved(item)) {
       analysisReady = false;
       add(unresolvedItems, "HUMAN_VALIDATION", "AI_ANALYSIS_PENDING_HUMAN_REVIEW", "AI analysis can warn or contextualize, but cannot satisfy readiness before human review.", id);
     }
