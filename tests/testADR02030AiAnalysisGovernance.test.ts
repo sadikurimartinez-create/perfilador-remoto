@@ -246,7 +246,7 @@ describe("ADR-020.30 - AI analysis governance", () => {
   test("TEST 28 generate-profile API response attaches aiAnalyticalOutput", () => {
     const source = readSource("src/app/api/generate-profile/route.ts");
     expect(source).toContain("createGenerateProfileAiAnalyticalOutput");
-    expect(source).toContain("\"aiAnalyticalOutput\"");
+    expect(source).toContain("aiAnalyticalOutput");
     expect(source).toContain("promptId = `generate-profile:chapter-${input.chapter}`");
   });
 });

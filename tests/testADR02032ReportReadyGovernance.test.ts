@@ -273,4 +273,33 @@ describe("ADR-020.32 - Report Ready governance", () => {
     expect(assessment.published).toBe(false);
     expect(canGenerateInstitutionalReport(readyProject())).toBe(true);
   });
+
+  test("TEST 29 supported and reviewed analysis makes analysisReady true", () => {
+    expect(assessReportReadiness(readyProject({
+      analysisOutputs: [supportedAnalysis({ validationStatus: "APPROVED" })],
+    })).analysisReady).toBe(true);
+  });
+
+  test("TEST 30 supported but not reviewed analysis remains not ready", () => {
+    const assessment = assessReportReadiness(readyProject({
+      analysisOutputs: [supportedAnalysis({ validationStatus: "PENDING_REVIEW" })],
+    }));
+    expect(assessment.analysisReady).toBe(false);
+    expect(assessment.unresolvedItems.some((r) => r.code === "AI_ANALYSIS_PENDING_HUMAN_REVIEW")).toBe(true);
+  });
+
+  test("TEST 31 reviewed but unsupported analysis remains not ready", () => {
+    const assessment = assessReportReadiness(readyProject({
+      analysisOutputs: [supportedAnalysis({ findingIds: [], evidenceIds: [], lineage: undefined, validationStatus: "APPROVED" })],
+    }));
+    expect(assessment.analysisReady).toBe(false);
+    expect(assessment.blockingReasons.some((r) => r.code === "ANALYSIS_UNSUPPORTED_OR_UNTRACEABLE")).toBe(true);
+  });
+
+  test("TEST 32 humanValidationReady does not bypass absent analysis", () => {
+    const assessment = assessReportReadiness(readyProject({ analysisOutputs: [] }));
+    expect(assessment.humanValidationReady).toBe(true);
+    expect(assessment.analysisReady).toBe(false);
+    expect(assessment.blockingReasons.some((r) => r.code === "SUPPORTED_ANALYSIS_MISSING")).toBe(true);
+  });
 });

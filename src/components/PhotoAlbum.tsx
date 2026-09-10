@@ -26,7 +26,7 @@ import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoram
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
-import { createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
+import { approveAiAnalyticalOutput, createAiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
 import {
   GENERATE_PROFILE_SESSION_EXPIRED_MESSAGE,
@@ -1105,6 +1105,7 @@ export function PhotoAlbum({
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [reportSummary, setReportSummary] = useState("");
   const [reportNumber, setReportNumber] = useState("");
+  const [isApprovingReportAnalysis, setIsApprovingReportAnalysis] = useState(false);
   const visibleNumeroExpediente = useMemo(
     () => resolveVisibleNumeroExpediente(project),
     [project?.numeroExpediente, project?.ceipolId]
@@ -1143,6 +1144,23 @@ export function PhotoAlbum({
     };
     return assessReportReadiness(liveProject);
   }, [project, album, documents, analysisResult]);
+  const reportAnalysisCandidates = useMemo(() => {
+    return [
+      ...(((project as any)?.analysisOutputs || []) as any[]),
+      ...(((project as any)?.aiAnalyticalOutputs || []) as any[]),
+      ...(((project as any)?.analyses || []) as any[]),
+      ...(((analysisResult as any)?.analysisOutputs || []) as any[]),
+      ...(((analysisResult as any)?.aiAnalyticalOutputs || []) as any[]),
+      ...(((analysisResult as any)?.analyses || []) as any[]),
+    ].filter((item) => item && item.usedInReport !== false);
+  }, [project, analysisResult]);
+  const acceptedReportAnalysisCount = useMemo(() => {
+    return reportAnalysisCandidates.filter((item: any) => {
+      const supported = item.lineageStatus === "SUPPORTED" || item.lineageStatus === "PARTIALLY_SUPPORTED";
+      const reviewed = item.validationStatus === "APPROVED" || item.humanValidationStatus === "APPROVED";
+      return supported && reviewed;
+    }).length;
+  }, [reportAnalysisCandidates]);
   const institutionalProducts = useMemo(
     () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),
     [reportReadyAssessment, project]
@@ -1165,6 +1183,63 @@ export function PhotoAlbum({
       unresolvedItemCodes: reportReadyAssessment.unresolvedItems.map((reason: any) => reason.code),
     });
   }, [projectId, project?.id, reportReadyAssessment, institutionalProducts.readyForInstitutionalReport, institutionalProducts.hasInstitutionalIdentity]);
+  useEffect(() => {
+    console.info("[REPORT ANALYSIS READINESS]", {
+      projectId: projectId || project?.id || reportReadyAssessment.projectId,
+      candidateCount: reportAnalysisCandidates.length,
+      acceptedCount: acceptedReportAnalysisCount,
+      candidates: reportAnalysisCandidates.map((item: any) => ({
+        id: item.outputId || item.analysisId || item.id || null,
+        outputType: item.outputType || null,
+        acquisitionMode: item.acquisitionMode || null,
+        validationStatus: item.validationStatus || item.humanValidationStatus || null,
+        lineageStatus: item.lineageStatus || null,
+        supported: item.lineageStatus === "SUPPORTED" || item.lineageStatus === "PARTIALLY_SUPPORTED",
+        reviewed: item.validationStatus === "APPROVED" || item.humanValidationStatus === "APPROVED",
+        hasEvidenceRefs: Array.isArray(item.evidenceIds) && item.evidenceIds.length > 0,
+        hasFindingRefs: Array.isArray(item.findingIds) && item.findingIds.length > 0,
+        hasLineage: Array.isArray(item.lineage) && item.lineage.length > 0,
+      })),
+    });
+  }, [projectId, project?.id, reportReadyAssessment.projectId, reportAnalysisCandidates, acceptedReportAnalysisCount]);
+
+  const buildValidatorIdentity = useCallback(() => {
+    if (!user) return null;
+    const identity: any = {};
+    if (user.id != null && String(user.id).trim()) identity.id = user.id;
+    if (user.username && user.username.trim()) identity.username = user.username.trim();
+    if (user.name && user.name.trim()) identity.name = user.name.trim();
+    return Object.keys(identity).length > 0 ? identity : null;
+  }, [user]);
+
+  const handleApproveReportAnalysis = useCallback(async () => {
+    if (isReadOnly || reportAnalysisCandidates.length === 0) return;
+    setIsApprovingReportAnalysis(true);
+    try {
+      const approvedAnalysisOutputs = reportAnalysisCandidates.map((item: any) => {
+        if (item.acquisitionMode === "AI_GENERATED" || item.epistemicClass === "AI_GENERATED") {
+          return approveAiAnalyticalOutput(item, {
+            validatedAt: new Date().toISOString(),
+            validatedBy: buildValidatorIdentity(),
+          });
+        }
+        return item;
+      });
+      const nextAnalysisResult = {
+        ...((analysisResult as any) || {}),
+        analysisOutputs: approvedAnalysisOutputs,
+      };
+      setAnalysisResult(nextAnalysisResult as any);
+      await updateProjectDetails({
+        analysisOutputs: approvedAnalysisOutputs,
+        iaAnalysis: nextAnalysisResult,
+      } as any);
+    } catch (err: any) {
+      setError(err?.message || "No fue posible confirmar la revisión humana del análisis.");
+    } finally {
+      setIsApprovingReportAnalysis(false);
+    }
+  }, [isReadOnly, reportAnalysisCandidates, analysisResult, setAnalysisResult, updateProjectDetails, buildValidatorIdentity]);
 
   const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
     if (!institutionalProducts.readyForInstitutionalReport) {
@@ -1578,6 +1653,7 @@ const hasMinimumPhotos =
     addLog("Iniciando procesamiento del Dictamen Técnico de Inteligencia...");
     let hasError = false;
     try {
+      const generatedAnalysisOutputs: any[] = [];
       const photosPayload = await Promise.all(
         selected.map(async (p) => {
           let imageBase64: string | null = null;
@@ -1874,6 +1950,9 @@ const hasMinimumPhotos =
               ...chapterData.meta
             };
           }
+          if (chapterData.aiAnalyticalOutput && typeof chapterData.aiAnalyticalOutput === "object") {
+            generatedAnalysisOutputs.push(chapterData.aiAnalyticalOutput);
+          }
           data.markdown = acceptedMarkdown;
           let chunkMarkdown = acceptedMarkdown;
           if (chunkMarkdown.startsWith("```markdown")) {
@@ -1978,6 +2057,10 @@ const hasMinimumPhotos =
 
         setAnalysisResult({
           ...(currentAnalysisResult || {}),
+          analysisOutputs: [
+            ...(((currentAnalysisResult as any)?.analysisOutputs || []) as any[]),
+            ...generatedAnalysisOutputs,
+          ],
           historicalCrimes: combinedCrimes,
           pois: data.meta?.pois || currentAnalysisResult?.pois || [],
           inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
@@ -5197,6 +5280,16 @@ const hasMinimumPhotos =
                         ))}
                       </ul>
                     </div>
+                  )}
+                  {reportAnalysisCandidates.length > 0 && acceptedReportAnalysisCount === 0 && !isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => void handleApproveReportAnalysis()}
+                      disabled={isApprovingReportAnalysis}
+                      className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
+                    >
+                      {isApprovingReportAnalysis ? "Confirmando revisión..." : "Confirmar revisión humana del análisis"}
+                    </button>
                   )}
                 </div>
               )}

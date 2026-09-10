@@ -314,4 +314,21 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
     expect(canonicalCta).toContain("showLegacyReportTools &&");
   });
+
+  test("35 PhotoAlbum conserva aiAnalyticalOutput y exige revisión humana del análisis", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const generationBlock = photoAlbum.slice(photoAlbum.indexOf("const generatedAnalysisOutputs"), photoAlbum.indexOf("setAnalysisResult({", photoAlbum.indexOf("const generatedAnalysisOutputs")));
+    const analysisResultBlock = photoAlbum.slice(photoAlbum.indexOf("setAnalysisResult({", photoAlbum.indexOf("const generatedAnalysisOutputs")), photoAlbum.indexOf("historicalCrimes: combinedCrimes"));
+
+    expect(generationBlock).toContain("chapterData.aiAnalyticalOutput");
+    expect(generationBlock).toContain("generatedAnalysisOutputs.push(chapterData.aiAnalyticalOutput)");
+    expect(analysisResultBlock).toContain("analysisOutputs");
+    expect(analysisResultBlock).toContain("generatedAnalysisOutputs");
+    expect(photoAlbum).toContain('console.info("[REPORT ANALYSIS READINESS]", {');
+    expect(photoAlbum).toContain("candidateCount: reportAnalysisCandidates.length");
+    expect(photoAlbum).toContain("acceptedCount: acceptedReportAnalysisCount");
+    expect(photoAlbum).toContain("Confirmar revisión humana del análisis");
+    expect(photoAlbum).toContain("approveAiAnalyticalOutput");
+    expect(photoAlbum).not.toContain("analysisReady = true");
+  });
 });
