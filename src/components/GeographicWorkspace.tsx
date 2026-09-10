@@ -472,7 +472,7 @@ export function GeographicWorkspace({
   const handleCaptureStatusChange = (captureId: string, status: GeointGovernanceStatusValue) => {
     setCaptures((prev) =>
       prev.map((c) => {
-        const cId = c.id || c.hash_md5 || c.filename;
+        const cId = c.id || c.findingId || c.originalFindingId || c.hash_md5 || c.filename;
         if (cId === captureId) {
           return { ...c, estado_revision: status, status };
         }

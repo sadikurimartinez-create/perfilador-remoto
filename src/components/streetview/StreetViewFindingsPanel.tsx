@@ -233,7 +233,13 @@ export function StreetViewFindingsPanel({
       return;
     }
 
-    const captureId = resolvePresentString(selectedCapture.id, selectedCapture.findingId, selectedCapture.hash_md5, selectedCapture.filename);
+    const captureId = resolvePresentString(
+      selectedCapture.id,
+      selectedCapture.findingId,
+      selectedCapture.originalFindingId,
+      selectedCapture.hash_md5,
+      selectedCapture.filename
+    );
     if (!captureId) {
       setErrorMessage("El hallazgo Street View no contiene identificador real de captura para convalidación.");
       return;
@@ -366,7 +372,7 @@ export function StreetViewFindingsPanel({
       }
 
       // Remover de la lista de pendientes local
-      setPendingCaptures((prev) => prev.filter((c) => (c.id || c.findingId || c.hash_md5 || c.filename) !== captureId));
+      setPendingCaptures((prev) => prev.filter((c) => (c.id || c.findingId || c.originalFindingId || c.hash_md5 || c.filename) !== captureId));
       setSelectedCapture(null);
       setValidationComment("");
     } catch (err) {
@@ -383,7 +389,12 @@ export function StreetViewFindingsPanel({
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const captureId = selectedCapture.id || selectedCapture.findingId || selectedCapture.hash_md5 || selectedCapture.filename;
+    const captureId =
+      selectedCapture.id ||
+      selectedCapture.findingId ||
+      selectedCapture.originalFindingId ||
+      selectedCapture.hash_md5 ||
+      selectedCapture.filename;
     const candidate = getGoogleCandidateFinding(selectedCapture);
     const rejectedCandidate = candidate ? rejectGoogleCandidateFinding(candidate) : null;
 
@@ -409,7 +420,7 @@ export function StreetViewFindingsPanel({
       }
 
       // Remover de la lista de pendientes local
-      setPendingCaptures((prev) => prev.filter((c) => (c.id || c.findingId || c.hash_md5 || c.filename) !== captureId));
+      setPendingCaptures((prev) => prev.filter((c) => (c.id || c.findingId || c.originalFindingId || c.hash_md5 || c.filename) !== captureId));
       setSelectedCapture(null);
       setValidationComment("");
     } catch (err) {
@@ -445,8 +456,8 @@ export function StreetViewFindingsPanel({
             </div>
           ) : (
             pendingCaptures.map((cap) => {
-              const capId = cap.id || cap.findingId || cap.hash_md5 || cap.filename;
-              const isSelected = selectedCapture && (selectedCapture.id === capId || selectedCapture.findingId === capId || selectedCapture.hash_md5 === capId);
+              const capId = cap.id || cap.findingId || cap.originalFindingId || cap.hash_md5 || cap.filename;
+              const isSelected = selectedCapture && (selectedCapture.id === capId || selectedCapture.findingId === capId || selectedCapture.originalFindingId === capId || selectedCapture.hash_md5 === capId);
               const lat = cap.latitude || cap.lat || cap.geometry?.lat;
               const lng = cap.longitude || cap.lng || cap.geometry?.lng;
               const display = getCandidateDisplay(cap);
