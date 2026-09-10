@@ -200,7 +200,15 @@ export function assessReportReadiness(project: any, options: { assessedAt?: stri
 
   const findings = collectFindings(project);
   const reportFindings = findings.filter((finding) => finding?.usedInReport !== false);
-  let findingsReady = true;
+  let findingsReady = reportFindings.length > 0;
+  if (!findingsReady) {
+    add(
+      blockingReasons,
+      "FINDING",
+      "VALID_FINDING_MISSING",
+      "At least one supported and traceable finding is required."
+    );
+  }
   for (const finding of reportFindings) {
     const id = itemId(finding, "finding");
     if (!isLineageSupported(finding)) {

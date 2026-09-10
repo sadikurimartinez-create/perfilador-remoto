@@ -148,6 +148,21 @@ describe("ADR-020.32 - Report Ready governance", () => {
     expect(assessment.status).toBe("READY_WITH_WARNINGS");
   });
 
+  test("TEST 9B zero findings -> findingsReady false and blocker", () => {
+    const assessment = assessReportReadiness(readyProject({
+      findings: [],
+      approvedFindings: [],
+      streetViewAnalysis: [],
+    }));
+
+    expect(assessment.findingsReady).toBe(false);
+    expect(
+      assessment.blockingReasons.some(
+        (reason) => reason.code === "VALID_FINDING_MISSING"
+      )
+    ).toBe(true);
+    expect(assessment.status).toBe("NOT_READY");
+  });
   test("TEST 10 unsupported finding used in report -> blocker", () => {
     const assessment = assessReportReadiness(readyProject({
       findings: [supportedFinding({ lineage: [], lineageStatus: "UNSUPPORTED" })],

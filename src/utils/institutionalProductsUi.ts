@@ -89,6 +89,7 @@ const REASON_LABELS: Record<string, string> = {
   GEOGRAPHY_INVALID_OR_MISSING: "Validar y confirmar la geografía territorial del expediente.",
   HYPOTHESIS_NOT_FORMULATED: "Formular o ratificar la hipótesis humana obligatoria.",
   VALID_EVIDENCE_MISSING: "Incorporar al menos una evidencia utilizable.",
+  VALID_FINDING_MISSING: "Incorporar y validar al menos un hallazgo trazable.",
   SUPPORTED_ANALYSIS_MISSING: "Incorporar al menos un análisis soportado y revisado.",
   MANDATORY_HUMAN_REVIEW_PENDING: "Completar la revisión humana obligatoria.",
   REPORT_LINEAGE_UNRESOLVED: "Resolver la trazabilidad de los elementos utilizados en el informe.",
