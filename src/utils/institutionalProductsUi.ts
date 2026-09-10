@@ -168,6 +168,39 @@ function analysisReferenceItems(input: {
   ].filter(Boolean);
 }
 
+function canonicalFindingItems(input: {
+  project?: any;
+  analysisResult?: any;
+}): any[] {
+  const project = input.project || {};
+  return [
+    ...asArray(project.findings),
+    ...asArray(project.approvedFindings),
+    ...asArray(project.streetViewAnalysis).filter((item: any) => item?.findingId || item?.usedInReport),
+    ...asArray(input.analysisResult?.findings),
+  ].filter((item: any) => item && item?.usedInReport !== false);
+}
+
+function findingReferenceValues(item: any): unknown[] {
+  return [
+    item?.findingId,
+    item?.id,
+    item?.traceabilityId,
+    ...asArray(item?.findingIds),
+    ...asArray(item?.supportingFindingIds),
+    ...asArray(item?.supportingFindings).flatMap((finding: any) => [
+      typeof finding === "string" ? finding : null,
+      finding?.findingId,
+      finding?.id,
+      finding?.traceabilityId,
+    ]),
+    ...asArray(item?.outputFindingIds),
+    ...asArray(item?.lineage).map((node: any) => node?.findingId),
+    ...asArray(item?.evidenceLineage).map((node: any) => node?.findingId),
+    ...asArray(item?.multimodalEvidence?.lineage).map((node: any) => node?.findingId),
+  ];
+}
+
 export function collectInstitutionalAnalysisEvidenceIds(input: {
   project?: any;
   album?: any[];
@@ -191,15 +224,10 @@ export function collectInstitutionalAnalysisFindingIds(input: {
   project?: any;
   analysisResult?: any;
 }): string[] {
-  return uniqueNonEmpty(analysisReferenceItems(input).flatMap((item: any) => [
-    item?.findingId,
-    ...asArray(item?.findingIds),
-    ...asArray(item?.supportingFindingIds),
-    ...asArray(item?.supportingFindings),
-    ...asArray(item?.lineage).map((node: any) => node?.findingId),
-    ...asArray(item?.evidenceLineage).map((node: any) => node?.findingId),
-    ...asArray(item?.multimodalEvidence?.lineage).map((node: any) => node?.findingId),
-  ]));
+  return uniqueNonEmpty([
+    ...canonicalFindingItems(input).flatMap(findingReferenceValues),
+    ...[input.project?.canonicalHypothesis, input.project?.hypothesisLifecycle].filter(Boolean).flatMap(findingReferenceValues),
+  ]);
 }
 
 export function buildInstitutionalProductsViewModel(

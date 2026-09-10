@@ -444,4 +444,80 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
       analysisOutputs: nextAnalysisResult.analysisOutputs,
     }).analysisReady).toBe(true);
   });
+
+  test("42 handler materializa traceabilityId de findings canónicos aunque Street View tenga 0 hallazgos", () => {
+    const project = {
+      id: "exp-prod-id-only",
+      numeroExpediente: "06092026-0007-JMG",
+      canonicalGeography: { geographyId: "geo-prod", validationStatus: "VALID" },
+      canonicalHypothesis: {
+        hypothesisStatus: "FORMULATED",
+        supportingEvidenceIds: ["ev-prod"],
+      },
+      evidence: [{ evidenceId: "ev-prod", humanValidationStatus: "APPROVED" }],
+      approvedFindings: [{
+        traceabilityId: "trace-approved-finding",
+        lineageStatus: "SUPPORTED",
+        validationStatus: "APPROVED",
+        usedInReport: true,
+      }],
+      streetViewAnalysis: [],
+    };
+    const beforeAssessment = assessReportReadiness(project);
+    const evidenceIds = collectInstitutionalAnalysisEvidenceIds({ project });
+    const findingIds = collectInstitutionalAnalysisFindingIds({ project });
+    const output = createInstitutionalReviewedAnalysisOutput({
+      projectId: project.id,
+      geographyId: "geo-prod",
+      evidenceIds,
+      findingIds,
+      validatedBy: { id: "u-prod" },
+      validatedAt: "2026-09-09T12:00:00.000Z",
+    });
+    const nextAnalysisResult = { analysisOutputs: [output] };
+    const afterAssessment = assessReportReadiness({
+      ...project,
+      analysisOutputs: nextAnalysisResult.analysisOutputs,
+    });
+
+    expect(beforeAssessment.evidenceReady).toBe(true);
+    expect(beforeAssessment.findingsReady).toBe(true);
+    expect(beforeAssessment.analysisReady).toBe(false);
+    expect(project.streetViewAnalysis).toHaveLength(0);
+    expect(evidenceIds.length).toBeGreaterThan(0);
+    expect(findingIds).toEqual(["trace-approved-finding"]);
+    expect(output.evidenceIds.length).toBeGreaterThan(0);
+    expect(output.findingIds.length).toBeGreaterThan(0);
+    expect(nextAnalysisResult.analysisOutputs.length).toBeGreaterThanOrEqual(1);
+    expect(["SUPPORTED", "PARTIALLY_SUPPORTED"]).toContain(output.lineageStatus);
+    expect(output.validationStatus).toBe("APPROVED");
+    expect(afterAssessment.analysisReady).toBe(true);
+  });
+
+  test("43 sin findings reales no fabrica referencias para crear análisis", () => {
+    const project = {
+      id: "exp-no-findings",
+      canonicalHypothesis: {
+        supportingEvidenceIds: ["ev-prod"],
+      },
+      evidence: [{ evidenceId: "ev-prod", humanValidationStatus: "APPROVED" }],
+      findings: [{
+        title: "Hallazgo sin identidad persistida",
+        lineageStatus: "UNSUPPORTED",
+        usedInReport: true,
+      }],
+      streetViewAnalysis: [],
+    };
+    const beforeAssessment = assessReportReadiness(project);
+    const evidenceIds = collectInstitutionalAnalysisEvidenceIds({ project });
+    const findingIds = collectInstitutionalAnalysisFindingIds({ project });
+
+    expect(beforeAssessment.findingsReady).toBe(false);
+    expect(findingIds).toEqual([]);
+    expect(() => createInstitutionalReviewedAnalysisOutput({
+      projectId: project.id,
+      evidenceIds,
+      findingIds,
+    })).toThrow("INSTITUTIONAL_ANALYSIS_FINDING_REQUIRED");
+  });
 });
