@@ -336,6 +336,93 @@ export function approveAiAnalyticalOutput(output: AiAnalyticalOutput, validation
   };
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  const clean: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item !== undefined) clean[key] = item;
+  }
+  return clean as T;
+}
+
+export function compactReportAnalysisOutput(output: any): any {
+  const outputId = String(output?.outputId || output?.analysisId || output?.id || `analysis-${stableHash(JSON.stringify([
+    output?.outputType || "ANALYSIS",
+    output?.generatedAt || "",
+    output?.generatedBy || "",
+  ]))}`);
+  const evidenceIds = uniq(output?.evidenceIds || []);
+  const findingIds = uniq(output?.findingIds || output?.supportingFindingIds || []);
+  const inferenceIds = uniq(output?.inferenceIds || []);
+  const derivedFromFindingIds = uniq(output?.derivedFromFindingIds || []);
+  const supportingFindingIds = uniq(output?.supportingFindingIds || findingIds);
+  const supportingInferenceIds = uniq(output?.supportingInferenceIds || []);
+  const comparedEvidenceIds = uniq(output?.comparedEvidenceIds || []);
+  const inputIds = uniq(output?.inputIds || []);
+  const sourceReferences = uniq(output?.sourceReferences || []);
+  const lineage = Array.isArray(output?.lineage) ? output.lineage : undefined;
+  const lineageStatus = lineage && lineage.length > 0
+    ? validateLineage(lineage).status
+    : output?.lineageStatus || "LEGACY_UNCLASSIFIED";
+
+  return omitUndefined({
+    outputId,
+    analysisId: output?.analysisId,
+    id: output?.id,
+    outputType: output?.outputType || "ANALYSIS",
+    acquisitionMode: output?.acquisitionMode || "DERIVED",
+    epistemicClass: output?.epistemicClass || "HUMAN_GOVERNED_ANALYSIS",
+    promptHash: output?.promptHash ?? null,
+    promptVersion: output?.promptVersion ?? null,
+    promptId: output?.promptId ?? null,
+    inputIds,
+    confidence: output?.confidence ?? "UNKNOWN",
+    sourceReferences,
+    evidenceIds,
+    findingIds,
+    inferenceIds,
+    derivedFromFindingIds,
+    supportingFindingIds,
+    supportingInferenceIds,
+    comparedEvidenceIds,
+    geographyId: output?.geographyId ?? null,
+    traceabilityId: output?.traceabilityId ?? null,
+    lineage,
+    lineageStatus,
+    validationStatus: output?.validationStatus || "PENDING_REVIEW",
+    humanValidationStatus: output?.humanValidationStatus,
+    validationSource: output?.validationSource,
+    validatedBy: output?.validatedBy,
+    validatedAt: output?.validatedAt,
+    generatedAt: output?.generatedAt || new Date().toISOString(),
+    generatedBy: output?.generatedBy || "UNAVAILABLE",
+    limitations: Array.isArray(output?.limitations) ? output.limitations : [],
+    usedInReport: output?.usedInReport !== false,
+  });
+}
+
+export function compactReportAnalysisOutputs(outputs: any[]): any[] {
+  const byId = new Map<string, any>();
+  for (const output of outputs) {
+    if (!output) continue;
+    const compact = compactReportAnalysisOutput(output);
+    byId.set(compact.outputId, compact);
+  }
+  return [...byId.values()];
+}
+
+export function approveReportAnalysisOutput(output: any, validation: { validatedBy?: any | null; validatedAt?: string | null }) {
+  const validatedAt = validation.validatedAt || new Date().toISOString();
+  return compactReportAnalysisOutput({
+    ...output,
+    validationStatus: "APPROVED",
+    humanValidationStatus: "APPROVED",
+    validationSource: "ADR_020_24_HUMAN_ACTION",
+    validatedBy: validation.validatedBy ?? null,
+    validatedAt,
+    usedInReport: output?.usedInReport !== false,
+  });
+}
+
 export function applyAiHypothesisSuggestion(currentHumanHypothesis: string, suggestion: AiAnalyticalOutput) {
   return {
     humanHypothesis: currentHumanHypothesis,

@@ -12,7 +12,7 @@ import {
   shouldShowInstitutionalAnalysisCreationTrigger,
   translateInstitutionalReadinessStatus,
 } from "../src/utils/institutionalProductsUi";
-import { createInstitutionalReviewedAnalysisOutput } from "../src/utils/aiAnalysisGovernance";
+import { compactReportAnalysisOutputs, createInstitutionalReviewedAnalysisOutput } from "../src/utils/aiAnalysisGovernance";
 import { assessReportReadiness } from "../src/utils/reportReadyGovernance";
 
 const root = process.cwd();
@@ -343,10 +343,12 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("Productos Institucionales"), photoAlbum.indexOf("<DynamicPopup"));
 
     expect(photoAlbum).toContain("createInstitutionalReviewedAnalysisOutput");
+    expect(photoAlbum).toContain("compactReportAnalysisOutputs");
     expect(photoAlbum).toContain("shouldShowInstitutionalAnalysisCreationTrigger");
     expect(photoAlbum).toContain('console.info("[INSTITUTIONAL ANALYSIS CTA]", {');
     expect(photoAlbum).toContain('console.info("[INSTITUTIONAL ANALYSIS CREATED]", {');
-    expect(handler).toContain("analysisOutputs: approvedAnalysisOutputs");
+    expect(handler).toContain("analysisOutputs: compactAnalysisOutputs");
+    expect(handler).toContain("acceptedReportAnalysisCount > 0");
     expect(handler).not.toContain("iaAnalysis: nextAnalysisResult");
     expect(handler).not.toContain("confirmAndGenerateProfile");
     expect(handler).not.toContain("/api/generate-profile");
@@ -363,6 +365,21 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
 
     expect(shouldShowInstitutionalAnalysisCreationTrigger(productiveState, {
       candidateCount: 0,
+      isReadOnly: false,
+    })).toBe(true);
+  });
+
+  test("37B candidatos no aceptados no bloquean crear análisis institucional canónico", () => {
+    const productiveState = readyAssessment({
+      analysisReady: false,
+      readyForInstitutionalReport: false,
+      status: "NOT_READY",
+      blockingReasons: [reason("SUPPORTED_ANALYSIS_MISSING")],
+    });
+
+    expect(shouldShowInstitutionalAnalysisCreationTrigger(productiveState, {
+      candidateCount: 3,
+      acceptedCount: 0,
       isReadOnly: false,
     })).toBe(true);
   });
@@ -427,14 +444,13 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     const nextAnalysisResult = { analysisOutputs: [output] };
     const updateProjectDetailsPayload = {
       analysisOutputs: nextAnalysisResult.analysisOutputs,
-      iaAnalysis: nextAnalysisResult,
     };
 
     expect(shouldShowInstitutionalAnalysisCreationTrigger(productiveState, { candidateCount: 0, isReadOnly: false })).toBe(true);
     expect(evidenceIds).toEqual(["ev-prod"]);
     expect(findingIds).toEqual(["find-prod"]);
     expect(updateProjectDetailsPayload).toHaveProperty("analysisOutputs");
-    expect(updateProjectDetailsPayload).toHaveProperty("iaAnalysis");
+    expect(updateProjectDetailsPayload).not.toHaveProperty("iaAnalysis");
     expect(output.lineageStatus).toBe("SUPPORTED");
     expect(output.validationStatus).toBe("APPROVED");
     expect(assessReportReadiness({
@@ -519,5 +535,79 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
       evidenceIds,
       findingIds,
     })).toThrow("INSTITUTIONAL_ANALYSIS_FINDING_REQUIRED");
+  });
+
+  test("44 P4-T creación institucional persiste patch compacto y retira candidates no aceptados del reporte", () => {
+    const unsupportedCandidate = {
+      outputId: "ai-heavy-unsupported",
+      outputType: "ANALYSIS",
+      acquisitionMode: "AI_GENERATED",
+      epistemicClass: "AI_GENERATED",
+      evidenceIds: [],
+      findingIds: [],
+      inferenceIds: [],
+      confidence: "UNKNOWN",
+      sourceReferences: [],
+      lineageStatus: "UNSUPPORTED",
+      validationStatus: "PENDING_REVIEW",
+      generatedAt: "2026-09-10T00:00:00.000Z",
+      generatedBy: "GeminiREST",
+      limitations: [],
+      content: "x".repeat(1_200_000),
+    };
+    const output = createInstitutionalReviewedAnalysisOutput({
+      projectId: "exp-prod",
+      evidenceIds: ["ev-prod"],
+      findingIds: ["find-prod"],
+      validatedAt: "2026-09-10T00:00:01.000Z",
+      validatedBy: { id: "u-prod" },
+    });
+    const analysisOutputs = compactReportAnalysisOutputs([
+      { ...unsupportedCandidate, usedInReport: false },
+      output,
+    ]);
+    const updateProjectDetailsPayload = { analysisOutputs };
+
+    expect(analysisOutputs).toHaveLength(2);
+    expect(analysisOutputs[0].usedInReport).toBe(false);
+    expect(analysisOutputs[0].content).toBeUndefined();
+    expect(updateProjectDetailsPayload).not.toHaveProperty("iaAnalysis");
+    expect(JSON.stringify(updateProjectDetailsPayload).length).toBeLessThan(20_000);
+    expect(assessReportReadiness({
+      id: "exp-prod",
+      canonicalGeography: { geographyId: "geo-prod", validationStatus: "VALID" },
+      canonicalHypothesis: {
+        hypothesisStatus: "FORMULATED",
+        supportingEvidenceIds: ["ev-prod"],
+        supportingFindingIds: ["find-prod"],
+      },
+      evidence: [{ evidenceId: "ev-prod", humanValidationStatus: "APPROVED" }],
+      findings: [{ findingId: "find-prod", lineageStatus: "SUPPORTED", humanValidationStatus: "APPROVED" }],
+      analysisOutputs,
+    }).analysisReady).toBe(true);
+  });
+
+  test("45 P4-T PhotoAlbum aprueba y crea análisis con compactación sin serializar expediente completo", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const approveHandler = photoAlbum.slice(photoAlbum.indexOf("const handleApproveReportAnalysis"), photoAlbum.indexOf("const handleCreateInstitutionalAnalysis"));
+    const createHandler = photoAlbum.slice(photoAlbum.indexOf("const handleCreateInstitutionalAnalysis"), photoAlbum.indexOf("const handleInstitutionalProductExport"));
+
+    expect(approveHandler).toContain("compactReportAnalysisOutputs(reportAnalysisCandidates.map");
+    expect(approveHandler).toContain("approveReportAnalysisOutput(item, validation)");
+    expect(approveHandler).toContain("analysisOutputs: approvedAnalysisOutputs");
+    expect(approveHandler).not.toContain("iaAnalysis");
+    expect(createHandler).toContain("usedInReport: false");
+    expect(createHandler).toContain("const compactAnalysisOutputs = compactReportAnalysisOutputs(approvedAnalysisOutputs)");
+    expect(createHandler).toContain("analysisOutputs: compactAnalysisOutputs");
+    expect(createHandler).not.toContain("iaAnalysis");
+  });
+
+  test("46 P4-T compatibilidad lectura iaAnalysis legacy permanece en ProjectContext", () => {
+    const projectContext = source("src/context/ProjectContext.tsx");
+
+    expect(projectContext).toContain("if (projectData.iaAnalysis)");
+    expect(projectContext).toContain("setAnalysisResultState(projectData.iaAnalysis)");
+    expect(projectContext).toContain("} else if (Array.isArray((projectData as any).analysisOutputs))");
+    expect(projectContext).toContain("analysisOutputs: (projectData as any).analysisOutputs");
   });
 });

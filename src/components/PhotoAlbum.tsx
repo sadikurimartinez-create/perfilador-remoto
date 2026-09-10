@@ -26,7 +26,13 @@ import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoram
 import { mapStreetViewToAlbumPhoto, StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { buildPhotoEvidenceGeoFields } from "@/utils/photoEvidenceGeoIntegrity";
 import { markHumanApproved } from "@/utils/multimodalEvidenceContract";
-import { approveAiAnalyticalOutput, createAiAnalyticalOutput, createInstitutionalReviewedAnalysisOutput } from "@/utils/aiAnalysisGovernance";
+import {
+  approveAiAnalyticalOutput,
+  approveReportAnalysisOutput,
+  compactReportAnalysisOutputs,
+  createAiAnalyticalOutput,
+  createInstitutionalReviewedAnalysisOutput,
+} from "@/utils/aiAnalysisGovernance";
 import { canProceedWithInstitutionalAnalysis } from "@/utils/hypothesisGovernance";
 import {
   GENERATE_PROFILE_SESSION_EXPIRED_MESSAGE,
@@ -1176,8 +1182,8 @@ export function PhotoAlbum({
   );
   const showInstitutionalAnalysisCreationTrigger = useMemo(() => shouldShowInstitutionalAnalysisCreationTrigger(
     reportReadyAssessment,
-    { candidateCount: reportAnalysisCandidates.length, isReadOnly }
-  ), [reportReadyAssessment, reportAnalysisCandidates.length, isReadOnly]);
+    { candidateCount: reportAnalysisCandidates.length, acceptedCount: acceptedReportAnalysisCount, isReadOnly }
+  ), [reportReadyAssessment, reportAnalysisCandidates.length, acceptedReportAnalysisCount, isReadOnly]);
   useEffect(() => {
     console.info("[REPORT READY]", {
       projectId: projectId || project?.id || reportReadyAssessment.projectId,
@@ -1244,15 +1250,15 @@ export function PhotoAlbum({
     if (isReadOnly || reportAnalysisCandidates.length === 0) return;
     setIsApprovingReportAnalysis(true);
     try {
-      const approvedAnalysisOutputs = reportAnalysisCandidates.map((item: any) => {
-        if (item.acquisitionMode === "AI_GENERATED" || item.epistemicClass === "AI_GENERATED") {
-          return approveAiAnalyticalOutput(item, {
-            validatedAt: new Date().toISOString(),
-            validatedBy: buildValidatorIdentity(),
-          });
-        }
-        return item;
-      });
+      const validation = {
+        validatedAt: new Date().toISOString(),
+        validatedBy: buildValidatorIdentity(),
+      };
+      const approvedAnalysisOutputs = compactReportAnalysisOutputs(reportAnalysisCandidates.map((item: any) =>
+        item.acquisitionMode === "AI_GENERATED" || item.epistemicClass === "AI_GENERATED"
+          ? approveAiAnalyticalOutput(item, validation)
+          : approveReportAnalysisOutput(item, validation)
+      ));
       const nextAnalysisResult = {
         ...((analysisResult as any) || {}),
         analysisOutputs: approvedAnalysisOutputs,
@@ -1269,7 +1275,7 @@ export function PhotoAlbum({
   }, [isReadOnly, reportAnalysisCandidates, analysisResult, setAnalysisResult, updateProjectDetails, buildValidatorIdentity]);
 
   const handleCreateInstitutionalAnalysis = useCallback(async () => {
-    if (isReadOnly || reportAnalysisCandidates.length > 0) return;
+    if (isReadOnly || acceptedReportAnalysisCount > 0) return;
     setIsApprovingReportAnalysis(true);
     try {
       if (institutionalAnalysisEvidenceIds.length === 0 || institutionalAnalysisFindingIds.length === 0) {
@@ -1293,24 +1299,27 @@ export function PhotoAlbum({
         validatedBy: buildValidatorIdentity(),
       });
       const approvedAnalysisOutputs = [
-        ...reportAnalysisCandidates.filter((item: any) => (item.outputId || item.analysisId || item.id) !== output.outputId),
+        ...reportAnalysisCandidates
+          .filter((item: any) => (item.outputId || item.analysisId || item.id) !== output.outputId)
+          .map((item: any) => ({ ...item, usedInReport: false })),
         output,
       ];
+      const compactAnalysisOutputs = compactReportAnalysisOutputs(approvedAnalysisOutputs);
       const nextAnalysisResult = {
         ...((analysisResult as any) || {}),
-        analysisOutputs: approvedAnalysisOutputs,
+        analysisOutputs: compactAnalysisOutputs,
       };
       setAnalysisResult(nextAnalysisResult as any);
       await updateProjectDetails({
-        analysisOutputs: approvedAnalysisOutputs,
+        analysisOutputs: compactAnalysisOutputs,
       } as any);
       console.info("[INSTITUTIONAL ANALYSIS CREATED]", {
         projectId: project?.id || projectId || reportReadyAssessment.projectId,
         evidenceRefCount: institutionalAnalysisEvidenceIds.length,
         findingRefCount: institutionalAnalysisFindingIds.length,
-        analysisOutputCount: approvedAnalysisOutputs.length,
-        candidateCount: approvedAnalysisOutputs.length,
-        acceptedCount: approvedAnalysisOutputs.filter((item: any) => {
+        analysisOutputCount: compactAnalysisOutputs.length,
+        candidateCount: compactAnalysisOutputs.length,
+        acceptedCount: compactAnalysisOutputs.filter((item: any) => {
           const supported = item.lineageStatus === "SUPPORTED" || item.lineageStatus === "PARTIALLY_SUPPORTED";
           const reviewed = item.validationStatus === "APPROVED" || item.humanValidationStatus === "APPROVED";
           return supported && reviewed;
@@ -1324,6 +1333,7 @@ export function PhotoAlbum({
   }, [
     isReadOnly,
     reportAnalysisCandidates,
+    acceptedReportAnalysisCount,
     project,
     projectId,
     institutionalAnalysisEvidenceIds,

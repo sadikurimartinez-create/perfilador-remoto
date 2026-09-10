@@ -127,10 +127,10 @@ export function collectInstitutionalReadinessMessages(assessment: Pick<ReportRea
 
 export function shouldShowInstitutionalAnalysisCreationTrigger(
   assessment: Pick<ReportReadyAssessment, "evidenceReady" | "findingsReady" | "analysisReady">,
-  options: { candidateCount: number; isReadOnly?: boolean }
+  options: { candidateCount: number; acceptedCount?: number; isReadOnly?: boolean }
 ): boolean {
   return options.isReadOnly !== true
-    && options.candidateCount === 0
+    && (options.acceptedCount ?? options.candidateCount) === 0
     && assessment.evidenceReady === true
     && assessment.findingsReady === true
     && assessment.analysisReady === false;

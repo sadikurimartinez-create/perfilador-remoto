@@ -3,7 +3,10 @@ import path from "node:path";
 import {
   applyAiHypothesisSuggestion,
   approveAiAnalyticalOutput,
+  approveReportAnalysisOutput,
   canPromoteToFinding,
+  compactReportAnalysisOutput,
+  compactReportAnalysisOutputs,
   createAiAnalyticalOutput,
   createGenerateProfileAiAnalyticalOutput,
   createInstitutionalReviewedAnalysisOutput,
@@ -267,5 +270,77 @@ describe("ADR-020.30 - AI analysis governance", () => {
     expect(output.validationStatus).toBe("APPROVED");
     expect(output.humanValidationStatus).toBe("APPROVED");
     expect(output.usedInReport).toBe(true);
+  });
+
+  test("TEST 30 P4-T compact report analysis keeps canonical refs and drops heavy payload", () => {
+    const heavyOutput = {
+      ...createAiAnalyticalOutput({
+        outputId: "analysis-heavy",
+        outputType: "ANALYSIS",
+        evidenceIds: ["EVI-1"],
+        findingIds: ["FND-1"],
+        validationStatus: "PENDING_REVIEW",
+      }),
+      content: "x".repeat(1_200_000),
+      raw: { payload: "x".repeat(50_000) },
+      dataUrl: `data:image/png;base64,${"x".repeat(50_000)}`,
+    };
+    const compact = compactReportAnalysisOutput(heavyOutput);
+
+    expect(compact.outputId).toBe("analysis-heavy");
+    expect(compact.evidenceIds).toEqual(["EVI-1"]);
+    expect(compact.findingIds).toEqual(["FND-1"]);
+    expect(compact.content).toBeUndefined();
+    expect(compact.raw).toBeUndefined();
+    expect(compact.dataUrl).toBeUndefined();
+    expect(JSON.stringify(compact).length).toBeLessThan(20_000);
+  });
+
+  test("TEST 31 P4-T human confirmation updates same canonical output", () => {
+    const pending = createAiAnalyticalOutput({
+      outputId: "analysis-same-id",
+      outputType: "ANALYSIS",
+      evidenceIds: ["EVI-1"],
+      findingIds: ["FND-1"],
+      validationStatus: "PENDING_REVIEW",
+    });
+    const approved = approveReportAnalysisOutput(pending, {
+      validatedBy: { id: "u-1" },
+      validatedAt: "2026-09-10T00:00:00.000Z",
+    });
+
+    expect(approved.outputId).toBe(pending.outputId);
+    expect(approved.validationStatus).toBe("APPROVED");
+    expect(approved.humanValidationStatus).toBe("APPROVED");
+    expect(approved.validationSource).toBe("ADR_020_24_HUMAN_ACTION");
+    expect(approved.validatedBy).toEqual({ id: "u-1" });
+  });
+
+  test("TEST 32 P4-T compact outputs dedupe by outputId without iaAnalysis copy", () => {
+    const first = compactReportAnalysisOutput({
+      outputId: "analysis-1",
+      outputType: "ANALYSIS",
+      evidenceIds: ["EVI-1"],
+      findingIds: ["FND-1"],
+      inferenceIds: [],
+      sourceReferences: [],
+      confidence: "UNKNOWN",
+      lineageStatus: "SUPPORTED",
+      validationStatus: "PENDING_REVIEW",
+      generatedAt: "2026-09-10T00:00:00.000Z",
+      generatedBy: "test",
+      limitations: [],
+      content: "large",
+    });
+    const second = approveReportAnalysisOutput(first, {
+      validatedAt: "2026-09-10T00:00:01.000Z",
+      validatedBy: { id: "u-1" },
+    });
+    const compactOutputs = compactReportAnalysisOutputs([first, second]);
+
+    expect(compactOutputs).toHaveLength(1);
+    expect(compactOutputs[0].outputId).toBe("analysis-1");
+    expect(compactOutputs[0].validationStatus).toBe("APPROVED");
+    expect({ analysisOutputs: compactOutputs }).not.toHaveProperty("iaAnalysis");
   });
 });
