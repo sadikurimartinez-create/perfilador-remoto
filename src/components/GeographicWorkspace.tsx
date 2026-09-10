@@ -759,6 +759,80 @@ export function GeographicWorkspace({
                   sourceType: "STREETVIEW_AUTOMATICO",
                 })),
               ]);
+              newCaptures.forEach((capture) => {
+                const findingId = capture.originalFindingId;
+
+                const lat = capture.geometry.lat;
+
+                const lng = capture.geometry.lng;
+
+                if (
+                  !findingId ||
+                  !capture.sourceEvidenceId ||
+                  !capture.geographyId
+                ) {
+                  console.warn("[GEOINT SWEEP FINDING PERSIST BLOCKED]", {
+                    findingId: findingId || null,
+                    sourceEvidenceId: capture.sourceEvidenceId || null,
+                    geographyId: capture.geographyId || null,
+                  });
+                  return;
+                }
+
+                void fetch("/api/streetview/findings", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    id: findingId,
+                    expedienteId,
+                    traceabilityId: capture.traceabilityId,
+                    sourceEvidenceId: capture.sourceEvidenceId,
+                    supportingEvidenceIds: [capture.sourceEvidenceId],
+                    geographyId: capture.geographyId,
+
+                    categoria: capture.category,
+                    coordenadas: {
+                      lat,
+                      lng,
+                    },
+                    imagen: capture.file_url,
+                    heading: capture.geometry.heading ?? 0,
+                    pitch: capture.geometry.pitch ?? 0,
+                    fov: capture.geometry.fov ?? 90,
+                    estado: GeointGovernanceStatus.PENDING_REVIEW,
+                    descripcion:
+                      capture.explanation ||
+                      capture.comentario ||
+                      "",
+                    origenRevision: "BARRIDO_AUTOMATICO",
+                  }),
+                })
+                  .then(async (res) => {
+                    const payload = await res.json().catch(() => null);
+
+                    if (!res.ok) {
+                      throw new Error(
+                        payload?.details ||
+                        payload?.error ||
+                        `HTTP ${res.status}`
+                      );
+                    }
+
+                    console.info("[GEOINT SWEEP FINDING PERSISTED]", {
+                      findingId,
+                      projectId: expedienteId,
+                    });
+                  })
+                  .catch((err) => {
+                    console.warn(
+                      "[GEOINT SWEEP FINDING PERSIST ERROR]",
+                      findingId,
+                      err
+                    );
+                  });
+              });
               void registerSweep({
                 engine: "GEOINT_CONTROLLED_SWEEP",
                 source: "GeointControlledSweepEngine",
