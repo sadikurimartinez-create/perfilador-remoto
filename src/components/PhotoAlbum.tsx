@@ -1260,7 +1260,6 @@ export function PhotoAlbum({
       setAnalysisResult(nextAnalysisResult as any);
       await updateProjectDetails({
         analysisOutputs: approvedAnalysisOutputs,
-        iaAnalysis: nextAnalysisResult,
       } as any);
     } catch (err: any) {
       setError(err?.message || "No fue posible confirmar la revisión humana del análisis.");
@@ -1304,7 +1303,6 @@ export function PhotoAlbum({
       setAnalysisResult(nextAnalysisResult as any);
       await updateProjectDetails({
         analysisOutputs: approvedAnalysisOutputs,
-        iaAnalysis: nextAnalysisResult,
       } as any);
       console.info("[INSTITUTIONAL ANALYSIS CREATED]", {
         projectId: project?.id || projectId || reportReadyAssessment.projectId,

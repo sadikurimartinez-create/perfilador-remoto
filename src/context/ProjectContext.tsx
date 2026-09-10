@@ -1155,6 +1155,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       if (projectData.iaAnalysis) {
         setAnalysisResultState(projectData.iaAnalysis);
+      } else if (Array.isArray((projectData as any).analysisOutputs)) {
+        setAnalysisResultState({
+          analysisOutputs: (projectData as any).analysisOutputs,
+        } as AnalysisResult);
       } else {
         setAnalysisResultState(null);
       }

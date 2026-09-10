@@ -347,7 +347,7 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(photoAlbum).toContain('console.info("[INSTITUTIONAL ANALYSIS CTA]", {');
     expect(photoAlbum).toContain('console.info("[INSTITUTIONAL ANALYSIS CREATED]", {');
     expect(handler).toContain("analysisOutputs: approvedAnalysisOutputs");
-    expect(handler).toContain("iaAnalysis: nextAnalysisResult");
+    expect(handler).not.toContain("iaAnalysis: nextAnalysisResult");
     expect(handler).not.toContain("confirmAndGenerateProfile");
     expect(handler).not.toContain("/api/generate-profile");
     expect(canonicalCta).toContain("Crear análisis institucional revisado");
