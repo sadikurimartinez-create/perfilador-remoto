@@ -40,6 +40,8 @@ import {
   buildInstitutionalProductExportOptions,
   buildInstitutionalProductExportPayload,
   buildInstitutionalProductsViewModel,
+  collectInstitutionalAnalysisEvidenceIds,
+  collectInstitutionalAnalysisFindingIds,
   shouldShowInstitutionalAnalysisCreationTrigger,
   type InstitutionalReportKind,
 } from "@/utils/institutionalProductsUi";
@@ -1163,22 +1165,10 @@ export function PhotoAlbum({
     }).length;
   }, [reportAnalysisCandidates]);
   const institutionalAnalysisEvidenceIds = useMemo(() => {
-    return Array.from(new Set([
-      ...(((project as any)?.evidence || []) as any[]),
-      ...(((project as any)?.evidences || []) as any[]),
-      ...(((project as any)?.photoEvidence || []) as any[]),
-      ...(album || []),
-      ...(documents || []),
-    ].map((item: any) => item?.evidenceId || item?.id || item?.multimodalEvidence?.evidenceId).filter(Boolean)));
-  }, [project, album, documents]);
+    return collectInstitutionalAnalysisEvidenceIds({ project, album, documents, analysisResult });
+  }, [project, album, documents, analysisResult]);
   const institutionalAnalysisFindingIds = useMemo(() => {
-    return Array.from(new Set([
-      ...(((project as any)?.findings || []) as any[]),
-      ...(((project as any)?.approvedFindings || []) as any[]),
-      ...(((analysisResult as any)?.findings || []) as any[]),
-    ].filter((item: any) => item && item.usedInReport !== false)
-      .map((item: any) => item?.findingId || item?.id)
-      .filter(Boolean)));
+    return collectInstitutionalAnalysisFindingIds({ project, analysisResult });
   }, [project, analysisResult]);
   const institutionalProducts = useMemo(
     () => buildInstitutionalProductsViewModel(reportReadyAssessment, project),
@@ -1283,6 +1273,16 @@ export function PhotoAlbum({
     if (isReadOnly || reportAnalysisCandidates.length > 0) return;
     setIsApprovingReportAnalysis(true);
     try {
+      if (institutionalAnalysisEvidenceIds.length === 0 || institutionalAnalysisFindingIds.length === 0) {
+        const reasonCode = "INSTITUTIONAL_ANALYSIS_CANONICAL_REFS_INSUFFICIENT";
+        console.error("[INSTITUTIONAL ANALYSIS CREATE BLOCKED]", {
+          projectId: project?.id || projectId || reportReadyAssessment.projectId,
+          evidenceRefCount: institutionalAnalysisEvidenceIds.length,
+          findingRefCount: institutionalAnalysisFindingIds.length,
+          reasonCode,
+        });
+        throw new Error("No existen referencias canónicas suficientes para crear el análisis institucional.");
+      }
       const output = createInstitutionalReviewedAnalysisOutput({
         projectId: String(project?.id || projectId || "UNAVAILABLE"),
         geographyId: (project as any)?.geographyId || (project as any)?.canonicalGeography?.geographyId || null,
@@ -1308,6 +1308,9 @@ export function PhotoAlbum({
       } as any);
       console.info("[INSTITUTIONAL ANALYSIS CREATED]", {
         projectId: project?.id || projectId || reportReadyAssessment.projectId,
+        evidenceRefCount: institutionalAnalysisEvidenceIds.length,
+        findingRefCount: institutionalAnalysisFindingIds.length,
+        analysisOutputCount: approvedAnalysisOutputs.length,
         candidateCount: approvedAnalysisOutputs.length,
         acceptedCount: approvedAnalysisOutputs.filter((item: any) => {
           const supported = item.lineageStatus === "SUPPORTED" || item.lineageStatus === "PARTIALLY_SUPPORTED";

@@ -135,6 +135,73 @@ export function shouldShowInstitutionalAnalysisCreationTrigger(
     && assessment.analysisReady === false;
 }
 
+function uniqueNonEmpty(values: Array<unknown>): string[] {
+  return Array.from(new Set(values
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim())));
+}
+
+function asArray<T = any>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function analysisReferenceItems(input: {
+  project?: any;
+  album?: any[];
+  documents?: any[];
+  analysisResult?: any;
+}): any[] {
+  const project = input.project || {};
+  return [
+    ...asArray(project.evidence),
+    ...asArray(project.evidences),
+    ...asArray(project.photoEvidence),
+    ...asArray(project.album),
+    ...asArray(input.album),
+    ...asArray(input.documents),
+    ...asArray(project.findings),
+    ...asArray(project.approvedFindings),
+    ...asArray(project.streetViewAnalysis),
+    ...asArray(input.analysisResult?.findings),
+    project.canonicalHypothesis,
+    project.hypothesisLifecycle,
+  ].filter(Boolean);
+}
+
+export function collectInstitutionalAnalysisEvidenceIds(input: {
+  project?: any;
+  album?: any[];
+  documents?: any[];
+  analysisResult?: any;
+}): string[] {
+  return uniqueNonEmpty(analysisReferenceItems(input).flatMap((item: any) => [
+    item?.evidenceId,
+    item?.id,
+    item?.multimodalEvidence?.evidenceId,
+    ...asArray(item?.evidenceIds),
+    ...asArray(item?.supportingEvidenceIds),
+    ...asArray(item?.evidenciaConfirmatoria),
+    ...asArray(item?.lineage).map((node: any) => node?.evidenceId),
+    ...asArray(item?.evidenceLineage).map((node: any) => node?.evidenceId),
+    ...asArray(item?.multimodalEvidence?.lineage).map((node: any) => node?.evidenceId),
+  ]));
+}
+
+export function collectInstitutionalAnalysisFindingIds(input: {
+  project?: any;
+  analysisResult?: any;
+}): string[] {
+  return uniqueNonEmpty(analysisReferenceItems(input).flatMap((item: any) => [
+    item?.findingId,
+    ...asArray(item?.findingIds),
+    ...asArray(item?.supportingFindingIds),
+    ...asArray(item?.supportingFindings),
+    ...asArray(item?.lineage).map((node: any) => node?.findingId),
+    ...asArray(item?.evidenceLineage).map((node: any) => node?.findingId),
+    ...asArray(item?.multimodalEvidence?.lineage).map((node: any) => node?.findingId),
+  ]));
+}
+
 export function buildInstitutionalProductsViewModel(
   assessment: ReportReadyAssessment,
   projectOrNumeroExpediente: { numeroExpediente?: unknown } | string | null | undefined

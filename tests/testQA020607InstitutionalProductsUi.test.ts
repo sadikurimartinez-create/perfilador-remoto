@@ -5,11 +5,15 @@ import {
   buildInstitutionalProductExportOptions,
   buildInstitutionalProductExportPayload,
   buildInstitutionalProductsViewModel,
+  collectInstitutionalAnalysisEvidenceIds,
+  collectInstitutionalAnalysisFindingIds,
   collectInstitutionalReadinessMessages,
   resolveInstitutionalNumeroExpediente,
   shouldShowInstitutionalAnalysisCreationTrigger,
   translateInstitutionalReadinessStatus,
 } from "../src/utils/institutionalProductsUi";
+import { createInstitutionalReviewedAnalysisOutput } from "../src/utils/aiAnalysisGovernance";
+import { assessReportReadiness } from "../src/utils/reportReadyGovernance";
 
 const root = process.cwd();
 
@@ -390,5 +394,54 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
       candidateCount: 0,
       isReadOnly: false,
     })).toBe(false);
+  });
+
+  test("41 handler usa refs canónicas aunque Street View/backend tenga 0 hallazgos", () => {
+    const project = {
+      id: "exp-prod",
+      numeroExpediente: "06092026-0007-JMG",
+      canonicalGeography: { geographyId: "geo-prod", validationStatus: "VALID" },
+      canonicalHypothesis: {
+        supportingEvidenceIds: ["ev-prod"],
+        supportingFindingIds: ["find-prod"],
+      },
+      streetViewAnalysis: [],
+    };
+    const productiveState = readyAssessment({
+      projectId: "exp-prod",
+      analysisReady: false,
+      readyForInstitutionalReport: false,
+      status: "NOT_READY",
+      blockingReasons: [reason("SUPPORTED_ANALYSIS_MISSING")],
+    });
+    const evidenceIds = collectInstitutionalAnalysisEvidenceIds({ project });
+    const findingIds = collectInstitutionalAnalysisFindingIds({ project });
+    const output = createInstitutionalReviewedAnalysisOutput({
+      projectId: project.id,
+      geographyId: "geo-prod",
+      evidenceIds,
+      findingIds,
+      validatedBy: { id: "u-prod" },
+      validatedAt: "2026-09-09T12:00:00.000Z",
+    });
+    const nextAnalysisResult = { analysisOutputs: [output] };
+    const updateProjectDetailsPayload = {
+      analysisOutputs: nextAnalysisResult.analysisOutputs,
+      iaAnalysis: nextAnalysisResult,
+    };
+
+    expect(shouldShowInstitutionalAnalysisCreationTrigger(productiveState, { candidateCount: 0, isReadOnly: false })).toBe(true);
+    expect(evidenceIds).toEqual(["ev-prod"]);
+    expect(findingIds).toEqual(["find-prod"]);
+    expect(updateProjectDetailsPayload).toHaveProperty("analysisOutputs");
+    expect(updateProjectDetailsPayload).toHaveProperty("iaAnalysis");
+    expect(output.lineageStatus).toBe("SUPPORTED");
+    expect(output.validationStatus).toBe("APPROVED");
+    expect(assessReportReadiness({
+      ...project,
+      evidence: [{ evidenceId: "ev-prod", humanValidationStatus: "APPROVED" }],
+      findings: [{ findingId: "find-prod", lineageStatus: "SUPPORTED" }],
+      analysisOutputs: nextAnalysisResult.analysisOutputs,
+    }).analysisReady).toBe(true);
   });
 });
