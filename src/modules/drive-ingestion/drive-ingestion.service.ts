@@ -94,27 +94,21 @@ export class DriveIngestionService {
   }
 
   /**
-   * Ensures the PostgreSQL tracking table exists for duplicate control.
+   * Verifies that the controlled PostgreSQL migration was applied.
    */
   public static async ensureTrackingTableExists(): Promise<void> {
     const pool = getPool();
-    const queryStr = `
-      CREATE TABLE IF NOT EXISTS drive_ingestion_log (
-        file_id VARCHAR(255) PRIMARY KEY,
-        file_name VARCHAR(255) NOT NULL,
-        status VARCHAR(50) NOT NULL,
-        timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        source VARCHAR(50) DEFAULT 'drive',
-        logical_category VARCHAR(100),
-        error_message TEXT,
-        metadata JSONB
-      );
-    `;
     try {
-      await pool.query(queryStr);
-      console.log("[DriveIngestionService] Tabla drive_ingestion_log verificada/creada.");
+      const result = await pool.query(
+        "SELECT to_regclass('public.drive_ingestion_log') AS relation"
+      );
+      if (!result.rows[0]?.relation) {
+        throw new Error(
+          "DATABASE_SCHEMA_MIGRATION_REQUIRED: drive_ingestion_log is missing. Apply database/migrations/e2e006/001_drive_ingestion_tables_up.sql."
+        );
+      }
     } catch (err) {
-      console.error("[DriveIngestionService] Error al crear tabla de control de duplicados:", err);
+      console.error("[DriveIngestionService] PostgreSQL schema verification failed:", err);
       throw err;
     }
   }

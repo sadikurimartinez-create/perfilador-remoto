@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPool, ensureSchema } from "@/lib/db";
+import { getPool } from "@/lib/db";
 import { verifyPassword, signSession } from "@/utils/authCrypto";
 import { cookies } from "next/headers";
 import { getFirebaseServerDb } from "@/lib/firebaseServer";
@@ -30,11 +30,7 @@ export async function POST(req: Request) {
     // 1. Intentar buscar el usuario en PostgreSQL
     try {
       const pool = getPool();
-
-  // Garantizar estructura antes de consultar usuarios
-  await ensureSchema(pool);
-
-  const { rows } = await pool.query(
+      const { rows } = await pool.query(
         `
         SELECT id, username, password_hash, role, name, profile
         FROM users

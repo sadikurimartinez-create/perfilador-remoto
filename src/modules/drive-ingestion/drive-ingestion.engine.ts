@@ -47,29 +47,22 @@ export interface ExtractedIntelligence {
  */
 export class DriveIngestionEngine {
   /**
-   * Safe initialization of PostgreSQL Tables for storing processed intelligence.
+   * Verifies that the controlled PostgreSQL migration was applied.
    */
   public static async ensureTablesExists(): Promise<void> {
     await DriveIngestionService.ensureTrackingTableExists();
     const pool = getPool();
-    const queryStr = `
-      CREATE TABLE IF NOT EXISTS drive_ingested_intelligence (
-        file_id VARCHAR(255) PRIMARY KEY REFERENCES drive_ingestion_log(file_id) ON DELETE CASCADE,
-        file_name VARCHAR(255) NOT NULL,
-        logical_category VARCHAR(100) NOT NULL,
-        extracted_text TEXT,
-        entities JSONB,
-        risk_level VARCHAR(50),
-        summary TEXT,
-        correlation_suggestions JSONB,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
     try {
-      await pool.query(queryStr);
-      console.log("[DriveIngestionEngine] Tabla drive_ingested_intelligence verificada/creada.");
+      const result = await pool.query(
+        "SELECT to_regclass('public.drive_ingested_intelligence') AS relation"
+      );
+      if (!result.rows[0]?.relation) {
+        throw new Error(
+          "DATABASE_SCHEMA_MIGRATION_REQUIRED: drive_ingested_intelligence is missing. Apply database/migrations/e2e006/001_drive_ingestion_tables_up.sql."
+        );
+      }
     } catch (err) {
-      console.error("[DriveIngestionEngine] Error al crear la tabla drive_ingested_intelligence:", err);
+      console.error("[DriveIngestionEngine] PostgreSQL schema verification failed:", err);
       throw err;
     }
   }

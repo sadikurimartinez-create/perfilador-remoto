@@ -1,58 +1,6 @@
 import { Pool } from "pg";
 
 let poolInstance: Pool | null = null;
-let schemaEnsured = false;
-
-export async function ensureSchema(pool: Pool) {
-  try {
-    // 1. Crear la tabla users si no existe (robusto para bases de datos nuevas/vacías)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) NOT NULL DEFAULT 'USER',
-        name VARCHAR(255) NOT NULL,
-        profile JSONB DEFAULT '{}'::jsonb,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // 2. Asegurar columnas adicionales por si la tabla ya existía
-    await pool.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS profile JSONB DEFAULT '{}'::jsonb;
-    `);
-    
-    // 3. Seeding del usuario admin si la tabla está vacía o no existe el admin
-    // Gobernanza de credenciales:
-    // Las cuentas administrativas no se provisionan con contraseñas fijas
-    // embebidas en el código de aplicación.
-    const bcrypt = require("bcryptjs");
-    // 4. Migración transparente de contraseñas de texto plano a hashes de Bcrypt
-    const { rows: allUsers } = await pool.query(
-      "SELECT id, username, password_hash FROM users"
-    );
-    
-    for (const u of allUsers) {
-      if (
-        u.password_hash && 
-        !u.password_hash.startsWith("$2a$") && 
-        !u.password_hash.startsWith("$2b$") && 
-        !u.password_hash.startsWith("$2y$")
-      ) {
-        console.log(`[Migration] Encriptando contraseña de texto plano para el usuario: ${u.username}`);
-        const salt = bcrypt.genSaltSync(10);
-        const hashed = bcrypt.hashSync(u.password_hash, salt);
-        await pool.query(
-          "UPDATE users SET password_hash = $1 WHERE id = $2",
-          [hashed, u.id]
-        );
-      }
-    }
-  } catch (err: any) {
-    console.error("PostgreSQL auto-migration error:", err.message);
-  }
-}
 
 function parseConnectionString(str: string) {
   if (!str) return null;
@@ -177,14 +125,6 @@ export function getPool(): Pool {
       });
     }
   }
-  
-  if (!schemaEnsured) {
-    schemaEnsured = true;
-    ensureSchema(poolInstance).catch((err) => {
-      console.error("PostgreSQL background schema alignment failed:", err);
-    });
-  }
-  
   return poolInstance;
 }
 

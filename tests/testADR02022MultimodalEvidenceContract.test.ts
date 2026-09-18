@@ -160,8 +160,8 @@ describe("ADR-020.22 - Multimodal evidence contract", () => {
 
   test("TEST 5 Drive processed means technically processed and not approved automatically", async () => {
     mockQuery
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ relation: "drive_ingestion_log" }] })
+      .mockResolvedValueOnce({ rows: [{ relation: "drive_ingested_intelligence" }] })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -241,8 +241,8 @@ describe("ADR-020.22 - Multimodal evidence contract", () => {
     );
 
     mockQuery
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ relation: "drive_ingestion_log" }] })
+      .mockResolvedValueOnce({ rows: [{ relation: "drive_ingested_intelligence" }] })
       .mockResolvedValueOnce({
         rows: [
           {
