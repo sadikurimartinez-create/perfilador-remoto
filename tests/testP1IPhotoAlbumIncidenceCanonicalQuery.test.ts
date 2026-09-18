@@ -197,19 +197,28 @@ describe("P1-I - PhotoAlbum incidencia canonical spatial query", () => {
     expect(body.data).toEqual([]);
   });
 
-  test("T10 error datasource queda visible como ERROR", async () => {
+  test("T10 error de configuracion datasource se sanitiza como ERROR", async () => {
     mockQueryCrimeIncidence.mockResolvedValue(response({
       success: false,
       sourceStatus: "FAILED",
       data: [],
-      error: "DATABASE_URL not configured for canonical PostGIS incidence query.",
+      error: "DATABASE_CONFIGURATION_ERROR: DATABASE_URL is structurally invalid.",
     }));
+
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
 
     const res = await POST(requestWithBody({ canonicalSpatialQuery: buildExpedientIncidenceCanonicalSpatialQuery({ canonicalGeography: pointGeography }) }));
     const body = await res.json();
 
     expect(body.resultStatus).toBe("ERROR");
-    expect(body.error).toContain("DATABASE_URL");
+    expect(body.error).toBe("Servicio de incidencia delictiva no disponible temporalmente.");
+    expect(JSON.stringify(body)).not.toContain("DATABASE_CONFIGURATION_ERROR");
+    expect(JSON.stringify(body)).not.toContain("DATABASE_URL");
+    expect(consoleError).toHaveBeenCalledWith(
+      "[api/incidencia] Error de configuración de base de datos:",
+      "DATABASE_CONFIGURATION_ERROR: DATABASE_URL is structurally invalid."
+    );
+    consoleError.mockRestore();
   });
 
   test("T11 filtros de categorias visibles se conservan en el request", () => {
@@ -260,5 +269,36 @@ describe("P1-I - PhotoAlbum incidencia canonical spatial query", () => {
 
     expect(block).toContain("incidenciaStatus === \"SUCCESS_EMPTY\"");
     expect(block).toContain("incidenciaStatus,");
+  });
+
+  test("T15 error de incidencia queda localizado fuera del error global", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+    const incidenceBlock = source.slice(
+      source.indexOf("buildExpedientIncidenceCanonicalSpatialQuery({"),
+      source.indexOf("const filteredInc = incidents.filter")
+    );
+
+    expect(source).toContain("const [incidenceError, setIncidenceError] = useState<string | null>(null)");
+    expect(incidenceBlock).toContain("setIncidenceError(null)");
+    expect(incidenceBlock).toContain("setIncidenceError(");
+    expect(incidenceBlock).not.toContain("setError(");
+    expect(incidenceBlock).toContain("Incidencia delictiva no disponible.");
+    expect(incidenceBlock).not.toContain("{error}");
+  });
+
+  test("T16 excepcion de configuracion conserva diagnostico server-side y sanitiza cliente", async () => {
+    const internalError = new Error("DATABASE_CONFIGURATION_ERROR: DATABASE_URL is structurally invalid.");
+    mockQueryCrimeIncidence.mockRejectedValue(internalError);
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const res = await POST(requestWithBody({ canonicalSpatialQuery: buildExpedientIncidenceCanonicalSpatialQuery({ canonicalGeography: pointGeography }) }));
+    const body = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(body.error).toBe("Servicio de incidencia delictiva no disponible temporalmente.");
+    expect(JSON.stringify(body)).not.toContain("DATABASE_CONFIGURATION_ERROR");
+    expect(JSON.stringify(body)).not.toContain("DATABASE_URL");
+    expect(consoleError).toHaveBeenCalledWith("[api/incidencia] Error inesperado:", internalError);
+    consoleError.mockRestore();
   });
 });

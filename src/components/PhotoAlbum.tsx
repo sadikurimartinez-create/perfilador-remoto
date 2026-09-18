@@ -809,6 +809,7 @@ export function PhotoAlbum({
 
 
   const [error, setError] = useState<string | null>(null);
+  const [incidenceError, setIncidenceError] = useState<string | null>(null);
   const [savingPhotoId, setSavingPhotoId] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -4238,8 +4239,8 @@ const hasMinimumPhotos =
                     radiusMeters: 1000,
                     corridorWidthMeters: 1000,
                   });
-                } catch (geoErr: any) {
-                  setError(geoErr.message || "INCIDENCE_CANONICAL_GEOGRAPHY_REQUIRED");
+                } catch {
+                  setIncidenceError("No fue posible preparar la geografía para consultar la incidencia delictiva.");
                   return;
                 }
 
@@ -4249,7 +4250,7 @@ const hasMinimumPhotos =
                 }
 
                 setIsCheckingIncidencia(true);
-                setError(null);
+                setIncidenceError(null);
                 try {
                   const res = await fetch("/api/incidencia", {
                     method: "POST",
@@ -4263,7 +4264,12 @@ const hasMinimumPhotos =
                   });
                   const data = await res.json();
                   if (!res.ok || data.resultStatus === "ERROR" || data.resultStatus === "SOURCE_UNAVAILABLE" || data.resultStatus === "UNSUPPORTED_GEOMETRY" || data.resultStatus === "FALLBACK_BLOCKED" || !data.success) {
-                    setError(data.error || data.resultStatus || "Error al obtener la incidencia delictiva.");
+                    const incidenceMessage = data.error || data.resultStatus || "Servicio de incidencia delictiva no disponible temporalmente.";
+                    setIncidenceError(
+                      /DATABASE_CONFIGURATION_ERROR|DATABASE_URL/i.test(incidenceMessage)
+                        ? "Servicio de incidencia delictiva no disponible temporalmente."
+                        : incidenceMessage
+                    );
                     return;
                   }
                   if (data.resultStatus === "SUCCESS_EMPTY") {
@@ -4319,10 +4325,10 @@ const hasMinimumPhotos =
                       createVisualEvidence: false
                     } as any);
                   } else {
-                    setError(data.error || "Error al obtener la incidencia delictiva.");
+                    setIncidenceError(data.error || "Servicio de incidencia delictiva no disponible temporalmente.");
                   }
-                } catch (err: any) {
-                  setError(err.message || "Error al conectar con la API de incidencia.");
+                } catch {
+                  setIncidenceError("Servicio de incidencia delictiva no disponible temporalmente.");
                 } finally {
                   setIsCheckingIncidencia(false);
                 }
@@ -4332,6 +4338,16 @@ const hasMinimumPhotos =
             </CEIPOLButton>
           </div>
         )}
+
+          {incidenceError && (
+            <div
+              role="alert"
+              className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-100"
+            >
+              <span className="font-semibold">Incidencia delictiva no disponible.</span>{" "}
+              {incidenceError}
+            </div>
+          )}
 
           {(() => {
             const filteredInc = incidents.filter(inc => activeDelitos.includes(getCategoryForFilename(inc.fuente || "")));

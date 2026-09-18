@@ -23,6 +23,17 @@ type IncidenciaRequestBody = {
   requestedCoverage?: "IN_COVERAGE" | "OUT_OF_COVERAGE" | "UNKNOWN_COVERAGE" | null;
 };
 
+const INCIDENCE_SERVICE_UNAVAILABLE_MESSAGE =
+  "Servicio de incidencia delictiva no disponible temporalmente.";
+
+function sanitizeIncidenceClientError(message: unknown): string | undefined {
+  if (typeof message !== "string" || !message) return undefined;
+  if (/DATABASE_CONFIGURATION_ERROR|DATABASE_URL/i.test(message)) {
+    return INCIDENCE_SERVICE_UNAVAILABLE_MESSAGE;
+  }
+  return message;
+}
+
 function incidenceResultStatus(result: Awaited<ReturnType<typeof queryCrimeIncidence>>) {
   if (result.error === "CSV_LEGACY_FALLBACK_POLYGON_NOT_SUPPORTED_NO_GEOMETRY_DEGRADATION") {
     return "FALLBACK_BLOCKED";
@@ -132,8 +143,13 @@ export async function POST(req: Request) {
       }
     );
 
+    if (/DATABASE_CONFIGURATION_ERROR|DATABASE_URL/i.test(result.error || "")) {
+      console.error("[api/incidencia] Error de configuración de base de datos:", result.error);
+    }
+
     const responseBody = {
       ...result,
+      error: sanitizeIncidenceClientError(result.error),
       resultStatus: incidenceResultStatus(result),
       ...(spatialQueryMetadata ? { spatialQueryMetadata } : {}),
     };
@@ -159,7 +175,7 @@ export async function POST(req: Request) {
         sourceStatus: "FAILED",
         coverageStatus: "UNKNOWN_COVERAGE",
         data: [],
-        error: message,
+        error: sanitizeIncidenceClientError(message),
       },
       {
         status: incidenceErrorHttpStatus(message),
