@@ -203,6 +203,71 @@ function ElapsedTime({ running }: { running: boolean }) {
   return <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded inline-block ml-1">{m}:{s}</span>;
 }
 
+type PersistAdditionalEvidenceParams = {
+  files: File[];
+  context: string;
+  isReadOnly: boolean;
+  uploadDocument: (file: File, context: string) => Promise<void>;
+  setIsUploading: (isUploading: boolean) => void;
+  clearError: () => void;
+  onSuccess: () => void;
+  onError: (message: string, failedFiles?: File[]) => void;
+};
+
+export async function persistAdditionalEvidenceFiles({
+  files,
+  context,
+  isReadOnly,
+  uploadDocument,
+  setIsUploading,
+  clearError,
+  onSuccess,
+  onError,
+}: PersistAdditionalEvidenceParams): Promise<boolean> {
+  const normalizedContext = context.trim();
+  if (isReadOnly) {
+    onError("El expediente está en modo lectura y no admite nuevas evidencias.");
+    return false;
+  }
+  if (files.length === 0) {
+    onError("Seleccione al menos un archivo de evidencia.");
+    return false;
+  }
+  if (!normalizedContext) {
+    onError("Capture el contexto de la evidencia antes de guardarla.");
+    return false;
+  }
+
+  setIsUploading(true);
+  clearError();
+  try {
+    const results = await Promise.allSettled(
+      files.map(async (file) => uploadDocument(file, normalizedContext))
+    );
+    const failedFiles = files.filter((_, index) => results[index].status === "rejected");
+    if (failedFiles.length > 0) {
+      const succeededCount = files.length - failedFiles.length;
+      const firstFailure = results.find((result) => result.status === "rejected");
+      const detail = firstFailure?.status === "rejected" && firstFailure.reason?.message
+        ? ` ${firstFailure.reason.message}`
+        : "";
+      const message = succeededCount > 0
+        ? `Carga parcial: ${succeededCount} archivo(s) se guardaron y ${failedFiles.length} fallaron. Sólo los archivos fallidos quedan preparados para reintento.${detail}`
+        : `No fue posible guardar los ${failedFiles.length} archivo(s). Todos permanecen preparados para reintento.${detail}`;
+      onError(message, failedFiles);
+      return false;
+    }
+    onSuccess();
+    return true;
+  } catch (err: any) {
+    const detail = err?.message ? ` ${err.message}` : "";
+    onError(`No fue posible guardar la evidencia adicional.${detail}`);
+    return false;
+  } finally {
+    setIsUploading(false);
+  }
+}
+
 function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isReadOnly }: any) {
   const { documents, saveCustomDocument, removeDocument } = useProject();
   const { user } = useAuth();
@@ -331,8 +396,16 @@ function PendingEvidenceEditor({ d, projectId, album, selectedIds, project, isRe
   return (
     <div className="mt-2 flex flex-col gap-2 p-3 bg-slate-900 border border-amber-600/50 rounded-lg shadow-inner">
        <p className="text-[11px] text-amber-400 font-semibold mb-1 flex items-center gap-1">
-         <span className="animate-pulse">⚠️</span> Evidencia In-Situ: Requiere Trabajo de Gabinete (Contextualización)
+         <span>Archivo fuente persistido:</span> <span className="text-slate-200">{d.name}</span>
        </p>
+       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+         <span>{d.type || "Tipo no identificado"}</span>
+         {d.url && (
+           <a href={d.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-sky-400 hover:text-sky-300">
+             Abrir archivo fuente
+           </a>
+         )}
+       </div>
        <textarea value={context} disabled={isReadOnly} onChange={(e) => { setContext(e.target.value); setIsAudited(false); }} className="w-full bg-slate-800 text-slate-200 border border-slate-600 rounded-md p-2 text-xs outline-none focus:border-sky-500 min-h-[80px]" placeholder="Describa el contexto y justificación de esta evidencia capturada en campo..." />
        
        {!isReadOnly && (
@@ -1101,6 +1174,7 @@ export function PhotoAlbum({
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [docContext, setDocContext] = useState("");
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [docUploadError, setDocUploadError] = useState<string | null>(null);
   const [isRefiningDoc, setIsRefiningDoc] = useState(false);
   const [docSuggestions, setDocSuggestions] = useState("");
   const [isAuditingDoc, setIsAuditingDoc] = useState(false);
@@ -1500,6 +1574,33 @@ export function PhotoAlbum({
   const [isDocContextAudited, setIsDocContextAudited] = useState(false);
   const [isAnalysisContextAudited, setIsAnalysisContextAudited] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState<any>(null); // Estado para la ventana de edición
+
+  const handlePersistAdditionalEvidence = useCallback(async () => {
+    await persistAdditionalEvidenceFiles({
+      files: docFiles,
+      context: docContext,
+      isReadOnly,
+      uploadDocument,
+      setIsUploading: setIsUploadingDoc,
+      clearError: () => {
+        setError(null);
+        setDocUploadError(null);
+      },
+      onSuccess: () => {
+        setDocFiles([]);
+        setDocContext("");
+        setDocSuggestions("");
+        setDocAuditScore(null);
+        setIsDocContextAudited(false);
+      },
+      onError: (message, failedFiles) => {
+        if (failedFiles) setDocFiles(failedFiles);
+        setDocUploadError(message);
+        setError(message);
+      },
+    });
+  }, [docFiles, docContext, isReadOnly, uploadDocument]);
+
   // Validación mínima de fotografías según geometría
 const minimumPhotos = {
   individual: 1,
@@ -4763,7 +4864,7 @@ const hasMinimumPhotos =
                   <input
                     type="file"
                     multiple
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || isUploadingDoc}
                     onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
                     className="hidden"
                     accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.ppt,.pptx,.txt,.mp4,.avi,.mkv,.mov,.jpg,.jpeg,.png,.wav,.mp3,.m4a"
@@ -4775,7 +4876,7 @@ const hasMinimumPhotos =
                     type="file"
                     {...{ webkitdirectory: "true", directory: "true" } as any}
                     multiple
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || isUploadingDoc}
                     onChange={(e) => setDocFiles(e.target.files ? Array.from(e.target.files) : [])}
                     className="hidden"
                   />
@@ -4784,7 +4885,7 @@ const hasMinimumPhotos =
               {docFiles.length > 0 && (
                 <div className="flex justify-between items-center bg-sky-900/20 border border-sky-800 p-2 rounded">
                   <span className="text-xs text-sky-400 font-semibold">✓ {docFiles.length} archivo(s) preparado(s)</span>
-                  <button type="button" onClick={() => setDocFiles([])} className="text-red-400 hover:text-red-300 text-[10px] font-bold">Cancelar</button>
+                  <button type="button" disabled={isUploadingDoc} onClick={() => setDocFiles([])} className="text-red-400 hover:text-red-300 text-[10px] font-bold disabled:opacity-50">Cancelar</button>
                 </div>
               )}
               <div className="w-full relative">
@@ -4803,7 +4904,7 @@ const hasMinimumPhotos =
                 <textarea
                   spellCheck={true}
                   value={docContext}
-                  disabled={isReadOnly}
+                  disabled={isReadOnly || isUploadingDoc}
                   onChange={(e) => {
                     setDocContext(e.target.value);
                     setIsDocContextAudited(false);
@@ -5087,7 +5188,41 @@ const hasMinimumPhotos =
                   </div>
                 </div>
               )}
+
+              {docUploadError && (
+                <p role="alert" className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+                  {docUploadError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handlePersistAdditionalEvidence}
+                disabled={isReadOnly || isUploadingDoc || docFiles.length === 0 || !docContext.trim()}
+                className="w-full rounded-md bg-sky-700 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isUploadingDoc ? "Guardando evidencia..." : "Guardar Evidencia Adicional"}
+              </button>
             </div>
+
+            {documents?.some((doc: any) => doc.type !== "powerup_execution" && Boolean(doc.url)) && (
+              <div className="w-full space-y-3">
+                <h5 className="text-xs font-semibold text-slate-300">Archivos incorporados al expediente</h5>
+                {documents
+                  .filter((doc: any) => doc.type !== "powerup_execution" && Boolean(doc.url))
+                  .map((doc: any) => (
+                    <PendingEvidenceEditor
+                      key={doc.id}
+                      d={doc}
+                      projectId={projectId}
+                      album={album}
+                      selectedIds={selectedIds}
+                      project={project}
+                      isReadOnly={isReadOnly}
+                    />
+                  ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
