@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
-import { VertexAI } from "@google-cloud/vertexai";
-import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import { GoogleGenAI } from "@google/genai";
+import { GCP_PROJECT_ID, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
 import { getPool } from "@/lib/db";
@@ -162,20 +162,32 @@ export async function GET() {
         latencyMs: null,
         errorMessage: "Falta GCP_PROJECT_ID en variables de entorno para Vertex AI.",
       });
+    } else if (!GCP_CLIENT_EMAIL || !GCP_PRIVATE_KEY) {
+      services.push({
+        id: "gemini",
+        name: "Vertex AI (Gemini)",
+        status: "error",
+        latencyMs: null,
+        errorMessage: "Faltan credenciales de servicio GCP_CLIENT_EMAIL/GCP_PRIVATE_KEY para Vertex AI.",
+      });
     } else {
       try {
-        const authOptions = GCP_PRIVATE_KEY
-          ? {
-              credentials: {
-                client_email: GCP_CLIENT_EMAIL,
-                private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
-              },
-            }
-          : undefined;
-
-        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
-        const model = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-        await model.generateContent("ping");
+        const vertexAI = new GoogleGenAI({
+          vertexai: true,
+          project: GCP_PROJECT_ID,
+          location: "global",
+          googleAuthOptions: {
+            credentials: {
+              client_email: GCP_CLIENT_EMAIL,
+              private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+            },
+          },
+        });
+        await vertexAI.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: "ping",
+          config: { temperature: 0 },
+        });
         services.push({
           id: "gemini",
           name: "Vertex AI (Gemini)",
