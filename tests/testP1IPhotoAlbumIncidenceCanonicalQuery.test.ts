@@ -107,14 +107,24 @@ describe("P1-I - PhotoAlbum incidencia canonical spatial query", () => {
     const query = buildExpedientIncidenceCanonicalSpatialQuery({
       expedienteId: "exp-p1i",
       canonicalGeography: corridorGeography,
-      corridorWidthMeters: 1000,
+      corridorWidthMeters: 30,
       now: "2026-09-08T00:00:00.000Z",
     });
 
     expect(query.mode).toBe("CORRIDOR_COVERAGE");
     expect(query.source).toBe("EXPEDIENT");
     expect(query.geometry).toEqual({ type: "LineString", coordinates: corridorPositions });
-    expect(query.metadata.corridorWidthMeters).toBe(1000);
+    expect(query.metadata.corridorWidthMeters).toBe(30);
+  });
+
+  test("T2B expediente CORREDOR usa ancho default de 30 metros", () => {
+    const query = buildExpedientIncidenceCanonicalSpatialQuery({
+      expedienteId: "exp-p1i-default",
+      canonicalGeography: corridorGeography,
+      now: "2026-09-08T00:00:00.000Z",
+    });
+
+    expect(query.metadata.corridorWidthMeters).toBe(30);
   });
 
   test("T3 expediente POLIGONO genera request POLYGON_BOUNDARY", () => {

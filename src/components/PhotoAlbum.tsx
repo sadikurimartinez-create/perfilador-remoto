@@ -4237,7 +4237,7 @@ const hasMinimumPhotos =
                     expedienteId: projectId,
                     canonicalGeography: project?.canonicalGeography,
                     radiusMeters: 1000,
-                    corridorWidthMeters: 1000,
+                    corridorWidthMeters: 30,
                   });
                 } catch {
                   setIncidenceError("No fue posible preparar la geografía para consultar la incidencia delictiva.");

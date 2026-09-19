@@ -8,7 +8,7 @@ import type {
 } from "@/lib/incidenceSpatialTypes";
 
 const DEFAULT_INDIVIDUAL_RADIUS_METERS = 1000;
-const DEFAULT_CORRIDOR_WIDTH_METERS = 1000;
+const DEFAULT_CORRIDOR_WIDTH_METERS = 30;
 
 function isValidPosition(position: IncidenceGeoJsonPosition): boolean {
   const [lng, lat] = position;
