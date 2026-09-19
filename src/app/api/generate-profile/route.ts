@@ -795,15 +795,11 @@ Escribe la salida en formato Markdown limpio. Devuelve ÚNICA Y EXCLUSIVAMENTE e
           location: "global",
           googleAuthOptions: authOptions,
         });
-        const streamPromise = vertexAI.models.generateContentStream({
+        const stream = await vertexAI.models.generateContentStream({
           model: GEMINI_MODEL,
           contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
           config: { temperature: 0.15 }
         });
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout en inicialización de Vertex AI (2s)")), 2000)
-        );
-        const stream = await Promise.race([streamPromise, timeoutPromise]);
         streamingResp = { stream };
       } catch (vertexInitErr: any) {
         console.warn("[api/generate-profile] Vertex AI initialization failed, falling back to REST API:", vertexInitErr.message);
