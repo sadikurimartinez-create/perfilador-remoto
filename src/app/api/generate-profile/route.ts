@@ -48,7 +48,8 @@ import {
 } from "@/utils/generateProfileChapterProtocol";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// AI chapters stream until terminalEvent; allow enough time to close the JSON response.
+export const maxDuration = 300;
 
 
 function simplifyOsintData(data: any): any {
