@@ -173,12 +173,12 @@ export function GangGeoSweepPanel({ projectId, project, onUpdateProject }: GangG
       );
 
       setSweepResult(result);
-      setIsProcessing(false);
-      setProgressMsg("");
     } catch (err: any) {
       console.error("[GangGeoSweepPanel] Error during sweep:", err);
       alert("❌ Ocurrió un error inesperado al procesar el barrido: " + err.message);
+    } finally {
       setIsProcessing(false);
+      setProgressMsg("");
     }
   };
 
