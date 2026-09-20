@@ -1,7 +1,7 @@
 import { IProvider, ProviderResponse, HealthCheckResult } from "./baseProvider";
 import { GeoDataNormalizerEngine } from "./geoNormalizer";
-import { getInegiDemographics } from "@/lib/inegiIndicators";
 import { getDenueData } from "@/lib/osintActions";
+import { resolveInegiTerritory } from "@/lib/inegiTerritorialResolver";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 
 export class InegiProvider implements IProvider {
@@ -65,24 +65,12 @@ export class InegiProvider implements IProvider {
       let confidence = 100;
 
       if (action === "scince") {
-        const municipio = params?.municipio || "Aguascalientes";
-        const estado = params?.estado || "Aguascalientes";
-        data = await getInegiDemographics(municipio, estado);
+        data = await resolveInegiTerritory(lat, lng);
       } else if (action === "denue") {
         const radio = params?.radio || 500;
         data = await getDenueData(lat, lng, radio);
       } else if (action === "marco_geoestadistico") {
-        // Infrastructure ready for Marco Geoestadístico layer integration
-        data = {
-          status: "ready_for_integration",
-          layer_type: "WFS / GeoJSON",
-          endpoints: {
-            wfs: "https://geoportal.inegi.org.mx/geoserver/wfs",
-            download: "https://www.inegi.org.mx/app/biblioteca/ficha.html?upc=889463807469"
-          },
-          target_layers: ["m_ageb_m_g", "m_localidad_p_g", "m_municipio_g"],
-          description: "División político-administrativa y desglose por Áreas Geoestadísticas Básicas (AGEB) urbanas y rurales."
-        };
+        data = await resolveInegiTerritory(lat, lng);
       } else if (action === "elevation_model") {
         // Infrastructure ready for Modelo Digital de Elevación (CEM 3.0)
         data = {

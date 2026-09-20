@@ -215,6 +215,14 @@ export function evaluateIntelligenceEligibility(
     blockingReasons.push("CONNECTIVITY_ONLY_NOT_REPORTABLE");
   }
 
+  if (
+    metadata.acquisitionStatus &&
+    metadata.acquisitionStatus !== "ACQUIRED" &&
+    metadata.acquisitionStatus !== "PARTIAL"
+  ) {
+    blockingReasons.push(`ACQUISITION_NOT_ACQUIRED:${metadata.acquisitionStatus}`);
+  }
+
   if (metadata.validationStatus === "PENDING_REVIEW" || metadata.validationStatus === "UNREVIEWED") {
     blockingReasons.push(`VALIDATION_NOT_APPROVED:${metadata.validationStatus}`);
   }
@@ -282,6 +290,7 @@ export function isInstitutionalAnalysisEligibleIntelligence(
   const eligibility = evaluateIntelligenceEligibility(item);
   return !eligibility.blockingReasons.some((reason) =>
     reason.startsWith("ACQUISITION_MODE_NOT_REPORTABLE:") ||
+    reason.startsWith("ACQUISITION_NOT_ACQUIRED:") ||
     reason === "SIMULATED_CONTENT_NOT_REPORTABLE" ||
     reason === "CONNECTIVITY_ONLY_NOT_REPORTABLE" ||
     reason === "LEGACY_DIAGNOSTIC_NOT_INSTITUTIONAL"

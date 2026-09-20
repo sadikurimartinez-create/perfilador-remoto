@@ -107,7 +107,7 @@ export class GeoDataNormalizerEngine {
         license = "Licencia de Información Abierta INEGI";
         sourceAuthority = 39; // government authority
 
-        if (action === "scince") {
+        if (action === "scince" || action === "marco_geoestadistico") {
           dataType = "demographic";
           observed_at = "2020-03-15T00:00:00.000Z"; // Mexican Census 2020
           temporalFreshness = 15; // older demographic dataset
@@ -123,7 +123,7 @@ export class GeoDataNormalizerEngine {
               : null;
 
           if (sourceGeometryCoordinates) {
-            geomType = "Polygon";
+            geomType = rawData.geometry.type === "MultiPolygon" ? "MultiPolygon" : "Polygon";
             geomCoords = sourceGeometryCoordinates;
             spatialVal = 100;
             spatialUnit = "neighborhood";
@@ -458,7 +458,7 @@ export class GeoDataNormalizerEngine {
 
       case "inegi":
         primarySource = "Instituto Nacional de Estadística y Geografía (INEGI) - Federal Repositories";
-        intermediary = action === "scince" ? "INEGI SCINCE Censal API" : "INEGI DENUE Registry API";
+        intermediary = action === "scince" ? "INEGI official dataset in local PostGIS" : "INEGI DENUE Registry API";
         transformations.push(
           "Resolve municipal boundaries and demographic/AGEB aggregation",
           "Standardize demographic properties / establishment coordinates",

@@ -26,6 +26,7 @@ export type EpistemicValidationStatus =
   | "LEGACY_UNCLASSIFIED";
 
 export type IntelligenceSemanticRole =
+  | "OBSERVATION"
   | "SOURCE_FACT"
   | "INFERENCE"
   | "SYNTHESIS"

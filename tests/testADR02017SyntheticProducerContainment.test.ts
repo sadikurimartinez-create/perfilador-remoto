@@ -36,17 +36,19 @@ describe("ADR-020.17 Fase 2 - Synthetic producer containment", () => {
     delete (global as any).fetch;
   });
 
-  test("SCINCE simulated output is SIMULATED and not reportable", async () => {
+  test("SCINCE productivo sin dataset no cae al simulador", async () => {
+    delete process.env.DATABASE_URL;
     const { getScinceData } = await import("../src/lib/osintActions");
 
     const result = await getScinceData(21.8818, -102.2916);
     const eligibility = evaluateIntelligenceEligibility(result);
 
-    expect(result.exito).toBe(true);
-    expect(result.epistemicIntegrity.acquisitionMode).toBe("SIMULATED");
-    expect(result.epistemicIntegrity.isSimulated).toBe(true);
+    expect(result.exito).toBe(false);
+    expect(result.status).toBe("NOT_CONFIGURED");
+    expect(result.epistemicIntegrity.acquisitionMode).toBe("OBSERVED");
+    expect(result.epistemicIntegrity.isSimulated).toBe(false);
     expect(eligibility.eligibleForReport).toBe(false);
-    expect(eligibility.blockingReasons).toContain("ACQUISITION_MODE_NOT_REPORTABLE:SIMULATED");
+    expect(eligibility.blockingReasons).toContain("ACQUISITION_NOT_ACQUIRED:NOT_CONFIGURED");
   });
 
   test("Telegram Gemini output is AI_GENERATED and pending review, never OBSERVED by generation alone", async () => {

@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed:pandillas": "node scripts/syncGangs.js",
+    "inegi:import": "node scripts/inegi/import-aguascalientes-2020.mjs",
+    "inegi:preflight": "node scripts/inegi/import-aguascalientes-2020.mjs --preflight-only",
     "test": "ts-node -r tsconfig-paths/register -O \"{\\\"module\\\": \\\"commonjs\\\", \\\"moduleResolution\\\": \\\"node\\\"}\" tests/run.ts"
   },
   "dependencies": {

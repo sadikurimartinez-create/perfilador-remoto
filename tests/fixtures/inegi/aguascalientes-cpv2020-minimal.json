@@ -1,0 +1,22 @@
+{
+  "documentation": {
+    "provider": "INEGI",
+    "product": "Principales resultados por AGEB y manzana urbana, Censo de Poblacion y Vivienda 2020",
+    "sourceUrl": "https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/ageb_manzana/ageb_mza_urbana_01_cpv2020_csv.zip",
+    "sourceSha256": "cac8849a7f672b3aa8d2722f8bef078ab9984588c02a498c2a776461918d12e9",
+    "referenceYear": 2020,
+    "officialKey": "01:001:0001:0017:001",
+    "note": "Fila minima documentada del CSV oficial. La geometria usada por el test es un mock sintetico y no se presenta como fixture oficial."
+  },
+  "row": {
+    "ENTIDAD": "01",
+    "MUN": "001",
+    "LOC": "0001",
+    "AGEB": "0017",
+    "MZA": "001",
+    "POBTOT": "170",
+    "VIVTOT": "54",
+    "VIVPAR_HAB": "54",
+    "VIVPAR_DES": "0"
+  }
+}

@@ -250,14 +250,16 @@ describe("ADR-020.17 FASE 1: Synthetic Intelligence Firewall", () => {
     expect(mockItems.every((item) => isReportEligibleIntelligence(item) === false)).toBe(true);
   });
 
-  test("ADR-023.6 TEST-03 SCINCE simulado no es elegible para reporte", async () => {
+  test("ADR-023.6 TEST-03 SCINCE sin dataset no simula ni es elegible", async () => {
+    delete process.env.DATABASE_URL;
     const { getScinceData } = await import("../src/lib/osintActions");
     const result = await getScinceData(21.8818, -102.2916);
     const eligibility = evaluateIntelligenceEligibility(result);
 
-    expect(result.epistemicIntegrity.acquisitionMode).toBe("SIMULATED");
-    expect(result.epistemicIntegrity.semanticRole).toBe("DIAGNOSTIC");
-    expect(result.epistemicIntegrity.isSimulated).toBe(true);
+    expect(result.status).toBe("NOT_CONFIGURED");
+    expect(result.epistemicIntegrity.acquisitionMode).toBe("OBSERVED");
+    expect(result.epistemicIntegrity.semanticRole).toBe("OBSERVATION");
+    expect(result.epistemicIntegrity.isSimulated).toBe(false);
     expect(eligibility.eligibleForReport).toBe(false);
   });
 
@@ -296,7 +298,8 @@ describe("ADR-020.17 FASE 1: Synthetic Intelligence Firewall", () => {
     expect(filterInstitutionalAnalysisEligibleIntelligence([realObserved])).toHaveLength(1);
   });
 
-  test("ADR-023.6 TEST-06 consumidor institucional rechaza items MOCK y SIMULATED", async () => {
+  test("ADR-023.6 TEST-06 consumidor institucional rechaza MOCK y SCINCE no configurado", async () => {
+    delete process.env.DATABASE_URL;
     const osint = await runOSINTScan({ locationName: "Aguascalientes" });
     const { getScinceData } = await import("../src/lib/osintActions");
     const scince = await getScinceData(21.8818, -102.2916);
@@ -322,7 +325,8 @@ describe("ADR-020.17 FASE 1: Synthetic Intelligence Firewall", () => {
     expect(accepted).toEqual([realObserved]);
   });
 
-  test("ADR-023.6 TEST-07 consumidor contextual conserva items MOCK/SIMULATED etiquetados", async () => {
+  test("ADR-023.6 TEST-07 consumidor contextual conserva MOCK y SCINCE no configurado etiquetados", async () => {
+    delete process.env.DATABASE_URL;
     const osint = await runOSINTScan({ locationName: "Aguascalientes" });
     const { getScinceData } = await import("../src/lib/osintActions");
     const scince = await getScinceData(21.8818, -102.2916);
@@ -330,7 +334,8 @@ describe("ADR-020.17 FASE 1: Synthetic Intelligence Firewall", () => {
 
     expect(contextualItems).toHaveLength(2);
     expect(contextualItems[0].epistemicIntegrity.acquisitionMode).toBe("MOCK");
-    expect(contextualItems[1].epistemicIntegrity.acquisitionMode).toBe("SIMULATED");
+    expect(contextualItems[1].epistemicIntegrity.acquisitionMode).toBe("OBSERVED");
+    expect(contextualItems[1].epistemicIntegrity.acquisitionStatus).toBe("NOT_CONFIGURED");
     expect(contextualItems.every((item) => evaluateIntelligenceEligibility(item).eligibleForReport === false)).toBe(true);
   });
 });

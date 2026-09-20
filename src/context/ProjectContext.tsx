@@ -284,6 +284,7 @@ export type AnalysisResult = {
   pois?: Array<{ lat: number; lng: number; name: string; category?: string }>;
   inegiDemographics?: {
     exito: boolean;
+    status: "OBSERVED" | "NO_DATA" | "NOT_CONFIGURED" | "FAILED";
     municipioNombre: string;
     poblacionTotal: string;
     datosExtra: string;

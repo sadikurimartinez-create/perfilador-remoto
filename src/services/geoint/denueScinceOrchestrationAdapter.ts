@@ -81,6 +81,17 @@ function classifyAuthority(
     return "AUTHORITATIVE";
   }
 
+  if (
+    sourceType === "INEGI_TERRITORIAL_CPV2020" &&
+    sourceId === "INEGI_CPV2020_LOCAL_POSTGIS" &&
+    providerId === "INEGI" &&
+    acquisitionMode === "OBSERVED" &&
+    present(integrity.sourceReference) &&
+    present(integrity.rawSourceReference)
+  ) {
+    return "AUTHORITATIVE";
+  }
+
   return "UNKNOWN";
 }
 
@@ -118,7 +129,7 @@ export function adaptDenueScinceSource(
 
   if (!sourceType || !sourceId) return null;
 
-  if (sourceType !== "DENUE" && sourceType !== "SCINCE") return null;
+  if (sourceType !== "DENUE" && sourceType !== "SCINCE" && sourceType !== "INEGI_TERRITORIAL_CPV2020") return null;
 
   const authorityClassification = classifyAuthority(integrity);
   const integrityClassification = classifyIntegrity(integrity, authorityClassification);

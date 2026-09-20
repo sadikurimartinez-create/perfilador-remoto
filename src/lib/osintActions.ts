@@ -5,6 +5,7 @@ import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVA
 import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, EpistemicValidationStatus, IntelligenceSemanticRole } from "@/types/epistemicIntegrity";
 import { prepareDenueAcquisitionPois } from "@/utils/denueCanonicalPoi";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
+import { resolveInegiTerritory } from "./inegiTerritorialResolver";
 
 export type DenueQueryStatus =
   | "SUCCESS"
@@ -99,62 +100,7 @@ export async function getNgrokUrl() {
 }
 
 export async function getScinceData(lat: number, lng: number) {
-  try {
-    if (!lat || !lng) throw new Error("Faltan coordenadas");
-    
-    // Simulador de datos demográficos para pruebas
-    const seed = Math.abs(Math.sin(lat * lng)) * 10000;
-    const poblacion = Math.floor(100 + (seed % 400));
-    const viviendas = Math.floor(poblacion / 3.5);
-    const deshabitadas = Math.floor((seed % 15));
-    const marginacion = (seed % 100) > 80 ? "Alto" : (seed % 100) > 40 ? "Medio" : "Bajo";
-
-    return {
-      exito: true,
-      coordenadas: `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`,
-      poblacionTotal: poblacion.toString(), 
-      viviendasTotales: viviendas.toString(),
-      viviendasDeshabitadas: deshabitadas.toString(),
-      gradoMarginacion: marginacion,
-      epistemicIntegrity: osintEpistemicIntegrity({
-        sourceId: "SCINCE_LOCAL_SIMULATOR",
-        providerId: "SCINCE_LOCAL_SIMULATOR",
-        providerName: "SCINCE Local Simulator",
-        sourceType: "SCINCE",
-        acquisitionMode: "SIMULATED",
-        acquisitionStatus: "ACQUIRED",
-        semanticRole: "DIAGNOSTIC",
-        isSimulated: true,
-        generatedAt: new Date().toISOString(),
-        sourceReference: "src/lib/osintActions.ts:getScinceData",
-        rawSourceReference: "local-simulator:scince-demographic-seed",
-        query: `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`,
-        resultCount: 1,
-        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
-      }),
-    };
-  } catch (error: any) {
-    return {
-      exito: false,
-      error: error.message || "Error al calcular SCINCE",
-      epistemicIntegrity: osintEpistemicIntegrity({
-        sourceId: "SCINCE_LOCAL_SIMULATOR",
-        providerId: "SCINCE_LOCAL_SIMULATOR",
-        providerName: "SCINCE Local Simulator",
-        sourceType: "SCINCE",
-        acquisitionMode: "SIMULATED",
-        acquisitionStatus: "FAILED",
-        semanticRole: "DIAGNOSTIC",
-        isSimulated: true,
-        generatedAt: new Date().toISOString(),
-        sourceReference: "src/lib/osintActions.ts:getScinceData",
-        rawSourceReference: "local-simulator:scince-demographic-seed",
-        query: `${lat},${lng}`,
-        resultCount: 0,
-        geolocationSource: "INPUT_COORDINATES_UNVERIFIED",
-      }),
-    };
-  }
+  return resolveInegiTerritory(Number(lat), Number(lng));
 }
 
 export async function getDenueData(lat: number, lng: number, radio: number = 500) {

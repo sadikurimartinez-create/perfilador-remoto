@@ -110,6 +110,7 @@ type ProductiveSourceConfirmation = {
   content: string;
   integrity: ProductiveSourceIntegrityInput;
   sourceItem: MultisourceOrchestrationItem | null;
+  payload?: any;
 };
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
@@ -4106,12 +4107,12 @@ const hasMinimumPhotos =
 
 
 
-      {/* MÓDULO DE INTELIGENCIA DEMOGRÁFICA (INEGI SCINCE) (Paso 5) */}
+      {/* MÓDULO DE DEMOGRAFÍA TERRITORIAL OFICIAL INEGI (Paso 5) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
         <CEIPOLSectionHeader
           icon="📊"
-          title="Demografía y Marginación (INEGI SCINCE) (Paso 5)"
-          subtitle="Extrae datos sociodemográficos a nivel manzana/AGEB basados en el centro de las fotografías seleccionadas. Identifica viviendas deshabitadas y desorganización social."
+          title="Demografía territorial — INEGI (Paso 5)"
+          subtitle="Resuelve el centro de las fotografías seleccionadas contra el Marco Geoestadístico y el Censo 2020 importados con geometría oficial."
           className="mb-2"
           actions={
             <>
@@ -4122,7 +4123,7 @@ const hasMinimumPhotos =
           }
         />
         {isCheckingScince ? (
-          <CEIPOLLoader message="Consultando indicadores demográficos INEGI SCINCE" />
+          <CEIPOLLoader message="Consultando dataset territorial oficial INEGI" />
         ) : (
           <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
             <p className="text-xs text-slate-300 flex-1">
@@ -4150,20 +4151,33 @@ const hasMinimumPhotos =
 
                   const data = await getScinceData(centerLat, centerLng);
                   if (data.exito) {
-                    const newContext = `[INTELIGENCIA DEMOGRÁFICA - INEGI SCINCE] Coordenadas: ${data.coordenadas}. Población de la manzana: ${data.poblacionTotal} hab. Viviendas totales: ${data.viviendasTotales}. VIVIENDAS DESHABITADAS: ${data.viviendasDeshabitadas}. Grado de marginación: ${data.gradoMarginacion}. Observaciones tácticas: El nivel de viviendas abandonadas o en desuso agudiza la percepción de desorden, propicia el paracaidismo, el consumo de drogas y consolida el patrón de "Ventanas Rotas" en la zona.`;
+                    const territorialLevel = data.geographicLevel || "No disponible";
+                    const demographicLevel = data.demographics?.geographicLevel || "No disponible";
+                    const territorialLabel = (kind: string, code?: string, name?: string) => code
+                      ? `${kind} ${code}${name ? ` (${name})` : ""}`
+                      : null;
+                    const codes = [
+                      territorialLabel("estado", data.geography?.estado?.code, data.geography?.estado?.name),
+                      territorialLabel("municipio", data.geography?.municipio?.code, data.geography?.municipio?.name),
+                      territorialLabel("localidad", data.geography?.localidad?.code, data.geography?.localidad?.name),
+                      territorialLabel("AGEB", data.geography?.ageb?.code),
+                      territorialLabel("manzana", data.geography?.manzana?.code),
+                    ].filter(Boolean).join(", ");
+                    const formatMetric = (value: string | undefined, unit: string) => value && value !== "No disponible" ? `${value} ${unit}` : "No disponible";
+                    const newContext = `[DEMOGRAFÍA TERRITORIAL OFICIAL - INEGI] Producto: ${data.provenance?.productName || "No disponible"}. Año: ${data.provenance?.referenceYear ?? "No disponible"}. Unidad territorial localizada: ${territorialLevel}. Nivel de datos demográficos: ${demographicLevel}. Claves: ${codes || "No disponibles"}. Coordenadas consultadas: ${data.coordenadas}. Población total: ${formatMetric(data.poblacionTotal, "personas")}. Viviendas totales: ${formatMetric(data.viviendasTotales, "viviendas")}. Viviendas particulares habitadas: ${formatMetric(data.viviendasHabitadas, "viviendas")}. Viviendas particulares deshabitadas: ${formatMetric(data.viviendasDeshabitadas, "viviendas")}. Marginación: no disponible en los productos INEGI importados. Dataset: ${data.provenance?.datasetId || "No disponible"}. Versión: ${data.provenance?.version || "No disponible"}. Importado: ${data.provenance?.importedAt || "No disponible"}. Fuente geográfica: ${data.provenance?.geographySourceUrl || "No disponible"}. SHA geografía: ${data.provenance?.geographySha256 || "No disponible"}. Fuente censal: ${data.provenance?.censusSourceUrl || "No disponible"}. SHA censo: ${data.provenance?.censusSha256 || "No disponible"}.`;
                     const sourceItem = adaptDenueScinceSource({
                       expedienteId: project?.id,
                       integrity: data.epistemicIntegrity,
                     });
-                    setScinceDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
+                    setScinceDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem, payload: data });
                   } else {
-                    setError(data.error || "Error al consultar INEGI SCINCE.");
+                    setError(data.error || "No hay datos territoriales oficiales INEGI disponibles para la coordenada.");
                   }
-                } catch (err: any) { setError(err.message || "Error de red al conectar con SCINCE."); } 
+                } catch (err: any) { setError(err.message || "Error al consultar el dataset territorial INEGI."); }
                 finally { setIsCheckingScince(false); }
               }}
             >
-              📊 Consultar Cuadra y Añadir a Hipótesis
+              📊 Consultar territorio y revisar
             </CEIPOLButton>
           </div>
         )}
@@ -6646,7 +6660,7 @@ const hasMinimumPhotos =
         </DynamicPopup>
       )}
 
-      {/* CONFIRMACIÓN DE HIPÓTESIS DEMOGRÁFICA (SCINCE) */}
+      {/* CONFIRMACIÓN DE DEMOGRAFÍA TERRITORIAL OFICIAL */}
       <DynamicPopup
         open={!!scinceDataConfirm}
         anchorPosition={clickCoords}
@@ -6654,17 +6668,19 @@ const hasMinimumPhotos =
         className="max-w-md w-full"
       >
         <h3 className="text-sm font-black text-cyan-400 flex items-center gap-2 mb-2 uppercase tracking-wider">
-          📊 Confirmación de Hipótesis: INEGI SCINCE
+          📊 Confirmación de fuente: INEGI territorial
         </h3>
         <p className="text-[11px] text-slate-400 font-medium leading-relaxed mb-3">
-          Se han obtenido los siguientes datos sociodemográficos de la cuadra (Demografía, Marginación, Población e Indicadores Sociales). Confirme su incorporación al análisis de hipótesis:
+          Revise el producto, año, nivel geográfico, claves e indicadores observados antes de incorporarlos al expediente:
         </p>
         <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
           {scinceDataConfirm?.content}
         </div>
-        <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
-          SCINCE disponible actualmente corresponde a una simulación diagnóstica no autoritativa y no puede incorporarse como corroboración institucional.
-        </p>
+        {!canAdmitSourceToInstitutionalContext(scinceDataConfirm?.sourceItem) && (
+          <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
+            La fuente territorial no demostró dataset oficial, PostGIS y lineage completos; no puede incorporarse como dato factual.
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
           <CEIPOLButton
             variant="secondary"
@@ -6674,11 +6690,39 @@ const hasMinimumPhotos =
             Cancelar
           </CEIPOLButton>
           <CEIPOLButton
-            variant="secondary"
+            variant="confirm"
             size="sm"
-            onClick={() => setScinceDataConfirm(null)}
+            disabled={!canAdmitSourceToInstitutionalContext(scinceDataConfirm?.sourceItem)}
+            onClick={async () => {
+              if (!scinceDataConfirm || !canAdmitSourceToInstitutionalContext(scinceDataConfirm.sourceItem)) return;
+              const nextAnalysisResult = {
+                ...(analysisResult || {}),
+                scinceDemographics: scinceDataConfirm.payload,
+              } as any;
+              try {
+                await registerSweep({
+                  engine: "Demografía territorial (INEGI)",
+                  source: "INEGI Censo 2020 / Marco Geoestadístico",
+                  type: "Directa",
+                  relevance: "Medio",
+                  data: scinceDataConfirm.content,
+                  context: JSON.stringify({
+                    provenance: scinceDataConfirm.payload?.provenance,
+                    geography: scinceDataConfirm.payload?.geography,
+                    queryCoordinates: scinceDataConfirm.payload?.coordenadas,
+                  }),
+                  createVisualEvidence: false,
+                } as any);
+                setAnalysisResult(nextAnalysisResult);
+                await updateProjectDetails({ iaAnalysis: nextAnalysisResult } as any);
+                setScinceDataConfirm(null);
+                setToast({ type: "success", message: "✓ Demografía territorial oficial incorporada al expediente" });
+              } catch (err: any) {
+                setError(err.message || "No fue posible persistir la demografía territorial.");
+              }
+            }}
           >
-            Cerrar diagnóstico
+            Incorporar al expediente
           </CEIPOLButton>
         </div>
       </DynamicPopup>

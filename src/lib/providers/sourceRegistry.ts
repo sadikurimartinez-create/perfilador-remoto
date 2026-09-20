@@ -32,11 +32,16 @@ export interface SourceRouteDescriptor {
   notes: string;
 }
 
+export interface ScinceRouteReadiness {
+  ready: boolean;
+  datasetId?: string;
+}
+
 function configured(value: string | undefined): SourceAvailability {
   return value ? "AVAILABLE" : "NOT_CONFIGURED";
 }
 
-export function getSourceRoutes(): SourceRouteDescriptor[] {
+export function getSourceRoutes(options?: { scinceReadiness?: ScinceRouteReadiness }): SourceRouteDescriptor[] {
   const denueAvailability = configured(process.env.INEGI_DENUE_TOKEN);
   const telegramAvailability = configured(process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_PGP_TELEGRAM_BOT_TOKEN);
   const xAvailability = configured(
@@ -45,6 +50,7 @@ export function getSourceRoutes(): SourceRouteDescriptor[] {
       process.env.PGP_X_ACCESS_TOKEN ||
       process.env.NEXT_PUBLIC_PGP_X_ACCESS_TOKEN
   );
+  const scinceReady = options?.scinceReadiness?.ready === true && Boolean(options.scinceReadiness.datasetId);
 
   return [
     {
@@ -72,6 +78,21 @@ export function getSourceRoutes(): SourceRouteDescriptor[] {
       availability: denueAvailability,
       selectedForProductiveAcquisition: false,
       notes: "Diagnostico de conectividad/autenticacion; no reemplaza adquisicion DENUE.",
+    },
+    {
+      sourceFamily: "SCINCE",
+      routeId: "inegi.territorial.local-postgis",
+      providerId: "inegi",
+      action: "scince",
+      sourceType: "INEGI_TERRITORIAL_CPV2020",
+      providerName: "INEGI Censo 2020 / Marco Geoestadistico (PostGIS local)",
+      authoritative: scinceReady,
+      operationalMode: scinceReady ? "AUTHORITATIVE_PRODUCTIVE" : "NOT_CONFIGURED",
+      availability: scinceReady ? "AVAILABLE" : "NOT_CONFIGURED",
+      selectedForProductiveAcquisition: scinceReady,
+      notes: scinceReady
+        ? `Dataset oficial local verificado: ${options?.scinceReadiness?.datasetId}.`
+        : "Requiere PostGIS y un dataset INEGI READY con URLs oficiales, conteos y SHA-256 completos.",
     },
     {
       sourceFamily: "SCINCE",
@@ -177,13 +198,19 @@ export function getSourceRoutes(): SourceRouteDescriptor[] {
   ];
 }
 
-export function getSourceFamilyRoutes(sourceFamily: SourceFamily): SourceRouteDescriptor[] {
-  return getSourceRoutes().filter((route) => route.sourceFamily === sourceFamily);
+export function getSourceFamilyRoutes(
+  sourceFamily: SourceFamily,
+  options?: { scinceReadiness?: ScinceRouteReadiness }
+): SourceRouteDescriptor[] {
+  return getSourceRoutes(options).filter((route) => route.sourceFamily === sourceFamily);
 }
 
-export function selectAuthoritativeRoute(sourceFamily: SourceFamily): SourceRouteDescriptor | null {
+export function selectAuthoritativeRoute(
+  sourceFamily: SourceFamily,
+  options?: { scinceReadiness?: ScinceRouteReadiness }
+): SourceRouteDescriptor | null {
   return (
-    getSourceFamilyRoutes(sourceFamily).find(
+    getSourceFamilyRoutes(sourceFamily, options).find(
       (route) =>
         route.authoritative &&
         route.operationalMode === "AUTHORITATIVE_PRODUCTIVE" &&
@@ -205,7 +232,11 @@ export function classifyEpistemicSource(params: {
   if (providerId === "INEGI_DENUE" || sourceType === "DENUE") {
     return selectAuthoritativeRoute("DENUE") ?? getSourceFamilyRoutes("DENUE")[0] ?? null;
   }
-  if (providerId === "SCINCE_LOCAL_SIMULATOR" || sourceType === "SCINCE" || acquisitionMode === "SIMULATED") {
+  if (providerId === "INEGI" && sourceType === "INEGI_TERRITORIAL_CPV2020" && acquisitionMode === "OBSERVED") {
+    return getSourceFamilyRoutes("SCINCE")
+      .find((route) => route.routeId === "inegi.territorial.local-postgis") ?? null;
+  }
+  if (providerId === "SCINCE_LOCAL_SIMULATOR" || acquisitionMode === "SIMULATED") {
     return getSourceFamilyRoutes("SCINCE").find((route) => route.operationalMode === "SIMULATED") ?? null;
   }
   if (providerId === "GEMINI" && sourceType === "TELEGRAM_CONTEXT") {

@@ -98,18 +98,20 @@ describe("ADR-020.19 - External source provenance", () => {
     expect(provenance.sourceUrl).toBe("https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar");
   });
 
-  test("TEST 2 SCINCE simulated result preserves explicit simulator provenance", async () => {
+  test("TEST 2 SCINCE productivo sin dataset no usa simulador", async () => {
+    delete process.env.DATABASE_URL;
     const { getScinceData } = await import("../src/lib/osintActions");
 
     const result = await getScinceData(21.8818, -102.2916);
     const provenance = result.epistemicIntegrity;
 
-    expect(result.exito).toBe(true);
-    expect(provenance.providerId).toBe("SCINCE_LOCAL_SIMULATOR");
-    expect(provenance.sourceType).toBe("SCINCE");
-    expect(provenance.acquisitionMode).toBe("SIMULATED");
-    expect(provenance.rawSourceReference).toBe("local-simulator:scince-demographic-seed");
-    expect(provenance.resultCount).toBe(1);
+    expect(result.exito).toBe(false);
+    expect(result.status).toBe("NOT_CONFIGURED");
+    expect(provenance.providerId).toBe("INEGI");
+    expect(provenance.sourceType).toBe("INEGI_TERRITORIAL_CPV2020");
+    expect(provenance.acquisitionMode).toBe("OBSERVED");
+    expect(provenance.isSimulated).toBe(false);
+    expect(provenance.resultCount).toBe(0);
   });
 
   test("TEST 3 Telegram Gemini synthesis preserves Gemini provenance and is not Telegram observed", async () => {
@@ -276,7 +278,7 @@ describe("ADR-020.19 - External source provenance", () => {
 
     expect(result.externalSourceProvenance).toHaveLength(3);
     expect(result.externalSourceProvenance?.map((p) => p.providerId)).toEqual([
-      "SCINCE_LOCAL_SIMULATOR",
+      "INEGI",
       "INEGI_DENUE",
       "GEMINI",
     ]);

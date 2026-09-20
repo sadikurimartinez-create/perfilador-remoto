@@ -806,6 +806,7 @@ export class ReportEngineKernelClass {
 
         // Adjuntar el IntelligenceIntegrationContext unificado para los exportadores subsiguientes
         editorialPayload.intelligenceContext = this.context.intelligenceContext;
+        (editorialPayload as any).scinceDemographics = this.context.scinceDemographics || null;
 
         // Aplicar la capa de Síntesis Narrativa de Inteligencia v1.0.7 de forma limpia y no invasiva
         const synthContext = {

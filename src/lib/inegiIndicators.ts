@@ -1,5 +1,6 @@
 export type InegiDemographics = {
   exito: boolean;
+  status: "OBSERVED" | "NO_DATA" | "NOT_CONFIGURED" | "FAILED";
   municipioNombre: string;
   poblacionTotal: string;
   datosExtra: string;
@@ -26,33 +27,40 @@ const AGS_MUNICIPIOS: Record<string, string> = {
   "san francisco de los romo": "01011"
 };
 
-const INEGI_TOKEN = process.env.INEGI_API_TOKEN || "5333be08-38e0-47c9-845a-76e4d12e3adb";
-
 // Indicador 1002000001 = Población Total (Censo)
 const ID_POBLACION = "1002000001"; 
 
 export async function getInegiDemographics(municipio: string | null, estado: string | null): Promise<InegiDemographics> {
   if (!municipio) {
-    return { exito: false, municipioNombre: "Desconocido", poblacionTotal: "N/A", datosExtra: "" };
+    return { exito: false, status: "NO_DATA", municipioNombre: "Desconocido", poblacionTotal: "N/A", datosExtra: "" };
   }
 
   const municipioNormalizado = municipio.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  const estadoNormalizado = estado?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-
   // Por ahora limitamos el enfoque detallado al estado de Aguascalientes
-  let claveGeo = AGS_MUNICIPIOS[municipioNormalizado];
+  const claveGeo = AGS_MUNICIPIOS[municipioNormalizado];
   
   if (!claveGeo) {
-    // Si no es AGS o no se encuentra, devolvemos un fallback genérico para que la IA asuma datos nacionales urbanos
     return { 
       exito: false, 
+      status: "NO_DATA",
       municipioNombre: municipio, 
       poblacionTotal: "No disponible vía API", 
-      datosExtra: "Aplicar promedios urbanos de desempleo (aprox. 3.5%) y población joven (aprox. 25%) según contexto." 
+      datosExtra: "No hay un indicador municipal verificable para la clave solicitada."
     };
   }
 
-  const url = `https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/${ID_POBLACION}/es/${claveGeo}/false/BISE/2.0/${INEGI_TOKEN}?type=json`;
+  const inegiToken = process.env.INEGI_API_TOKEN?.trim();
+  if (!inegiToken) {
+    return {
+      exito: false,
+      status: "NOT_CONFIGURED",
+      municipioNombre: municipio,
+      poblacionTotal: "No disponible",
+      datosExtra: "INEGI_API_TOKEN no está configurado.",
+    };
+  }
+
+  const url = `https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/${ID_POBLACION}/es/${claveGeo}/false/BISE/2.0/${inegiToken}?type=json`;
 
   try {
     const res = await fetch(url, { headers: { "User-Agent": "PerfiladorRemoto/1.0" } });
@@ -66,6 +74,7 @@ export async function getInegiDemographics(municipio: string | null, estado: str
 
     return {
       exito: true,
+      status: "OBSERVED",
       municipioNombre: municipio,
       poblacionTotal: poblacion,
       datosExtra: "Al analizar la colonia, considere la densidad poblacional del municipio y cruce con vulnerabilidades macro (desocupación histórica del 3-4% y alta concentración de población joven de 15 a 29 años)."
@@ -73,6 +82,6 @@ export async function getInegiDemographics(municipio: string | null, estado: str
 
   } catch (err) {
     console.error("[inegiIndicators] Fallo al consultar INEGI:", err);
-    return { exito: false, municipioNombre: municipio, poblacionTotal: "Error de conexión", datosExtra: "" };
+    return { exito: false, status: "FAILED", municipioNombre: municipio, poblacionTotal: "Error de conexión", datosExtra: "" };
   }
 }
