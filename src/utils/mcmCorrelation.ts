@@ -11,6 +11,10 @@ export interface CorrelatedEntity {
     date: string;
     engine: string;
     contextText: string;
+    providerId?: string | null;
+    sourceReference?: string | null;
+    sourceUrl?: string | null;
+    acquisitionMode?: string | null;
   }>;
   reason: string;
 }
@@ -76,7 +80,8 @@ export const runMultiSourceCorrelation = async (
     date: string,
     engine: string,
     contextText: string,
-    baseConfidence = 60
+    baseConfidence = 60,
+    lineage?: { providerId?: string | null; sourceReference?: string | null; sourceUrl?: string | null; acquisitionMode?: string | null }
   ) => {
     if (!value || value.trim().length < 3) return;
     const cleanValue = value.trim();
@@ -87,7 +92,7 @@ export const runMultiSourceCorrelation = async (
 
     if (correlatedMap.has(key)) {
       const entity = correlatedMap.get(key)!;
-      entity.occurrences.push({ source, date: dateStr, engine, contextText });
+      entity.occurrences.push({ source, date: dateStr, engine, contextText, ...lineage });
       if (!entity.sources.includes(source)) {
         entity.sources.push(source);
       }
@@ -101,14 +106,31 @@ export const runMultiSourceCorrelation = async (
         type,
         confidence: baseConfidence,
         sources: [source],
-        occurrences: [{ source, date: dateStr, engine, contextText }],
+        occurrences: [{ source, date: dateStr, engine, contextText, ...lineage }],
         reason: `Mención de ${type.toLowerCase()} en ${source}.`
       });
     }
   };
 
   // Process all sources into a raw flat array of data items
-  const rawItems: Array<{ source: string; platform: string; content: string; date: string; engine: string }> = [];
+  const rawItems: Array<{
+    source: string;
+    platform: string;
+    content: string;
+    date: string;
+    engine: string;
+    providerId?: string | null;
+    sourceReference?: string | null;
+    sourceUrl?: string | null;
+    acquisitionMode?: string | null;
+  }> = [];
+
+  const lineage = (item: any, directUrl?: string | null) => ({
+    providerId: item?.providerId ?? item?.epistemicIntegrity?.providerId ?? null,
+    sourceReference: item?.sourceReference ?? item?.epistemicIntegrity?.sourceReference ?? null,
+    sourceUrl: directUrl ?? item?.sourceUrl ?? item?.epistemicIntegrity?.sourceUrl ?? null,
+    acquisitionMode: item?.acquisitionMode ?? item?.epistemicIntegrity?.acquisitionMode ?? null,
+  });
 
   // 1. YouTube
   if (Array.isArray(rawResults?.youtube)) {
@@ -118,7 +140,8 @@ export const runMultiSourceCorrelation = async (
         platform: "YouTube",
         content: `${yt.title || ""} ${yt.description || ""} ${yt.comments?.join(" ") || ""}`,
         date: yt.publishedAt || new Date().toISOString(),
-        engine: "YouTube Engine"
+        engine: "YouTube Engine",
+        ...lineage(yt, yt.videoId ? `https://www.youtube.com/watch?v=${yt.videoId}` : null),
       });
     });
   }
@@ -131,7 +154,8 @@ export const runMultiSourceCorrelation = async (
         platform: "Telegram",
         content: tg.texto || "",
         date: tg.fecha ? new Date(tg.fecha).toISOString() : new Date().toISOString(),
-        engine: "Telegram Monitor"
+        engine: "Telegram Monitor",
+        ...lineage(tg),
       });
     });
   }
@@ -144,7 +168,8 @@ export const runMultiSourceCorrelation = async (
         platform: "X",
         content: tweet.text || "",
         date: tweet.created_at || new Date().toISOString(),
-        engine: "X API v2"
+        engine: "X API v2",
+        ...lineage(tweet, tweet.id ? `https://x.com/i/web/status/${tweet.id}` : null),
       });
     });
   }
@@ -158,7 +183,8 @@ export const runMultiSourceCorrelation = async (
         platform: "Reddit",
         content: `${data.title || ""} ${data.selftext || ""}`,
         date: data.created_utc ? new Date(data.created_utc * 1000).toISOString() : new Date().toISOString(),
-        engine: "Reddit Engine"
+        engine: "Reddit Engine",
+        ...lineage(rd, data.permalink ? `https://www.reddit.com${data.permalink}` : null),
       });
     });
   }
@@ -182,7 +208,8 @@ export const runMultiSourceCorrelation = async (
       platform: "RSS/Noticias",
       content: `${title} ${desc}`,
       date: n.publishedAt || n.date || new Date().toISOString(),
-      engine: "Radar OSINT Regional"
+      engine: "Radar OSINT Regional",
+      ...lineage(n, n.link || null),
     });
   });
 
@@ -194,7 +221,8 @@ export const runMultiSourceCorrelation = async (
         platform: "Google Drive",
         content: `${file.summary || ""} ${file.extractedText || ""}`,
         date: file.createdAt || new Date().toISOString(),
-        engine: "Perfilador_Ingesta"
+        engine: "Perfilador_Ingesta",
+        ...lineage(file),
       });
     });
   }
@@ -227,27 +255,33 @@ export const runMultiSourceCorrelation = async (
 
     // Extract Mexican phones
     const phones = extractPhones(item.content);
-    phones.forEach(p => registerOccurrence(p, "TELEFONO", item.source, item.date, item.engine, `Mención de teléfono: ${p}`, 75));
+    const itemLineage = {
+      providerId: item.providerId,
+      sourceReference: item.sourceReference,
+      sourceUrl: item.sourceUrl,
+      acquisitionMode: item.acquisitionMode,
+    };
+    phones.forEach(p => registerOccurrence(p, "TELEFONO", item.source, item.date, item.engine, `Mención de teléfono: ${p}`, 75, itemLineage));
 
     // Extract license plates
     const plates = extractPlates(item.content);
-    plates.forEach(pl => registerOccurrence(pl, "VEHICULO", item.source, item.date, item.engine, `Vehículo sospechoso detectado con placa: ${pl}`, 80));
+    plates.forEach(pl => registerOccurrence(pl, "VEHICULO", item.source, item.date, item.engine, `Mención de placa vehicular: ${pl}`, 80, itemLineage));
 
     // Extract hashtags
     const hashtags = extractHashtags(item.content);
-    hashtags.forEach(h => registerOccurrence(h, "HASHTAG", item.source, item.date, item.engine, `Hashtag activo en la red: ${h}`, 50));
+    hashtags.forEach(h => registerOccurrence(h, "HASHTAG", item.source, item.date, item.engine, `Hashtag observado en la fuente: ${h}`, 50, itemLineage));
 
     // Extract known aliases
     KNOWN_ALIASES.forEach(alias => {
       if (item.content.includes(alias)) {
-        registerOccurrence(alias, "PERSONA", item.source, item.date, item.engine, `Mención del alias criminológico: ${alias}`, 70);
+        registerOccurrence(alias, "PERSONA", item.source, item.date, item.engine, `Mención textual del alias: ${alias}`, 70, itemLineage);
       }
     });
 
     // Extract known gangs
     KNOWN_GANGS.forEach(gang => {
       if (new RegExp(`\\b${gang}\\b`, "i").test(item.content)) {
-        registerOccurrence(gang, "PANDILLA", item.source, item.date, item.engine, `Mención de grupo / pandilla: ${gang}`, 75);
+        registerOccurrence(gang, "PANDILLA", item.source, item.date, item.engine, `Mención textual de grupo: ${gang}`, 75, itemLineage);
       }
     });
   });
@@ -295,10 +329,10 @@ export const runMultiSourceCorrelation = async (
   const vehicleMatches = correlatedEntities.filter(e => e.type === "VEHICULO");
 
   if (gangMatches.length > 0) {
-    updatedHypothesis = `Fusión OSINT CEIPOL: Se confirma la incidencia de ${gangMatches.length} organizaciones (${gangMatches.map(g => g.value).join(", ")}) en el cuadrante. `;
+    updatedHypothesis = `Fusión OSINT CEIPOL: Se observaron menciones de ${gangMatches.length} organizaciones (${gangMatches.map(g => g.value).join(", ")}) en las fuentes consultadas; requieren validación analista. `;
   }
   if (phoneMatches.length > 0 || vehicleMatches.length > 0) {
-    updatedHypothesis += `Se identificaron correlaciones multifuente sólidas que vinculan ${phoneMatches.length} teléfonos de contacto y ${vehicleMatches.length} placas vehiculares sospechosas.`;
+    updatedHypothesis += `Se identificaron menciones potencialmente correlacionadas de ${phoneMatches.length} teléfonos y ${vehicleMatches.length} placas; no constituyen atribución confirmada.`;
   }
 
   // Sort chronology

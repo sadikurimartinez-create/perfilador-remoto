@@ -33,6 +33,7 @@ export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
   google_maps: "Google Maps Geosearch",
   street_view: "Street View Vision Analysis",
   apis_gubernamentales: "APIs Gubernamentales (INEGI/DENUE)",
+  openstreetmap: "OpenStreetMap / Overpass",
   facebook_public: "Facebook Páginas Públicas",
   instagram_public: "Instagram Public hashtags"
 };
@@ -82,10 +83,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       const sources = await getAuthorizedSources();
       setAvailableSources(sources);
 
-      // Auto-select all available sources by default (automatic global OSINT sweep)
-      const authorizedKeys = sources.map(s => s.id || "").filter(Boolean);
-      const finalSources = authorizedKeys.length > 0 ? authorizedKeys : Object.keys(SOURCE_PLATFORM_LABELS);
-      setSelectedSources(finalSources);
+      setSelectedSources(Object.keys(SOURCE_PLATFORM_LABELS));
     };
 
     loadPlanAndSources();
@@ -105,7 +103,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
       }
 
       // Trigger the independent hypothesis confirmation popup
-      if (scanData.correlation?.updatedHypothesis) {
+      if (scanData.coveragePanel?.sourcesObserved > 0 && scanData.correlation?.updatedHypothesis) {
         setCifaDataConfirm(scanData.correlation.updatedHypothesis);
       }
       
@@ -120,12 +118,32 @@ export const CifaCeipolPanel: React.FC<Props> = ({
   };
 
   const handleAppendHypothesis = async () => {
-    if (!cifaDataConfirm) return;
+    const hypothesis = cifaDataConfirm || results?.correlation?.updatedHypothesis;
+    if (!hypothesis || !results) return;
+    const observedSources = (results.sourceResults || []).filter((source: any) =>
+      source.acquisitionMode === "OBSERVED" && source.acquisitionStatus === "ACQUIRED"
+    );
+    if (observedSources.length === 0 || !["PRODUCTIVE_OBSERVED", "PARTIAL_PRODUCTIVE"].includes(results.institutionalUse)) {
+      setToast({ type: "warning", message: "No hay evidencia observada elegible para anexar al expediente." });
+      return;
+    }
+
+    const provenance = observedSources.map((source: any) =>
+      `- ${source.providerName} [${source.providerId}] | estado=${source.acquisitionStatus} | modo=${source.acquisitionMode} | simulado=false | ${source.resultCount} resultado(s) | ${source.acquiredAt || "sin fecha"} | ${source.sourceUrl || source.sourceReference}`
+    ).join("\n");
+    onAppendToAnalysis?.(
+      `[CIFA-CEIPOL | ${results.institutionalUse}]\n${hypothesis}\n\nConsulta: ${results.orchestrator?.query || "No registrada"}\nFuentes observadas:\n${provenance}\nValidación: UNREVIEWED`
+    );
     setCifaDataConfirm(null);
-    setToast({
-      type: "warning",
-      message: "CIFA opera como diagnóstico legacy simulado; no se persiste en el expediente ni alimenta el informe institucional.",
-    });
+    setToast({ type: "success", message: "Síntesis y provenance de fuentes observadas anexadas al expediente para revisión." });
+  };
+
+  const sourceStatusClass = (status: string) => {
+    if (status === "ACQUIRED") return "bg-emerald-950/60 text-emerald-400 border-emerald-800/40";
+    if (status === "NO_DATA") return "bg-slate-950 text-slate-300 border-slate-700";
+    if (status === "FAILED") return "bg-red-950/60 text-red-300 border-red-800/40";
+    if (status === "NOT_CONFIGURED") return "bg-amber-950/60 text-amber-300 border-amber-800/40";
+    return "bg-orange-950/60 text-orange-300 border-orange-800/40";
   };
 
   const getPriorityColor = (lvl: string) => {
@@ -151,7 +169,9 @@ export const CifaCeipolPanel: React.FC<Props> = ({
           subtitle="Fusión operativa, orquestación de motores y análisis de correlación multifuente"
           className="border-none pb-0"
           actions={
-            <CEIPOLBadge status="warning">SIMULADO / NO INSTITUCIONAL</CEIPOLBadge>
+            <CEIPOLBadge status={results?.coveragePanel?.sourcesObserved > 0 ? "validated" : "warning"}>
+              {results ? results.institutionalUse : "ORQUESTADOR MULTIFUENTE"}
+            </CEIPOLBadge>
           }
         />
 
@@ -236,7 +256,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-800">
                     <div>
                       <h4 className="text-xs font-bold text-cyan-300 uppercase tracking-wider">Fuentes de Inteligencia Activas ({selectedSources.length}/{Object.keys(SOURCE_PLATFORM_LABELS).length})</h4>
-                      <p className="text-[10px] text-slate-400">Seleccione motores de diagnóstico legacy. Sus resultados son simulados/no institucionales.</p>
+                      <p className="text-[10px] text-slate-400">Cada fuente conserva su estado, proveedor y trazabilidad; las no disponibles no generan sustitutos.</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 text-[10px]">
                       <button
@@ -342,33 +362,40 @@ export const CifaCeipolPanel: React.FC<Props> = ({
               </CEIPOLCard>
             </div>
 
-            {/* Global Coverage Index Progress */}
+            {/* Measurable execution coverage */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-300 uppercase tracking-wider">Índice Global de Cobertura OSINT:</span>
-                <span className="text-lg font-black text-emerald-400">{results.coveragePanel.globalOsintCoverageIndex}%</span>
+                <span className="font-bold text-slate-300 uppercase tracking-wider">Fuentes ejecutadas sobre solicitadas:</span>
+                <span className="text-lg font-black text-emerald-400">{results.coveragePanel.sourcesExecuted}/{results.coveragePanel.sourcesRequested}</span>
               </div>
               <div className="w-full bg-slate-950 rounded-full h-3 border border-slate-800">
                 <div 
                   className="bg-gradient-to-r from-cyan-500 to-emerald-500 h-2.5 rounded-full transition-all duration-1000"
-                  style={{ width: `${results.coveragePanel.globalOsintCoverageIndex}%` }}
+                  style={{ width: `${results.coveragePanel.executionCoveragePercent}%` }}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4 pt-2 text-[10px] text-slate-400 uppercase tracking-wider">
-                <div>Cobertura de Plataforma: <span className="text-slate-200 font-bold">{results.coveragePanel.platformCoverage}%</span></div>
-                <div>Cobertura Territorial Georreferenciada: <span className="text-slate-200 font-bold">{results.coveragePanel.territorialCoverage}%</span></div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 text-[10px] text-slate-400 uppercase tracking-wider">
+                <div>Con datos: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesWithData}</span></div>
+                <div>Observadas: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesObserved}</span></div>
+                <div>Resultados: <span className="text-slate-200 font-bold">{results.coveragePanel.resultsAcquired}</span></div>
+                <div>Georreferenciados: <span className="text-slate-200 font-bold">{results.coveragePanel.georeferencedResults}</span></div>
               </div>
+              <p className="text-[10px] text-slate-500">Cobertura territorial: {results.coveragePanel.territorialCoverageStatus}</p>
             </div>
 
             {/* Sources consulted status list */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Fuentes Consultadas y Estado Operativo</h4>
               <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800">
-                {results.coveragePanel.sourcesConsulted.map((sKey: string) => (
-                  <div key={sKey} className="flex justify-between items-center p-3 text-xs">
-                    <span className="font-bold text-slate-200">{SOURCE_PLATFORM_LABELS[sKey] || sKey}</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 text-[9px] font-bold uppercase tracking-wider">
-                      Consultado OK
+                {results.sourceResults.map((source: any) => (
+                  <div key={`${source.sourceKey}:${source.providerId}`} className="flex justify-between items-start gap-3 p-3 text-xs">
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-200">{SOURCE_PLATFORM_LABELS[source.sourceKey] || source.providerName}</span>
+                      <p className="text-[9px] text-slate-500 mt-1">{source.providerName} · {source.acquisitionMode} · {source.resultCount} resultado(s)</p>
+                      {source.errorMessage && <p className="text-[9px] text-slate-400 mt-1">{source.errorMessage}</p>}
+                    </div>
+                    <span className={`shrink-0 px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${sourceStatusClass(source.acquisitionStatus)}`}>
+                      {source.acquisitionStatus}
                     </span>
                   </div>
                 ))}
@@ -443,7 +470,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             {/* Recommendations Copilot */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-3">
               <h4 className="text-xs font-bold text-fuchsia-300 uppercase tracking-wider flex items-center gap-1">
-                <span>🤖</span> Recomendaciones del Copiloto Investigativo
+                Recomendaciones Operativas
               </h4>
               <ul className="space-y-2 text-xs">
                 {results.recommendations.map((rec: string, idx: number) => (
@@ -569,7 +596,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
           🛰️ Confirmación de Hipótesis: CIFA-CEIPOL
         </h3>
         <p className="text-xs text-slate-400 mb-3 leading-relaxed font-sans">
-          Se ha realizado el barrido inteligente automático sobre todas las fuentes OSINT autorizadas disponibles. Revise la síntesis predictiva generada a partir de los parámetros tácticos analizados:
+          El barrido conserva únicamente adquisiciones reales y separa los análisis derivados por IA. Revise la síntesis antes de anexarla:
         </p>
         
         {softContext && (
@@ -587,8 +614,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
         </div>
 
         <div className="flex justify-between items-center text-[10px] text-slate-400 mb-4 border-t border-slate-850 pt-2 font-sans">
-          <span>Fuentes: {selectedSources.length} OSINT simuladas</span>
-          <span className="text-amber-400 font-bold uppercase tracking-wider">LEGACY DIAGNÓSTICO</span>
+          <span>Observadas: {results?.coveragePanel?.sourcesObserved || 0}</span>
+          <span className="text-emerald-400 font-bold uppercase tracking-wider">{results?.institutionalUse || "SIN RESULTADO"}</span>
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-slate-800 font-sans">
@@ -604,7 +631,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             onClick={handleAppendHypothesis}
             className="px-4 py-2 text-xs font-bold shadow-md"
           >
-            Mantener Diagnóstico
+            Anexar con Provenance
           </CEIPOLButton>
         </div>
       </DynamicPopup>

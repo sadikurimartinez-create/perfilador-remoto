@@ -60,31 +60,7 @@ export class RedditProvider implements IProvider {
         };
       }
 
-      let data: any = null;
-      try {
-        data = await searchReddit(query);
-      } catch (e) {
-        // Fallback connectivity check to reddit.com if API scraping gets 429
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch("https://www.reddit.com", { method: "GET", signal: controller.signal });
-        clearTimeout(id);
-
-        if (res.status >= 500) {
-          throw new Error(`Reddit server unreachable, status: ${res.status}`);
-        }
-        data = [
-          {
-            data: {
-              title: `Conexión de red de Reddit activa. Búsqueda simulada para '${query}'.`,
-              selftext: "Enlace perimetral con Reddit verificado exitosamente.",
-              subreddit: "Mexico",
-              created_utc: Math.floor(Date.now() / 1000),
-              permalink: "/r/Mexico/comments/ping"
-            }
-          }
-        ];
-      }
+      const data = await searchReddit(query);
 
       const action = params?.action || "search";
       const normalized = GeoDataNormalizerEngine.normalize(this.getId(), action, data, lat, lng);

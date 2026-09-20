@@ -45,14 +45,10 @@ export const searchSerpAPI = async (
       response.data?.organic_results || []
     );
 
-  } catch (error) {
+  } catch {
+    console.error("[SERPAPI] Provider request failed.");
 
-    console.error(
-      'SERPAPI ERROR',
-      error
-    );
-
-    return [];
+    throw new Error("SERPAPI_REQUEST_FAILED");
 
   }
 
@@ -351,8 +347,8 @@ export const searchYouTubeOSINT = async (query: string) => {
     }
 
     return results;
-  } catch (error: any) {
-    console.error('YOUTUBE DATA API ERROR:', error.response?.data?.error?.message || error.message);
-    return [];
+  } catch {
+    console.error("[YouTube Data API] Provider request failed.");
+    throw new Error("YOUTUBE_REQUEST_FAILED");
   }
 };

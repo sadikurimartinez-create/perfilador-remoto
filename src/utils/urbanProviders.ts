@@ -1,11 +1,29 @@
 import axios from 'axios';
+import { classifyExternalFailure, invalidProviderResponse } from './externalProviderError';
 
 const GOOGLE_KEY =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.PGP_GOOGLE_BROWSER_KEY || process.env.PGP_GOOGLE_SERVER_KEY || "";
 
-const OVERPASS_URL =
-  process.env.NEXT_PUBLIC_OVERPASS_API_URL || process.env.PGP_OVERPASS_API_URL ||
-  'https://overpass-api.de/api/interpreter';
+const DEFAULT_OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const ALTERNATE_OVERPASS_URL = 'https://overpass.kumi.systems/api/interpreter';
+
+export function getOverpassEndpoints(): [string, string] {
+  const configured = process.env.PGP_OVERPASS_URL ||
+    process.env.PGP_OVERPASS_API_URL ||
+    process.env.NEXT_PUBLIC_OVERPASS_API_URL;
+  const primary = configured || DEFAULT_OVERPASS_URL;
+  const alternate = primary === DEFAULT_OVERPASS_URL ? ALTERNATE_OVERPASS_URL : DEFAULT_OVERPASS_URL;
+  return [primary, alternate];
+}
+
+export function getOverpassSourceReference(): string {
+  try {
+    const parsed = new URL(getOverpassEndpoints()[0]);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return DEFAULT_OVERPASS_URL;
+  }
+}
 
 export const searchGooglePlaces =
   async (
@@ -59,14 +77,10 @@ export const searchGooglePlaces =
 
       return results;
 
-    } catch (error) {
+    } catch {
+      console.error("[Google Places] Provider request failed.");
 
-      console.error(
-        'GOOGLE PLACES ERROR',
-        error
-      );
-
-      return [];
+      throw new Error("GOOGLE_PLACES_REQUEST_FAILED");
 
     }
 
@@ -78,57 +92,40 @@ export const searchOverpass =
     lng: number
   ) => {
 
-    try {
-
-      const query = `
-
-[out:json];
-
+    const query = `[out:json][timeout:12];
 (
+  node[amenity](around:500,${lat},${lng});
+  way[amenity](around:500,${lat},${lng});
+  relation[amenity](around:500,${lat},${lng});
+    );
+out center;`;
+    const body = new URLSearchParams({ data: query }).toString();
+    const endpoints = getOverpassEndpoints();
 
-node
-  [amenity]
-  (around:500,${lat},${lng});
-
-way
-  [amenity]
-  (around:500,${lat},${lng});
-
-relation
-  [amenity]
-  (around:500,${lat},${lng});
-
-);
-
-out center;
-
-`;
-
-      const response =
-        await axios.post(
-          OVERPASS_URL,
-          query,
-          {
-            headers: {
-              'Content-Type':
-                'text/plain',
-            },
-          }
-        );
-
-      return (
-        response.data?.elements || []
-      );
-
-    } catch (error) {
-
-      console.error(
-        'OVERPASS ERROR',
-        error
-      );
-
-      return [];
-
+    for (let index = 0; index < endpoints.length; index += 1) {
+      try {
+        const response = await axios.post(endpoints[index], body, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'User-Agent': 'PERFILADOR-REMOTO-SSPE-CEIPOL/1.0',
+          },
+          timeout: 15_000,
+        });
+        if (!Array.isArray(response.data?.elements)) throw invalidProviderResponse();
+        return response.data.elements;
+      } catch (error) {
+        const classified = classifyExternalFailure(error);
+        const retryable = ["RATE_LIMITED", "PROVIDER_UNAVAILABLE", "NETWORK_ERROR", "TLS_CERTIFICATE_ERROR", "TIMEOUT"]
+          .includes(classified.failure.reason);
+        const hasAlternate = index === 0 && endpoints.length > 1;
+        if (retryable && hasAlternate) {
+          console.warn(`[Overpass] Primary endpoint failed (${classified.failure.reason}); trying one alternate endpoint.`);
+          continue;
+        }
+        console.error(`[Overpass] Provider request failed (${classified.failure.reason}).`);
+        throw classified;
+      }
     }
-
+    throw classifyExternalFailure(new Error("OVERPASS_UNREACHABLE"));
   };

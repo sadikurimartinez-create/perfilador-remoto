@@ -6,6 +6,7 @@ import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, Ep
 import { prepareDenueAcquisitionPois } from "@/utils/denueCanonicalPoi";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
 import { resolveInegiTerritory } from "./inegiTerritorialResolver";
+import { classifyExternalFailure, classifyHttpFailure, invalidProviderResponse } from "@/utils/externalProviderError";
 
 export type DenueQueryStatus =
   | "SUCCESS"
@@ -134,6 +135,8 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
         exito: false,
         denueStatus: "NOT_ELIGIBLE" as DenueQueryStatus,
         error: DENUE_STATUS_MESSAGES.NOT_ELIGIBLE,
+        sanitizedFailureReason: "INVALID_REQUEST",
+        providerErrorCode: "INVALID_COORDINATES",
         epistemicIntegrity: denueIntegrity({
           acquisitionStatus: "FAILED",
           generatedAt: new Date().toISOString(),
@@ -147,6 +150,8 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
         exito: false,
         denueStatus: "NOT_CONFIGURED" as DenueQueryStatus,
         error: DENUE_STATUS_MESSAGES.NOT_CONFIGURED,
+        sanitizedFailureReason: "NOT_CONFIGURED",
+        providerErrorCode: "DENUE_TOKEN_NOT_CONFIGURED",
         epistemicIntegrity: denueIntegrity({
           acquisitionStatus: "NOT_CONFIGURED",
           generatedAt: new Date().toISOString(),
@@ -155,14 +160,18 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
       };
     }
     const url = `https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar/todos/${lat},${lng}/${radio}/${token}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) {
+      const failure = classifyHttpFailure(res.status).failure;
       return {
         exito: false,
         denueStatus: (res.status === 401 || res.status === 403 ? "AUTH_ERROR" : "PROVIDER_ERROR") as DenueQueryStatus,
         error: res.status === 401 || res.status === 403
           ? DENUE_STATUS_MESSAGES.AUTH_ERROR
           : `${DENUE_STATUS_MESSAGES.PROVIDER_ERROR} HTTP ${res.status}`,
+        httpStatus: failure.httpStatus,
+        sanitizedFailureReason: failure.reason,
+        providerErrorCode: failure.technicalCode,
         epistemicIntegrity: denueIntegrity({
           acquisitionStatus: "FAILED",
           generatedAt: new Date().toISOString(),
@@ -171,13 +180,37 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
       };
     }
     
-    const data = await res.json();
-    if (!Array.isArray(data)) {
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      const failure = invalidProviderResponse().failure;
       return {
         exito: false,
         denueStatus: "INVALID_RESPONSE" as DenueQueryStatus,
         total: 0,
-        error: DENUE_STATUS_MESSAGES.INVALID_RESPONSE,
+        error: failure.message,
+        sanitizedFailureReason: failure.reason,
+        providerErrorCode: failure.technicalCode,
+        epistemicIntegrity: denueIntegrity({
+          acquisitionStatus: "FAILED",
+          generatedAt: new Date().toISOString(),
+          resultCount: 0,
+        }),
+      };
+    }
+    const records = Array.isArray(data) && data.every((record) => (
+      record !== null && typeof record === "object" && !Array.isArray(record)
+    )) ? data : null;
+    if (!records) {
+      const failure = invalidProviderResponse().failure;
+      return {
+        exito: false,
+        denueStatus: "INVALID_RESPONSE" as DenueQueryStatus,
+        total: 0,
+        error: failure.message,
+        sanitizedFailureReason: failure.reason,
+        providerErrorCode: failure.technicalCode,
         epistemicIntegrity: denueIntegrity({
           acquisitionStatus: "FAILED",
           generatedAt: new Date().toISOString(),
@@ -186,27 +219,33 @@ export async function getDenueData(lat: number, lng: number, radio: number = 500
       };
     }
     const acquiredAt = new Date().toISOString();
-    const pois = prepareDenueAcquisitionPois(data, { query, acquiredAt });
-    const negocios = data.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
+    const pois = prepareDenueAcquisitionPois(records, { query, acquiredAt });
+    const negocios = records.map((n: any) => `${n.Nombre} (${n.Clase_actividad})`);
     const topNegocios = negocios.slice(0, 8).join(" | ");
 
     return {
       exito: true,
-      denueStatus: (data.length > 0 ? "SUCCESS" : "EMPTY") as DenueQueryStatus,
-      total: data.length,
+      denueStatus: (records.length > 0 ? "SUCCESS" : "EMPTY") as DenueQueryStatus,
+      total: records.length,
       pois,
-      resumen: data.length > 0 ? `${topNegocios}${data.length > 8 ? `... y ${data.length - 8} más` : ""}` : DENUE_STATUS_MESSAGES.EMPTY,
+      resumen: records.length > 0 ? `${topNegocios}${records.length > 8 ? `... y ${records.length - 8} más` : ""}` : DENUE_STATUS_MESSAGES.EMPTY,
       epistemicIntegrity: denueIntegrity({
-        acquisitionStatus: data.length > 0 ? "ACQUIRED" : "NO_DATA",
+        acquisitionStatus: records.length > 0 ? "ACQUIRED" : "NO_DATA",
         observedAt: acquiredAt,
-        resultCount: data.length,
+        resultCount: records.length,
       }),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const failure = classifyExternalFailure(error).failure;
     return {
       exito: false,
       denueStatus: "PROVIDER_ERROR" as DenueQueryStatus,
-      error: error.message || DENUE_STATUS_MESSAGES.PROVIDER_ERROR,
+      error: failure.message,
+      httpStatus: failure.httpStatus,
+      sanitizedFailureReason: failure.reason,
+      providerErrorCode: failure.technicalCode,
+      nativeErrorCode: failure.nativeErrorCode,
+      nativeCauseCode: failure.nativeCauseCode,
       epistemicIntegrity: osintEpistemicIntegrity({
         sourceId: "inegi-denue-api",
         providerId: "INEGI_DENUE",

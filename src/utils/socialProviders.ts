@@ -2,6 +2,12 @@
 
 import axios from 'axios';
 import { GoogleAuth } from 'google-auth-library';
+import {
+  ExternalProviderError,
+  classifyExternalFailure,
+  classifyHttpFailure,
+  invalidProviderResponse,
+} from './externalProviderError';
 
 const REDDIT_USER_AGENT =
   process.env.PGP_REDDIT_USER_AGENT || process.env.REDDIT_USER_AGENT || "";
@@ -16,8 +22,6 @@ const TELEGRAM_TOKEN =
 const DISCOVERY_PROJECT_ID = process.env.PGP_DISCOVERY_PROJECT_ID || "";
 const DISCOVERY_LOCATION = process.env.PGP_DISCOVERY_LOCATION || "";
 const DISCOVERY_ENGINE_ID = process.env.PGP_DISCOVERY_ENGINE_ID || "";
-const DISCOVERY_API_KEY = process.env.PGP_DISCOVERY_API_KEY || "";
-
 // Claves para Vertex AI (Análisis de Inteligencia)
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || "";
 const GCP_LOCATION = process.env.GCP_LOCATION || "us-central1";
@@ -25,6 +29,28 @@ const GCP_LOCATION = process.env.GCP_LOCATION || "us-central1";
 const GCP_CLIENT_EMAIL = process.env.GCP_CLIENT_EMAIL || "";
 const GCP_PRIVATE_KEY = process.env.GCP_PRIVATE_KEY ? process.env.GCP_PRIVATE_KEY.replace(/\\n/g, '\n') : "";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+
+function discoveryText(value: any): string {
+  return typeof value === "string" ? value : value?.stringValue || "";
+}
+
+function formatDiscoveryResults(results: any[]): any[] {
+  return results.flatMap((result: any) => {
+    const document = result?.document;
+    if (!document || typeof document !== "object") return [];
+    const derived = document.derivedStructData || {};
+    const fields = derived.fields || {};
+    const snippets = Array.isArray(derived.snippets) ? derived.snippets : null;
+    const protobufSnippet = fields.snippets?.listValue?.values?.[0]?.structValue?.fields?.snippet;
+    return [{
+      id: document.id || document.name || null,
+      source: "Google Discovery Engine",
+      title: discoveryText(derived.title) || discoveryText(fields.title) || "Sin título",
+      link: discoveryText(derived.link) || discoveryText(fields.link) || null,
+      snippet: discoveryText(snippets?.[0]?.snippet) || discoveryText(protobufSnippet) || "",
+    }];
+  });
+}
 
 export const buscarEnWebOSINT = async (query: string) => {
   if (!DISCOVERY_PROJECT_ID || !DISCOVERY_LOCATION || !DISCOVERY_ENGINE_ID) {
@@ -38,7 +64,7 @@ export const buscarEnWebOSINT = async (query: string) => {
     queryExpansionSpec: { condition: "AUTO" },
     spellCorrectionSpec: { mode: "AUTO" },
     contentSearchSpec: {
-      summaryResultCount: 3,
+      summarySpec: { summaryResultCount: 3 },
       extractiveContentSpec: { maxExtractiveAnswerCount: 1 },
     },
   };
@@ -55,37 +81,52 @@ export const buscarEnWebOSINT = async (query: string) => {
         client_email: GCP_CLIENT_EMAIL,
         private_key: GCP_PRIVATE_KEY,
       };
-      authOptions.projectId = GCP_PROJECT_ID;
+      authOptions.projectId = DISCOVERY_PROJECT_ID;
     }
 
-    const auth = new GoogleAuth(authOptions);
-    const client = await auth.getClient();
-    const tokenResponse = await client.getAccessToken();
-    const token = tokenResponse.token;
-
-    if (!token) {
-      throw new Error("No se pudo obtener el token de acceso OAuth2.");
+    let token: string;
+    try {
+      const auth = new GoogleAuth(authOptions);
+      const client = await auth.getClient();
+      const tokenResponse = await client.getAccessToken();
+      if (!tokenResponse.token) throw new Error("TOKEN_UNAVAILABLE");
+      token = tokenResponse.token;
+    } catch (error) {
+      const oauthFailure = classifyExternalFailure(error).failure;
+      const rejectedCredentials = oauthFailure.reason === "AUTH_FAILED" ||
+        oauthFailure.reason === "INVALID_REQUEST" ||
+        ["invalid_grant", "invalid_client", "unauthorized_client"].includes(oauthFailure.nativeErrorCode || "");
+      throw new ExternalProviderError({
+        ...oauthFailure,
+        reason: rejectedCredentials ? "AUTH_FAILED" : oauthFailure.reason,
+        technicalCode: rejectedCredentials ? "GOOGLE_OAUTH_REJECTED" : oauthFailure.technicalCode,
+      });
     }
 
-    // Ruta REST oficial corregida (incluye /collections/default_collection/)
-    const url = `https://discoveryengine.googleapis.com/v1/projects/${DISCOVERY_PROJECT_ID}/locations/${DISCOVERY_LOCATION}/collections/default_collection/engines/${DISCOVERY_ENGINE_ID}/servingConfigs/default_search:search`;
+    if (!["global", "us", "eu"].includes(DISCOVERY_LOCATION)) {
+      throw new ExternalProviderError({ reason: "INVALID_REQUEST", technicalCode: "INVALID_DISCOVERY_LOCATION" });
+    }
+    const discoveryHost = DISCOVERY_LOCATION === "global"
+      ? "discoveryengine.googleapis.com"
+      : `${DISCOVERY_LOCATION}-discoveryengine.googleapis.com`;
+    const url = `https://${discoveryHost}/v1/projects/${DISCOVERY_PROJECT_ID}/locations/${DISCOVERY_LOCATION}/collections/default_collection/engines/${DISCOVERY_ENGINE_ID}/servingConfigs/default_search:search`;
 
     console.log(`[WEB OSINT] 🚀 Buscando en Discovery Engine: "${query}"`);
-    const response = await axios.post(url, payload, { 
+    const response = await axios.post(url, payload, {
       headers: { 
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json' 
-      } 
+      },
+      timeout: 15_000,
+      validateStatus: () => true,
     });
+    if (response.status < 200 || response.status >= 300) throw classifyHttpFailure(response.status);
 
-    const results = response.data?.results || [];
+    if (!Array.isArray(response.data?.results)) throw invalidProviderResponse();
+    const results = response.data.results;
     console.log(`[WEB OSINT] ✅ Búsqueda completada. ${results.length} resultados obtenidos. El semáforo se puede poner en verde.`);
 
-    const formattedResults = results.map((res: any) => {
-      const doc = res.document?.derivedStructData?.fields || {};
-      const snippet = doc.snippets?.listValue?.values?.[0]?.structValue?.fields?.snippet?.stringValue || "No hay resumen disponible.";
-      return { title: doc.title?.stringValue || "Sin título", link: doc.link?.stringValue || "#", snippet };
-    });
+    const formattedResults = formatDiscoveryResults(results);
 
     let analisisInteligencia = null;
 
@@ -157,21 +198,23 @@ Devuelve la información ESTRICTAMENTE en formato JSON válido con esta estructu
         const cleanJsonText = geminiText.replace(/```json/g, "").replace(/```/g, "").trim();
         analisisInteligencia = JSON.parse(cleanJsonText);
         console.log(`[WEB OSINT] ✅ Análisis de inteligencia generado correctamente con Vertex AI.`);
-      } catch (vertexError: any) {
-        console.error("ERROR EN ANÁLISIS VERTEX AI:", vertexError.response?.data?.error?.message || vertexError.message);
+      } catch (error) {
+        const failure = classifyExternalFailure(error).failure;
+        console.error(`[Discovery Engine] Vertex AI analysis failed (${failure.reason}); observed search results are preserved.`);
       }
     }
 
     return { resultadosWeb: formattedResults, analisisInteligencia };
-  } catch (error: any) {
-    console.error("DISCOVERY ENGINE ERROR:", error.response?.data?.error?.message || error.message);
-    return { resultadosWeb: [], analisisInteligencia: null };
+  } catch (error) {
+    const classified = classifyExternalFailure(error);
+    console.error(`[Discovery Engine] Provider request failed (${classified.failure.reason}).`);
+    throw classified;
   }
 };
 
 export const analyzeStreetViewWithGemini = async (lat: number, lng: number) => {
   const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
-  if (!GCP_PROJECT_ID || !MAPS_KEY) return null;
+  if (!MAPS_KEY) return null;
 
   const headings = [0, 90, 180, 270];
   const svImages: string[] = [];
@@ -184,11 +227,13 @@ export const analyzeStreetViewWithGemini = async (lat: number, lng: number) => {
       // Validamos que no sea la imagen genérica gris de "No image available"
       if (base64.length > 10000) svImages.push(base64);
     }
-  } catch (e) { 
-    console.error("Error obteniendo imágenes de Street View:", e); 
+  } catch {
+    console.error("[Street View] Image acquisition failed.");
+    throw new Error("STREET_VIEW_IMAGE_REQUEST_FAILED");
   }
 
-  if (svImages.length === 0) return null;
+  if (svImages.length === 0) return { analisis: null, imagenesBase64: [] };
+  if (!GCP_PROJECT_ID) return { analisis: null, imagenesBase64: svImages };
 
   try {
     const authOptions: any = { scopes: ['https://www.googleapis.com/auth/cloud-platform'] };
@@ -214,9 +259,9 @@ export const analyzeStreetViewWithGemini = async (lat: number, lng: number) => {
     const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "No se detectaron hallazgos relevantes en el entorno visual.";
     
     return { analisis: text, imagenesBase64: svImages };
-  } catch (error) {
-    console.error("Error en Gemini Street View Analysis:", error);
-    return null;
+  } catch {
+    console.error("[Street View] Gemini analysis failed; observed images are preserved.");
+    return { analisis: null, imagenesBase64: svImages };
   }
 };
 
@@ -246,14 +291,10 @@ export const searchReddit = async (
       response.data?.data?.children || []
     );
 
-  } catch (error) {
+  } catch {
+    console.error("[Reddit] Provider request failed.");
 
-    console.error(
-      'REDDIT ERROR',
-      error
-    );
-
-    return [];
+    throw new Error("REDDIT_REQUEST_FAILED");
 
   }
 
@@ -292,12 +333,9 @@ export const searchTelegram = async (
       };
     });
 
-  } catch (error) {
-    console.error(
-      'TELEGRAM ERROR',
-      error
-    );
-    return [];
+  } catch {
+    console.error("[Telegram] Provider request failed.");
+    throw new Error("TELEGRAM_REQUEST_FAILED");
   }
 
 };
@@ -333,14 +371,9 @@ export const searchX = async (
       response.data?.data || []
     );
 
-  } catch (error) {
-
-    console.error(
-      'X/TWITTER ERROR',
-      error
-    );
-
-    return [];
+  } catch {
+    console.error("[X API] Provider request failed.");
+    throw new Error("X_REQUEST_FAILED");
 
   }
 
