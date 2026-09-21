@@ -20,6 +20,115 @@ const X_BEARER =
 const TELEGRAM_TOKEN =
   process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "";
 
+type TelegramBotOperation = "getMe" | "getWebhookInfo" | "getUpdates";
+
+export interface TelegramBotRuntimeStatus {
+  botTokenStatus: "BOT_TOKEN_MISSING" | "BOT_TOKEN_VALID";
+  webhookStatus: "UNKNOWN" | "WEBHOOK_INACTIVE" | "WEBHOOK_ACTIVE";
+  longPollingStatus: "NOT_CONFIGURED" | "LONG_POLLING_AVAILABLE" | "LONG_POLLING_BLOCKED";
+}
+
+function sanitizeTelegramDescription(value: unknown, token: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let sanitized = value.replace(/https?:\/\/api\.telegram\.org\/bot[^\s/]+/gi, "[REDACTED_TELEGRAM_API]");
+  sanitized = sanitized.replace(/bot\d+:[A-Za-z0-9_-]+/g, "bot[REDACTED]");
+  sanitized = sanitized.replace(/(TELEGRAM_(?:BOT_TOKEN|SESSION|API_HASH)\s*[=:]\s*)\S+/gi, "$1[REDACTED]");
+  const sensitiveValues = [token, process.env.TELEGRAM_SESSION, process.env.TELEGRAM_API_HASH]
+    .filter((secret): secret is string => Boolean(secret && secret.length >= 4));
+  for (const secret of sensitiveValues) sanitized = sanitized.split(secret).join("[REDACTED]");
+  sanitized = sanitized.replace(/\s+/g, " ").trim();
+  return sanitized ? sanitized.slice(0, 300) : undefined;
+}
+
+function telegramApiFailure(
+  operation: TelegramBotOperation,
+  httpStatus: number,
+  data: any,
+  token: string
+): ExternalProviderError {
+  const telegramErrorCode = Number(data?.error_code);
+  const hasTelegramErrorCode = Number.isFinite(telegramErrorCode) && telegramErrorCode > 0;
+  const effectiveStatus = hasTelegramErrorCode ? telegramErrorCode : httpStatus;
+  const providerDescription = sanitizeTelegramDescription(data?.description, token);
+
+  if (operation === "getUpdates" && effectiveStatus === 409) {
+    return new ExternalProviderError({
+      reason: "WEBHOOK_CONFLICT",
+      httpStatus,
+      technicalCode: "TELEGRAM_WEBHOOK_CONFLICT",
+      nativeErrorCode: hasTelegramErrorCode ? String(telegramErrorCode) : undefined,
+      providerDescription,
+    });
+  }
+
+  if (effectiveStatus >= 400) {
+    const classified = classifyHttpFailure(effectiveStatus).failure;
+    return new ExternalProviderError({
+      ...classified,
+      httpStatus,
+      technicalCode: `TELEGRAM_${operation.toUpperCase()}_${effectiveStatus}`,
+      nativeErrorCode: hasTelegramErrorCode ? String(telegramErrorCode) : undefined,
+      providerDescription,
+    });
+  }
+
+  return new ExternalProviderError({
+    reason: "INVALID_RESPONSE",
+    httpStatus,
+    technicalCode: `TELEGRAM_${operation.toUpperCase()}_INVALID_RESPONSE`,
+    nativeErrorCode: hasTelegramErrorCode ? String(telegramErrorCode) : undefined,
+    providerDescription,
+  });
+}
+
+async function callTelegramBotApi(operation: TelegramBotOperation): Promise<unknown> {
+  try {
+    const response = await axios.get(
+      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/${operation}`,
+      { timeout: 10_000, validateStatus: () => true }
+    );
+    const httpStatus = Number(response.status ?? 200);
+    if (httpStatus < 200 || httpStatus >= 300 || response.data?.ok === false) {
+      throw telegramApiFailure(operation, httpStatus, response.data, TELEGRAM_TOKEN);
+    }
+    if (!response.data || typeof response.data !== "object" || response.data.ok !== true) {
+      throw invalidProviderResponse();
+    }
+    return response.data.result;
+  } catch (error) {
+    if (error instanceof ExternalProviderError) throw error;
+    const response = (error as any)?.response;
+    const httpStatus = Number(response?.status);
+    if (Number.isFinite(httpStatus) && httpStatus > 0) {
+      throw telegramApiFailure(operation, httpStatus, response?.data, TELEGRAM_TOKEN);
+    }
+    throw classifyExternalFailure(error);
+  }
+}
+
+export const inspectTelegramBotRuntime = async (): Promise<TelegramBotRuntimeStatus> => {
+  if (!TELEGRAM_TOKEN) {
+    return {
+      botTokenStatus: "BOT_TOKEN_MISSING",
+      webhookStatus: "UNKNOWN",
+      longPollingStatus: "NOT_CONFIGURED",
+    };
+  }
+
+  const bot = await callTelegramBotApi("getMe");
+  if (!bot || typeof bot !== "object") throw invalidProviderResponse();
+  const webhook = await callTelegramBotApi("getWebhookInfo");
+  if (!webhook || typeof webhook !== "object" || typeof (webhook as any).url !== "string") {
+    throw invalidProviderResponse();
+  }
+  const webhookActive = (webhook as any).url.trim().length > 0;
+  return {
+    botTokenStatus: "BOT_TOKEN_VALID",
+    webhookStatus: webhookActive ? "WEBHOOK_ACTIVE" : "WEBHOOK_INACTIVE",
+    longPollingStatus: webhookActive ? "LONG_POLLING_BLOCKED" : "LONG_POLLING_AVAILABLE",
+  };
+};
+
 // Claves para Vertex AI Search (Discovery Engine)
 const DISCOVERY_PROJECT_ID = process.env.PGP_DISCOVERY_PROJECT_ID || "";
 const DISCOVERY_LOCATION = process.env.PGP_DISCOVERY_LOCATION || "";
@@ -368,22 +477,18 @@ export const searchTelegram = async (
   }
 
   try {
-    // Nota: La API oficial de Bots de Telegram lee mensajes de grupos/canales donde el bot es miembro.
-    // Utilizamos getUpdates para recuperar los mensajes recientes que el bot ha captado.
-    const response = await axios.get(
-      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`
-    );
-
-    if (response.data?.ok === false) {
-      const telegramCode = Number(response.data?.error_code);
-      if (telegramCode === 409) {
-        throw new ExternalProviderError({ reason: "PROVIDER_UNAVAILABLE", httpStatus: 409, technicalCode: "TELEGRAM_WEBHOOK_CONFLICT" });
-      }
-      if (Number.isFinite(telegramCode) && telegramCode > 0) throw classifyHttpFailure(telegramCode);
-      throw invalidProviderResponse();
+    const runtimeStatus = await inspectTelegramBotRuntime();
+    if (runtimeStatus.longPollingStatus === "LONG_POLLING_BLOCKED") {
+      throw new ExternalProviderError({
+        reason: "WEBHOOK_CONFLICT",
+        technicalCode: "TELEGRAM_WEBHOOK_ACTIVE",
+        providerDescription: "Telegram reporta un webhook activo; getUpdates no está disponible.",
+      });
     }
-    if (response.data?.ok !== true || !Array.isArray(response.data?.result)) throw invalidProviderResponse();
-    const updates = response.data.result;
+
+    // Bot API only exposes updates delivered to this bot; it is not a global Telegram search.
+    const updates = await callTelegramBotApi("getUpdates");
+    if (!Array.isArray(updates)) throw invalidProviderResponse();
     const queryTerms = query
       .split(/\s+OR\s+/i)
       .map((term) => term.trim().toLowerCase())
@@ -401,13 +506,20 @@ export const searchTelegram = async (
       return {
         texto: msg.text || "",
         chat: msg.chat?.title || msg.chat?.username || "Chat Monitorizado",
-        fecha: new Date((msg.date || Math.floor(Date.now() / 1000)) * 1000).toLocaleString("es-MX")
+        fecha: Number.isFinite(Number(msg.date)) ? new Date(Number(msg.date) * 1000).toISOString() : null,
       };
     });
 
   } catch (error) {
-    console.error("[Telegram] Provider request failed.");
-    throw classifyExternalFailure(error);
+    const classified = classifyExternalFailure(error);
+    console.error("[Telegram] Provider request failed.", {
+      reason: classified.failure.reason,
+      status: classified.failure.httpStatus ?? null,
+      telegramErrorCode: classified.failure.nativeErrorCode ?? null,
+      technicalCode: classified.failure.technicalCode ?? null,
+      description: classified.failure.providerDescription ?? null,
+    });
+    throw classified;
   }
 
 };

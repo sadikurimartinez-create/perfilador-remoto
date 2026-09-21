@@ -35,6 +35,7 @@ const originalProviderEnv = {
   redditBearer: process.env.REDDIT_BEARER_TOKEN,
   pgpRedditBearer: process.env.PGP_REDDIT_BEARER_TOKEN,
   telegramToken: process.env.PGP_TELEGRAM_BOT_TOKEN,
+  telegramTokenAlias: process.env.TELEGRAM_BOT_TOKEN,
   mapsKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
   serpApiKey: process.env.PGP_SERPAPI_API_KEY,
 };
@@ -57,6 +58,13 @@ function restoreEnv(name: string, value: string | undefined) {
   } else {
     process.env[name] = value;
   }
+}
+
+function mockTelegramLongPolling(getMock: jest.Mock, updates: unknown[]) {
+  getMock
+    .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1, username: "test_bot" } } })
+    .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "", pending_update_count: 0 } } })
+    .mockResolvedValueOnce({ status: 200, data: { ok: true, result: updates } });
 }
 
 const denueRecord = {
@@ -98,6 +106,7 @@ afterAll(() => {
   restoreEnv("REDDIT_BEARER_TOKEN", originalProviderEnv.redditBearer);
   restoreEnv("PGP_REDDIT_BEARER_TOKEN", originalProviderEnv.pgpRedditBearer);
   restoreEnv("PGP_TELEGRAM_BOT_TOKEN", originalProviderEnv.telegramToken);
+  restoreEnv("TELEGRAM_BOT_TOKEN", originalProviderEnv.telegramTokenAlias);
   restoreEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", originalProviderEnv.mapsKey);
   restoreEnv("PGP_SERPAPI_API_KEY", originalProviderEnv.serpApiKey);
 });
@@ -459,6 +468,7 @@ describe("Google Discovery Engine productive contract", () => {
 
 describe("CIFA external provider readiness and failure semantics", () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.resetModules();
     (axios.get as jest.Mock).mockReset();
     (axios.post as jest.Mock).mockReset();
@@ -518,34 +528,153 @@ describe("CIFA external provider readiness and failure semantics", () => {
 
   test("Telegram matches OR terms only within updates delivered to the configured bot", async () => {
     process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    delete process.env.TELEGRAM_BOT_TOKEN;
     jest.resetModules();
     const dynamicAxios = (await import("axios")).default;
-    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({
-      data: {
-        ok: true,
-        result: [
-          { message: { text: "Reporte de robo", date: 1, chat: { title: "Canal A" } } },
-          { channel_post: { text: "Sin novedad", date: 1, chat: { title: "Canal B" } } },
-        ],
-      },
-    });
-    const { searchTelegram } = await import("../src/utils/socialProviders");
+    mockTelegramLongPolling(dynamicAxios.get as jest.Mock, [
+      { message: { text: "Reporte de robo", date: 1, chat: { title: "Canal A" } } },
+      { channel_post: { text: "Sin novedad", date: 1, chat: { title: "Canal B" } } },
+    ]);
+    const { inspectTelegramBotRuntime, searchTelegram } = await import("../src/utils/socialProviders");
 
     await expect(searchTelegram("Aguascalientes operativo OR robo OR detención")).resolves.toEqual([
       expect.objectContaining({ texto: "Reporte de robo", chat: "Canal A" }),
     ]);
+    expect(dynamicAxios.get).toHaveBeenCalledTimes(3);
+    expect((dynamicAxios.get as jest.Mock).mock.calls.map((call) => call[0].split("/").pop())).toEqual([
+      "getMe",
+      "getWebhookInfo",
+      "getUpdates",
+    ]);
+
+    (dynamicAxios.get as jest.Mock).mockReset();
+    (dynamicAxios.get as jest.Mock)
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1 } } })
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "" } } });
+    await expect(inspectTelegramBotRuntime()).resolves.toEqual({
+      botTokenStatus: "BOT_TOKEN_VALID",
+      webhookStatus: "WEBHOOK_INACTIVE",
+      longPollingStatus: "LONG_POLLING_AVAILABLE",
+    });
   });
 
-  test("Telegram webhook conflict remains a classified provider failure", async () => {
+  test("Telegram valid updates without matches remain NO_DATA-compatible", async () => {
     process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
     jest.resetModules();
     const dynamicAxios = (await import("axios")).default;
-    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { ok: false, error_code: 409 } });
+    mockTelegramLongPolling(dynamicAxios.get as jest.Mock, [
+      { message: { text: "Sin novedad", date: 1, chat: { title: "Canal A" } } },
+    ]);
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(searchTelegram("robo OR detención")).resolves.toEqual([]);
+  });
+
+  test("Telegram detects an active webhook before attempting long polling", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock)
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1 } } })
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "https://webhook.invalid/secret" } } });
     const { searchTelegram } = await import("../src/utils/socialProviders");
 
     await expect(searchTelegram("consulta")).rejects.toMatchObject({
-      failure: { reason: "PROVIDER_UNAVAILABLE", technicalCode: "TELEGRAM_WEBHOOK_CONFLICT" },
+      failure: { reason: "WEBHOOK_CONFLICT", technicalCode: "TELEGRAM_WEBHOOK_ACTIVE" },
     });
+    expect(dynamicAxios.get).toHaveBeenCalledTimes(2);
+    expect((dynamicAxios.get as jest.Mock).mock.calls.some((call) => String(call[0]).includes("deleteWebhook"))).toBe(false);
+  });
+
+  test("Telegram getUpdates 409 preserves sanitized provider detail without leaking the token", async () => {
+    const token = "123456:test-secret-token";
+    process.env.PGP_TELEGRAM_BOT_TOKEN = token;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock)
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1 } } })
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "" } } })
+      .mockResolvedValueOnce({
+        status: 409,
+        data: {
+          ok: false,
+          error_code: 409,
+          description: `Conflict at https://api.telegram.org/bot${token}/getUpdates`,
+        },
+      });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    const failure = await searchTelegram("consulta").catch((error) => error.failure);
+    expect(failure).toMatchObject({
+      reason: "WEBHOOK_CONFLICT",
+      httpStatus: 409,
+      nativeErrorCode: "409",
+      technicalCode: "TELEGRAM_WEBHOOK_CONFLICT",
+    });
+    expect(failure.providerDescription).not.toContain(token);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(token);
+  });
+
+  test.each([
+    [401, "AUTH_FAILED"],
+    [429, "RATE_LIMITED"],
+    [503, "PROVIDER_UNAVAILABLE"],
+  ])("Telegram HTTP %s remains %s", async (status, reason) => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({
+      status,
+      data: { ok: false, error_code: status, description: "Sanitized provider detail" },
+    });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(searchTelegram("consulta")).rejects.toMatchObject({
+      failure: { reason, httpStatus: status, nativeErrorCode: String(status) },
+    });
+  });
+
+  test.each([
+    ["ECONNABORTED", "TIMEOUT"],
+    ["ECONNRESET", "NETWORK_ERROR"],
+  ])("Telegram network code %s remains %s", async (code, reason) => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce(networkError(code));
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(searchTelegram("consulta")).rejects.toMatchObject({ failure: { reason } });
+  });
+
+  test("Telegram rejects an invalid Bot API response", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ status: 200, data: { ok: true, result: null } });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(searchTelegram("consulta")).rejects.toMatchObject({ failure: { reason: "INVALID_RESPONSE" } });
+  });
+
+  test("Telegram without a bot token performs no provider request", async () => {
+    delete process.env.PGP_TELEGRAM_BOT_TOKEN;
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const { inspectTelegramBotRuntime, searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(inspectTelegramBotRuntime()).resolves.toEqual({
+      botTokenStatus: "BOT_TOKEN_MISSING",
+      webhookStatus: "UNKNOWN",
+      longPollingStatus: "NOT_CONFIGURED",
+    });
+    await expect(searchTelegram("consulta")).resolves.toEqual([]);
+    expect(dynamicAxios.get).not.toHaveBeenCalled();
   });
 
   test("the canonical YouTube key is preferred when both names exist", async () => {

@@ -43,7 +43,7 @@ function configured(value: string | undefined): SourceAvailability {
 
 export function getSourceRoutes(options?: { scinceReadiness?: ScinceRouteReadiness }): SourceRouteDescriptor[] {
   const denueAvailability = configured(process.env.INEGI_DENUE_TOKEN);
-  const telegramAvailability = configured(process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_PGP_TELEGRAM_BOT_TOKEN);
+  const telegramAvailability = configured(process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN);
   const xAvailability = configured(
     process.env.PGP_X_BEARER_TOKEN ||
       process.env.NEXT_PUBLIC_PGP_X_BEARER_TOKEN ||
@@ -124,13 +124,13 @@ export function getSourceRoutes(options?: { scinceReadiness?: ScinceRouteReadine
       routeId: "telegram.bot.search",
       providerId: "telegram",
       action: "search",
-      sourceType: "TELEGRAM_DIRECT_OBSERVATION",
-      providerName: "Telegram Bot API",
+      sourceType: "TELEGRAM_BOT_UPDATES",
+      providerName: "Telegram Bot API (updates recibidos)",
       authoritative: false,
       operationalMode: telegramAvailability === "AVAILABLE" ? "LEGACY" : "NOT_CONFIGURED",
       availability: telegramAvailability,
       selectedForProductiveAcquisition: false,
-      notes: "Lectura Bot API limitada a canales/grupos configurados; requiere fortalecimiento de provenance antes de ser autoritativa.",
+      notes: "Lectura Bot API limitada a updates entregados al bot en chats, grupos o canales donde participa; no es busqueda publica global.",
     },
     {
       sourceFamily: "TELEGRAM",

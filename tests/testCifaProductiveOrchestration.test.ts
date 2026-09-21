@@ -10,6 +10,44 @@ import {
   resolveCanonicalAcquisitionGeography,
 } from "../src/utils/canonicalProjectGeography";
 
+jest.mock("axios", () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn(),
+    post: jest.fn(),
+  },
+}));
+
+const originalTelegramToken = process.env.PGP_TELEGRAM_BOT_TOKEN;
+const originalTelegramTokenAlias = process.env.TELEGRAM_BOT_TOKEN;
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
+function telegramSourceDefinition(execute: () => Promise<unknown>): CifaSourceDefinition {
+  return {
+    sourceKey: "telegram",
+    sourceId: "telegram-bot-updates",
+    providerId: "TELEGRAM_BOT_API",
+    providerName: "Telegram Bot API (updates recibidos)",
+    sourceType: "TELEGRAM_BOT_UPDATES",
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/socialProviders.ts:searchTelegram",
+    sourceUrl: "https://api.telegram.org/",
+    rawSourceReference: "telegram:getUpdates:configured-chats-only",
+    readiness: () => ({
+      ready: Boolean(process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN),
+      code: "SOURCE_NOT_CONFIGURED",
+    }),
+    execute,
+    failureCode: "TELEGRAM_REQUEST_FAILED",
+  };
+}
+
 function source(
   sourceKey: string,
   execute: () => Promise<unknown>,
@@ -34,6 +72,11 @@ function source(
 }
 
 describe("CIFA productive source execution", () => {
+  afterAll(() => {
+    restoreEnv("PGP_TELEGRAM_BOT_TOKEN", originalTelegramToken);
+    restoreEnv("TELEGRAM_BOT_TOKEN", originalTelegramTokenAlias);
+  });
+
   test("calls the configured provider and preserves its lineage", async () => {
     const searchFunc = jest.fn().mockResolvedValue([{ id: "real-1", title: "Observed result" }]);
     const result = await executeCifaSource(source("reddit", searchFunc), "consulta real");
@@ -240,6 +283,113 @@ describe("CIFA productive source execution", () => {
     expect(result.acquisitionMode).toBe("AI_GENERATED");
     expect(result.semanticRole).toBe("SYNTHESIS");
     expect((result.data as any).epistemicIntegrity.isDerived).toBe(true);
+  });
+
+  test("Telegram without token is NOT_CONFIGURED and never executes", async () => {
+    delete process.env.PGP_TELEGRAM_BOT_TOKEN;
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    const execute = jest.fn().mockResolvedValue([]);
+
+    const result = await executeCifaSource(telegramSourceDefinition(execute), "consulta");
+
+    expect(result).toMatchObject({
+      acquisitionStatus: "NOT_CONFIGURED",
+      configuredForProductiveAcquisition: false,
+      selectedForProductiveAcquisition: false,
+      errorCode: "SOURCE_NOT_CONFIGURED",
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  test("Telegram matched updates are ACQUIRED with complete observed provenance", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock)
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1 } } })
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "" } } })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { ok: true, result: [{ message: { text: "Reporte de robo", date: 1, chat: { title: "Canal" } } }] },
+      });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    const result = await executeCifaSource(
+      telegramSourceDefinition(() => searchTelegram("robo")),
+      "robo"
+    );
+
+    expect(result).toMatchObject({
+      acquisitionStatus: "ACQUIRED",
+      resultCount: 1,
+      providerId: "TELEGRAM_BOT_API",
+      providerName: "Telegram Bot API (updates recibidos)",
+      sourceType: "TELEGRAM_BOT_UPDATES",
+      acquisitionMode: "OBSERVED",
+      semanticRole: "SOURCE_FACT",
+      isSimulated: false,
+    });
+    expect((result.data as any[])[0]).toMatchObject({
+      providerId: "TELEGRAM_BOT_API",
+      source: "Telegram Bot API (updates recibidos)",
+      sourceUrl: "https://api.telegram.org/",
+      query: "robo",
+      acquisitionMode: "OBSERVED",
+      semanticRole: "SOURCE_FACT",
+      isSimulated: false,
+      acquiredAt: expect.any(String),
+      provenance: expect.objectContaining({ providerId: "TELEGRAM_BOT_API", query: "robo" }),
+    });
+  });
+
+  test("Telegram successful polling without matches is NO_DATA", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock)
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1 } } })
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "" } } })
+      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: [] } });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    const result = await executeCifaSource(
+      telegramSourceDefinition(() => searchTelegram("consulta")),
+      "consulta"
+    );
+
+    expect(result).toMatchObject({
+      acquisitionStatus: "NO_DATA",
+      resultCount: 0,
+      configuredForProductiveAcquisition: true,
+      selectedForProductiveAcquisition: true,
+      isSimulated: false,
+    });
+  });
+
+  test("Telegram webhook failure metadata reaches the CIFA envelope sanitized", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    const result = await executeCifaSource(
+      telegramSourceDefinition(jest.fn().mockRejectedValue(new ExternalProviderError({
+        reason: "WEBHOOK_CONFLICT",
+        httpStatus: 409,
+        technicalCode: "TELEGRAM_WEBHOOK_CONFLICT",
+        nativeErrorCode: "409",
+        providerDescription: "Conflict: webhook activo.",
+      }))),
+      "consulta"
+    );
+
+    expect(result).toMatchObject({
+      acquisitionStatus: "FAILED",
+      sanitizedFailureReason: "WEBHOOK_CONFLICT",
+      providerErrorCode: "TELEGRAM_WEBHOOK_CONFLICT",
+      nativeErrorCode: "409",
+      httpStatus: 409,
+      providerDescription: "Conflict: webhook activo.",
+      data: [],
+      isSimulated: false,
+    });
   });
 });
 

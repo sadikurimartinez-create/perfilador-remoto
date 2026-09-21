@@ -7,6 +7,7 @@ export type ExternalFailureReason =
   | "TLS_CERTIFICATE_ERROR"
   | "TIMEOUT"
   | "INVALID_RESPONSE"
+  | "WEBHOOK_CONFLICT"
   | "PROVIDER_UNAVAILABLE"
   | "UNKNOWN_FAILURE";
 
@@ -17,6 +18,7 @@ export interface SanitizedProviderFailure {
   technicalCode?: string;
   nativeErrorCode?: string;
   nativeCauseCode?: string;
+  providerDescription?: string;
 }
 
 const PUBLIC_MESSAGES: Record<ExternalFailureReason, string> = {
@@ -28,6 +30,7 @@ const PUBLIC_MESSAGES: Record<ExternalFailureReason, string> = {
   TLS_CERTIFICATE_ERROR: "El certificado TLS presentado por el proveedor no pudo validarse.",
   TIMEOUT: "El proveedor excedió el tiempo máximo de respuesta.",
   INVALID_RESPONSE: "El proveedor devolvió una respuesta con formato inesperado.",
+  WEBHOOK_CONFLICT: "Telegram tiene un webhook activo y no permite consultar updates mediante long polling.",
   PROVIDER_UNAVAILABLE: "El proveedor está temporalmente no disponible.",
   UNKNOWN_FAILURE: "El proveedor no pudo completar la adquisición.",
 };

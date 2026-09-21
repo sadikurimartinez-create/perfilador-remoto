@@ -160,7 +160,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceId: "telegram-bot-updates",
     providerId: "TELEGRAM_BOT_API",
     providerName: "Telegram Bot API (updates recibidos)",
-    sourceType: "TELEGRAM_BOT_RECEIVED_UPDATES",
+    sourceType: "TELEGRAM_BOT_UPDATES",
     classification: "OBSERVED_REAL",
     acquisitionMode: "OBSERVED",
     semanticRole: "SOURCE_FACT",

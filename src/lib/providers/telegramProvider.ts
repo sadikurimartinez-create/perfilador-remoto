@@ -1,8 +1,9 @@
 import { IProvider, ProviderResponse, HealthCheckResult } from "./baseProvider";
 import { GeoDataNormalizerEngine } from "./geoNormalizer";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
-import { searchTelegram } from "@/utils/socialProviders";
+import { inspectTelegramBotRuntime, searchTelegram } from "@/utils/socialProviders";
 import { getTelegramOsintData } from "@/lib/osintActions";
+import { classifyExternalFailure } from "@/utils/externalProviderError";
 
 export class TelegramProvider implements IProvider {
   getId(): string {
@@ -10,7 +11,7 @@ export class TelegramProvider implements IProvider {
   }
 
   getName(): string {
-    return "Telegram OSINT Channel Monitoring";
+    return "Telegram Bot API (updates recibidos)";
   }
 
   isEnabled(): boolean {
@@ -23,9 +24,9 @@ export class TelegramProvider implements IProvider {
       version: "2.1.0",
       status: this.isEnabled() ? "Active" : "Disabled",
       featureFlag: "ENABLE_TELEGRAM",
-      authType: "Telegram Bot API Token / Web Scraper Connection",
-      geographicCoverage: "Global / Local channels",
-      outputFormat: "JSON (Scraped Channels / Message Telemetry)"
+      authType: "Telegram Bot API token",
+      geographicCoverage: "Chats, grupos y canales donde el bot recibe updates",
+      outputFormat: "JSON (updates entregados al bot)"
     };
   }
 
@@ -62,7 +63,7 @@ export class TelegramProvider implements IProvider {
         };
       }
 
-      const token = process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_PGP_TELEGRAM_BOT_TOKEN;
+      const token = process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
       let data: any = null;
 
       if (token) {
@@ -119,55 +120,42 @@ export class TelegramProvider implements IProvider {
   async healthCheck(): Promise<HealthCheckResult> {
     const start = Date.now();
     try {
-      const token = process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_PGP_TELEGRAM_BOT_TOKEN || "";
-      
-      if (token) {
-        const url = `https://api.telegram.org/bot${token}/getMe`;
-        const res = await fetch(url);
-        const resData = await res.json();
-        
-        if (!res.ok || !resData.ok) {
-          throw new Error(`Telegram Bot API responded with error: ${resData.description || "Unknown"}`);
-        }
-
+      const tokenConfigured = Boolean(process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN);
+      if (!tokenConfigured) {
         return {
-          isHealthy: true,
+          isHealthy: false,
           latencyMs: Date.now() - start,
-          details: `Telegram Bot authenticated as @${resData.result?.username || "Bot"}.`,
+          details: "Telegram Bot API no está configurado.",
           timestamp: new Date().toISOString(),
-          authenticationStatus: "valid",
-          availability: 100,
-          recordsCount: 1
-        };
-      } else {
-        // Validate Telegram reachability if no token configured
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch("https://api.telegram.org", { method: "GET", signal: controller.signal });
-        clearTimeout(id);
-
-        if (res.status >= 500) {
-          throw new Error(`Telegram API endpoint returned HTTP status ${res.status}`);
-        }
-
-        return {
-          isHealthy: true,
-          latencyMs: Date.now() - start,
-          details: "El servidor de Telegram API es alcanzable. Conexión de red de respaldo activa.",
-          timestamp: new Date().toISOString(),
-          authenticationStatus: "bypassed",
-          availability: 100,
-          recordsCount: 1
+          authenticationStatus: "invalid",
+          availability: 0,
+          recordsCount: 0,
         };
       }
-    } catch (err: any) {
+
+      const runtime = await inspectTelegramBotRuntime();
+      const available = runtime.longPollingStatus === "LONG_POLLING_AVAILABLE";
+      return {
+        isHealthy: available,
+        latencyMs: Date.now() - start,
+        details: available
+          ? "Bot autenticado; webhook inactivo; long polling disponible."
+          : "Bot autenticado; webhook activo; long polling bloqueado.",
+        timestamp: new Date().toISOString(),
+        authenticationStatus: "valid",
+        availability: available ? 100 : 0,
+        recordsCount: 1,
+      };
+    } catch (error) {
+      const failure = classifyExternalFailure(error).failure;
       return {
         isHealthy: false,
         latencyMs: Date.now() - start,
-        details: err.message || String(err),
+        details: failure.message,
         timestamp: new Date().toISOString(),
         authenticationStatus: "invalid",
-        availability: 0
+        availability: 0,
+        recordsCount: 0,
       };
     }
   }

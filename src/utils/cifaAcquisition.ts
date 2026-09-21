@@ -46,6 +46,7 @@ export interface CifaSourceEnvelope<T = unknown> {
   httpStatus?: number;
   nativeErrorCode?: string;
   nativeCauseCode?: string;
+  providerDescription?: string;
   geographyContext?: unknown;
   providerMetadata?: unknown;
 }
@@ -284,6 +285,7 @@ export async function executeCifaSource<T>(
       httpStatus: failure.httpStatus,
       nativeErrorCode: failure.nativeErrorCode,
       nativeCauseCode: failure.nativeCauseCode,
+      providerDescription: failure.providerDescription,
     };
   }
 }
