@@ -341,6 +341,42 @@ describe("Google Discovery Engine productive contract", () => {
     await expect(search()).resolves.toMatchObject({ resultadosWeb: [] });
   });
 
+  test("missing results is a valid no-data response and preserves top-level metadata", async () => {
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.post as jest.Mock).mockResolvedValueOnce({
+      status: 200,
+      data: {
+        attributionToken: "token",
+        queryExpansionInfo: {},
+        semanticState: "DISABLED",
+        summary: { summaryText: "No se encontraron resultados relevantes" },
+      },
+    });
+
+    await expect(search()).resolves.toMatchObject({
+      resultadosWeb: [],
+      analisisInteligencia: null,
+      discoveryMetadata: {
+        attributionToken: "token",
+        queryExpansionInfo: {},
+        semanticState: "DISABLED",
+        summary: { summaryText: "No se encontraron resultados relevantes" },
+      },
+    });
+  });
+
+  test("present results with an unexpected type remains INVALID_RESPONSE", async () => {
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.post as jest.Mock).mockResolvedValueOnce({
+      status: 200,
+      data: { results: "invalid" },
+    });
+
+    await expect(search()).rejects.toMatchObject({
+      failure: { reason: "INVALID_RESPONSE" },
+    });
+  });
+
   test.each([
     [401, "AUTH_FAILED"],
     [403, "AUTH_FAILED"],

@@ -159,20 +159,23 @@ export const buscarEnWebOSINT = async (query: string) => {
     });
     if (response.status < 200 || response.status >= 300) throw classifyHttpFailure(response.status);
 
-    if (!Array.isArray(response.data?.results)) throw invalidProviderResponse();
-    const results = response.data.results;
+    const responseData = response.data;
+    if (!responseData || typeof responseData !== "object" || Array.isArray(responseData)) throw invalidProviderResponse();
+    const rawResults = responseData.results;
+    if (rawResults != null && !Array.isArray(rawResults)) throw invalidProviderResponse();
+    const results = rawResults ?? [];
     console.log(`[WEB OSINT] ✅ Búsqueda completada. ${results.length} resultados obtenidos. El semáforo se puede poner en verde.`);
 
     const acquiredAt = new Date().toISOString();
     const formattedResults = formatDiscoveryResults(results, query, acquiredAt);
     const discoveryMetadata = {
-      semanticState: response.data.semanticState ?? null,
-      summary: response.data.summary ?? null,
-      totalSize: response.data.totalSize ?? null,
-      attributionToken: response.data.attributionToken ?? null,
-      nextPageToken: response.data.nextPageToken ?? null,
-      queryExpansionInfo: response.data.queryExpansionInfo ?? null,
-      summaryEpistemicIntegrity: response.data.summary == null ? null : {
+      semanticState: responseData.semanticState ?? null,
+      summary: responseData.summary ?? null,
+      totalSize: responseData.totalSize ?? null,
+      attributionToken: responseData.attributionToken ?? null,
+      nextPageToken: responseData.nextPageToken ?? null,
+      queryExpansionInfo: responseData.queryExpansionInfo ?? null,
+      summaryEpistemicIntegrity: responseData.summary == null ? null : {
         providerId: "GOOGLE_DISCOVERY_ENGINE",
         acquisitionMode: "AI_GENERATED",
         semanticRole: "SYNTHESIS",
