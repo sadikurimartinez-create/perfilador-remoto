@@ -23,6 +23,13 @@ import { CEIPOLButton } from "./ui/CEIPOLButton";
 export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
   osint_territorial: "OSINT Territorial CEIPOL v2.0",
   rss_regional: "Radar OSINT Regional (RSS)",
+  news_api: "NewsAPI · Radar de Medios",
+  gdelt_doc: "GDELT Document Intelligence",
+  gdelt_context: "GDELT Context Intelligence",
+  gdelt_geo: "GDELT GEO · Ubicaciones mencionadas",
+  bluesky: "Bluesky Public Intelligence",
+  fediverse: "Fediverse · Instancias gobernadas",
+  official_ceipol: "Fuentes Oficiales CEIPOL",
   google_dorks: "Google Dorks Search",
   discovery_engine: "Discovery Engine (Vertex AI)",
   telegram: "Telegram Bot · Updates recibidos",
@@ -269,7 +276,7 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSelectedSources(["telegram", "x_twitter", "reddit", "youtube", "facebook_public", "instagram_public"])}
+                        onClick={() => setSelectedSources(["telegram", "x_twitter", "reddit", "youtube", "bluesky", "fediverse", "facebook_public", "instagram_public"])}
                         className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-semibold transition"
                       >
                         📱 Redes

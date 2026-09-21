@@ -15,6 +15,19 @@ import { autoDiscoverSource, logLearningAction } from "./imfoService";
 import { getRegionalRSSFeeds } from "@/lib/osintSources";
 import { getDenueData } from "@/lib/osintActions";
 import { resolveCanonicalAcquisitionGeography } from "./canonicalProjectGeography";
+import { getSourceRoutes } from "@/lib/providers/sourceRegistry";
+import {
+  getProviderCollectionMetadata,
+  getProviderCollectionStatus,
+  searchBluesky,
+  searchFediverse,
+  searchGdeltContext,
+  searchGdeltDocuments,
+  searchGdeltGeo,
+  searchNewsApi,
+  searchOfficialCeipolSources,
+} from "./cifaExpandedProviders";
+import { deduplicateCifaRecords } from "./cifaMultisourceDeduplication";
 import {
   executeCifaBatch,
   executeCifaSource,
@@ -79,6 +92,11 @@ function observedData(envelope: CifaSourceEnvelope | undefined): unknown {
   return envelope.data;
 }
 
+function observedItems(envelope: CifaSourceEnvelope | undefined): any[] {
+  const data = observedData(envelope);
+  return Array.isArray(data) ? data : [];
+}
+
 function countGeoreferenced(data: unknown): number {
   const values = Array.isArray(data) ? data : data ? [data] : [];
   return values.filter((item: any) => {
@@ -103,6 +121,12 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
   const coordinatesReady = hasCoordinates(lat, lng);
   const query = customQuery?.trim() || `${location} operativo OR balacera OR robo OR detención OR cartel`;
   const definitions: CifaSourceDefinition[] = [];
+  const registeredRoutes = getSourceRoutes();
+  const registeredRoute = (routeId: string) => {
+    const route = registeredRoutes.find((candidate) => candidate.routeId === routeId);
+    if (!route) throw new Error(`Missing governed source route: ${routeId}`);
+    return route;
+  };
   const add = (selectedKey: string, definition: CifaSourceDefinition) => {
     if (selectedSources.includes(selectedKey)) definitions.push(definition);
   };
@@ -136,6 +160,138 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     execute: () => fetchRegionalRss(location, query),
     failureCode: "RSS_REQUEST_FAILED",
     failureMessage: "Ningún feed RSS respondió correctamente.",
+  });
+
+  const newsApiRoute = registeredRoute("newsapi.everything");
+  add("news_api", {
+    sourceKey: "news_api",
+    sourceId: newsApiRoute.routeId,
+    providerId: newsApiRoute.providerId,
+    providerName: newsApiRoute.providerName,
+    sourceType: newsApiRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaExpandedProviders.ts:searchNewsApi",
+    sourceUrl: "https://newsapi.org/v2/everything",
+    rawSourceReference: "newsapi:v2:everything",
+    readiness: () => ({
+      ready: envConfigured(process.env.NEWS_API_TOKEN),
+      code: "SOURCE_NOT_CONFIGURED",
+      message: "NewsAPI requiere NEWS_API_TOKEN server-side.",
+    }),
+    execute: () => searchNewsApi(query, process.env.NEWS_API_TOKEN as string),
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "NEWS_API_REQUEST_FAILED",
+  });
+
+  const gdeltDocRoute = registeredRoute("gdelt.doc.v2");
+  add("gdelt_doc", {
+    sourceKey: "gdelt_doc",
+    sourceId: gdeltDocRoute.routeId,
+    providerId: gdeltDocRoute.providerId,
+    providerName: gdeltDocRoute.providerName,
+    sourceType: gdeltDocRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaExpandedProviders.ts:searchGdeltDocuments",
+    sourceUrl: "https://api.gdeltproject.org/api/v2/doc/doc",
+    rawSourceReference: "gdelt:doc:2.0:ArtList",
+    execute: () => searchGdeltDocuments(query),
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "GDELT_DOC_REQUEST_FAILED",
+  });
+
+  const gdeltContextRoute = registeredRoute("gdelt.context.v2");
+  add("gdelt_context", {
+    sourceKey: "gdelt_context",
+    sourceId: gdeltContextRoute.routeId,
+    providerId: gdeltContextRoute.providerId,
+    providerName: gdeltContextRoute.providerName,
+    sourceType: gdeltContextRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaExpandedProviders.ts:searchGdeltContext",
+    sourceUrl: "https://api.gdeltproject.org/api/v2/context/context",
+    rawSourceReference: "gdelt:context:2.0:ArtList",
+    execute: () => searchGdeltContext(query),
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "GDELT_CONTEXT_REQUEST_FAILED",
+  });
+
+  const gdeltGeoRoute = registeredRoute("gdelt.geo.v2");
+  add("gdelt_geo", {
+    sourceKey: "gdelt_geo",
+    sourceId: gdeltGeoRoute.routeId,
+    providerId: gdeltGeoRoute.providerId,
+    providerName: gdeltGeoRoute.providerName,
+    sourceType: gdeltGeoRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaExpandedProviders.ts:searchGdeltGeo",
+    sourceUrl: "https://api.gdeltproject.org/api/v2/geo/geo",
+    rawSourceReference: "gdelt:geo:2.0:GeoJSON",
+    execute: () => searchGdeltGeo(query),
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "GDELT_GEO_REQUEST_FAILED",
+  });
+
+  const blueskyRoute = registeredRoute("bluesky.search-posts");
+  add("bluesky", {
+    sourceKey: "bluesky",
+    sourceId: blueskyRoute.routeId,
+    providerId: blueskyRoute.providerId,
+    providerName: blueskyRoute.providerName,
+    sourceType: blueskyRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaExpandedProviders.ts:searchBluesky",
+    sourceUrl: "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts",
+    rawSourceReference: "atproto:app.bsky.feed.searchPosts",
+    execute: () => searchBluesky(query),
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "BLUESKY_REQUEST_FAILED",
+  });
+
+  const fediverseRoute = registeredRoute("fediverse.governed-instances");
+  add("fediverse", {
+    sourceKey: "fediverse",
+    sourceId: fediverseRoute.routeId,
+    providerId: fediverseRoute.providerId,
+    providerName: fediverseRoute.providerName,
+    sourceType: fediverseRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaExpandedProviders.ts:searchFediverse",
+    sourceUrl: "https://docs.joinmastodon.org/methods/search/",
+    rawSourceReference: "mastodon:governed-instances:api-v2-search",
+    execute: () => searchFediverse(query),
+    resolveStatus: getProviderCollectionStatus,
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "FEDIVERSE_REQUEST_FAILED",
+  });
+
+  const officialRoute = registeredRoute("ceipol.official-sources");
+  add("official_ceipol", {
+    sourceKey: "official_ceipol",
+    sourceId: officialRoute.routeId,
+    providerId: officialRoute.providerId,
+    providerName: officialRoute.providerName,
+    sourceType: officialRoute.sourceType,
+    classification: "OBSERVED_REAL",
+    acquisitionMode: "OBSERVED",
+    semanticRole: "SOURCE_FACT",
+    sourceReference: "src/utils/cifaOfficialSourceRegistry.ts:CIFA_OFFICIAL_SOURCE_REGISTRY",
+    rawSourceReference: "ceipol:official-source-registry",
+    execute: () => searchOfficialCeipolSources(query),
+    resolveStatus: getProviderCollectionStatus,
+    providerMetadata: getProviderCollectionMetadata,
+    failureCode: "OFFICIAL_SOURCES_REQUEST_FAILED",
   });
 
   add("google_dorks", {
@@ -451,6 +607,15 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
   ));
 
   const byKey = new Map(sourceResults.map((result) => [result.sourceKey, result]));
+  const newsDeduplication = deduplicateCifaRecords([
+    observedData(byKey.get("rss_regional")),
+    observedData(byKey.get("google_dorks")),
+    observedData(byKey.get("discovery_engine")),
+    observedData(byKey.get("news_api")),
+    observedData(byKey.get("gdelt_doc")),
+    observedData(byKey.get("gdelt_context")),
+    observedData(byKey.get("official_ceipol")),
+  ]);
   const rawResults = {
     rssData: observedData(byKey.get("rss_regional")),
     serp: observedData(byKey.get("google_dorks")),
@@ -463,9 +628,21 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     googlePlaces: observedData(byKey.get("google_maps")),
     denue: observedData(byKey.get("apis_gubernamentales")),
     overpass: observedData(byKey.get("openstreetmap")),
+    newsApi: observedData(byKey.get("news_api")),
+    gdeltDoc: observedData(byKey.get("gdelt_doc")),
+    gdeltContext: observedData(byKey.get("gdelt_context")),
+    gdeltGeo: observedData(byKey.get("gdelt_geo")),
+    bluesky: observedData(byKey.get("bluesky")),
+    fediverse: observedData(byKey.get("fediverse")),
+    officialCeipol: observedData(byKey.get("official_ceipol")),
+    deduplicatedNews: newsDeduplication.records,
+    expandedSocial: [
+      ...observedItems(byKey.get("bluesky")),
+      ...observedItems(byKey.get("fediverse")),
+    ],
   };
 
-  for (const key of ["rss_regional", "google_dorks", "discovery_engine"]) {
+  for (const key of ["rss_regional", "google_dorks", "discovery_engine", "news_api", "gdelt_doc", "official_ceipol"]) {
     const envelope = byKey.get(key);
     const data = observedData(envelope);
     const items = Array.isArray(data) ? data : [];
@@ -479,12 +656,13 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
 
   const correlation = await runMultiSourceCorrelation(rawResults, project);
   const primaryResults = sourceResults.filter((result) => selectedSources.includes(result.sourceKey));
-  const observed = sourceResults.filter((result) => result.acquisitionMode === "OBSERVED" && result.acquisitionStatus === "ACQUIRED");
+  const observed = sourceResults.filter((result) => result.acquisitionMode === "OBSERVED" && (result.acquisitionStatus === "ACQUIRED" || result.acquisitionStatus === "PARTIAL"));
   const aiDerived = sourceResults.filter((result) => result.acquisitionMode === "AI_GENERATED" && result.acquisitionStatus === "ACQUIRED");
   const failed = primaryResults.filter((result) => result.acquisitionStatus === "FAILED");
   const notConfigured = primaryResults.filter((result) => result.acquisitionStatus === "NOT_CONFIGURED");
   const unavailable = primaryResults.filter((result) => result.acquisitionStatus === "UNAVAILABLE");
   const noData = primaryResults.filter((result) => result.acquisitionStatus === "NO_DATA");
+  const partial = primaryResults.filter((result) => result.acquisitionStatus === "PARTIAL");
   const notApplicable = primaryResults.filter((result) => result.applicable === false);
   const applicablePrimaryResults = primaryResults.filter((result) => result.applicable !== false);
   const validResponses = primaryResults.filter((result) =>
@@ -493,7 +671,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
   const resultsAcquired = primaryResults.reduce((sum, result) => sum + result.resultCount, 0);
   const georeferencedResults = primaryResults.reduce((sum, result) => sum + countGeoreferenced(result.data), 0);
   const unavailableApplicable = unavailable.filter((result) => !notApplicable.includes(result));
-  const degradedCount = failed.length + notConfigured.length + unavailableApplicable.length;
+  const degradedCount = failed.length + notConfigured.length + unavailableApplicable.length + partial.length;
 
   const institutionalUse = observed.length > 0
     ? (degradedCount > 0 ? "PARTIAL_PRODUCTIVE" : "PRODUCTIVE_OBSERVED")
@@ -516,6 +694,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourcesObserved: observed.length,
     sourcesAiDerived: aiDerived.length,
     sourcesNoData: noData.length,
+    sourcesPartial: partial.length,
     sourcesFailed: failed.length,
     sourcesNotConfigured: notConfigured.length,
     sourcesUnavailable: coverageSummary.sourcesUnavailable,
@@ -551,5 +730,6 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     recommendations,
     sourceResults,
     rawResults,
+    deduplication: newsDeduplication,
   };
 }

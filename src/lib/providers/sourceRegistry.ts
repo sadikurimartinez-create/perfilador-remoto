@@ -5,10 +5,18 @@ export type SourceFamily =
   | "X"
   | "FACEBOOK"
   | "INSTAGRAM"
+  | "NEWS_API"
+  | "GDELT_DOC"
+  | "GDELT_CONTEXT"
+  | "GDELT_GEO"
+  | "BLUESKY"
+  | "FEDIVERSE"
+  | "OFFICIAL_CEIPOL"
   | "OSINT_CONNECTIVITY";
 
 export type SourceOperationalMode =
   | "AUTHORITATIVE_PRODUCTIVE"
+  | "PRODUCTIVE_OBSERVED"
   | "SIMULATED"
   | "AI_GENERATED"
   | "CONNECTIVITY_ONLY"
@@ -51,6 +59,7 @@ export function getSourceRoutes(options?: { scinceReadiness?: ScinceRouteReadine
       process.env.NEXT_PUBLIC_PGP_X_ACCESS_TOKEN
   );
   const scinceReady = options?.scinceReadiness?.ready === true && Boolean(options.scinceReadiness.datasetId);
+  const newsApiAvailability = configured(process.env.NEWS_API_TOKEN);
 
   return [
     {
@@ -182,6 +191,97 @@ export function getSourceRoutes(options?: { scinceReadiness?: ScinceRouteReadine
       availability: "AVAILABLE",
       selectedForProductiveAcquisition: false,
       notes: "Alcance de red; no produce observacion Instagram.",
+    },
+    {
+      sourceFamily: "NEWS_API",
+      routeId: "newsapi.everything",
+      providerId: "NEWS_API",
+      action: "search",
+      sourceType: "NEWS_ARTICLE",
+      providerName: "NewsAPI - Radar de Medios",
+      authoritative: false,
+      operationalMode: newsApiAvailability === "AVAILABLE" ? "PRODUCTIVE_OBSERVED" : "NOT_CONFIGURED",
+      availability: newsApiAvailability,
+      selectedForProductiveAcquisition: newsApiAvailability === "AVAILABLE",
+      notes: "Adquisicion observada server-side mediante /v2/everything con limite por barrido.",
+    },
+    {
+      sourceFamily: "GDELT_DOC",
+      routeId: "gdelt.doc.v2",
+      providerId: "GDELT_DOC_2",
+      action: "search",
+      sourceType: "NEWS_DOCUMENT",
+      providerName: "GDELT Document Intelligence",
+      authoritative: false,
+      operationalMode: "PRODUCTIVE_OBSERVED",
+      availability: "AVAILABLE",
+      selectedForProductiveAcquisition: true,
+      notes: "Busqueda documental publica GDELT DOC 2.0; no sintetiza articulos.",
+    },
+    {
+      sourceFamily: "GDELT_CONTEXT",
+      routeId: "gdelt.context.v2",
+      providerId: "GDELT_CONTEXT_2",
+      action: "search",
+      sourceType: "NEWS_CONTEXT",
+      providerName: "GDELT Context Intelligence",
+      authoritative: false,
+      operationalMode: "PRODUCTIVE_OBSERVED",
+      availability: "AVAILABLE",
+      selectedForProductiveAcquisition: true,
+      notes: "Contexto textual entregado por GDELT; no completa ni reconstruye contenido.",
+    },
+    {
+      sourceFamily: "GDELT_GEO",
+      routeId: "gdelt.geo.v2",
+      providerId: "GDELT_GEO_2",
+      action: "search",
+      sourceType: "MENTIONED_LOCATION",
+      providerName: "GDELT GEO Intelligence",
+      authoritative: false,
+      operationalMode: "PRODUCTIVE_OBSERVED",
+      availability: "AVAILABLE",
+      selectedForProductiveAcquisition: true,
+      notes: "Geografia mencionada en cobertura; no se promueve automaticamente a ubicacion del evento.",
+    },
+    {
+      sourceFamily: "BLUESKY",
+      routeId: "bluesky.search-posts",
+      providerId: "BLUESKY_PUBLIC_APPVIEW",
+      action: "search",
+      sourceType: "SOCIAL_POST",
+      providerName: "Bluesky Public Intelligence",
+      authoritative: false,
+      operationalMode: "PRODUCTIVE_OBSERVED",
+      availability: "AVAILABLE",
+      selectedForProductiveAcquisition: true,
+      notes: "Lectura publica oficial de app.bsky.feed.searchPosts sin inferencia geografica.",
+    },
+    {
+      sourceFamily: "FEDIVERSE",
+      routeId: "fediverse.governed-instances",
+      providerId: "FEDIVERSE_MASTODON",
+      action: "search",
+      sourceType: "FEDIVERSE_STATUS",
+      providerName: "Fediverse Intelligence",
+      authoritative: false,
+      operationalMode: "PRODUCTIVE_OBSERVED",
+      availability: "AVAILABLE",
+      selectedForProductiveAcquisition: true,
+      notes: "Consulta por instancia gobernada; no declara una busqueda global de Mastodon.",
+    },
+    {
+      sourceFamily: "OFFICIAL_CEIPOL",
+      routeId: "ceipol.official-sources",
+      providerId: "CEIPOL_OFFICIAL_SOURCES",
+      action: "search",
+      sourceType: "OFFICIAL_PUBLICATION",
+      providerName: "Fuentes Oficiales CEIPOL",
+      authoritative: false,
+      operationalMode: "PRODUCTIVE_OBSERVED",
+      availability: "AVAILABLE",
+      selectedForProductiveAcquisition: true,
+      notes: "Registro explicito de endpoints oficiales publicos verificables, sin autenticacion ni evasion.",
     },
     {
       sourceFamily: "OSINT_CONNECTIVITY",

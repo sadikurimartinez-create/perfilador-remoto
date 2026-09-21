@@ -74,6 +74,8 @@ export interface CifaSourceDefinition<T = unknown> {
   };
   execute: () => Promise<T>;
   count?: (data: T) => number;
+  resolveStatus?: (data: T, resultCount: number) => AcquisitionStatus;
+  providerMetadata?: (data: T) => unknown;
   failureCode?: string;
   failureMessage?: string;
   geographyContext?: unknown;
@@ -141,29 +143,45 @@ function integrityFor<T>(envelope: CifaSourceEnvelope<T>): EpistemicIntegrityMet
 function attachIntegrity<T>(data: T, envelope: CifaSourceEnvelope<T>): T {
   const decorate = (item: unknown) => {
     if (!item || typeof item !== "object") return item;
+    const record = item as Record<string, unknown>;
+    const existingProvenance = record.provenance && typeof record.provenance === "object"
+      ? record.provenance as Record<string, unknown>
+      : {};
+    const directSourceUrl = typeof record.sourceUrl === "string" ? record.sourceUrl : envelope.sourceUrl;
+    const providerQuery = typeof record.providerQuery === "string" ? record.providerQuery : envelope.query;
     return {
-      ...(item as Record<string, unknown>),
-      source: (item as Record<string, unknown>).source ?? envelope.providerName,
+      ...record,
+      source: record.source ?? envelope.providerName,
       acquisitionMode: envelope.acquisitionMode,
       acquisitionStatus: envelope.acquisitionStatus,
       semanticRole: envelope.semanticRole,
       validationStatus: envelope.validationStatus,
       isSimulated: false,
       providerId: envelope.providerId,
+      providerName: envelope.providerName,
+      sourceType: envelope.sourceType,
       sourceId: envelope.sourceId,
       sourceReference: envelope.sourceReference,
-      sourceUrl: envelope.sourceUrl,
+      sourceUrl: directSourceUrl,
       rawSourceReference: envelope.rawSourceReference,
       geographyContext: envelope.geographyContext,
       query: envelope.query,
+      providerQuery,
       acquiredAt: envelope.acquiredAt,
-      provenance: (item as Record<string, unknown>).provenance ?? {
+      provenance: {
         providerId: envelope.providerId,
+        providerName: envelope.providerName,
+        sourceType: envelope.sourceType,
         sourceId: envelope.sourceId,
         sourceReference: envelope.sourceReference,
-        sourceUrl: envelope.sourceUrl,
+        sourceUrl: directSourceUrl,
         query: envelope.query,
+        providerQuery,
         acquiredAt: envelope.acquiredAt,
+        acquisitionMode: envelope.acquisitionMode,
+        semanticRole: envelope.semanticRole,
+        isSimulated: false,
+        ...existingProvenance,
       },
       epistemicIntegrity: integrityFor(envelope),
     };
@@ -218,6 +236,7 @@ export async function executeCifaSource<T>(
   try {
     const data = await definition.execute();
     const resultCount = definition.count?.(data) ?? countResult(data);
+    const acquisitionStatus = definition.resolveStatus?.(data, resultCount) ?? (resultCount > 0 ? "ACQUIRED" : "NO_DATA");
     const acquiredAt = new Date().toISOString();
     const envelope: CifaSourceEnvelope<T> = {
       sourceKey: definition.sourceKey,
@@ -227,7 +246,7 @@ export async function executeCifaSource<T>(
       sourceType: definition.sourceType,
       classification: definition.classification,
       acquisitionMode: definition.acquisitionMode,
-      acquisitionStatus: resultCount > 0 ? "ACQUIRED" : "NO_DATA",
+      acquisitionStatus,
       semanticRole: definition.semanticRole,
       validationStatus: "UNREVIEWED",
       isSimulated: false,
@@ -244,8 +263,13 @@ export async function executeCifaSource<T>(
       sourceUrl: definition.sourceUrl ?? null,
       rawSourceReference: definition.rawSourceReference ?? null,
       geographyContext: definition.geographyContext,
+      providerMetadata: definition.providerMetadata?.(data),
       data,
     };
+    if (acquisitionStatus === "NOT_CONFIGURED") {
+      envelope.configuredForProductiveAcquisition = false;
+      envelope.selectedForProductiveAcquisition = false;
+    }
     envelope.data = attachIntegrity(data, envelope);
     return envelope;
   } catch (error) {

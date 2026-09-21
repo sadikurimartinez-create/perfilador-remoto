@@ -3,12 +3,12 @@
 export interface CorrelatedEntity {
   id: string;
   value: string;
-  type: "PERSONA" | "TELEFONO" | "VEHICULO" | "DOMICILIO" | "COMERCIO" | "PANDILLA" | "HASHTAG" | "COORDENADAS" | "EVENTO";
+  type: "PERSONA" | "TELEFONO" | "VEHICULO" | "DOMICILIO" | "LUGAR_MENCIONADO" | "COMERCIO" | "PANDILLA" | "HASHTAG" | "COORDENADAS" | "EVENTO";
   confidence: number;
   sources: string[];
   occurrences: Array<{
     source: string;
-    date: string;
+    date: string | null;
     engine: string;
     contextText: string;
     providerId?: string | null;
@@ -29,7 +29,7 @@ export interface MCMResult {
     links: Array<{ source: string; target: string; label: string }>;
   };
   chronology: Array<{
-    date: string;
+    date: string | null;
     source: string;
     content: string;
     riskLevel: string;
@@ -77,7 +77,7 @@ export const runMultiSourceCorrelation = async (
     value: string,
     type: CorrelatedEntity["type"],
     source: string,
-    date: string,
+    date: string | null,
     engine: string,
     contextText: string,
     baseConfidence = 60,
@@ -88,7 +88,8 @@ export const runMultiSourceCorrelation = async (
     if (COMMON_NAMES_IGNORE.has(cleanValue.toLowerCase())) return;
 
     const key = `${type}_${cleanValue.toLowerCase()}`;
-    const dateStr = date ? new Date(date).toLocaleString("es-MX") : new Date().toLocaleString("es-MX");
+    const parsedDate = date ? Date.parse(date) : Number.NaN;
+    const dateStr = Number.isFinite(parsedDate) ? new Date(parsedDate).toLocaleString("es-MX") : null;
 
     if (correlatedMap.has(key)) {
       const entity = correlatedMap.get(key)!;
@@ -117,7 +118,7 @@ export const runMultiSourceCorrelation = async (
     source: string;
     platform: string;
     content: string;
-    date: string;
+    date: string | null;
     engine: string;
     providerId?: string | null;
     sourceReference?: string | null;
@@ -139,7 +140,7 @@ export const runMultiSourceCorrelation = async (
         source: `YouTube - Canal: ${yt.channelTitle || "Desconocido"}`,
         platform: "YouTube",
         content: `${yt.title || ""} ${yt.description || ""} ${yt.comments?.join(" ") || ""}`,
-        date: yt.publishedAt || new Date().toISOString(),
+        date: yt.publishedAt || null,
         engine: "YouTube Engine",
         ...lineage(yt, yt.videoId ? `https://www.youtube.com/watch?v=${yt.videoId}` : null),
       });
@@ -153,7 +154,7 @@ export const runMultiSourceCorrelation = async (
         source: `Telegram: ${tg.chat || "Monitorizado"}`,
         platform: "Telegram",
         content: tg.texto || "",
-        date: tg.fecha ? new Date(tg.fecha).toISOString() : new Date().toISOString(),
+        date: tg.fecha ? new Date(tg.fecha).toISOString() : null,
         engine: "Telegram Monitor",
         ...lineage(tg),
       });
@@ -167,7 +168,7 @@ export const runMultiSourceCorrelation = async (
         source: "Twitter Search",
         platform: "X",
         content: tweet.text || "",
-        date: tweet.created_at || new Date().toISOString(),
+        date: tweet.created_at || null,
         engine: "X API v2",
         ...lineage(tweet, tweet.id ? `https://x.com/i/web/status/${tweet.id}` : null),
       });
@@ -182,7 +183,7 @@ export const runMultiSourceCorrelation = async (
         source: `Reddit: r/${data.subreddit || "Mexico"}`,
         platform: "Reddit",
         content: `${data.title || ""} ${data.selftext || ""}`,
-        date: data.created_utc ? new Date(data.created_utc * 1000).toISOString() : new Date().toISOString(),
+        date: data.created_utc ? new Date(data.created_utc * 1000).toISOString() : null,
         engine: "Reddit Engine",
         ...lineage(rd, data.permalink ? `https://www.reddit.com${data.permalink}` : null),
       });
@@ -190,14 +191,16 @@ export const runMultiSourceCorrelation = async (
   }
 
   // 5. RSS (Radar) & News APIs (Serp, News, GNews)
-  const newsCollections = [
-    ...(rawResults?.news || []),
-    ...(rawResults?.gnews || []),
-    ...(rawResults?.newsdata || []),
-    ...(rawResults?.thenews || []),
-    ...(rawResults?.serp || []),
-    ...(rawResults?.rssData || [])
-  ];
+  const newsCollections = Array.isArray(rawResults?.deduplicatedNews)
+    ? rawResults.deduplicatedNews
+    : [
+        ...(rawResults?.news || []),
+        ...(rawResults?.gnews || []),
+        ...(rawResults?.newsdata || []),
+        ...(rawResults?.thenews || []),
+        ...(rawResults?.serp || []),
+        ...(rawResults?.rssData || []),
+      ];
 
   newsCollections.forEach((n: any) => {
     const title = n.title || n.titular || n.snippet || "";
@@ -207,11 +210,50 @@ export const runMultiSourceCorrelation = async (
       source: sourceName,
       platform: "RSS/Noticias",
       content: `${title} ${desc}`,
-      date: n.publishedAt || n.date || new Date().toISOString(),
+      date: n.publishedAt || n.date || null,
       engine: "Radar OSINT Regional",
       ...lineage(n, n.link || null),
     });
   });
+
+  if (Array.isArray(rawResults?.expandedSocial)) {
+    rawResults.expandedSocial.forEach((post: any) => {
+      rawItems.push({
+        source: post.sourceName || post.source || "Red social abierta",
+        platform: post.instance ? "Fediverse" : "Bluesky",
+        content: post.text || post.description || "",
+        date: post.publishedAt || null,
+        engine: post.instance ? "Fediverse Intelligence" : "Bluesky Public Intelligence",
+        ...lineage(post, post.sourceUrl || null),
+      });
+    });
+  }
+
+  if (Array.isArray(rawResults?.gdeltGeo)) {
+    rawResults.gdeltGeo.forEach((geo: any) => {
+      const locationName = typeof geo.locationName === "string" ? geo.locationName : "";
+      rawItems.push({
+        source: geo.sourceName || "GDELT GEO",
+        platform: "GDELT GEO",
+        content: `${locationName} ${geo.description || geo.text || ""}`.trim(),
+        date: geo.publishedAt || geo.observedAt || null,
+        engine: "GDELT GEO Intelligence (MENTIONED_LOCATION)",
+        ...lineage(geo, geo.sourceUrl || null),
+      });
+      if (locationName) {
+        registerOccurrence(
+          locationName,
+          "LUGAR_MENCIONADO",
+          geo.sourceName || "GDELT GEO",
+          geo.publishedAt || geo.observedAt || null,
+          "GDELT GEO Intelligence",
+          `Ubicación mencionada en cobertura; no equivale a ubicación del hecho: ${locationName}`,
+          45,
+          lineage(geo, geo.sourceUrl || null)
+        );
+      }
+    });
+  }
 
   // 6. Google Drive Ingested Data
   if (Array.isArray(rawResults?.driveData)) {
@@ -220,7 +262,7 @@ export const runMultiSourceCorrelation = async (
         source: `Google Drive: [${file.logicalCategory}] ${file.fileName}`,
         platform: "Google Drive",
         content: `${file.summary || ""} ${file.extractedText || ""}`,
-        date: file.createdAt || new Date().toISOString(),
+        date: file.createdAt || null,
         engine: "Perfilador_Ingesta",
         ...lineage(file),
       });
@@ -336,7 +378,11 @@ export const runMultiSourceCorrelation = async (
   }
 
   // Sort chronology
-  chronology.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  chronology.sort((a, b) => {
+    const aTime = a.date ? Date.parse(a.date) : Number.NEGATIVE_INFINITY;
+    const bTime = b.date ? Date.parse(b.date) : Number.NEGATIVE_INFINITY;
+    return bTime - aTime;
+  });
 
   return {
     success: true,
