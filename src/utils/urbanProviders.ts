@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { classifyExternalFailure, invalidProviderResponse } from './externalProviderError';
+import { ExternalProviderError, classifyExternalFailure, invalidProviderResponse } from './externalProviderError';
 
 const GOOGLE_KEY =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.PGP_GOOGLE_BROWSER_KEY || process.env.PGP_GOOGLE_SERVER_KEY || "";
@@ -68,19 +68,29 @@ export const searchGooglePlaces =
             }
           );
 
-        const places =
-          response.data?.results || [];
+        const providerStatus = response.data?.status;
+        if (providerStatus === "REQUEST_DENIED") {
+          throw new ExternalProviderError({ reason: "AUTH_FAILED", technicalCode: "GOOGLE_PLACES_REQUEST_DENIED" });
+        }
+        if (providerStatus === "OVER_QUERY_LIMIT") {
+          throw new ExternalProviderError({ reason: "RATE_LIMITED", technicalCode: "GOOGLE_PLACES_OVER_QUERY_LIMIT" });
+        }
+        if (providerStatus === "INVALID_REQUEST") {
+          throw new ExternalProviderError({ reason: "INVALID_REQUEST", technicalCode: "GOOGLE_PLACES_INVALID_REQUEST" });
+        }
+        if (providerStatus !== "OK" && providerStatus !== "ZERO_RESULTS") throw invalidProviderResponse();
+        const places = response.data?.results;
+        if (places != null && !Array.isArray(places)) throw invalidProviderResponse();
 
-        results.push(...places);
+        results.push(...(places ?? []));
 
       }
 
       return results;
 
-    } catch {
+    } catch (error) {
       console.error("[Google Places] Provider request failed.");
-
-      throw new Error("GOOGLE_PLACES_REQUEST_FAILED");
+      throw classifyExternalFailure(error);
 
     }
 
@@ -127,5 +137,8 @@ out center;`;
         throw classified;
       }
     }
-    throw classifyExternalFailure(new Error("OVERPASS_UNREACHABLE"));
+    throw new ExternalProviderError({
+      reason: "PROVIDER_UNAVAILABLE",
+      technicalCode: "OVERPASS_ENDPOINTS_UNAVAILABLE",
+    });
   };

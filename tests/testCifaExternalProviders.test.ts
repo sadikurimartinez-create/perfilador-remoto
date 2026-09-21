@@ -27,6 +27,17 @@ const originalDiscovery = {
   servingConfig: process.env.PGP_DISCOVERY_SERVING_CONFIG,
   gcpProject: process.env.GCP_PROJECT_ID,
 };
+const originalProviderEnv = {
+  youtube: process.env.YOUTUBE_API_KEY,
+  legacyYoutube: process.env.YPU_TUBE_API_KEY,
+  redditUserAgent: process.env.REDDIT_USER_AGENT,
+  pgpRedditUserAgent: process.env.PGP_REDDIT_USER_AGENT,
+  redditBearer: process.env.REDDIT_BEARER_TOKEN,
+  pgpRedditBearer: process.env.PGP_REDDIT_BEARER_TOKEN,
+  telegramToken: process.env.PGP_TELEGRAM_BOT_TOKEN,
+  mapsKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+  serpApiKey: process.env.PGP_SERPAPI_API_KEY,
+};
 
 function fetchResponse(status: number, data: unknown): Partial<Response> {
   return {
@@ -80,6 +91,15 @@ afterAll(() => {
   restoreEnv("PGP_DISCOVERY_ENGINE_ID", originalDiscovery.engine);
   restoreEnv("PGP_DISCOVERY_SERVING_CONFIG", originalDiscovery.servingConfig);
   restoreEnv("GCP_PROJECT_ID", originalDiscovery.gcpProject);
+  restoreEnv("YOUTUBE_API_KEY", originalProviderEnv.youtube);
+  restoreEnv("YPU_TUBE_API_KEY", originalProviderEnv.legacyYoutube);
+  restoreEnv("REDDIT_USER_AGENT", originalProviderEnv.redditUserAgent);
+  restoreEnv("PGP_REDDIT_USER_AGENT", originalProviderEnv.pgpRedditUserAgent);
+  restoreEnv("REDDIT_BEARER_TOKEN", originalProviderEnv.redditBearer);
+  restoreEnv("PGP_REDDIT_BEARER_TOKEN", originalProviderEnv.pgpRedditBearer);
+  restoreEnv("PGP_TELEGRAM_BOT_TOKEN", originalProviderEnv.telegramToken);
+  restoreEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", originalProviderEnv.mapsKey);
+  restoreEnv("PGP_SERPAPI_API_KEY", originalProviderEnv.serpApiKey);
 });
 
 describe("DENUE productive contract", () => {
@@ -434,5 +454,182 @@ describe("Google Discovery Engine productive contract", () => {
     });
     const dynamicAxios = (await import("axios")).default;
     expect(dynamicAxios.post).not.toHaveBeenCalled();
+  });
+});
+
+describe("CIFA external provider readiness and failure semantics", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    (axios.get as jest.Mock).mockReset();
+    (axios.post as jest.Mock).mockReset();
+  });
+
+  test("Reddit OAuth search operates with bearer, institutional User-Agent and valid empty data", async () => {
+    delete process.env.REDDIT_USER_AGENT;
+    delete process.env.PGP_REDDIT_USER_AGENT;
+    process.env.PGP_REDDIT_BEARER_TOKEN = "test-reddit-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { data: { children: [] } } });
+    const { searchReddit } = await import("../src/utils/socialProviders");
+
+    await expect(searchReddit("Aguascalientes")).resolves.toEqual([]);
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][0]).toContain("https://oauth.reddit.com/search");
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][1].headers["User-Agent"]).toBe("PERFILADOR-REMOTO-SSPE-CEIPOL/1.0");
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][1].headers.Authorization).toBe("Bearer test-reddit-token");
+  });
+
+  test.each([
+    [401, "AUTH_FAILED"],
+    [403, "AUTH_FAILED"],
+    [429, "RATE_LIMITED"],
+  ])("Reddit HTTP %s preserves %s instead of returning NO_DATA", async (status, reason) => {
+    process.env.PGP_REDDIT_BEARER_TOKEN = "invalid-test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce({ response: { status } });
+    const { searchReddit } = await import("../src/utils/socialProviders");
+
+    await expect(searchReddit("Aguascalientes")).rejects.toMatchObject({
+      failure: { reason, httpStatus: status },
+    });
+  });
+
+  test("Reddit rejects malformed OAuth response schema", async () => {
+    process.env.PGP_REDDIT_BEARER_TOKEN = "test-reddit-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { data: { children: "invalid" } } });
+    const { searchReddit } = await import("../src/utils/socialProviders");
+
+    await expect(searchReddit("Aguascalientes")).rejects.toMatchObject({ failure: { reason: "INVALID_RESPONSE" } });
+  });
+
+  test("Reddit without OAuth credentials does not issue a provider request", async () => {
+    delete process.env.REDDIT_BEARER_TOKEN;
+    delete process.env.PGP_REDDIT_BEARER_TOKEN;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const { searchReddit } = await import("../src/utils/socialProviders");
+
+    await expect(searchReddit("Aguascalientes")).resolves.toEqual([]);
+    expect(dynamicAxios.get).not.toHaveBeenCalled();
+  });
+
+  test("Telegram matches OR terms only within updates delivered to the configured bot", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({
+      data: {
+        ok: true,
+        result: [
+          { message: { text: "Reporte de robo", date: 1, chat: { title: "Canal A" } } },
+          { channel_post: { text: "Sin novedad", date: 1, chat: { title: "Canal B" } } },
+        ],
+      },
+    });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(searchTelegram("Aguascalientes operativo OR robo OR detención")).resolves.toEqual([
+      expect.objectContaining({ texto: "Reporte de robo", chat: "Canal A" }),
+    ]);
+  });
+
+  test("Telegram webhook conflict remains a classified provider failure", async () => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { ok: false, error_code: 409 } });
+    const { searchTelegram } = await import("../src/utils/socialProviders");
+
+    await expect(searchTelegram("consulta")).rejects.toMatchObject({
+      failure: { reason: "PROVIDER_UNAVAILABLE", technicalCode: "TELEGRAM_WEBHOOK_CONFLICT" },
+    });
+  });
+
+  test("the canonical YouTube key is preferred when both names exist", async () => {
+    process.env.YOUTUBE_API_KEY = "test-canonical-youtube-key";
+    process.env.YPU_TUBE_API_KEY = "test-legacy-youtube-key";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { items: [] } });
+    const { searchYouTubeOSINT } = await import("../src/utils/osintProviders");
+
+    await expect(searchYouTubeOSINT("consulta")).resolves.toEqual([]);
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][1].params.key).toBe("test-canonical-youtube-key");
+  });
+
+  test("the legacy production YouTube key name is accepted by the productive adapter", async () => {
+    delete process.env.YOUTUBE_API_KEY;
+    process.env.YPU_TUBE_API_KEY = "test-legacy-youtube-key";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { items: [] } });
+    const { searchYouTubeOSINT } = await import("../src/utils/osintProviders");
+
+    await expect(searchYouTubeOSINT("consulta")).resolves.toEqual([]);
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][1].params.key).toBe("test-legacy-youtube-key");
+  });
+
+  test("SerpAPI missing configuration performs no request", async () => {
+    delete process.env.PGP_SERPAPI_API_KEY;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const { searchSerpAPI } = await import("../src/utils/osintProviders");
+
+    await expect(searchSerpAPI("consulta")).resolves.toEqual([]);
+    expect(dynamicAxios.get).not.toHaveBeenCalled();
+  });
+
+  test("SerpAPI valid empty results remain NO_DATA-compatible", async () => {
+    process.env.PGP_SERPAPI_API_KEY = "test-serp-key";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { organic_results: [] } });
+    const { searchSerpAPI } = await import("../src/utils/osintProviders");
+
+    await expect(searchSerpAPI("consulta")).resolves.toEqual([]);
+  });
+
+  test.each([
+    [401, "AUTH_FAILED"],
+    [403, "AUTH_FAILED"],
+    [429, "RATE_LIMITED"],
+    [503, "PROVIDER_UNAVAILABLE"],
+  ])("SerpAPI HTTP %s remains %s", async (status, reason) => {
+    process.env.PGP_SERPAPI_API_KEY = "test-serp-key";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce({ response: { status } });
+    const { searchSerpAPI } = await import("../src/utils/osintProviders");
+
+    await expect(searchSerpAPI("consulta")).rejects.toMatchObject({ failure: { reason, httpStatus: status } });
+  });
+
+  test.each([
+    ["REQUEST_DENIED", "AUTH_FAILED"],
+    ["OVER_QUERY_LIMIT", "RATE_LIMITED"],
+  ])("Google Places status %s remains a provider failure classified as %s", async (status, reason) => {
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "test-maps-key";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { status, error_message: "do-not-expose" } });
+    const { searchGooglePlaces } = await import("../src/utils/urbanProviders");
+
+    await expect(searchGooglePlaces(21.886, -102.292)).rejects.toMatchObject({ failure: { reason } });
+  });
+
+  test("Google Places preserves valid data and ZERO_RESULTS as successful provider responses", async () => {
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "test-maps-key";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock)
+      .mockResolvedValueOnce({ data: { status: "OK", results: [{ place_id: "place-1" }] } })
+      .mockResolvedValue({ data: { status: "ZERO_RESULTS", results: [] } });
+    const { searchGooglePlaces } = await import("../src/utils/urbanProviders");
+
+    await expect(searchGooglePlaces(21.886, -102.292)).resolves.toEqual([{ place_id: "place-1" }]);
+    expect(dynamicAxios.get).toHaveBeenCalledTimes(7);
   });
 });

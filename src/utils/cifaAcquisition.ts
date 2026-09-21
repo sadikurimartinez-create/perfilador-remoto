@@ -27,6 +27,8 @@ export interface CifaSourceEnvelope<T = unknown> {
   validationStatus: "UNREVIEWED";
   isSimulated: false;
   authoritative: boolean;
+  applicable: boolean;
+  configuredForProductiveAcquisition: boolean;
   selectedForProductiveAcquisition: boolean;
   query: string;
   requestedAt: string;
@@ -44,6 +46,8 @@ export interface CifaSourceEnvelope<T = unknown> {
   httpStatus?: number;
   nativeErrorCode?: string;
   nativeCauseCode?: string;
+  geographyContext?: unknown;
+  providerMetadata?: unknown;
 }
 
 export interface CifaSourceDefinition<T = unknown> {
@@ -56,14 +60,50 @@ export interface CifaSourceDefinition<T = unknown> {
   acquisitionMode: Extract<AcquisitionMode, "OBSERVED" | "AI_GENERATED" | "CONNECTIVITY_ONLY">;
   semanticRole: IntelligenceSemanticRole;
   authoritative?: boolean;
+  applicable?: boolean;
   sourceReference: string;
   sourceUrl?: string | null;
   rawSourceReference?: string | null;
-  readiness?: () => { ready: boolean; status?: "NOT_CONFIGURED" | "UNAVAILABLE"; code?: string; message?: string };
+  readiness?: () => {
+    ready: boolean;
+    configured?: boolean;
+    status?: "NOT_CONFIGURED" | "UNAVAILABLE";
+    code?: string;
+    message?: string;
+  };
   execute: () => Promise<T>;
   count?: (data: T) => number;
   failureCode?: string;
   failureMessage?: string;
+  geographyContext?: unknown;
+}
+
+export function summarizeCifaSourceCoverage(
+  results: CifaSourceEnvelope[],
+  sourcesRequested: number
+) {
+  const notApplicable = results.filter((result) => result.applicable === false);
+  const applicable = results.filter((result) => result.applicable !== false);
+  const responded = results.filter((result) =>
+    result.acquisitionStatus === "ACQUIRED" ||
+    result.acquisitionStatus === "NO_DATA" ||
+    result.acquisitionStatus === "PARTIAL"
+  );
+  const executed = applicable.filter((result) => result.selectedForProductiveAcquisition).length;
+  const configured = applicable.filter((result) => result.configuredForProductiveAcquisition).length;
+  const unavailable = applicable.filter((result) => result.acquisitionStatus === "UNAVAILABLE").length;
+
+  return {
+    sourcesRequested,
+    sourcesConfigured: configured,
+    sourcesExecuted: executed,
+    sourcesResponded: responded.length,
+    sourcesWithData: applicable.filter((result) => result.resultCount > 0).length,
+    sourcesApplicable: applicable.length,
+    sourcesNotApplicable: notApplicable.length,
+    sourcesUnavailable: unavailable,
+    executionCoveragePercent: applicable.length > 0 ? Math.round((executed / applicable.length) * 100) : 0,
+  };
 }
 
 function countResult(data: unknown): number {
@@ -102,6 +142,7 @@ function attachIntegrity<T>(data: T, envelope: CifaSourceEnvelope<T>): T {
     if (!item || typeof item !== "object") return item;
     return {
       ...(item as Record<string, unknown>),
+      source: (item as Record<string, unknown>).source ?? envelope.providerName,
       acquisitionMode: envelope.acquisitionMode,
       acquisitionStatus: envelope.acquisitionStatus,
       semanticRole: envelope.semanticRole,
@@ -112,8 +153,17 @@ function attachIntegrity<T>(data: T, envelope: CifaSourceEnvelope<T>): T {
       sourceReference: envelope.sourceReference,
       sourceUrl: envelope.sourceUrl,
       rawSourceReference: envelope.rawSourceReference,
+      geographyContext: envelope.geographyContext,
       query: envelope.query,
       acquiredAt: envelope.acquiredAt,
+      provenance: (item as Record<string, unknown>).provenance ?? {
+        providerId: envelope.providerId,
+        sourceId: envelope.sourceId,
+        sourceReference: envelope.sourceReference,
+        sourceUrl: envelope.sourceUrl,
+        query: envelope.query,
+        acquiredAt: envelope.acquiredAt,
+      },
       epistemicIntegrity: integrityFor(envelope),
     };
   };
@@ -128,6 +178,8 @@ export async function executeCifaSource<T>(
   const requestedAt = new Date().toISOString();
   const startedAt = Date.now();
   const readiness = definition.readiness?.() ?? { ready: true };
+  const applicable = definition.applicable !== false;
+  const configuredForProductiveAcquisition = applicable && (readiness.configured ?? readiness.ready);
 
   if (!readiness.ready) {
     const unavailable = readiness.status === "UNAVAILABLE";
@@ -144,6 +196,8 @@ export async function executeCifaSource<T>(
       validationStatus: "UNREVIEWED",
       isSimulated: false,
       authoritative: Boolean(definition.authoritative),
+      applicable,
+      configuredForProductiveAcquisition,
       selectedForProductiveAcquisition: false,
       query,
       requestedAt,
@@ -153,6 +207,7 @@ export async function executeCifaSource<T>(
       sourceReference: definition.sourceReference,
       sourceUrl: definition.sourceUrl ?? null,
       rawSourceReference: definition.rawSourceReference ?? null,
+      geographyContext: definition.geographyContext,
       data: [],
       errorCode: readiness.code ?? (unavailable ? "SOURCE_UNAVAILABLE" : "SOURCE_NOT_CONFIGURED"),
       errorMessage: readiness.message ?? (unavailable ? "La fuente no está disponible." : "La fuente no está configurada."),
@@ -176,6 +231,8 @@ export async function executeCifaSource<T>(
       validationStatus: "UNREVIEWED",
       isSimulated: false,
       authoritative: Boolean(definition.authoritative),
+      applicable,
+      configuredForProductiveAcquisition,
       selectedForProductiveAcquisition: true,
       query,
       requestedAt,
@@ -185,6 +242,7 @@ export async function executeCifaSource<T>(
       sourceReference: definition.sourceReference,
       sourceUrl: definition.sourceUrl ?? null,
       rawSourceReference: definition.rawSourceReference ?? null,
+      geographyContext: definition.geographyContext,
       data,
     };
     envelope.data = attachIntegrity(data, envelope);
@@ -204,6 +262,8 @@ export async function executeCifaSource<T>(
       validationStatus: "UNREVIEWED",
       isSimulated: false,
       authoritative: Boolean(definition.authoritative),
+      applicable,
+      configuredForProductiveAcquisition,
       selectedForProductiveAcquisition: true,
       query,
       requestedAt,
@@ -213,6 +273,7 @@ export async function executeCifaSource<T>(
       sourceReference: definition.sourceReference,
       sourceUrl: definition.sourceUrl ?? null,
       rawSourceReference: definition.rawSourceReference ?? null,
+      geographyContext: definition.geographyContext,
       data: [],
       errorCode: definition.failureCode ?? "PROVIDER_REQUEST_FAILED",
       errorMessage: failure.reason === "UNKNOWN_FAILURE"
@@ -248,6 +309,8 @@ export async function executeCifaBatch(
       validationStatus: "UNREVIEWED",
       isSimulated: false,
       authoritative: Boolean(definition.authoritative),
+      applicable: definition.applicable !== false,
+      configuredForProductiveAcquisition: definition.applicable !== false,
       selectedForProductiveAcquisition: true,
       query,
       requestedAt: new Date().toISOString(),

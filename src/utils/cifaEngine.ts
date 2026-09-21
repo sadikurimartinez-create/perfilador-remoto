@@ -14,14 +14,20 @@ import { runMultiSourceCorrelation } from "./mcmCorrelation";
 import { autoDiscoverSource, logLearningAction } from "./imfoService";
 import { getRegionalRSSFeeds } from "@/lib/osintSources";
 import { getDenueData } from "@/lib/osintActions";
-import { validateGeoIntegrity } from "./geoIntegrityEngine";
+import { resolveCanonicalAcquisitionGeography } from "./canonicalProjectGeography";
 import {
   executeCifaBatch,
   executeCifaSource,
+  summarizeCifaSourceCoverage,
   type CifaSourceDefinition,
   type CifaSourceEnvelope,
 } from "./cifaAcquisition";
-import { ExternalProviderError, type ExternalFailureReason } from "./externalProviderError";
+import {
+  ExternalProviderError,
+  classifyExternalFailure,
+  classifyHttpFailure,
+  type ExternalFailureReason,
+} from "./externalProviderError";
 
 function envConfigured(...values: Array<string | undefined>): boolean {
   return values.some((value) => Boolean(value?.trim()));
@@ -35,7 +41,7 @@ function textFromXml(fragment: string, tag: string): string {
 
 async function fetchRssFeedData(url: string, name: string, query: string): Promise<any[]> {
   const response = await fetch(url, { next: { revalidate: 300 } });
-  if (!response.ok) throw new Error("RSS_HTTP_ERROR");
+  if (!response.ok) throw classifyHttpFailure(response.status);
   const acquiredAt = new Date().toISOString();
   const xmlText = await response.text();
   const items = [...xmlText.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((match) => match[1]);
@@ -56,7 +62,10 @@ async function fetchRegionalRss(location: string, query: string): Promise<any[]>
   const feeds = getRegionalRSSFeeds(location);
   const settled = await Promise.allSettled(feeds.map((feed) => fetchRssFeedData(feed.url, feed.name, query)));
   const successful = settled.filter((result): result is PromiseFulfilledResult<any[]> => result.status === "fulfilled");
-  if (feeds.length > 0 && successful.length === 0) throw new Error("RSS_ALL_FEEDS_FAILED");
+  if (feeds.length > 0 && successful.length === 0) {
+    const firstFailure = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    throw classifyExternalFailure(firstFailure?.reason);
+  }
   return successful.flatMap((result) => result.value);
 }
 
@@ -74,17 +83,23 @@ function countGeoreferenced(data: unknown): number {
   const values = Array.isArray(data) ? data : data ? [data] : [];
   return values.filter((item: any) => {
     const coordinates = item?.geometry?.coordinates ?? item?.location?.coordinates;
+    const placesLocation = item?.geometry?.location;
+    const center = item?.center;
     return (Array.isArray(coordinates) && coordinates.length >= 2) ||
-      (Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lng)));
+      (Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lng))) ||
+      (Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lon))) ||
+      (Number.isFinite(Number(item?.latitude)) && Number.isFinite(Number(item?.longitude))) ||
+      (Number.isFinite(Number(placesLocation?.lat)) && Number.isFinite(Number(placesLocation?.lng))) ||
+      (Number.isFinite(Number(center?.lat)) && Number.isFinite(Number(center?.lon ?? center?.lng)));
   }).length;
 }
 
 export async function runUnifiedCifaScan(project: any, selectedSources: string[], customQuery?: string) {
   const startedAt = Date.now();
   const location = project?.locationName || "Aguascalientes";
-  const geoValidation = validateGeoIntegrity(project?.latitude, project?.longitude);
-  const lat = geoValidation.latitude;
-  const lng = geoValidation.longitude;
+  const geographyContext = resolveCanonicalAcquisitionGeography(project ?? {});
+  const lat = geographyContext?.queryPoint.lat ?? null;
+  const lng = geographyContext?.queryPoint.lng ?? null;
   const coordinatesReady = hasCoordinates(lat, lng);
   const query = customQuery?.trim() || `${location} operativo OR balacera OR robo OR detención OR cartel`;
   const definitions: CifaSourceDefinition[] = [];
@@ -101,8 +116,9 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     classification: "OBSERVED_REAL",
     acquisitionMode: "OBSERVED",
     semanticRole: "OBSERVATION",
+    applicable: false,
     sourceReference: "src/utils/cifaEngine.ts:runUnifiedCifaScan",
-    readiness: () => ({ ready: false, code: "GROUP_HAS_NO_PROVIDER", message: "OSINT Territorial es un agrupador y no produce evidencia autónoma." }),
+    readiness: () => ({ ready: false, status: "UNAVAILABLE", code: "NOT_APPLICABLE_AGGREGATOR", message: "OSINT Territorial es un agrupador y no produce evidencia autónoma." }),
     execute: async () => [],
   });
 
@@ -143,15 +159,19 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceKey: "telegram",
     sourceId: "telegram-bot-updates",
     providerId: "TELEGRAM_BOT_API",
-    providerName: "Telegram Bot API",
-    sourceType: "TELEGRAM_DIRECT_OBSERVATION",
+    providerName: "Telegram Bot API (updates recibidos)",
+    sourceType: "TELEGRAM_BOT_RECEIVED_UPDATES",
     classification: "OBSERVED_REAL",
     acquisitionMode: "OBSERVED",
     semanticRole: "SOURCE_FACT",
     sourceReference: "src/utils/socialProviders.ts:searchTelegram",
     sourceUrl: "https://api.telegram.org/",
     rawSourceReference: "telegram:getUpdates:configured-chats-only",
-    readiness: () => ({ ready: envConfigured(process.env.PGP_TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_BOT_TOKEN) }),
+    readiness: () => ({
+      ready: envConfigured(process.env.PGP_TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_BOT_TOKEN),
+      code: "SOURCE_NOT_CONFIGURED",
+      message: "Telegram requiere un token de bot y sólo analiza updates entregados a ese bot.",
+    }),
     execute: () => searchTelegram(query),
     failureCode: "TELEGRAM_REQUEST_FAILED",
   });
@@ -176,16 +196,16 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
   add("reddit", {
     sourceKey: "reddit",
     sourceId: "reddit-public-search",
-    providerId: "REDDIT_PUBLIC_API",
-    providerName: "Reddit Public JSON API",
+    providerId: "REDDIT_DATA_API",
+    providerName: "Reddit Data API OAuth",
     sourceType: "REDDIT_DIRECT_OBSERVATION",
     classification: "OBSERVED_REAL",
     acquisitionMode: "OBSERVED",
     semanticRole: "SOURCE_FACT",
     sourceReference: "src/utils/socialProviders.ts:searchReddit",
-    sourceUrl: "https://www.reddit.com/search.json",
-    rawSourceReference: "reddit:search.json",
-    readiness: () => ({ ready: envConfigured(process.env.PGP_REDDIT_USER_AGENT, process.env.REDDIT_USER_AGENT) }),
+    sourceUrl: "https://oauth.reddit.com/search",
+    rawSourceReference: "reddit:oauth:search",
+    readiness: () => ({ ready: envConfigured(process.env.PGP_REDDIT_BEARER_TOKEN, process.env.REDDIT_BEARER_TOKEN) }),
     execute: () => searchReddit(query),
     failureCode: "REDDIT_REQUEST_FAILED",
   });
@@ -202,7 +222,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceReference: "src/utils/osintProviders.ts:searchYouTubeOSINT",
     sourceUrl: "https://www.googleapis.com/youtube/v3/search",
     rawSourceReference: "youtube:v3:search",
-    readiness: () => ({ ready: envConfigured(process.env.YOUTUBE_API_KEY) }),
+    readiness: () => ({ ready: envConfigured(process.env.YOUTUBE_API_KEY, process.env.YPU_TUBE_API_KEY) }),
     execute: () => searchYouTubeOSINT(query),
     failureCode: "YOUTUBE_REQUEST_FAILED",
   });
@@ -239,9 +259,13 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceReference: "src/utils/urbanProviders.ts:searchGooglePlaces",
     sourceUrl: "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
     rawSourceReference: "google-places:nearbysearch",
-    readiness: () => coordinatesReady
-      ? { ready: envConfigured(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, process.env.PGP_GOOGLE_BROWSER_KEY, process.env.PGP_GOOGLE_SERVER_KEY) }
-      : { ready: false, status: "UNAVAILABLE", code: "INVALID_COORDINATES", message: "El expediente no tiene coordenadas válidas." },
+    geographyContext: geographyContext ?? undefined,
+    readiness: () => {
+      const configured = envConfigured(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, process.env.PGP_GOOGLE_BROWSER_KEY, process.env.PGP_GOOGLE_SERVER_KEY);
+      return coordinatesReady
+        ? { ready: configured, configured }
+        : { ready: false, configured, status: "UNAVAILABLE", code: "INVALID_COORDINATES", message: "El expediente no tiene coordenadas válidas." };
+    },
     execute: () => searchGooglePlaces(lat as number, lng as number),
     failureCode: "GOOGLE_PLACES_REQUEST_FAILED",
   });
@@ -259,9 +283,13 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceReference: "src/lib/osintActions.ts:getDenueData",
     sourceUrl: "https://www.inegi.org.mx/app/api/denue/v1/consulta/Buscar",
     rawSourceReference: "denue:v1:consulta:Buscar:todos",
-    readiness: () => coordinatesReady
-      ? { ready: envConfigured(process.env.INEGI_DENUE_TOKEN) }
-      : { ready: false, status: "UNAVAILABLE", code: "INVALID_COORDINATES", message: "DENUE requiere coordenadas válidas." },
+    geographyContext: geographyContext ?? undefined,
+    readiness: () => {
+      const configured = envConfigured(process.env.INEGI_DENUE_TOKEN);
+      return coordinatesReady
+        ? { ready: configured, configured }
+        : { ready: false, configured, status: "UNAVAILABLE", code: "INVALID_COORDINATES", message: "DENUE requiere coordenadas válidas." };
+    },
     execute: async () => {
       const result = await getDenueData(lat as number, lng as number);
       if (!result.exito && result.denueStatus !== "EMPTY") {
@@ -290,9 +318,10 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceReference: "src/utils/urbanProviders.ts:searchOverpass",
     sourceUrl: getOverpassSourceReference(),
     rawSourceReference: "overpass:interpreter",
+    geographyContext: geographyContext ?? undefined,
     readiness: () => coordinatesReady
       ? { ready: true }
-      : { ready: false, status: "UNAVAILABLE", code: "INVALID_COORDINATES", message: "Overpass requiere coordenadas válidas." },
+      : { ready: false, configured: true, status: "UNAVAILABLE", code: "INVALID_COORDINATES", message: "Overpass requiere coordenadas válidas." },
     execute: () => searchOverpass(lat as number, lng as number),
     failureCode: "OVERPASS_REQUEST_FAILED",
   });
@@ -307,8 +336,9 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
       classification: "OBSERVED_REAL",
       acquisitionMode: "OBSERVED",
       semanticRole: "SOURCE_FACT",
+      applicable: false,
       sourceReference: "src/utils/cifaEngine.ts:runUnifiedCifaScan",
-      readiness: () => ({ ready: false, code: "NO_AUTHORIZED_PROVIDER", message: `No existe un proveedor ${sourceKey === "facebook_public" ? "Facebook" : "Instagram"} autorizado para adquisición productiva.` }),
+      readiness: () => ({ ready: false, status: "UNAVAILABLE", code: "UNSUPPORTED_PROVIDER", message: `No existe un proveedor ${sourceKey === "facebook_public" ? "Facebook" : "Instagram"} autorizado para búsqueda pública general productiva.` }),
       execute: async () => [],
     });
   }
@@ -317,6 +347,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
 
   if (selectedSources.includes("discovery_engine")) {
     let analysis: unknown = null;
+    let providerMetadata: unknown = null;
     const discovery = await executeCifaSource({
       sourceKey: "discovery_engine",
       sourceId: "vertex-ai-search",
@@ -333,10 +364,12 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
       execute: async () => {
         const result = await buscarEnWebOSINT(query);
         analysis = result.analisisInteligencia;
+        providerMetadata = result.discoveryMetadata ?? null;
         return result.resultadosWeb;
       },
       failureCode: "DISCOVERY_ENGINE_FAILED",
     }, query);
+    discovery.providerMetadata = providerMetadata;
     sourceResults.push(discovery);
     if (analysis) {
       sourceResults.push(await executeCifaSource({
@@ -369,13 +402,29 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
       sourceReference: "src/utils/socialProviders.ts:analyzeStreetViewWithGemini",
       sourceUrl: "https://maps.googleapis.com/maps/api/streetview",
       rawSourceReference: "street-view:headings:0,90,180,270",
-      readiness: () => coordinatesReady && envConfigured(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, process.env.GOOGLE_MAPS_API_KEY)
-        ? { ready: true }
-        : { ready: false, status: coordinatesReady ? "NOT_CONFIGURED" : "UNAVAILABLE" },
+      geographyContext: geographyContext ?? undefined,
+      readiness: () => {
+        const configured = envConfigured(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, process.env.GOOGLE_MAPS_API_KEY);
+        return coordinatesReady && configured
+          ? { ready: true, configured: true }
+          : {
+              ready: false,
+              configured,
+              status: coordinatesReady ? "NOT_CONFIGURED" : "UNAVAILABLE",
+              code: coordinatesReady ? "SOURCE_NOT_CONFIGURED" : "INVALID_COORDINATES",
+              message: coordinatesReady
+                ? "Street View requiere una API key configurada."
+                : "Street View requiere una geografía canónica válida.",
+            };
+      },
       execute: async () => {
         const result = await analyzeStreetViewWithGemini(lat as number, lng as number);
         analysis = result?.analisis ?? null;
-        return result?.imagenesBase64 ?? [];
+        return (result?.imagenesBase64 ?? []).map((imageBase64: string, imageIndex: number) => ({
+          imageBase64,
+          imageIndex,
+          requestedLocation: { lat, lng },
+        }));
       },
       failureCode: "STREET_VIEW_REQUEST_FAILED",
     }, query);
@@ -436,38 +485,42 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
   const notConfigured = primaryResults.filter((result) => result.acquisitionStatus === "NOT_CONFIGURED");
   const unavailable = primaryResults.filter((result) => result.acquisitionStatus === "UNAVAILABLE");
   const noData = primaryResults.filter((result) => result.acquisitionStatus === "NO_DATA");
-  const resultsAcquired = sourceResults.reduce((sum, result) => sum + result.resultCount, 0);
-  const georeferencedResults = sourceResults.reduce((sum, result) => sum + countGeoreferenced(result.data), 0);
-  const executed = primaryResults.filter((result) => result.selectedForProductiveAcquisition).length;
-  const degradedCount = failed.length + notConfigured.length + unavailable.length + noData.length;
+  const notApplicable = primaryResults.filter((result) => result.applicable === false);
+  const applicablePrimaryResults = primaryResults.filter((result) => result.applicable !== false);
+  const validResponses = primaryResults.filter((result) =>
+    result.acquisitionStatus === "ACQUIRED" || result.acquisitionStatus === "NO_DATA" || result.acquisitionStatus === "PARTIAL"
+  );
+  const resultsAcquired = primaryResults.reduce((sum, result) => sum + result.resultCount, 0);
+  const georeferencedResults = primaryResults.reduce((sum, result) => sum + countGeoreferenced(result.data), 0);
+  const unavailableApplicable = unavailable.filter((result) => !notApplicable.includes(result));
+  const degradedCount = failed.length + notConfigured.length + unavailableApplicable.length;
 
   const institutionalUse = observed.length > 0
     ? (degradedCount > 0 ? "PARTIAL_PRODUCTIVE" : "PRODUCTIVE_OBSERVED")
     : aiDerived.length > 0
       ? "AI_DERIVED_ONLY"
-      : failed.length > 0 && failed.length === sourceResults.length
+      : failed.length > 0 && failed.length === applicablePrimaryResults.length
         ? "FAILED"
-        : primaryResults.length > 0 && notConfigured.length + unavailable.length === primaryResults.length
+        : applicablePrimaryResults.length > 0 && notConfigured.length === applicablePrimaryResults.length
           ? "NOT_CONFIGURED"
+          : applicablePrimaryResults.length === 0 || unavailableApplicable.length === applicablePrimaryResults.length
+            ? "UNAVAILABLE"
           : "NO_DATA";
 
   const totalProcessingTime = Number(((Date.now() - startedAt) / 1000).toFixed(2));
+  const coverageSummary = summarizeCifaSourceCoverage(primaryResults, selectedSources.length);
   const coveragePanel = {
     sourcesConsulted: selectedSources,
     totalProcessingTime,
-    sourcesRequested: selectedSources.length,
-    sourcesConfigured: primaryResults.filter((result) => result.acquisitionStatus !== "NOT_CONFIGURED" && result.acquisitionStatus !== "UNAVAILABLE").length,
-    sourcesExecuted: executed,
-    sourcesWithData: sourceResults.filter((result) => result.resultCount > 0).length,
+    ...coverageSummary,
     sourcesObserved: observed.length,
     sourcesAiDerived: aiDerived.length,
     sourcesNoData: noData.length,
     sourcesFailed: failed.length,
     sourcesNotConfigured: notConfigured.length,
-    sourcesUnavailable: unavailable.length,
+    sourcesUnavailable: coverageSummary.sourcesUnavailable,
     resultsAcquired,
     georeferencedResults,
-    executionCoveragePercent: selectedSources.length > 0 ? Math.round((executed / selectedSources.length) * 100) : 0,
     territorialCoverage: null,
     territorialCoverageStatus: "NOT_COMPUTABLE",
     publicationsAnalyzed: observed.reduce((sum, result) => sum + (result.sourceType === "VIDEO_SEARCH" || result.sourceType === "POINT_OF_INTEREST" ? 0 : result.resultCount), 0),
@@ -483,7 +536,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
   if (correlation.correlatedEntities.length > 0) recommendations.push(`Se detectaron ${correlation.correlatedEntities.length} menciones correlacionadas que requieren validación analista.`);
 
   return {
-    success: observed.length > 0 || aiDerived.length > 0,
+    success: validResponses.length > 0 || aiDerived.length > 0,
     institutionalUse,
     orchestrator: {
       engine: "CIFA-CEIPOL",
@@ -491,6 +544,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
       generatedAt: new Date().toISOString(),
       query,
       isSimulated: false,
+      geographyContext,
     },
     correlation,
     coveragePanel,

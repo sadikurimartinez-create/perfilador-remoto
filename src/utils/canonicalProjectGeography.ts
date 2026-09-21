@@ -474,6 +474,17 @@ export function adaptLegacyProjectGeography(project: {
   return null;
 }
 
+export interface CanonicalAcquisitionGeographyContext {
+  geographyId: string;
+  geographyType: CanonicalGeographyType;
+  geometry: CanonicalGeometry;
+  coordinates: LatLngPoint[];
+  queryPoint: LatLngPoint;
+  queryPointDerivation: "CANONICAL_POINT" | "CORRIDOR_NODE" | "POLYGON_CENTROID";
+  queryPointIndex?: number;
+  source: CanonicalGeographySource;
+}
+
 export function buildImportedProjectCanonicalGeographyPatch(project: {
   id: string;
   canonicalGeography?: CanonicalProjectGeography | FirestoreSafeCanonicalProjectGeography | null;
@@ -524,6 +535,69 @@ export function getCanonicalMapViewport(geography: CanonicalProjectGeography | n
     center: centroid ? { lat: centroid.lat, lng: centroid.lng } : undefined,
     bounds,
     fitMode: points.length > 1 ? ("BOUNDS" as const) : ("CENTER" as const),
+  };
+}
+
+export function resolveCanonicalAcquisitionGeography(project: {
+  id?: string | null;
+  geometryType?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  canonicalGeography?: CanonicalProjectGeography | FirestoreSafeCanonicalProjectGeography | null;
+}): CanonicalAcquisitionGeographyContext | null {
+  const suppliedCanonical = project.canonicalGeography ?? null;
+  if (suppliedCanonical && suppliedCanonical.validationStatus !== "VALID") return null;
+
+  const canonical = suppliedCanonical
+    ? deserializeCanonicalGeographyFromFirestore(suppliedCanonical)
+    : adaptLegacyProjectGeography({
+      id: String(project.id || "project"),
+      geometryType: project.geometryType,
+      latitude: project.latitude,
+      longitude: project.longitude,
+    });
+
+  if (!canonical || canonical.validationStatus !== "VALID") return null;
+  const coordinates = getCanonicalGeographyCoordinates(canonical).filter(isValidLatLng);
+  if (coordinates.length === 0) return null;
+
+  if (canonical.type === "INDIVIDUAL") {
+    return {
+      geographyId: canonical.geographyId,
+      geographyType: canonical.type,
+      geometry: canonical.geometry,
+      coordinates,
+      queryPoint: coordinates[0],
+      queryPointDerivation: "CANONICAL_POINT",
+      queryPointIndex: 0,
+      source: canonical.source,
+    };
+  }
+
+  if (canonical.type === "CORRIDOR") {
+    const queryPointIndex = Math.floor((coordinates.length - 1) / 2);
+    return {
+      geographyId: canonical.geographyId,
+      geographyType: canonical.type,
+      geometry: canonical.geometry,
+      coordinates,
+      queryPoint: coordinates[queryPointIndex],
+      queryPointDerivation: "CORRIDOR_NODE",
+      queryPointIndex,
+      source: canonical.source,
+    };
+  }
+
+  const centroid = deriveCentroid(canonical.type, coordinates);
+  if (!isValidLatLng(centroid)) return null;
+  return {
+    geographyId: canonical.geographyId,
+    geographyType: canonical.type,
+    geometry: canonical.geometry,
+    coordinates,
+    queryPoint: { lat: centroid.lat, lng: centroid.lng },
+    queryPointDerivation: "POLYGON_CENTROID",
+    source: canonical.source,
   };
 }
 

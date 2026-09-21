@@ -25,7 +25,7 @@ export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
   rss_regional: "Radar OSINT Regional (RSS)",
   google_dorks: "Google Dorks Search",
   discovery_engine: "Discovery Engine (Vertex AI)",
-  telegram: "Telegram Bot, Grupos y Canales",
+  telegram: "Telegram Bot · Updates recibidos",
   x_twitter: "X (Twitter) Publicaciones",
   reddit: "Reddit Subreddits & Foros",
   youtube: "YouTube Videos y Shorts",
@@ -138,11 +138,12 @@ export const CifaCeipolPanel: React.FC<Props> = ({
     setToast({ type: "success", message: "Síntesis y provenance de fuentes observadas anexadas al expediente para revisión." });
   };
 
-  const sourceStatusClass = (status: string) => {
-    if (status === "ACQUIRED") return "bg-emerald-950/60 text-emerald-400 border-emerald-800/40";
-    if (status === "NO_DATA") return "bg-slate-950 text-slate-300 border-slate-700";
-    if (status === "FAILED") return "bg-red-950/60 text-red-300 border-red-800/40";
-    if (status === "NOT_CONFIGURED") return "bg-amber-950/60 text-amber-300 border-amber-800/40";
+  const sourceStatusClass = (source: any) => {
+    if (source.applicable === false) return "bg-slate-950 text-slate-300 border-slate-700";
+    if (source.acquisitionStatus === "ACQUIRED") return "bg-emerald-950/60 text-emerald-400 border-emerald-800/40";
+    if (source.acquisitionStatus === "NO_DATA") return "bg-emerald-950/40 text-emerald-300 border-emerald-800/40";
+    if (source.acquisitionStatus === "FAILED") return "bg-red-950/60 text-red-300 border-red-800/40";
+    if (source.acquisitionStatus === "NOT_CONFIGURED") return "bg-amber-950/60 text-amber-300 border-amber-800/40";
     return "bg-orange-950/60 text-orange-300 border-orange-800/40";
   };
 
@@ -365,8 +366,8 @@ export const CifaCeipolPanel: React.FC<Props> = ({
             {/* Measurable execution coverage */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-300 uppercase tracking-wider">Fuentes ejecutadas sobre solicitadas:</span>
-                <span className="text-lg font-black text-emerald-400">{results.coveragePanel.sourcesExecuted}/{results.coveragePanel.sourcesRequested}</span>
+                <span className="font-bold text-slate-300 uppercase tracking-wider">Fuentes ejecutadas sobre aplicables:</span>
+                <span className="text-lg font-black text-emerald-400">{results.coveragePanel.sourcesExecuted}/{results.coveragePanel.sourcesApplicable}</span>
               </div>
               <div className="w-full bg-slate-950 rounded-full h-3 border border-slate-800">
                 <div 
@@ -374,8 +375,13 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                   style={{ width: `${results.coveragePanel.executionCoveragePercent}%` }}
                 />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 text-[10px] text-slate-400 uppercase tracking-wider">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2 text-[10px] text-slate-400 uppercase tracking-wider">
+                <div>Solicitadas: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesRequested}</span></div>
+                <div>Configuradas: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesConfigured}</span></div>
+                <div>Respondieron: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesResponded}</span></div>
                 <div>Con datos: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesWithData}</span></div>
+                <div>Sin datos: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesNoData}</span></div>
+                <div>No aplicables: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesNotApplicable}</span></div>
                 <div>Observadas: <span className="text-slate-200 font-bold">{results.coveragePanel.sourcesObserved}</span></div>
                 <div>Resultados: <span className="text-slate-200 font-bold">{results.coveragePanel.resultsAcquired}</span></div>
                 <div>Georreferenciados: <span className="text-slate-200 font-bold">{results.coveragePanel.georeferencedResults}</span></div>
@@ -394,8 +400,10 @@ export const CifaCeipolPanel: React.FC<Props> = ({
                       <p className="text-[9px] text-slate-500 mt-1">{source.providerName} · {source.acquisitionMode} · {source.resultCount} resultado(s)</p>
                       {source.errorMessage && <p className="text-[9px] text-slate-400 mt-1">{source.errorMessage}</p>}
                     </div>
-                    <span className={`shrink-0 px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${sourceStatusClass(source.acquisitionStatus)}`}>
-                      {source.acquisitionStatus}
+                    <span className={`shrink-0 px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wider ${sourceStatusClass(source)}`}>
+                      {source.applicable === false
+                        ? "NO APLICABLE"
+                        : source.acquisitionStatus === "NO_DATA" ? "READY · NO_DATA" : source.acquisitionStatus}
                     </span>
                   </div>
                 ))}

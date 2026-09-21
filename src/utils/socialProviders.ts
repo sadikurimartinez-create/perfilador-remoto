@@ -10,7 +10,9 @@ import {
 } from './externalProviderError';
 
 const REDDIT_USER_AGENT =
-  process.env.PGP_REDDIT_USER_AGENT || process.env.REDDIT_USER_AGENT || "";
+  process.env.PGP_REDDIT_USER_AGENT || process.env.REDDIT_USER_AGENT || "PERFILADOR-REMOTO-SSPE-CEIPOL/1.0";
+const REDDIT_BEARER =
+  process.env.PGP_REDDIT_BEARER_TOKEN || process.env.REDDIT_BEARER_TOKEN || "";
 
 const X_BEARER =
   process.env.PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
@@ -126,7 +128,9 @@ export const buscarEnWebOSINT = async (query: string) => {
       const auth = new GoogleAuth(authOptions);
       const client = await auth.getClient();
       const tokenResponse = await client.getAccessToken();
-      if (!tokenResponse.token) throw new Error("TOKEN_UNAVAILABLE");
+      if (!tokenResponse.token) {
+        throw new ExternalProviderError({ reason: "AUTH_FAILED", technicalCode: "GOOGLE_OAUTH_TOKEN_UNAVAILABLE" });
+      }
       token = tokenResponse.token;
     } catch (error) {
       const oauthFailure = classifyExternalFailure(error).failure;
@@ -282,9 +286,9 @@ export const analyzeStreetViewWithGemini = async (lat: number, lng: number) => {
       // Validamos que no sea la imagen genérica gris de "No image available"
       if (base64.length > 10000) svImages.push(base64);
     }
-  } catch {
+  } catch (error) {
     console.error("[Street View] Image acquisition failed.");
-    throw new Error("STREET_VIEW_IMAGE_REQUEST_FAILED");
+    throw classifyExternalFailure(error);
   }
 
   if (svImages.length === 0) return { analisis: null, imagenesBase64: [] };
@@ -324,8 +328,8 @@ export const searchReddit = async (
   query: string
 ) => {
 
-  if (!REDDIT_USER_AGENT) {
-    console.warn("REDDIT_USER_AGENT no configurado. Omitiendo búsqueda en Reddit.");
+  if (!REDDIT_BEARER) {
+    console.warn("REDDIT_BEARER_TOKEN no configurado. Omitiendo búsqueda en Reddit.");
     return [];
   }
 
@@ -333,23 +337,22 @@ export const searchReddit = async (
 
     const response =
       await axios.get(
-        `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}`,
+        `https://oauth.reddit.com/search?q=${encodeURIComponent(query)}`,
         {
           headers: {
-            'User-Agent':
-              REDDIT_USER_AGENT,
+            'User-Agent': REDDIT_USER_AGENT,
+            Authorization: `Bearer ${REDDIT_BEARER}`,
           },
         }
       );
 
-    return (
-      response.data?.data?.children || []
-    );
+    const children = response.data?.data?.children;
+    if (!Array.isArray(children)) throw invalidProviderResponse();
+    return children;
 
-  } catch {
+  } catch (error) {
     console.error("[Reddit] Provider request failed.");
-
-    throw new Error("REDDIT_REQUEST_FAILED");
+    throw classifyExternalFailure(error);
 
   }
 
@@ -371,12 +374,26 @@ export const searchTelegram = async (
       `https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`
     );
 
-    const updates = response.data?.result || [];
+    if (response.data?.ok === false) {
+      const telegramCode = Number(response.data?.error_code);
+      if (telegramCode === 409) {
+        throw new ExternalProviderError({ reason: "PROVIDER_UNAVAILABLE", httpStatus: 409, technicalCode: "TELEGRAM_WEBHOOK_CONFLICT" });
+      }
+      if (Number.isFinite(telegramCode) && telegramCode > 0) throw classifyHttpFailure(telegramCode);
+      throw invalidProviderResponse();
+    }
+    if (response.data?.ok !== true || !Array.isArray(response.data?.result)) throw invalidProviderResponse();
+    const updates = response.data.result;
+    const queryTerms = query
+      .split(/\s+OR\s+/i)
+      .map((term) => term.trim().toLowerCase())
+      .filter(Boolean);
 
     // Filtramos localmente por la palabra clave (query) proporcionada
     const filtered = updates.filter((update: any) => {
       const text = update.message?.text || update.channel_post?.text || "";
-      return text.toLowerCase().includes(query.toLowerCase());
+      const normalizedText = text.toLowerCase();
+      return queryTerms.some((term) => normalizedText.includes(term));
     });
 
     return filtered.map((update: any) => {
@@ -388,9 +405,9 @@ export const searchTelegram = async (
       };
     });
 
-  } catch {
+  } catch (error) {
     console.error("[Telegram] Provider request failed.");
-    throw new Error("TELEGRAM_REQUEST_FAILED");
+    throw classifyExternalFailure(error);
   }
 
 };
@@ -422,13 +439,14 @@ export const searchX = async (
         }
       );
 
-    return (
-      response.data?.data || []
-    );
+    if (!response.data || typeof response.data !== "object" || Array.isArray(response.data)) throw invalidProviderResponse();
+    const tweets = response.data.data;
+    if (tweets != null && !Array.isArray(tweets)) throw invalidProviderResponse();
+    return tweets ?? [];
 
-  } catch {
+  } catch (error) {
     console.error("[X API] Provider request failed.");
-    throw new Error("X_REQUEST_FAILED");
+    throw classifyExternalFailure(error);
 
   }
 

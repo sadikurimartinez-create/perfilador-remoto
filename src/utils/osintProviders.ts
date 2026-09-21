@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { classifyExternalFailure, invalidProviderResponse } from './externalProviderError';
 
 const SERPAPI_KEY =
   process.env.PGP_SERPAPI_API_KEY || "";
@@ -41,14 +42,13 @@ export const searchSerpAPI = async (
         }
       );
 
-    return (
-      response.data?.organic_results || []
-    );
+    const results = response.data?.organic_results;
+    if (results != null && !Array.isArray(results)) throw invalidProviderResponse();
+    return results ?? [];
 
-  } catch {
+  } catch (error) {
     console.error("[SERPAPI] Provider request failed.");
-
-    throw new Error("SERPAPI_REQUEST_FAILED");
+    throw classifyExternalFailure(error);
 
   }
 
@@ -247,7 +247,7 @@ export const searchDENUE = async (
 };
 
 export const searchYouTubeOSINT = async (query: string) => {
-  const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY || "";
+  const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY || process.env.YPU_TUBE_API_KEY || "";
   if (!YOUTUBE_KEY) {
     console.warn("YOUTUBE_API_KEY no configurada. Omitiendo búsqueda de YouTube.");
     return [];
@@ -267,10 +267,12 @@ export const searchYouTubeOSINT = async (query: string) => {
       }
     });
 
-    const searchItems = searchRes.data?.items || [];
-    if (searchItems.length === 0) return [];
+    const searchItems = searchRes.data?.items;
+    if (searchItems != null && !Array.isArray(searchItems)) throw invalidProviderResponse();
+    const normalizedSearchItems = searchItems ?? [];
+    if (normalizedSearchItems.length === 0) return [];
 
-    const videoIds = searchItems.map((item: any) => item.id?.videoId).filter(Boolean);
+    const videoIds = normalizedSearchItems.map((item: any) => item.id?.videoId).filter(Boolean);
 
     // 2. Obtener estadísticas e información adicional de los videos
     const detailsMap: Record<string, any> = {};
@@ -294,7 +296,7 @@ export const searchYouTubeOSINT = async (query: string) => {
 
     // 3. Obtener hilos de comentarios para cada video
     const results = [];
-    for (const item of searchItems) {
+    for (const item of normalizedSearchItems) {
       const videoId = item.id?.videoId;
       if (!videoId) continue;
 
@@ -347,8 +349,8 @@ export const searchYouTubeOSINT = async (query: string) => {
     }
 
     return results;
-  } catch {
+  } catch (error) {
     console.error("[YouTube Data API] Provider request failed.");
-    throw new Error("YOUTUBE_REQUEST_FAILED");
+    throw classifyExternalFailure(error);
   }
 };
