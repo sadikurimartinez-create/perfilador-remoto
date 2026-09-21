@@ -2,6 +2,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { DynamicModuleFallback } from "./DynamicModuleFallback";
+import { classifyDynamicModuleFailure } from "../../utils/dynamicModuleFailure";
 
 interface Props {
   moduleName: string;
@@ -28,11 +29,8 @@ export class DynamicErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.warn(`[MODULE FALLBACK] Módulo: ${this.props.moduleName}`, {
-      error: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
-    });
+    void errorInfo;
+    console.warn(`[MODULE FALLBACK] Módulo: ${this.props.moduleName}`, classifyDynamicModuleFailure(error));
   }
 
   public render() {

@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { classifyDynamicModuleFailure } from '../utils/dynamicModuleFailure';
 
 const ForceGraph2DFallback = () => (
   <div className="p-6 text-center text-slate-400 text-xs font-mono border border-dashed border-slate-800 rounded bg-slate-950/60">
@@ -13,7 +14,7 @@ ForceGraph2DFallback.displayName = "ForceGraph2DFallback";
 const ForceGraph2D: any = dynamic(
   () =>
     import('react-force-graph-2d').catch((err) => {
-      console.warn('[MODULE FALLBACK] Fallo al cargar paquete de visualización de grafo 2D:', err);
+      console.warn('[MODULE FALLBACK] Motor gráfico 2D no disponible.', classifyDynamicModuleFailure(err));
       return ForceGraph2DFallback;
     }),
   { ssr: false }

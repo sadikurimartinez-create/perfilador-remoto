@@ -18,7 +18,7 @@ import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
 import { GangGeoSweepPanel } from "./GangGeoSweepPanel";
 import { CrimeCharts } from "./CrimeCharts";
-import dynamic from "next/dynamic";
+import { NetworkDashboard } from "./NetworkDashboard";
 
 import { StreetViewConfirmationModal } from "@/modules/streetView/StreetViewConfirmationModal";
 import { StreetViewDisclaimerModal } from "@/modules/streetView/StreetViewDisclaimerModal";
@@ -58,25 +58,7 @@ import {
 } from "@/services/geoint/denueScinceOrchestrationAdapter";
 import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 
-import { DynamicModuleFallback } from "@/components/ui/DynamicModuleFallback";
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
-
-const NetworkDashboardFallback = () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" />;
-NetworkDashboardFallback.displayName = "NetworkDashboardFallback";
-
-const NetworkDashboard = dynamic(
-  () =>
-    import("./NetworkDashboard")
-      .then((mod) => mod.NetworkDashboard)
-      .catch((err) => {
-        console.warn("[MODULE FALLBACK] Fallo al cargar chunk de NetworkDashboard (HIG 2.0):", err);
-        return NetworkDashboardFallback;
-      }),
-  {
-    ssr: false,
-    loading: () => <DynamicModuleFallback moduleName="Hypothesis Intelligence Graph (HIG 2.0)" loading={true} />,
-  }
-);
 
 function averagePhotoCoordinate(album: any[], axis: "lat" | "lng"): number | null {
   const values = (album || [])
