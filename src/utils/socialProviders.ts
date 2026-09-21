@@ -22,6 +22,7 @@ const TELEGRAM_TOKEN =
 const DISCOVERY_PROJECT_ID = process.env.PGP_DISCOVERY_PROJECT_ID || "";
 const DISCOVERY_LOCATION = process.env.PGP_DISCOVERY_LOCATION || "";
 const DISCOVERY_ENGINE_ID = process.env.PGP_DISCOVERY_ENGINE_ID || "";
+const DISCOVERY_SERVING_CONFIG = process.env.PGP_DISCOVERY_SERVING_CONFIG || "default_search";
 // Claves para Vertex AI (Análisis de Inteligencia)
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || "";
 const GCP_LOCATION = process.env.GCP_LOCATION || "us-central1";
@@ -34,7 +35,25 @@ function discoveryText(value: any): string {
   return typeof value === "string" ? value : value?.stringValue || "";
 }
 
-function formatDiscoveryResults(results: any[]): any[] {
+function discoveryList(value: any): any[] {
+  if (Array.isArray(value)) return value;
+  return value?.listValue?.values || [];
+}
+
+function formatExtractiveAnswers(derived: any): any[] {
+  const fields = derived.fields || {};
+  const answers = discoveryList(derived.extractive_answers).length > 0
+    ? discoveryList(derived.extractive_answers)
+    : discoveryList(fields.extractive_answers);
+  return answers.flatMap((answer: any) => {
+    const fields = answer?.structValue?.fields || answer?.fields || {};
+    const content = discoveryText(answer?.content) || discoveryText(fields.content) || discoveryText(answer?.pageContent) || discoveryText(fields.pageContent);
+    const pageNumber = answer?.pageNumber ?? fields.pageNumber?.numberValue ?? fields.pageNumber?.integerValue ?? null;
+    return content ? [{ content, pageNumber }] : [];
+  });
+}
+
+function formatDiscoveryResults(results: any[], query: string, timestamp: string): any[] {
   return results.flatMap((result: any) => {
     const document = result?.document;
     if (!document || typeof document !== "object") return [];
@@ -42,12 +61,30 @@ function formatDiscoveryResults(results: any[]): any[] {
     const fields = derived.fields || {};
     const snippets = Array.isArray(derived.snippets) ? derived.snippets : null;
     const protobufSnippet = fields.snippets?.listValue?.values?.[0]?.structValue?.fields?.snippet;
+    const title = discoveryText(derived.title) || discoveryText(fields.title) || "Sin título";
+    const link = discoveryText(derived.link) || discoveryText(fields.link) || null;
+    const extractiveAnswers = formatExtractiveAnswers(derived);
     return [{
       id: document.id || document.name || null,
       source: "Google Discovery Engine",
-      title: discoveryText(derived.title) || discoveryText(fields.title) || "Sin título",
-      link: discoveryText(derived.link) || discoveryText(fields.link) || null,
+      title,
+      link,
       snippet: discoveryText(snippets?.[0]?.snippet) || discoveryText(protobufSnippet) || "",
+      extractiveAnswers,
+      extractive_answers: extractiveAnswers,
+      rankSignals: result.rankSignals ?? null,
+      retrievalSignals: result.retrievalSignals ?? null,
+      provenance: {
+        project: DISCOVERY_PROJECT_ID,
+        location: DISCOVERY_LOCATION,
+        engine: DISCOVERY_ENGINE_ID,
+        servingConfig: DISCOVERY_SERVING_CONFIG,
+        query,
+        timestamp,
+        sourceUrl: link,
+        documentName: document.name || null,
+        documentId: document.id || null,
+      },
     }];
   });
 }
@@ -109,7 +146,7 @@ export const buscarEnWebOSINT = async (query: string) => {
     const discoveryHost = DISCOVERY_LOCATION === "global"
       ? "discoveryengine.googleapis.com"
       : `${DISCOVERY_LOCATION}-discoveryengine.googleapis.com`;
-    const url = `https://${discoveryHost}/v1/projects/${DISCOVERY_PROJECT_ID}/locations/${DISCOVERY_LOCATION}/collections/default_collection/engines/${DISCOVERY_ENGINE_ID}/servingConfigs/default_search:search`;
+    const url = `https://${discoveryHost}/v1/projects/${DISCOVERY_PROJECT_ID}/locations/${DISCOVERY_LOCATION}/collections/default_collection/engines/${DISCOVERY_ENGINE_ID}/servingConfigs/${DISCOVERY_SERVING_CONFIG}:search`;
 
     console.log(`[WEB OSINT] 🚀 Buscando en Discovery Engine: "${query}"`);
     const response = await axios.post(url, payload, {
@@ -126,7 +163,22 @@ export const buscarEnWebOSINT = async (query: string) => {
     const results = response.data.results;
     console.log(`[WEB OSINT] ✅ Búsqueda completada. ${results.length} resultados obtenidos. El semáforo se puede poner en verde.`);
 
-    const formattedResults = formatDiscoveryResults(results);
+    const acquiredAt = new Date().toISOString();
+    const formattedResults = formatDiscoveryResults(results, query, acquiredAt);
+    const discoveryMetadata = {
+      semanticState: response.data.semanticState ?? null,
+      summary: response.data.summary ?? null,
+      totalSize: response.data.totalSize ?? null,
+      attributionToken: response.data.attributionToken ?? null,
+      nextPageToken: response.data.nextPageToken ?? null,
+      queryExpansionInfo: response.data.queryExpansionInfo ?? null,
+      summaryEpistemicIntegrity: response.data.summary == null ? null : {
+        providerId: "GOOGLE_DISCOVERY_ENGINE",
+        acquisitionMode: "AI_GENERATED",
+        semanticRole: "SYNTHESIS",
+        isSimulated: false,
+      },
+    };
 
     let analisisInteligencia = null;
 
@@ -204,7 +256,7 @@ Devuelve la información ESTRICTAMENTE en formato JSON válido con esta estructu
       }
     }
 
-    return { resultadosWeb: formattedResults, analisisInteligencia };
+    return { resultadosWeb: formattedResults, analisisInteligencia, discoveryMetadata };
   } catch (error) {
     const classified = classifyExternalFailure(error);
     console.error(`[Discovery Engine] Provider request failed (${classified.failure.reason}).`);

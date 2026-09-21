@@ -24,6 +24,7 @@ const originalDiscovery = {
   project: process.env.PGP_DISCOVERY_PROJECT_ID,
   location: process.env.PGP_DISCOVERY_LOCATION,
   engine: process.env.PGP_DISCOVERY_ENGINE_ID,
+  servingConfig: process.env.PGP_DISCOVERY_SERVING_CONFIG,
   gcpProject: process.env.GCP_PROJECT_ID,
 };
 
@@ -37,6 +38,14 @@ function fetchResponse(status: number, data: unknown): Partial<Response> {
 
 function networkError(code: string) {
   return Object.assign(new Error("secret token Authorization private key DATABASE_URL"), { code });
+}
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
 }
 
 const denueRecord = {
@@ -65,11 +74,12 @@ const denueRecord = {
 };
 
 afterAll(() => {
-  process.env.INEGI_DENUE_TOKEN = originalDenueToken;
-  process.env.PGP_DISCOVERY_PROJECT_ID = originalDiscovery.project;
-  process.env.PGP_DISCOVERY_LOCATION = originalDiscovery.location;
-  process.env.PGP_DISCOVERY_ENGINE_ID = originalDiscovery.engine;
-  process.env.GCP_PROJECT_ID = originalDiscovery.gcpProject;
+  restoreEnv("INEGI_DENUE_TOKEN", originalDenueToken);
+  restoreEnv("PGP_DISCOVERY_PROJECT_ID", originalDiscovery.project);
+  restoreEnv("PGP_DISCOVERY_LOCATION", originalDiscovery.location);
+  restoreEnv("PGP_DISCOVERY_ENGINE_ID", originalDiscovery.engine);
+  restoreEnv("PGP_DISCOVERY_SERVING_CONFIG", originalDiscovery.servingConfig);
+  restoreEnv("GCP_PROJECT_ID", originalDiscovery.gcpProject);
 });
 
 describe("DENUE productive contract", () => {
@@ -222,7 +232,8 @@ describe("Google Discovery Engine productive contract", () => {
     mockedPost.mockReset();
     process.env.PGP_DISCOVERY_PROJECT_ID = "test-project";
     process.env.PGP_DISCOVERY_LOCATION = "global";
-    process.env.PGP_DISCOVERY_ENGINE_ID = "test-engine";
+    process.env.PGP_DISCOVERY_ENGINE_ID = "cifa-enterprise-engine";
+    process.env.PGP_DISCOVERY_SERVING_CONFIG = "default_search";
     delete process.env.GCP_PROJECT_ID;
   });
 
@@ -235,17 +246,93 @@ describe("Google Discovery Engine productive contract", () => {
     const dynamicAxios = (await import("axios")).default;
     (dynamicAxios.post as jest.Mock).mockResolvedValueOnce({
       status: 200,
-      data: { results: [{ document: { id: "doc-1", derivedStructData: { title: "Resultado", link: "https://example.test/result", snippets: [{ snippet: "Resumen" }] } } }] },
+      data: {
+        totalSize: 1,
+        attributionToken: "test-attribution-token",
+        nextPageToken: "test-next-page-token",
+        summary: {
+          summaryText: "Resumen generativo del proveedor",
+          summarySkippedReasons: [],
+        },
+        queryExpansionInfo: {
+          expandedQuery: true,
+          pinnedResultCount: 0,
+        },
+        semanticState: "ENABLED",
+        results: [{
+          rankSignals: { score: 0.91 },
+          retrievalSignals: { semanticState: "ENABLED" },
+          document: {
+            id: "doc-1",
+            name: "projects/test-project/locations/global/collections/default_collection/dataStores/cifa-trial-content/branches/0/documents/doc-1",
+            derivedStructData: {
+              title: "Resultado",
+              link: "https://example.test/result",
+              snippets: [{ snippet: "Resumen" }],
+              extractive_answers: [{ content: "Evidencia extractiva observada", pageNumber: 2 }],
+            },
+          },
+        }],
+      },
     });
     const result = await search();
-    expect(result.resultadosWeb).toEqual([expect.objectContaining({ id: "doc-1", title: "Resultado", snippet: "Resumen" })]);
+    expect(result.resultadosWeb).toEqual([expect.objectContaining({
+      id: "doc-1",
+      title: "Resultado",
+      snippet: "Resumen",
+      extractiveAnswers: [{ content: "Evidencia extractiva observada", pageNumber: 2 }],
+      extractive_answers: [{ content: "Evidencia extractiva observada", pageNumber: 2 }],
+      rankSignals: { score: 0.91 },
+      retrievalSignals: { semanticState: "ENABLED" },
+      provenance: expect.objectContaining({
+        project: "test-project",
+        location: "global",
+        engine: "cifa-enterprise-engine",
+        servingConfig: "default_search",
+        query: "Aguascalientes seguridad",
+        sourceUrl: "https://example.test/result",
+      }),
+    })]);
+    expect(result.resultadosWeb[0]).not.toHaveProperty("summary");
+    expect(result.resultadosWeb[0]).not.toHaveProperty("semanticState");
+    expect(result.discoveryMetadata).toEqual({
+      semanticState: "ENABLED",
+      summary: {
+        summaryText: "Resumen generativo del proveedor",
+        summarySkippedReasons: [],
+      },
+      totalSize: 1,
+      attributionToken: "test-attribution-token",
+      nextPageToken: "test-next-page-token",
+      queryExpansionInfo: {
+        expandedQuery: true,
+        pinnedResultCount: 0,
+      },
+      summaryEpistemicIntegrity: {
+        providerId: "GOOGLE_DISCOVERY_ENGINE",
+        acquisitionMode: "AI_GENERATED",
+        semanticRole: "SYNTHESIS",
+        isSimulated: false,
+      },
+    });
     const [url, payload] = (dynamicAxios.post as jest.Mock).mock.calls[0];
-    expect(url).toContain("/locations/global/collections/default_collection/engines/test-engine/servingConfigs/default_search:search");
+    expect(url).toBe("https://discoveryengine.googleapis.com/v1/projects/test-project/locations/global/collections/default_collection/engines/cifa-enterprise-engine/servingConfigs/default_search:search");
     expect(payload.contentSearchSpec).toEqual({
       summarySpec: { summaryResultCount: 3 },
       extractiveContentSpec: { maxExtractiveAnswerCount: 1 },
     });
     expect(payload.contentSearchSpec).not.toHaveProperty("summaryResultCount");
+  });
+
+  test("serving config env var is reflected in the productive Search URL", async () => {
+    process.env.PGP_DISCOVERY_SERVING_CONFIG = "custom_search";
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.post as jest.Mock).mockResolvedValueOnce({ status: 200, data: { results: [] } });
+
+    await search();
+
+    const [url] = (dynamicAxios.post as jest.Mock).mock.calls[0];
+    expect(url).toBe("https://discoveryengine.googleapis.com/v1/projects/test-project/locations/global/collections/default_collection/engines/cifa-enterprise-engine/servingConfigs/custom_search:search");
   });
 
   test("zero provider results remains an empty observed result", async () => {
