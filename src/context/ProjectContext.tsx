@@ -69,6 +69,7 @@ import {
   persistHistoricalGeographyReconciliation,
 } from "@/services/historicalGeographyReconciliationService";
 import type { HistoricalGeographyReconciliation } from "@/utils/historicalGeographyReconciliation";
+import type { PersistedCifaFinding, PersistedDenuePoi } from "@/utils/institutionalStructuredPersistence";
 import type {
   InstitutionalReportCertification,
   InstitutionalReportPublication,
@@ -234,6 +235,9 @@ export type Project = {
   hipotesis?: string;
   reportSummary?: string;
   sweeps?: SweepIntegrationItem[];
+  denuePois?: PersistedDenuePoi[];
+  osintFindings?: PersistedCifaFinding[];
+  crimeIncidenceExportContract?: ReturnType<typeof import("@/utils/institutionalStructuredPersistence").prepareCrimeIncidenceContractForProject>;
   canonicalGeography?: CanonicalProjectGeography | null;
   geographyId?: string | null;
   geographyValidationStatus?: "VALID" | "PARTIAL" | "INVALID";

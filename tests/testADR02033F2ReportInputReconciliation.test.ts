@@ -122,7 +122,8 @@ function readyProject(overrides: any = {}) {
     temporalComparisons: [{ comparisonId: "tc-1", comparedEvidenceIds: ["ev-a", "ev-b"], humanValidationStatus: "APPROVED" }],
     intelligenceContext: {
       aceReport: {
-        certifiedGimOutput: { validatedByACE: true, traceabilityReference: "gim-cert-1", analyticalFindings: ["Hallazgo GIM"] },
+        certifiedGimOutput: { schemaVersion: "GIM-REPORT-1.0", validationStatus: "CERTIFIED", validatedByACE: true,
+          traceabilityReference: "gim-cert-1", analyticalFindings: ["Hallazgo GIM"] },
       },
     },
     maps: [{ id: "map-1", dataUrl: "data:image/png;base64,AAA", geographyId: geography.geographyId }],

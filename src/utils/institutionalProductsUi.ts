@@ -60,6 +60,7 @@ export function buildInstitutionalProductExportPayload(
     classification: project?.classification || project?.clasificacion || "CONFIDENCIAL",
     personaPerfiladora: context.user?.username || context.user?.name || context.user?.email,
     analysisContent: context.editableProfile || context.aiProfile || project?.analysisContent || "",
+    iaAnalysis: { ...(project?.iaAnalysis || {}), ...(context.analysisResult || {}) },
     briefing: context.editableProfile || context.aiProfile || project?.analysisContent || "",
     reportSummary: context.reportSummary,
     reportReadyAssessment: context.reportReadyAssessment,

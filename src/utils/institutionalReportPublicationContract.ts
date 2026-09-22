@@ -77,6 +77,9 @@ export interface InstitutionalReportInput {
   analyses: any[];
   conclusions: any[];
   osint: any[];
+  scinceDemographics?: any;
+  denuePois?: any[];
+  crimeIncidenceExportContract?: any;
   streetView: any[];
   temporalComparisons: any[];
   specializedIntelligence: any[];
@@ -286,8 +289,13 @@ export function assessReportItemEligibility(item: any, context: {
     return withDecision(item, type, disclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", "CONCLUSION", [], disclosures);
   }
 
-  if (type === "OSINT" && (source === "SIMULATED" || source === "MOCK" || isAiGenerated(item))) {
-    return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "OSINT_NOT_OBSERVED_FACT", "AI synthesis or simulated OSINT cannot be presented as observed social fact.")], disclosures);
+  if (type === "OSINT") {
+    const integrity = item?.epistemicIntegrity || item;
+    if (source === "SIMULATED" || source === "MOCK" || isAiGenerated(item) ||
+      integrity?.acquisitionMode !== "OBSERVED" || integrity?.acquisitionStatus !== "ACQUIRED" ||
+      integrity?.isSimulated === true || item?.isSimulated === true) {
+      return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "OSINT_NOT_OBSERVED_FACT", "Only acquired, observed OSINT may be published as source data.")], disclosures);
+    }
   }
 
   if (type === "STREET_VIEW") {
@@ -306,7 +314,8 @@ export function assessReportItemEligibility(item: any, context: {
   }
 
   if (type === "SPECIALIZED_INTELLIGENCE") {
-    if (item?.validatedByACE !== true || !item?.traceabilityReference) {
+    if (item?.schemaVersion !== "GIM-REPORT-1.0" || item?.validatedByACE !== true ||
+      item?.validationStatus === "NOT_CERTIFIED" || !item?.traceabilityReference) {
       return withDecision(item, type, "INELIGIBLE", "ANALYSIS", [exclusion(item, type, "SPECIALIZED_INTELLIGENCE_NOT_CERTIFIED_PAYLOAD", "Pandillas/GIM report input must be CertifiedGangAnalysisPayload.")], disclosures);
     }
     return withDecision(item, type, disclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", "ANALYSIS", [], disclosures);
@@ -430,6 +439,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   process([
     project?.intelligenceContext?.aceReport?.certifiedGimOutput,
     project?.certifiedGimOutput,
+    project?.iaAnalysis?.aceReport?.certifiedGimOutput,
   ].filter(Boolean), "SPECIALIZED_INTELLIGENCE", specializedIntelligence);
   const predictiveSelection = selectPredictiveProductsForInstitutionalReport(project, {
     expedienteId: reportReadyAssessment.projectId,
@@ -512,6 +522,15 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     analyses: traceableAnalyses,
     conclusions,
     osint,
+    scinceDemographics: project?.iaAnalysis?.scinceDemographics || project?.scinceDemographics,
+    denuePois: [
+      ...asArray(project?.denuePois),
+      ...asArray(project?.iaAnalysis?.denuePois),
+      ...asArray(project?.iaAnalysis?.pois),
+    ].filter((item) => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
+      item?.territorialStatus === "INSTITUTIONAL" && item?.epistemicIntegrity?.acquisitionMode === "OBSERVED" &&
+      item?.epistemicIntegrity?.acquisitionStatus === "ACQUIRED" && item?.epistemicIntegrity?.isSimulated === false),
+    crimeIncidenceExportContract: project?.crimeIncidenceExportContract,
     streetView: traceableStreetView,
     temporalComparisons,
     specializedIntelligence,

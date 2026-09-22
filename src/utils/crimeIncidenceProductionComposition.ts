@@ -18,7 +18,7 @@ import {
   type CrimeIncidenceWorkspaceBindingResult,
 } from "@/utils/crimeIncidenceWorkspaceBinding";
 
-interface CrimeIncidenceApiResult extends CurrentCrimeIncidenceQueryResult {
+export interface CrimeIncidenceApiResult extends CurrentCrimeIncidenceQueryResult {
   success: boolean;
   datasetIdentity?: CrimeDatasetIdentity;
 }
@@ -30,6 +30,7 @@ export interface CrimeIncidenceProductionCompositionInput {
   filters?: CrimeIncidenceFilterState;
   requestedBy?: string;
   fetcher?: typeof fetch;
+  result?: CrimeIncidenceApiResult;
 }
 
 function errorBinding(message: string): CrimeIncidenceWorkspaceBindingResult {
@@ -112,7 +113,7 @@ export async function composeCrimeIncidenceProductionWorkspace(
         input.expedienteId,
         queryGeometry
       );
-    const response = await fetcher("/api/incidencia", {
+    const response = input.result ? null : await fetcher("/api/incidencia", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -123,8 +124,8 @@ export async function composeCrimeIncidenceProductionWorkspace(
         requestedCoverage: filters.geographicCoverage,
       }),
     });
-    if (!response.ok) throw new Error(`CRIME_INCIDENCE_QUERY_HTTP_${response.status}`);
-    const result = await response.json() as CrimeIncidenceApiResult;
+    if (response && !response.ok) throw new Error(`CRIME_INCIDENCE_QUERY_HTTP_${response.status}`);
+    const result = input.result ?? await response!.json() as CrimeIncidenceApiResult;
     if (!result.success || result.sourceStatus === "FAILED" || result.sourceStatus === "NOT_CONFIGURED") {
       throw new Error(result.error || "CRIME_INCIDENCE_QUERY_SOURCE_UNAVAILABLE");
     }

@@ -89,6 +89,17 @@ describe("ADR-022.8J production composition", () => {
     expect(binding.viewModel?.exportReference.productClassification).toBe("DESCRIPTIVE_ANALYTICAL_PRODUCT");
   });
 
+  test("governs an already acquired API response without a second request", async () => {
+    const request = jest.fn(() => { throw new Error("SECOND_REQUEST_FORBIDDEN"); }) as unknown as typeof fetch;
+    const binding = await composeCrimeIncidenceProductionWorkspace({
+      expedienteId: "EXP-0228J", canonicalGeography, radiusMeters: 1000,
+      requestedBy: "analyst-1", result: apiResult() as any, fetcher: request,
+    });
+    expect(request).not.toHaveBeenCalled();
+    expect(binding.state).toBe("READY");
+    expect(binding.viewModel?.exportReference.productClassification).toBe("DESCRIPTIVE_ANALYTICAL_PRODUCT");
+  });
+
   test("sends controlled filters to the productive query boundary", async () => {
     const filters: CrimeIncidenceFilterState = {
       temporal: { start: "2026-08-01", end: "2026-08-31" },
@@ -122,7 +133,12 @@ describe("ADR-022.8J production composition", () => {
       requestedBy: "analyst-1",
       fetcher: fetcher(apiResult(), (body) => { requestBody = body; }),
     });
-    expect(requestBody).toMatchObject({ lat: 21.88, lng: -102.29, radiusMeters: 1250 });
+    expect(requestBody).toMatchObject({
+      canonicalSpatialQuery: {
+        geometry: { type: "Point", coordinates: [-102.29, 21.88] },
+        metadata: { radiusMeters: 1250 },
+      },
+    });
     expect(binding.viewModel?.geographyContext.canonicalGeography).toBe(canonicalGeography);
     expect(JSON.stringify(canonicalGeography)).toBe(before);
   });

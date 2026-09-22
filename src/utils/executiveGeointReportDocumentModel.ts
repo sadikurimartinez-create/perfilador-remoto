@@ -85,6 +85,7 @@ export interface ExecutiveGeointReportDocumentModel {
     sourceProjectId: string;
     traceabilityIds: string[];
     evidenceReferences: string[];
+    sourceProvenance?: Array<{ source: string; sourceUrl?: string | null; observedAt?: string | null; query?: string | null; traceabilityId?: string | null }>;
     sectionCount: number;
     visualPlacementCount: number;
   };
@@ -188,6 +189,82 @@ function linkedHypothesisElements(input: InstitutionalReportInput, evidenceIds: 
     : "No constan elementos vinculados en el insumo institucional.";
 }
 
+function observed(item: any): boolean {
+  const integrity = item?.epistemicIntegrity || item;
+  return integrity?.acquisitionMode === "OBSERVED" && integrity?.acquisitionStatus === "ACQUIRED" &&
+    integrity?.isSimulated === false;
+}
+
+function scinceContext(input: InstitutionalReportInput): string {
+  const source = input.scinceDemographics;
+  if (source?.status !== "OBSERVED" || !observed(source) || !source?.provenance?.datasetId) {
+    return "Contexto demográfico INEGI: no disponible como dato observado gobernado.";
+  }
+  const geo = source.geography || {};
+  const demographic = source.demographics || {};
+  const value = (number: unknown) => typeof number === "number" && Number.isFinite(number) ? String(number) : "No disponible";
+  return `Contexto demográfico INEGI (Censo ${visible(String(source.provenance.referenceYear ?? ""), "corte no consignado")}): ` +
+    `AGEB ${visible(geo.ageb?.code, "no consignada")}; manzana ${visible(geo.manzana?.code, "no consignada")}; ` +
+    `población ${value(demographic.populationTotal)}; viviendas ${value(demographic.housingTotal)}; ` +
+    `habitadas ${value(demographic.inhabitedPrivateHousing)}; deshabitadas ${value(demographic.uninhabitedPrivateHousing)}.`;
+}
+
+function denueContext(input: InstitutionalReportInput): string {
+  const pois = asArray(input.denuePois).filter((item) => item?.source === "DENUE" &&
+    item?.provider === "INEGI_DENUE" && item?.territorialStatus === "INSTITUTIONAL" && observed(item));
+  const unique = Array.from(new Map(pois.map((item) => [item.traceabilityId || item.sourceEvidenceId || item.id, item])).values());
+  if (!unique.length) return "Actividad y entorno DENUE: no constan establecimientos canónicos observados en el insumo.";
+  const shown = unique.slice(0, 3);
+  const labels = shown.map((item) => visible(`${item.name || "Establecimiento"} (${item.activityCode || "actividad no consignada"})`));
+  return `Actividad y entorno DENUE (INEGI): ${unique.length} registro(s) elegible(s); ${shown.length} mostrado(s), ` +
+    `primeros en orden del insumo canónico: ${labels.join("; ")}.`;
+}
+
+function incidenceContext(input: InstitutionalReportInput): string {
+  const contract = input.crimeIncidenceExportContract;
+  const query = contract?.queryReference;
+  if (contract?.productClassification !== "DESCRIPTIVE_ANALYTICAL_PRODUCT" ||
+    contract?.analyticalLevel !== "DESCRIPTIVE" || query?.status !== "EXECUTED" ||
+    query?.admission?.accepted !== true || !contract?.datasetReference?.datasetId) {
+    return "Incidencia: no consta un producto descriptivo gobernado disponible en el insumo.";
+  }
+  const total = contract?.projectionReference?.metrics?.frequency?.totalRecords;
+  if (!Number.isFinite(total) || total < 0) return "Incidencia: no consta un conteo gobernado válido.";
+  const temporal = contract?.datasetReference?.coverage?.temporal;
+  const period = temporal?.start && temporal?.end ? `; cobertura ${temporal.start} a ${temporal.end}` : "";
+  return `Incidencia (producto descriptivo, no evidencia): ${total} registro(s) en la consulta` +
+    `${period}; fuente C5i SSPE Aguascalientes.`;
+}
+
+function osintContext(input: InstitutionalReportInput): string[] {
+  const seen = new Set<string>();
+  return asArray(input.osint).filter((item) => {
+    if (!observed(item)) return false;
+    const integrity = item.epistemicIntegrity || item;
+    const key = String(item.url || item.link || integrity.traceabilityId || item.id || "");
+    if (key && seen.has(key)) return false;
+    if (key) seen.add(key);
+    return true;
+  }).slice(0, 3).map((item) => {
+    const integrity = item.epistemicIntegrity || item;
+    const provider = visible(integrity.providerName || integrity.providerId || item.provider || item.source, "Fuente no consignada");
+    const label = visible(item.title || item.summary || item.snippet || item.text, "Registro sin descripción publicable");
+    return `Registro OSINT observado (${provider}; ${visible(integrity.observedAt || integrity.acquiredAt, "fecha no consignada")}): ${label}`;
+  });
+}
+
+function gangContext(input: InstitutionalReportInput): string[] {
+  const certified = asArray(input.specializedIntelligence).find((item) =>
+    item?.schemaVersion === "GIM-REPORT-1.0" && item?.validatedByACE === true &&
+    item?.validationStatus !== "NOT_CERTIFIED" && item?.traceabilityReference);
+  if (!certified) return ["Pandillas y estructuras relacionadas: no consta un análisis certificado publicable."];
+  const content = [
+    ...visibleList(asArray(certified.analyticalFindings), 2).map((finding) => `Análisis certificado de pandillas: ${finding}`),
+    ...visibleList(asArray(certified.evidenceSummary), 1).map((summary) => `Base de evidencia del análisis de pandillas: ${summary}`),
+  ];
+  return content.length ? content : ["Pandillas y estructuras relacionadas: payload certificado sin descripción publicable."];
+}
+
 function buildSections(
   model: ExecutiveGeointReportModel,
   visualComposition: ExecutiveVisualComposition,
@@ -226,6 +303,7 @@ function buildSections(
   const conclusionText = visibleList(linkedConclusions.map((item) =>
     item?.text || item?.summary || item?.conclusion || item?.description
   ), 2).join("; ");
+  const observedOsint = osintContext(input);
   const sections: ExecutiveDocumentSection[] = [
     {
       sectionId: "cover",
@@ -285,8 +363,11 @@ function buildSections(
           : visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
             ? "Mapa territorial principal requerido desde geografia canonica gobernada."
             : "Mapa territorial principal disponible desde visual gobernado.",
+        scinceContext(input),
+        denueContext(input),
+        incidenceContext(input),
       ],
-      densityPolicy: { targetPages: "1", maxItems: 4 },
+      densityPolicy: { targetPages: "1-2", maxItems: 5 },
       status: visualComposition.principalTerritorialMap.status === "NO_CANONICAL_GEOGRAPHY" ? "INCOMPLETE" : "READY",
     },
     {
@@ -313,6 +394,9 @@ function buildSections(
       title: "ANALISIS MULTIFUENTE",
       role: "Sintesis de convergencia, contradiccion y brechas",
       content: [
+        ...observedOsint,
+        ...(observedOsint.length ? [] : ["Inteligencia de fuentes abiertas: no constan registros observados adquiridos y publicables."]),
+        ...gangContext(input),
         ...visibleList(model.multisourceAnalysis.convergencias, 5).map((item) => `Convergencia: ${item}`),
         ...visibleList(model.multisourceAnalysis.contradicciones, 5).map((item) => `Contradiccion: ${item}`),
         ...visibleList(model.multisourceAnalysis.fuentesIndependientes, 5).map((item) => `Fuente independiente: ${item}`),
@@ -477,6 +561,35 @@ export function buildExecutiveGeointReportDocumentModel(
         ...asArray<string>(institutionalInput.hypothesis?.supportingEvidenceIds),
         ...asArray<string>(institutionalInput.hypothesis?.contradictingEvidenceIds),
       ]),
+      sourceProvenance: [
+        ...(institutionalInput.scinceDemographics?.status === "OBSERVED" && observed(institutionalInput.scinceDemographics) ? [{
+          source: "INEGI SCINCE", sourceUrl: institutionalInput.scinceDemographics.provenance?.censusSourceUrl,
+          observedAt: institutionalInput.scinceDemographics.epistemicIntegrity?.acquiredAt,
+          query: institutionalInput.scinceDemographics.epistemicIntegrity?.query,
+          traceabilityId: institutionalInput.scinceDemographics.provenance?.datasetId,
+        }] : []),
+        ...asArray(institutionalInput.denuePois).filter((item) => item?.source === "DENUE" && observed(item)).map((item) => ({
+          source: "INEGI DENUE", sourceUrl: item.epistemicIntegrity?.sourceUrl,
+          observedAt: item.observedAt || item.acquiredAt, query: item.epistemicIntegrity?.query,
+          traceabilityId: item.traceabilityId,
+        })),
+        ...asArray(institutionalInput.osint).filter(observed).map((item) => {
+          const integrity = item.epistemicIntegrity || item;
+          return { source: integrity.providerName || integrity.providerId || item.provider || "OSINT",
+            sourceUrl: item.url || item.link || integrity.sourceUrl, observedAt: integrity.observedAt || integrity.acquiredAt,
+            query: integrity.query, traceabilityId: integrity.traceabilityId };
+        }),
+        ...asArray(institutionalInput.specializedIntelligence).filter((item) =>
+          item?.schemaVersion === "GIM-REPORT-1.0" && item?.validatedByACE === true &&
+          item?.validationStatus !== "NOT_CERTIFIED" && item?.traceabilityReference).map((item) => ({
+          source: "GIM ACE", traceabilityId: item.traceabilityReference,
+        })),
+        ...(institutionalInput.crimeIncidenceExportContract?.queryReference?.status === "EXECUTED" &&
+          institutionalInput.crimeIncidenceExportContract?.queryReference?.admission?.accepted === true ? [{
+          source: "C5i SSPE Aguascalientes",
+          traceabilityId: institutionalInput.crimeIncidenceExportContract.exportId || institutionalInput.crimeIncidenceExportContract.datasetReference?.datasetId,
+        }] : []),
+      ],
       sectionCount: sections.length,
       visualPlacementCount: visualPlacements.length,
     },

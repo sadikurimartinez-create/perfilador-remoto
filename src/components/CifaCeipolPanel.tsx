@@ -5,10 +5,12 @@ import { proposeIntelligencePlan, IntelligencePlan } from "../utils/moiOrchestra
 import { runUnifiedCifaScan } from "../utils/cifaEngine";
 import { getAuthorizedSources, ImfoSource } from "../utils/imfoService";
 import { DynamicPopup } from "./DynamicPopup";
+import type { CifaSourceEnvelope } from "../utils/cifaAcquisition";
 
 interface Props {
   project: any;
   onAppendToAnalysis?: (text: string) => void;
+  onConfirmObservedRecords?: (sources: CifaSourceEnvelope[]) => Promise<void>;
   onUpdateMapResults?: (data: any) => void;
 }
 
@@ -48,6 +50,7 @@ export const SOURCE_PLATFORM_LABELS: Record<string, string> = {
 export const CifaCeipolPanel: React.FC<Props> = ({
   project,
   onAppendToAnalysis,
+  onConfirmObservedRecords,
   onUpdateMapResults
 }) => {
   const [loading, setLoading] = useState(false);
@@ -138,11 +141,16 @@ export const CifaCeipolPanel: React.FC<Props> = ({
     const provenance = observedSources.map((source: any) =>
       `- ${source.providerName} [${source.providerId}] | estado=${source.acquisitionStatus} | modo=${source.acquisitionMode} | simulado=false | ${source.resultCount} resultado(s) | ${source.acquiredAt || "sin fecha"} | ${source.sourceUrl || source.sourceReference}`
     ).join("\n");
-    onAppendToAnalysis?.(
-      `[CIFA-CEIPOL | ${results.institutionalUse}]\n${hypothesis}\n\nConsulta: ${results.orchestrator?.query || "No registrada"}\nFuentes observadas:\n${provenance}\nValidación: UNREVIEWED`
-    );
-    setCifaDataConfirm(null);
-    setToast({ type: "success", message: "Síntesis y provenance de fuentes observadas anexadas al expediente para revisión." });
+    try {
+      await onConfirmObservedRecords?.(observedSources);
+      onAppendToAnalysis?.(
+        `[CIFA-CEIPOL | ${results.institutionalUse}]\n${hypothesis}\n\nConsulta: ${results.orchestrator?.query || "No registrada"}\nFuentes observadas:\n${provenance}\nValidación: UNREVIEWED`
+      );
+      setCifaDataConfirm(null);
+      setToast({ type: "success", message: "Registros observados y síntesis anexados al expediente para revisión." });
+    } catch {
+      setToast({ type: "error", message: "No fue posible guardar los registros observados en el expediente." });
+    }
   };
 
   const sourceStatusClass = (source: any) => {

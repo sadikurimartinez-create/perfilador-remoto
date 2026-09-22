@@ -13,6 +13,14 @@ import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic 
 import { exportToWord } from "@/lib/exportToWord";
 import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { buildExpedientIncidenceCanonicalSpatialQuery } from "@/lib/projectIncidenceCanonicalSpatialQuery";
+import {
+  mergeCifaFindingObservations,
+  mergeStructuredRecords,
+  prepareCifaFindingsForProject,
+  prepareCrimeIncidenceContractForProject,
+  prepareDenuePoisForProject,
+} from "@/utils/institutionalStructuredPersistence";
+import { composeCrimeIncidenceProductionWorkspace } from "@/utils/crimeIncidenceProductionComposition";
 
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
@@ -4219,7 +4227,7 @@ const hasMinimumPhotos =
                       setError("DENUE no cuenta con elegibilidad institucional para incorporarse al expediente.");
                       return;
                     }
-                    setDenueDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem });
+                    setDenueDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem, payload: data });
                   } else if (denueStatus === "EMPTY") {
                     setError("SIN ESTABLECIMIENTOS DENUE EN LA GEOMETRÍA CONSULTADA");
                   } else if (denueStatus === "NOT_CONFIGURED") {
@@ -4368,6 +4376,17 @@ const hasMinimumPhotos =
                         : incidenceMessage
                     );
                     return;
+                  }
+                  const incidenceBinding = await composeCrimeIncidenceProductionWorkspace({
+                    expedienteId: projectId || project?.id || "",
+                    canonicalGeography: project?.canonicalGeography,
+                    radiusMeters: project?.canonicalGeography?.type === "POLYGON" ? null : 1000,
+                    requestedBy: user?.id ? String(user.id) : user?.username || "",
+                    result: data,
+                  });
+                  if (incidenceBinding.viewModel) {
+                    const contract = prepareCrimeIncidenceContractForProject(incidenceBinding.viewModel.exportReference);
+                    if (contract) await updateProjectDetails({ crimeIncidenceExportContract: contract } as any);
                   }
                   if (data.resultStatus === "SUCCESS_EMPTY") {
                     setIncidents([]);
@@ -4628,6 +4647,19 @@ const hasMinimumPhotos =
         {/* 10.2: CIFA-CEIPOL v3.0 */}
         <CifaCeipolPanel
           project={project}
+          onConfirmObservedRecords={async (sources) => {
+            if (isReadOnly || !project) throw new Error("EXPEDIENT_READ_ONLY");
+            const findings = prepareCifaFindingsForProject(sources);
+            if (!findings.length) throw new Error("CIFA_NO_STRUCTURED_OBSERVED_RECORDS");
+            await updateProjectDetails({
+              osintFindings: mergeStructuredRecords(
+                (project as any).osintFindings,
+                findings,
+                (item) => item.id,
+                mergeCifaFindingObservations
+              ),
+            } as any);
+          }}
           onAppendToAnalysis={(text) => {
             setAnalysisContext((prev) => (prev ? `${prev}\n\n${text}` : text));
             setIsAnalysisContextAudited(false);
@@ -6749,6 +6781,20 @@ const hasMinimumPhotos =
                 return;
               }
               try {
+                if (isReadOnly || !project?.id) throw new Error("EXPEDIENT_READ_ONLY");
+                const pois = prepareDenuePoisForProject(denueDataConfirm.payload, {
+                  expedienteId: project.id,
+                  canonicalGeography: project.canonicalGeography,
+                  radiusMeters: 500,
+                });
+                if (!pois.length) throw new Error("DENUE_NO_INSTITUTIONAL_STRUCTURED_POIS");
+                await updateProjectDetails({
+                  denuePois: mergeStructuredRecords(
+                    (project as any).denuePois,
+                    pois,
+                    (item) => item.traceabilityId
+                  ),
+                } as any);
                 await registerSweep({
                   engine: "Giros Comerciales (DENUE)",
                   source: "INEGI DENUE",

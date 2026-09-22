@@ -473,4 +473,72 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(section?.content[5]).toContain("No consta una conclusión validada y vinculada");
     expect(section?.content[5]).not.toContain("Conclusión ajena");
   });
+
+  test("42 SCINCE muestra datos observados sin inventar ceros y conserva procedencia", () => {
+    const source = {
+      status: "OBSERVED",
+      geography: { ageb: { code: "001" }, manzana: { code: "002" } },
+      demographics: { populationTotal: 125, housingTotal: null, inhabitedPrivateHousing: 40, uninhabitedPrivateHousing: null },
+      provenance: { datasetId: "inegi-cpv-2020", referenceYear: 2020, censusSourceUrl: "https://inegi.example/censo" },
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false, acquiredAt: generatedAt },
+    };
+    const model = documentModel({}, { scinceDemographics: source });
+    const text = model.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ") || "";
+    expect(text).toContain("población 125");
+    expect(text).toContain("viviendas No disponible");
+    expect(text).toContain("Censo 2020");
+    expect(model.technicalMetadata.sourceProvenance).toContainEqual(expect.objectContaining({ traceabilityId: "inegi-cpv-2020" }));
+    const absent = documentModel({}, { scinceDemographics: { ...source, status: "NO_DATA" } });
+    expect(absent.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ")).not.toContain("población 125");
+  });
+
+  test("43 DENUE sólo representa POI observados y distingue conteo de muestra", () => {
+    const pois = Array.from({ length: 5 }, (_, index) => ({
+      id: `denue-${index}`, traceabilityId: `trace-denue-${index}`,
+      name: `Comercio ${index}`, activityCode: "A1", source: "DENUE", provider: "INEGI_DENUE",
+      territorialStatus: "INSTITUTIONAL", epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false },
+    }));
+    const model = documentModel({}, { denuePois: [...pois, { ...pois[0], id: "google-1", source: "GOOGLE", name: "POI ajeno" }] });
+    const text = model.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ") || "";
+    expect(text).toContain("5 registro(s) elegible(s); 3 mostrado(s)");
+    expect(text).toContain("Comercio 0");
+    expect(text).not.toContain("POI ajeno");
+    expect(text).not.toContain("Comercio 4");
+  });
+
+  test("44 incidencia sólo publica el contrato descriptivo ejecutado", () => {
+    const contract = { productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT", analyticalLevel: "DESCRIPTIVE",
+      queryReference: { status: "EXECUTED", admission: { accepted: true } },
+      datasetReference: { datasetId: "c5i-911", coverage: { temporal: { start: "2020-01-01", end: "2020-12-31" } } },
+      projectionReference: { metrics: { frequency: { totalRecords: 12 } } }, exportId: "inc-1" };
+    const model = documentModel({}, { crimeIncidenceExportContract: contract });
+    const text = model.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ") || "";
+    expect(text).toContain("12 registro(s)");
+    expect(text).toContain("producto descriptivo, no evidencia");
+    const rejected = documentModel({}, { crimeIncidenceExportContract: { ...contract, queryReference: { status: "REJECTED", admission: { accepted: false } } } });
+    expect(rejected.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ")).not.toContain("12 registro(s)");
+  });
+
+  test("45 OSINT y Pandillas sólo imprimen contenido gobernado y conservan provenance", () => {
+    const osint = (status: string, title: string) => ({ title, url: `https://example.org/${title}`,
+      epistemicIntegrity: { providerName: "GDELT", acquisitionMode: "OBSERVED", acquisitionStatus: status,
+        isSimulated: false, acquiredAt: generatedAt, query: "consulta", traceabilityId: title } });
+    const certified = { schemaVersion: "GIM-REPORT-1.0", validationStatus: "CERTIFIED", validatedByACE: true,
+      traceabilityReference: "gim-cert-1", analyticalFindings: ["Relación territorial revisada"], evidenceSummary: ["Dos fuentes de campo"] };
+    const model = documentModel({}, { osint: [osint("ACQUIRED", "Nota adquirida"), osint("FAILED", "Nota fallida"),
+      osint("NO_DATA", "Nota vacía"), osint("NOT_CONFIGURED", "Nota sin configurar"),
+      osint("UNAVAILABLE", "Nota no disponible"), osint("NO_APLICABLE", "Nota no aplicable")],
+      specializedIntelligence: [certified] });
+    const text = model.sections.find((item) => item.sectionId === "multisource-analysis")?.content.join(" ") || "";
+    expect(text).toContain("Nota adquirida");
+    expect(text).toContain("GDELT");
+    expect(text).toContain("Relación territorial revisada");
+    expect(text).not.toMatch(/Nota fallida|Nota vacía|Nota sin configurar|Nota no disponible|Nota no aplicable/);
+    expect(model.technicalMetadata.sourceProvenance).toContainEqual(expect.objectContaining({ traceabilityId: "Nota adquirida", query: "consulta" }));
+    const absent = documentModel({}, { osint: [osint("FAILED", "Nota fallida")], specializedIntelligence: [{ ...certified, validationStatus: "NOT_CERTIFIED" }] });
+    const absentText = absent.sections.find((item) => item.sectionId === "multisource-analysis")?.content.join(" ") || "";
+    expect(absentText).toContain("no constan registros observados adquiridos");
+    expect(absentText).toContain("no consta un análisis certificado publicable");
+    expect(absent.technicalMetadata.sourceProvenance?.some((item) => item.source === "GIM ACE")).toBe(false);
+  });
 });

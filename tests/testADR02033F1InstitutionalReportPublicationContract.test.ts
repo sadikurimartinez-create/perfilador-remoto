@@ -3,6 +3,17 @@ import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeo
 import { buildEvidenceLineage } from "../src/utils/evidenceLineage";
 import { createComputedFileIntegrity, createHashUnavailableIntegrity } from "../src/utils/forensicFileIntegrity";
 import { formulateHumanHypothesis } from "../src/utils/hypothesisGovernance";
+import { buildInstitutionalProductExportPayload } from "../src/utils/institutionalProductsUi";
+import { assessReportReadiness } from "../src/utils/reportReadyGovernance";
+import {
+  mergeCifaFindingObservations,
+  mergeStructuredRecords,
+  prepareCifaFindingsForProject,
+  prepareCrimeIncidenceContractForProject,
+  prepareDenuePoisForProject,
+} from "../src/utils/institutionalStructuredPersistence";
+import type { CifaSourceEnvelope } from "../src/utils/cifaAcquisition";
+import type { CrimeIncidenceExportContract } from "../src/types/crimeIncidenceExportContract";
 import {
   assessReportItemEligibility,
   buildDraftReportInput,
@@ -107,6 +118,119 @@ function readyProject(overrides: any = {}) {
     ...overrides,
   };
 }
+
+function reopenedInstitutionalPayload(fields: Record<string, unknown>) {
+  const stored = JSON.parse(JSON.stringify(readyProject({ numeroExpediente: "CEIPOL-1", ...fields })));
+  const reopened = { id: stored.id, nombre: "Expediente", ...stored };
+  return buildInstitutionalProductExportPayload(reopened, {
+    reportReadyAssessment: assessReportReadiness(reopened),
+  });
+}
+
+describe("QA-08 phase 2B structured persistence round-trip", () => {
+  const acquiredAt = "2026-09-22T12:00:00.000Z";
+  const denueResponse = {
+    exito: true, denueStatus: "SUCCESS", epistemicIntegrity: { acquisitionStatus: "ACQUIRED" },
+    pois: [{ Id: "denue-1", Nombre: "Tienda", Clase_actividad: "Comercio", Domicilio: "Calle 1",
+      Latitud: "21.888", Longitud: "-102.285", distancia_m: 120, acquiredAt }],
+  };
+  const cifaSource = (status: string, data: unknown) => ({
+    sourceKey: "rss_regional", sourceId: "rss-1", providerId: "RSS_REGIONAL", providerName: "RSS Regional",
+    sourceType: "NEWS", sourceReference: "rss:regional", sourceUrl: "https://example.org/feed",
+    rawSourceReference: "rss:raw", query: "Aguascalientes", requestedAt: acquiredAt,
+    acquiredAt, acquisitionMode: "OBSERVED", acquisitionStatus: status,
+    semanticRole: "SOURCE_FACT", isSimulated: false, applicable: true, data,
+  }) as CifaSourceEnvelope;
+
+  test("DENUE canonical POI survives save/reopen and reaches institutional payload", () => {
+    const pois = prepareDenuePoisForProject(denueResponse, {
+      expedienteId: "project-1", canonicalGeography: geography, radiusMeters: 500,
+    });
+    expect(pois).toHaveLength(1);
+    const payload = reopenedInstitutionalPayload({
+      denuePois: mergeStructuredRecords(pois, pois, (item) => item.traceabilityId),
+    });
+    const input = buildInstitutionalReportInput(payload);
+    expect(input.denuePois).toHaveLength(1);
+    expect(input.denuePois[0]).toMatchObject({
+      name: "Tienda", activityCode: "Comercio", lat: 21.888, lng: -102.285,
+      distanceMeters: 120, source: "DENUE", provider: "INEGI_DENUE",
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false },
+    });
+    expect(input.denuePois[0].sourceEvidenceId).toBeTruthy();
+    expect(input.denuePois[0].raw).toBeUndefined();
+  });
+
+  test("observed CIFA record survives save/reopen without duplicating or promoting synthesis", () => {
+    const records = prepareCifaFindingsForProject([cifaSource("ACQUIRED", [
+      { id: "article-1", title: "Nota observada", link: "https://example.org/a", text: "Contenido publicado" },
+      { id: "article-1", title: "Nota observada", link: "https://example.org/a", text: "Contenido publicado" },
+    ])]);
+    expect(records).toHaveLength(1);
+    const payload = reopenedInstitutionalPayload({
+      osintFindings: mergeStructuredRecords(records, records, (item) => item.id),
+    });
+    const input = buildInstitutionalReportInput(payload);
+    expect(input.osint).toHaveLength(1);
+    expect(input.osint[0]).toMatchObject({
+      providerId: "RSS_REGIONAL", sourceUrl: "https://example.org/a", query: "Aguascalientes",
+      observedAt: acquiredAt, acquiredAt, text: "Contenido publicado",
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false },
+    });
+    expect(input.osint[0].provenance.sourceReference).toBe("rss:regional");
+  });
+
+  test("two observed providers for one URL retain both source observations", () => {
+    const article = [{ title: "Misma nota", link: "https://example.org/a?utm_source=feed", text: "Texto" }];
+    const first = cifaSource("ACQUIRED", article);
+    const second = { ...cifaSource("ACQUIRED", article), providerId: "NEWS_API", providerName: "News API" };
+    const findings = prepareCifaFindingsForProject([first, second]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].sourceObservations.map((item) => item.providerId)).toEqual(["RSS_REGIONAL", "NEWS_API"]);
+    const repeated = prepareCifaFindingsForProject([first]);
+    const merged = mergeStructuredRecords(findings, repeated, (item) => item.id, mergeCifaFindingObservations);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].sourceObservations.map((item) => item.providerId)).toEqual(["RSS_REGIONAL", "NEWS_API"]);
+  });
+
+  test("merging structured data preserves unkeyed legacy records without inventing identities", () => {
+    const legacy = { data: "Barrido textual histórico" };
+    const records = mergeStructuredRecords([legacy], [{ id: "new", data: "observado" }], (item) => (item as any).id);
+    expect(records).toEqual([legacy, { id: "new", data: "observado" }]);
+  });
+
+  test("FAILED, NO_DATA, NOT_CONFIGURED and AI synthesis never become positive OSINT", () => {
+    const observed = [{ id: "false-positive", title: "No debe publicarse" }];
+    const sources = ["FAILED", "NO_DATA", "NOT_CONFIGURED"].map((status) => cifaSource(status, observed));
+    sources.push({ ...cifaSource("ACQUIRED", observed), acquisitionMode: "AI_GENERATED" } as CifaSourceEnvelope);
+    expect(prepareCifaFindingsForProject(sources)).toEqual([]);
+    expect(prepareDenuePoisForProject({ ...denueResponse, denueStatus: "FAILED" }, {
+      expedienteId: "project-1", canonicalGeography: geography, radiusMeters: 500,
+    })).toEqual([]);
+    const input = buildInstitutionalReportInput(reopenedInstitutionalPayload({ sweeps: [{ data: "DENUE Tienda; CIFA nota" }] }));
+    expect(input.denuePois).toEqual([]);
+    expect(input.osint).toEqual([]);
+  });
+
+  test("governed incidence remains a descriptive product after reopening", () => {
+    const contract = {
+      exportId: "inc-1", expedienteId: "project-1", productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT",
+      analyticalLevel: "DESCRIPTIVE", createdAtReference: acquiredAt,
+      limitations: ["NOT_EVIDENCE"], datasetReference: { datasetId: "c5i-1", coverage: { temporal: { start: "2026-01-01", end: "2026-06-30" } } },
+      queryReference: { status: "EXECUTED", admission: { accepted: true } },
+      projectionReference: { metrics: { frequency: { totalRecords: 3 } } },
+    } as unknown as CrimeIncidenceExportContract;
+    const snapshot = prepareCrimeIncidenceContractForProject(contract);
+    const input = buildInstitutionalReportInput(reopenedInstitutionalPayload({ crimeIncidenceExportContract: snapshot }));
+    expect(input.crimeIncidenceExportContract).toMatchObject({
+      productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT", analyticalLevel: "DESCRIPTIVE",
+      queryReference: { status: "EXECUTED", admission: { accepted: true } },
+      projectionReference: { metrics: { frequency: { totalRecords: 3 } } },
+    });
+    expect(input.evidence.some((item: any) => item?.exportId === "inc-1")).toBe(false);
+    expect(prepareCrimeIncidenceContractForProject({ ...contract, queryReference: { status: "REJECTED", admission: { accepted: false } } } as any)).toBeNull();
+  });
+});
 
 describe("ADR-020.33 F1 - Institutional report publication contract", () => {
   test("TEST 1 project NOT_READY rejects institutional report input", () => {
@@ -218,9 +342,37 @@ describe("ADR-020.33 F1 - Institutional report publication contract", () => {
 
   test("TEST 20 Pandillas consumes CertifiedGangAnalysisPayload only", () => {
     const raw = assessReportItemEligibility({ validatedByACE: false }, { itemType: "SPECIALIZED_INTELLIGENCE" });
-    const certified = assessReportItemEligibility({ validatedByACE: true, traceabilityReference: "gim-cert-1" }, { itemType: "SPECIALIZED_INTELLIGENCE" });
+    const certifiedItem = {
+      schemaVersion: "GIM-REPORT-1.0", validationStatus: "CERTIFIED",
+      validatedByACE: true, traceabilityReference: "gim-cert-1",
+    };
+    const certified = assessReportItemEligibility(certifiedItem, { itemType: "SPECIALIZED_INTELLIGENCE" });
     expect(raw.eligibility).toBe("INELIGIBLE");
     expect(certified.eligibility).toBe("ELIGIBLE");
+    expect(assessReportItemEligibility({ ...certifiedItem, validationStatus: "NOT_CERTIFIED" }, { itemType: "SPECIALIZED_INTELLIGENCE" }).eligibility).toBe("INELIGIBLE");
+  });
+
+  test("TEST 20A OSINT admite sólo adquisiciones observadas positivas", () => {
+    for (const acquisitionStatus of ["FAILED", "NOT_CONFIGURED", "NO_DATA", "UNAVAILABLE", "NO_APLICABLE"]) {
+      const result = assessReportItemEligibility({ acquisitionMode: "OBSERVED", acquisitionStatus, isSimulated: false }, { itemType: "OSINT" });
+      expect(result.eligibility).toBe("INELIGIBLE");
+    }
+    expect(assessReportItemEligibility({ acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false }, { itemType: "OSINT" }).eligibility).toBe("ELIGIBLE");
+  });
+
+  test("TEST 20B el insumo conserva fuentes estructuradas tras serializar expediente", () => {
+    const scince = { status: "OBSERVED", provenance: { datasetId: "inegi-2020" },
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } };
+    const denue = { id: "denue-1", source: "DENUE", provider: "INEGI_DENUE", territorialStatus: "INSTITUTIONAL",
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } };
+    const project = JSON.parse(JSON.stringify(readyProject({
+      iaAnalysis: { scinceDemographics: scince, pois: [denue, { ...denue, id: "not-denue", source: "SCINCE" }] },
+      crimeIncidenceExportContract: { productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT", exportId: "inc-1" },
+    })));
+    const input = buildInstitutionalReportInput(project);
+    expect(input.scinceDemographics?.provenance.datasetId).toBe("inegi-2020");
+    expect(input.denuePois).toHaveLength(1);
+    expect(input.crimeIncidenceExportContract?.exportId).toBe("inc-1");
   });
 
   test("TEST 21 non-authoritative contextual source -> ELIGIBLE_WITH_DISCLOSURE", () => {
