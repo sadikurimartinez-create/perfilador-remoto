@@ -71,6 +71,12 @@ function mockTelegramLongPolling(getMock: jest.Mock, updates: unknown[]) {
     .mockResolvedValueOnce({ status: 200, data: { ok: true, result: updates } });
 }
 
+function mockTelegramWebhookInfo(getMock: jest.Mock, webhookInfo: unknown) {
+  getMock
+    .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1, username: "test_bot" } } })
+    .mockResolvedValueOnce({ status: 200, data: { ok: true, result: webhookInfo } });
+}
+
 const denueRecord = {
   CLEE: "01001721112000684",
   Id: "9321560",
@@ -668,6 +674,8 @@ describe("CIFA external provider readiness and failure semantics", () => {
       botTokenStatus: "BOT_TOKEN_VALID",
       webhookStatus: "WEBHOOK_INACTIVE",
       longPollingStatus: "LONG_POLLING_AVAILABLE",
+      webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
+      webhookActive: false,
     });
   });
 
@@ -683,13 +691,103 @@ describe("CIFA external provider readiness and failure semantics", () => {
     await expect(searchTelegram("robo OR detención")).resolves.toEqual([]);
   });
 
+  test("Telegram exposes only safe observed metadata for an active webhook", async () => {
+    const token = "123456:test-secret-token";
+    const webhookUrl = `https://hooks.example.com/private/${token}/telegram?secret=hidden#fragment`;
+    process.env.PGP_TELEGRAM_BOT_TOKEN = token;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const infoSpy = jest.spyOn(console, "info").mockImplementation(() => undefined);
+    mockTelegramWebhookInfo(dynamicAxios.get as jest.Mock, {
+      url: webhookUrl,
+      pending_update_count: 7,
+      has_custom_certificate: true,
+      last_error_date: 1_725_000_000,
+      last_error_message: `Delivery to ${webhookUrl} failed for ${token}`,
+      max_connections: 40,
+      allowed_updates: ["message", "channel_post"],
+      ip_address: "192.0.2.10",
+      secret_token: "must-not-escape",
+      certificate: "must-not-escape",
+    });
+    const { inspectTelegramBotRuntime } = await import("../src/utils/socialProviders");
+
+    const runtime = await inspectTelegramBotRuntime();
+    expect(runtime).toEqual({
+      botTokenStatus: "BOT_TOKEN_VALID",
+      webhookStatus: "WEBHOOK_ACTIVE",
+      longPollingStatus: "LONG_POLLING_BLOCKED",
+      webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
+      webhookActive: true,
+      webhookHost: "hooks.example.com",
+      protocol: "https",
+      hostClassification: "EXTERNAL_UNKNOWN_HOST",
+      pendingUpdateCount: 7,
+      hasCustomCertificate: true,
+      lastErrorDate: 1_725_000_000,
+      lastErrorMessage: "Delivery to [REDACTED_URL] failed for [REDACTED]",
+      maxConnections: 40,
+      allowedUpdatesCount: 2,
+    });
+    expect((dynamicAxios.get as jest.Mock).mock.calls.map((call) => call[0].split("/").pop())).toEqual([
+      "getMe",
+      "getWebhookInfo",
+    ]);
+    const safeOutput = JSON.stringify({ runtime, logs: infoSpy.mock.calls });
+    expect(safeOutput).not.toContain(token);
+    expect(safeOutput).not.toContain(webhookUrl);
+    expect(safeOutput).not.toContain("/private/");
+    expect(safeOutput).not.toContain("?secret=");
+    expect(safeOutput).not.toContain("must-not-escape");
+  });
+
+  test.each([
+    ["https://perfil-remoto.vercel.app/api/telegram/private", "VERCEL_HOST", "Vercel"],
+    ["https://ceipol.ngrok-free.app/telegram/private", "NGROK_HOST", "ngrok"],
+    ["https://legacy.ngrok.io/bot/private", "NGROK_HOST", "ngrok"],
+  ])("Telegram classifies webhook host %s without inferring ownership", async (url, hostClassification, probableHostingProvider) => {
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    jest.spyOn(console, "info").mockImplementation(() => undefined);
+    mockTelegramWebhookInfo(dynamicAxios.get as jest.Mock, { url });
+    const { inspectTelegramBotRuntime } = await import("../src/utils/socialProviders");
+
+    await expect(inspectTelegramBotRuntime()).resolves.toMatchObject({
+      webhookActive: true,
+      webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
+      hostClassification,
+      probableHostingProvider,
+    });
+  });
+
+  test("Telegram keeps ownership unknown when the active webhook URL is invalid", async () => {
+    const invalidUrl = "not-a-valid-url/private?secret=hidden";
+    process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const infoSpy = jest.spyOn(console, "info").mockImplementation(() => undefined);
+    mockTelegramWebhookInfo(dynamicAxios.get as jest.Mock, { url: invalidUrl });
+    const { inspectTelegramBotRuntime } = await import("../src/utils/socialProviders");
+
+    const runtime = await inspectTelegramBotRuntime();
+    expect(runtime).toMatchObject({
+      webhookActive: true,
+      webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
+      webhookStatus: "WEBHOOK_ACTIVE",
+    });
+    expect(runtime).not.toHaveProperty("webhookHost");
+    expect(runtime).not.toHaveProperty("protocol");
+    expect(runtime).not.toHaveProperty("hostClassification");
+    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain(invalidUrl);
+  });
+
   test("Telegram detects an active webhook before attempting long polling", async () => {
     process.env.PGP_TELEGRAM_BOT_TOKEN = "test-token";
     jest.resetModules();
     const dynamicAxios = (await import("axios")).default;
-    (dynamicAxios.get as jest.Mock)
-      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { id: 1 } } })
-      .mockResolvedValueOnce({ status: 200, data: { ok: true, result: { url: "https://webhook.invalid/secret" } } });
+    jest.spyOn(console, "info").mockImplementation(() => undefined);
+    mockTelegramWebhookInfo(dynamicAxios.get as jest.Mock, { url: "https://webhook.invalid/secret" });
     const { searchTelegram } = await import("../src/utils/socialProviders");
 
     await expect(searchTelegram("consulta")).rejects.toMatchObject({
@@ -697,6 +795,7 @@ describe("CIFA external provider readiness and failure semantics", () => {
     });
     expect(dynamicAxios.get).toHaveBeenCalledTimes(2);
     expect((dynamicAxios.get as jest.Mock).mock.calls.some((call) => String(call[0]).includes("deleteWebhook"))).toBe(false);
+    expect((dynamicAxios.get as jest.Mock).mock.calls.some((call) => String(call[0]).includes("setWebhook"))).toBe(false);
   });
 
   test("Telegram getUpdates 409 preserves sanitized provider detail without leaking the token", async () => {
@@ -785,6 +884,7 @@ describe("CIFA external provider readiness and failure semantics", () => {
       botTokenStatus: "BOT_TOKEN_MISSING",
       webhookStatus: "UNKNOWN",
       longPollingStatus: "NOT_CONFIGURED",
+      webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
     });
     await expect(searchTelegram("consulta")).resolves.toEqual([]);
     expect(dynamicAxios.get).not.toHaveBeenCalled();

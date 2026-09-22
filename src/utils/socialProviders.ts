@@ -60,10 +60,39 @@ const TELEGRAM_TOKEN =
 
 type TelegramBotOperation = "getMe" | "getWebhookInfo" | "getUpdates";
 
+export type TelegramWebhookOwnership =
+  | "WEBHOOK_OWNED_BY_PROJECT"
+  | "WEBHOOK_EXTERNAL_OWNER"
+  | "WEBHOOK_ORPHANED_LIKELY"
+  | "WEBHOOK_OWNER_UNKNOWN";
+
+export type TelegramWebhookHostClassification =
+  | "VERCEL_HOST"
+  | "NGROK_HOST"
+  | "GOOGLE_CLOUD_FUNCTION"
+  | "GOOGLE_CLOUD_RUN"
+  | "AZURE_APP_SERVICE"
+  | "RENDER_HOST"
+  | "RAILWAY_HOST"
+  | "LOCAL_HOST"
+  | "EXTERNAL_UNKNOWN_HOST";
+
 export interface TelegramBotRuntimeStatus {
   botTokenStatus: "BOT_TOKEN_MISSING" | "BOT_TOKEN_VALID";
   webhookStatus: "UNKNOWN" | "WEBHOOK_INACTIVE" | "WEBHOOK_ACTIVE";
   longPollingStatus: "NOT_CONFIGURED" | "LONG_POLLING_AVAILABLE" | "LONG_POLLING_BLOCKED";
+  webhookOwnership: TelegramWebhookOwnership;
+  webhookActive?: boolean;
+  webhookHost?: string;
+  protocol?: string;
+  hostClassification?: TelegramWebhookHostClassification;
+  probableHostingProvider?: string;
+  pendingUpdateCount?: number;
+  hasCustomCertificate?: boolean;
+  lastErrorDate?: number;
+  lastErrorMessage?: string;
+  maxConnections?: number;
+  allowedUpdatesCount?: number;
 }
 
 function sanitizeTelegramDescription(value: unknown, token: string): string | undefined {
@@ -76,6 +105,41 @@ function sanitizeTelegramDescription(value: unknown, token: string): string | un
   for (const secret of sensitiveValues) sanitized = sanitized.split(secret).join("[REDACTED]");
   sanitized = sanitized.replace(/\s+/g, " ").trim();
   return sanitized ? sanitized.slice(0, 300) : undefined;
+}
+
+function sanitizeTelegramWebhookErrorMessage(value: unknown, token: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return sanitizeTelegramDescription(value.replace(/https?:\/\/\S+/gi, "[REDACTED_URL]"), token);
+}
+
+function classifyTelegramWebhookHost(hostname: string): {
+  hostClassification: TelegramWebhookHostClassification;
+  probableHostingProvider?: string;
+} {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  const matches = (suffix: string) => host === suffix || host.endsWith(`.${suffix}`);
+
+  if (matches("vercel.app")) return { hostClassification: "VERCEL_HOST", probableHostingProvider: "Vercel" };
+  if (matches("ngrok-free.app") || matches("ngrok.io")) {
+    return { hostClassification: "NGROK_HOST", probableHostingProvider: "ngrok" };
+  }
+  if (matches("cloudfunctions.net")) {
+    return { hostClassification: "GOOGLE_CLOUD_FUNCTION", probableHostingProvider: "Google Cloud Functions" };
+  }
+  if (matches("run.app")) return { hostClassification: "GOOGLE_CLOUD_RUN", probableHostingProvider: "Google Cloud Run" };
+  if (matches("azurewebsites.net")) {
+    return { hostClassification: "AZURE_APP_SERVICE", probableHostingProvider: "Azure App Service" };
+  }
+  if (matches("onrender.com")) return { hostClassification: "RENDER_HOST", probableHostingProvider: "Render" };
+  if (matches("railway.app")) return { hostClassification: "RAILWAY_HOST", probableHostingProvider: "Railway" };
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return { hostClassification: "LOCAL_HOST", probableHostingProvider: "Local" };
+  }
+  return { hostClassification: "EXTERNAL_UNKNOWN_HOST" };
+}
+
+function finiteTelegramNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function telegramApiFailure(
@@ -150,6 +214,7 @@ export const inspectTelegramBotRuntime = async (): Promise<TelegramBotRuntimeSta
       botTokenStatus: "BOT_TOKEN_MISSING",
       webhookStatus: "UNKNOWN",
       longPollingStatus: "NOT_CONFIGURED",
+      webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
     };
   }
 
@@ -159,12 +224,62 @@ export const inspectTelegramBotRuntime = async (): Promise<TelegramBotRuntimeSta
   if (!webhook || typeof webhook !== "object" || typeof (webhook as any).url !== "string") {
     throw invalidProviderResponse();
   }
-  const webhookActive = (webhook as any).url.trim().length > 0;
-  return {
+  const webhookData = webhook as any;
+  const webhookUrl = webhookData.url.trim();
+  const webhookActive = webhookUrl.length > 0;
+  const runtimeStatus: TelegramBotRuntimeStatus = {
     botTokenStatus: "BOT_TOKEN_VALID",
     webhookStatus: webhookActive ? "WEBHOOK_ACTIVE" : "WEBHOOK_INACTIVE",
     longPollingStatus: webhookActive ? "LONG_POLLING_BLOCKED" : "LONG_POLLING_AVAILABLE",
+    webhookOwnership: "WEBHOOK_OWNER_UNKNOWN",
+    webhookActive,
   };
+
+  if (webhookActive) {
+    try {
+      const parsedWebhookUrl = new URL(webhookUrl);
+      if (parsedWebhookUrl.hostname) {
+        runtimeStatus.webhookHost = parsedWebhookUrl.hostname.toLowerCase();
+        runtimeStatus.protocol = parsedWebhookUrl.protocol.replace(/:$/, "").toLowerCase();
+        Object.assign(runtimeStatus, classifyTelegramWebhookHost(runtimeStatus.webhookHost));
+      }
+    } catch {
+      // An invalid provider URL remains active but is never exposed verbatim.
+    }
+  }
+
+  const pendingUpdateCount = finiteTelegramNumber(webhookData.pending_update_count);
+  const lastErrorDate = finiteTelegramNumber(webhookData.last_error_date);
+  const maxConnections = finiteTelegramNumber(webhookData.max_connections);
+  const lastErrorMessage = sanitizeTelegramWebhookErrorMessage(webhookData.last_error_message, TELEGRAM_TOKEN);
+  if (pendingUpdateCount !== undefined) runtimeStatus.pendingUpdateCount = pendingUpdateCount;
+  if (typeof webhookData.has_custom_certificate === "boolean") {
+    runtimeStatus.hasCustomCertificate = webhookData.has_custom_certificate;
+  }
+  if (lastErrorDate !== undefined) runtimeStatus.lastErrorDate = lastErrorDate;
+  if (lastErrorMessage !== undefined) runtimeStatus.lastErrorMessage = lastErrorMessage;
+  if (maxConnections !== undefined) runtimeStatus.maxConnections = maxConnections;
+  if (Array.isArray(webhookData.allowed_updates)) runtimeStatus.allowedUpdatesCount = webhookData.allowed_updates.length;
+
+  if (webhookActive) {
+    const safeLog = Object.fromEntries(Object.entries({
+      webhookActive: runtimeStatus.webhookActive,
+      webhookHost: runtimeStatus.webhookHost,
+      protocol: runtimeStatus.protocol,
+      hostClassification: runtimeStatus.hostClassification,
+      probableHostingProvider: runtimeStatus.probableHostingProvider,
+      webhookOwnership: runtimeStatus.webhookOwnership,
+      pendingUpdateCount: runtimeStatus.pendingUpdateCount,
+      hasCustomCertificate: runtimeStatus.hasCustomCertificate,
+      lastErrorDate: runtimeStatus.lastErrorDate,
+      lastErrorMessage: runtimeStatus.lastErrorMessage,
+      maxConnections: runtimeStatus.maxConnections,
+      allowedUpdatesCount: runtimeStatus.allowedUpdatesCount,
+    }).filter(([, value]) => value !== undefined));
+    console.info("[Telegram] Active webhook detected.", safeLog);
+  }
+
+  return runtimeStatus;
 };
 
 // Claves para Vertex AI Search (Discovery Engine)
