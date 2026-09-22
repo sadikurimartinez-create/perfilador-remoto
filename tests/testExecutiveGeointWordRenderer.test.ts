@@ -48,6 +48,7 @@ function documentModel(overrides: Partial<ExecutiveGeointReportDocumentModel> = 
       guidance: {
         cover: "1",
         "executive-panorama": "1",
+        "initial-hypothesis": "0-1",
         "territorial-situation": "1",
         "priority-findings": "1-2",
         "key-evidence": "1-2",
@@ -138,6 +139,25 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
 
   test("4 conserva orden de sections", () => {
     expect(renderExecutiveGeointWordDocument(documentModel()).renderAudit.sectionOrder.slice(0, 4)).toEqual(["cover", "executive-panorama", "territorial-situation", "priority-findings"]);
+  });
+
+  test("4A imprime literalmente la hipótesis inicial y la distingue de la vigente", () => {
+    const initial = "Hipótesis humana  original SOURCE_FACT.";
+    const current = "Hipótesis vigente tras hallazgos.";
+    const base = documentModel();
+    const model = documentModel({ sections: [
+      ...base.sections.slice(0, 2),
+      { sectionId: "initial-hypothesis", order: 3, title: "HIPÓTESIS INICIAL", role: "Evolución", content: [
+        `Hipótesis inicial: ${initial}`,
+        `Hipótesis vigente: ${current}`,
+      ], densityPolicy: { targetPages: "0-1", maxItems: 2 }, status: "READY" },
+      ...base.sections.slice(2),
+    ] });
+    const rendered = renderExecutiveGeointWordDocument(model);
+    const wordContent = JSON.stringify(rendered.children);
+    expect(rendered.renderAudit.sectionOrder).toContain("initial-hypothesis");
+    expect(wordContent).toContain(`Hipótesis inicial: ${initial}`);
+    expect(wordContent).toContain(`Hipótesis vigente: ${current}`);
   });
 
   test("5 OPTIONAL_SUPPRESSED no se renderiza", () => {

@@ -2,6 +2,7 @@ import { buildCanonicalProjectGeography, type CanonicalProjectGeography } from "
 import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
 import { buildExecutiveVisualComposition, MAX_EXECUTIVE_VISUALS } from "../src/utils/executiveVisualComposition";
+import { buildReportChapter0Hypothesis, formulateHumanHypothesis, reviseHumanHypothesis } from "../src/utils/hypothesisGovernance";
 
 const generatedAt = "2026-09-06T12:00:00.000Z";
 
@@ -199,6 +200,7 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(documentModel().sections.map((section) => section.sectionId)).toEqual([
       "cover",
       "executive-panorama",
+      "initial-hypothesis",
       "territorial-situation",
       "priority-findings",
       "key-evidence",
@@ -400,5 +402,75 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(model.paginationPolicy.targetPageRange).toBe("7-9");
     expect(model.paginationPolicy.ordinaryMaximumPages).toBe(10);
     expect(model.presentation.headerFooterPolicy.preserveExistingInstitutionalHeaderFooter).toBe(true);
+  });
+
+  test("38 distingue la hipótesis inicial canónica de la vigente sin reformularlas", () => {
+    const initial = "Observación humana inicial  con  dos espacios.";
+    const current = "Hipótesis vigente tras revisión humana.";
+    const model = documentModel({}, { hypothesis: {
+      initialHypothesis: initial,
+      currentHypothesis: current,
+      versions: [{ text: initial, authorType: "HUMAN", version: 1 }],
+      supportingEvidenceIds: ["ev-1"],
+      supportingFindingIds: ["finding-1"],
+      contradictingEvidenceIds: ["ev-2"],
+      contradictingFindingIds: [],
+    },
+    evidence: [
+      { evidenceId: "ev-1", title: "Fotografía de apoyo" },
+      { evidenceId: "ev-2", title: "Fotografía contradictoria" },
+    ],
+    findings: [{ findingId: "finding-1", title: "Hallazgo de apoyo" }],
+    conclusions: [{ text: "Conclusión validada por PPC", findingIds: ["finding-1"] }],
+    });
+    const section = model.sections.find((item) => item.sectionId === "initial-hypothesis");
+    expect(section?.title).toBe("HIPÓTESIS INICIAL");
+    expect(section?.status).toBe("READY");
+    expect(section?.content[0]).toBe(`Hipótesis inicial: ${initial}`);
+    expect(section?.content[1]).toBe(`Hipótesis vigente: ${current}`);
+    expect(section?.content[2]).toContain("Hallazgo de apoyo");
+    expect(section?.content[3]).toContain("Fotografía de apoyo");
+    expect(section?.content[4]).toContain("Fotografía contradictoria");
+    expect(section?.content[5]).toContain("Conclusión validada por PPC");
+    expect(model.technicalMetadata.evidenceReferences).toContain("ev-2");
+    expect(model.presentation.visibleText).toContain(`Hipótesis inicial: ${initial}`);
+  });
+
+  test("39 no sustituye un historial inicial ausente por la hipótesis vigente", () => {
+    const model = documentModel({}, { hypothesis: {
+      initialHypothesis: "Texto no verificable",
+      currentHypothesis: "Hipótesis vigente documentada",
+      versions: [],
+    } });
+    const section = model.sections.find((item) => item.sectionId === "initial-hypothesis");
+    expect(section?.status).toBe("INCOMPLETE");
+    expect(section?.content[0]).toContain("No consta una hipótesis inicial humana verificable");
+    expect(section?.content[0]).not.toContain("Hipótesis vigente documentada");
+    expect(section?.content[1]).toContain("Hipótesis vigente documentada");
+  });
+
+  test("40 conserva la versión inicial tras serializar y reabrir la hipótesis canónica", () => {
+    const formulated = formulateHumanHypothesis({ projectId: "exp-document", text: "Hipótesis formulada en campo" });
+    const revised = reviseHumanHypothesis(formulated, { text: "Hipótesis vigente revisada" });
+    const reopened = JSON.parse(JSON.stringify({ canonicalHypothesis: revised }));
+    const model = documentModel({}, { hypothesis: buildReportChapter0Hypothesis(reopened) });
+    const section = model.sections.find((item) => item.sectionId === "initial-hypothesis");
+    expect(section?.content[0]).toBe("Hipótesis inicial: Hipótesis formulada en campo");
+    expect(section?.content[1]).toBe("Hipótesis vigente: Hipótesis vigente revisada");
+  });
+
+  test("41 no presenta una conclusión ajena como vinculada a la hipótesis", () => {
+    const model = documentModel({}, {
+      hypothesis: {
+        currentHypothesis: "Hipótesis vigente",
+        versions: [{ text: "Hipótesis inicial", authorType: "HUMAN", version: 1 }],
+        supportingFindingIds: ["finding-1"],
+      },
+      findings: [{ findingId: "finding-1", title: "Hallazgo vinculado" }],
+      conclusions: [{ text: "Conclusión ajena", findingIds: ["finding-2"] }],
+    });
+    const section = model.sections.find((item) => item.sectionId === "initial-hypothesis");
+    expect(section?.content[5]).toContain("No consta una conclusión validada y vinculada");
+    expect(section?.content[5]).not.toContain("Conclusión ajena");
   });
 });

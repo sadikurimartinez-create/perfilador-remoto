@@ -85,14 +85,14 @@ export function sanitizeExecutiveGeointWordText(value: unknown, fallback = ""): 
     .trim();
 }
 
-function paragraph(text: string, options: { bold?: boolean; size?: number; color?: string; align?: any; spacingAfter?: number } = {}) {
+function paragraph(text: string, options: { bold?: boolean; size?: number; color?: string; align?: any; spacingAfter?: number; preserveText?: boolean } = {}) {
   return new Paragraph(
     FlowControlManager.applyFlowRules({
       alignment: options.align,
       spacing: { after: options.spacingAfter ?? 120 },
       children: [
         new TextRun({
-          text: sanitizeExecutiveGeointWordText(text, "Condicion institucional no disponible."),
+          text: options.preserveText ? text : sanitizeExecutiveGeointWordText(text, "Condicion institucional no disponible."),
           bold: options.bold,
           size: options.size ?? 20,
           color: options.color ?? "222222",
@@ -129,7 +129,9 @@ function renderSectionContent(section: ExecutiveDocumentSection): any[] {
     : section.content.slice(0, section.densityPolicy.maxItems ?? section.content.length);
   return [
     sectionTitle(section),
-    ...items.map((item) => paragraph(item)),
+    ...items.map((item, index) => paragraph(item, {
+      preserveText: section.sectionId === "initial-hypothesis" && index < 2,
+    })),
   ];
 }
 

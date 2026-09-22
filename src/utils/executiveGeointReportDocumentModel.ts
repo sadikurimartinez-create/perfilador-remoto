@@ -21,6 +21,7 @@ export const EXECUTIVE_DOCUMENT_LIMITS = {
 export type ExecutiveDocumentSectionId =
   | "cover"
   | "executive-panorama"
+  | "initial-hypothesis"
   | "territorial-situation"
   | "priority-findings"
   | "key-evidence"
@@ -173,14 +174,58 @@ function hasGovernedProspective(model: ExecutiveGeointReportModel): boolean {
   return model.prospectiveAnalysis.technicalMetadata.sourceProductIds.length > 0;
 }
 
+function linkedHypothesisElements(input: InstitutionalReportInput, evidenceIds: string[], findingIds: string[]): string {
+  const evidence = input.evidence
+    .filter((item) => evidenceIds.includes(String(item?.evidenceId || item?.id || "")))
+    .map((item) => item?.title || item?.caption || item?.summary);
+  const findings = input.findings
+    .filter((item) => findingIds.includes(String(item?.findingId || item?.id || "")))
+    .map((item) => item?.title || item?.summary);
+  const labels = visibleList([...evidence, ...findings], 3);
+  if (labels.length) return labels.join("; ");
+  return evidenceIds.length || findingIds.length
+    ? "Referencias registradas sin descripción publicable en el insumo."
+    : "No constan elementos vinculados en el insumo institucional.";
+}
+
 function buildSections(
   model: ExecutiveGeointReportModel,
   visualComposition: ExecutiveVisualComposition,
+  input: InstitutionalReportInput,
   numeroExpediente: string
 ): ExecutiveDocumentSection[] {
   const findings = limited(model.findings, EXECUTIVE_DOCUMENT_LIMITS.findings);
   const evidence = limited(model.keyEvidence, EXECUTIVE_DOCUMENT_LIMITS.keyEvidence);
   const decisions = limited(model.decisionImplications, EXECUTIVE_DOCUMENT_LIMITS.decisions);
+  const hypothesis = input.hypothesis;
+  const initialVersion = asArray(hypothesis?.versions)[0];
+  const initialText = initialVersion?.authorType === "HUMAN" && clean(initialVersion.text)
+    ? initialVersion.text
+    : "No consta una hipótesis inicial humana verificable en el historial del expediente.";
+  const currentText = clean(hypothesis?.currentHypothesis)
+    ? hypothesis.currentHypothesis
+    : "No consta una hipótesis vigente en el insumo institucional.";
+  const hypothesisEvidenceIds = [
+    ...asArray<string>(hypothesis?.supportingEvidenceIds),
+    ...asArray<string>(hypothesis?.contradictingEvidenceIds),
+  ];
+  const hypothesisFindingIds = [
+    ...asArray<string>(hypothesis?.supportingFindingIds),
+    ...asArray<string>(hypothesis?.contradictingFindingIds),
+  ];
+  const linkedFindings = input.findings.filter((item) =>
+    hypothesisFindingIds.includes(String(item?.findingId || item?.id || ""))
+  );
+  const linkedConclusions = input.conclusions.filter((item) =>
+    Boolean(hypothesis?.hypothesisId && item?.hypothesisId === hypothesis.hypothesisId) ||
+    [...asArray<string>(item?.evidenceIds), ...asArray<string>(item?.publicationEligibility?.lineageRefs?.evidenceIds)]
+      .some((id) => hypothesisEvidenceIds.includes(id)) ||
+    [...asArray<string>(item?.findingIds), ...asArray<string>(item?.publicationEligibility?.lineageRefs?.findingIds)]
+      .some((id) => hypothesisFindingIds.includes(id))
+  );
+  const conclusionText = visibleList(linkedConclusions.map((item) =>
+    item?.text || item?.summary || item?.conclusion || item?.description
+  ), 2).join("; ");
   const sections: ExecutiveDocumentSection[] = [
     {
       sectionId: "cover",
@@ -213,8 +258,24 @@ function buildSections(
       status: "READY",
     },
     {
-      sectionId: "territorial-situation",
+      sectionId: "initial-hypothesis",
       order: 3,
+      title: "HIPÓTESIS INICIAL",
+      role: "Trayectoria de la hipótesis humana y su contraste con evidencia gobernada",
+      content: [
+        `Hipótesis inicial: ${initialText}`,
+        `Hipótesis vigente: ${currentText}`,
+        `Hallazgos relevantes: ${visibleList(linkedFindings.map((item) => item.title || item.summary), 3).join("; ") || "No constan hallazgos vinculados y publicables."}`,
+        `Elementos de confirmación: ${linkedHypothesisElements(input, asArray<string>(hypothesis?.supportingEvidenceIds), asArray<string>(hypothesis?.supportingFindingIds))}`,
+        `Elementos de refutación: ${linkedHypothesisElements(input, asArray<string>(hypothesis?.contradictingEvidenceIds), asArray<string>(hypothesis?.contradictingFindingIds))}`,
+        `Conclusión analítica validada: ${conclusionText || "No consta una conclusión validada y vinculada a la hipótesis en el insumo institucional."}`,
+      ],
+      densityPolicy: { targetPages: "0-1", maxItems: 6 },
+      status: initialVersion?.authorType === "HUMAN" && clean(initialVersion.text) ? "READY" : "INCOMPLETE",
+    },
+    {
+      sectionId: "territorial-situation",
+      order: 4,
       title: "SITUACION TERRITORIAL",
       role: "Contexto territorial y mapa principal",
       content: [
@@ -230,7 +291,7 @@ function buildSections(
     },
     {
       sectionId: "priority-findings",
-      order: 4,
+      order: 5,
       title: "HALLAZGOS Y PATRONES PRIORITARIOS",
       role: "Hallazgos subordinados a evidencia e implicacion",
       content: findings.map((finding) => findingContent(finding, model.keyEvidence)),
@@ -239,7 +300,7 @@ function buildSections(
     },
     {
       sectionId: "key-evidence",
-      order: 5,
+      order: 6,
       title: "EVIDENCIA CLAVE",
       role: "Evidencia estrictamente seleccionada para cuerpo ejecutivo",
       content: evidence.map(evidenceContent),
@@ -248,7 +309,7 @@ function buildSections(
     },
     {
       sectionId: "multisource-analysis",
-      order: 6,
+      order: 7,
       title: "ANALISIS MULTIFUENTE",
       role: "Sintesis de convergencia, contradiccion y brechas",
       content: [
@@ -267,7 +328,7 @@ function buildSections(
   if (hasGovernedProspective(model)) {
     sections.push({
       sectionId: "prospective-analysis",
-      order: 7,
+      order: 8,
       title: "ANALISIS PROSPECTIVO",
       role: "Escenario prospectivo gobernado",
       content: [
@@ -288,7 +349,7 @@ function buildSections(
 
   sections.push({
     sectionId: "decision-implications",
-    order: hasGovernedProspective(model) ? 8 : 7,
+    order: hasGovernedProspective(model) ? 9 : 8,
     title: "IMPLICACIONES PARA LA DECISION",
     role: "Acciones derivadas de implicaciones gobernadas",
     content: decisions.map(decisionContent),
@@ -350,9 +411,13 @@ function collectEvidenceReferences(model: ExecutiveGeointReportModel): string[] 
 
 function flattenVisibleText(sections: ExecutiveDocumentSection[], placements: ExecutiveVisualPlacement[]): string[] {
   return [
-    ...sections.flatMap((section) => [section.title, section.role, ...section.content]),
-    ...placements.flatMap((placement) => [placement.headline, placement.caption]),
-  ].map((item) => visible(item)).filter(Boolean);
+    ...sections.flatMap((section) => [
+      visible(section.title),
+      visible(section.role),
+      ...section.content.map((item, index) => section.sectionId === "initial-hypothesis" && index < 2 ? item : visible(item)),
+    ]),
+    ...placements.flatMap((placement) => [visible(placement.headline), visible(placement.caption)]),
+  ].filter(Boolean);
 }
 
 export function buildExecutiveGeointReportDocumentModel(
@@ -362,7 +427,7 @@ export function buildExecutiveGeointReportDocumentModel(
   options: { numeroExpediente?: string; ceipolId?: string } = {}
 ): ExecutiveGeointReportDocumentModel {
   const numeroExpediente = resolveNumeroExpediente(executiveModel, options);
-  const sections = buildSections(executiveModel, visualComposition, numeroExpediente);
+  const sections = buildSections(executiveModel, visualComposition, institutionalInput, numeroExpediente);
   const visualPlacements = buildVisualPlacements(visualComposition);
   return {
     identity: {
@@ -379,6 +444,7 @@ export function buildExecutiveGeointReportDocumentModel(
       guidance: {
         cover: "1",
         "executive-panorama": "1",
+        "initial-hypothesis": "0-1",
         "territorial-situation": "1",
         "priority-findings": "1-2",
         "key-evidence": "1-2",
@@ -406,7 +472,11 @@ export function buildExecutiveGeointReportDocumentModel(
       rendersWord: false,
       sourceProjectId: institutionalInput.projectId,
       traceabilityIds: collectTraceabilityIds(executiveModel, visualComposition),
-      evidenceReferences: collectEvidenceReferences(executiveModel),
+      evidenceReferences: dedupe([
+        ...collectEvidenceReferences(executiveModel),
+        ...asArray<string>(institutionalInput.hypothesis?.supportingEvidenceIds),
+        ...asArray<string>(institutionalInput.hypothesis?.contradictingEvidenceIds),
+      ]),
       sectionCount: sections.length,
       visualPlacementCount: visualPlacements.length,
     },
