@@ -3,6 +3,10 @@ import { GeoDataNormalizerEngine } from "./geoNormalizer";
 import { validateGeoIntegrity } from "../../utils/geoIntegrityEngine";
 import { searchReddit } from "@/utils/socialProviders";
 
+function hasRedditBearer(): boolean {
+  return Boolean((process.env.PGP_REDDIT_BEARER_TOKEN || process.env.REDDIT_BEARER_TOKEN)?.trim());
+}
+
 export class RedditProvider implements IProvider {
   getId(): string {
     return "reddit";
@@ -60,6 +64,25 @@ export class RedditProvider implements IProvider {
         };
       }
 
+      if (!hasRedditBearer()) {
+        return {
+          provider: this.getId(),
+          status: "disabled",
+          timestamp: new Date().toISOString(),
+          confidence: 0,
+          payload: null,
+          latency: Date.now() - start,
+          metadata: {
+            version: "2.1.0",
+            sourceFamily: "REDDIT",
+            operationalMode: "NOT_CONFIGURED",
+            acquisitionStatus: "NOT_CONFIGURED",
+            authoritative: false,
+          },
+          errors: ["Reddit OAuth Bearer token is not configured."],
+        };
+      }
+
       const data = await searchReddit(query);
 
       const action = params?.action || "search";
@@ -91,56 +114,29 @@ export class RedditProvider implements IProvider {
 
   async healthCheck(): Promise<HealthCheckResult> {
     const start = Date.now();
+    if (!hasRedditBearer()) {
+      return {
+        isHealthy: false,
+        latencyMs: Date.now() - start,
+        details: "Reddit OAuth Bearer token is not configured.",
+        timestamp: new Date().toISOString(),
+        authenticationStatus: "unknown",
+        availability: 0,
+        recordsCount: 0,
+      };
+    }
+
     try {
-      const userAgent = process.env.PGP_REDDIT_USER_AGENT || "Mozilla/5.0";
-      const url = "https://www.reddit.com/search.json?q=ping&limit=1";
-      
-      try {
-        const res = await fetch(url, {
-          headers: { "User-Agent": userAgent }
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          const recordsCount = data?.data?.children?.length || 0;
-
-          return {
-            isHealthy: true,
-            latencyMs: Date.now() - start,
-            details: "Reddit search API is responsive.",
-            timestamp: new Date().toISOString(),
-            authenticationStatus: "valid",
-            availability: 100,
-            recordsCount
-          };
-        } else {
-          throw new Error(`HTTP status ${res.status}`);
-        }
-      } catch (errApi) {
-        // Run fallback reachability test
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch("https://www.reddit.com", {
-          method: "GET",
-          signal: controller.signal,
-          headers: { "User-Agent": "Mozilla/5.0" }
-        });
-        clearTimeout(id);
-
-        if (res.status >= 500) {
-          throw new Error(`Reddit server returned HTTP status ${res.status}`);
-        }
-
-        return {
-          isHealthy: true,
-          latencyMs: Date.now() - start,
-          details: "El servidor de Reddit es alcanzable. Conexión de red de respaldo activa.",
-          timestamp: new Date().toISOString(),
-          authenticationStatus: "bypassed",
-          availability: 100,
-          recordsCount: 1
-        };
-      }
+      const data = await searchReddit("ping");
+      return {
+        isHealthy: true,
+        latencyMs: Date.now() - start,
+        details: "Reddit OAuth search is responsive.",
+        timestamp: new Date().toISOString(),
+        authenticationStatus: "valid",
+        availability: 100,
+        recordsCount: data.length,
+      };
     } catch (err: any) {
       return {
         isHealthy: false,
