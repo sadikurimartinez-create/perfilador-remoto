@@ -345,7 +345,7 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     sourceReference: "src/utils/socialProviders.ts:searchX",
     sourceUrl: "https://api.twitter.com/2/tweets/search/recent",
     rawSourceReference: "x:v2:recent-search",
-    readiness: () => ({ ready: envConfigured(process.env.PGP_X_BEARER_TOKEN, process.env.PGP_X_ACCESS_TOKEN, process.env.X_BEARER_TOKEN, process.env.TWITTER_BEARER_TOKEN) }),
+    readiness: () => ({ ready: envConfigured(process.env.PGP_X_BEARER_TOKEN, process.env.X_BEARER_TOKEN, process.env.TWITTER_BEARER_TOKEN) }),
     execute: () => searchX(query),
     failureCode: "X_REQUEST_FAILED",
   });

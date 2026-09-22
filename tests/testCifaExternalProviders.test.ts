@@ -36,6 +36,10 @@ const originalProviderEnv = {
   pgpRedditBearer: process.env.PGP_REDDIT_BEARER_TOKEN,
   telegramToken: process.env.PGP_TELEGRAM_BOT_TOKEN,
   telegramTokenAlias: process.env.TELEGRAM_BOT_TOKEN,
+  xBearer: process.env.PGP_X_BEARER_TOKEN,
+  xBearerAlias: process.env.X_BEARER_TOKEN,
+  twitterBearerAlias: process.env.TWITTER_BEARER_TOKEN,
+  xOauth1AccessToken: process.env.PGP_X_ACCESS_TOKEN,
   mapsKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
   serpApiKey: process.env.PGP_SERPAPI_API_KEY,
 };
@@ -107,6 +111,10 @@ afterAll(() => {
   restoreEnv("PGP_REDDIT_BEARER_TOKEN", originalProviderEnv.pgpRedditBearer);
   restoreEnv("PGP_TELEGRAM_BOT_TOKEN", originalProviderEnv.telegramToken);
   restoreEnv("TELEGRAM_BOT_TOKEN", originalProviderEnv.telegramTokenAlias);
+  restoreEnv("PGP_X_BEARER_TOKEN", originalProviderEnv.xBearer);
+  restoreEnv("X_BEARER_TOKEN", originalProviderEnv.xBearerAlias);
+  restoreEnv("TWITTER_BEARER_TOKEN", originalProviderEnv.twitterBearerAlias);
+  restoreEnv("PGP_X_ACCESS_TOKEN", originalProviderEnv.xOauth1AccessToken);
   restoreEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", originalProviderEnv.mapsKey);
   restoreEnv("PGP_SERPAPI_API_KEY", originalProviderEnv.serpApiKey);
 });
@@ -524,6 +532,55 @@ describe("CIFA external provider readiness and failure semantics", () => {
 
     await expect(searchReddit("Aguascalientes")).resolves.toEqual([]);
     expect(dynamicAxios.get).not.toHaveBeenCalled();
+  });
+
+  test("X recent search uses only an explicit Bearer token", async () => {
+    process.env.PGP_X_BEARER_TOKEN = "test-x-bearer";
+    delete process.env.X_BEARER_TOKEN;
+    delete process.env.TWITTER_BEARER_TOKEN;
+    delete process.env.PGP_X_ACCESS_TOKEN;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { data: [{ id: "1", text: "Reporte" }] } });
+    const { searchX } = await import("../src/utils/socialProviders");
+
+    await expect(searchX("Aguascalientes robo")).resolves.toEqual([{ id: "1", text: "Reporte" }]);
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][0]).toBe("https://api.twitter.com/2/tweets/search/recent");
+    expect((dynamicAxios.get as jest.Mock).mock.calls[0][1]).toMatchObject({
+      headers: { Authorization: "Bearer test-x-bearer" },
+      params: { query: "Aguascalientes robo", max_results: 10 },
+    });
+  });
+
+  test("X never reinterprets an OAuth 1.0a access token as Bearer", async () => {
+    delete process.env.PGP_X_BEARER_TOKEN;
+    delete process.env.X_BEARER_TOKEN;
+    delete process.env.TWITTER_BEARER_TOKEN;
+    process.env.PGP_X_ACCESS_TOKEN = "oauth1-user-access-token";
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const { searchX } = await import("../src/utils/socialProviders");
+
+    await expect(searchX("Aguascalientes")).resolves.toEqual([]);
+    expect(dynamicAxios.get).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [401, "AUTH_FAILED"],
+    [403, "AUTH_FAILED"],
+    [429, "RATE_LIMITED"],
+    [503, "PROVIDER_UNAVAILABLE"],
+  ])("X HTTP %s remains %s", async (status, reason) => {
+    process.env.PGP_X_BEARER_TOKEN = "test-x-bearer";
+    delete process.env.X_BEARER_TOKEN;
+    delete process.env.TWITTER_BEARER_TOKEN;
+    delete process.env.PGP_X_ACCESS_TOKEN;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce({ response: { status } });
+    const { searchX } = await import("../src/utils/socialProviders");
+
+    await expect(searchX("Aguascalientes")).rejects.toMatchObject({ failure: { reason, httpStatus: status } });
   });
 
   test("Telegram matches OR terms only within updates delivered to the configured bot", async () => {

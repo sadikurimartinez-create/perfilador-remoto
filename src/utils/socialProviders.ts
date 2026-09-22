@@ -15,7 +15,7 @@ const REDDIT_BEARER =
   process.env.PGP_REDDIT_BEARER_TOKEN || process.env.REDDIT_BEARER_TOKEN || "";
 
 const X_BEARER =
-  process.env.PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
+  process.env.PGP_X_BEARER_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
 
 const TELEGRAM_TOKEN =
   process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "";

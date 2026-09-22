@@ -60,7 +60,7 @@ export class XProvider implements IProvider {
         };
       }
 
-      const token = process.env.PGP_X_BEARER_TOKEN || process.env.NEXT_PUBLIC_PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.NEXT_PUBLIC_PGP_X_ACCESS_TOKEN;
+      const token = process.env.PGP_X_BEARER_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN;
       let data: any = null;
 
       if (token) {
@@ -114,7 +114,7 @@ export class XProvider implements IProvider {
   async healthCheck(): Promise<HealthCheckResult> {
     const start = Date.now();
     try {
-      const token = process.env.PGP_X_BEARER_TOKEN || process.env.NEXT_PUBLIC_PGP_X_BEARER_TOKEN || process.env.PGP_X_ACCESS_TOKEN || process.env.NEXT_PUBLIC_PGP_X_ACCESS_TOKEN || "";
+      const token = process.env.PGP_X_BEARER_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
       
       if (token) {
         const url = "https://api.twitter.com/2/tweets/search/recent?query=ping&max_results=10";
