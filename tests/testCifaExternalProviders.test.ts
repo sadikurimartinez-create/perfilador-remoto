@@ -567,20 +567,76 @@ describe("CIFA external provider readiness and failure semantics", () => {
 
   test.each([
     [401, "AUTH_FAILED"],
+    [402, "ACCESS_RESTRICTED"],
     [403, "AUTH_FAILED"],
     [429, "RATE_LIMITED"],
     [503, "PROVIDER_UNAVAILABLE"],
   ])("X HTTP %s remains %s", async (status, reason) => {
-    process.env.PGP_X_BEARER_TOKEN = "test-x-bearer";
+    const token = "test-x-bearer-secret";
+    process.env.PGP_X_BEARER_TOKEN = token;
     delete process.env.X_BEARER_TOKEN;
     delete process.env.TWITTER_BEARER_TOKEN;
     delete process.env.PGP_X_ACCESS_TOKEN;
     jest.resetModules();
     const dynamicAxios = (await import("axios")).default;
-    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce({ response: { status } });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce({
+      code: "ERR_BAD_RESPONSE",
+      config: { headers: { Authorization: `Bearer ${token}` } },
+      response: {
+        status,
+        headers: { authorization: `Bearer ${token}` },
+        data: { errors: [{ code: status, message: `Authorization: Bearer ${token} rejected` }] },
+      },
+    });
     const { searchX } = await import("../src/utils/socialProviders");
 
-    await expect(searchX("Aguascalientes")).rejects.toMatchObject({ failure: { reason, httpStatus: status } });
+    const failure = await searchX("Aguascalientes").catch((error) => error.failure);
+    expect(failure).toMatchObject({
+      reason,
+      httpStatus: status,
+      technicalCode: `X_RECENT_SEARCH_${status}`,
+      nativeErrorCode: String(status),
+    });
+    expect(failure.providerDescription).toBe("[REDACTED_CREDENTIAL] rejected");
+    const observableOutput = JSON.stringify({ failure, logs: errorSpy.mock.calls });
+    expect(observableOutput).not.toContain(token);
+    expect(observableOutput).not.toMatch(/Authorization/i);
+  });
+
+  test.each([
+    ["ECONNABORTED", "TIMEOUT", "REQUEST_TIMEOUT"],
+    ["ECONNRESET", "NETWORK_ERROR", "CONNECTION_RESET"],
+  ])("X network code %s remains %s with safe diagnostics", async (code, reason, technicalCode) => {
+    const token = "test-x-bearer-secret";
+    process.env.PGP_X_BEARER_TOKEN = token;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock).mockRejectedValueOnce(networkError(code));
+    const { searchX } = await import("../src/utils/socialProviders");
+
+    const failure = await searchX("Aguascalientes").catch((error) => error.failure);
+    expect(failure).toMatchObject({ reason, technicalCode, nativeErrorCode: code });
+    const observableOutput = JSON.stringify({ failure, logs: errorSpy.mock.calls });
+    expect(observableOutput).not.toContain(token);
+    expect(observableOutput).not.toMatch(/Authorization|private key|DATABASE_URL/i);
+  });
+
+  test("X invalid response remains INVALID_RESPONSE with safe diagnostics", async () => {
+    const token = "test-x-bearer-secret";
+    process.env.PGP_X_BEARER_TOKEN = token;
+    jest.resetModules();
+    const dynamicAxios = (await import("axios")).default;
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (dynamicAxios.get as jest.Mock).mockResolvedValueOnce({ data: { data: "invalid" } });
+    const { searchX } = await import("../src/utils/socialProviders");
+
+    const failure = await searchX("Aguascalientes").catch((error) => error.failure);
+    expect(failure).toMatchObject({ reason: "INVALID_RESPONSE", technicalCode: "INVALID_RESPONSE_SCHEMA" });
+    const observableOutput = JSON.stringify({ failure, logs: errorSpy.mock.calls });
+    expect(observableOutput).not.toContain(token);
+    expect(observableOutput).not.toMatch(/Authorization/i);
   });
 
   test("Telegram matches OR terms only within updates delivered to the configured bot", async () => {

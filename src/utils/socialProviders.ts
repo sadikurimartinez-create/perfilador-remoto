@@ -17,6 +17,44 @@ const REDDIT_BEARER =
 const X_BEARER =
   process.env.PGP_X_BEARER_TOKEN || process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
 
+function sanitizeXProviderDescription(value: unknown, token: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let sanitized = value.replace(/(?:authorization\s*[:=]\s*)?bearer\s+[A-Za-z0-9._~+/=-]+/gi, "[REDACTED_CREDENTIAL]");
+  if (token.length >= 4) sanitized = sanitized.split(token).join("[REDACTED]");
+  sanitized = sanitized.replace(/\s+/g, " ").trim();
+  return sanitized ? sanitized.slice(0, 300) : undefined;
+}
+
+function xNativeErrorCode(data: any): string | undefined {
+  const value = data?.errors?.[0]?.code ?? data?.code;
+  const normalized = typeof value === "number" && Number.isFinite(value) ? String(value) : value;
+  if (typeof normalized !== "string" || !/^[A-Za-z0-9_.:-]{1,96}$/.test(normalized)) return undefined;
+  return normalized;
+}
+
+function xApiFailure(error: unknown): ExternalProviderError {
+  if (error instanceof ExternalProviderError) return error;
+
+  const classified = classifyExternalFailure(error);
+  const response = (error as any)?.response;
+  const status = Number(response?.status);
+  if (!Number.isFinite(status) || status <= 0) return classified;
+
+  const data = response?.data;
+  const providerDescription = sanitizeXProviderDescription(
+    data?.detail ?? data?.errors?.[0]?.message ?? data?.title ?? data?.error?.message ?? data?.error,
+    X_BEARER
+  );
+  return new ExternalProviderError({
+    ...classified.failure,
+    reason: status === 402 ? "ACCESS_RESTRICTED" : classified.failure.reason,
+    httpStatus: status,
+    technicalCode: `X_RECENT_SEARCH_${status}`,
+    nativeErrorCode: xNativeErrorCode(data) ?? classified.failure.nativeErrorCode,
+    providerDescription,
+  });
+}
+
 const TELEGRAM_TOKEN =
   process.env.PGP_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "";
 
@@ -557,8 +595,15 @@ export const searchX = async (
     return tweets ?? [];
 
   } catch (error) {
-    console.error("[X API] Provider request failed.");
-    throw classifyExternalFailure(error);
+    const classified = xApiFailure(error);
+    console.error("[X API] Provider request failed.", {
+      reason: classified.failure.reason,
+      status: classified.failure.httpStatus ?? null,
+      technicalCode: classified.failure.technicalCode ?? null,
+      nativeErrorCode: classified.failure.nativeErrorCode ?? null,
+      providerDescription: classified.failure.providerDescription ?? null,
+    });
+    throw classified;
 
   }
 
