@@ -2,7 +2,9 @@ import axios from "axios";
 import {
   classifyExternalFailure,
   classifyHttpFailure,
+  ExternalProviderError,
   invalidProviderResponse,
+  type ExternalFailureReason,
 } from "./externalProviderError";
 import { planCifaProviderQuery, type CifaQueryProvider } from "./cifaQueryPlanner";
 import {
@@ -19,12 +21,18 @@ const NEWS_API_ENDPOINT = "https://newsapi.org/v2/everything";
 const GDELT_DOC_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
 const GDELT_CONTEXT_ENDPOINT = "https://api.gdeltproject.org/api/v2/context/context";
 const GDELT_GEO_ENDPOINT = "https://api.gdeltproject.org/api/v2/geo/geo";
-const BLUESKY_SEARCH_ENDPOINT = "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts";
+const BLUESKY_SEARCH_ENDPOINT = "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts";
 const DEFAULT_LIMIT = 20;
+const GDELT_ATTEMPT_TIMEOUT_MS = 21_000;
+const GDELT_TOTAL_BUDGET_MS = 22_500;
+const BLUESKY_ATTEMPT_TIMEOUT_MS = 7_500;
+const BLUESKY_TOTAL_BUDGET_MS = 10_000;
+const RETRY_DELAY_MS = 150;
 
 export interface ProviderCollectionMetadata {
   originalQuery: string;
   providerQuery: string;
+  providerQueries?: string[];
   requestedLimit: number;
   returnedCount: number;
   totalAvailable?: number | null;
@@ -93,6 +101,110 @@ function statusForCount(count: number): AcquisitionStatus {
 
 function ensureHttpStatus(status: number): void {
   if (status < 200 || status >= 300) throw classifyHttpFailure(status);
+}
+
+type PublicProviderId = "GDELT_DOC" | "GDELT_CONTEXT" | "GDELT_GEO" | "BLUESKY";
+
+function logProviderAttempt(details: {
+  provider: PublicProviderId;
+  reason: ExternalFailureReason | "SUCCESS";
+  status: number | null;
+  elapsedMs: number;
+  attempt: number;
+  resultCount?: number;
+}): void {
+  console.info("[CIFA_PROVIDER]", JSON.stringify(details));
+}
+
+function retryableFailure(reason: ExternalFailureReason, status?: number): boolean {
+  if (reason === "TIMEOUT" || reason === "RATE_LIMITED") return true;
+  return reason === "PROVIDER_UNAVAILABLE" && [502, 503, 504].includes(status ?? 0);
+}
+
+function providerHttpFailure(provider: PublicProviderId, status: number): ExternalProviderError {
+  if (provider === "BLUESKY" && status === 403) {
+    return new ExternalProviderError({
+      reason: "ACCESS_RESTRICTED",
+      httpStatus: status,
+      technicalCode: "BLUESKY_PUBLIC_ACCESS_RESTRICTED",
+    });
+  }
+  if (provider === "GDELT_GEO" && status === 404) {
+    return new ExternalProviderError({
+      reason: "PROVIDER_UNAVAILABLE",
+      httpStatus: status,
+      technicalCode: "GDELT_GEO_ENDPOINT_UNAVAILABLE",
+    });
+  }
+  return classifyHttpFailure(status);
+}
+
+async function waitForRetry(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+}
+
+async function requestPublicProvider(
+  provider: PublicProviderId,
+  endpoint: string,
+  params: Record<string, unknown>,
+  attemptTimeoutMs: number,
+  totalBudgetMs: number,
+  headers?: Record<string, string>
+) {
+  const startedAt = Date.now();
+  let lastFailure: ExternalProviderError | null = null;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const elapsedBeforeAttempt = Date.now() - startedAt;
+    const remainingMs = totalBudgetMs - elapsedBeforeAttempt;
+    if (remainingMs <= 0) break;
+
+    try {
+      const response = await axios.get(endpoint, {
+        headers,
+        params,
+        timeout: Math.min(attemptTimeoutMs, remainingMs),
+        validateStatus: () => true,
+      });
+      const elapsedMs = Date.now() - startedAt;
+      if (response.status >= 200 && response.status < 300) {
+        logProviderAttempt({ provider, reason: "SUCCESS", status: response.status, elapsedMs, attempt });
+        return { response, attempt, elapsedMs };
+      }
+
+      const failure = providerHttpFailure(provider, response.status);
+      lastFailure = failure;
+      logProviderAttempt({
+        provider,
+        reason: failure.failure.reason,
+        status: response.status,
+        elapsedMs,
+        attempt,
+      });
+      const canRetry = attempt === 1 && retryableFailure(failure.failure.reason, response.status)
+        && totalBudgetMs - elapsedMs > RETRY_DELAY_MS;
+      if (!canRetry) throw failure;
+    } catch (error) {
+      const failure = classifyExternalFailure(error);
+      if (failure !== lastFailure) {
+        lastFailure = failure;
+        logProviderAttempt({
+          provider,
+          reason: failure.failure.reason,
+          status: failure.failure.httpStatus ?? null,
+          elapsedMs: Date.now() - startedAt,
+          attempt,
+        });
+      }
+      const elapsedMs = Date.now() - startedAt;
+      const canRetry = attempt === 1 && retryableFailure(failure.failure.reason, failure.failure.httpStatus)
+        && totalBudgetMs - elapsedMs > RETRY_DELAY_MS;
+      if (!canRetry) throw failure;
+    }
+    await waitForRetry();
+  }
+
+  throw lastFailure ?? new ExternalProviderError({ reason: "TIMEOUT", technicalCode: "REQUEST_BUDGET_EXHAUSTED" });
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
@@ -235,9 +347,13 @@ function gdeltArticleCollection(
 ): ProviderCollection<CifaObservedRecord> {
   const plan = planCifaProviderQuery(originalQuery, provider);
   const record = asRecord(body);
-  if (!record || !Array.isArray(record.articles)) throw invalidProviderResponse();
+  if (!record) throw invalidProviderResponse();
+  if (record.articles !== undefined && record.articles !== null && !Array.isArray(record.articles)) {
+    throw invalidProviderResponse();
+  }
+  const articles = Array.isArray(record.articles) ? record.articles : [];
   const acquiredAt = new Date().toISOString();
-  const items = record.articles.slice(0, limit).map((article: unknown, index: number) => {
+  const items = articles.slice(0, limit).map((article: unknown, index: number) => {
     const value = asRecord(article);
     if (!value) throw invalidProviderResponse();
     const sourceUrl = safeUrl(value.url ?? value.url_mobile);
@@ -269,7 +385,7 @@ function gdeltArticleCollection(
     providerQuery: plan.providerQuery,
     requestedLimit: limit,
     returnedCount: items.length,
-    truncated: record.articles.length > items.length,
+    truncated: articles.length > items.length,
   });
 }
 
@@ -281,13 +397,28 @@ async function searchGdeltArticles(
 ): Promise<ProviderCollection<CifaObservedRecord>> {
   const plan = planCifaProviderQuery(originalQuery, provider);
   const boundedLimit = clampLimit(limit, 75);
-  const response = await axios.get(endpoint, {
-    params: { query: plan.providerQuery, mode: "ArtList", maxrecords: boundedLimit, format: "json", sort: "HybridRel" },
-    timeout: 12_000,
-    validateStatus: () => true,
-  });
-  ensureHttpStatus(response.status);
-  return gdeltArticleCollection(originalQuery, provider, response.data, boundedLimit);
+  const { response, attempt, elapsedMs } = await requestPublicProvider(
+    provider,
+    endpoint,
+    {
+      query: plan.providerQuery,
+      mode: "ArtList",
+      maxrecords: boundedLimit,
+      format: "json",
+      sort: "DateDesc",
+      timespan: "24h",
+    },
+    GDELT_ATTEMPT_TIMEOUT_MS,
+    GDELT_TOTAL_BUDGET_MS,
+    { Accept: "application/json" }
+  );
+  try {
+    return gdeltArticleCollection(originalQuery, provider, response.data, boundedLimit);
+  } catch (error) {
+    const failure = classifyExternalFailure(error);
+    logProviderAttempt({ provider, reason: failure.failure.reason, status: response.status, elapsedMs, attempt });
+    throw failure;
+  }
 }
 
 export function searchGdeltDocuments(originalQuery: string, limit = 20) {
@@ -304,14 +435,32 @@ export async function searchGdeltGeo(
 ): Promise<ProviderCollection<CifaObservedRecord>> {
   const plan = planCifaProviderQuery(originalQuery, "GDELT_GEO");
   const boundedLimit = clampLimit(limit, 50);
-  const response = await axios.get(GDELT_GEO_ENDPOINT, {
-    params: { query: plan.providerQuery, mode: "PointData", format: "GeoJSON", maxpoints: boundedLimit },
-    timeout: 12_000,
-    validateStatus: () => true,
-  });
-  ensureHttpStatus(response.status);
+  const { response, attempt, elapsedMs } = await requestPublicProvider(
+    "GDELT_GEO",
+    GDELT_GEO_ENDPOINT,
+    {
+      query: plan.providerQuery,
+      mode: "PointData",
+      format: "GeoJSON",
+      maxpoints: boundedLimit,
+      timespan: "24h",
+    },
+    GDELT_ATTEMPT_TIMEOUT_MS,
+    GDELT_TOTAL_BUDGET_MS,
+    { Accept: "application/geo+json, application/json" }
+  );
   const body = asRecord(response.data);
-  if (!body || !Array.isArray(body.features)) throw invalidProviderResponse();
+  if (!body || !Array.isArray(body.features)) {
+    const failure = invalidProviderResponse();
+    logProviderAttempt({
+      provider: "GDELT_GEO",
+      reason: failure.failure.reason,
+      status: response.status,
+      elapsedMs,
+      attempt,
+    });
+    throw failure;
+  }
   const acquiredAt = new Date().toISOString();
   const items = body.features.slice(0, boundedLimit).map((feature: unknown, index: number) => {
     const value = asRecord(feature);
@@ -357,22 +506,16 @@ function blueskyPostUrl(uri: unknown, handle: unknown): string | null {
   return match ? `https://bsky.app/profile/${encodeURIComponent(handle)}/post/${encodeURIComponent(match[1])}` : null;
 }
 
-export async function searchBluesky(
+function parseBlueskyPosts(
+  body: unknown,
   originalQuery: string,
-  limit = 20
-): Promise<ProviderCollection<CifaObservedRecord>> {
-  const plan = planCifaProviderQuery(originalQuery, "BLUESKY");
-  const boundedLimit = clampLimit(limit, 100);
-  const response = await axios.get(BLUESKY_SEARCH_ENDPOINT, {
-    params: { q: plan.providerQuery, limit: boundedLimit, sort: "latest" },
-    timeout: 10_000,
-    validateStatus: () => true,
-  });
-  ensureHttpStatus(response.status);
-  const body = asRecord(response.data);
-  if (!body || !Array.isArray(body.posts)) throw invalidProviderResponse();
+  providerQuery: string,
+  branchIndex: number
+): { items: CifaObservedRecord[]; cursor: string | null } {
+  const recordBody = asRecord(body);
+  if (!recordBody || !Array.isArray(recordBody.posts)) throw invalidProviderResponse();
   const acquiredAt = new Date().toISOString();
-  const items = body.posts.slice(0, boundedLimit).map((post: unknown, index: number) => {
+  const items = recordBody.posts.map((post: unknown, index: number) => {
     const value = asRecord(post);
     const record = asRecord(value?.record);
     const author = asRecord(value?.author);
@@ -387,7 +530,7 @@ export async function searchBluesky(
     const sourceUrl = blueskyPostUrl(value.uri, author.handle);
     return {
       ...makeBaseRecord({
-        id: stringOrNull(value.uri) ?? `bluesky:${index}`,
+        id: stringOrNull(value.uri) ?? `bluesky:${branchIndex}:${index}`,
         title: null,
         description: record.text,
         text: record.text,
@@ -396,8 +539,8 @@ export async function searchBluesky(
         sourceUrl,
         publishedAt: record.createdAt,
         observedAt: value.indexedAt,
-        originalQuery: plan.originalQuery,
-        providerQuery: plan.providerQuery,
+        originalQuery,
+        providerQuery,
         acquiredAt,
       }),
       uri: stringOrNull(value.uri),
@@ -413,13 +556,86 @@ export async function searchBluesky(
       geography: null,
     };
   });
+  return { items, cursor: stringOrNull(recordBody.cursor) };
+}
+
+export async function searchBluesky(
+  originalQuery: string,
+  limit = 20
+): Promise<ProviderCollection<CifaObservedRecord>> {
+  const plan = planCifaProviderQuery(originalQuery, "BLUESKY");
+  const boundedLimit = clampLimit(limit, 100);
+  const providerQueries = plan.providerQueries?.length ? plan.providerQueries : [plan.providerQuery];
+  const branchLimit = Math.max(1, Math.min(25, Math.ceil(boundedLimit / providerQueries.length)));
+  const branches = await Promise.all(providerQueries.map(async (providerQuery, branchIndex) => {
+    let attempt = 1;
+    let elapsedMs = 0;
+    try {
+      const result = await requestPublicProvider(
+        "BLUESKY",
+        BLUESKY_SEARCH_ENDPOINT,
+        { q: providerQuery, limit: branchLimit, sort: "latest" },
+        BLUESKY_ATTEMPT_TIMEOUT_MS,
+        BLUESKY_TOTAL_BUDGET_MS,
+        { Accept: "application/json" }
+      );
+      attempt = result.attempt;
+      elapsedMs = result.elapsedMs;
+      const { response } = result;
+      const parsed = parseBlueskyPosts(response.data, plan.originalQuery, providerQuery, branchIndex);
+      return {
+        providerQuery,
+        status: statusForCount(parsed.items.length),
+        items: parsed.items,
+        cursor: parsed.cursor,
+        attempt,
+        elapsedMs,
+        failure: null,
+      };
+    } catch (error) {
+      const failure = classifyExternalFailure(error);
+      if (failure.failure.reason === "INVALID_RESPONSE") {
+        logProviderAttempt({ provider: "BLUESKY", reason: failure.failure.reason, status: 200, elapsedMs, attempt });
+      }
+      return {
+        providerQuery,
+        status: "FAILED" as AcquisitionStatus,
+        items: [] as CifaObservedRecord[],
+        cursor: null,
+        attempt,
+        elapsedMs,
+        failure,
+      };
+    }
+  }));
+
+  const successfulBranches = branches.filter((branch) => branch.status !== "FAILED");
+  if (successfulBranches.length === 0) throw branches[0].failure ?? invalidProviderResponse();
+
+  const uniqueItems = new Map<string, CifaObservedRecord>();
+  for (const item of successfulBranches.flatMap((branch) => branch.items)) {
+    const key = stringOrNull(item.uri) ?? stringOrNull(item.cid) ?? item.id;
+    if (!uniqueItems.has(key)) uniqueItems.set(key, item);
+  }
+  const allItems = [...uniqueItems.values()];
+  const items = allItems.slice(0, boundedLimit);
+  const acquisitionStatus = aggregateStatuses(branches.map((branch) => branch.status));
   return collection(items, {
     originalQuery: plan.originalQuery,
     providerQuery: plan.providerQuery,
+    providerQueries,
     requestedLimit: boundedLimit,
     returnedCount: items.length,
-    truncated: Boolean(body.cursor) || body.posts.length > items.length,
-  });
+    truncated: branches.some((branch) => Boolean(branch.cursor)) || allItems.length > items.length,
+    observations: branches.map((branch) => ({
+      providerQuery: branch.providerQuery,
+      status: branch.status,
+      resultCount: branch.items.length,
+      attempt: branch.attempt,
+      elapsedMs: branch.elapsedMs,
+      failureReason: branch.failure?.failure.reason ?? null,
+    })),
+  }, acquisitionStatus);
 }
 
 function envToken(name: string | undefined): string | undefined {

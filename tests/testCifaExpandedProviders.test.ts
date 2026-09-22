@@ -29,6 +29,10 @@ function response(status: number, data: unknown) {
   return { status, data };
 }
 
+function networkError(code: string) {
+  return Object.assign(new Error(code), { code });
+}
+
 function observedDefinition(execute: () => Promise<unknown>): CifaSourceDefinition {
   return {
     sourceKey: "expanded",
@@ -48,7 +52,11 @@ function observedDefinition(execute: () => Promise<unknown>): CifaSourceDefiniti
 }
 
 describe("CIFA expanded provider contracts", () => {
-  beforeEach(() => mockedGet.mockReset());
+  beforeEach(() => {
+    mockedGet.mockReset();
+    jest.spyOn(console, "info").mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
   afterAll(() => { global.fetch = originalFetch; });
 
   describe("NewsAPI", () => {
@@ -120,32 +128,59 @@ describe("CIFA expanded provider contracts", () => {
         observedAt: "2026-09-20T10:11:12.000Z",
         language: "Spanish",
       });
+      expect(mockedGet.mock.calls[0][1]).toMatchObject({
+        timeout: 21_000,
+        params: { mode: "ArtList", format: "json", sort: "DateDesc", timespan: "24h" },
+      });
     });
 
-    test("DOC empty is valid and HTTP/schema failures remain failures", async () => {
-      mockedGet.mockResolvedValueOnce(response(200, { articles: [] }))
-        .mockResolvedValueOnce(response(500, {}))
-        .mockResolvedValueOnce(response(200, { articles: {} }));
-      expect(await searchGdeltDocuments("robo")).toHaveLength(0);
-      await expect(searchGdeltDocuments("robo")).rejects.toMatchObject({ failure: { reason: "PROVIDER_UNAVAILABLE" } });
-      await expect(searchGdeltDocuments("robo")).rejects.toMatchObject({ failure: { reason: "INVALID_RESPONSE" } });
-    });
-
-    test("Context preserves exactly the provider sentence and empty is valid", async () => {
-      mockedGet.mockResolvedValueOnce(response(200, { articles: [{
+    test("Context preserves exactly the provider sentence", async () => {
+      mockedGet.mockResolvedValue(response(200, { articles: [{
         url: "https://media.example/context", title: "Nota", context: "Frase exacta del proveedor.",
-      }] })).mockResolvedValueOnce(response(200, { articles: [] }));
+      }] }));
       const result = await searchGdeltContext("operativo");
       expect(result[0].contextText).toBe("Frase exacta del proveedor.");
       expect(result[0].text).toBe("Frase exacta del proveedor.");
-      expect(await searchGdeltContext("sin coincidencias")).toHaveLength(0);
+    });
+
+    describe.each([
+      ["DOC", searchGdeltDocuments],
+      ["Context", searchGdeltContext],
+    ])("%s response contract", (_provider, search) => {
+      test("treats omitted or empty articles as valid NO_DATA", async () => {
+        mockedGet.mockResolvedValueOnce(response(200, {}))
+          .mockResolvedValueOnce(response(200, { articles: [] }));
+        expect(await search("sin coincidencias")).toHaveLength(0);
+        expect(await search("sin coincidencias")).toHaveLength(0);
+      });
+
+      test.each([[429, "RATE_LIMITED"], [503, "PROVIDER_UNAVAILABLE"]])(
+        "retries transient HTTP %s once and preserves %s",
+        async (status, reason) => {
+          mockedGet.mockResolvedValue(response(status, {}));
+          await expect(search("robo")).rejects.toMatchObject({ failure: { reason } });
+          expect(mockedGet).toHaveBeenCalledTimes(2);
+        }
+      );
+
+      test("bounds timeout and retries it at most once", async () => {
+        mockedGet.mockRejectedValue(networkError("ECONNABORTED"));
+        await expect(search("robo")).rejects.toMatchObject({ failure: { reason: "TIMEOUT" } });
+        expect(mockedGet).toHaveBeenCalledTimes(2);
+      });
+
+      test("rejects an invalid non-array articles schema without retry", async () => {
+        mockedGet.mockResolvedValue(response(200, { articles: {} }));
+        await expect(search("robo")).rejects.toMatchObject({ failure: { reason: "INVALID_RESPONSE" } });
+        expect(mockedGet).toHaveBeenCalledTimes(1);
+      });
     });
 
     test("GEO marks mentioned location and never promotes it to event location", async () => {
-      mockedGet.mockResolvedValueOnce(response(200, { type: "FeatureCollection", features: [{
+      mockedGet.mockResolvedValue(response(200, { type: "FeatureCollection", features: [{
         type: "Feature", geometry: { type: "Point", coordinates: [-102.29, 21.88] },
         properties: { name: "Aguascalientes", count: 3 },
-      }] })).mockResolvedValueOnce(response(200, { type: "FeatureCollection", features: [] }));
+      }] }));
       const result = await searchGdeltGeo("Aguascalientes");
       expect(result[0]).toMatchObject({
         geometry: { coordinates: [-102.29, 21.88] },
@@ -153,33 +188,122 @@ describe("CIFA expanded provider contracts", () => {
         eventLocation: null,
         publishedAt: null,
       });
+    });
+
+    test("GEO empty FeatureCollection is valid NO_DATA", async () => {
+      mockedGet.mockResolvedValue(response(200, { type: "FeatureCollection", features: [] }));
       expect(await searchGdeltGeo("sin geo")).toHaveLength(0);
+    });
+
+    test.each([[429, "RATE_LIMITED"], [503, "PROVIDER_UNAVAILABLE"]])(
+      "GEO retries transient HTTP %s once and preserves %s",
+      async (status, reason) => {
+        mockedGet.mockResolvedValue(response(status, {}));
+        await expect(searchGdeltGeo("robo")).rejects.toMatchObject({ failure: { reason } });
+        expect(mockedGet).toHaveBeenCalledTimes(2);
+      }
+    );
+
+    test("GEO bounds timeout and retries it at most once", async () => {
+      mockedGet.mockRejectedValue(networkError("ECONNABORTED"));
+      await expect(searchGdeltGeo("robo")).rejects.toMatchObject({ failure: { reason: "TIMEOUT" } });
+      expect(mockedGet).toHaveBeenCalledTimes(2);
+    });
+
+    test("GEO classifies its observed endpoint 404 as provider unavailable without retry", async () => {
+      mockedGet.mockResolvedValue(response(404, {}));
+      await expect(searchGdeltGeo("robo")).rejects.toMatchObject({
+        failure: { reason: "PROVIDER_UNAVAILABLE", technicalCode: "GDELT_GEO_ENDPOINT_UNAVAILABLE" },
+      });
+      expect(mockedGet).toHaveBeenCalledTimes(1);
+    });
+
+    test("GEO rejects invalid GeoJSON schema without retry", async () => {
+      mockedGet.mockResolvedValue(response(200, { features: "invalid" }));
+      await expect(searchGdeltGeo("robo")).rejects.toMatchObject({ failure: { reason: "INVALID_RESPONSE" } });
+      expect(mockedGet).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("Bluesky", () => {
-    test("uses public search without auth and preserves post metadata", async () => {
+    test("uses the working public AppView without auth and preserves post metadata", async () => {
       mockedGet.mockResolvedValue(response(200, { posts: [{
         uri: "at://did:plc:abc/app.bsky.feed.post/xyz", cid: "cid-1",
         author: { did: "did:plc:abc", handle: "analista.bsky.social", displayName: "Analista" },
         record: { text: "Reporte #Aguascalientes", createdAt: "2026-09-20T10:00:00Z", facets: [] },
         indexedAt: "2026-09-20T10:01:00Z", replyCount: 1, repostCount: 2,
       }] }));
-      const result = await searchBluesky("Aguascalientes OR operativo");
+      const result = await searchBluesky("Aguascalientes");
       expect(result[0]).toMatchObject({
         authorDid: "did:plc:abc", handle: "analista.bsky.social", geography: null,
         publishedAt: "2026-09-20T10:00:00.000Z", observedAt: "2026-09-20T10:01:00.000Z",
       });
-      expect(mockedGet.mock.calls[0][1].headers).toBeUndefined();
+      expect(mockedGet.mock.calls[0][0]).toBe("https://api.bsky.app/xrpc/app.bsky.feed.searchPosts");
+      expect(mockedGet.mock.calls[0][1].headers).toEqual({ Accept: "application/json" });
+      expect(mockedGet.mock.calls[0][1].headers.Authorization).toBeUndefined();
     });
 
-    test("empty, rate limit and invalid schema remain distinct", async () => {
-      mockedGet.mockResolvedValueOnce(response(200, { posts: [] }))
-        .mockResolvedValueOnce(response(429, {}))
-        .mockResolvedValueOnce(response(200, { posts: "invalid" }));
+    test("HTTP 200 with posts=[] is valid NO_DATA", async () => {
+      mockedGet.mockResolvedValue(response(200, { posts: [] }));
       expect(await searchBluesky("robo")).toHaveLength(0);
-      await expect(searchBluesky("robo")).rejects.toMatchObject({ failure: { reason: "RATE_LIMITED" } });
+    });
+
+    test.each([
+      [400, "INVALID_REQUEST", 1],
+      [401, "AUTH_FAILED", 1],
+      [403, "ACCESS_RESTRICTED", 1],
+      [429, "RATE_LIMITED", 2],
+      [503, "PROVIDER_UNAVAILABLE", 2],
+    ])("maps HTTP %s to %s with %s attempt(s)", async (status, reason, attempts) => {
+      mockedGet.mockResolvedValue(response(status, {}));
+      await expect(searchBluesky("robo")).rejects.toMatchObject({ failure: { reason } });
+      expect(mockedGet).toHaveBeenCalledTimes(attempts);
+    });
+
+    test.each([
+      ["ECONNABORTED", "TIMEOUT", 2],
+      ["ENOTFOUND", "NETWORK_ERROR", 1],
+    ])("maps %s to %s with bounded retry", async (code, reason, attempts) => {
+      mockedGet.mockRejectedValue(networkError(code));
+      await expect(searchBluesky("robo")).rejects.toMatchObject({ failure: { reason } });
+      expect(mockedGet).toHaveBeenCalledTimes(attempts);
+    });
+
+    test("rejects invalid posts schema without retry", async () => {
+      mockedGet.mockResolvedValue(response(200, { posts: "invalid" }));
       await expect(searchBluesky("robo")).rejects.toMatchObject({ failure: { reason: "INVALID_RESPONSE" } });
+      expect(mockedGet).toHaveBeenCalledTimes(1);
+    });
+
+    test("fans out OR branches, deduplicates posts and reports restricted branches as PARTIAL", async () => {
+      const post = {
+        uri: "at://did:plc:abc/app.bsky.feed.post/xyz", cid: "cid-1",
+        author: { did: "did:plc:abc", handle: "analista.bsky.social" },
+        record: { text: "Reporte", createdAt: "2026-09-20T10:00:00Z" },
+        indexedAt: "2026-09-20T10:01:00Z",
+      };
+      mockedGet.mockResolvedValueOnce(response(200, { posts: [post] }))
+        .mockResolvedValueOnce(response(200, { posts: [] }))
+        .mockResolvedValueOnce(response(200, { posts: [post] }))
+        .mockResolvedValueOnce(response(200, { posts: [] }))
+        .mockResolvedValueOnce(response(403, {}));
+
+      const result = await searchBluesky("Aguascalientes operativo OR balacera OR robo OR detención OR cartel");
+
+      expect(result).toHaveLength(1);
+      expect(result.acquisitionStatus).toBe("PARTIAL");
+      expect(result.providerMetadata?.providerQueries).toEqual([
+        "Aguascalientes operativo",
+        "Aguascalientes balacera",
+        "Aguascalientes robo",
+        "Aguascalientes detención",
+        "Aguascalientes cartel",
+      ]);
+      expect(result.providerMetadata?.observations?.at(-1)).toMatchObject({
+        status: "FAILED",
+        failureReason: "ACCESS_RESTRICTED",
+      });
+      expect(result[0]).toMatchObject({ geography: null, providerQuery: "Aguascalientes operativo" });
     });
   });
 
@@ -292,14 +416,18 @@ describe("CIFA expanded provider contracts", () => {
       record: { text: "Reporte", createdAt: null }, indexedAt: null,
     }] }));
     const envelope = await executeCifaSource(observedDefinition(() => searchBluesky("robo OR detención")), "robo OR detención");
-    expect(envelope.providerMetadata).toMatchObject({ originalQuery: "robo OR detención", providerQuery: "robo detención" });
+    expect(envelope.providerMetadata).toMatchObject({
+      originalQuery: "robo OR detención",
+      providerQuery: "robo OR detención",
+      providerQueries: ["robo", "detención"],
+    });
     expect((envelope.data as any[])[0]).toMatchObject({
       acquisitionMode: "OBSERVED", semanticRole: "SOURCE_FACT", isSimulated: false,
       publishedAt: null, observedAt: null,
       provenance: {
         providerId: "EXPANDED_PROVIDER", providerName: "Expanded provider",
         sourceType: "EXPANDED_OBSERVATION", query: "robo OR detención",
-        providerQuery: "robo detención", acquisitionMode: "OBSERVED",
+        providerQuery: "robo", acquisitionMode: "OBSERVED",
         semanticRole: "SOURCE_FACT", isSimulated: false,
       },
     });
@@ -323,12 +451,15 @@ describe("CIFA expanded provider contracts", () => {
 });
 
 describe("CIFA query planning and multisource deduplication", () => {
-  test("keeps original query while adapting providers without boolean syntax", () => {
+  test("keeps original query while adapting scoped OR queries per provider", () => {
     expect(planCifaProviderQuery("Aguascalientes operativo OR robo", "BLUESKY")).toEqual({
       originalQuery: "Aguascalientes operativo OR robo",
-      providerQuery: "Aguascalientes operativo robo",
+      providerQuery: "Aguascalientes operativo OR Aguascalientes robo",
+      providerQueries: ["Aguascalientes operativo", "Aguascalientes robo"],
       provider: "BLUESKY",
     });
+    expect(planCifaProviderQuery("Aguascalientes operativo OR robo", "GDELT_DOC").providerQuery)
+      .toBe("Aguascalientes (operativo OR robo)");
     expect(planCifaProviderQuery("Aguascalientes operativo OR robo", "NEWS_API").providerQuery)
       .toBe("Aguascalientes operativo OR robo");
   });

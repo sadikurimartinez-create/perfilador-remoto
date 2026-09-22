@@ -1,5 +1,6 @@
 export type ExternalFailureReason =
   | "AUTH_FAILED"
+  | "ACCESS_RESTRICTED"
   | "RATE_LIMITED"
   | "INVALID_REQUEST"
   | "HTTP_ERROR"
@@ -23,6 +24,7 @@ export interface SanitizedProviderFailure {
 
 const PUBLIC_MESSAGES: Record<ExternalFailureReason, string> = {
   AUTH_FAILED: "El proveedor rechazó las credenciales configuradas.",
+  ACCESS_RESTRICTED: "El proveedor restringió el acceso público desde este entorno.",
   RATE_LIMITED: "El proveedor alcanzó su límite temporal de consultas.",
   INVALID_REQUEST: "El proveedor rechazó los parámetros de la consulta.",
   HTTP_ERROR: "El proveedor devolvió un error HTTP.",

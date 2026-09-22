@@ -250,9 +250,10 @@ export async function runUnifiedCifaScan(project: any, selectedSources: string[]
     acquisitionMode: "OBSERVED",
     semanticRole: "SOURCE_FACT",
     sourceReference: "src/utils/cifaExpandedProviders.ts:searchBluesky",
-    sourceUrl: "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts",
+    sourceUrl: "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts",
     rawSourceReference: "atproto:app.bsky.feed.searchPosts",
     execute: () => searchBluesky(query),
+    resolveStatus: getProviderCollectionStatus,
     providerMetadata: getProviderCollectionMetadata,
     failureCode: "BLUESKY_REQUEST_FAILED",
   });

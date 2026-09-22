@@ -133,4 +133,30 @@ describe("CIFA expanded multisource orchestration", () => {
     }), expect.any(Object));
     expect(result.sourceResults.every((item) => item.isSimulated === false)).toBe(true);
   });
+
+  test("preserves a partially successful Bluesky fan-out as PARTIAL", async () => {
+    mockSearchBluesky.mockResolvedValue(providerItems([{
+      id: "at://post", text: "Operativo observado", sourceName: "Bluesky",
+      sourceUrl: "https://bsky.app/profile/a/post/1", publishedAt: null,
+      providerQuery: "Aguascalientes operativo",
+    }], "PARTIAL"));
+
+    const result = await runUnifiedCifaScan(
+      { id: "project", locationName: "Aguascalientes" },
+      ["bluesky"],
+      "Aguascalientes operativo OR robo"
+    );
+
+    expect(result.sourceResults[0]).toMatchObject({
+      sourceKey: "bluesky",
+      acquisitionStatus: "PARTIAL",
+      resultCount: 1,
+      isSimulated: false,
+    });
+    expect(result.coveragePanel).toMatchObject({
+      sourcesResponded: 1,
+      sourcesWithData: 1,
+      sourcesPartial: 1,
+    });
+  });
 });
