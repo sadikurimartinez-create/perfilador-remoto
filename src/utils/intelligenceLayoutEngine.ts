@@ -6,6 +6,7 @@ import { StatisticalIntelligenceEngineV2 } from './statisticalIntelligenceEngine
 import { StatisticalEvidenceMatrixManager } from './statisticalEvidenceMatrix';
 import { TCE_DEFAULT_FALLBACK, TerritorialContextEngine } from './territorialContextEngine';
 import { VisualEvidenceEngine } from "./visualEvidenceEngine";
+import { hasStreetViewProvenance } from "./visualEvidenceEngine/streetViewCollector";
 import { HypothesisIntelligenceEngine, HIEResult } from './hypothesisIntelligenceEngine';
 import { CartographicIntelligenceEngine } from './cartographicIntelligenceEngine';
 import { safeUpperCase } from '../lib/exportToWord';
@@ -970,13 +971,12 @@ export const buildIntelligenceEditorialPayload = async (
   };
 
   album = (album || []).filter(isApprovedEvidence).map(p => {
-    if (p && (p.tipo === "REMOTE_STREET_VIEW" || p.tipo === "STREET_VIEW" || p.isStreetView)) {
+    if (hasStreetViewProvenance(p)) {
       return {
         ...p,
         tipo: "REMOTE_STREET_VIEW",
         category: "STREET_VIEW",
         classification: "REMOTE_VISUAL",
-        sourceProvider: "GOOGLE_STREET_VIEW",
         isStreetView: true
       };
     }
@@ -1220,24 +1220,8 @@ export const buildIntelligenceEditorialPayload = async (
   ];
 
   // ==================== STREET VIEW TRACE ====================
-  const isStructuredStreetViewEvidence = (p: any) =>
-    p.evidenceOrigin === "REMOTE" ||
-    p.collectionMethod === "DESKTOP_ANALYSIS" ||
-    p.evidenceCategoryClass === "REMOTE_VISUAL" ||
-    p.sourceProvider === "GOOGLE_STREET_VIEW" ||
-    !!p.streetViewMetadata;
-
-  const isLegacyStreetViewEvidence = (p: any) =>
-    p.tipo?.toLowerCase().includes("street") ||
-    p.url?.toLowerCase().includes("street") ||
-    p.previewUrl?.toLowerCase().includes("street") ||
-    p.comentario?.toLowerCase().includes("street") ||
-    p.description?.toLowerCase().includes("street") ||
-    p.evidenceType === "VIRTUAL_STREET_VIEW" ||
-    p.fuente === "Google Street View";
-
   const svCaptured = (album || []).filter(p =>
-    isStructuredStreetViewEvidence(p) || isLegacyStreetViewEvidence(p)
+    hasStreetViewProvenance(p)
   );
   
   const tacticalSVs = project?.tacticalStreetViews || [];
@@ -1246,11 +1230,10 @@ export const buildIntelligenceEditorialPayload = async (
   
   // ==================== GOBERNANZA FOTOGRÁFICA DE EVIDENCIA (ADR-011) ====================
   const analystRaw = (album || []).filter(p =>
-    !isStructuredStreetViewEvidence(p) && !isLegacyStreetViewEvidence(p)
+    !hasStreetViewProvenance(p)
   );
   const streetViewRaw = (album || []).filter(p => {
-    const isSv = isStructuredStreetViewEvidence(p) || isLegacyStreetViewEvidence(p);
-    return isSv && isValidStreetViewImage(p);
+    return hasStreetViewProvenance(p) && isValidStreetViewImage(p);
   });
   
   const governedAnalyst = PhotoEvidenceGovernanceEngine.process(analystRaw);
@@ -1284,7 +1267,7 @@ export const buildIntelligenceEditorialPayload = async (
     console.log(`[Item #${idx + 1}]`);
     console.log(`  id: ${item.id}`);
     console.log(`  tipo: ${item.tipo}`);
-    console.log(`  fuente: ${item.fuente || "Google Street View"}`);
+    console.log(`  fuente: ${item.fuente || item.sourceProvider || "Proveedor Street View no especificado"}`);
     console.log(`  URL/dataUrl: ${item.previewUrl || item.url || ""}`);
     console.log(`  thumbnail: ${item.previewUrl || item.url || ""}`);
     console.log(`  coordenadas: Lat ${item.lat ?? item.gpsLat ?? item.streetViewMetadata?.panoramaLat}, Lng ${item.lng ?? item.gpsLng ?? item.streetViewMetadata?.panoramaLng}`);
@@ -1296,7 +1279,7 @@ export const buildIntelligenceEditorialPayload = async (
     console.log(`[Editorial SV #${idx + 1}]`);
     console.log(`  id: SV-00${idx + 1}`);
     console.log(`  tipo: STREET_VIEW`);
-    console.log(`  fuente: Google Street View`);
+    console.log(`  fuente: evidencia Street View del album`);
     console.log(`  URL/dataUrl: ${item.image}`);
     console.log(`  thumbnail: ${item.image}`);
     console.log(`  coordenadas: Lat ${lat}, Lng ${lng}`);
@@ -1307,7 +1290,7 @@ export const buildIntelligenceEditorialPayload = async (
   // Photos Sanitized Mapping (FASE 7.12.6)
   const photoEvidence = visualMatrix.analystPhotos.map((p, idx) => {
     const originalPhoto = (album || []).find(
-      (item) => item.previewUrl === p.image || item.url === p.image
+      (item) => !hasStreetViewProvenance(item) && (item.previewUrl === p.image || item.url === p.image)
     );
     const rel = originalPhoto?.evidenceRelationship;
 
@@ -1345,7 +1328,7 @@ export const buildIntelligenceEditorialPayload = async (
   // Street View Sanitized Mapping
   const streetViewAnalysis = visualMatrix.streetViewEvidence.map((s, idx) => {
     const originalPhoto = (album || []).find(
-      (item) => item.previewUrl === s.image || item.url === s.image
+      (item) => hasStreetViewProvenance(item) && (item.previewUrl === s.image || item.url === s.image)
     );
     const svMeta = originalPhoto?.streetViewMetadata;
     const heading = svMeta?.heading ?? originalPhoto?.heading ?? 0;
@@ -1360,7 +1343,7 @@ export const buildIntelligenceEditorialPayload = async (
       title: s.title,
       dataUrl: s.image,
       location: "Sector perimetral", // Sanitizado: sin coordenadas geográficas numéricas
-      fuentePrimaria: originalPhoto?.sourceProvider || svMeta?.provider || "Google Street View",
+      fuentePrimaria: originalPhoto?.sourceProvider || originalPhoto?.streetViewSource || originalPhoto?.fuente || svMeta?.provider || "Proveedor Street View no especificado",
       fechaCaptura: captureDate,
       direccion: areaGeografica,
       orientacion: `Heading ${heading}° / Pitch ${pitch}° / FOV ${fov}°`,
@@ -1379,7 +1362,7 @@ export const buildIntelligenceEditorialPayload = async (
       tipo: "REMOTE_STREET_VIEW",
       category: "STREET_VIEW",
       classification: "REMOTE_VISUAL",
-      sourceProvider: "GOOGLE_STREET_VIEW",
+      sourceProvider: originalPhoto?.sourceProvider || svMeta?.provider || undefined,
       isStreetView: true,
       evidenceOrigin: "REMOTE",
       evidenceCategoryClass: "REMOTE_VISUAL",

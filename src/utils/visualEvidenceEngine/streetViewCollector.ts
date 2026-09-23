@@ -1,6 +1,29 @@
 import { VisualEvidenceInternal } from "./models/visualEvidenceTypes";
 import { isValidStreetViewImage } from "../streetViewValidator";
 
+function upper(value: unknown): string {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+export function hasStreetViewProvenance(image: any): boolean {
+  if (!image || typeof image !== "object") return false;
+
+  const type = upper(image.tipo);
+  const provider = upper(image.sourceProvider);
+  const metadata = image.streetViewMetadata;
+  return type === "STREET_VIEW" || type === "REMOTE_STREET_VIEW" || type === "STREETVIEW" ||
+    upper(image.evidenceType) === "VIRTUAL_STREET_VIEW" ||
+    upper(image.gpsSource) === "STREET_VIEW" ||
+    upper(image.analysisType) === "STREET_VIEW" ||
+    provider === "GOOGLE_STREET_VIEW" ||
+    upper(image.source) === "GOOGLE_STREET_VIEW" ||
+    upper(image.fuente) === "GOOGLE STREET VIEW" ||
+    upper(image.streetViewSource) === "GOOGLE STREET VIEW" ||
+    upper(metadata?.provider) === "GOOGLE_STREET_VIEW" ||
+    upper(metadata?.provider) === "GOOGLE STREET VIEW" ||
+    Boolean(metadata?.panoId || image.panoramaId);
+}
+
 export class StreetViewCollector {
   /**
    * Obtiene hasta 30 candidatos de imágenes Street View en el área del proyecto.
@@ -12,23 +35,7 @@ export class StreetViewCollector {
     radiusMeters: number
   ): VisualEvidenceInternal[] {
     const collected: VisualEvidenceInternal[] = [];
-
-    // Filtrar candidatos explícitos que representen Street View
-    const svRaw = rawImages.filter(
-      img => {
-        const matchesSv = img.evidenceOrigin === "REMOTE" ||
-          img.evidenceCategoryClass === "REMOTE_VISUAL" ||
-          img.evidenceCategoryClass === "REMOTE_STREET_VIEW" ||
-          img.tipo === "REMOTE_STREET_VIEW" ||
-          img.tipo?.toLowerCase().includes("street") ||
-          img.url?.toLowerCase().includes("street") ||
-          img.comentario?.toLowerCase().includes("street") ||
-          img.description?.toLowerCase().includes("street") ||
-          img.evidenceType === "VIRTUAL_STREET_VIEW" ||
-          img.fuente === "Google Street View";
-        return matchesSv && isValidStreetViewImage(img);
-      }
-    );
+    const svRaw = rawImages.filter(img => hasStreetViewProvenance(img) && isValidStreetViewImage(img));
 
     // Mapear cada uno a VisualEvidenceInternal
     for (let i = 0; i < svRaw.length; i++) {
@@ -44,31 +51,6 @@ export class StreetViewCollector {
         lng: item.lng || projectLng,
         capturedAt: item.createdAt || new Date().toLocaleDateString("es-MX")
       });
-    }
-
-    // Si no hay candidatos específicos pero existen fotos generales, podemos admitir algunas como candidatos de barrido secundario
-    if (collected.length === 0) {
-      const nonSvRaw = rawImages.filter(
-        img =>
-          !(img.tipo?.toLowerCase().includes("street") ||
-            img.url?.toLowerCase().includes("street") ||
-            img.comentario?.toLowerCase().includes("street") ||
-            img.description?.toLowerCase().includes("street"))
-      );
-      for (let i = 0; i < Math.min(nonSvRaw.length, 10); i++) {
-        const item = nonSvRaw[i];
-        collected.push({
-          id: `virtual-sv-${i}`,
-          source: "STREET_VIEW",
-          image: item.previewUrl || item.url || "",
-          category: "ANALISIS_VIAL",
-          observation: item.comentario || item.description || "Punto vial analizado virtualmente.",
-          riskLevel: "MEDIO",
-          lat: item.lat || projectLat + (i * 0.0001),
-          lng: item.lng || projectLng + (i * 0.0001),
-          capturedAt: item.createdAt || new Date().toLocaleDateString("es-MX")
-        });
-      }
     }
 
     // Retornar máximo 30 candidatos

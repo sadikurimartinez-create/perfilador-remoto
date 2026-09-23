@@ -1,6 +1,6 @@
 import { VisualEvidenceInternal, VisualEvidenceMatrix } from "./models/visualEvidenceTypes";
 import { resolveImageExtension } from "../documentEvidenceIntegrationEngine";
-import { StreetViewCollector } from "./streetViewCollector";
+import { hasStreetViewProvenance, StreetViewCollector } from "./streetViewCollector";
 import { StreetViewAnalyzer } from "./streetViewAnalyzer";
 import { StreetViewSelector } from "./streetViewSelector";
 import { GraffitiDetector } from "./graffitiDetector";
@@ -23,7 +23,7 @@ export class VisualEvidenceEngine {
       if (!p) return p;
 
       // Determinar clase de categoría y tipo de proveedor de fuente
-      const isStreetView = p.tipo === "REMOTE_STREET_VIEW" || p.tipo === "STREET_VIEW" || p.isStreetView;
+      const isStreetView = hasStreetViewProvenance(p);
       const isPhotoField = p.tipo === "PHOTO_FIELD" || p.tipo === "PHOTO" || p.category === "VULNERABILIDAD_FISICA" || p.classification === "PHOTO_FIELD";
 
       let resolvedImage = p.previewUrl || p.dataUrl || p.imageUrl || p.url || p.capturaPanoramica || p.panoramaUrl || p.streetViewMetadata?.staticUrl || "";
@@ -46,7 +46,6 @@ export class VisualEvidenceEngine {
           category: "STREET_VIEW",
           classification: "REMOTE_VISUAL",
           evidenceCategoryClass: "REMOTE_VISUAL",
-          sourceProvider: "GOOGLE_STREET_VIEW",
           isStreetView: true,
           previewUrl: resolvedImage,
           dataUrl: resolvedImage,
@@ -59,7 +58,7 @@ export class VisualEvidenceEngine {
 
     // 1. Clasificar y mapear las fotos del analista (sin límites)
     const analystInternal: VisualEvidenceInternal[] = normalizedRawPhotos
-      .filter(p => !p.tipo?.toLowerCase().includes("street") && !p.url?.toLowerCase().includes("street"))
+      .filter(p => !hasStreetViewProvenance(p))
       .map((p, idx) => {
         let category = "VULNERABILIDAD_FISICA";
         const comment = (p.comentario || p.description || "").toLowerCase();
@@ -114,7 +113,7 @@ export class VisualEvidenceEngine {
       });
 
     // 2. Ejecutar barrido Street View (Collector -> Analyzer -> Selector)
-    const svCandidates = StreetViewCollector.collect(rawPhotos, projectLat, projectLng, radiusMeters);
+    const svCandidates = StreetViewCollector.collect(normalizedRawPhotos, projectLat, projectLng, radiusMeters);
     const svAnalyzed = StreetViewAnalyzer.analyze(svCandidates);
     const svSelected = StreetViewSelector.select(svAnalyzed, hotspots);
 
