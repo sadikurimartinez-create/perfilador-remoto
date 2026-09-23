@@ -20,6 +20,7 @@ import {
   PageFormatManager,
 } from "@/utils/documentCompositionEngine";
 import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
+import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
 
 export interface ExecutiveGeointWordVisualAsset {
   data: ArrayBuffer | Uint8Array;
@@ -78,11 +79,11 @@ function clean(value: unknown): string {
 
 export function sanitizeExecutiveGeointWordText(value: unknown, fallback = ""): string {
   const text = clean(value) || fallback;
-  return text
+  return sanitizeVisibleDocumentText(text
     .replace(TECHNICAL_VISIBLE_TERMS, "")
     .replace(/\b(?:project|sourceItem|traceability|trace|geo|evidence|finding)-[A-Za-z0-9_-]+\b/gi, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim(), fallback);
 }
 
 function paragraph(text: string, options: { bold?: boolean; size?: number; color?: string; align?: any; spacingAfter?: number; preserveText?: boolean } = {}) {
@@ -92,7 +93,9 @@ function paragraph(text: string, options: { bold?: boolean; size?: number; color
       spacing: { after: options.spacingAfter ?? 120 },
       children: [
         new TextRun({
-          text: options.preserveText ? text : sanitizeExecutiveGeointWordText(text, "Condicion institucional no disponible."),
+          text: options.preserveText
+            ? sanitizeVisibleDocumentText(text, "Condicion institucional no disponible.", { preserveWhitespace: true })
+            : sanitizeExecutiveGeointWordText(text, "Condicion institucional no disponible."),
           bold: options.bold,
           size: options.size ?? 20,
           color: options.color ?? "222222",

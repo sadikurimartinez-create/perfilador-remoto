@@ -1,4 +1,7 @@
-import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
+import {
+  isCertifiedGimAnalysisPayload,
+  type InstitutionalReportInput,
+} from "@/utils/institutionalReportPublicationContract";
 import type { ExecutiveGeointReportModel } from "@/utils/executiveGeointReportModel";
 import type { ExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
 import type { ExecutiveGeointReportDocumentModel } from "@/utils/executiveGeointReportDocumentModel";
@@ -385,8 +388,7 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     { label: "Periodo inicial", value: firstText(incidence.datasetReference.coverage?.temporal?.start, "No disponible") },
     { label: "Periodo final", value: firstText(incidence.datasetReference.coverage?.temporal?.end, "No disponible") },
   ] : [];
-  const gim = institutionalInput.specializedIntelligence.find((item) => item?.schemaVersion === "GIM-REPORT-1.0" &&
-    item?.validatedByACE === true && item?.validationStatus !== "NOT_CERTIFIED" && item?.traceabilityReference);
+  const gim = institutionalInput.specializedIntelligence.find(isCertifiedGimAnalysisPayload);
   const findingRecords = executiveModel.findings.map((item, index) => {
     const record = evidenceRecord(item, "HALLAZGO_GOBERNADO", selectedIds, `hallazgo-${index + 1}`);
     const evidenceRefs = [...asArray<string>(item?.evidenceReferences), ...asArray<string>(item?.technicalMetadata?.sourceEvidenceIds)];

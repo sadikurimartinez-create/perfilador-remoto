@@ -349,7 +349,9 @@ describe("ADR-020.33 F1 - Institutional report publication contract", () => {
     const certified = assessReportItemEligibility(certifiedItem, { itemType: "SPECIALIZED_INTELLIGENCE" });
     expect(raw.eligibility).toBe("INELIGIBLE");
     expect(certified.eligibility).toBe("ELIGIBLE");
-    expect(assessReportItemEligibility({ ...certifiedItem, validationStatus: "NOT_CERTIFIED" }, { itemType: "SPECIALIZED_INTELLIGENCE" }).eligibility).toBe("INELIGIBLE");
+    for (const validationStatus of ["DRAFT", "PENDING", "VALIDATED", "NOT_CERTIFIED", "FAILED", undefined, null]) {
+      expect(assessReportItemEligibility({ ...certifiedItem, validationStatus }, { itemType: "SPECIALIZED_INTELLIGENCE" }).eligibility).toBe("INELIGIBLE");
+    }
   });
 
   test("TEST 20A OSINT admite sólo adquisiciones observadas positivas", () => {

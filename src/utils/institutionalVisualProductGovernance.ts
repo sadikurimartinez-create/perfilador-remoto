@@ -3,6 +3,7 @@ import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeograph
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 import type { PublicationDisclosure, PublicationEligibility, PublicationExclusion } from "@/utils/institutionalReportPublicationContract";
+import { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
 
 export type InstitutionalVisualType =
   | "MAP"
@@ -249,7 +250,7 @@ export function assessVisualProductEligibility(item: any, options: {
     failure = exclusion(item, "CHART_WITHOUT_DATASET_SOURCE", "Chart visual requires dataset or source reference.");
   } else if (visualType === "CHART" && (source === "SIMULATED" || mode === "SIMULATED")) {
     failure = exclusion(item, "SIMULATED_DATASET_CHART_NOT_INSTITUTIONAL", "Simulated dataset chart cannot be presented as observed institutional chart.");
-  } else if (visualType === "SPECIALIZED_INTELLIGENCE_VISUAL" && (item?.validatedByACE !== true || !item?.traceabilityReference)) {
+  } else if (visualType === "SPECIALIZED_INTELLIGENCE_VISUAL" && !isCertifiedGimAnalysisPayload(item)) {
     failure = exclusion(item, "SPECIALIZED_VISUAL_NOT_CERTIFIED_PAYLOAD", "Pandillas/GIM visual requires governed certified payload.");
   } else if (visualType !== "DECORATIVE_ASSET" && !hasLink && item?.contextual !== true) {
     failure = exclusion(item, "ORPHAN_VISUAL_PRODUCT", "Visual product has no resolvable evidence, finding, analysis, geography, or source relation.");

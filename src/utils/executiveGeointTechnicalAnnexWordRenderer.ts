@@ -22,6 +22,7 @@ import {
 } from "@/utils/documentCompositionEngine";
 import { buildNumeroExpedienteFilename } from "@/utils/documentIdentity";
 import type { ExecutiveGeointWordVisualAsset } from "@/utils/executiveGeointWordRenderer";
+import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
 
 export interface TechnicalAnnexWordRenderResult {
   document: Document;
@@ -41,12 +42,7 @@ export interface TechnicalAnnexWordRenderResult {
 }
 
 function clean(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value
-    .replace(/https?:\/\/\S+|blob:\S+|data:\S+/gi, "[referencia reservada]")
-    .replace(/\bBearer\s+\S+|\b(?:token|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "[credencial reservada]")
-    .replace(/\b[A-Za-z]:\\[^\s]+|(?:^|\s)(?:gs:\/\/|projects\/)[^\s]+/gi, " [ruta reservada]")
-    .replace(/\s+/g, " ").trim();
+  return sanitizeVisibleDocumentText(value);
 }
 
 function para(text: string, options: { bold?: boolean; size?: number; color?: string; align?: any } = {}) {

@@ -541,4 +541,17 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(absentText).toContain("no consta un análisis certificado publicable");
     expect(absent.technicalMetadata.sourceProvenance?.some((item) => item.source === "GIM ACE")).toBe(false);
   });
+
+  test("46 GIM exige CERTIFIED de forma simetrica en contenido y provenance", () => {
+    const base = { schemaVersion: "GIM-REPORT-1.0", validatedByACE: true, traceabilityReference: "gim-cert-1",
+      analyticalFindings: ["Hallazgo GIM gobernado"] };
+    const certified = documentModel({}, { specializedIntelligence: [{ ...base, validationStatus: "CERTIFIED" }] });
+    expect(certified.sections.find((item) => item.sectionId === "multisource-analysis")?.content.join(" ")).toContain("Hallazgo GIM gobernado");
+    expect(certified.technicalMetadata.sourceProvenance).toContainEqual(expect.objectContaining({ source: "GIM ACE" }));
+    for (const validationStatus of ["DRAFT", "PENDING", "VALIDATED", "NOT_CERTIFIED", "FAILED", undefined, null]) {
+      const excluded = documentModel({}, { specializedIntelligence: [{ ...base, validationStatus }] });
+      expect(excluded.sections.find((item) => item.sectionId === "multisource-analysis")?.content.join(" ")).toContain("no consta un análisis certificado publicable");
+      expect(excluded.technicalMetadata.sourceProvenance?.some((item) => item.source === "GIM ACE")).toBe(false);
+    }
+  });
 });

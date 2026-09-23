@@ -354,6 +354,10 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(annex(input({ specializedIntelligence: [gim] })).sections.some((s) => s.sectionId === "gang-intelligence")).toBe(true);
     expect(annex(input({ specializedIntelligence: [{ ...gim, validatedByACE: false }] }))
       .sections.some((s) => s.sectionId === "gang-intelligence")).toBe(false);
+    for (const validationStatus of ["DRAFT", "PENDING", "VALIDATED", "NOT_CERTIFIED", "FAILED", undefined, null]) {
+      expect(annex(input({ specializedIntelligence: [{ ...gim, validationStatus }] }))
+        .sections.some((s) => s.sectionId === "gang-intelligence")).toBe(false);
+    }
   });
 
   test("31 cero Street View real conserva fotos de campo separadas", () => {
@@ -367,15 +371,23 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
   });
 
   test("32 serializacion visible no filtra secretos ni objetos de lineage", () => {
-    const model = annex(input({ evidence: [{ evidenceId: "ev-safe", title: "Foto Bearer secret-token", imageUrl: "https://host.test/photo?token=secret", traceabilityIds: ["trace-safe"],
+    const contaminated = "Bearer abc123 access_token=secret refresh_token=secret apiKey=secret api_key=secret client_secret=secret password=secret " +
+      "DATABASE_URL=postgresql://private Authorization: Bearer hidden storagePath=projects/private projectId=internal-project " +
+      "C:\\Users\\usuario\\archivo.txt /Users/usuario/private.json /home/service/private.json gs://bucket/private/file " +
+      "TypeError: private failure. stack trace [object Object] https://internal.example/api/private INEGI DENUE SCINCE Google Street View";
+    const model = annex(input({ evidence: [{ evidenceId: "ev-safe", title: contaminated, imageUrl: "https://host.test/photo?token=secret", traceabilityIds: ["trace-safe"],
       lineage: [{ sourceId: "source-1", nested: { secret: "never-show" } }] }] }));
     const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(model);
     const visible = JSON.stringify(rendered.children);
-    expect(visible).not.toContain("[object Object]");
-    expect(visible).not.toContain("secret-token");
-    expect(visible).not.toContain("https://host.test");
-    expect(visible).not.toContain("project-technical-id");
-    expect(visible).not.toContain("never-show");
+    for (const forbidden of ["abc123", "access_token", "refresh_token", "apiKey", "api_key", "client_secret", "password=",
+      "DATABASE_URL", "Authorization:", "storagePath", "internal-project", "C:\\\\Users", "/Users/", "/home/", "gs://",
+      "TypeError:", "stack trace", "[object Object]", "https://internal.example", "https://host.test", "never-show"]) {
+      expect(visible).not.toContain(forbidden);
+    }
+    expect(visible).toContain("INEGI");
+    expect(visible).toContain("DENUE");
+    expect(visible).toContain("SCINCE");
+    expect(visible).toContain("Google Street View");
   });
 
   test("33 renderer no trunca silenciosamente mas de 40 registros", () => {

@@ -17,6 +17,9 @@ import {
   renderPredictiveProductsForInstitutionalReport,
   selectPredictiveProductsForInstitutionalReport,
 } from "@/utils/institutionalPredictiveProductIntegration";
+import { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
+
+export { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
 
 export type PublicationEligibility = "ELIGIBLE" | "ELIGIBLE_WITH_DISCLOSURE" | "INELIGIBLE";
 export type PublicationItemType =
@@ -314,8 +317,7 @@ export function assessReportItemEligibility(item: any, context: {
   }
 
   if (type === "SPECIALIZED_INTELLIGENCE") {
-    if (item?.schemaVersion !== "GIM-REPORT-1.0" || item?.validatedByACE !== true ||
-      item?.validationStatus === "NOT_CERTIFIED" || !item?.traceabilityReference) {
+    if (!isCertifiedGimAnalysisPayload(item)) {
       return withDecision(item, type, "INELIGIBLE", "ANALYSIS", [exclusion(item, type, "SPECIALIZED_INTELLIGENCE_NOT_CERTIFIED_PAYLOAD", "Pandillas/GIM report input must be CertifiedGangAnalysisPayload.")], disclosures);
     }
     return withDecision(item, type, disclosures.length ? "ELIGIBLE_WITH_DISCLOSURE" : "ELIGIBLE", "ANALYSIS", [], disclosures);

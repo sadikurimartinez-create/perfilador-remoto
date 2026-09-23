@@ -105,6 +105,20 @@ function conclusion(overrides: any = {}) {
   };
 }
 
+function specializedGimVisual(overrides: any = {}) {
+  return {
+    id: "gim-visual-f4",
+    visualType: "SPECIALIZED_INTELLIGENCE_VISUAL",
+    schemaVersion: "GIM-REPORT-1.0",
+    validatedByACE: true,
+    validationStatus: "CERTIFIED",
+    traceabilityReference: "gim-cert-f4",
+    imageUrl: "https://example.test/gim.jpg",
+    lineage,
+    ...overrides,
+  };
+}
+
 function hypothesis() {
   return formulateHumanHypothesis({
     projectId: "project-f4",
@@ -132,7 +146,7 @@ function readyProject(overrides: any = {}) {
     temporalComparisons: [{ comparisonId: "tc-f4", imageUrl: "https://example.test/tc.jpg", comparedEvidenceIds: ["ev-a", "ev-b"], humanValidationStatus: "APPROVED" }],
     intelligenceContext: {
       aceReport: {
-        certifiedGimOutput: { validatedByACE: true, traceabilityReference: "gim-cert-f4", imageUrl: "https://example.test/gim.jpg", lineage },
+        certifiedGimOutput: specializedGimVisual(),
       },
     },
     sweeps: [{ id: "sweep-f4", lifecycleStatus: "CERTIFIED", outputEvidenceIds: ["ev-f4"], outputFindingIds: ["find-f4"] }],
@@ -220,9 +234,20 @@ describe("ADR-020.33 F4 - Visual products governance", () => {
     expect(product.caption).not.toMatch(/causa|demuestra/i);
   });
 
-  test("TEST 15 certified Pandillas visual -> eligible specialized visual", () => {
-    const product = buildInstitutionalVisualProduct({ id: "gim-ok", visualType: "SPECIALIZED_INTELLIGENCE_VISUAL", validatedByACE: true, traceabilityReference: "gim-cert" });
-    expect(product.publicationEligibility).toBe("ELIGIBLE");
+  test("TEST 15 only a fully certified Pandillas visual is eligible", () => {
+    expect(buildInstitutionalVisualProduct(specializedGimVisual()).publicationEligibility).toBe("ELIGIBLE");
+
+    for (const validationStatus of ["DRAFT", "PENDING", "VALIDATED", "NOT_CERTIFIED", "FAILED", undefined, null]) {
+      expect(buildInstitutionalVisualProduct(specializedGimVisual({ validationStatus })).publicationEligibility).toBe("INELIGIBLE");
+    }
+
+    expect(buildInstitutionalVisualProduct(specializedGimVisual({ validatedByACE: false })).publicationEligibility).toBe("INELIGIBLE");
+    expect(buildInstitutionalVisualProduct(specializedGimVisual({ schemaVersion: "GIM-REPORT-0.9" })).publicationEligibility).toBe("INELIGIBLE");
+    expect(buildInstitutionalVisualProduct(specializedGimVisual({ traceabilityReference: "  " })).publicationEligibility).toBe("INELIGIBLE");
+
+    const ordinaryVisual = buildInstitutionalVisualProduct(evidence());
+    expect(ordinaryVisual.visualType).toBe("PHOTO");
+    expect(ordinaryVisual.publicationEligibility).toBe("ELIGIBLE");
   });
 
   test("TEST 16 raw GIM AI visualization -> ineligible institutional visual", () => {

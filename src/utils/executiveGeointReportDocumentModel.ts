@@ -6,7 +6,10 @@ import type {
   TechnicalAnnexReference,
 } from "@/utils/executiveGeointReportModel";
 import type { ExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
-import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
+import {
+  isCertifiedGimAnalysisPayload,
+  type InstitutionalReportInput,
+} from "@/utils/institutionalReportPublicationContract";
 
 export const EXECUTIVE_GEOINT_DOCUMENT_MODEL_VERSION = "1.0.0";
 export const EXECUTIVE_DOCUMENT_MAX_VISUALS = 5;
@@ -254,9 +257,7 @@ function osintContext(input: InstitutionalReportInput): string[] {
 }
 
 function gangContext(input: InstitutionalReportInput): string[] {
-  const certified = asArray(input.specializedIntelligence).find((item) =>
-    item?.schemaVersion === "GIM-REPORT-1.0" && item?.validatedByACE === true &&
-    item?.validationStatus !== "NOT_CERTIFIED" && item?.traceabilityReference);
+  const certified = asArray(input.specializedIntelligence).find(isCertifiedGimAnalysisPayload);
   if (!certified) return ["Pandillas y estructuras relacionadas: no consta un análisis certificado publicable."];
   const content = [
     ...visibleList(asArray(certified.analyticalFindings), 2).map((finding) => `Análisis certificado de pandillas: ${finding}`),
@@ -579,9 +580,7 @@ export function buildExecutiveGeointReportDocumentModel(
             sourceUrl: item.url || item.link || integrity.sourceUrl, observedAt: integrity.observedAt || integrity.acquiredAt,
             query: integrity.query, traceabilityId: integrity.traceabilityId };
         }),
-        ...asArray(institutionalInput.specializedIntelligence).filter((item) =>
-          item?.schemaVersion === "GIM-REPORT-1.0" && item?.validatedByACE === true &&
-          item?.validationStatus !== "NOT_CERTIFIED" && item?.traceabilityReference).map((item) => ({
+        ...asArray(institutionalInput.specializedIntelligence).filter(isCertifiedGimAnalysisPayload).map((item) => ({
           source: "GIM ACE", traceabilityId: item.traceabilityReference,
         })),
         ...(institutionalInput.crimeIncidenceExportContract?.queryReference?.status === "EXECUTED" &&

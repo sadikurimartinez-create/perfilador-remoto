@@ -137,6 +137,47 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(sanitizeExecutiveGeointWordText("projectId project-technical-id")).not.toMatch(/projectId|project-technical-id/);
   });
 
+  test("3A neutraliza secretos rutas objetos y URLs tecnicas sin borrar fuentes legitimas", () => {
+    const contaminated = [
+      "Bearer abc123",
+      "access_token=secret",
+      "refresh_token=secret",
+      "apiKey=secret",
+      "api_key=secret",
+      "client_secret=secret",
+      "password=secret",
+      "DATABASE_URL=postgresql://user:secret@internal/db",
+      "Authorization: Bearer hidden",
+      "storagePath=projects/project-1/private/file",
+      "projectId=project-technical-id",
+      "C:\\Users\\usuario\\archivo.txt",
+      "/Users/usuario/private.json",
+      "/home/service/private.json",
+      "gs://bucket/private/file",
+      "TypeError: private failure.",
+      "stack trace",
+      "[object Object]",
+      "https://internal.example/api/private",
+      "INEGI DENUE SCINCE Google Street View",
+    ].join(" | ");
+    const model = documentModel({ sections: [{
+      sectionId: "initial-hypothesis", order: 1, title: "HIPOTESIS INICIAL", role: "Gobernada",
+      content: [contaminated], densityPolicy: { targetPages: "0-1", maxItems: 1 }, status: "READY",
+    }] });
+    const visible = JSON.stringify(renderExecutiveGeointWordDocument(model).children);
+    for (const forbidden of [
+      "abc123", "access_token", "refresh_token", "apiKey", "api_key", "client_secret", "password=",
+      "DATABASE_URL", "Authorization:", "storagePath", "project-technical-id", "C:\\\\Users", "/Users/",
+      "/home/", "gs://", "TypeError:", "stack trace", "[object Object]", "https://internal.example",
+    ]) {
+      expect(visible).not.toContain(forbidden);
+    }
+    expect(visible).toContain("INEGI");
+    expect(visible).toContain("DENUE");
+    expect(visible).toContain("SCINCE");
+    expect(visible).toContain("Google Street View");
+  });
+
   test("4 conserva orden de sections", () => {
     expect(renderExecutiveGeointWordDocument(documentModel()).renderAudit.sectionOrder.slice(0, 4)).toEqual(["cover", "executive-panorama", "territorial-situation", "priority-findings"]);
   });
