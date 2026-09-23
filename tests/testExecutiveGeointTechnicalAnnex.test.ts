@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { Packer } from "docx";
 import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
@@ -37,11 +38,15 @@ function input(overrides: any = {}) {
     analyses: [{ analysisId: "analysis-1", traceabilityIds: ["trace-analysis-1"], sourceItemId: "source-analysis-1" }],
     conclusions: [],
     osint: [
-      { id: "denue-1", sourceType: "DENUE", title: "DENUE comercio", sourceUrl: "https://denue.test", traceabilityIds: ["trace-denue-1"], sourceItemId: "source-denue-1" },
+      { id: "denue-1", sourceType: "DENUE", title: "DENUE comercio", sourceUrl: "https://denue.test", traceabilityIds: ["trace-denue-1"], sourceItemId: "source-denue-1",
+        epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false, semanticRole: "SOURCE_FACT" } },
       { id: "places-review-1", sourceType: "GOOGLE_PLACES_REVIEWS", title: "Resena publica no verificada", sourceUrl: "https://places.test", traceabilityIds: ["trace-places-1"], limitations: ["contexto no verificado"] },
       { id: "vision-ocr-1", sourceType: "GOOGLE_VISION_OCR", title: "Texto OCR", sourceUrl: "asset://vision", traceabilityIds: ["trace-vision-1"], limitations: ["OCR no constituye verdad semantica"] },
       { id: "osint-untraced", sourceType: "OSINT", title: "Sin trazabilidad" },
     ],
+    denuePois: [{ id: "poi-1", source: "DENUE", provider: "INEGI_DENUE", territorialStatus: "INSTITUTIONAL",
+      name: "Comercio observado", activityCode: "A1", category: "Comercio", distanceMeters: 120,
+      traceabilityId: "trace-poi-1", epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } }],
     streetView: [
       { id: "sv-1", sourceType: "GOOGLE_STREET_VIEW", imageUrl: "asset://sv-1", coordinates: { lat: 22.1, lng: -101.9 }, heading: 90, pitch: 0, capturedAt: "2026-09-01", traceabilityIds: ["trace-sv-1"], sourceItemId: "source-sv-1" },
     ],
@@ -197,19 +202,19 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(records.map((record) => record.recordId)).not.toContain("osint-untraced");
   });
 
-  test("9 DENUE puede aparecer como fuente territorial", () => {
+  test("9 DENUE estructurado aparece como fuente territorial", () => {
     const records = annex().sections.find((s) => s.sectionId === "territorial-sources")?.records || [];
     expect(records.some((record) => record.sourceType.includes("DENUE"))).toBe(true);
   });
 
-  test("10 Places Reviews permanecen contexto no verificado", () => {
+  test("10 Places Reviews sin adquisición observada no se promueven", () => {
     const record = annex().sections.find((s) => s.sectionId === "territorial-sources")?.records.find((item) => item.recordId === "places-review-1");
-    expect(record?.limitations.join(" ")).toMatch(/contexto no verificado/i);
+    expect(record).toBeUndefined();
   });
 
-  test("11 Vision OCR no se convierte en verdad semantica", () => {
+  test("11 Vision OCR sin adquisición observada no se convierte en hecho", () => {
     const record = annex().sections.find((s) => s.sectionId === "territorial-sources")?.records.find((item) => item.recordId === "vision-ocr-1");
-    expect(record?.limitations.join(" ")).toMatch(/OCR no constituye verdad semantica/i);
+    expect(record).toBeUndefined();
   });
 
   test("12 correlation lineage preservada", () => {
@@ -225,12 +230,12 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(annex().sections.find((s) => s.sectionId === "hypothesis-history")?.content.join(" ")).toContain("Revision humana de hipotesis");
   });
 
-  test("15 IDs tecnicos permitidos solo en seccion tecnica", () => {
+  test("15 projectId permanece interno y no se imprime", () => {
     const model = annex();
     const technical = model.sections.find((s) => s.sectionId === "technical-traceability");
-    const nonTechnical = model.sections.filter((s) => s.sectionId !== "technical-traceability").flatMap((s) => s.content).join(" ");
-    expect(technical?.content.join(" ")).toContain("projectId");
-    expect(nonTechnical).not.toContain("projectId:");
+    expect(model.identity.projectId).toBe("project-technical-id");
+    expect(model.sections.flatMap((s) => s.content).join(" ")).not.toContain("projectId:");
+    expect(technical?.content.join(" ")).toContain("Expediente:");
   });
 
   test("16 no se duplican imagenes por fingerprint cuando es detectable", () => {
@@ -269,9 +274,16 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(renderExecutiveGeointTechnicalAnnexWordDocument(annex()).filename).toContain("06092026-0007-JMG");
   });
 
-  test("23 Incidencia no participa", () => {
-    const text = `${source("src/utils/executiveGeointTechnicalAnnexModel.ts")}\n${source("src/utils/executiveGeointTechnicalAnnexWordRenderer.ts")}`;
-    expect(text).not.toMatch(/incidencia|crimeIncidence|incidence/i);
+  test("23 incidencia descriptiva se proyecta y no se trata como evidencia", () => {
+    const contract = { productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT", analyticalLevel: "DESCRIPTIVE",
+      queryReference: { status: "EXECUTED", admission: { accepted: true } }, datasetReference: { datasetId: "c5i-911" },
+      projectionReference: { metrics: { frequency: { totalRecords: 12 } } } };
+    const model = annex(input({ crimeIncidenceExportContract: contract }));
+    const facts = model.sections.find((s) => s.sectionId === "incidence")?.facts || [];
+    expect(facts).toContainEqual({ label: "Registros", value: "12" });
+    expect(facts).toContainEqual(expect.objectContaining({ label: "Naturaleza", value: expect.stringContaining("no evidencia primaria") }));
+    expect(annex(input({ crimeIncidenceExportContract: { ...contract, queryReference: { status: "FAILED" } } }))
+      .sections.find((s) => s.sectionId === "incidence")?.facts).toHaveLength(0);
   });
 
   test("24 no existe segundo ReportEngine", () => {
@@ -284,5 +296,120 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     const before = JSON.stringify(doc.presentation.visibleText);
     annex(input(), {}, {}, doc);
     expect(JSON.stringify(doc.presentation.visibleText)).toBe(before);
+  });
+
+  test("26 anexo comparte la referencia cartografica gobernada y puede insertar el mismo activo", () => {
+    const model = annex();
+    const mapId = model.executiveReportReference.principalMapId;
+    expect(mapId).toBe("principal-territorial-map");
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(model, {
+      visualAssetsById: { [mapId]: { data: new Uint8Array(1024), type: "png", width: 500, height: 280 } },
+    });
+    expect(rendered.renderAudit.renderedVisualIds).toContain(mapId);
+    expect(rendered.renderAudit.missingVisualAssetIds).not.toContain(mapId);
+    const renderRequired = annex(input(), {}, { principalTerritorialMap: {
+      ...visualComposition().principalTerritorialMap, status: "MAP_RENDER_REQUIRED", visualReference: null,
+    } });
+    expect(renderRequired.sections.find((s) => s.sectionId === "canonical-geography")?.content.join(" ")).toContain("requiere resolver");
+    expect(renderExecutiveGeointTechnicalAnnexWordDocument(renderRequired, {
+      visualAssetsById: { [mapId]: { data: new Uint8Array(1024), type: "png" } },
+    }).renderAudit.renderedVisualIds).toContain(mapId);
+  });
+
+  test("27 SCINCE solo presenta datos observados y validos", () => {
+    const scince = { status: "OBSERVED", provenance: { datasetId: "inegi-cpv-2020", referenceYear: 2020 },
+      geography: { ageb: { code: "001" } }, demographics: { populationTotal: 125, housingTotal: null },
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } };
+    const facts = annex(input({ scinceDemographics: scince })).sections.find((s) => s.sectionId === "scince")?.facts || [];
+    expect(facts).toContainEqual({ label: "Población", value: "125" });
+    expect(facts).toContainEqual({ label: "Viviendas", value: "No disponible" });
+    expect(annex(input({ scinceDemographics: { ...scince, status: "NO_DATA" } }))
+      .sections.find((s) => s.sectionId === "scince")?.facts).toHaveLength(0);
+  });
+
+  test("28 DENUE no depende del texto OSINT y descarta fuentes ajenas", () => {
+    const model = annex(input({ osint: [], denuePois: [
+      ...input().denuePois,
+      { ...input().denuePois[0], id: "ajeno", source: "GOOGLE", name: "No DENUE" },
+    ] }));
+    const records = model.sections.find((s) => s.sectionId === "denue")?.records || [];
+    expect(records).toHaveLength(1);
+    expect(records[0].summary).toContain("Distancia: 120 m");
+    expect(records[0].title).toBe("Comercio observado");
+  });
+
+  test("29 CIFA solo promueve fuente observada adquirida y no sintesis", () => {
+    const base = input().osint[0];
+    const records = annex(input({ osint: [base,
+      { ...base, id: "failed", epistemicIntegrity: { ...base.epistemicIntegrity, acquisitionStatus: "FAILED" } },
+      { ...base, id: "synthesis", epistemicIntegrity: { ...base.epistemicIntegrity, semanticRole: "AI_SYNTHESIS" } },
+      { ...base, id: "not-configured", epistemicIntegrity: { ...base.epistemicIntegrity, acquisitionStatus: "NOT_CONFIGURED" } },
+    ] })).sections.find((s) => s.sectionId === "osint")?.records || [];
+    expect(records.map((record) => record.recordId)).toEqual(["denue-1"]);
+  });
+
+  test("30 GIM solo crea capitulo con certificacion ACE", () => {
+    const gim = { schemaVersion: "GIM-REPORT-1.0", validatedByACE: true, validationStatus: "CERTIFIED",
+      traceabilityReference: "trace-gim-1", analyticalFindings: ["Hallazgo certificado"] };
+    expect(annex(input({ specializedIntelligence: [gim] })).sections.some((s) => s.sectionId === "gang-intelligence")).toBe(true);
+    expect(annex(input({ specializedIntelligence: [{ ...gim, validatedByACE: false }] }))
+      .sections.some((s) => s.sectionId === "gang-intelligence")).toBe(false);
+  });
+
+  test("31 cero Street View real conserva fotos de campo separadas", () => {
+    const fake = { id: "fake", imageUrl: "asset://photo", isStreetView: true, traceabilityIds: ["trace-fake"] };
+    const model = annex(input({ streetView: [fake], evidence: input().evidence }));
+    expect(model.sections.find((s) => s.sectionId === "street-view")?.records).toHaveLength(0);
+    expect(model.sections.find((s) => s.sectionId === "field-photographs")?.records).toHaveLength(1);
+    expect(model.sections.find((s) => s.sectionId === "street-view")?.content).toContain("NO DISPONIBLE EN EL EXPEDIENTE");
+    expect(annex(input({ streetView: [{ ...fake, url: "https://example.org/streetview.png" }] }))
+      .sections.find((s) => s.sectionId === "street-view")?.records).toHaveLength(0);
+  });
+
+  test("32 serializacion visible no filtra secretos ni objetos de lineage", () => {
+    const model = annex(input({ evidence: [{ evidenceId: "ev-safe", title: "Foto Bearer secret-token", imageUrl: "https://host.test/photo?token=secret", traceabilityIds: ["trace-safe"],
+      lineage: [{ sourceId: "source-1", nested: { secret: "never-show" } }] }] }));
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(model);
+    const visible = JSON.stringify(rendered.children);
+    expect(visible).not.toContain("[object Object]");
+    expect(visible).not.toContain("secret-token");
+    expect(visible).not.toContain("https://host.test");
+    expect(visible).not.toContain("project-technical-id");
+    expect(visible).not.toContain("never-show");
+  });
+
+  test("33 renderer no trunca silenciosamente mas de 40 registros", () => {
+    const many = Array.from({ length: 41 }, (_, index) => ({ evidenceId: `ev-${index}`, title: `Foto ${index}`,
+      traceabilityIds: [`trace-${index}`], imageUrl: `asset://photo-${index}` }));
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex(input({ evidence: many })));
+    expect(JSON.stringify(rendered.children)).toContain("Foto 40");
+  });
+
+  test("34 matriz liga hallazgo con tipo y referencia de evidencia", () => {
+    const record = annex().sections.find((s) => s.sectionId === "findings-matrix")?.records[0];
+    expect(record?.sourceType).toContain("FIELD_PHOTO");
+    expect(record?.referenceLabel).toContain("ev-1");
+    expect(record?.selectedForExecutiveBody).toBe(true);
+  });
+
+  test("35 fotos elegibles usan un activo separado de Street View", () => {
+    const model = annex();
+    const photo = model.sections.find((s) => s.sectionId === "field-photographs")?.records[0];
+    const street = model.sections.find((s) => s.sectionId === "street-view")?.records[0];
+    expect(photo?.sourceType).toBe("FIELD_PHOTO");
+    expect(street?.sourceType).toBe("GOOGLE_STREET_VIEW");
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(model, { visualAssetsById: {
+      [photo!.recordId]: { data: new Uint8Array(1024), type: "png" },
+      [street!.recordId]: { data: new Uint8Array(1024), type: "png" },
+    } });
+    expect(rendered.renderAudit.renderedVisualIds).toEqual(expect.arrayContaining([photo!.recordId, street!.recordId]));
+  });
+
+  test("36 anexo con mapa y tablas empaqueta DOCX", async () => {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==", "base64");
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex(), {
+      visualAssetsById: { "principal-territorial-map": { data: png, type: "png", width: 500, height: 280 } },
+    });
+    expect((await Packer.toBuffer(rendered.document)).byteLength).toBeGreaterThan(1000);
   });
 });

@@ -3,6 +3,8 @@ import type { ExecutiveGeointReportModel } from "@/utils/executiveGeointReportMo
 import type { ExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
 import type { ExecutiveGeointReportDocumentModel } from "@/utils/executiveGeointReportDocumentModel";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
+import { hasStreetViewProvenance } from "@/utils/visualEvidenceEngine/streetViewCollector";
+import { isValidStreetViewImage } from "@/utils/streetViewValidator";
 
 export const EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION = "1.0.0";
 
@@ -10,13 +12,20 @@ export type TechnicalAnnexSectionId =
   | "identity"
   | "canonical-geography"
   | "evidence-inventory"
+  | "field-photographs"
   | "street-view"
   | "territorial-sources"
+  | "scince"
+  | "denue"
+  | "incidence"
   | "osint"
+  | "gang-intelligence"
+  | "findings-matrix"
   | "multisource-correlation"
   | "prospective-products"
   | "hypothesis-history"
-  | "technical-traceability";
+  | "technical-traceability"
+  | "sources-limitations";
 
 export interface TechnicalAnnexRecord {
   recordId: string;
@@ -32,6 +41,9 @@ export interface TechnicalAnnexRecord {
   traceabilityIds: string[];
   technicalIds: Record<string, unknown>;
   limitations: string[];
+  referenceLabel?: string;
+  traceabilityStatus?: string;
+  reportUsage?: "SI" | "NO" | "NO DETERMINADO";
 }
 
 export interface ExecutiveGeointTechnicalAnnexSection {
@@ -40,6 +52,7 @@ export interface ExecutiveGeointTechnicalAnnexSection {
   role: "INSTITUTIONAL_IDENTITY" | "TECHNICAL_SUPPORT" | "AUDIT_TRACEABILITY";
   content: string[];
   records: TechnicalAnnexRecord[];
+  facts: Array<{ label: string; value: string }>;
   status: "READY" | "PARTIAL" | "NO DISPONIBLE EN EL EXPEDIENTE";
   technicalSection: boolean;
 }
@@ -65,6 +78,7 @@ export interface ExecutiveGeointTechnicalAnnexModel {
     documentTitle: string;
     sectionIds: string[];
     visualPlacementIds: string[];
+    principalMapId: string;
   };
   governance: {
     deterministic: true;
@@ -98,7 +112,13 @@ function asArray<T = any>(value: unknown): T[] {
 }
 
 function clean(value: unknown): string {
-  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/https?:\/\/\S+|blob:\S+|data:\S+/gi, "[referencia reservada]")
+    .replace(/\bBearer\s+\S+/gi, "[credencial reservada]")
+    .replace(/\b(?:token|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "[credencial reservada]")
+    .replace(/\b[A-Za-z]:\\[^\s]+|(?:^|\s)(?:gs:\/\/|projects\/)[^\s]+/gi, " [ruta reservada]")
+    .replace(/\s+/g, " ").trim();
 }
 
 function firstText(...values: unknown[]): string {
@@ -150,7 +170,8 @@ function isTraceable(item: any): boolean {
 }
 
 function visualReference(item: any): string | null {
-  return firstText(item?.visualReference, item?.reference, item?.assetRef, item?.dataUrl, item?.imageUrl, item?.previewUrl, item?.url) || null;
+  const candidates = [item?.visualReference, item?.imageReference, item?.assetRef, item?.dataUrl, item?.imageUrl, item?.previewUrl, item?.url, item?.reference];
+  return candidates.find((value) => typeof value === "string" && value.trim())?.trim() || null;
 }
 
 function imageFingerprint(item: any): string {
@@ -160,10 +181,8 @@ function imageFingerprint(item: any): string {
     item?.pHash,
     item?.imageFingerprint,
     item?.forensicIntegrity?.sha256,
-    item?.multimodalEvidence?.forensicIntegrity?.sha256,
-    visualReference(item),
-    itemId(item, "")
-  );
+    item?.multimodalEvidence?.forensicIntegrity?.sha256
+  ) || visualReference(item) || itemId(item, "");
 }
 
 function sourceType(item: any, fallback: string): string {
@@ -171,7 +190,7 @@ function sourceType(item: any, fallback: string): string {
 }
 
 function summary(item: any, fallback: string): string {
-  return firstText(item?.summary, item?.resumen, item?.description, item?.descripcion, item?.caption, item?.title, item?.titulo, fallback);
+  return firstText(item?.summary, item?.resumen, item?.description, item?.descripcion, item?.snippet, item?.caption, item?.title, item?.titulo, fallback);
 }
 
 function technicalIds(item: any): Record<string, unknown> {
@@ -184,6 +203,35 @@ function technicalIds(item: any): Record<string, unknown> {
     modelVersion: item?.modelVersion || item?.technicalMetadata?.modelVersion,
     timestamp: item?.timestamp || item?.createdAt || item?.capturedAt || item?.generatedAt,
   };
+}
+
+function observedFact(item: any): boolean {
+  const integrity = item?.epistemicIntegrity || item;
+  return integrity?.acquisitionMode === "OBSERVED" && integrity?.acquisitionStatus === "ACQUIRED" &&
+    integrity?.isSimulated === false && item?.isSimulated !== true &&
+    !["AI_SYNTHESIS", "AI_GENERATED"].includes(String(integrity?.semanticRole || item?.semanticRole || "")) &&
+    (!integrity?.semanticRole || integrity.semanticRole === "SOURCE_FACT");
+}
+
+function governedStreetView(item: any): boolean {
+  const integrity = item?.epistemicIntegrity || item;
+  if (integrity?.isSimulated === true || item?.isSimulated === true ||
+    ["SIMULATED", "MOCK", "AI_GENERATED"].includes(String(integrity?.acquisitionMode || ""))) return false;
+  const provider = firstText(item?.sourceProvider, item?.source, item?.streetViewMetadata?.provider).toUpperCase();
+  const typed = [item?.tipo, item?.evidenceType, item?.sourceType].some((value) =>
+    ["STREET_VIEW", "GOOGLE_STREET_VIEW", "VIRTUAL_STREET_VIEW"].includes(String(value || "").toUpperCase()));
+  return (hasStreetViewProvenance(item) || String(item?.sourceType || "").toUpperCase() === "GOOGLE_STREET_VIEW") &&
+    (provider === "GOOGLE_STREET_VIEW" || provider === "GOOGLE STREET VIEW" || typed || Boolean(item?.streetViewMetadata?.panoId)) &&
+    isValidStreetViewImage({ ...item, previewUrl: visualReference(item) }) && isTraceable(item);
+}
+
+function displayedNumber(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "No disponible";
+}
+
+function safeReference(item: any, fallback: string): string {
+  const value = firstText(item?.evidenceId, item?.findingId, item?.traceabilityId);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(value) && !/token|secret|apikey|password/i.test(value) ? value : fallback;
 }
 
 function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fallback: string): TechnicalAnnexRecord {
@@ -202,6 +250,10 @@ function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fal
     traceabilityIds: traceabilityIds(item),
     technicalIds: technicalIds(item),
     limitations: asArray<string>(item?.limitations || item?.limitaciones),
+    referenceLabel: safeReference(item, fallback),
+    traceabilityStatus: firstText(item?.lineageStatus, item?.multimodalEvidence?.lineageStatus,
+      traceabilityIds(item).length ? "TRAZABLE" : "NO CONSIGNADO"),
+    reportUsage: selectedIds.has(id) ? "SI" : "NO DETERMINADO",
   };
 }
 
@@ -232,15 +284,17 @@ function section(
   role: ExecutiveGeointTechnicalAnnexSection["role"],
   content: string[],
   records: TechnicalAnnexRecord[] = [],
-  technicalSection = false
+  technicalSection = false,
+  facts: Array<{ label: string; value: string }> = []
 ): ExecutiveGeointTechnicalAnnexSection {
-  const hasData = content.some(Boolean) || records.length > 0;
+  const hasData = content.some(Boolean) || records.length > 0 || facts.length > 0;
   return {
     sectionId,
     title,
     role,
     content: hasData ? content.filter(Boolean) : ["NO DISPONIBLE EN EL EXPEDIENTE"],
     records,
+    facts,
     status: hasData ? "READY" : "NO DISPONIBLE EN EL EXPEDIENTE",
     technicalSection,
   };
@@ -260,32 +314,100 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     ceipolId: context.ceipolId,
   });
   const evidenceRecords = dedupeImageRecords([
-    ...institutionalInput.evidence.map((item, index) => evidenceRecord(item, "EVIDENCIA", selectedIds, `evidence-${index + 1}`)),
-    ...executiveModel.keyEvidence.map((item, index) => evidenceRecord(item, "EVIDENCIA_VISUAL_SELECCIONADA", selectedIds, `key-evidence-${index + 1}`)),
-    ...visualComposition.secondaryVisuals.map((item, index) => evidenceRecord(item, "VISUAL_EJECUTIVO_SELECCIONADO", selectedIds, `visual-${index + 1}`)),
+    ...institutionalInput.evidence.filter((item) => !hasStreetViewProvenance(item))
+      .map((item, index) => evidenceRecord(item, "EVIDENCIA", selectedIds, `evidence-${index + 1}`)),
+    ...executiveModel.keyEvidence.filter((item) => !item.sourceTypes?.includes("STREET_VIEW"))
+      .map((item, index) => evidenceRecord(item, "EVIDENCIA_VISUAL_SELECCIONADA", selectedIds, `key-evidence-${index + 1}`)),
   ]).filter((item) => isTraceable({ ...item, ...item.technicalIds }));
-  const streetViewRecords = dedupeImageRecords(institutionalInput.streetView.map((item, index) => evidenceRecord(item, "GOOGLE_STREET_VIEW", selectedIds, `street-view-${index + 1}`)))
+  const fieldPhotoRecords = dedupeImageRecords(institutionalInput.evidence
+    .filter((item) => visualReference(item) && !hasStreetViewProvenance(item) && item?.sourceType !== "GOOGLE_STREET_VIEW")
+    .map((item, index) => {
+      const record = evidenceRecord(item, "FOTOGRAFIA_DE_CAMPO", selectedIds, `foto-${index + 1}`);
+      return { ...record, summary: `${record.summary}; fecha: ${record.capturedAt || "No disponible"}; contexto: ${firstText(item?.context, item?.comentario, "No disponible")}` };
+    }))
+    .filter((item) => isTraceable({ ...item, ...item.technicalIds }));
+  const streetViewRecords = dedupeImageRecords(institutionalInput.streetView.filter(governedStreetView)
+    .map((item, index) => {
+      const record = evidenceRecord(item, "GOOGLE_STREET_VIEW", selectedIds, `street-view-${index + 1}`);
+      return { ...record, sourceType: "GOOGLE_STREET_VIEW", summary: `${record.summary}; fecha: ${record.capturedAt || "No disponible"}` };
+    }))
     .filter((item) => isTraceable({ ...item, ...item.technicalIds }));
   const osintRecords = institutionalInput.osint
-    .filter(isTraceable)
-    .map((item, index) => evidenceRecord(item, "OSINT_TRAZABLE", selectedIds, `osint-${index + 1}`));
-  const territorialSourceRecords = [
-    ...institutionalInput.osint,
-    ...institutionalInput.specializedIntelligence,
-    ...institutionalInput.visualProducts,
-    ...institutionalInput.temporalComparisons,
-  ]
-    .filter((item) => /DENUE|PLACE|ROUTE|DIRECTION|ELEVATION|VISION|GEOGRAF|GEOGRAPH|TERRITOR/i.test(sourceType(item, "") + " " + summary(item, "")))
-    .map((item, index) => evidenceRecord(item, "FUENTE_TERRITORIAL", selectedIds, `territorial-source-${index + 1}`));
+    .filter((item) => isTraceable(item) && observedFact(item))
+    .map((item, index) => {
+      const record = evidenceRecord(item, "OSINT_TRAZABLE", selectedIds, `osint-${index + 1}`);
+      const integrity = item.epistemicIntegrity || item;
+      return {
+        ...record,
+        sourceType: firstText(integrity.providerName, integrity.providerId, item.provider, item.source, record.sourceType),
+        summary: `${record.summary}; fecha: ${firstText(integrity.observedAt, integrity.acquiredAt, "No disponible")}; estado: OBSERVADO / ADQUIRIDO`,
+      };
+    });
+
+  const scince = institutionalInput.scinceDemographics;
+  const scinceReady = scince?.status === "OBSERVED" && observedFact(scince) && Boolean(scince?.provenance?.datasetId);
+  const scinceFacts = scinceReady ? [
+    { label: "Conjunto de datos", value: clean(scince.provenance.datasetId) },
+    { label: "Año de referencia", value: displayedNumber(scince.provenance.referenceYear) },
+    { label: "AGEB", value: firstText(scince.geography?.ageb?.code, "No disponible") },
+    { label: "Manzana", value: firstText(scince.geography?.manzana?.code, "No disponible") },
+    { label: "Población", value: displayedNumber(scince.demographics?.populationTotal) },
+    { label: "Viviendas", value: displayedNumber(scince.demographics?.housingTotal) },
+    { label: "Viviendas habitadas", value: displayedNumber(scince.demographics?.inhabitedPrivateHousing) },
+    { label: "Viviendas deshabitadas", value: displayedNumber(scince.demographics?.uninhabitedPrivateHousing) },
+  ] : [];
+  const denueRecords = asArray<any>(institutionalInput.denuePois)
+    .filter((item) => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
+      item?.territorialStatus === "INSTITUTIONAL" && observedFact(item) &&
+      (isTraceable(item) || Boolean(item?.sourceEvidenceId)))
+    .map((item, index) => ({
+      ...evidenceRecord(item, "INEGI_DENUE", selectedIds, `denue-${index + 1}`),
+      sourceType: "INEGI_DENUE",
+      title: firstText(item?.name, "Establecimiento sin nombre"),
+      summary: [
+        `Actividad: ${firstText(item?.activityCode, "No disponible")}`,
+        `Categoria: ${firstText(item?.category, item?.activityCategory, "No disponible")}`,
+        `Distancia: ${typeof item?.distanceMeters === "number" && Number.isFinite(item.distanceMeters) ? `${item.distanceMeters} m` : "No disponible"}`,
+        `Ubicacion: ${firstText(item?.address, item?.locationName, "No disponible")}`,
+      ].join("; "),
+    }));
+  const territorialSourceRecords = denueRecords;
+  const incidence = institutionalInput.crimeIncidenceExportContract;
+  const incidenceReady = incidence?.productClassification === "DESCRIPTIVE_ANALYTICAL_PRODUCT" &&
+    incidence?.analyticalLevel === "DESCRIPTIVE" && incidence?.queryReference?.status === "EXECUTED" &&
+    incidence?.queryReference?.admission?.accepted === true && Boolean(incidence?.datasetReference?.datasetId) &&
+    Number.isFinite(incidence?.projectionReference?.metrics?.frequency?.totalRecords) &&
+    incidence.projectionReference.metrics.frequency.totalRecords >= 0;
+  const incidenceFacts = incidenceReady ? [
+    { label: "Naturaleza", value: "Producto analitico descriptivo; no evidencia primaria" },
+    { label: "Conjunto de datos", value: clean(incidence.datasetReference.datasetId) },
+    { label: "Registros", value: displayedNumber(incidence.projectionReference.metrics.frequency.totalRecords) },
+    { label: "Periodo inicial", value: firstText(incidence.datasetReference.coverage?.temporal?.start, "No disponible") },
+    { label: "Periodo final", value: firstText(incidence.datasetReference.coverage?.temporal?.end, "No disponible") },
+  ] : [];
+  const gim = institutionalInput.specializedIntelligence.find((item) => item?.schemaVersion === "GIM-REPORT-1.0" &&
+    item?.validatedByACE === true && item?.validationStatus !== "NOT_CERTIFIED" && item?.traceabilityReference);
+  const findingRecords = executiveModel.findings.map((item, index) => {
+    const record = evidenceRecord(item, "HALLAZGO_GOBERNADO", selectedIds, `hallazgo-${index + 1}`);
+    const evidenceRefs = [...asArray<string>(item?.evidenceReferences), ...asArray<string>(item?.technicalMetadata?.sourceEvidenceIds)];
+    const related = evidenceRecords.filter((evidence) => evidenceRefs.includes(evidence.recordId));
+    return {
+      ...record,
+      sourceType: related.map((evidence) => evidence.sourceType).join(", ") || "EVIDENCIA NO VINCULADA EN EL INSUMO",
+      referenceLabel: related.map((evidence) => evidence.referenceLabel).filter(Boolean).join(", ") || record.referenceLabel,
+      selectedForExecutiveBody: true,
+      reportUsage: "SI" as const,
+    };
+  });
 
   const allTechnicalRecords = [
     ...evidenceRecords,
     ...streetViewRecords,
     ...osintRecords,
-    ...territorialSourceRecords,
+    ...denueRecords,
+    ...findingRecords,
     ...institutionalInput.analyses.map((item, index) => evidenceRecord(item, "ANALISIS_MULTIFUENTE", selectedIds, `analysis-${index + 1}`)),
     ...institutionalInput.predictiveAnalyticalProducts.map((item, index) => evidenceRecord(item, "PRODUCTO_PROSPECTIVO", selectedIds, `predictive-product-${index + 1}`)),
-    ...executiveModel.findings.map((item, index) => evidenceRecord(item, "HALLAZGO_EJECUTIVO", selectedIds, `finding-${index + 1}`)),
     ...executiveModel.decisionImplications.map((item, index) => evidenceRecord(item, "IMPLICACION_DECISION", selectedIds, `decision-${index + 1}`)),
   ];
 
@@ -303,20 +425,30 @@ export function buildExecutiveGeointTechnicalAnnexModel(
         : "NO DISPONIBLE EN EL EXPEDIENTE",
       visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL"
         ? "Representacion cartografica gobernada disponible."
-        : "Representacion cartografica no disponible como activo gobernado.",
+        : visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
+          ? "Cartografia canonica disponible; requiere resolver el activo visual gobernado."
+          : "Representacion cartografica no disponible como activo gobernado.",
     ], [], true),
-    section("evidence-inventory", "INVENTARIO DE EVIDENCIA", "TECHNICAL_SUPPORT", [
-      `Evidencias inventariadas: ${evidenceRecords.length}`,
-    ], evidenceRecords),
-    section("street-view", "GOOGLE STREET VIEW", "TECHNICAL_SUPPORT", [
-      `Capturas gobernadas: ${streetViewRecords.length}`,
-    ], streetViewRecords),
-    section("territorial-sources", "FUENTES TERRITORIALES", "TECHNICAL_SUPPORT", [
-      `Fuentes territoriales registradas: ${territorialSourceRecords.length}`,
-    ], territorialSourceRecords),
-    section("osint", "OSINT TRAZABLE", "TECHNICAL_SUPPORT", [
-      `Elementos OSINT trazables: ${osintRecords.length}`,
-    ], osintRecords),
+    section("evidence-inventory", "INVENTARIO DE EVIDENCIA", "TECHNICAL_SUPPORT",
+      evidenceRecords.length ? [`Evidencias inventariadas: ${evidenceRecords.length}`] : [], evidenceRecords),
+    section("field-photographs", "EVIDENCIA FOTOGRAFICA DE CAMPO", "TECHNICAL_SUPPORT",
+      fieldPhotoRecords.length ? [`Fotografias de campo elegibles: ${fieldPhotoRecords.length}`] : [], fieldPhotoRecords),
+    section("street-view", "GOOGLE STREET VIEW", "TECHNICAL_SUPPORT",
+      streetViewRecords.length ? [`Capturas gobernadas: ${streetViewRecords.length}`] : [], streetViewRecords),
+    section("territorial-sources", "FUENTES TERRITORIALES", "TECHNICAL_SUPPORT",
+      territorialSourceRecords.length ? [`Fuentes territoriales registradas: ${territorialSourceRecords.length}`] : [], territorialSourceRecords),
+    section("scince", "CONTEXTO TERRITORIAL SCINCE", "TECHNICAL_SUPPORT", [], [], true, scinceFacts),
+    section("denue", "ACTIVIDAD ECONOMICA DENUE", "TECHNICAL_SUPPORT",
+      denueRecords.length ? [`Establecimientos observados: ${denueRecords.length}`] : [], denueRecords),
+    section("incidence", "INCIDENCIA DELICTIVA", "TECHNICAL_SUPPORT", [], [], true, incidenceFacts),
+    section("osint", "CIFA / CEFI - FUENTES ABIERTAS", "TECHNICAL_SUPPORT",
+      osintRecords.length ? [`Registros observados, adquiridos y trazables: ${osintRecords.length}`] : [], osintRecords),
+    ...(gim ? [section("gang-intelligence", "PANDILLAS / GIM", "TECHNICAL_SUPPORT",
+      ["Producto especializado certificado y admitido por ACE.",
+        ...asArray<string>(gim.analyticalFindings).map((item) => `Hallazgo analitico: ${clean(item)}`)],
+      [evidenceRecord(gim, "GIM_CERTIFICADO", selectedIds, "gim-1")])] : []),
+    section("findings-matrix", "MATRIZ DE HALLAZGOS Y EVIDENCIA", "TECHNICAL_SUPPORT",
+      findingRecords.length ? [`Hallazgos gobernados: ${findingRecords.length}`] : [], findingRecords),
     section("multisource-correlation", "CORRELACION MULTIFUENTE", "TECHNICAL_SUPPORT", [
       ...executiveModel.multisourceAnalysis.convergencias.map((item) => `Convergencia aceptada: ${item}`),
       ...executiveModel.multisourceAnalysis.contradicciones.map((item) => `Contradiccion: ${item}`),
@@ -331,14 +463,19 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     ] : [] , [], true),
     section("hypothesis-history", "HIPOTESIS E HISTORIAL", "TECHNICAL_SUPPORT", [
       firstText((institutionalInput.hypothesis as any)?.currentHypothesis, (institutionalInput as any)?.initialHypothesis, "NO DISPONIBLE EN EL EXPEDIENTE"),
-      ...asArray<any>((institutionalInput as any)?.hypothesisHistory).map((item) => firstText(item?.summary, item?.text, item?.status, JSON.stringify(item))),
+      ...asArray<any>((institutionalInput as any)?.hypothesisHistory).map((item) => firstText(item?.summary, item?.text, item?.status)),
     ], [], true),
     section("technical-traceability", "TRAZABILIDAD TECNICA", "AUDIT_TRACEABILITY", [
-      `projectId: ${institutionalInput.projectId}`,
-      `modelVersion: ${EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION}`,
-      `sourceItemIds: ${dedupe(allTechnicalRecords.flatMap((record) => Object.values(record.technicalIds).flatMap((value) => Array.isArray(value) ? value.map(String) : [String(value || "")]))).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,
-      `traceabilityIds: ${dedupe(allTechnicalRecords.flatMap((record) => record.traceabilityIds)).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,
-    ], allTechnicalRecords, true),
+      `Expediente: ${numeroExpediente}`,
+      `Registros con trazabilidad: ${allTechnicalRecords.filter((record) => record.traceabilityIds.length).length}`,
+      `Fuentes vinculadas: ${dedupe(allTechnicalRecords.map((record) => record.sourceType)).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,
+    ], [], true),
+    section("sources-limitations", "FUENTES, EXCLUSIONES Y LIMITACIONES", "AUDIT_TRACEABILITY", [
+      `Elementos excluidos por gobernanza: ${institutionalInput.exclusions.length}`,
+      `Declaraciones de limite: ${institutionalInput.disclosures.length}`,
+      ...institutionalInput.exclusions.map((item) => `Exclusion ${firstText(item.itemType)}: ${firstText(item.reason)}`),
+      ...institutionalInput.disclosures.map((item) => `Declaracion ${firstText(item.itemType)}: ${firstText(item.message)}`),
+    ], [], true),
   ];
 
   const partialSections = sections.map((item) => ({
@@ -369,6 +506,7 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       documentTitle: documentModel.presentation.documentTitle,
       sectionIds: documentModel.sections.map((item) => item.sectionId),
       visualPlacementIds: documentModel.visualPlacements.map((item) => item.visualId),
+      principalMapId: visualComposition.principalTerritorialMap.mapId,
     },
     governance: {
       deterministic: true,

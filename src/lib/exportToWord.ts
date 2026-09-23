@@ -780,6 +780,25 @@ function sanitizeEditorialPayload(payload: any) {
   return payload;
 }
 
+async function resolveInstitutionalVisualAssets(visualComposition: any, geography: any, strictEvidence = false) {
+  return buildExecutiveGeointWordVisualAssets(visualComposition, {
+    canonicalGeography: geography,
+    googleStaticMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY,
+    strictPrincipalMapAssets: true,
+    resolvePrincipalMapImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
+      const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, {
+        disableFallback: true, minimumWidth: 300, minimumHeight: 180, minimumBytes: 1024,
+      });
+      return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
+    },
+    resolveImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
+      const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId,
+        strictEvidence ? { disableFallback: true } : undefined);
+      return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
+    },
+  });
+}
+
 export async function exportToWord(
   payload: any,
   projectName: string,
@@ -819,36 +838,7 @@ export async function exportToWord(
       const rendered = renderExecutiveGeointWordDocument(executiveDocumentModel, {
         projectName,
         ceipolId: payload.ceipolId,
-        visualAssetsById: await buildExecutiveGeointWordVisualAssets(visualComposition, {
-          canonicalGeography: institutionalReportInput.geography,
-          googleStaticMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY,
-          strictPrincipalMapAssets: true,
-          resolvePrincipalMapImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
-            const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, {
-              disableFallback: true,
-              minimumWidth: 300,
-              minimumHeight: 180,
-              minimumBytes: 1024,
-            });
-            if (!resolved) return null;
-            return {
-              data: resolved.data,
-              width: resolved.width,
-              height: resolved.height,
-              type: resolved.type as any,
-            };
-          },
-          resolveImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
-            const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId);
-            if (!resolved) return null;
-            return {
-              data: resolved.data,
-              width: resolved.width,
-              height: resolved.height,
-              type: resolved.type as any,
-            };
-          },
-        }),
+        visualAssetsById: await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography),
       });
       assertExecutiveGeointPrincipalMapRendered(rendered);
       const blob = await Packer.toBlob(rendered.document);
@@ -900,12 +890,22 @@ export async function exportToWord(
           clasificacion: payload.classification || payload.clasificacion,
         }
       );
-      const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, { projectName });
+      const visualAssetsById = await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography, true);
+      for (const section of annexModel.sections.filter((item) => item.sectionId === "field-photographs" || item.sectionId === "street-view")) {
+        for (const record of section.records) {
+          if (!record.visualReference || visualAssetsById[record.recordId]) continue;
+          const resolved = await getImageDimensionsAndBuffer(record.visualReference, 360, 220, record.title, record.recordId, { disableFallback: true });
+          if (resolved) visualAssetsById[record.recordId] = {
+            data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any,
+          };
+        }
+      }
+      const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, { projectName, visualAssetsById });
       const blob = await Packer.toBlob(rendered.document);
       saveAs(blob, rendered.filename);
       return;
-    } catch (err) {
-      console.warn("[FASE F] Anexo tecnico GEOINT no disponible; usando compatibilidad legacy controlada.", err);
+    } catch {
+      throw new Error("EXECUTIVE_GEOINT_TECHNICAL_ANNEX_BLOCKED:RENDER_FAILED");
     }
   }
 
