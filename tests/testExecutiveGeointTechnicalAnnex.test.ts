@@ -465,4 +465,46 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     });
     expect((await Packer.toBuffer(rendered.document)).byteLength).toBeGreaterThan(1000);
   });
+
+  test("37 tablas del Anexo reutilizan el renderer tabular gobernado", () => {
+    const rendererSource = source("src/utils/executiveGeointTechnicalAnnexWordRenderer.ts");
+    expect(rendererSource).toContain("renderStructuredTable");
+    expect(rendererSource).not.toMatch(/new Table\(|new TableRow\(|new TableCell\(/);
+    expect(rendererSource).not.toMatch(/\.(?:substring|slice)\(/);
+  });
+
+  test("38 caso adversarial conserva 24 filas y texto largo en OOXML", async () => {
+    const model = annex();
+    const longText = "CONTENIDO_LARGO_INTEGRO_" + "evidencia trazable con observaciones y limitaciones completas ".repeat(18);
+    const records = Array.from({ length: 24 }, (_, index) => ({
+      recordId: `adversarial-${index + 1}`,
+      title: `REGISTRO_ADVERSARIAL_${String(index + 1).padStart(2, "0")}`,
+      sourceType: index % 2 === 0 ? "FUENTE_MULTIPLE_A" : "FUENTE_MULTIPLE_B",
+      summary: `${longText} FILA_FINAL_${index + 1}`,
+      selectedForExecutiveBody: index % 3 === 0,
+      traceabilityIds: [`trace-adversarial-${index + 1}`],
+      technicalIds: {},
+      limitations: [`Limitacion completa ${index + 1}`],
+      referenceLabel: `ref-${index + 1}`,
+      traceabilityStatus: "TRAZABLE",
+      reportUsage: index % 3 === 0 ? "SI" as const : "NO" as const,
+    }));
+    const inventory = model.sections.find((section) => section.sectionId === "evidence-inventory")!;
+    inventory.records = records;
+
+    const xml = (await packageXml(renderExecutiveGeointTechnicalAnnexWordDocument(model).document)).document;
+    expect(xml).toContain("<w:tblHeader/>");
+    expect(xml).toContain("<w:cantSplit/>");
+    expect(xml).toContain("<w:tblW");
+    expect(xml).toContain("<w:tcW");
+    expect(xml).toContain('<w:tblLayout w:type="fixed"/>');
+    expect(xml).toContain(longText);
+    expect(xml).not.toContain("[object Object]");
+    for (const record of records) {
+      expect(xml.match(new RegExp(record.title, "g"))).toHaveLength(1);
+      expect(xml).toContain(`FILA_FINAL_${record.recordId.split("-")[1]}`);
+    }
+    expect(xml).toContain("SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES");
+    expect(xml).toContain("ANEXO TÉCNICO");
+  });
 });

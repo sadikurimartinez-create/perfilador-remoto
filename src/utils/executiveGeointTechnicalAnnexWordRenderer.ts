@@ -4,11 +4,7 @@ import {
   ImageRun,
   PageBreak,
   Paragraph,
-  Table,
-  TableCell,
-  TableRow,
   TextRun,
-  WidthType,
 } from "docx";
 import type {
   ExecutiveGeointTechnicalAnnexModel,
@@ -25,6 +21,7 @@ import { buildNumeroExpedienteFilename } from "@/utils/documentIdentity";
 import type { ExecutiveGeointWordVisualAsset } from "@/utils/executiveGeointWordRenderer";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
 import { TECHNICAL_ANNEX_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
+import { renderStructuredTable } from "@/utils/documentTableRenderer";
 
 export interface TechnicalAnnexWordRenderResult {
   document: Document;
@@ -65,44 +62,29 @@ function para(text: string, options: { bold?: boolean; size?: number; color?: st
   );
 }
 
-function cell(text: string, bold = false) {
-  return new TableCell({
-    children: [para(text, { bold, size: 16 })],
-  });
-}
-
-function recordRows(records: TechnicalAnnexRecord[]): TableRow[] {
-  return records.map((record) => new TableRow({
-    children: [
-      cell(record.title),
-      cell(record.sourceType),
-      cell(record.summary),
-      cell(record.referenceLabel || "Referencia no consignada"),
-      cell(record.traceabilityStatus || "NO CONSIGNADO"),
-      cell(record.reportUsage || (record.selectedForExecutiveBody ? "SI" : "NO DETERMINADO")),
-    ],
-  }));
-}
-
 function renderRecords(records: TechnicalAnnexRecord[]): any[] {
   if (!records.length) return [];
   return [
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({ children: [cell("HALLAZGO / ELEMENTO", true), cell("TIPO / FUENTE", true), cell("DETALLE", true), cell("REFERENCIA", true), cell("TRAZABILIDAD", true), cell("INFORME", true)] }),
-        ...recordRows(records),
-      ],
-    }),
+    renderStructuredTable({
+      headers: ["HALLAZGO / ELEMENTO", "TIPO / FUENTE", "DETALLE", "REFERENCIA", "TRAZABILIDAD", "INFORME"],
+      rows: records.map((record) => [
+        clean(record.title),
+        clean(record.sourceType),
+        clean(record.summary),
+        clean(record.referenceLabel || "Referencia no consignada"),
+        clean(record.traceabilityStatus || "NO CONSIGNADO"),
+        clean(record.reportUsage || (record.selectedForExecutiveBody ? "SI" : "NO DETERMINADO")),
+      ]),
+    }, { columnWidths: [18, 14, 28, 14, 14, 12] }),
   ];
 }
 
 function renderFactTable(facts: ExecutiveGeointTechnicalAnnexSection["facts"]): any[] {
   if (!facts.length) return [];
-  return [new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: facts.map((fact) => new TableRow({ children: [cell(fact.label, true), cell(fact.value)] })),
-  })];
+  return [renderStructuredTable({
+    headers: ["CAMPO", "VALOR"],
+    rows: facts.map((fact) => [clean(fact.label), clean(fact.value)]),
+  }, { columnWidths: [28, 72] })];
 }
 
 function renderAsset(asset: ExecutiveGeointWordVisualAsset, caption: string, map = false): any[] {

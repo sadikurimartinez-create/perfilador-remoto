@@ -1,4 +1,4 @@
-import { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, AlignmentType, ShadingType, BorderStyle } from "docx";
+import { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, AlignmentType, ShadingType, BorderStyle, TableLayoutType } from "docx";
 
 // OBSERVACIÓN CRÍTICA #4: No hardcodear colores institucionales. Usar tema CEIPOL.
 export const CEIPOL_DOCUMENT_THEME = {
@@ -14,6 +14,39 @@ export interface ParsedTable {
   headers: string[];
   rows: string[][];
   alignments: any[];
+}
+
+export interface StructuredTableInput {
+  headers: string[];
+  rows: unknown[][];
+  alignments?: any[];
+}
+
+export interface GovernedTableRenderOptions {
+  columnWidths?: number[];
+  repeatHeader?: boolean;
+  preventRowSplit?: boolean;
+  cleanMarkdown?: boolean;
+}
+
+function visibleCellText(value: unknown): string {
+  if (value === null || value === undefined) return "N/D";
+  if (typeof value === "string") return value;
+  if (["number", "boolean", "bigint"].includes(typeof value)) return String(value);
+  if (Array.isArray(value)) return value.map(visibleCellText).join("; ");
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "N/D";
+  }
+}
+
+function resolveColumnWidths(columnCount: number, requested?: number[]): number[] {
+  if (requested?.length === columnCount && requested.every((width) => Number.isFinite(width) && width > 0)) {
+    const total = requested.reduce((sum, width) => sum + width, 0);
+    return requested.map((width) => Number(((width / total) * 100).toFixed(4)));
+  }
+  return Array.from({ length: columnCount }, () => 100 / columnCount);
 }
 
 /**
@@ -150,9 +183,9 @@ export class TableRenderer {
   /**
    * Renderiza una estructura tabular parseada y validada a un objeto docx.Table formal.
    */
-  public static render(parsed: ParsedTable): Table {
+  public static render(parsed: ParsedTable, options: GovernedTableRenderOptions = {}): Table {
     const colCount = parsed.headers.length;
-    const colWidthPercent = Math.floor(100 / colCount);
+    const columnWidths = resolveColumnWidths(colCount, options.columnWidths);
 
     const rows: TableRow[] = [];
 
@@ -160,7 +193,7 @@ export class TableRenderer {
     const headerCells = parsed.headers.map((h, idx) => {
       const align = parsed.alignments[idx] || AlignmentType.LEFT;
       return new TableCell({
-        width: { size: colWidthPercent, type: WidthType.PERCENTAGE },
+        width: { size: columnWidths[idx], type: WidthType.PERCENTAGE },
         shading: { fill: CEIPOL_DOCUMENT_THEME.headerBackground, type: ShadingType.CLEAR },
         margins: TableStyleProvider.getCellMargins(),
         children: [
@@ -168,7 +201,7 @@ export class TableRenderer {
             alignment: align,
             children: [
               new TextRun({
-                text: TableParser.cleanCellMarkdown(h),
+                text: options.cleanMarkdown === false ? h : TableParser.cleanCellMarkdown(h),
                 bold: true,
                 size: 18, // 9pt para tablas institucionales
                 color: CEIPOL_DOCUMENT_THEME.headerText,
@@ -183,8 +216,8 @@ export class TableRenderer {
     // Añadir encabezado con repetición (tableHeader: true) e impedir división (cantSplit: true)
     rows.push(
       new TableRow({
-        tableHeader: true,
-        cantSplit: true,
+        tableHeader: options.repeatHeader !== false,
+        cantSplit: options.preventRowSplit !== false,
         children: headerCells
       })
     );
@@ -217,7 +250,7 @@ export class TableRenderer {
         }
 
         return new TableCell({
-          width: { size: colWidthPercent, type: WidthType.PERCENTAGE },
+          width: { size: columnWidths[colIdx], type: WidthType.PERCENTAGE },
           shading: { fill: bgFill, type: ShadingType.CLEAR },
           margins: TableStyleProvider.getCellMargins(),
           children: [
@@ -225,7 +258,7 @@ export class TableRenderer {
               alignment: align,
               children: [
                 new TextRun({
-                  text: TableParser.cleanCellMarkdown(sanitizedText),
+                  text: options.cleanMarkdown === false ? sanitizedText : TableParser.cleanCellMarkdown(sanitizedText),
                   size: 18, // 9pt
                   color: CEIPOL_DOCUMENT_THEME.bodyText,
                   font: "Calibri"
@@ -239,7 +272,7 @@ export class TableRenderer {
       // Añadir fila impidiendo división (cantSplit: true)
       rows.push(
         new TableRow({
-          cantSplit: true,
+          cantSplit: options.preventRowSplit !== false,
           children: bodyCells
         })
       );
@@ -247,10 +280,26 @@ export class TableRenderer {
 
     return new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      layout: TableLayoutType.FIXED,
       borders: TableStyleProvider.getTableBorders(),
       rows: rows
     });
   }
+}
+
+/**
+ * Entrada estructurada para tablas construidas desde modelos gobernados, sin pasar por Markdown.
+ */
+export function renderStructuredTable(input: StructuredTableInput, options: GovernedTableRenderOptions = {}): Table {
+  const parsed: ParsedTable = {
+    headers: input.headers.map(visibleCellText),
+    rows: input.rows.map((row) => row.map(visibleCellText)),
+    alignments: input.alignments || [],
+  };
+  if (!TableValidator.validate(parsed)) {
+    throw new Error("Estructura tabular gobernada inválida.");
+  }
+  return TableRenderer.render(parsed, { ...options, cleanMarkdown: false });
 }
 
 /**
