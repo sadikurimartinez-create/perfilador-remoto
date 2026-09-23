@@ -272,8 +272,11 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(text).toContain("renderExecutiveGeointTechnicalAnnexWordDocument");
     expect(text).toContain("const reportBlob = await Packer.toBlob(renderedReport.document)");
     expect(text).toContain("const annexBlob = await Packer.toBlob(renderedAnnex.document)");
-    expect(text.indexOf("const reportBlob = await Packer.toBlob(renderedReport.document)")).toBeLessThan(text.indexOf("saveAs(reportBlob, reportFilename)"));
-    expect(text.indexOf("const annexBlob = await Packer.toBlob(renderedAnnex.document)")).toBeLessThan(text.indexOf("saveAs(reportBlob, reportFilename)"));
+    expect(text).toContain("institutionalReportPackageService.persistGeneratedPackage");
+    expect(text.indexOf("const reportBlob = await Packer.toBlob(renderedReport.document)")).toBeLessThan(text.indexOf("persistGeneratedPackage"));
+    expect(text.indexOf("const annexBlob = await Packer.toBlob(renderedAnnex.document)")).toBeLessThan(text.indexOf("persistGeneratedPackage"));
+    expect(text.indexOf("persistGeneratedPackage")).toBeLessThan(text.indexOf("saveAs(reportBlob, reportPackage.artifacts.executiveReport.filename)"));
+    expect(text).toContain("saveAs(annexBlob, reportPackage.artifacts.technicalAnnex.filename)");
     expect(text).toContain("visualAssetsById: generationContext.visualAssetsById");
   });
 

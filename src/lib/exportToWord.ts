@@ -83,6 +83,7 @@ import {
 } from "@/utils/executiveGeointWordRenderer";
 import { buildExecutiveGeointTechnicalAnnexModel } from "@/utils/executiveGeointTechnicalAnnexModel";
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executiveGeointTechnicalAnnexWordRenderer";
+import { institutionalReportPackageService } from "@/services/institutionalReportPackageService";
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -893,21 +894,18 @@ export async function exportToWord(
       });
       const reportBlob = await Packer.toBlob(renderedReport.document);
       const annexBlob = await Packer.toBlob(renderedAnnex.document);
-      const reportFilename = buildNumeroExpedienteFilename({
+      const reportPackage = await institutionalReportPackageService.persistGeneratedPackage({
+        projectId: generationContext.projectId,
         numeroExpediente: renderedReport.visibleNumeroExpediente || generationContext.numeroExpediente,
-        ceipolId: payload.ceipolId,
-        projectName: `INFORME_${projectName}`,
-        extension: "docx",
+        generatedAt: generationContext.generatedAt,
+        generatedBy: user,
+        generationContext,
+        reportBlob,
+        annexBlob,
       });
-      const annexFilename = buildNumeroExpedienteFilename({
-        numeroExpediente: annexModel.identity.numeroExpediente,
-        ceipolId: payload.ceipolId,
-        projectName: `ANEXO_TECNICO_${projectName}`,
-        extension: "docx",
-      });
-      saveAs(reportBlob, reportFilename);
-      saveAs(annexBlob, annexFilename);
-      return;
+      saveAs(reportBlob, reportPackage.artifacts.executiveReport.filename);
+      saveAs(annexBlob, reportPackage.artifacts.technicalAnnex.filename);
+      return reportPackage;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.startsWith("EXECUTIVE_GEOINT_BLOCKED:")) throw err instanceof Error ? err : new Error(message);

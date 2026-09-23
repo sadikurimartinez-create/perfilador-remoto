@@ -65,6 +65,10 @@ import {
   type ProductiveSourceIntegrityInput,
 } from "@/services/geoint/denueScinceOrchestrationAdapter";
 import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
+import {
+  institutionalReportPackageService,
+  type InstitutionalReportPackageManifest,
+} from "@/services/institutionalReportPackageService";
 
 import { DynamicErrorBoundary } from "@/components/ui/DynamicErrorBoundary";
 
@@ -1079,6 +1083,10 @@ export function PhotoAlbum({
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyDossiers, setHistoryDossiers] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [showInstitutionalReportHistory, setShowInstitutionalReportHistory] = useState(false);
+  const [institutionalReportPackages, setInstitutionalReportPackages] = useState<InstitutionalReportPackageManifest[]>([]);
+  const [isLoadingInstitutionalReportHistory, setIsLoadingInstitutionalReportHistory] = useState(false);
+  const institutionalGenerationInFlightRef = useRef(false);
   const [isSavingExpediente, setIsSavingExpediente] = useState(false);
 
   useEffect(() => {
@@ -1412,15 +1420,17 @@ export function PhotoAlbum({
   ]);
 
   const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
+    if (institutionalGenerationInFlightRef.current) return;
     if (!institutionalProducts.readyForInstitutionalReport) {
       setError(institutionalProducts.pendingMessages.join(" ") || "El expediente aún no está habilitado para emitir productos institucionales.");
       return;
     }
+    institutionalGenerationInFlightRef.current = true;
     console.info(`[REPORT PRODUCT] ${reportKind}`);
     setIsSavingAnalysis(true);
     setError(null);
     try {
-      await exportToWord(
+      const generatedPackage = await exportToWord(
         buildInstitutionalProductExportPayload(project, {
           projectId,
           user,
@@ -1438,12 +1448,47 @@ export function PhotoAlbum({
         user,
         buildInstitutionalProductExportOptions(reportKind)
       );
+      if (generatedPackage?.packageId) {
+        setInstitutionalReportPackages((current) => [
+          generatedPackage,
+          ...current.filter((item) => item.packageId !== generatedPackage.packageId),
+        ].sort((a, b) => b.version - a.version));
+      }
     } catch (err: any) {
       setError(err?.message || "No fue posible generar el producto institucional.");
     } finally {
+      institutionalGenerationInFlightRef.current = false;
       setIsSavingAnalysis(false);
     }
   }, [institutionalProducts, project, projectId, user, editableProfile, aiProfile, reportSummary, reportReadyAssessment, album, documents, mapSnapshots, analysisResult]);
+
+  const handleConsultarHistorialInstitucional = useCallback(async () => {
+    const currentProjectId = project?.id || projectId;
+    if (!currentProjectId) return;
+    setShowInstitutionalReportHistory(true);
+    setIsLoadingInstitutionalReportHistory(true);
+    try {
+      setInstitutionalReportPackages(await institutionalReportPackageService.listPackages(currentProjectId));
+    } catch (err: any) {
+      setError(err?.message || "No fue posible consultar el historial institucional.");
+    } finally {
+      setIsLoadingInstitutionalReportHistory(false);
+    }
+  }, [project?.id, projectId]);
+
+  const handleDownloadInstitutionalPackage = useCallback(async (item: InstitutionalReportPackageManifest) => {
+    setIsLoadingInstitutionalReportHistory(true);
+    try {
+      const pair = await institutionalReportPackageService.downloadPackage(item.projectId, item.packageId);
+      const { saveAs: saveFile } = await import("file-saver");
+      saveFile(pair.executiveReport, pair.manifest.artifacts.executiveReport.filename);
+      saveFile(pair.technicalAnnex, pair.manifest.artifacts.technicalAnnex.filename);
+    } catch (err: any) {
+      setError(err?.message || "No fue posible descargar el paquete institucional.");
+    } finally {
+      setIsLoadingInstitutionalReportHistory(false);
+    }
+  }, []);
 
   // 🔒 5. REACT RENDER ISOLATION LAYER
   useEffect(() => {
@@ -5577,6 +5622,47 @@ const hasMinimumPhotos =
                   )}
                 </div>
               )}
+              <div className="pt-3 border-t border-slate-800 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => showInstitutionalReportHistory
+                    ? setShowInstitutionalReportHistory(false)
+                    : void handleConsultarHistorialInstitucional()}
+                  disabled={isLoadingInstitutionalReportHistory}
+                  className="text-[10px] text-cyan-200 hover:text-cyan-100 font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {showInstitutionalReportHistory ? "Ocultar historial de informes" : "Consultar historial de informes"}
+                </button>
+                {showInstitutionalReportHistory && (
+                  <div className="space-y-2" aria-label="Historial de informes institucionales">
+                    {isLoadingInstitutionalReportHistory ? (
+                      <p className="text-[11px] text-slate-400">Cargando historial institucional...</p>
+                    ) : institutionalReportPackages.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">No existen paquetes institucionales versionados.</p>
+                    ) : institutionalReportPackages.map((item) => (
+                      <div key={item.packageId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-2 text-[11px]">
+                        <div className="text-slate-300">
+                          <span className="font-black text-cyan-300">v{item.version}</span>
+                          <span className="mx-2 text-slate-600">|</span>
+                          <span>{new Date(item.generatedAt).toLocaleString("es-MX")}</span>
+                          <span className="mx-2 text-slate-600">|</span>
+                          <span className={item.state === "GENERATED" ? "text-emerald-300" : "text-amber-300"}>{item.state}</span>
+                        </div>
+                        {(item.state === "GENERATED" || item.state === "CERTIFIED" || item.state === "PUBLISHED") && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDownloadInstitutionalPackage(item)}
+                            disabled={isLoadingInstitutionalReportHistory}
+                            className="text-cyan-200 hover:text-cyan-100 font-bold disabled:opacity-50"
+                          >
+                            Descargar Informe + Anexo
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
     </section>
