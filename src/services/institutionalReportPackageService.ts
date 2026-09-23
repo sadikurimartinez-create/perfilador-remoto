@@ -19,6 +19,121 @@ import { sanitizeExpedienteFilePart } from "@/utils/documentIdentity";
 export type InstitutionalReportPackageState = "GENERATING" | "GENERATED" | "FAILED" | "CERTIFIED" | "PUBLISHED";
 export type InstitutionalReportArtifactState = "PENDING" | "STORED" | "FAILED";
 export type InstitutionalReportArtifactKind = "EXECUTIVE_REPORT" | "TECHNICAL_ANNEX";
+export type ReportPackageStage =
+  | "RESOLVE_ACTOR"
+  | "BUILD_SNAPSHOT_HASHES"
+  | "RESERVE_PACKAGE"
+  | "STORE_EXECUTIVE_REPORT"
+  | "SAVE_EXECUTIVE_REPORT_STATE"
+  | "STORE_TECHNICAL_ANNEX"
+  | "SAVE_TECHNICAL_ANNEX_STATE"
+  | "MARK_GENERATED"
+  | "MARK_FAILED"
+  | "DOWNLOAD_EXECUTIVE"
+  | "DOWNLOAD_TECHNICAL_ANNEX"
+  | "VERIFY_DOWNLOAD_HASHES";
+
+export interface ReportPackageErrorDiagnostic {
+  stage: ReportPackageStage | null;
+  code: string;
+  message: string;
+}
+
+const REPORT_PACKAGE_ERROR_PREFIX = "REPORT_PACKAGE_STAGE_FAILED";
+const REPORT_PACKAGE_STAGES = new Set<ReportPackageStage>([
+  "RESOLVE_ACTOR",
+  "BUILD_SNAPSHOT_HASHES",
+  "RESERVE_PACKAGE",
+  "STORE_EXECUTIVE_REPORT",
+  "SAVE_EXECUTIVE_REPORT_STATE",
+  "STORE_TECHNICAL_ANNEX",
+  "SAVE_TECHNICAL_ANNEX_STATE",
+  "MARK_GENERATED",
+  "MARK_FAILED",
+  "DOWNLOAD_EXECUTIVE",
+  "DOWNLOAD_TECHNICAL_ANNEX",
+  "VERIFY_DOWNLOAD_HASHES",
+]);
+
+function sanitizeDiagnosticText(value: unknown, fallback: string): string {
+  const text = String(value ?? fallback)
+    .replace(/https?:\/\/\S+/gi, "[REDACTED_URL]")
+    .replace(/\b(token|cookie|credential|authorization|password|api[_ -]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return (text || fallback).slice(0, 300);
+}
+
+function errorCode(error: unknown): string {
+  const source = error && typeof error === "object" ? error as Record<string, unknown> : null;
+  const explicit = source?.code;
+  if (typeof explicit === "string" && explicit.trim()) {
+    return sanitizeDiagnosticText(explicit, "UNKNOWN").replace(/[^a-zA-Z0-9_./-]/g, "_").slice(0, 80);
+  }
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /^[A-Z][A-Z0-9_/-]+$/.test(message) ? message.slice(0, 80) : "UNKNOWN";
+}
+
+export class ReportPackageStageError extends Error {
+  readonly name = "ReportPackageStageError";
+
+  constructor(
+    readonly stage: ReportPackageStage,
+    readonly code: string,
+    readonly originalMessage: string
+  ) {
+    super(`${REPORT_PACKAGE_ERROR_PREFIX}:${stage}:${code}:${originalMessage}`);
+  }
+}
+
+function toStageError(stage: ReportPackageStage, error: unknown): ReportPackageStageError {
+  if (error instanceof ReportPackageStageError) return error;
+  const message = error instanceof Error ? error.message : String(error ?? "UNKNOWN_ERROR");
+  return new ReportPackageStageError(
+    stage,
+    errorCode(error),
+    sanitizeDiagnosticText(message, "UNKNOWN_ERROR")
+  );
+}
+
+function logStageError(error: ReportPackageStageError, secondary = false) {
+  console.error(secondary ? "[REPORT PACKAGE SECONDARY ERROR]" : "[REPORT PACKAGE ERROR]", {
+    stage: error.stage,
+    code: error.code,
+    message: error.originalMessage,
+  });
+}
+
+async function runReportPackageStage<T>(stage: ReportPackageStage, operation: () => Promise<T> | T): Promise<T> {
+  console.info(`[REPORT PACKAGE] stage=${stage} status=START`);
+  try {
+    const result = await operation();
+    console.info(`[REPORT PACKAGE] stage=${stage} status=OK`);
+    return result;
+  } catch (error) {
+    const stageError = toStageError(stage, error);
+    logStageError(stageError);
+    throw stageError;
+  }
+}
+
+export function getReportPackageErrorDiagnostic(error: unknown): ReportPackageErrorDiagnostic {
+  if (error instanceof ReportPackageStageError) {
+    return { stage: error.stage, code: error.code, message: error.originalMessage };
+  }
+  const rawMessage = error instanceof Error ? error.message : String(error ?? "UNKNOWN_ERROR");
+  const sanitized = sanitizeDiagnosticText(rawMessage, "UNKNOWN_ERROR");
+  const match = sanitized.match(/REPORT_PACKAGE_STAGE_FAILED:([^:]+):([^:]+):(.+)$/);
+  const stage = match?.[1] && REPORT_PACKAGE_STAGES.has(match[1] as ReportPackageStage)
+    ? match[1] as ReportPackageStage
+    : null;
+  return {
+    stage,
+    code: match?.[2] || errorCode(error),
+    message: match?.[3] || sanitized,
+  };
+}
 
 export interface InstitutionalReportPackageActor {
   uid: string;
@@ -295,39 +410,44 @@ export class InstitutionalReportPackageService {
     annexBlob: Blob;
   }): Promise<InstitutionalReportPackageManifest> {
     const packageId = input.packageId || createInstitutionalReportPackageId();
-    const actor = resolveActor(input.generatedBy);
-    const [snapshotHash, reportHash, annexHash] = await Promise.all([
-      buildInstitutionalSnapshotHash(input.generationContext),
-      sha256Blob(input.reportBlob),
-      sha256Blob(input.annexBlob),
-    ]);
+    const actor = await runReportPackageStage("RESOLVE_ACTOR", () => resolveActor(input.generatedBy));
+    const [snapshotHash, reportHash, annexHash] = await runReportPackageStage(
+      "BUILD_SNAPSHOT_HASHES",
+      () => Promise.all([
+        buildInstitutionalSnapshotHash(input.generationContext),
+        sha256Blob(input.reportBlob),
+        sha256Blob(input.annexBlob),
+      ])
+    );
     const createdAt = this.now();
-    let manifest = await this.repository.reserve(input.projectId, packageId, (version) => {
-      const filenames = buildVersionedReportPackageFilenames(input.numeroExpediente, version);
-      const root = `projects/${input.projectId}/reports/${packageId}/v${version}`;
-      return {
-        packageId,
-        projectId: input.projectId,
-        numeroExpediente: input.numeroExpediente,
-        version,
-        generatedAt: input.generatedAt,
-        generatedBy: actor,
-        state: "GENERATING",
-        snapshotHash,
-        createdAt,
-        updatedAt: createdAt,
-        artifacts: {
-          executiveReport: { kind: "EXECUTIVE_REPORT", filename: filenames.executiveReport, storagePath: `${root}/${filenames.executiveReport}`, sha256: reportHash, sizeBytes: input.reportBlob.size, state: "PENDING" },
-          technicalAnnex: { kind: "TECHNICAL_ANNEX", filename: filenames.technicalAnnex, storagePath: `${root}/${filenames.technicalAnnex}`, sha256: annexHash, sizeBytes: input.annexBlob.size, state: "PENDING" },
-        },
-        lineage: {
-          reportSnapshotId: input.generationContext.documentModel?.reportSnapshotId || input.generationContext.institutionalReportInput?.reportSnapshotId || null,
-          institutionalReportInputId: input.generationContext.institutionalReportInput?.institutionalReportInputId || null,
-          documentModelId: input.generationContext.documentModel?.modelId || null,
-        },
-        failureReason: null,
-      };
-    });
+    let manifest = await runReportPackageStage("RESERVE_PACKAGE", () =>
+      this.repository.reserve(input.projectId, packageId, (version) => {
+        const filenames = buildVersionedReportPackageFilenames(input.numeroExpediente, version);
+        const root = `projects/${input.projectId}/reports/${packageId}/v${version}`;
+        return {
+          packageId,
+          projectId: input.projectId,
+          numeroExpediente: input.numeroExpediente,
+          version,
+          generatedAt: input.generatedAt,
+          generatedBy: actor,
+          state: "GENERATING",
+          snapshotHash,
+          createdAt,
+          updatedAt: createdAt,
+          artifacts: {
+            executiveReport: { kind: "EXECUTIVE_REPORT", filename: filenames.executiveReport, storagePath: `${root}/${filenames.executiveReport}`, sha256: reportHash, sizeBytes: input.reportBlob.size, state: "PENDING" },
+            technicalAnnex: { kind: "TECHNICAL_ANNEX", filename: filenames.technicalAnnex, storagePath: `${root}/${filenames.technicalAnnex}`, sha256: annexHash, sizeBytes: input.annexBlob.size, state: "PENDING" },
+          },
+          lineage: {
+            reportSnapshotId: input.generationContext.documentModel?.reportSnapshotId || input.generationContext.institutionalReportInput?.reportSnapshotId || null,
+            institutionalReportInputId: input.generationContext.institutionalReportInput?.institutionalReportInputId || null,
+            documentModelId: input.generationContext.documentModel?.modelId || null,
+          },
+          failureReason: null,
+        };
+      })
+    );
 
     if (manifest.snapshotHash !== snapshotHash
       || manifest.artifacts.executiveReport.sha256 !== reportHash
@@ -337,19 +457,37 @@ export class InstitutionalReportPackageService {
     if (manifest.state === "GENERATED") return manifest;
 
     try {
-      await this.storage.storeImmutable(manifest.artifacts.executiveReport.storagePath, input.reportBlob, {
-        sha256: reportHash, packageId, version: manifest.version, kind: "EXECUTIVE_REPORT",
-      });
-      manifest = await this.repository.saveArtifact(input.projectId, packageId, "executiveReport", { ...manifest.artifacts.executiveReport, state: "STORED" }, this.now());
-      await this.storage.storeImmutable(manifest.artifacts.technicalAnnex.storagePath, input.annexBlob, {
-        sha256: annexHash, packageId, version: manifest.version, kind: "TECHNICAL_ANNEX",
-      });
-      manifest = await this.repository.saveArtifact(input.projectId, packageId, "technicalAnnex", { ...manifest.artifacts.technicalAnnex, state: "STORED" }, this.now());
-      return await this.repository.markGenerated(input.projectId, packageId, this.now());
+      await runReportPackageStage("STORE_EXECUTIVE_REPORT", () =>
+        this.storage.storeImmutable(manifest.artifacts.executiveReport.storagePath, input.reportBlob, {
+          sha256: reportHash, packageId, version: manifest.version, kind: "EXECUTIVE_REPORT",
+        })
+      );
+      manifest = await runReportPackageStage("SAVE_EXECUTIVE_REPORT_STATE", () =>
+        this.repository.saveArtifact(input.projectId, packageId, "executiveReport", { ...manifest.artifacts.executiveReport, state: "STORED" }, this.now())
+      );
+      await runReportPackageStage("STORE_TECHNICAL_ANNEX", () =>
+        this.storage.storeImmutable(manifest.artifacts.technicalAnnex.storagePath, input.annexBlob, {
+          sha256: annexHash, packageId, version: manifest.version, kind: "TECHNICAL_ANNEX",
+        })
+      );
+      manifest = await runReportPackageStage("SAVE_TECHNICAL_ANNEX_STATE", () =>
+        this.repository.saveArtifact(input.projectId, packageId, "technicalAnnex", { ...manifest.artifacts.technicalAnnex, state: "STORED" }, this.now())
+      );
+      return await runReportPackageStage("MARK_GENERATED", () =>
+        this.repository.markGenerated(input.projectId, packageId, this.now())
+      );
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      await this.repository.markFailed(input.projectId, packageId, reason, this.now());
-      throw error;
+      const primaryError = error instanceof ReportPackageStageError
+        ? error
+        : toStageError("MARK_GENERATED", error);
+      console.info("[REPORT PACKAGE] stage=MARK_FAILED status=START");
+      try {
+        await this.repository.markFailed(input.projectId, packageId, primaryError.message, this.now());
+        console.info("[REPORT PACKAGE] stage=MARK_FAILED status=OK");
+      } catch (markFailedError) {
+        logStageError(toStageError("MARK_FAILED", markFailedError), true);
+      }
+      throw primaryError;
     }
   }
 
@@ -364,17 +502,19 @@ export class InstitutionalReportPackageService {
       throw new Error("REPORT_PACKAGE_NOT_DOWNLOADABLE");
     }
     const [executiveReport, technicalAnnex] = await Promise.all([
-      this.storage.get(manifest.artifacts.executiveReport.storagePath),
-      this.storage.get(manifest.artifacts.technicalAnnex.storagePath),
+      runReportPackageStage("DOWNLOAD_EXECUTIVE", () => this.storage.get(manifest.artifacts.executiveReport.storagePath)),
+      runReportPackageStage("DOWNLOAD_TECHNICAL_ANNEX", () => this.storage.get(manifest.artifacts.technicalAnnex.storagePath)),
     ]);
-    const [executiveReportHash, technicalAnnexHash] = await Promise.all([
-      sha256Blob(executiveReport),
-      sha256Blob(technicalAnnex),
-    ]);
-    if (executiveReportHash !== manifest.artifacts.executiveReport.sha256
-      || technicalAnnexHash !== manifest.artifacts.technicalAnnex.sha256) {
-      throw new Error("REPORT_PACKAGE_INTEGRITY_VIOLATION");
-    }
+    await runReportPackageStage("VERIFY_DOWNLOAD_HASHES", async () => {
+      const [executiveReportHash, technicalAnnexHash] = await Promise.all([
+        sha256Blob(executiveReport),
+        sha256Blob(technicalAnnex),
+      ]);
+      if (executiveReportHash !== manifest.artifacts.executiveReport.sha256
+        || technicalAnnexHash !== manifest.artifacts.technicalAnnex.sha256) {
+        throw new Error("REPORT_PACKAGE_INTEGRITY_VIOLATION");
+      }
+    });
     return { manifest, executiveReport, technicalAnnex };
   }
 }

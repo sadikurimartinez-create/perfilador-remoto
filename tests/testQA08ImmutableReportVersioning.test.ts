@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import {
   buildInstitutionalSnapshotHash,
+  getReportPackageErrorDiagnostic,
   InstitutionalReportPackageService,
   toExactArrayBuffer,
   type InstitutionalReportPackageArtifact,
@@ -13,8 +14,12 @@ import {
 class MemoryRepository implements InstitutionalReportPackageRepository {
   readonly records = new Map<string, InstitutionalReportPackageManifest>();
   private readonly versions = new Map<string, number>();
+  failReserve = false;
+  failMarkGenerated = false;
+  failMarkFailed = false;
 
   async reserve(projectId: string, packageId: string, createManifest: (version: number) => InstitutionalReportPackageManifest) {
+    if (this.failReserve) throw new Error("RESERVE_TEST_FAILURE");
     const key = `${projectId}/${packageId}`;
     const existing = this.records.get(key);
     if (existing) return existing;
@@ -41,6 +46,7 @@ class MemoryRepository implements InstitutionalReportPackageRepository {
   }
 
   async markGenerated(projectId: string, packageId: string, updatedAt: string) {
+    if (this.failMarkGenerated) throw new Error("MARK_GENERATED_TEST_FAILURE");
     const manifest = await this.required(projectId, packageId);
     if (manifest.artifacts.executiveReport.state !== "STORED" || manifest.artifacts.technicalAnnex.state !== "STORED") {
       throw new Error("REPORT_PACKAGE_INCOMPLETE");
@@ -51,6 +57,7 @@ class MemoryRepository implements InstitutionalReportPackageRepository {
   }
 
   async markFailed(projectId: string, packageId: string, reason: string, updatedAt: string) {
+    if (this.failMarkFailed) throw new Error("MARK_FAILED_TEST_FAILURE");
     const manifest = await this.required(projectId, packageId);
     const saved = { ...manifest, state: "FAILED" as const, failureReason: reason, updatedAt };
     this.records.set(`${projectId}/${packageId}`, saved);
@@ -68,8 +75,10 @@ class MemoryStorage implements InstitutionalReportPackageStorage {
   readonly objects = new Map<string, { blob: Blob; sha256: string }>();
   readonly writes: string[] = [];
   failAnnex = false;
+  failExecutive = false;
 
   async storeImmutable(pathValue: string, blob: Blob, metadata: { sha256: string }) {
+    if (this.failExecutive && pathValue.includes("_INFORME_")) throw new Error("REPORT_STORAGE_FAILED");
     if (this.failAnnex && pathValue.includes("ANEXO_TECNICO")) throw new Error("ANNEX_STORAGE_FAILED");
     const existing = this.objects.get(pathValue);
     if (existing && existing.sha256 !== metadata.sha256) throw new Error("REPORT_PACKAGE_IMMUTABILITY_VIOLATION");
@@ -121,6 +130,15 @@ function visualContext(data: ArrayBuffer | ArrayBufferView) {
 }
 
 describe("QA-08 FASE 3F - immutable report package versioning", () => {
+  beforeEach(() => {
+    jest.spyOn(console, "info").mockImplementation(() => undefined);
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   test("1 primera generación crea v1", async () => {
     const { service, base } = fixture();
     expect((await service.persistGeneratedPackage({ ...base, packageId: "pkg-1" })).version).toBe(1);
@@ -294,5 +312,85 @@ describe("QA-08 FASE 3F - immutable report package versioning", () => {
     expect(JSON.stringify(await repository.get(base.projectId, manifest.packageId))).toBe(beforeManifest);
     expect(Array.from(storage.objects.keys()).sort()).toEqual(beforePaths);
     expect((await repository.get(base.projectId, manifest.packageId))?.state).toBe("GENERATED");
+  });
+
+  test("25 fallo de reserve conserva etapa, código y mensaje", async () => {
+    const setup = fixture();
+    setup.repository.failReserve = true;
+    const promise = setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-reserve-failure" });
+    await expect(promise).rejects.toMatchObject({
+      stage: "RESERVE_PACKAGE",
+      code: "RESERVE_TEST_FAILURE",
+      originalMessage: "RESERVE_TEST_FAILURE",
+    });
+  });
+
+  test("26 fallo de almacenamiento del Informe identifica STORE_EXECUTIVE_REPORT", async () => {
+    const setup = fixture();
+    setup.storage.failExecutive = true;
+    await expect(setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-report-failure" })).rejects.toMatchObject({
+      stage: "STORE_EXECUTIVE_REPORT",
+      code: "REPORT_STORAGE_FAILED",
+    });
+  });
+
+  test("27 fallo de almacenamiento del Anexo identifica STORE_TECHNICAL_ANNEX", async () => {
+    const setup = fixture();
+    setup.storage.failAnnex = true;
+    await expect(setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-annex-stage" })).rejects.toMatchObject({
+      stage: "STORE_TECHNICAL_ANNEX",
+      code: "ANNEX_STORAGE_FAILED",
+    });
+  });
+
+  test("28 fallo de cierre identifica MARK_GENERATED", async () => {
+    const setup = fixture();
+    setup.repository.failMarkGenerated = true;
+    await expect(setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-mark-generated" })).rejects.toMatchObject({
+      stage: "MARK_GENERATED",
+      code: "MARK_GENERATED_TEST_FAILURE",
+    });
+  });
+
+  test("29 fallo secundario de markFailed no sustituye el error primario", async () => {
+    const setup = fixture();
+    setup.storage.failExecutive = true;
+    setup.repository.failMarkFailed = true;
+    const promise = setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-double-failure" });
+    await expect(promise).rejects.toMatchObject({
+      stage: "STORE_EXECUTIVE_REPORT",
+      code: "REPORT_STORAGE_FAILED",
+      originalMessage: "REPORT_STORAGE_FAILED",
+    });
+    expect(console.error).toHaveBeenCalledWith(
+      "[REPORT PACKAGE SECONDARY ERROR]",
+      expect.objectContaining({ stage: "MARK_FAILED", code: "MARK_FAILED_TEST_FAILURE" })
+    );
+  });
+
+  test("30 diagnóstico recupera metadata tras la envoltura EXECUTIVE_GEOINT_BLOCKED", () => {
+    expect(getReportPackageErrorDiagnostic(
+      new Error("EXECUTIVE_GEOINT_BLOCKED:REPORT_PACKAGE_STAGE_FAILED:RESERVE_PACKAGE:permission-denied:Missing permissions")
+    )).toEqual({
+      stage: "RESERVE_PACKAGE",
+      code: "permission-denied",
+      message: "Missing permissions",
+    });
+  });
+
+  test("31 PhotoAlbum registra y muestra el error institucional saneado", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
+    expect(source).toContain('console.error("[INSTITUTIONAL REPORT GENERATION ERROR]"');
+    expect(source).toContain('setToast({ type: "error", message: diagnosticLabel');
+    expect(source).toContain("getReportPackageErrorDiagnostic(err)");
+  });
+
+  test("32 diagnóstico redacta URLs y tokens", () => {
+    const diagnostic = getReportPackageErrorDiagnostic(
+      new Error("Request failed at https://storage.example/object token=secret-value")
+    );
+    expect(diagnostic.message).toContain("[REDACTED_URL]");
+    expect(diagnostic.message).toContain("token=[REDACTED]");
+    expect(diagnostic.message).not.toContain("secret-value");
   });
 });

@@ -66,6 +66,7 @@ import {
 } from "@/services/geoint/denueScinceOrchestrationAdapter";
 import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
 import {
+  getReportPackageErrorDiagnostic,
   institutionalReportPackageService,
   type InstitutionalReportPackageManifest,
 } from "@/services/institutionalReportPackageService";
@@ -1455,7 +1456,17 @@ export function PhotoAlbum({
         ].sort((a, b) => b.version - a.version));
       }
     } catch (err: any) {
-      setError(err?.message || "No fue posible generar el producto institucional.");
+      const diagnostic = getReportPackageErrorDiagnostic(err);
+      const diagnosticLabel = diagnostic.stage
+        ? `[${diagnostic.stage}/${diagnostic.code}] ${diagnostic.message}`
+        : diagnostic.message;
+      console.error("[INSTITUTIONAL REPORT GENERATION ERROR]", {
+        message: diagnostic.message,
+        stage: diagnostic.stage,
+        code: diagnostic.code,
+      });
+      setError(diagnosticLabel || "No fue posible generar el producto institucional.");
+      setToast({ type: "error", message: diagnosticLabel || "No fue posible generar el producto institucional." });
     } finally {
       institutionalGenerationInFlightRef.current = false;
       setIsSavingAnalysis(false);
