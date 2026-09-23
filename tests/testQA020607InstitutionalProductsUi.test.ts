@@ -264,17 +264,23 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     const helper = source("src/utils/institutionalProductsUi.ts");
     const handler = photoAlbum.slice(photoAlbum.indexOf("const handleInstitutionalProductExport"), photoAlbum.indexOf("}, [institutionalProducts"));
     const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("const [showLegacyReportTools"), photoAlbum.indexOf("<DynamicPopup"));
+    const visibleReportCtas = photoAlbum.match(/GENERAR INFORME/g) || [];
+    const executiveReportCalls = photoAlbum.match(/handleInstitutionalProductExport\(institutionalProducts\.actions\.executiveReport\.reportKind\)/g) || [];
 
-    expect(helper).toContain("Generar Informe Ejecutivo GEOINT");
+    expect(helper).toContain("GENERAR INFORME");
     expect(helper).toContain('reportKind: "EXECUTIVE_GEOINT"');
     expect(photoAlbum).toContain("const [showLegacyReportTools, setShowLegacyReportTools] = useState(false)");
     expect(canonicalCta).toContain("Productos Institucionales");
     expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
-    expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)");
-    expect(canonicalCta).toContain("Mostrar herramientas históricas");
-    expect(canonicalCta).toContain("showLegacyReportTools &&");
-    expect(photoAlbum).toContain("Regenerar Dictamen Histórico Legacy");
-    expect(photoAlbum).toContain("Histórico / Compatibilidad");
+    expect(canonicalCta).not.toContain("Mostrar herramientas históricas");
+    expect(canonicalCta).not.toContain("showLegacyReportTools &&");
+    expect(photoAlbum).not.toContain("Regenerar Dictamen Histórico Legacy");
+    expect(photoAlbum).not.toContain("Histórico / Compatibilidad");
+    expect(photoAlbum).not.toContain("Generar Anexo Técnico");
+    expect(photoAlbum).not.toContain("Generar Informe Ejecutivo GEOINT");
+    expect(visibleReportCtas).toHaveLength(1);
+    expect(executiveReportCalls).toHaveLength(1);
+    expect(canonicalCta).toContain("GENERAR INFORME");
     expect(photoAlbum).toContain("PROCESAMIENTO LEGACY DE DICTAMEN HISTÓRICO - GEOINT v8.0");
     expect(photoAlbum).not.toContain("Regenerar / Actualizar Informe Oficial");
     expect(handler).toContain("[REPORT PRODUCT]");
@@ -325,7 +331,7 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(canonicalCta).not.toContain("disabled={false}");
     expect(canonicalCta).not.toContain("readyForInstitutionalReport: true");
     expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
-    expect(canonicalCta).toContain("showLegacyReportTools &&");
+    expect(canonicalCta).not.toContain("handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)");
   });
 
   test("35 PhotoAlbum conserva aiAnalyticalOutput y exige revisión humana del análisis", () => {

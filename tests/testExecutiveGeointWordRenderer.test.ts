@@ -268,6 +268,13 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(text).toContain("buildExecutiveVisualComposition");
     expect(text).toContain("buildExecutiveGeointReportDocumentModel");
     expect(text).toContain("renderExecutiveGeointWordDocument");
+    expect(text).toContain("const generationContext = await buildInstitutionalGenerationContext");
+    expect(text).toContain("renderExecutiveGeointTechnicalAnnexWordDocument");
+    expect(text).toContain("const reportBlob = await Packer.toBlob(renderedReport.document)");
+    expect(text).toContain("const annexBlob = await Packer.toBlob(renderedAnnex.document)");
+    expect(text.indexOf("const reportBlob = await Packer.toBlob(renderedReport.document)")).toBeLessThan(text.indexOf("saveAs(reportBlob, reportFilename)"));
+    expect(text.indexOf("const annexBlob = await Packer.toBlob(renderedAnnex.document)")).toBeLessThan(text.indexOf("saveAs(reportBlob, reportFilename)"));
+    expect(text).toContain("visualAssetsById: generationContext.visualAssetsById");
   });
 
   test("27 data URL se resuelve y renderiza", async () => {

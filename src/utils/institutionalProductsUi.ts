@@ -267,12 +267,12 @@ export function buildInstitutionalProductsViewModel(
     pendingMessages,
     actions: {
       executiveReport: {
-        label: "Generar Informe Ejecutivo GEOINT",
+        label: "GENERAR INFORME",
         reportKind: "EXECUTIVE_GEOINT",
         disabled,
       },
       technicalAnnex: {
-        label: "Generar Anexo Técnico",
+        label: "Anexo tecnico interno",
         reportKind: "EXECUTIVE_GEOINT_TECHNICAL_ANNEX",
         disabled,
       },

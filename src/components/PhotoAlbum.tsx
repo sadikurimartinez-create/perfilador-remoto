@@ -5514,7 +5514,7 @@ const hasMinimumPhotos =
                   Productos Institucionales
                 </p>
                 <p className="text-[11px] text-slate-400 font-medium">
-                  Ruta canónica de emisión documental: Informe Ejecutivo GEOINT y Anexo Técnico.
+                  Ruta canónica de emisión documental institucional.
                 </p>
               </div>
               <button
@@ -5524,16 +5524,7 @@ const hasMinimumPhotos =
                 title={institutionalProducts.pendingMessages.join(" ")}
                 className="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black px-8 py-4 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <span>📄</span> {institutionalProducts.actions.executiveReport.label}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)}
-                disabled={isSavingAnalysis || institutionalProducts.actions.technicalAnnex.disabled}
-                title={institutionalProducts.pendingMessages.join(" ")}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-cyan-200 border border-cyan-500/40 font-black px-8 py-3 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <span>📎</span> {institutionalProducts.actions.technicalAnnex.label}
+                <span>📄</span> GENERAR INFORME
               </button>
               {!institutionalProducts.readyForInstitutionalReport && (
                 <div className="rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-3">
@@ -5586,32 +5577,6 @@ const hasMinimumPhotos =
                   )}
                 </div>
               )}
-              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setShowLegacyReportTools((prev) => !prev)}
-                  className="w-full flex items-center justify-between gap-3 text-left text-[10px] text-amber-300 font-black uppercase tracking-wider"
-                >
-                  <span>Histórico / Compatibilidad</span>
-                  <span>{showLegacyReportTools ? "Ocultar herramientas históricas" : "Mostrar herramientas históricas"}</span>
-                </button>
-                {showLegacyReportTools && (
-                  <button
-                    type="button"
-                    onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); void confirmAndGenerateProfile(); }}
-                    disabled={isGeneratingAI}
-                    className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 font-black px-6 py-3 rounded-xl uppercase tracking-wider text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {isGeneratingAI ? (
-                      <>Re-procesando Dictamen Histórico Legacy...</>
-                    ) : (
-                      <>
-                        <span>📄</span> Regenerar Dictamen Histórico Legacy
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
             </div>
           </div>
     </section>
@@ -5737,26 +5702,6 @@ const hasMinimumPhotos =
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <CEIPOLButton
-                      variant="confirm"
-                      size="sm"
-                      disabled={isSavingAnalysis || institutionalProducts.actions.executiveReport.disabled}
-                      title={institutionalProducts.pendingMessages.join(" ")}
-                      onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)}
-                    >
-                      {institutionalProducts.actions.executiveReport.label}
-                    </CEIPOLButton>
-                    <CEIPOLButton
-                      variant="primary"
-                      size="sm"
-                      disabled={isSavingAnalysis || institutionalProducts.actions.technicalAnnex.disabled}
-                      title={institutionalProducts.pendingMessages.join(" ")}
-                      onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)}
-                    >
-                      {institutionalProducts.actions.technicalAnnex.label}
-                    </CEIPOLButton>
-                  </div>
                 </div>
 
                 <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800/80 space-y-3">
@@ -6270,13 +6215,6 @@ const hasMinimumPhotos =
                         onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); handleConsultarHistorial(); }}
                       >
                         📂 Consultar Historial
-                      </CEIPOLButton>
-                      <CEIPOLButton
-                        variant="secondary"
-                        size="sm"
-                        onClick={(e) => { setClickCoords({ x: e.clientX, y: e.clientY }); setShowReportModal(false); void confirmAndGenerateProfile(); }}
-                      >
-                        🔄 Regenerar Dictamen Histórico Legacy
                       </CEIPOLButton>
                     </div>
                   )}

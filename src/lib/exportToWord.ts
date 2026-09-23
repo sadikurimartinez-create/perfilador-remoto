@@ -799,6 +799,60 @@ async function resolveInstitutionalVisualAssets(visualComposition: any, geograph
   });
 }
 
+async function buildInstitutionalGenerationContext(payload: any, projectName: string, reportNumber?: string, user?: any) {
+  const institutionalReportInput = buildInstitutionalReportInput(payload);
+  const generatedAt = institutionalReportInput.generatedAt;
+  const numeroExpediente = payload.numeroExpediente || reportNumber;
+  const projectId = payload.projectId || institutionalReportInput.projectId;
+  const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
+    documentIdentity: {
+      numeroExpediente,
+      ceipolId: payload.ceipolId,
+      projectId,
+      name: projectName,
+    },
+    nombreExpediente: projectName,
+    fecha: generatedAt,
+    personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
+    clasificacion: payload.classification || payload.clasificacion,
+  });
+  const visualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
+  const documentModel = buildExecutiveGeointReportDocumentModel(
+    executiveModel,
+    visualComposition,
+    institutionalReportInput,
+    {
+      numeroExpediente,
+      ceipolId: payload.ceipolId,
+    }
+  );
+  const visualAssetsById = await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography, true);
+  return {
+    institutionalReportInput,
+    generatedAt,
+    numeroExpediente,
+    projectId,
+    visualComposition,
+    executiveModel,
+    documentModel,
+    visualAssetsById,
+  };
+}
+
+async function hydrateTechnicalAnnexVisualAssets(generationContext: any, annexModel: any) {
+  const visualAssetsById = generationContext.visualAssetsById;
+  for (const section of annexModel.sections.filter((item: any) => item.sectionId === "field-photographs" || item.sectionId === "street-view")) {
+    for (const record of section.records) {
+      if (!record.visualReference || visualAssetsById[record.recordId]) continue;
+      const resolved = await getImageDimensionsAndBuffer(record.visualReference, 360, 220, record.title, record.recordId, { disableFallback: true });
+      if (resolved) visualAssetsById[record.recordId] = {
+        data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any,
+      };
+    }
+  }
+  return visualAssetsById;
+}
+
 export async function exportToWord(
   payload: any,
   projectName: string,
@@ -812,37 +866,47 @@ export async function exportToWord(
 
   if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT") {
     try {
-      const institutionalReportInput = buildInstitutionalReportInput(payload);
-      const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
-        documentIdentity: {
-          numeroExpediente: payload.numeroExpediente || reportNumber,
-          ceipolId: payload.ceipolId,
-          projectId: payload.projectId,
-          name: projectName,
-        },
-        nombreExpediente: projectName,
-        fecha: payload.date || payload.fecha || institutionalReportInput.generatedAt,
-        personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
-        clasificacion: payload.classification || payload.clasificacion,
-      });
-      const visualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
-      const executiveDocumentModel = buildExecutiveGeointReportDocumentModel(
-        executiveModel,
-        visualComposition,
-        institutionalReportInput,
-        {
-          numeroExpediente: payload.numeroExpediente || reportNumber,
-          ceipolId: payload.ceipolId,
-        }
-      );
-      const rendered = renderExecutiveGeointWordDocument(executiveDocumentModel, {
+      const generationContext = await buildInstitutionalGenerationContext(payload, projectName, reportNumber, user);
+      const renderedReport = renderExecutiveGeointWordDocument(generationContext.documentModel, {
         projectName,
         ceipolId: payload.ceipolId,
-        visualAssetsById: await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography),
+        visualAssetsById: generationContext.visualAssetsById,
       });
-      assertExecutiveGeointPrincipalMapRendered(rendered);
-      const blob = await Packer.toBlob(rendered.document);
-      saveAs(blob, rendered.filename);
+      assertExecutiveGeointPrincipalMapRendered(renderedReport);
+      const annexModel = buildExecutiveGeointTechnicalAnnexModel(
+        generationContext.institutionalReportInput,
+        generationContext.executiveModel,
+        generationContext.visualComposition,
+        generationContext.documentModel,
+        {
+          numeroExpediente: generationContext.numeroExpediente,
+          ceipolId: payload.ceipolId,
+          nombreExpediente: projectName,
+          fecha: generationContext.generatedAt,
+          personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
+          clasificacion: payload.classification || payload.clasificacion,
+        }
+      );
+      const renderedAnnex = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, {
+        projectName,
+        visualAssetsById: await hydrateTechnicalAnnexVisualAssets(generationContext, annexModel),
+      });
+      const reportBlob = await Packer.toBlob(renderedReport.document);
+      const annexBlob = await Packer.toBlob(renderedAnnex.document);
+      const reportFilename = buildNumeroExpedienteFilename({
+        numeroExpediente: renderedReport.visibleNumeroExpediente || generationContext.numeroExpediente,
+        ceipolId: payload.ceipolId,
+        projectName: `INFORME_${projectName}`,
+        extension: "docx",
+      });
+      const annexFilename = buildNumeroExpedienteFilename({
+        numeroExpediente: annexModel.identity.numeroExpediente,
+        ceipolId: payload.ceipolId,
+        projectName: `ANEXO_TECNICO_${projectName}`,
+        extension: "docx",
+      });
+      saveAs(reportBlob, reportFilename);
+      saveAs(annexBlob, annexFilename);
       return;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -853,53 +917,22 @@ export async function exportToWord(
 
   if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT_TECHNICAL_ANNEX") {
     try {
-      const institutionalReportInput = buildInstitutionalReportInput(payload);
-      const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
-        documentIdentity: {
-          numeroExpediente: payload.numeroExpediente || reportNumber,
-          ceipolId: payload.ceipolId,
-          projectId: payload.projectId,
-          name: projectName,
-        },
-        nombreExpediente: projectName,
-        fecha: payload.date || payload.fecha || institutionalReportInput.generatedAt,
-        personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
-        clasificacion: payload.classification || payload.clasificacion,
-      });
-      const visualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
-      const executiveDocumentModel = buildExecutiveGeointReportDocumentModel(
-        executiveModel,
-        visualComposition,
-        institutionalReportInput,
-        {
-          numeroExpediente: payload.numeroExpediente || reportNumber,
-          ceipolId: payload.ceipolId,
-        }
-      );
+      const generationContext = await buildInstitutionalGenerationContext(payload, projectName, reportNumber, user);
       const annexModel = buildExecutiveGeointTechnicalAnnexModel(
-        institutionalReportInput,
-        executiveModel,
-        visualComposition,
-        executiveDocumentModel,
+        generationContext.institutionalReportInput,
+        generationContext.executiveModel,
+        generationContext.visualComposition,
+        generationContext.documentModel,
         {
-          numeroExpediente: payload.numeroExpediente || reportNumber,
+          numeroExpediente: generationContext.numeroExpediente,
           ceipolId: payload.ceipolId,
           nombreExpediente: projectName,
-          fecha: payload.date || payload.fecha || institutionalReportInput.generatedAt,
+          fecha: generationContext.generatedAt,
           personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
           clasificacion: payload.classification || payload.clasificacion,
         }
       );
-      const visualAssetsById = await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography, true);
-      for (const section of annexModel.sections.filter((item) => item.sectionId === "field-photographs" || item.sectionId === "street-view")) {
-        for (const record of section.records) {
-          if (!record.visualReference || visualAssetsById[record.recordId]) continue;
-          const resolved = await getImageDimensionsAndBuffer(record.visualReference, 360, 220, record.title, record.recordId, { disableFallback: true });
-          if (resolved) visualAssetsById[record.recordId] = {
-            data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any,
-          };
-        }
-      }
+      const visualAssetsById = await hydrateTechnicalAnnexVisualAssets(generationContext, annexModel);
       const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, { projectName, visualAssetsById });
       const blob = await Packer.toBlob(rendered.document);
       saveAs(blob, rendered.filename);
