@@ -143,12 +143,21 @@ function renderVisualPlacement(
   visualAssetsById: RenderOptions["visualAssetsById"],
   audit: ExecutiveGeointWordRenderResult["renderAudit"]
 ): any[] {
+  const captionParts = [
+    placement.caption,
+    placement.visualClass ? `Tipo de visual: ${placement.visualClass.replace(/_/g, " ")}.` : "",
+    placement.visibleSourceLabel ? `Fuente: ${placement.visibleSourceLabel}.` : "",
+    placement.cartographicMetadata?.geometryLabel ? `Geometría representada: ${placement.cartographicMetadata.geometryLabel}.` : "",
+    placement.cartographicMetadata?.legendLabel ? `Leyenda: ${placement.cartographicMetadata.legendLabel}.` : "",
+    placement.cartographicMetadata?.scaleLabel ? `Escala: ${placement.cartographicMetadata.scaleLabel}.` : "",
+    placement.cartographicMetadata?.orientationLabel ? `Orientación: ${placement.cartographicMetadata.orientationLabel}.` : "",
+  ].filter(Boolean).join(" ");
   const asset = visualAssetsById?.[placement.visualId];
   if (!asset?.data) {
     audit.missingVisualAssetIds.push(placement.visualId);
     return [
       paragraph(placement.headline, { bold: true, size: 20, color: "0D2B52" }),
-      paragraph(placement.caption),
+      paragraph(captionParts),
     ];
   }
 
@@ -169,7 +178,7 @@ function renderVisualPlacement(
         } as any),
       ],
     }),
-    paragraph(placement.caption, { size: 16, color: "5B6573", align: AlignmentType.CENTER }),
+    paragraph(captionParts, { size: 16, color: "5B6573", align: AlignmentType.CENTER }),
   ];
 }
 

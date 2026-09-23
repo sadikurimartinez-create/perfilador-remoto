@@ -53,6 +53,14 @@ export interface ExecutiveVisualPlacement {
   placementRole: "PRINCIPAL_TERRITORIAL_MAP" | "SUPPORTING_EVIDENCE" | "ANALYTICAL_SUPPORT";
   headline: string;
   caption: string;
+  visualClass?: "MAPA_CARTOGRAFICO" | "FOTOGRAFIA_CAMPO" | "STREET_VIEW" | "GRAFICA_ESTADISTICA" | "INFOGRAFIA" | "VISUAL_ANALITICO";
+  visibleSourceLabel?: string | null;
+  cartographicMetadata?: {
+    geometryLabel: string;
+    legendLabel: string | null;
+    scaleLabel: string | null;
+    orientationLabel: string | null;
+  };
 }
 
 export interface ExecutiveGeointReportDocumentModel {
@@ -284,6 +292,14 @@ function buildSections(
   const currentText = clean(hypothesis?.currentHypothesis)
     ? hypothesis.currentHypothesis
     : "No consta una hipótesis vigente en el insumo institucional.";
+  const geographyLabel = input.geography
+    ? `${input.geography.type === "INDIVIDUAL" ? "Punto territorial individual" : input.geography.type === "CORRIDOR" ? "Corredor territorial" : "Polígono territorial"}; estado ${input.geography.validationStatus}`
+    : "NO CONSIGNADO";
+  const profiler = clean(model.identity.personaPerfiladora) && !/no disponible/i.test(model.identity.personaPerfiladora)
+    ? model.identity.personaPerfiladora
+    : "NO CONSIGNADO";
+  const formulationDate = clean(initialVersion?.createdAt) || "NO CONSIGNADO";
+  const initialStatus = clean(initialVersion?.status) || "NO CONSIGNADO";
   const hypothesisEvidenceIds = [
     ...asArray<string>(hypothesis?.supportingEvidenceIds),
     ...asArray<string>(hypothesis?.contradictingEvidenceIds),
@@ -340,7 +356,7 @@ function buildSections(
     {
       sectionId: "initial-hypothesis",
       order: 3,
-      title: "HIPÓTESIS INICIAL",
+      title: "CAPÍTULO 0. HIPÓTESIS INICIAL Y TRAZABILIDAD",
       role: "Trayectoria de la hipótesis humana y su contraste con evidencia gobernada",
       content: [
         `Hipótesis inicial: ${initialText}`,
@@ -349,8 +365,13 @@ function buildSections(
         `Elementos de confirmación: ${linkedHypothesisElements(input, asArray<string>(hypothesis?.supportingEvidenceIds), asArray<string>(hypothesis?.supportingFindingIds))}`,
         `Elementos de refutación: ${linkedHypothesisElements(input, asArray<string>(hypothesis?.contradictingEvidenceIds), asArray<string>(hypothesis?.contradictingFindingIds))}`,
         `Conclusión analítica validada: ${conclusionText || "No consta una conclusión validada y vinculada a la hipótesis en el insumo institucional."}`,
+        "Contexto de formulación: NO CONSIGNADO",
+        `Geografía de referencia: ${geographyLabel}`,
+        `Persona perfiladora criminológica (PPC): ${profiler}`,
+        `Fecha de formulación: ${formulationDate}`,
+        `Estado de la hipótesis inicial: ${initialStatus}`,
       ],
-      densityPolicy: { targetPages: "0-1", maxItems: 6 },
+      densityPolicy: { targetPages: "0-1", maxItems: 11 },
       status: initialVersion?.authorType === "HUMAN" && clean(initialVersion.text) ? "READY" : "INCOMPLETE",
     },
     {
@@ -446,6 +467,15 @@ function buildSections(
   return sections.sort((a, b) => a.order - b.order);
 }
 
+function visualClass(visualType: string): ExecutiveVisualPlacement["visualClass"] {
+  if (visualType === "MAP" || visualType === "SECONDARY_MAP") return "MAPA_CARTOGRAFICO";
+  if (visualType === "FIELD_PHOTOGRAPH") return "FOTOGRAFIA_CAMPO";
+  if (visualType === "STREET_VIEW_CAPTURE") return "STREET_VIEW";
+  if (visualType === "STATISTICAL_CHART" || visualType === "TREND_VISUAL") return "GRAFICA_ESTADISTICA";
+  if (visualType === "INFOGRAPHIC") return "INFOGRAFIA";
+  return "VISUAL_ANALITICO";
+}
+
 function placementSectionForVisual(visualType: string): ExecutiveDocumentSectionId {
   if (visualType === "EVIDENCE_IMAGE") return "key-evidence";
   if (visualType === "PROSPECTIVE_SCENARIO") return "prospective-analysis";
@@ -460,6 +490,9 @@ function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): E
     placementRole: "PRINCIPAL_TERRITORIAL_MAP",
     headline: visible(visualComposition.principalTerritorialMap.executiveHeadline, "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA"),
     caption: visible(visualComposition.principalTerritorialMap.caption, "Mapa territorial principal."),
+    visualClass: "MAPA_CARTOGRAFICO",
+    visibleSourceLabel: visible(visualComposition.principalTerritorialMap.presentation.visibleSourceLabel) || null,
+    cartographicMetadata: visualComposition.principalTerritorialMap.presentation.cartographicMetadata,
   }];
   const seen = new Set(placements.map((item) => item.visualId));
   for (const visual of visualComposition.secondaryVisuals) {
@@ -470,6 +503,8 @@ function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): E
       placementRole: visual.visualType === "EVIDENCE_IMAGE" ? "SUPPORTING_EVIDENCE" : "ANALYTICAL_SUPPORT",
       headline: visible(visual.executiveHeadline, "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA"),
       caption: visible(visual.caption, "Visual ejecutivo gobernado."),
+      visualClass: visualClass(visual.visualType),
+      visibleSourceLabel: visible(visual.presentation.visibleSourceLabel) || null,
     });
     seen.add(visual.visualId);
   }

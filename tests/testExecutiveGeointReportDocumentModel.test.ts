@@ -3,6 +3,9 @@ import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveG
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
 import { buildExecutiveVisualComposition, MAX_EXECUTIVE_VISUALS } from "../src/utils/executiveVisualComposition";
 import { buildReportChapter0Hypothesis, formulateHumanHypothesis, reviseHumanHypothesis } from "../src/utils/hypothesisGovernance";
+import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
+import { Packer } from "docx";
+import JSZip from "jszip";
 
 const generatedAt = "2026-09-06T12:00:00.000Z";
 
@@ -195,6 +198,11 @@ function documentModel(modelOverrides: any = {}, inputOverrides: any = {}) {
   return buildExecutiveGeointReportDocumentModel(model as any, visuals, input as any);
 }
 
+async function documentXml(document: any): Promise<string> {
+  const zip = await JSZip.loadAsync(await Packer.toBuffer(document));
+  return zip.file("word/document.xml")?.async("string") || "";
+}
+
 describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
   test("1 estructura ejecutiva correcta", () => {
     expect(documentModel().sections.map((section) => section.sectionId)).toEqual([
@@ -248,7 +256,7 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
 
   test("10 no crea capitulos por fuente", () => {
     const titles = documentModel().sections.map((section) => section.title).join(" ");
-    expect(titles).not.toMatch(/CAP[IÍ]TULO|FOTOGRAF[IÍ]AS|ESTAD[IÍ]STICAS|PANDILLAS|MAPAS/);
+    expect(titles).not.toMatch(/FOTOGRAF[IÍ]AS|ESTAD[IÍ]STICAS|PANDILLAS|MAPAS/);
   });
 
   test("11 Street View no aparece como capitulo", () => {
@@ -424,7 +432,7 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     conclusions: [{ text: "Conclusión validada por PPC", findingIds: ["finding-1"] }],
     });
     const section = model.sections.find((item) => item.sectionId === "initial-hypothesis");
-    expect(section?.title).toBe("HIPÓTESIS INICIAL");
+    expect(section?.title).toBe("CAPÍTULO 0. HIPÓTESIS INICIAL Y TRAZABILIDAD");
     expect(section?.status).toBe("READY");
     expect(section?.content[0]).toBe(`Hipótesis inicial: ${initial}`);
     expect(section?.content[1]).toBe(`Hipótesis vigente: ${current}`);
@@ -472,6 +480,73 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     const section = model.sections.find((item) => item.sectionId === "initial-hypothesis");
     expect(section?.content[5]).toContain("No consta una conclusión validada y vinculada");
     expect(section?.content[5]).not.toContain("Conclusión ajena");
+  });
+
+  test("41A Capítulo 0 publica contexto gobernado disponible y separa hipótesis vigente", () => {
+    const model = documentModel({ identity: { ...executiveModel().identity, personaPerfiladora: "PPC Laura Méndez" } }, {
+      hypothesis: {
+        initialHypothesis: "Hipótesis humana inicial",
+        currentHypothesis: "Hipótesis vigente distinta",
+        status: "UNDER_REVIEW",
+        versions: [{
+          text: "Hipótesis humana inicial",
+          authorType: "HUMAN",
+          version: 1,
+          status: "FORMULATED",
+          createdAt: "2026-09-01T10:30:00.000Z",
+        }],
+      },
+    });
+    const content = model.sections.find((item) => item.sectionId === "initial-hypothesis")?.content || [];
+    expect(content).toContain("Hipótesis inicial: Hipótesis humana inicial");
+    expect(content).toContain("Hipótesis vigente: Hipótesis vigente distinta");
+    expect(content).toContain("Geografía de referencia: Punto territorial individual; estado VALID");
+    expect(content).toContain("Persona perfiladora criminológica (PPC): PPC Laura Méndez");
+    expect(content).toContain("Fecha de formulación: 2026-09-01T10:30:00.000Z");
+    expect(content).toContain("Estado de la hipótesis inicial: FORMULATED");
+  });
+
+  test("41B Capítulo 0 expresa ausencias sin backfill ficticio", () => {
+    const model = documentModel({
+      identity: { ...executiveModel().identity, personaPerfiladora: "Persona perfiladora no disponible" },
+      territorialSituation: { ...executiveModel().territorialSituation, canonicalGeography: null },
+    }, {
+      geography: null,
+      hypothesis: { currentHypothesis: "Hipótesis vigente", versions: [] },
+    });
+    const section = model.sections.find((item) => item.sectionId === "initial-hypothesis")!;
+    expect(section.status).toBe("INCOMPLETE");
+    expect(section.content[0]).not.toContain("Hipótesis vigente");
+    expect(section.content).toContain("Contexto de formulación: NO CONSIGNADO");
+    expect(section.content).toContain("Geografía de referencia: NO CONSIGNADO");
+    expect(section.content).toContain("Persona perfiladora criminológica (PPC): NO CONSIGNADO");
+    expect(section.content).toContain("Fecha de formulación: NO CONSIGNADO");
+    expect(section.content).toContain("Estado de la hipótesis inicial: NO CONSIGNADO");
+  });
+
+  test("41C cadena canónica entrega Capítulo 0 completo al OOXML", async () => {
+    const initial = formulateHumanHypothesis({
+      projectId: "exp-document",
+      text: "Hipótesis inicial formulada por la PPC",
+      geographyId: geography().geographyId,
+      authorId: "ppc-1",
+      createdAt: "2026-09-01T10:30:00.000Z",
+    });
+    const revised = reviseHumanHypothesis(initial, {
+      text: "Hipótesis vigente después del contraste humano",
+      authorId: "ppc-1",
+      updatedAt: "2026-09-02T12:00:00.000Z",
+    });
+    const model = documentModel({ identity: { ...executiveModel().identity, personaPerfiladora: "PPC Laura Méndez" } }, {
+      hypothesis: buildReportChapter0Hypothesis({ canonicalHypothesis: revised }),
+    });
+    const xml = await documentXml(renderExecutiveGeointWordDocument(model).document);
+    expect(xml).toContain("CAPÍTULO 0. HIPÓTESIS INICIAL Y TRAZABILIDAD");
+    expect(xml).toContain("Hipótesis inicial: Hipótesis inicial formulada por la PPC");
+    expect(xml).toContain("Hipótesis vigente: Hipótesis vigente después del contraste humano");
+    expect(xml).toContain("Persona perfiladora criminológica (PPC): PPC Laura Méndez");
+    expect(xml).toContain("Fecha de formulación: 2026-09-01T10:30:00.000Z");
+    expect(xml).not.toContain("ppc-1");
   });
 
   test("42 SCINCE muestra datos observados sin inventar ceros y conserva procedencia", () => {

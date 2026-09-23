@@ -446,4 +446,78 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     renderExecutiveGeointWordDocument(model, { visualAssetsById: assets });
     expect(JSON.stringify(model)).toBe(before);
   });
+
+  test("38 visibleSourceLabel y clase visual llegan al pie de figura OOXML", async () => {
+    const model = documentModel({
+      sections: [{ sectionId: "key-evidence", order: 1, title: "EVIDENCIA CLAVE", role: "Evidencia", content: [], densityPolicy: { targetPages: "1" }, status: "READY" }],
+      visualPlacements: [{
+        visualId: "field-photo-safe",
+        sectionId: "key-evidence",
+        placementRole: "SUPPORTING_EVIDENCE",
+        headline: "Acceso oriental documentado",
+        caption: "Registro fotográfico del entorno observado.",
+        visualClass: "FOTOGRAFIA_CAMPO",
+        visibleSourceLabel: "Unidad de Campo CEIPOL",
+      }],
+    });
+    const xml = (await packageXml(renderExecutiveGeointWordDocument(model, {
+      visualAssetsById: { "field-photo-safe": { data: Buffer.from(pngDataUrl.split(",")[1], "base64"), type: "png" } },
+    }).document)).document;
+    const visibleText = xml.replace(/<[^>]+>/g, " ");
+    expect(xml).toContain("Tipo de visual: FOTOGRAFIA CAMPO.");
+    expect(xml).toContain("Fuente: Unidad de Campo CEIPOL.");
+    expect(visibleText).not.toMatch(/storagePath|gs:\/\/|https?:\/\/|project-technical-id|\[object Object\]/i);
+  });
+
+  test("39 mapa con metadata suficiente publica fuente geometria y leyenda sin inventar escala", async () => {
+    const model = documentModel({
+      sections: [{ sectionId: "territorial-situation", order: 1, title: "SITUACION TERRITORIAL", role: "Mapa", content: [], densityPolicy: { targetPages: "1" }, status: "READY" }],
+      visualPlacements: [{
+        visualId: "principal-territorial-map",
+        sectionId: "territorial-situation",
+        placementRole: "PRINCIPAL_TERRITORIAL_MAP",
+        headline: "Configuración territorial",
+        caption: "Mapa territorial principal.",
+        visualClass: "MAPA_CARTOGRAFICO",
+        visibleSourceLabel: "Google Maps; geografía canónica del expediente",
+        cartographicMetadata: {
+          geometryLabel: "Corredor territorial",
+          legendLabel: "Trazo azul: corredor territorial analizado",
+          scaleLabel: null,
+          orientationLabel: null,
+        },
+      }],
+    });
+    const xml = (await packageXml(renderExecutiveGeointWordDocument(model, {
+      visualAssetsById: { "principal-territorial-map": { data: Buffer.from(pngDataUrl.split(",")[1], "base64"), type: "png" } },
+    }).document)).document;
+    expect(xml).toContain("Fuente: Google Maps; geografía canónica del expediente.");
+    expect(xml).toContain("Geometría representada: Corredor territorial.");
+    expect(xml).toContain("Leyenda: Trazo azul: corredor territorial analizado.");
+    expect(xml).not.toContain("Escala:");
+    expect(xml).not.toContain("Orientación:");
+  });
+
+  test("40 mapa con metadata incompleta no recibe fuente leyenda escala u orientacion inventadas", async () => {
+    const model = documentModel({
+      sections: [{ sectionId: "territorial-situation", order: 1, title: "SITUACION TERRITORIAL", role: "Mapa", content: [], densityPolicy: { targetPages: "1" }, status: "READY" }],
+      visualPlacements: [{
+        visualId: "principal-territorial-map",
+        sectionId: "territorial-situation",
+        placementRole: "PRINCIPAL_TERRITORIAL_MAP",
+        headline: "Mapa gobernado",
+        caption: "Mapa territorial principal.",
+        visualClass: "MAPA_CARTOGRAFICO",
+        visibleSourceLabel: null,
+      }],
+    });
+    const xml = (await packageXml(renderExecutiveGeointWordDocument(model, {
+      visualAssetsById: { "principal-territorial-map": { data: Buffer.from(pngDataUrl.split(",")[1], "base64"), type: "png" } },
+    }).document)).document;
+    expect(xml).toContain("Tipo de visual: MAPA CARTOGRAFICO.");
+    expect(xml).not.toContain("Fuente:");
+    expect(xml).not.toContain("Leyenda:");
+    expect(xml).not.toContain("Escala:");
+    expect(xml).not.toContain("Orientación:");
+  });
 });

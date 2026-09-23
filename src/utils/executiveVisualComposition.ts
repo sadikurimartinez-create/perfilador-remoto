@@ -16,11 +16,14 @@ export const MAX_EXECUTIVE_VISUALS = 5;
 
 export type ExecutiveSecondaryVisualType =
   | "EVIDENCE_IMAGE"
+  | "FIELD_PHOTOGRAPH"
+  | "STREET_VIEW_CAPTURE"
   | "TEMPORAL_COMPARISON"
   | "MULTISOURCE_CONVERGENCE"
   | "TREND_VISUAL"
   | "PROSPECTIVE_SCENARIO"
   | "STATISTICAL_CHART"
+  | "INFOGRAPHIC"
   | "SECONDARY_MAP";
 
 export type ExecutiveVisualExclusionReasonCode =
@@ -45,7 +48,13 @@ export interface ExecutiveTerritorialMap {
   visualReference?: string | null;
   presentation: {
     title: string;
-    visibleSourceLabel: string;
+    visibleSourceLabel: string | null;
+    cartographicMetadata?: {
+      geometryLabel: string;
+      legendLabel: string | null;
+      scaleLabel: string | null;
+      orientationLabel: string | null;
+    };
   };
   technicalMetadata: {
     geographyId?: string | null;
@@ -73,7 +82,7 @@ export interface ExecutiveSecondaryVisual {
   visualReference: string;
   presentation: {
     title: string;
-    visibleSourceLabel: string;
+    visibleSourceLabel: string | null;
   };
   technicalMetadata: {
     sourceItemId: string;
@@ -133,6 +142,7 @@ interface Candidate {
   sourceItemId: string;
   score: number;
   originalIndex: number;
+  explicitVisibleSourceLabel: string;
 }
 
 interface PrincipalMapCandidate {
@@ -146,6 +156,7 @@ interface PrincipalMapCandidate {
   relatedEvidenceIds: string[];
   sourceItemId: string;
   explicitGeographyIds: string[];
+  visibleSourceLabel: string;
 }
 
 function clean(value: unknown): string {
@@ -207,21 +218,28 @@ function visualReference(item: any): string {
   return clean(item?.visualReference || item?.reference || item?.assetRef || item?.dataUrl || item?.imageUrl || item?.previewUrl || item?.url);
 }
 
-function visibleSourceLabel(candidate: Pick<Candidate, "visualType" | "title">): string {
-  const title = candidate.title.toUpperCase();
-  if (candidate.visualType === "EVIDENCE_IMAGE" && /STREET|PANORAM/i.test(title)) return "IMAGEN PANORAMICA DE GOOGLE";
-  if (candidate.visualType === "EVIDENCE_IMAGE") return "EVIDENCIA VISUAL";
-  if (candidate.visualType === "TEMPORAL_COMPARISON") return "COMPARACION TEMPORAL";
-  if (candidate.visualType === "MULTISOURCE_CONVERGENCE") return "CONVERGENCIA MULTIFUENTE";
-  if (candidate.visualType === "TREND_VISUAL") return "VISUAL DE TENDENCIA";
-  if (candidate.visualType === "PROSPECTIVE_SCENARIO") return "ESCENARIO PROSPECTIVO CUALITATIVO";
-  if (candidate.visualType === "STATISTICAL_CHART") return "GRAFICA ESTADISTICA";
-  if (candidate.visualType === "SECONDARY_MAP") return "MAPA SECUNDARIO";
-  return "VISUAL EJECUTIVO";
+function explicitVisibleSourceLabel(item: any): string {
+  const label = clean(item?.presentation?.visibleSourceLabel || item?.visibleSourceLabel || item?.sourceLabel);
+  if (!label || /https?:\/\/|blob:|data:|gs:\/\/|storagePath|[A-Za-z]:\\|\[object Object\]/i.test(label)) return "";
+  return label;
+}
+
+function visibleSourceLabel(candidate: Pick<Candidate, "visualType" | "explicitVisibleSourceLabel">): string | null {
+  if (candidate.explicitVisibleSourceLabel) return candidate.explicitVisibleSourceLabel;
+  if (candidate.visualType === "STREET_VIEW_CAPTURE") return "Google Street View";
+  if (candidate.visualType === "FIELD_PHOTOGRAPH") return "Fotografía de campo";
+  return null;
 }
 
 function classifyVisualType(item: any): ExecutiveSecondaryVisualType | "MAP" {
   const raw = clean(item?.visualType || item?.type || item?.kind || item?.technicalMetadata?.originalItemType).toUpperCase();
+  const provenance = [
+    item?.sourceType,
+    item?.sourceProvider,
+    item?.provider,
+    item?.technicalMetadata?.sourceType,
+    ...(asArray<string>(item?.sourceTypes)),
+  ].map(clean).join(" ").toUpperCase();
   const title = clean(item?.title).toUpperCase();
   if (raw.includes("MAP") || raw.includes("MAPA")) return "MAP";
   if (raw.includes("TEMPORAL")) return "TEMPORAL_COMPARISON";
@@ -229,8 +247,23 @@ function classifyVisualType(item: any): ExecutiveSecondaryVisualType | "MAP" {
   if (raw.includes("TREND") || raw.includes("TENDENCIA")) return "TREND_VISUAL";
   if (raw.includes("PROSPECT") || raw.includes("ESCENARIO")) return "PROSPECTIVE_SCENARIO";
   if (raw.includes("CHART") || raw.includes("GRAPH") || raw.includes("GRAF")) return "STATISTICAL_CHART";
-  if (raw.includes("STREET") || raw.includes("PHOTO") || raw.includes("EVIDENCE") || title.includes("PANORAM")) return "EVIDENCE_IMAGE";
+  if (raw.includes("INFOGRAPH") || raw.includes("INFOGRAF")) return "INFOGRAPHIC";
+  if (raw.includes("STREET_VIEW") || provenance.includes("STREET_VIEW")) return "STREET_VIEW_CAPTURE";
+  if (raw.includes("FIELD_PHOTO") || provenance.includes("FIELD_PHOTO") || provenance.includes("FIELD_CAPTURE")) return "FIELD_PHOTOGRAPH";
+  if (raw.includes("PHOTO") || raw.includes("EVIDENCE") || title.includes("FOTOGRAF")) return "EVIDENCE_IMAGE";
   return "EVIDENCE_IMAGE";
+}
+
+function visibleGeometryLabel(geography: CanonicalProjectGeography): string {
+  if (geography.type === "INDIVIDUAL") return "Punto territorial individual";
+  if (geography.type === "CORRIDOR") return "Corredor territorial";
+  return "Polígono territorial";
+}
+
+function generatedMapLegend(geography: CanonicalProjectGeography): string {
+  if (geography.type === "INDIVIDUAL") return "Marcador A: ubicación territorial de referencia";
+  if (geography.type === "CORRIDOR") return "Trazo azul: corredor territorial analizado";
+  return "Contorno azul: polígono territorial analizado";
 }
 
 function isProspectiveAllowed(candidate: Candidate, model: ExecutiveGeointReportModel): boolean {
@@ -290,6 +323,7 @@ function toPrincipalMapCandidate(item: any, institutionalInput: InstitutionalRep
       ...explicitGeographyIds(item),
       ...sourceProducts.flatMap(explicitGeographyIds),
     ]),
+    visibleSourceLabel: explicitVisibleSourceLabel(item) || sourceProducts.map(explicitVisibleSourceLabel).find(Boolean) || "",
   };
 }
 
@@ -352,7 +386,7 @@ function buildPrincipalMap(
       visualReference: null,
       presentation: {
         title: "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA",
-        visibleSourceLabel: "MAPA TERRITORIAL PRINCIPAL",
+        visibleSourceLabel: null,
       },
       technicalMetadata: {
         geographyId: null,
@@ -400,7 +434,13 @@ function buildPrincipalMap(
     visualReference: mapCandidate?.reference || null,
     presentation: {
       title: headline,
-      visibleSourceLabel: "MAPA TERRITORIAL PRINCIPAL",
+      visibleSourceLabel: mapCandidate?.visibleSourceLabel || (mapCandidate ? null : "Google Maps; geografía canónica del expediente"),
+      cartographicMetadata: {
+        geometryLabel: visibleGeometryLabel(geography),
+        legendLabel: mapCandidate ? null : generatedMapLegend(geography),
+        scaleLabel: null,
+        orientationLabel: null,
+      },
     },
     technicalMetadata: {
       geographyId: geography.geographyId,
@@ -432,6 +472,7 @@ function candidateFromKeyEvidence(item: ExecutiveEvidenceItem, index: number): C
     sourceItemId: item.technicalMetadata.sourceItemId,
     score: 70 - index,
     originalIndex: index,
+    explicitVisibleSourceLabel: explicitVisibleSourceLabel(item),
   };
 }
 
@@ -450,6 +491,7 @@ function candidateFromVisual(item: ExecutiveVisualCandidate, index: number): Can
     sourceItemId: item.technicalMetadata.sourceItemId,
     score: 60 - index,
     originalIndex: index,
+    explicitVisibleSourceLabel: explicitVisibleSourceLabel(item),
   };
 }
 
@@ -469,6 +511,7 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
     sourceItemId: itemId(item, `input-visual-${index + 1}`),
     score: 40 - index,
     originalIndex: index,
+    explicitVisibleSourceLabel: explicitVisibleSourceLabel(item),
   };
 }
 
@@ -535,7 +578,7 @@ function toSecondaryVisual(candidate: Candidate, model: ExecutiveGeointReportMod
     visualReference: candidate.reference,
     presentation: {
       title: headline,
-      visibleSourceLabel: visibleSourceLabel({ visualType: type, title: candidate.title }),
+      visibleSourceLabel: visibleSourceLabel({ visualType: type, explicitVisibleSourceLabel: candidate.explicitVisibleSourceLabel }),
     },
     technicalMetadata: {
       sourceItemId: candidate.sourceItemId,

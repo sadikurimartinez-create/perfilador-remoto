@@ -255,16 +255,22 @@ describe("Fase C - ExecutiveVisualComposition", () => {
     expect(composition.secondaryVisuals.filter((item) => item.visualType === "EVIDENCE_IMAGE").length).toBeLessThanOrEqual(2);
   });
 
-  test("14 Street View no crea seccion autonoma", () => {
+  test("14 un titulo panoramico no reclasifica fotografia de campo como Street View", () => {
     const composition = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [keyEvidence({ title: "Street View panorama" })] }), institutionalInput());
-    expect(composition.secondaryVisuals[0]?.presentation.visibleSourceLabel).toBe("IMAGEN PANORAMICA DE GOOGLE");
+    expect(composition.secondaryVisuals[0]?.visualType).toBe("FIELD_PHOTOGRAPH");
+    expect(composition.secondaryVisuals[0]?.presentation.visibleSourceLabel).toBe("Fotografía de campo");
     const visible = JSON.stringify([composition.principalTerritorialMap.presentation, ...composition.secondaryVisuals.map((item) => item.presentation)]);
     expect(visible).not.toContain("STREET VIEW INTELLIGENCE");
   });
 
-  test("15 evidencia panoramica puede entrar como visual", () => {
-    const composition = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [keyEvidence({ title: "Imagen panoramica de Google" })] }), institutionalInput());
-    expect(composition.secondaryVisuals[0]?.presentation.visibleSourceLabel).toBe("IMAGEN PANORAMICA DE GOOGLE");
+  test("15 Street View exige procedencia estructurada y conserva fuente visible", () => {
+    const composition = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [keyEvidence({
+      title: "Captura territorial",
+      sourceTypes: ["STREET_VIEW"],
+      presentation: { visibleSourceLabel: "Google Street View" },
+    })] }), institutionalInput());
+    expect(composition.secondaryVisuals[0]?.visualType).toBe("STREET_VIEW_CAPTURE");
+    expect(composition.secondaryVisuals[0]?.presentation.visibleSourceLabel).toBe("Google Street View");
   });
 
   test("16 prospective visual solo con producto admitido", () => {
@@ -468,5 +474,58 @@ describe("Fase C - ExecutiveVisualComposition", () => {
     }));
     const composition = buildExecutiveVisualComposition(executiveModel({ keyEvidence: visuals }), institutionalInput());
     expect(1 + composition.secondaryVisuals.length).toBeLessThanOrEqual(5);
+  });
+
+  test("39 conserva visibleSourceLabel explicito sin exponer referencias tecnicas", () => {
+    const visual = keyEvidence({ presentation: { visibleSourceLabel: "Unidad de Análisis Territorial CEIPOL" } });
+    const selected = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [visual] }), institutionalInput()).secondaryVisuals[0];
+    expect(selected.presentation.visibleSourceLabel).toBe("Unidad de Análisis Territorial CEIPOL");
+  });
+
+  test("40 un visual generico sin fuente no recibe procedencia inventada", () => {
+    const visual = keyEvidence({ sourceTypes: [], title: "Visual complementario" });
+    const selected = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [visual] }), institutionalInput()).secondaryVisuals[0];
+    expect(selected.visualType).toBe("EVIDENCE_IMAGE");
+    expect(selected.presentation.visibleSourceLabel).toBeNull();
+  });
+
+  test("41 mapa generado declara fuente, geometria y leyenda derivables sin fabricar escala", () => {
+    const geo = geography("CORRIDOR");
+    const noMap = executiveModel({
+      geography: geo,
+      visualCandidates: [],
+      territorialSituation: { ...executiveModel({ geography: geo }).territorialSituation, principalMapCandidate: null },
+    });
+    const map = buildExecutiveVisualComposition(noMap, institutionalInput({ geography: geo })).principalTerritorialMap;
+    expect(map.status).toBe("MAP_RENDER_REQUIRED");
+    expect(map.presentation.visibleSourceLabel).toContain("Google Maps");
+    expect(map.presentation.cartographicMetadata).toEqual({
+      geometryLabel: "Corredor territorial",
+      legendLabel: "Trazo azul: corredor territorial analizado",
+      scaleLabel: null,
+      orientationLabel: null,
+    });
+  });
+
+  test("42 mapa raster sin metadata editorial no inventa fuente leyenda escala u orientacion", () => {
+    const geo = geography("POLYGON");
+    const mapCandidate = visualCandidate({
+      geographyId: geo.geographyId,
+      technicalMetadata: { sourceItemId: "map-incomplete", sourceType: "VISUAL_CANDIDATE", geographyId: geo.geographyId },
+    });
+    const model = executiveModel({
+      geography: geo,
+      territorialSituation: { ...executiveModel({ geography: geo }).territorialSituation, principalMapCandidate: mapCandidate },
+      visualCandidates: [mapCandidate],
+    });
+    const map = buildExecutiveVisualComposition(model, institutionalInput({ geography: geo })).principalTerritorialMap;
+    expect(map.status).toBe("READY_FROM_GOVERNED_VISUAL");
+    expect(map.presentation.visibleSourceLabel).toBeNull();
+    expect(map.presentation.cartographicMetadata).toEqual(expect.objectContaining({
+      geometryLabel: "Polígono territorial",
+      legendLabel: null,
+      scaleLabel: null,
+      orientationLabel: null,
+    }));
   });
 });
