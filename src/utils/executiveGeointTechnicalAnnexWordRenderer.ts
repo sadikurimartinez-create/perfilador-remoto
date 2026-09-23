@@ -2,6 +2,7 @@ import {
   AlignmentType,
   Document,
   ImageRun,
+  PageBreak,
   Paragraph,
   Table,
   TableCell,
@@ -23,6 +24,7 @@ import {
 import { buildNumeroExpedienteFilename } from "@/utils/documentIdentity";
 import type { ExecutiveGeointWordVisualAsset } from "@/utils/executiveGeointWordRenderer";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
+import { TECHNICAL_ANNEX_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
 
 export interface TechnicalAnnexWordRenderResult {
   document: Document;
@@ -154,35 +156,44 @@ function renderSection(
 
 export function renderExecutiveGeointTechnicalAnnexWordDocument(
   annexModel: ExecutiveGeointTechnicalAnnexModel,
-  options: { projectName?: string; visualAssetsById?: Record<string, ExecutiveGeointWordVisualAsset | null | undefined> } = {}
+  options: {
+    projectName?: string;
+    visualAssetsById?: Record<string, ExecutiveGeointWordVisualAsset | null | undefined>;
+    institutionalLogos?: { sspe?: ArrayBuffer | Uint8Array | null; ceipol?: ArrayBuffer | Uint8Array | null };
+  } = {}
 ): TechnicalAnnexWordRenderResult {
   const snapshot = JSON.stringify(annexModel);
   FlowControlManager.reset();
   const renderedVisualIds: string[] = [];
   const missingVisualAssetIds: string[] = [];
+  const bodySections = annexModel.sections.filter((section) => section.sectionId !== "identity");
   const children = [
-    para("ANEXO TECNICO DEL EXPEDIENTE", { bold: true, size: 30, color: "0D2B52", align: AlignmentType.CENTER }),
+    ...InstitutionalBrandManager.createCoverIdentity(TECHNICAL_ANNEX_OFFICIAL_TITLE, options.institutionalLogos),
     para(`Numero de expediente: ${annexModel.identity.numeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
+    para(`Nombre del expediente: ${annexModel.identity.nombreExpediente}`, { align: AlignmentType.CENTER }),
     para(`Clasificacion: ${annexModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
-    para("Este anexo contiene soporte tecnico, trazabilidad ampliada y evidencia complementaria del informe ejecutivo GEOINT.", { align: AlignmentType.CENTER }),
-    ...annexModel.sections.flatMap((section) => renderSection(section, annexModel, options.visualAssetsById || {}, renderedVisualIds, missingVisualAssetIds)),
+    para(`Fecha de emision: ${annexModel.identity.fecha}`, { align: AlignmentType.CENTER }),
+    para("Soporte técnico, trazabilidad ampliada y evidencia complementaria del Informe Ejecutivo GEOINT.", { align: AlignmentType.CENTER }),
+    new Paragraph({ children: [new PageBreak()] }),
+    ...bodySections.flatMap((section) => renderSection(section, annexModel, options.visualAssetsById || {}, renderedVisualIds, missingVisualAssetIds)),
   ];
   const watermarkBuffer = InstitutionalBrandManager.generateWatermarkBuffer();
   const document = new Document({
     sections: [
       {
         properties: {
+          titlePage: true,
           page: {
             size: { width: PageFormatManager.width, height: PageFormatManager.height },
             margin: PageFormatManager.margins,
           },
         },
         headers: {
-          default: HeaderFooterManager.createDefaultHeader(watermarkBuffer),
+          default: HeaderFooterManager.createDefaultHeader(watermarkBuffer, TECHNICAL_ANNEX_OFFICIAL_TITLE),
           first: HeaderFooterManager.createFirstPageHeader(),
         },
         footers: {
-          default: HeaderFooterManager.createDefaultFooter(annexModel.identity.fecha, annexModel.identity.numeroExpediente),
+          default: HeaderFooterManager.createDefaultFooter(annexModel.identity.fecha, annexModel.identity.numeroExpediente, { includeDate: false }),
           first: HeaderFooterManager.createFirstPageFooter(),
         },
         children,
@@ -205,7 +216,7 @@ export function renderExecutiveGeointTechnicalAnnexWordDocument(
       aiCalls: false,
       secondReportEngine: false,
       modelMutated: JSON.stringify(annexModel) !== snapshot,
-      renderedSectionIds: annexModel.sections.map((section) => section.sectionId),
+      renderedSectionIds: bodySections.map((section) => section.sectionId),
       renderedVisualIds,
       missingVisualAssetIds,
     },

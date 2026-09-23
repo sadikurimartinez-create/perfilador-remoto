@@ -2,6 +2,7 @@ import {
   AlignmentType,
   Document,
   ImageRun,
+  PageBreak,
   Paragraph,
   TextRun,
 } from "docx";
@@ -21,6 +22,7 @@ import {
 } from "@/utils/documentCompositionEngine";
 import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
+import { EXECUTIVE_GEOINT_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
 
 export interface ExecutiveGeointWordVisualAsset {
   data: ArrayBuffer | Uint8Array;
@@ -60,6 +62,7 @@ interface RenderOptions {
   projectName?: string;
   ceipolId?: string;
   visualAssetsById?: Record<string, ExecutiveGeointWordVisualAsset | null | undefined>;
+  institutionalLogos?: { sspe?: ArrayBuffer | Uint8Array | null; ceipol?: ArrayBuffer | Uint8Array | null };
 }
 
 interface VisualAssetBuildOptions {
@@ -110,15 +113,12 @@ function sectionTitle(section: ExecutiveDocumentSection) {
   return paragraph(section.title.toUpperCase(), { bold: true, size: 24, color: "0D2B52", spacingAfter: 90 });
 }
 
-function renderCover(documentModel: ExecutiveGeointReportDocumentModel, visibleNumeroExpediente: string): any[] {
+function renderCover(documentModel: ExecutiveGeointReportDocumentModel, visibleNumeroExpediente: string, options: RenderOptions): any[] {
   return [
-    paragraph(documentModel.presentation.documentTitle || "INFORME EJECUTIVO GEOINT", {
-      bold: true,
-      size: 32,
-      color: "0D2B52",
-      align: AlignmentType.CENTER,
-      spacingAfter: 220,
-    }),
+    ...InstitutionalBrandManager.createCoverIdentity(
+      documentModel.presentation.documentTitle || EXECUTIVE_GEOINT_OFFICIAL_TITLE,
+      options.institutionalLogos
+    ),
     paragraph(`Numero de expediente: ${visibleNumeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
     paragraph(`Clasificacion: ${documentModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
     paragraph(`Fecha de emision: ${documentModel.identity.fechaEmision}`, { align: AlignmentType.CENTER }),
@@ -318,7 +318,8 @@ export function renderExecutiveGeointWordDocument(
     }
     if (section.status === "INCOMPLETE") audit.incompleteSections.push(section.sectionId);
     if (section.sectionId === "cover") {
-      children.push(...renderCover(documentModel, visibleNumeroExpediente));
+      children.push(...renderCover(documentModel, visibleNumeroExpediente, options));
+      children.push(new Paragraph({ children: [new PageBreak()] }));
     } else {
       children.push(...renderSectionContent(section));
     }
@@ -333,17 +334,18 @@ export function renderExecutiveGeointWordDocument(
     sections: [
       {
         properties: {
+          titlePage: true,
           page: {
             size: { width: PageFormatManager.width, height: PageFormatManager.height },
             margin: PageFormatManager.margins,
           },
         },
         headers: {
-          default: HeaderFooterManager.createDefaultHeader(watermarkBuffer),
+          default: HeaderFooterManager.createDefaultHeader(watermarkBuffer, EXECUTIVE_GEOINT_OFFICIAL_TITLE),
           first: HeaderFooterManager.createFirstPageHeader(),
         },
         footers: {
-          default: HeaderFooterManager.createDefaultFooter(documentModel.identity.fechaEmision, visibleNumeroExpediente),
+          default: HeaderFooterManager.createDefaultFooter(documentModel.identity.fechaEmision, visibleNumeroExpediente, { includeDate: false }),
           first: HeaderFooterManager.createFirstPageFooter(),
         },
         children,

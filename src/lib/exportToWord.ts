@@ -828,6 +828,10 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     }
   );
   const visualAssetsById = await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography, true);
+  const [sspeLogo, ceipolLogo] = await Promise.all([
+    fetchLocalImageBuffer("/logos/logo-ssp.png"),
+    fetchLocalImageBuffer("/logos/logo-ceipol.png"),
+  ]);
   return {
     institutionalReportInput,
     generatedAt,
@@ -837,6 +841,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     executiveModel,
     documentModel,
     visualAssetsById,
+    institutionalLogos: { sspe: sspeLogo, ceipol: ceipolLogo },
   };
 }
 
@@ -872,6 +877,7 @@ export async function exportToWord(
         projectName,
         ceipolId: payload.ceipolId,
         visualAssetsById: generationContext.visualAssetsById,
+        institutionalLogos: generationContext.institutionalLogos,
       });
       assertExecutiveGeointPrincipalMapRendered(renderedReport);
       const annexModel = buildExecutiveGeointTechnicalAnnexModel(
@@ -891,6 +897,7 @@ export async function exportToWord(
       const renderedAnnex = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, {
         projectName,
         visualAssetsById: await hydrateTechnicalAnnexVisualAssets(generationContext, annexModel),
+        institutionalLogos: generationContext.institutionalLogos,
       });
       const reportBlob = await Packer.toBlob(renderedReport.document);
       const annexBlob = await Packer.toBlob(renderedAnnex.document);
@@ -931,7 +938,11 @@ export async function exportToWord(
         }
       );
       const visualAssetsById = await hydrateTechnicalAnnexVisualAssets(generationContext, annexModel);
-      const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, { projectName, visualAssetsById });
+      const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, {
+        projectName,
+        visualAssetsById,
+        institutionalLogos: generationContext.institutionalLogos,
+      });
       const blob = await Packer.toBlob(rendered.document);
       saveAs(blob, rendered.filename);
       return;

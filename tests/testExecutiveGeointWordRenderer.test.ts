@@ -1,5 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { Packer } from "docx";
+import JSZip from "jszip";
 import {
   buildExecutiveGeointWordVisualAssets,
   renderExecutiveGeointWordDocument,
@@ -13,6 +15,18 @@ const pngDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAA
 
 function source(path: string): string {
   return readFileSync(join(root, path), "utf8");
+}
+
+async function packageXml(document: any) {
+  const zip = await JSZip.loadAsync(await Packer.toBuffer(document));
+  const read = async (path: string) => zip.file(path)?.async("string") || "";
+  const names = Object.keys(zip.files);
+  return {
+    document: await read("word/document.xml"),
+    headers: await Promise.all(names.filter((name) => /^word\/header\d+\.xml$/.test(name)).map(read)),
+    footers: await Promise.all(names.filter((name) => /^word\/footer\d+\.xml$/.test(name)).map(read)),
+    media: names.filter((name) => /^word\/media\//.test(name)),
+  };
 }
 
 function documentModel(overrides: Partial<ExecutiveGeointReportDocumentModel> = {}): ExecutiveGeointReportDocumentModel {
@@ -274,7 +288,35 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
   });
 
   test("20 numeroExpediente alimenta pie institucional", () => {
-    expect(source("src/utils/executiveGeointWordRenderer.ts")).toContain("HeaderFooterManager.createDefaultFooter(documentModel.identity.fechaEmision, visibleNumeroExpediente)");
+    expect(source("src/utils/executiveGeointWordRenderer.ts")).toContain("HeaderFooterManager.createDefaultFooter(documentModel.identity.fechaEmision, visibleNumeroExpediente, { includeDate: false })");
+  });
+
+  test("20A paquete DOCX diferencia portada e interiores con identidad institucional unica", async () => {
+    const logo = Buffer.from(pngDataUrl.split(",")[1], "base64");
+    const rendered = renderExecutiveGeointWordDocument(documentModel(), {
+      institutionalLogos: { sspe: logo, ceipol: logo },
+    });
+    const xml = await packageXml(rendered.document);
+    const visiblePackage = [xml.document, ...xml.headers, ...xml.footers].join(" ");
+    const visibleText = visiblePackage.replace(/<[^>]+>/g, " ");
+
+    expect(xml.document).toContain("<w:titlePg/>");
+    expect(xml.document).toContain('w:headerReference w:type="first"');
+    expect(xml.document).toContain('w:footerReference w:type="first"');
+    expect(xml.headers).toHaveLength(2);
+    expect(xml.footers).toHaveLength(2);
+    expect(xml.headers.some((part) => part.includes("INFORME EJECUTIVO GEOINT"))).toBe(true);
+    expect(xml.headers.some((part) => !part.includes("<w:t"))).toBe(true);
+    expect(xml.footers.some((part) => part.includes("PAGE") && part.includes("NUMPAGES") && part.includes("06092026-0007-JMG"))).toBe(true);
+    expect(xml.footers.some((part) => !part.includes("<w:t"))).toBe(true);
+    expect(xml.document).toContain("SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES");
+    expect(xml.document).toContain("CEIPOL");
+    expect(xml.document).toContain("INFORME EJECUTIVO GEOINT");
+    expect(xml.document).toContain("06092026-0007-JMG");
+    expect(xml.media.length).toBeGreaterThanOrEqual(1);
+    expect(visiblePackage).not.toContain("DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL");
+    expect(visiblePackage).not.toContain("INFORME DE GEOINTELIGENCIA PARA LA PREVENCIÓN DEL DELITO");
+    expect(visibleText).not.toMatch(/project-technical-id|storagePath|gs:\/\/|https?:\/\//i);
   });
 
   test("21 filename institucional usa numeroExpediente", () => {

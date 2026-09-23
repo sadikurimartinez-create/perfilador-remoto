@@ -10,6 +10,7 @@ import {
   isCertifiedGimAnalysisPayload,
   type InstitutionalReportInput,
 } from "@/utils/institutionalReportPublicationContract";
+import { EXECUTIVE_GEOINT_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
 
 export const EXECUTIVE_GEOINT_DOCUMENT_MODEL_VERSION = "1.0.0";
 export const EXECUTIVE_DOCUMENT_MAX_VISUALS = 5;
@@ -312,7 +313,7 @@ function buildSections(
       title: "PORTADA",
       role: "Identidad institucional del informe",
       content: [
-        "INFORME EJECUTIVO GEOINT",
+        EXECUTIVE_GEOINT_OFFICIAL_TITLE,
         `Numero de expediente: ${numeroExpediente}`,
         `Clasificacion: ${visible(model.identity.clasificacion, "CONFIDENCIAL - USO INSTITUCIONAL")}`,
       ],
@@ -540,7 +541,7 @@ export function buildExecutiveGeointReportDocumentModel(
       note: "Politica editorial de densidad; no mide paginas fisicas.",
     },
     presentation: {
-      documentTitle: "INFORME EJECUTIVO GEOINT",
+      documentTitle: EXECUTIVE_GEOINT_OFFICIAL_TITLE,
       visibleText: flattenVisibleText(sections, visualPlacements),
       headerFooterPolicy: {
         preserveExistingInstitutionalHeaderFooter: true,

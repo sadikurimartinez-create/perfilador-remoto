@@ -1,5 +1,6 @@
 import { Table, TableRow, TableCell, Paragraph, TextRun, AlignmentType, ShadingType, BorderStyle, ImageRun, Header, Footer, PageNumber } from "docx";
 import { CEIPOL_DOCUMENT_THEME } from "./documentTableRenderer";
+import { INSTITUTIONAL_ISSUER, INSTITUTIONAL_UNIT } from "./institutionalDocumentIdentity";
 
 export interface DocumentCompositionConfig {
   pageSize: "LETTER";
@@ -110,6 +111,39 @@ export class InstitutionalBrandManager {
       return base64ToArrayBuffer(this.FALLBACK_PNG);
     }
   }
+
+  public static createCoverIdentity(
+    documentTitle: string,
+    logos: { sspe?: ArrayBuffer | Uint8Array | null; ceipol?: ArrayBuffer | Uint8Array | null } = {}
+  ): Paragraph[] {
+    const logoRuns: any[] = [];
+    if (logos.sspe) {
+      logoRuns.push(new ImageRun({ data: logos.sspe, type: "png", transformation: { width: 76, height: 76 } } as any));
+    }
+    if (logos.sspe && logos.ceipol) logoRuns.push(new TextRun({ text: "                 " }));
+    if (logos.ceipol) {
+      logoRuns.push(new ImageRun({ data: logos.ceipol, type: "png", transformation: { width: 76, height: 76 } } as any));
+    }
+
+    return [
+      ...(logoRuns.length ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 180 }, children: logoRuns })] : []),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 50 },
+        children: [new TextRun({ text: INSTITUTIONAL_ISSUER, bold: true, size: 19, color: "222222", font: "Calibri" })],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 260 },
+        children: [new TextRun({ text: INSTITUTIONAL_UNIT, bold: true, size: 18, color: "5B6573", font: "Calibri" })],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 260 },
+        children: [new TextRun({ text: documentTitle, bold: true, size: 32, color: "0D2B52", font: "Calibri" })],
+      }),
+    ];
+  }
 }
 
 /**
@@ -134,7 +168,7 @@ export class HeaderFooterManager {
     });
   }
 
-  public static createDefaultHeader(watermarkBuffer: ArrayBuffer): Header {
+  public static createDefaultHeader(watermarkBuffer: ArrayBuffer, documentLabel = "PRODUCTO DOCUMENTAL INSTITUCIONAL"): Header {
     const children: any[] = [];
     const runs: any[] = [];
 
@@ -144,7 +178,7 @@ export class HeaderFooterManager {
 
     runs.push(
       new TextRun({ text: "CEIPOL - SSPE | ", bold: true, color: "5B6573", size: 15, font: "Calibri" }),
-      new TextRun({ text: "DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL", color: "5B6573", size: 15, font: "Calibri" })
+      new TextRun({ text: documentLabel, color: "5B6573", size: 15, font: "Calibri" })
     );
 
     // Cabecera institucional limpia
@@ -163,8 +197,9 @@ export class HeaderFooterManager {
     });
   }
 
-  public static createDefaultFooter(dateText: string, safeName: string): Footer {
+  public static createDefaultFooter(dateText: string, safeName: string, options: { includeDate?: boolean } = {}): Footer {
     const footerAlign = this.getAlignment(DEFAULT_COMPOSITION_CONFIG.footerAlignment);
+    const prefix = options.includeDate === false ? "" : `${dateText} | `;
     return new Footer({
       children: [
         new Paragraph({
@@ -172,7 +207,7 @@ export class HeaderFooterManager {
           border: { top: { color: "D9DEE5", space: 1, style: BorderStyle.SINGLE, size: 6 } },
           spacing: { before: 80 },
           children: [
-            new TextRun({ text: `${dateText} | Página `, color: "5B6573", size: 14, font: "Calibri" }),
+            new TextRun({ text: `${prefix}Página `, color: "5B6573", size: 14, font: "Calibri" }),
             new TextRun({ children: [PageNumber.CURRENT], color: "5B6573", size: 14, font: "Calibri" }),
             new TextRun({ text: " de ", color: "5B6573", size: 14, font: "Calibri" }),
             new TextRun({ children: [PageNumber.TOTAL_PAGES], color: "5B6573", size: 14, font: "Calibri" }),

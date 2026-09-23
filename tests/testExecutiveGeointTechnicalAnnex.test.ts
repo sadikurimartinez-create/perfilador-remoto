@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Packer } from "docx";
+import JSZip from "jszip";
 import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
@@ -10,6 +11,18 @@ const generatedAt = "2026-09-06T12:00:00.000Z";
 
 function source(path: string): string {
   return readFileSync(join(root, path), "utf8");
+}
+
+async function packageXml(document: any) {
+  const zip = await JSZip.loadAsync(await Packer.toBuffer(document));
+  const read = async (path: string) => zip.file(path)?.async("string") || "";
+  const names = Object.keys(zip.files);
+  return {
+    document: await read("word/document.xml"),
+    headers: await Promise.all(names.filter((name) => /^word\/header\d+\.xml$/.test(name)).map(read)),
+    footers: await Promise.all(names.filter((name) => /^word\/footer\d+\.xml$/.test(name)).map(read)),
+    media: names.filter((name) => /^word\/media\//.test(name)),
+  };
 }
 
 function geography() {
@@ -268,6 +281,34 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex());
     expect(rendered.renderAudit.headerFooterManagerReused).toBe(true);
     expect(source("src/utils/executiveGeointTechnicalAnnexWordRenderer.ts")).toContain("HeaderFooterManager.createDefaultHeader");
+  });
+
+  test("21A DOCX identifica el Anexo y diferencia portada de interiores", async () => {
+    const logo = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex(), {
+      institutionalLogos: { sspe: logo, ceipol: logo },
+    });
+    const xml = await packageXml(rendered.document);
+    const visiblePackage = [xml.document, ...xml.headers, ...xml.footers].join(" ");
+    const visibleText = visiblePackage.replace(/<[^>]+>/g, " ");
+
+    expect(xml.document).toContain("<w:titlePg/>");
+    expect(xml.document).toContain('w:headerReference w:type="first"');
+    expect(xml.document).toContain('w:footerReference w:type="first"');
+    expect(xml.headers).toHaveLength(2);
+    expect(xml.footers).toHaveLength(2);
+    expect(xml.headers.some((part) => part.includes("ANEXO TÉCNICO"))).toBe(true);
+    expect(xml.headers.some((part) => !part.includes("<w:t"))).toBe(true);
+    expect(xml.footers.some((part) => part.includes("PAGE") && part.includes("NUMPAGES") && part.includes("06092026-0007-JMG"))).toBe(true);
+    expect(xml.footers.some((part) => !part.includes("<w:t"))).toBe(true);
+    expect(xml.document).toContain("SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES");
+    expect(xml.document).toContain("ANEXO TÉCNICO");
+    expect(xml.document).toContain("06092026-0007-JMG");
+    expect(xml.document.match(/Nombre del expediente:/g)).toHaveLength(1);
+    expect(xml.media.length).toBeGreaterThanOrEqual(1);
+    expect(visiblePackage).not.toContain("DICTAMEN TÉCNICO DE INTELIGENCIA TERRITORIAL");
+    expect(visiblePackage).not.toContain("INFORME DE GEOINTELIGENCIA PARA LA PREVENCIÓN DEL DELITO");
+    expect(visibleText).not.toMatch(/project-technical-id|storagePath|gs:\/\/|https?:\/\//i);
   });
 
   test("22 filename usa numeroExpediente", () => {
