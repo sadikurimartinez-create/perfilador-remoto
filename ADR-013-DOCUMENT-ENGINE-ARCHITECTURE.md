@@ -260,3 +260,51 @@ Auditoría E2E.
 
 El sistema deberá conservar exactamente la misma salida funcional mientras mejora la separación arquitectónica.
 
+
+
+\## Adenda — escala cartográfica gobernada
+
+
+
+La escala del mapa territorial principal se rige por:
+
+
+
+`CARTOGRAPHIC_SCALE_WEB_MERCATOR_V1`
+
+
+
+El `ExecutiveCanonicalTerritorialMapSpec` es la única fuente de verdad para el viewport y la escala. Debe calcularse una sola vez desde `CanonicalProjectGeography`, antes de la composición visual final y del modelo documental.
+
+
+
+Parámetros gobernados:
+
+
+
+\- viewport lógico `640x480`;
+
+\- densidad Static Maps `scale=2`;
+
+\- tile Web Mercator `256`;
+
+\- padding lógico `40 px`;
+
+\- zoom permitido `0..21`;
+
+\- zoom `16` para geometría individual;
+
+\- barra máxima `160 px` lógicos con selección `1-2-5 × 10^n`.
+
+
+
+Para corredores y polígonos, el Document Engine conserva centro y geometría canónicos, calcula y valida un zoom explícito y deja de utilizar el autofit opaco del proveedor como autoridad. La escala se fija en el snapshot institucional, se protege mediante hash y se representa como barra gráfica más etiqueta derivada.
+
+
+
+La barra se compone en una franja adyacente al bitmap, sin cubrir ni modificar la atribución del proveedor. Informe y Anexo reutilizan el mismo activo final.
+
+
+
+Los packages previos permanecen inmutables. La ausencia de metadatos cartográficos gobernados equivale a `LEGACY_NO_GOVERNED_SCALE`; nunca activa recálculo durante la redescarga.
+

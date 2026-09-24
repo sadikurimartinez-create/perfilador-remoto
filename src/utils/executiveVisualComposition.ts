@@ -5,6 +5,8 @@ import type {
   ExecutiveGeointReportModel,
   ExecutiveVisualCandidate,
 } from "@/utils/executiveGeointReportModel";
+import type { ExecutiveCanonicalTerritorialMapSpec } from "@/utils/executiveCanonicalTerritorialMap";
+import type { GovernedCartographicScale } from "@/utils/governedCartographicScale";
 import {
   getCanonicalMapViewport,
   type CanonicalGeometry,
@@ -67,6 +69,7 @@ export interface ExecutiveTerritorialMap {
       : never;
     center?: LatLngPoint | null;
     fitMode?: "CENTER" | "BOUNDS";
+    cartographicScale?: GovernedCartographicScale | null;
     traceabilityIds: string[];
     relatedFindingIds: string[];
     relatedEvidenceIds: string[];
@@ -367,7 +370,8 @@ function selectCompatiblePrincipalMapCandidate(
 function buildPrincipalMap(
   model: ExecutiveGeointReportModel,
   institutionalInput: InstitutionalReportInput,
-  excludedItems: ExecutiveVisualSelectionAudit["excludedItems"]
+  excludedItems: ExecutiveVisualSelectionAudit["excludedItems"],
+  principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null
 ): ExecutiveTerritorialMap {
   const geography = model.territorialSituation.canonicalGeography || institutionalInput.geography || null;
   if (!geography) {
@@ -425,6 +429,10 @@ function buildPrincipalMap(
   }
 
   const headline = headlineFromFinding(model.findings, relatedFindingIds);
+  const governedScale = !mapCandidate
+    && principalMapSpec?.technicalMetadata.geographyId === geography.geographyId
+    ? principalMapSpec.cartographicScale
+    : null;
   return {
     mapId: "principal-territorial-map",
     status: mapCandidate ? "READY_FROM_GOVERNED_VISUAL" : "MAP_RENDER_REQUIRED",
@@ -438,7 +446,7 @@ function buildPrincipalMap(
       cartographicMetadata: {
         geometryLabel: visibleGeometryLabel(geography),
         legendLabel: mapCandidate ? null : generatedMapLegend(geography),
-        scaleLabel: null,
+        scaleLabel: governedScale?.label ?? null,
         orientationLabel: null,
       },
     },
@@ -449,6 +457,7 @@ function buildPrincipalMap(
       bounds: viewport.bounds,
       center: viewport.center ?? null,
       fitMode: viewport.fitMode,
+      cartographicScale: governedScale,
       traceabilityIds: traces,
       relatedFindingIds,
       relatedEvidenceIds: mapRelatedEvidenceIds,
@@ -594,11 +603,11 @@ function toSecondaryVisual(candidate: Candidate, model: ExecutiveGeointReportMod
 export function buildExecutiveVisualComposition(
   executiveModel: ExecutiveGeointReportModel,
   institutionalInput: InstitutionalReportInput,
-  options: { maxVisuals?: number } = {}
+  options: { maxVisuals?: number; principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null } = {}
 ): ExecutiveVisualComposition {
   const maxVisuals = Math.min(Math.max(1, options.maxVisuals ?? MAX_EXECUTIVE_VISUALS), MAX_EXECUTIVE_VISUALS);
   const excludedItems: ExecutiveVisualSelectionAudit["excludedItems"] = [];
-  const principalTerritorialMap = buildPrincipalMap(executiveModel, institutionalInput, excludedItems);
+  const principalTerritorialMap = buildPrincipalMap(executiveModel, institutionalInput, excludedItems, options.principalMapSpec);
   const secondaryBudget = Math.max(0, maxVisuals - 1);
   const priorityFindingIds = executiveModel.findings.map((finding) => finding.findingId);
   const decisionLabels = executiveModel.decisionImplications.map((decision) => decision.hallazgoRelacionado);

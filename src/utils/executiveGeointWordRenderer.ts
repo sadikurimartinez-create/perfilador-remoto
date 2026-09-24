@@ -12,8 +12,7 @@ import type {
   ExecutiveGeointReportDocumentModel,
 } from "@/utils/executiveGeointReportDocumentModel";
 import type { ExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
-import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
-import { buildExecutiveCanonicalTerritorialMapSpec } from "@/utils/executiveCanonicalTerritorialMap";
+import type { ExecutiveCanonicalTerritorialMapSpec } from "@/utils/executiveCanonicalTerritorialMap";
 import {
   FlowControlManager,
   HeaderFooterManager,
@@ -69,8 +68,7 @@ interface VisualAssetBuildOptions {
   resolveImage?: ExecutiveGeointWordImageResolver;
   resolvePrincipalMapImage?: ExecutiveGeointWordImageResolver;
   strictPrincipalMapAssets?: boolean;
-  canonicalGeography?: CanonicalProjectGeography | null;
-  googleStaticMapsApiKey?: string;
+  principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null;
 }
 
 const TECHNICAL_VISIBLE_TERMS =
@@ -260,9 +258,9 @@ export async function buildExecutiveGeointWordVisualAssets(
     );
     if (principalAsset) assets[visualComposition.principalTerritorialMap.mapId] = principalAsset;
   }
-  if (visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED" && options.canonicalGeography) {
-    const mapSpec = buildExecutiveCanonicalTerritorialMapSpec(options.canonicalGeography);
-    console.info("[EXECUTIVE MAP] BUILD_SPEC=OK");
+  if (visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED" && options.principalMapSpec) {
+    const mapSpec = options.principalMapSpec;
+    console.info("[EXECUTIVE MAP] SPEC_REUSED=OK");
     const principalAsset = await resolvePrincipalTerritorialMapReference(
       mapSpec.imageUrl,
       options,

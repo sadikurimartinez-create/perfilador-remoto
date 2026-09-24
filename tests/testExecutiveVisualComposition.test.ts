@@ -1,6 +1,7 @@
 import { buildCanonicalProjectGeography, type CanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildExecutiveVisualComposition, MAX_EXECUTIVE_VISUALS } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
+import { buildExecutiveCanonicalTerritorialMapSpec } from "../src/utils/executiveCanonicalTerritorialMap";
 
 const generatedAt = "2026-09-06T12:00:00.000Z";
 
@@ -534,5 +535,18 @@ describe("Fase C - ExecutiveVisualComposition", () => {
       scaleLabel: null,
       orientationLabel: null,
     }));
+  });
+
+  test("43 mapa generado deriva scaleLabel exclusivamente del spec gobernado", () => {
+    const geo = geography("CORRIDOR");
+    const noMap = executiveModel({
+      geography: geo,
+      visualCandidates: [],
+      territorialSituation: { ...executiveModel({ geography: geo }).territorialSituation, principalMapCandidate: null },
+    });
+    const spec = buildExecutiveCanonicalTerritorialMapSpec(geo);
+    const map = buildExecutiveVisualComposition(noMap, institutionalInput({ geography: geo }), { principalMapSpec: spec }).principalTerritorialMap;
+    expect(map.presentation.cartographicMetadata?.scaleLabel).toBe(spec.cartographicScale.label);
+    expect(map.technicalMetadata.cartographicScale).toEqual(spec.cartographicScale);
   });
 });

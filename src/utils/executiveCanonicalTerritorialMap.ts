@@ -5,12 +5,21 @@ import {
   type CanonicalProjectGeography,
   type LatLngPoint,
 } from "@/utils/canonicalProjectGeography";
+import {
+  buildGovernedCartographicDecision,
+  CARTOGRAPHIC_LOGICAL_HEIGHT,
+  CARTOGRAPHIC_LOGICAL_WIDTH,
+  CARTOGRAPHIC_STATIC_MAP_SCALE,
+  type GovernedCartographicScale,
+  type GovernedCartographicViewport,
+} from "@/utils/governedCartographicScale";
 
 export interface ExecutiveCanonicalTerritorialMapSpec {
   mapId: "principal-territorial-map";
   provider: "GOOGLE_STATIC_MAPS";
   imageUrl: string;
-  viewport: ReturnType<typeof getCanonicalMapViewport>;
+  viewport: ReturnType<typeof getCanonicalMapViewport> & GovernedCartographicViewport;
+  cartographicScale: GovernedCartographicScale;
   geometryType: CanonicalGeometry["type"];
   paths: LatLngPoint[][];
   pathMetadata: Array<{
@@ -32,8 +41,7 @@ export interface ExecutiveCanonicalTerritorialMapSpec {
 }
 
 const GOOGLE_STATIC_MAPS_URL_MAX_LENGTH = 16384;
-const DEFAULT_STATIC_MAP_SIZE = "640x480";
-const DEFAULT_STATIC_MAP_SCALE = 2;
+const DEFAULT_STATIC_MAP_SIZE = `${CARTOGRAPHIC_LOGICAL_WIDTH}x${CARTOGRAPHIC_LOGICAL_HEIGHT}`;
 
 function isFiniteCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -129,26 +137,28 @@ function appendCanonicalShape(
 
 export function buildExecutiveCanonicalTerritorialMapSpec(
   geography: CanonicalProjectGeography,
-  options: { apiKey?: string; size?: string; scale?: 1 | 2 } = {}
+  _options: { apiKey?: string } = {}
 ): ExecutiveCanonicalTerritorialMapSpec {
   const snapshot = JSON.stringify(geography);
   validateGeography(geography);
   const viewport = getCanonicalMapViewport(geography);
   const coordinates = getCanonicalGeographyCoordinates(geography);
+  if (!viewport.center) throw new Error("CANONICAL_MAP_CENTER_REQUIRED");
+  const governed = buildGovernedCartographicDecision({
+    center: viewport.center,
+    points: coordinates,
+    fitMode: viewport.fitMode,
+  });
   const paths = geometryPaths(geography.geometry);
   const pathMetadata = geometryPathMetadata(geography.geometry, paths);
   const markers = geography.geometry.type === "Point" ? coordinates : [];
   const params = new URLSearchParams();
   params.set("provider", "google-static-map");
-  params.set("size", options.size || DEFAULT_STATIC_MAP_SIZE);
-  params.set("scale", String(options.scale || DEFAULT_STATIC_MAP_SCALE));
+  params.set("size", DEFAULT_STATIC_MAP_SIZE);
+  params.set("scale", String(CARTOGRAPHIC_STATIC_MAP_SCALE));
   params.set("maptype", "roadmap");
-  if (viewport.center) params.set("center", pointParam(viewport.center));
-  if (viewport.fitMode === "CENTER") params.set("zoom", "16");
-  if (viewport.bounds) {
-    params.append("visible", pointParam({ lat: viewport.bounds.north, lng: viewport.bounds.east }));
-    params.append("visible", pointParam({ lat: viewport.bounds.south, lng: viewport.bounds.west }));
-  }
+  params.set("center", pointParam(governed.viewport.center));
+  params.set("zoom", String(governed.viewport.zoom));
   appendCanonicalShape(params, geography, paths, markers, pathMetadata);
   const imageUrl = `/api/proxy-image?${params.toString()}`;
   const modeledProviderUrl = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}&key=SERVER_SIDE`;
@@ -158,7 +168,8 @@ export function buildExecutiveCanonicalTerritorialMapSpec(
     mapId: "principal-territorial-map",
     provider: "GOOGLE_STATIC_MAPS",
     imageUrl,
-    viewport,
+    viewport: { ...viewport, ...governed.viewport },
+    cartographicScale: governed.cartographicScale,
     geometryType: geography.geometry.type,
     paths,
     pathMetadata,

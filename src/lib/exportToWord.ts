@@ -75,6 +75,17 @@ import {
 } from "@/utils/documentIdentity";
 import { buildExecutiveGeointReportModel } from "@/utils/executiveGeointReportModel";
 import { buildExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
+import {
+  buildExecutiveCanonicalTerritorialMapSpec,
+  type ExecutiveCanonicalTerritorialMapSpec,
+} from "@/utils/executiveCanonicalTerritorialMap";
+import {
+  CARTOGRAPHIC_LOGICAL_HEIGHT,
+  CARTOGRAPHIC_LOGICAL_WIDTH,
+  CARTOGRAPHIC_SCALE_STRIP_LOGICAL_HEIGHT,
+  CARTOGRAPHIC_STATIC_MAP_SCALE,
+  type GovernedCartographicScale,
+} from "@/utils/governedCartographicScale";
 import { buildExecutiveGeointReportDocumentModel } from "@/utils/executiveGeointReportDocumentModel";
 import {
   assertExecutiveGeointPrincipalMapRendered,
@@ -84,6 +95,11 @@ import {
 import { buildExecutiveGeointTechnicalAnnexModel } from "@/utils/executiveGeointTechnicalAnnexModel";
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executiveGeointTechnicalAnnexWordRenderer";
 import { institutionalReportPackageService } from "@/services/institutionalReportPackageService";
+
+const CARTOGRAPHIC_SCALE_BAR_HEIGHT_LOGICAL_PX = 6;
+const CARTOGRAPHIC_SCALE_LABEL_BASELINE_LOGICAL_PX = 19;
+const CARTOGRAPHIC_SCALE_BAR_TOP_LOGICAL_PX = 27;
+const CARTOGRAPHIC_SCALE_VERSION_BASELINE_LOGICAL_PX = 29;
 
 export function safeUpperCase(value: any, fallback = "NO DEFINIDO"): string {
   if (value === undefined || value === null || String(value).trim() === "") return fallback;
@@ -159,6 +175,7 @@ export async function getImageDimensionsAndBuffer(
     minimumBytes?: number;
     fingerprintScope?: string;
     visualClass?: "EVIDENCE" | "TERRITORIAL_MAP";
+    cartographicScale?: GovernedCartographicScale;
   } = {}
 ): Promise<{ data: ArrayBuffer; width: number; height: number; type: string } | null> {
   if (!imageUrl || typeof imageUrl !== "string") return null;
@@ -252,11 +269,22 @@ export async function getImageDimensionsAndBuffer(
 
     const origWidth = img.width || img.naturalWidth || 640;
     const origHeight = img.height || img.naturalHeight || 480;
+    const scaleStripHeight = options.cartographicScale
+      ? CARTOGRAPHIC_SCALE_STRIP_LOGICAL_HEIGHT * CARTOGRAPHIC_STATIC_MAP_SCALE
+      : 0;
+    if (options.cartographicScale && (
+      origWidth !== CARTOGRAPHIC_LOGICAL_WIDTH * CARTOGRAPHIC_STATIC_MAP_SCALE
+      || origHeight !== CARTOGRAPHIC_LOGICAL_HEIGHT * CARTOGRAPHIC_STATIC_MAP_SCALE
+    )) {
+      if (isPrincipalTerritorialMap) console.warn("[EXECUTIVE MAP] VALIDATION=GOVERNED_DIMENSIONS_MISMATCH");
+      return null;
+    }
+    const composedHeight = origHeight + scaleStripHeight;
 
     // Calcular dimensiones proporcionales (object-fit: contain)
-    const ratio = Math.min(maxWidth / origWidth, maxHeight / origHeight);
+    const ratio = Math.min(maxWidth / origWidth, maxHeight / composedHeight);
     const scaledWidth = Math.round(origWidth * ratio);
-    const scaledHeight = Math.round(origHeight * ratio);
+    const scaledHeight = Math.round(composedHeight * ratio);
 
     if ((options.minimumWidth && scaledWidth < options.minimumWidth) || (options.minimumHeight && scaledHeight < options.minimumHeight)) {
       if (isPrincipalTerritorialMap) console.warn("[EXECUTIVE MAP] VALIDATION=DIMENSIONS_BELOW_MINIMUM");
@@ -265,7 +293,7 @@ export async function getImageDimensionsAndBuffer(
 
     const canvas = document.createElement("canvas");
     canvas.width = origWidth;
-    canvas.height = origHeight;
+    canvas.height = composedHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
@@ -283,6 +311,42 @@ export async function getImageDimensionsAndBuffer(
     ctx.rotate(-Math.PI / 4);
     ctx.fillText("SSPE-CEIPOL", 0, 0);
     ctx.restore();
+
+    if (options.cartographicScale) {
+      const governedScale = options.cartographicScale;
+      const outputScale = CARTOGRAPHIC_STATIC_MAP_SCALE;
+      const stripTop = origHeight;
+      const barX = governedScale.paddingLogicalPx * outputScale;
+      const barY = stripTop + CARTOGRAPHIC_SCALE_BAR_TOP_LOGICAL_PX * outputScale;
+      const barWidth = governedScale.outputPixels;
+      const barHeight = CARTOGRAPHIC_SCALE_BAR_HEIGHT_LOGICAL_PX * outputScale;
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, stripTop, origWidth, scaleStripHeight);
+      ctx.strokeStyle = "#0D2B52";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, stripTop);
+      ctx.lineTo(origWidth, stripTop);
+      ctx.stroke();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(barX, barY, barWidth / 2, barHeight);
+      ctx.strokeRect(barX, barY, barWidth / 2, barHeight);
+      ctx.fillStyle = "#0D2B52";
+      ctx.fillRect(barX + barWidth / 2, barY, barWidth / 2, barHeight);
+      ctx.strokeRect(barX + barWidth / 2, barY, barWidth / 2, barHeight);
+      ctx.fillStyle = "#0D2B52";
+      ctx.font = `bold ${12 * outputScale}px Arial`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(`ESCALA GRAFICA ${governedScale.label}`, barX, stripTop + CARTOGRAPHIC_SCALE_LABEL_BASELINE_LOGICAL_PX * outputScale);
+      ctx.font = `${9 * outputScale}px Arial`;
+      ctx.textAlign = "right";
+      ctx.fillText(
+        governedScale.algorithmVersion,
+        origWidth - 32 * outputScale,
+        stripTop + CARTOGRAPHIC_SCALE_VERSION_BASELINE_LOGICAL_PX * outputScale
+      );
+    }
 
     const stampedBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
       canvas.toBlob(
@@ -796,9 +860,14 @@ function sanitizeEditorialPayload(payload: any) {
 
 let institutionalGenerationSequence = 0;
 
-async function resolveInstitutionalVisualAssets(visualComposition: any, geography: any, strictEvidence = false, fingerprintScope = "GLOBAL") {
+async function resolveInstitutionalVisualAssets(
+  visualComposition: any,
+  principalMapSpec: ExecutiveCanonicalTerritorialMapSpec | null,
+  strictEvidence = false,
+  fingerprintScope = "GLOBAL"
+) {
   return buildExecutiveGeointWordVisualAssets(visualComposition, {
-    canonicalGeography: geography,
+    principalMapSpec,
     strictPrincipalMapAssets: true,
     resolvePrincipalMapImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
       const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, {
@@ -808,6 +877,7 @@ async function resolveInstitutionalVisualAssets(visualComposition: any, geograph
         minimumBytes: 1024,
         fingerprintScope,
         visualClass: "TERRITORIAL_MAP",
+        cartographicScale: principalMapSpec?.cartographicScale,
       });
       return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
     },
@@ -836,7 +906,14 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
     clasificacion: payload.classification || payload.clasificacion,
   });
-  const visualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
+  const provisionalVisualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
+  const principalTerritorialMapSpec = provisionalVisualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
+    && institutionalReportInput.geography
+    ? buildExecutiveCanonicalTerritorialMapSpec(institutionalReportInput.geography)
+    : null;
+  const visualComposition = principalTerritorialMapSpec
+    ? buildExecutiveVisualComposition(executiveModel, institutionalReportInput, { principalMapSpec: principalTerritorialMapSpec })
+    : provisionalVisualComposition;
   const documentModel = buildExecutiveGeointReportDocumentModel(
     executiveModel,
     visualComposition,
@@ -849,7 +926,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
   const fingerprintScope = `institutional-report:${++institutionalGenerationSequence}`;
   const visualAssetsById = await resolveInstitutionalVisualAssets(
     visualComposition,
-    institutionalReportInput.geography,
+    principalTerritorialMapSpec,
     true,
     fingerprintScope
   );
@@ -866,6 +943,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     executiveModel,
     documentModel,
     visualAssetsById,
+    principalTerritorialMapSpec,
     fingerprintScope,
     institutionalLogos: { sspe: sspeLogo, ceipol: ceipolLogo },
   };

@@ -94,6 +94,7 @@ export interface ExecutiveGeointTechnicalAnnexModel {
     sectionIds: string[];
     visualPlacementIds: string[];
     principalMapId: string;
+    principalMapScaleLabel?: string | null;
   };
   governance: {
     deterministic: true;
@@ -535,6 +536,7 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       sectionIds: documentModel.sections.map((item) => item.sectionId),
       visualPlacementIds: documentModel.visualPlacements.map((item) => item.visualId),
       principalMapId: visualComposition.principalTerritorialMap.mapId,
+      principalMapScaleLabel: visualComposition.principalTerritorialMap.presentation.cartographicMetadata?.scaleLabel ?? null,
     },
     governance: {
       deterministic: true,

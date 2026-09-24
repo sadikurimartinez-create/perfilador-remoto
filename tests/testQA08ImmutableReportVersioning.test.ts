@@ -129,6 +129,46 @@ function visualContext(data: ArrayBuffer | ArrayBufferView) {
   };
 }
 
+function cartographicSpec(zoom: number) {
+  return {
+    mapId: "principal-territorial-map",
+    provider: "GOOGLE_STATIC_MAPS",
+    imageUrl: `/api/proxy-image?zoom=${zoom}`,
+    viewport: {
+      center: { lat: 22, lng: -102 },
+      bounds: { north: 22.1, south: 21.9, east: -101.9, west: -102.1 },
+      fitMode: "BOUNDS",
+      zoom,
+      logicalWidth: 640,
+      logicalHeight: 480,
+      staticMapScale: 2,
+      tileSize: 256,
+      paddingLogicalPx: 40,
+      allCoordinatesVisible: true,
+    },
+    geometryType: "LineString",
+    paths: [[{ lat: 21.9, lng: -102.1 }, { lat: 22.1, lng: -101.9 }]],
+    pathMetadata: [],
+    markers: [],
+    coordinateCount: 2,
+    cartographicScale: {
+      algorithmVersion: "CARTOGRAPHIC_SCALE_WEB_MERCATOR_V1",
+      distance: 1,
+      distanceMeters: 1000,
+      unit: "km",
+      label: "1 km",
+      logicalPixels: 100,
+      outputPixels: 200,
+      metersPerLogicalPixel: 10,
+      metersPerOutputPixel: 5,
+      referenceLatitude: 22,
+      zoom,
+      paddingLogicalPx: 40,
+    },
+    technicalMetadata: { geographyId: "geo-1", source: "CanonicalProjectGeography" },
+  };
+}
+
 describe("QA-08 FASE 3F - immutable report package versioning", () => {
   beforeEach(() => {
     jest.spyOn(console, "info").mockImplementation(() => undefined);
@@ -392,5 +432,34 @@ describe("QA-08 FASE 3F - immutable report package versioning", () => {
     expect(diagnostic.message).toContain("[REDACTED_URL]");
     expect(diagnostic.message).toContain("token=[REDACTED]");
     expect(diagnostic.message).not.toContain("secret-value");
+  });
+
+  test("33 cambiar map spec cambia snapshotHash aunque el bitmap sea igual", async () => {
+    const base = visualContext(new Uint8Array([1, 2, 3]));
+    const first = await buildInstitutionalSnapshotHash({ ...base, principalTerritorialMapSpec: cartographicSpec(10) });
+    const changed = await buildInstitutionalSnapshotHash({ ...base, principalTerritorialMapSpec: cartographicSpec(11) });
+    expect(first).not.toBe(changed);
+  });
+
+  test("34 manifest nuevo persiste snapshot cartografico versionado y su hash", async () => {
+    const setup = fixture();
+    (setup.base.generationContext as any).principalTerritorialMapSpec = cartographicSpec(12);
+    const manifest = await setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-cartographic" });
+    expect(manifest.cartographicSnapshot).toMatchObject({
+      algorithmVersion: "CARTOGRAPHIC_SCALE_WEB_MERCATOR_V1",
+      geographyId: "geo-1",
+      zoom: 12,
+      logicalWidth: 640,
+      logicalHeight: 480,
+      staticMapScale: 2,
+    });
+    expect(manifest.cartographicSnapshot?.mapSpecHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  test("35 package legacy sin map spec sigue generado sin campos nuevos", async () => {
+    const setup = fixture();
+    const manifest = await setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-legacy-no-scale" });
+    expect(manifest.state).toBe("GENERATED");
+    expect(manifest.cartographicSnapshot).toBeUndefined();
   });
 });

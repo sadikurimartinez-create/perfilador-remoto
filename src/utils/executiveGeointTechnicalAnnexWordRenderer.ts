@@ -156,7 +156,11 @@ function renderSection(
   if (section.sectionId === "canonical-geography") {
     const id = annexModel.executiveReportReference.principalMapId;
     if (assets[id]?.data) {
-      children.push(...renderAsset(assets[id]!, "Mapa territorial principal del expediente.", true));
+      const scaleLabel = annexModel.executiveReportReference.principalMapScaleLabel;
+      const caption = scaleLabel
+        ? `Mapa territorial principal del expediente. Escala: ${scaleLabel}.`
+        : "Mapa territorial principal del expediente.";
+      children.push(...renderAsset(assets[id]!, caption, true));
       renderedVisualIds.push(id);
     } else {
       children.push(para("Activo cartografico no resuelto para este anexo."));

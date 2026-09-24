@@ -9,6 +9,7 @@ import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointRep
 import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
 import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
+import { buildExecutiveCanonicalTerritorialMapSpec } from "../src/utils/executiveCanonicalTerritorialMap";
 
 const root = process.cwd();
 const generatedAt = "2026-09-06T12:00:00.000Z";
@@ -544,7 +545,8 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
       fecha: "2026-09-24T02:54:17.387Z",
       personaPerfiladora: "NO DISPONIBLE",
     });
-    const composition = buildExecutiveVisualComposition(reportModel, controlled as any);
+    const mapSpec = buildExecutiveCanonicalTerritorialMapSpec(controlled.geography!);
+    const composition = buildExecutiveVisualComposition(reportModel, controlled as any, { principalMapSpec: mapSpec });
     const reportDocumentModel = buildExecutiveGeointReportDocumentModel(reportModel, composition, controlled as any);
     const model = buildExecutiveGeointTechnicalAnnexModel(
       controlled as any,
@@ -577,6 +579,8 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect((await Packer.toBuffer(renderedAnnex.document)).byteLength).toBeGreaterThan(1000);
     expect(renderedReport.renderAudit.renderedVisualIds).toContain(composition.principalTerritorialMap.mapId);
     expect(renderedAnnex.renderAudit.renderedVisualIds).toContain(composition.principalTerritorialMap.mapId);
+    expect(reportPackage.document).toContain(`Escala: ${mapSpec.cartographicScale.label}.`);
+    expect(annexPackage.document).toContain(`Escala: ${mapSpec.cartographicScale.label}.`);
     expect(reportPackage.document).toContain("Hipótesis vigente: Sin modificación respecto de la hipótesis inicial.");
     expect(annexPackage.document).toContain(`Instrucción original de análisis: ${instruction}`);
     expect(annexPackage.document).not.toContain(`Hallazgo: ${instruction}`);

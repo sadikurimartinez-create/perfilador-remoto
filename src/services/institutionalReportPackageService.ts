@@ -15,6 +15,7 @@ import {
 } from "firebase/storage";
 import { getDb, getStorageInstance } from "@/lib/firebase";
 import { sanitizeExpedienteFilePart } from "@/utils/documentIdentity";
+import type { GovernedCartographicScale } from "@/utils/governedCartographicScale";
 
 export type InstitutionalReportPackageState = "GENERATING" | "GENERATED" | "FAILED" | "CERTIFIED" | "PUBLISHED";
 export type InstitutionalReportArtifactState = "PENDING" | "STORED" | "FAILED";
@@ -169,6 +170,19 @@ export interface InstitutionalReportPackageManifest {
     reportSnapshotId: string | null;
     institutionalReportInputId: string | null;
     documentModelId: string | null;
+  };
+  cartographicSnapshot?: {
+    algorithmVersion: string;
+    mapSpecHash: string;
+    geographyId: string;
+    geometryType: string;
+    center: { lat: number; lng: number };
+    bounds: unknown;
+    zoom: number;
+    logicalWidth: number;
+    logicalHeight: number;
+    staticMapScale: number;
+    cartographicScale: GovernedCartographicScale;
   };
   failureReason?: string | null;
 }
@@ -364,9 +378,16 @@ export async function buildInstitutionalSnapshotHash(context: any): Promise<stri
     executiveModel: context.executiveModel,
     visualComposition: context.visualComposition,
     documentModel: context.documentModel,
+    ...(context.principalTerritorialMapSpec ? { principalTerritorialMapSpec: context.principalTerritorialMapSpec } : {}),
     visualAssets: visualAssets.sort((a, b) => a.id.localeCompare(b.id)),
   });
   const canonicalBytes = new TextEncoder().encode(JSON.stringify(canonical));
+  return `sha256:${await sha256Bytes(canonicalBytes.buffer as ArrayBuffer)}`;
+}
+
+export async function buildInstitutionalMapSpecHash(mapSpec: unknown): Promise<string | null> {
+  if (!mapSpec) return null;
+  const canonicalBytes = new TextEncoder().encode(JSON.stringify(canonicalize(mapSpec)));
   return `sha256:${await sha256Bytes(canonicalBytes.buffer as ArrayBuffer)}`;
 }
 
@@ -411,12 +432,13 @@ export class InstitutionalReportPackageService {
   }): Promise<InstitutionalReportPackageManifest> {
     const packageId = input.packageId || createInstitutionalReportPackageId();
     const actor = await runReportPackageStage("RESOLVE_ACTOR", () => resolveActor(input.generatedBy));
-    const [snapshotHash, reportHash, annexHash] = await runReportPackageStage(
+    const [snapshotHash, reportHash, annexHash, mapSpecHash] = await runReportPackageStage(
       "BUILD_SNAPSHOT_HASHES",
       () => Promise.all([
         buildInstitutionalSnapshotHash(input.generationContext),
         sha256Blob(input.reportBlob),
         sha256Blob(input.annexBlob),
+        buildInstitutionalMapSpecHash(input.generationContext.principalTerritorialMapSpec),
       ])
     );
     const createdAt = this.now();
@@ -444,6 +466,21 @@ export class InstitutionalReportPackageService {
             institutionalReportInputId: input.generationContext.institutionalReportInput?.institutionalReportInputId || null,
             documentModelId: input.generationContext.documentModel?.modelId || null,
           },
+          ...(mapSpecHash && input.generationContext.principalTerritorialMapSpec ? {
+            cartographicSnapshot: {
+              algorithmVersion: input.generationContext.principalTerritorialMapSpec.cartographicScale.algorithmVersion,
+              mapSpecHash,
+              geographyId: input.generationContext.principalTerritorialMapSpec.technicalMetadata.geographyId,
+              geometryType: input.generationContext.principalTerritorialMapSpec.geometryType,
+              center: input.generationContext.principalTerritorialMapSpec.viewport.center,
+              bounds: input.generationContext.principalTerritorialMapSpec.viewport.bounds ?? null,
+              zoom: input.generationContext.principalTerritorialMapSpec.viewport.zoom,
+              logicalWidth: input.generationContext.principalTerritorialMapSpec.viewport.logicalWidth,
+              logicalHeight: input.generationContext.principalTerritorialMapSpec.viewport.logicalHeight,
+              staticMapScale: input.generationContext.principalTerritorialMapSpec.viewport.staticMapScale,
+              cartographicScale: input.generationContext.principalTerritorialMapSpec.cartographicScale,
+            },
+          } : {}),
           failureReason: null,
         };
       })
@@ -451,7 +488,8 @@ export class InstitutionalReportPackageService {
 
     if (manifest.snapshotHash !== snapshotHash
       || manifest.artifacts.executiveReport.sha256 !== reportHash
-      || manifest.artifacts.technicalAnnex.sha256 !== annexHash) {
+      || manifest.artifacts.technicalAnnex.sha256 !== annexHash
+      || (mapSpecHash && manifest.cartographicSnapshot?.mapSpecHash !== mapSpecHash)) {
       throw new Error("REPORT_PACKAGE_IDEMPOTENCY_CONFLICT");
     }
     if (manifest.state === "GENERATED") return manifest;

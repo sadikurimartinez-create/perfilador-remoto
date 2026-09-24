@@ -88,34 +88,35 @@ function realPrincipalMapAsset() {
   return { data: new Uint8Array(2048), width: 500, height: 280, type: "png" as const };
 }
 
-function installImageResolutionHarness() {
+function installImageResolutionHarness(imageWidth = 600, imageHeight = 380) {
   const originalImage = (global as any).Image;
   const originalDocument = (global as any).document;
   const blobBuffer = new Uint8Array(2048).buffer;
+  const context = {
+    save: jest.fn(),
+    restore: jest.fn(),
+    translate: jest.fn(),
+    rotate: jest.fn(),
+    drawImage: jest.fn(),
+    fillRect: jest.fn(),
+    strokeRect: jest.fn(),
+    fillText: jest.fn(),
+    beginPath: jest.fn(),
+    moveTo: jest.fn(),
+    lineTo: jest.fn(),
+    stroke: jest.fn(),
+    globalAlpha: 1,
+    font: "",
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
+    textAlign: "",
+    textBaseline: "",
+  };
   const canvas = {
     width: 0,
     height: 0,
-    getContext: () => ({
-      save: jest.fn(),
-      restore: jest.fn(),
-      translate: jest.fn(),
-      rotate: jest.fn(),
-      drawImage: jest.fn(),
-      fillRect: jest.fn(),
-      strokeRect: jest.fn(),
-      fillText: jest.fn(),
-      beginPath: jest.fn(),
-      moveTo: jest.fn(),
-      lineTo: jest.fn(),
-      stroke: jest.fn(),
-      globalAlpha: 1,
-      font: "",
-      fillStyle: "",
-      strokeStyle: "",
-      lineWidth: 0,
-      textAlign: "",
-      textBaseline: "",
-    }),
+    getContext: () => context,
     toBlob: (callback: (blob: { arrayBuffer: () => Promise<ArrayBuffer> }) => void) => {
       callback({ arrayBuffer: async () => blobBuffer });
     },
@@ -126,17 +127,17 @@ function installImageResolutionHarness() {
   });
   (global as any).document = { createElement };
   (global as any).Image = class {
-    width = 600;
-    height = 380;
-    naturalWidth = 600;
-    naturalHeight = 380;
+    width = imageWidth;
+    height = imageHeight;
+    naturalWidth = imageWidth;
+    naturalHeight = imageHeight;
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
     set src(_value: string) {
       setTimeout(() => this.onload?.(), 0);
     }
   };
-  return () => {
+  const cleanup = () => {
     if (originalDocument === undefined) {
       delete (global as any).document;
     } else {
@@ -144,6 +145,7 @@ function installImageResolutionHarness() {
     }
     (global as any).Image = originalImage;
   };
+  return Object.assign(cleanup, { canvas, context });
 }
 
 async function resolveHarnessedImage(options: Parameters<typeof getImageDimensionsAndBuffer>[5] = {}) {
@@ -196,16 +198,25 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     const spec = buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]), { apiKey: "test-key" });
     expect(spec.markers).toEqual([{ lat: 22.1, lng: -101.9 }]);
     expect(decodeURIComponent(spec.imageUrl)).toContain("markers=color:red|label:A|22.1,-101.9");
+    const params = new URL(spec.imageUrl, "http://localhost").searchParams;
+    expect(params.get("zoom")).toBe("16");
+    expect(params.getAll("visible")).toEqual([]);
   });
 
   test("2 LineString conserva todos los vertices canonicos", () => {
     const spec = buildExecutiveCanonicalTerritorialMapSpec(geo("CORRIDOR", [{ lat: 22, lng: -102 }, { lat: 22.1, lng: -101.9 }, { lat: 22.2, lng: -101.8 }]), { apiKey: "test-key" });
     expect(spec.paths[0]).toEqual([{ lat: 22, lng: -102 }, { lat: 22.1, lng: -101.9 }, { lat: 22.2, lng: -101.8 }]);
+    const params = new URL(spec.imageUrl, "http://localhost").searchParams;
+    expect(Number.isInteger(Number(params.get("zoom")))).toBe(true);
+    expect(params.getAll("visible")).toEqual([]);
   });
 
   test("3 Polygon conserva y cierra correctamente el ring", () => {
     const spec = buildExecutiveCanonicalTerritorialMapSpec(geo("POLYGON", [{ lat: 22, lng: -102 }, { lat: 22, lng: -101.9 }, { lat: 22.1, lng: -101.9 }]), { apiKey: "test-key" });
     expect(spec.paths[0][0]).toEqual(spec.paths[0][spec.paths[0].length - 1]);
+    const params = new URL(spec.imageUrl, "http://localhost").searchParams;
+    expect(params.get("zoom")).toBe(String(spec.viewport.zoom));
+    expect(params.getAll("visible")).toEqual([]);
   });
 
   test("4 MultiPolygon conserva todos los componentes", () => {
@@ -256,8 +267,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
   test("12 MAP_RENDER_REQUIRED puede convertirse en activo real", async () => {
     const resolver = jest.fn(async () => ({ data: new Uint8Array([1, 2, 3]), type: "png" as const }));
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       resolveImage: resolver,
     });
     expect(resolver.mock.calls[0][0]).toContain("/api/proxy-image?provider=google-static-map");
@@ -266,8 +276,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
 
   test("13 fallo de adquisicion bloquea EXECUTIVE_GEOINT", async () => {
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       resolveImage: async () => null,
     });
     const rendered = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets });
@@ -287,8 +296,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
   test("16 NO_CANONICAL_GEOGRAPHY no fabrica mapa", async () => {
     const resolver = jest.fn(async () => ({ data: new Uint8Array([1]), type: "png" as const }));
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("NO_CANONICAL_GEOGRAPHY"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       resolveImage: resolver,
     });
     expect(assets["principal-territorial-map"]).toBeUndefined();
@@ -328,8 +336,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
 
   test("23 fallo del resolver real no produce placeholder para principal-territorial-map", async () => {
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       strictPrincipalMapAssets: true,
       resolvePrincipalMapImage: async () => null,
       resolveImage: async () => ({ data: new Uint8Array(1), type: "png" as const }),
@@ -346,8 +353,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
 
   test("25 EXECUTIVE_GEOINT permanece fail-closed sin activo principal real", async () => {
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       strictPrincipalMapAssets: true,
       resolvePrincipalMapImage: async () => ({ data: new Uint8Array(12), width: 1, height: 1, type: "png" as const }),
     });
@@ -465,8 +471,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     const validationSpy = jest.spyOn(EvidenceImageValidationEngine, "validateImage").mockReturnValue({ valid: false, reason: "IMAGE_CORRUPTED", fallbackReason: "IMAGE_CORRUPTED" } as any);
     const duplicateSpy = jest.spyOn(ImageFingerprintService, "registerAndCheckDuplicate").mockReturnValue({ duplicate: false, type: "NONE" } as any);
     const invalidAssets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       strictPrincipalMapAssets: true,
       resolvePrincipalMapImage: (reference, maxWidth, maxHeight, narrative, evidenceId) =>
         getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, { disableFallback: true }),
@@ -476,8 +481,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     validationSpy.mockReturnValue({ valid: true } as any);
     duplicateSpy.mockReturnValue({ duplicate: true, type: "SHA256" } as any);
     const duplicateAssets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
-      googleStaticMapsApiKey: "test-key",
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }])),
       strictPrincipalMapAssets: true,
       resolvePrincipalMapImage: (reference, maxWidth, maxHeight, narrative, evidenceId) =>
         getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, { disableFallback: true }),
@@ -512,7 +516,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     ["POLYGON", [{ lat: 22, lng: -102 }, { lat: 22, lng: -101.9 }, { lat: 22.1, lng: -101.9 }]],
   ] as const)("37 activo estricto %s alcanza renderedVisualIds y supera assert", async (type, points) => {
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
-      canonicalGeography: geo(type, [...points]),
+      principalMapSpec: buildExecutiveCanonicalTerritorialMapSpec(geo(type, [...points])),
       strictPrincipalMapAssets: true,
       resolvePrincipalMapImage: async () => realPrincipalMapAsset(),
     });
@@ -589,6 +593,40 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
       else (global as any).window = originalWindow;
       restoreHarness();
     }
+  });
+
+  test("41 franja gobernada conserva el mapa completo y dibuja barra mas etiqueta", async () => {
+    const harness = installImageResolutionHarness(1280, 960);
+    const validationSpy = jest.spyOn(EvidenceImageValidationEngine, "validateImage").mockReturnValue({ valid: true } as any);
+    const duplicateSpy = jest.spyOn(ImageFingerprintService, "registerAndCheckDuplicate").mockReturnValue({ duplicate: false, type: "NONE" } as any);
+    const spec = buildExecutiveCanonicalTerritorialMapSpec(geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]));
+    try {
+      const result = await resolveHarnessedImage({
+        disableFallback: true,
+        minimumWidth: 300,
+        minimumHeight: 180,
+        minimumBytes: 1024,
+        cartographicScale: spec.cartographicScale,
+      });
+      expect(result).not.toBeNull();
+      expect(harness.canvas.width).toBe(1280);
+      expect(harness.canvas.height).toBe(1056);
+      expect(harness.context.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1280, 960);
+      expect(harness.context.fillText).toHaveBeenCalledWith(`ESCALA GRAFICA ${spec.cartographicScale.label}`, 80, 998);
+      expect(harness.context.fillText).toHaveBeenCalledWith(spec.cartographicScale.algorithmVersion, 1216, 1018);
+    } finally {
+      duplicateSpy.mockRestore();
+      validationSpy.mockRestore();
+      harness();
+    }
+  });
+
+  test("42 renderer reutiliza el spec recibido y no lo reconstruye", () => {
+    const rendererSource = source("src/utils/executiveGeointWordRenderer.ts");
+    const exportSource = source("src/lib/exportToWord.ts");
+    expect(rendererSource).not.toContain("buildExecutiveCanonicalTerritorialMapSpec");
+    expect(exportSource.match(/buildExecutiveCanonicalTerritorialMapSpec\(/g)).toHaveLength(1);
+    expect(exportSource).toContain("principalMapSpec");
   });
 });
 
