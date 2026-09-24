@@ -703,6 +703,7 @@ export function ProjectMap({
               strokeColor: "#f43f5e",
               strokeOpacity: 0.9,
               strokeWeight: 4,
+              zIndex: 20,
               clickable: false,
             }}
           />
@@ -718,6 +719,7 @@ export function ProjectMap({
               strokeWeight: 3,
               fillColor: "#10b981",
               fillOpacity: 0.15,
+              zIndex: 20,
               clickable: false,
             }}
           />
