@@ -32,6 +32,8 @@ export interface ExecutiveCanonicalTerritorialMapSpec {
 }
 
 const GOOGLE_STATIC_MAPS_URL_MAX_LENGTH = 16384;
+const DEFAULT_STATIC_MAP_SIZE = "640x480";
+const DEFAULT_STATIC_MAP_SCALE = 2;
 
 function isFiniteCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -131,16 +133,15 @@ export function buildExecutiveCanonicalTerritorialMapSpec(
 ): ExecutiveCanonicalTerritorialMapSpec {
   const snapshot = JSON.stringify(geography);
   validateGeography(geography);
-  const apiKey = options.apiKey || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
-  if (!apiKey) throw new Error("CANONICAL_MAP_GOOGLE_STATIC_MAPS_KEY_REQUIRED");
   const viewport = getCanonicalMapViewport(geography);
   const coordinates = getCanonicalGeographyCoordinates(geography);
   const paths = geometryPaths(geography.geometry);
   const pathMetadata = geometryPathMetadata(geography.geometry, paths);
   const markers = geography.geometry.type === "Point" ? coordinates : [];
   const params = new URLSearchParams();
-  params.set("size", options.size || "800x600");
-  params.set("scale", String(options.scale || 2));
+  params.set("provider", "google-static-map");
+  params.set("size", options.size || DEFAULT_STATIC_MAP_SIZE);
+  params.set("scale", String(options.scale || DEFAULT_STATIC_MAP_SCALE));
   params.set("maptype", "roadmap");
   if (viewport.center) params.set("center", pointParam(viewport.center));
   if (viewport.fitMode === "CENTER") params.set("zoom", "16");
@@ -149,9 +150,9 @@ export function buildExecutiveCanonicalTerritorialMapSpec(
     params.append("visible", pointParam({ lat: viewport.bounds.south, lng: viewport.bounds.west }));
   }
   appendCanonicalShape(params, geography, paths, markers, pathMetadata);
-  params.set("key", apiKey);
-  const imageUrl = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-  if (imageUrl.length > GOOGLE_STATIC_MAPS_URL_MAX_LENGTH) throw new Error("CANONICAL_MAP_URL_TOO_LONG");
+  const imageUrl = `/api/proxy-image?${params.toString()}`;
+  const modeledProviderUrl = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}&key=SERVER_SIDE`;
+  if (modeledProviderUrl.length > GOOGLE_STATIC_MAPS_URL_MAX_LENGTH) throw new Error("CANONICAL_MAP_URL_TOO_LONG");
   if (JSON.stringify(geography) !== snapshot) throw new Error("CANONICAL_MAP_GEOGRAPHY_MUTATION_DETECTED");
   return {
     mapId: "principal-territorial-map",

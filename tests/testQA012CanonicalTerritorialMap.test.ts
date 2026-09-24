@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { Packer } from "docx";
 import {
   buildCanonicalProjectGeography,
   type CanonicalProjectGeography,
@@ -13,6 +14,7 @@ import {
 } from "../src/utils/executiveGeointWordRenderer";
 import { EvidenceImageValidationEngine } from "../src/utils/evidenceImageValidationEngine";
 import { ImageFingerprintService } from "../src/utils/imageFingerprintService";
+import { GET as proxyImageGet } from "../src/app/api/proxy-image/route";
 
 const root = process.cwd();
 
@@ -258,7 +260,7 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
       googleStaticMapsApiKey: "test-key",
       resolveImage: resolver,
     });
-    expect(resolver.mock.calls[0][0]).toContain("https://maps.googleapis.com/maps/api/staticmap?");
+    expect(resolver.mock.calls[0][0]).toContain("/api/proxy-image?provider=google-static-map");
     expect(assets["principal-territorial-map"]).toBeTruthy();
   });
 
@@ -486,5 +488,146 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     duplicateSpy.mockRestore();
     validationSpy.mockRestore();
     restoreHarness();
+  });
+
+  test("36 contrato canonico usa proxy interno, tamano admitido y escala 2 sin exponer clave", () => {
+    const spec = buildExecutiveCanonicalTerritorialMapSpec(
+      geo("INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]),
+      { apiKey: "must-not-cross-client-boundary" }
+    );
+    const params = new URL(spec.imageUrl, "http://localhost").searchParams;
+    expect(spec.imageUrl.startsWith("/api/proxy-image?")).toBe(true);
+    expect(params.get("provider")).toBe("google-static-map");
+    expect(params.get("size")).toBe("640x480");
+    expect(params.get("scale")).toBe("2");
+    expect(params.has("key")).toBe(false);
+    expect(spec.imageUrl).not.toContain("must-not-cross-client-boundary");
+    expect(spec.imageUrl).not.toContain("21.885");
+    expect(spec.imageUrl).not.toContain("-102.291");
+  });
+
+  test.each([
+    ["INDIVIDUAL", [{ lat: 22.1, lng: -101.9 }]],
+    ["CORRIDOR", [{ lat: 22, lng: -102 }, { lat: 22.1, lng: -101.9 }]],
+    ["POLYGON", [{ lat: 22, lng: -102 }, { lat: 22, lng: -101.9 }, { lat: 22.1, lng: -101.9 }]],
+  ] as const)("37 activo estricto %s alcanza renderedVisualIds y supera assert", async (type, points) => {
+    const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("MAP_RENDER_REQUIRED"), {
+      canonicalGeography: geo(type, [...points]),
+      strictPrincipalMapAssets: true,
+      resolvePrincipalMapImage: async () => realPrincipalMapAsset(),
+    });
+    const rendered = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets });
+    expect(assets["principal-territorial-map"]?.data.byteLength).toBeGreaterThan(1024);
+    expect(rendered.renderAudit.renderedVisualIds).toContain("principal-territorial-map");
+    expect(rendered.renderAudit.missingVisualAssetIds).not.toContain("principal-territorial-map");
+    expect(() => assertExecutiveGeointPrincipalMapRendered(rendered)).not.toThrow();
+    const blob = await Packer.toBlob(rendered.document);
+    expect(blob.size).toBeGreaterThan(0);
+  });
+
+  test("38 fingerprint detecta repeticion dentro de una generacion y no contamina la siguiente", () => {
+    ImageFingerprintService.clearRegistry();
+    const bytes = new Uint8Array(2048).buffer;
+    expect(ImageFingerprintService.registerAndCheckDuplicate("map-a", bytes, "map-1", "generation-a").duplicate).toBe(false);
+    expect(ImageFingerprintService.registerAndCheckDuplicate("map-a", bytes, "map-2", "generation-a").duplicate).toBe(true);
+    expect(ImageFingerprintService.registerAndCheckDuplicate("map-a", bytes, "map-1", "generation-b").duplicate).toBe(false);
+    ImageFingerprintService.clearRegistry();
+  });
+});
+
+function proxyRequest(query: string) {
+  return { url: `http://localhost/api/proxy-image?${query}` } as any;
+}
+
+describe("QA-01.2 - Frontera proxy-image del mapa institucional", () => {
+  const originalKey = process.env.GOOGLE_MAPS_API_KEY;
+  const originalFetch = global.fetch;
+  let warnSpy: jest.SpyInstance;
+  let infoSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    process.env.GOOGLE_MAPS_API_KEY = "server-only-test-key";
+    warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    infoSpy = jest.spyOn(console, "info").mockImplementation(() => undefined);
+    errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
+    else process.env.GOOGLE_MAPS_API_KEY = originalKey;
+  });
+
+  test("39 construye Static Maps con clave exclusiva de servidor y conserva geometria", async () => {
+    global.fetch = jest.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { "content-type": "image/png" },
+    })) as any;
+    const response = await proxyImageGet(proxyRequest(
+      "provider=google-static-map&size=640x480&scale=2&maptype=roadmap&visible=22.2%2C-101.8&visible=22%2C-102&path=color%3A0x0D2B52ff%7Cweight%3A4%7C22%2C-102%7C22.2%2C-101.8"
+    ));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    const [upstream, options] = (global.fetch as jest.Mock).mock.calls[0];
+    const upstreamUrl = new URL(String(upstream));
+    expect(upstreamUrl.hostname).toBe("maps.googleapis.com");
+    expect(upstreamUrl.pathname).toBe("/maps/api/staticmap");
+    expect(upstreamUrl.searchParams.get("key")).toBe("server-only-test-key");
+    expect(upstreamUrl.searchParams.get("size")).toBe("640x480");
+    expect(upstreamUrl.searchParams.get("scale")).toBe("2");
+    expect(upstreamUrl.searchParams.getAll("visible")).toEqual(["22.2,-101.8", "22,-102"]);
+    expect(options.redirect).toBe("error");
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("40 rechaza clave cliente y tamano fuera del contrato antes de fetch", async () => {
+    global.fetch = jest.fn() as any;
+    const withKey = await proxyImageGet(proxyRequest("provider=google-static-map&center=22%2C-102&key=client-secret"));
+    const oversized = await proxyImageGet(proxyRequest("provider=google-static-map&center=22%2C-102&size=800x600"));
+    expect(withKey.status).toBe(400);
+    expect(await withKey.text()).toBe("CLIENT_API_KEY_FORBIDDEN");
+    expect(oversized.status).toBe(400);
+    expect(await oversized.text()).toBe("IMAGE_SIZE_OUT_OF_RANGE");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "url=http%3A%2F%2F127.0.0.1%2Fsecret",
+    "url=https%3A%2F%2Fexample.com%2Fimage.png",
+    "url=https%3A%2F%2Fmaps.googleapis.com%2FcomputeMetadata%2Fv1%2F",
+  ])("41 bloquea SSRF o ruta no autorizada: %s", async (query) => {
+    global.fetch = jest.fn() as any;
+    const response = await proxyImageGet(proxyRequest(query));
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test("42 rechaza respuesta no imagen y normaliza error HTTP remoto", async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce(new Response("quota", { status: 200, headers: { "content-type": "text/plain" } }))
+      .mockResolvedValueOnce(new Response("denied", { status: 403, headers: { "content-type": "text/plain" } })) as any;
+    const query = "provider=google-static-map&center=22%2C-102";
+    const invalidType = await proxyImageGet(proxyRequest(query));
+    const remoteFailure = await proxyImageGet(proxyRequest(query));
+    expect(invalidType.status).toBe(502);
+    expect(await invalidType.text()).toBe("REMOTE_CONTENT_TYPE_INVALID");
+    expect(remoteFailure.status).toBe(502);
+    expect(await remoteFailure.text()).toBe("REMOTE_IMAGE_HTTP_ERROR");
+  });
+
+  test("43 timeout se informa sin filtrar URL ni clave", async () => {
+    const abortError = new Error("request aborted");
+    abortError.name = "AbortError";
+    global.fetch = jest.fn(async () => { throw abortError; }) as any;
+    const response = await proxyImageGet(proxyRequest("provider=google-static-map&center=22%2C-102"));
+    expect(response.status).toBe(504);
+    expect(await response.text()).toBe("REMOTE_IMAGE_TIMEOUT");
+    const logged = errorSpy.mock.calls.flat().map(String).join(" ");
+    expect(logged).not.toContain("server-only-test-key");
+    expect(logged).not.toContain("22,-102");
   });
 });

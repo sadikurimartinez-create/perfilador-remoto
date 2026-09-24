@@ -261,9 +261,8 @@ export async function buildExecutiveGeointWordVisualAssets(
     if (principalAsset) assets[visualComposition.principalTerritorialMap.mapId] = principalAsset;
   }
   if (visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED" && options.canonicalGeography) {
-    const mapSpec = buildExecutiveCanonicalTerritorialMapSpec(options.canonicalGeography, {
-      apiKey: options.googleStaticMapsApiKey,
-    });
+    const mapSpec = buildExecutiveCanonicalTerritorialMapSpec(options.canonicalGeography);
+    console.info("[EXECUTIVE MAP] BUILD_SPEC=OK");
     const principalAsset = await resolvePrincipalTerritorialMapReference(
       mapSpec.imageUrl,
       options,

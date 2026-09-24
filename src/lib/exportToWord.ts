@@ -157,9 +157,12 @@ export async function getImageDimensionsAndBuffer(
     minimumWidth?: number;
     minimumHeight?: number;
     minimumBytes?: number;
+    fingerprintScope?: string;
+    visualClass?: "EVIDENCE" | "TERRITORIAL_MAP";
   } = {}
 ): Promise<{ data: ArrayBuffer; width: number; height: number; type: string } | null> {
   if (!imageUrl || typeof imageUrl !== "string") return null;
+  const isPrincipalTerritorialMap = options.visualClass === "TERRITORIAL_MAP" || evidenceId === "principal-territorial-map";
   let objectUrl: string | null = null;
   try {
     let imgSrc = imageUrl;
@@ -168,16 +171,11 @@ export async function getImageDimensionsAndBuffer(
     if (imageUrl.includes("api-maps.yandex.ru")) {
       console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Interceptada URL legacy de Yandex Maps:", imageUrl);
       const match = imageUrl.match(/ll=([^&]+)/);
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
       if (match && match[1]) {
         const [lng, lat] = match[1].split(",");
-        if (apiKey) {
-          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
-          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a Google Maps Static API.`);
-        } else {
-          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
-          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: Yandex LL [${lng}, ${lat}] -> Redireccionado a CartoDB.`);
-        }
+        const params = new URLSearchParams({ provider: "google-static-map", center: `${lat},${lng}`, zoom: "16", size: "600x400", scale: "2", maptype: "roadmap" });
+        imgSrc = `/api/proxy-image?${params.toString()}`;
+        console.log("[AUDITORÍA CARTOGRÁFICA SAI] Normalización legacy redirigida al proxy cartográfico institucional.");
       } else {
         console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Mapa Yandex omitido: no contiene coordenadas verificables.");
         return null;
@@ -188,23 +186,18 @@ export async function getImageDimensionsAndBuffer(
     if (imageUrl.includes("staticmap.openstreetmap.de")) {
       console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Interceptada URL legacy de OpenStreetMap Alemania:", imageUrl);
       const match = imageUrl.match(/center=([^&]+)/);
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
       if (match && match[1]) {
         const [lat, lng] = match[1].split(",");
-        if (apiKey) {
-          imgSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=600x400&maptype=roadmap&key=${apiKey}`;
-          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: OSM Center [${lat}, ${lng}] -> Redireccionado a Google Maps Static API.`);
-        } else {
-          imgSrc = `https://basemaps.cartocdn.com/rastertiles/voyager_labels_under/16/${lng}/${lat}/600x400.png`;
-          console.log(`[AUDITORÍA CARTOGRÁFICA SAI] Normalización exitosa en caliente: OSM Center [${lat}, ${lng}] -> Redireccionado a CartoDB.`);
-        }
+        const params = new URLSearchParams({ provider: "google-static-map", center: `${lat},${lng}`, zoom: "16", size: "600x400", scale: "2", maptype: "roadmap" });
+        imgSrc = `/api/proxy-image?${params.toString()}`;
+        console.log("[AUDITORÍA CARTOGRÁFICA SAI] Normalización legacy redirigida al proxy cartográfico institucional.");
       } else {
         console.warn("[AUDITORÍA CARTOGRÁFICA SAI] Mapa OSM omitido: no contiene coordenadas verificables.");
         return null;
       }
     }
 
-    if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
+    if (imgSrc.startsWith("/") || imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
       const isExternal = typeof window !== "undefined" && !imgSrc.includes(window.location.host);
       let fetchUrl = imgSrc;
 
@@ -218,7 +211,7 @@ export async function getImageDimensionsAndBuffer(
               const heading = u.searchParams.get("heading") || "0";
               const pitch = u.searchParams.get("pitch") || "0";
               const fov = u.searchParams.get("fov") || "90";
-              const size = u.searchParams.get("size") || "800x600";
+              const size = u.searchParams.get("size") || "640x480";
               fetchUrl = `/api/proxy-image?lat=${lat}&lng=${lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&size=${size}`;
             } else {
               fetchUrl = `/api/proxy-image?url=${encodeURIComponent(imgSrc)}`;
@@ -233,7 +226,11 @@ export async function getImageDimensionsAndBuffer(
       }
       
       const response = await fetch(fetchUrl, { cache: "no-cache" });
+      if (isPrincipalTerritorialMap) console.info(`[EXECUTIVE MAP] PROXY_FETCH status=${response.status}`);
       if (!response.ok) return null;
+      const contentType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      if (isPrincipalTerritorialMap) console.info(`[EXECUTIVE MAP] CONTENT_TYPE=${contentType || "UNKNOWN"}`);
+      if (!contentType.startsWith("image/")) return null;
       const blob = await response.blob();
       objectUrl = URL.createObjectURL(blob);
       imgSrc = objectUrl;
@@ -259,6 +256,7 @@ export async function getImageDimensionsAndBuffer(
     const scaledHeight = Math.round(origHeight * ratio);
 
     if ((options.minimumWidth && scaledWidth < options.minimumWidth) || (options.minimumHeight && scaledHeight < options.minimumHeight)) {
+      if (isPrincipalTerritorialMap) console.warn("[EXECUTIVE MAP] VALIDATION=DIMENSIONS_BELOW_MINIMUM");
       return null;
     }
 
@@ -299,6 +297,7 @@ export async function getImageDimensionsAndBuffer(
     if (narrative) {
       // 1. Validar integridad de imagen, peso, formato y coincidencia semántica
       const validation = EvidenceImageValidationEngine.validateImage(stampedBuffer, imageUrl, narrative);
+      if (isPrincipalTerritorialMap) console.info(`[EXECUTIVE MAP] VALIDATION=${validation.valid ? "PASS" : validation.reason || "FAIL"}`);
       if (!validation.valid) {
         console.warn(`[EvidenceImageValidationEngine] Imagen invalidada. Razón: ${validation.reason}`);
         if (options.disableFallback) return null;
@@ -312,7 +311,13 @@ export async function getImageDimensionsAndBuffer(
       }
 
       // 2. Control de duplicados usando doble fingerprint (SHA256 + pHash)
-      const dupCheck = ImageFingerprintService.registerAndCheckDuplicate(imageUrl, stampedBuffer);
+      const dupCheck = ImageFingerprintService.registerAndCheckDuplicate(
+        imageUrl,
+        stampedBuffer,
+        evidenceId || "N/D",
+        options.fingerprintScope || "GLOBAL"
+      );
+      if (isPrincipalTerritorialMap) console.info(`[EXECUTIVE MAP] DUPLICATE=${dupCheck.duplicate ? dupCheck.type || "YES" : "NO"}`);
       if (dupCheck.duplicate) {
         console.warn(`[ImageFingerprintService] Duplicado detectado (${dupCheck.type}). Excluyendo de compilación.`);
         if (options.disableFallback) return null;
@@ -328,11 +333,16 @@ export async function getImageDimensionsAndBuffer(
     const resolvedExt = resolveImageExtension(undefined, imageUrl, stampedBuffer);
     const resolvedType = resolvedExt.replace(".", "");
     if (options.minimumBytes && stampedBuffer.byteLength < options.minimumBytes) {
+      if (isPrincipalTerritorialMap) console.warn("[EXECUTIVE MAP] VALIDATION=BYTES_BELOW_MINIMUM");
       return null;
     }
+    if (isPrincipalTerritorialMap) console.info(`[EXECUTIVE MAP] ASSET width=${scaledWidth} height=${scaledHeight} bytes=${stampedBuffer.byteLength}`);
     return { data: stampedBuffer, width: scaledWidth, height: scaledHeight, type: resolvedType };
   } catch (err) {
-    if (options.disableFallback) return null;
+    if (options.disableFallback) {
+      if (isPrincipalTerritorialMap) console.warn("[EXECUTIVE MAP] VALIDATION=IMAGE_PIPELINE_ERROR");
+      return null;
+    }
     console.error("Watermark/dimension calc failed, aplicando fallback de placeholder táctico institucional local:", err);
     
     try {
@@ -781,20 +791,26 @@ function sanitizeEditorialPayload(payload: any) {
   return payload;
 }
 
-async function resolveInstitutionalVisualAssets(visualComposition: any, geography: any, strictEvidence = false) {
+let institutionalGenerationSequence = 0;
+
+async function resolveInstitutionalVisualAssets(visualComposition: any, geography: any, strictEvidence = false, fingerprintScope = "GLOBAL") {
   return buildExecutiveGeointWordVisualAssets(visualComposition, {
     canonicalGeography: geography,
-    googleStaticMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY,
     strictPrincipalMapAssets: true,
     resolvePrincipalMapImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
       const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId, {
-        disableFallback: true, minimumWidth: 300, minimumHeight: 180, minimumBytes: 1024,
+        disableFallback: true,
+        minimumWidth: 300,
+        minimumHeight: 180,
+        minimumBytes: 1024,
+        fingerprintScope,
+        visualClass: "TERRITORIAL_MAP",
       });
       return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
     },
     resolveImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
       const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId,
-        strictEvidence ? { disableFallback: true } : undefined);
+        strictEvidence ? { disableFallback: true, fingerprintScope, visualClass: "EVIDENCE" } : undefined);
       return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
     },
   });
@@ -827,7 +843,13 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
       ceipolId: payload.ceipolId,
     }
   );
-  const visualAssetsById = await resolveInstitutionalVisualAssets(visualComposition, institutionalReportInput.geography, true);
+  const fingerprintScope = `institutional-report:${++institutionalGenerationSequence}`;
+  const visualAssetsById = await resolveInstitutionalVisualAssets(
+    visualComposition,
+    institutionalReportInput.geography,
+    true,
+    fingerprintScope
+  );
   const [sspeLogo, ceipolLogo] = await Promise.all([
     fetchLocalImageBuffer("/logos/logo-ssp.png"),
     fetchLocalImageBuffer("/logos/logo-ceipol.png"),
@@ -841,6 +863,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     executiveModel,
     documentModel,
     visualAssetsById,
+    fingerprintScope,
     institutionalLogos: { sspe: sspeLogo, ceipol: ceipolLogo },
   };
 }
@@ -850,7 +873,11 @@ async function hydrateTechnicalAnnexVisualAssets(generationContext: any, annexMo
   for (const section of annexModel.sections.filter((item: any) => item.sectionId === "field-photographs" || item.sectionId === "street-view")) {
     for (const record of section.records) {
       if (!record.visualReference || visualAssetsById[record.recordId]) continue;
-      const resolved = await getImageDimensionsAndBuffer(record.visualReference, 360, 220, record.title, record.recordId, { disableFallback: true });
+      const resolved = await getImageDimensionsAndBuffer(record.visualReference, 360, 220, record.title, record.recordId, {
+        disableFallback: true,
+        fingerprintScope: generationContext.fingerprintScope,
+        visualClass: "EVIDENCE",
+      });
       if (resolved) visualAssetsById[record.recordId] = {
         data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any,
       };

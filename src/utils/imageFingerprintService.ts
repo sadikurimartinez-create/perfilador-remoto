@@ -24,24 +24,27 @@ export class ImageFingerprintService {
   public static registerAndCheckDuplicate(
     dataUrl: string,
     buffer: ArrayBuffer,
-    evidenceId: string = "N/D"
+    evidenceId: string = "N/D",
+    scope: string = "GLOBAL"
   ): { duplicate: boolean; type?: "EXACT" | "PERCEPTUAL"; duplicateOf?: string; hash: string; phash: string } {
     const hash = this.computeSHA256(buffer);
     const phash = this.computeSimulatedPHash(dataUrl, buffer);
+    const exactKey = `${scope}:${hash}`;
+    const perceptualKey = `${scope}:${phash}`;
 
-    if (this.registeredHashes.has(hash)) {
-      const originalId = this.registeredHashes.get(hash) || "Evidencia Previa";
+    if (this.registeredHashes.has(exactKey)) {
+      const originalId = this.registeredHashes.get(exactKey) || "Evidencia Previa";
       return { duplicate: true, type: "EXACT", duplicateOf: originalId, hash, phash };
     }
 
-    if (this.registeredPhashes.has(phash)) {
-      const originalId = this.registeredPhashes.get(phash) || "Evidencia Previa";
+    if (this.registeredPhashes.has(perceptualKey)) {
+      const originalId = this.registeredPhashes.get(perceptualKey) || "Evidencia Previa";
       return { duplicate: true, type: "PERCEPTUAL", duplicateOf: originalId, hash, phash };
     }
 
     // Registrar para futuras comparaciones
-    this.registeredHashes.set(hash, evidenceId);
-    this.registeredPhashes.set(phash, evidenceId);
+    this.registeredHashes.set(exactKey, evidenceId);
+    this.registeredPhashes.set(perceptualKey, evidenceId);
 
     return { duplicate: false, hash, phash };
   }
