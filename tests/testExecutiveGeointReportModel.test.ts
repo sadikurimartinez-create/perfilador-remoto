@@ -538,9 +538,32 @@ describe("ExecutiveGeointReportModel", () => {
     expect(explicit.panorama.nivelConfianza).toBe("MEDIO");
 
     const absent = buildExecutiveGeointReportModel(institutionalInput({
-      findings: [], analyses: [], evidence: [], visualProducts: [], streetView: [],
-      lineageSummary: { geographyId: "geo-1", sourceIds: [], evidenceIds: [], findingIds: [], analysisIds: [], conclusionIds: [], itemCount: 0 },
+      findings: [], analyses: [], visualProducts: [], streetView: [],
+      evidence: Array.from({ length: 3 }, (_, index) => ({
+        evidenceId: `photo-${index + 1}`,
+        traceabilityIds: [`trace-photo-${index + 1}`],
+      })),
+      lineageSummary: {
+        geographyId: "geo-1",
+        sourceIds: ["source-photo-1", "source-photo-2", "source-photo-3"],
+        evidenceIds: ["photo-1", "photo-2", "photo-3"],
+        findingIds: [], analysisIds: [], conclusionIds: [], itemCount: 3,
+      },
     }), context());
+    expect(absent.multisourceAnalysis.nivelSoporte).toBe("MEDIO");
     expect(absent.panorama.nivelConfianza).toBe("NO DISPONIBLE");
+  });
+
+  test("41 panorama conserva solo oraciones completas y nunca agrega truncamiento mecanico", () => {
+    const firstSentence = "El corredor presenta movilidad urbana y condiciones ambientales documentadas.";
+    const longHypothesis = `${firstSentence} ${"Estas condiciones requieren contraste institucional adicional antes de cualquier conclusión. ".repeat(8)}`;
+    const model = buildExecutiveGeointReportModel(institutionalInput({
+      hypothesis: { currentHypothesis: longHypothesis } as any,
+      findings: [], analyses: [],
+    }), context());
+    expect(model.panorama.situacion.startsWith(firstSentence)).toBe(true);
+    expect(model.panorama.situacion.length).toBeLessThanOrEqual(420);
+    expect(model.panorama.situacion).toMatch(/[.!?]$/);
+    expect(model.panorama.situacion).not.toMatch(/\.\.\.$|\bde con\.\.\.|\bpara det\.\.\./i);
   });
 });

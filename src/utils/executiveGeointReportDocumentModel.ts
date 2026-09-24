@@ -467,7 +467,7 @@ function buildSections(
     role: "Acciones derivadas de implicaciones gobernadas",
     content: decisions.map(decisionContent),
     densityPolicy: { targetPages: "1", maxItems: EXECUTIVE_DOCUMENT_LIMITS.decisions },
-    status: "READY",
+    status: decisions.length ? "READY" : "OPTIONAL_SUPPRESSED",
   });
 
   return sections.sort((a, b) => a.order - b.order);
@@ -494,7 +494,7 @@ function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): E
     visualId: visualComposition.principalTerritorialMap.mapId,
     sectionId: "territorial-situation",
     placementRole: "PRINCIPAL_TERRITORIAL_MAP",
-    headline: visible(visualComposition.principalTerritorialMap.executiveHeadline, "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA"),
+    headline: visible(visualComposition.principalTerritorialMap.executiveHeadline, "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA"),
     caption: visible(visualComposition.principalTerritorialMap.caption, "Mapa territorial principal."),
     visualClass: "MAPA_CARTOGRAFICO",
     visibleSourceLabel: visible(visualComposition.principalTerritorialMap.presentation.visibleSourceLabel) || null,
@@ -507,7 +507,7 @@ function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): E
       visualId: visual.visualId,
       sectionId: placementSectionForVisual(visual.visualType),
       placementRole: visual.visualType === "EVIDENCE_IMAGE" ? "SUPPORTING_EVIDENCE" : "ANALYTICAL_SUPPORT",
-      headline: visible(visual.executiveHeadline, "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA"),
+      headline: visible(visual.executiveHeadline, "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA"),
       caption: visible(visual.caption, "Visual ejecutivo gobernado."),
       visualClass: visualClass(visual.visualType),
       visibleSourceLabel: visible(visual.presentation.visibleSourceLabel) || null,

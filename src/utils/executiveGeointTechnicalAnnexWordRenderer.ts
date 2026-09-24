@@ -70,6 +70,13 @@ function compactCell(value: unknown, maxLength = 160): string {
   return `${candidate.slice(0, lastSpace > maxLength * 0.65 ? lastSpace : candidate.length).trim()}…`;
 }
 
+function visibleRecordLabel(value: string): string {
+  if (["FOTOGRAFIA_DE_CAMPO", "FIELD_PHOTO", "FOTOGRAFIA_CAMPO"].includes(value.toUpperCase())) {
+    return "Fotografía de campo";
+  }
+  return value.replace(/_/g, " ");
+}
+
 function renderRecords(records: TechnicalAnnexRecord[]): any[] {
   if (!records.length) return [];
   return [
@@ -91,18 +98,20 @@ function renderRecords(records: TechnicalAnnexRecord[]): any[] {
 function renderEvidenceDossier(record: TechnicalAnnexRecord): any[] {
   const children = [
     para(`FICHA DE EVIDENCIA - ${record.referenceLabel || record.recordId}`, { bold: true, size: 20, color: "0D2B52" }),
-    para(`Título: ${record.title}`),
-    para(`Tipo: ${record.contentRole || "OBSERVATION"}. Fuente: ${record.sourceType}.`),
+    para(`Título: ${visibleRecordLabel(record.title)}`),
+    para(`Tipo: ${record.contentRole || "OBSERVATION"}. Fuente: ${visibleRecordLabel(record.sourceType)}.`),
     para(`Fecha: ${record.capturedAt ? formatInstitutionalDate(record.capturedAt) : "NO CONSIGNADA"}. Trazabilidad: ${record.traceabilityStatus || "NO CONSIGNADO"}.`),
   ];
   if (record.locationLabel) children.push(para(`Ubicación: ${record.locationLabel}.`));
-  if (record.contentRole === "INSTRUCTION" && record.contextOriginal) {
-    children.push(para(`Contexto o instrucción de análisis: ${record.contextOriginal}`));
-  } else if (record.validatedAnalysis) {
+  if (record.contextOriginal) children.push(para(`Contexto original: ${record.contextOriginal}`));
+  if (record.instructionOriginal) {
+    children.push(para(`Instrucción original de análisis: ${record.instructionOriginal}`));
+  } else if (record.narrativeSegmentationStatus === "NOT_SEPARABLE") {
+    children.push(para("Clasificación narrativa no separable automáticamente."));
+  }
+  if (record.validatedAnalysis) {
     children.push(para(`Síntesis analítica validada: ${record.validatedAnalysis}`));
-  } else if (record.contextOriginal) {
-    children.push(para(`Contexto original: ${record.contextOriginal}`));
-  } else {
+  } else if (!record.contextOriginal && !record.instructionOriginal) {
     children.push(para("Interpretación analítica: NO CONSIGNADA."));
   }
   if (record.limitations.length) children.push(para(`Limitaciones: ${record.limitations.join("; ")}`));
@@ -162,7 +171,7 @@ function renderSection(
         if (record.visualReference) missingVisualAssetIds.push(record.recordId);
         continue;
       }
-      children.push(...renderAsset(asset, `${record.title}. Fuente: ${record.sourceType}. Referencia: ${record.referenceLabel || record.recordId}.`));
+      children.push(...renderAsset(asset, `${visibleRecordLabel(record.title)}. Fuente: ${visibleRecordLabel(record.sourceType)}. Referencia: ${record.referenceLabel || record.recordId}.`));
       renderedVisualIds.push(record.recordId);
     }
   }

@@ -10,6 +10,7 @@ import { hasStreetViewProvenance } from "@/utils/visualEvidenceEngine/streetView
 import { isValidStreetViewImage } from "@/utils/streetViewValidator";
 import {
   classifyInstitutionalContentRole,
+  segmentInstitutionalNarrative,
   type InstitutionalContentRole,
 } from "@/utils/analyticalNarrativeGovernance";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
@@ -54,6 +55,8 @@ export interface TechnicalAnnexRecord {
   reportUsage?: "SI" | "NO" | "NO DETERMINADO";
   contentRole?: InstitutionalContentRole;
   contextOriginal?: string;
+  instructionOriginal?: string;
+  narrativeSegmentationStatus?: "SEPARATED" | "INSTRUCTION_ONLY" | "NOT_SEPARABLE" | "NO_INSTRUCTION";
   validatedAnalysis?: string;
   locationLabel?: string;
 }
@@ -255,6 +258,8 @@ function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fal
   const contentRole = classifyInstitutionalContentRole(item);
   const rawSummary = summary(item, "NO DISPONIBLE EN EL EXPEDIENTE");
   const humanApproved = evaluateHumanValidation(item?.multimodalEvidence || item).status === "APPROVED";
+  const originalContext = firstText(item?.context, item?.comentario, contentRole === "INSTRUCTION" ? rawSummary : "");
+  const narrativeSegments = segmentInstitutionalNarrative(originalContext, contentRole);
   return {
     recordId: id,
     title: firstText(item?.title, item?.titulo, item?.caption, source),
@@ -274,11 +279,9 @@ function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fal
       traceabilityIds(item).length ? "TRAZABLE" : "NO CONSIGNADO"),
     reportUsage: selectedIds.has(id) ? "SI" : "NO DETERMINADO",
     contentRole,
-    contextOriginal: firstText(
-      item?.context,
-      item?.comentario,
-      contentRole === "INSTRUCTION" ? rawSummary : ""
-    ),
+    contextOriginal: narrativeSegments.contextText,
+    instructionOriginal: narrativeSegments.instructionText,
+    narrativeSegmentationStatus: narrativeSegments.status,
     validatedAnalysis: humanApproved && (contentRole === "ANALYSIS" || contentRole === "CONCLUSION")
       ? firstText(item?.analysis, item?.analyticalFinding, item?.interpretation)
       : "",
@@ -446,7 +449,7 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     ]),
     section("canonical-geography", "GEOGRAFÍA CANÓNICA", "TECHNICAL_SUPPORT", [
       institutionalInput.geography
-        ? `Tipo: ${institutionalInput.geography.type}. Estado: ${institutionalInput.geography.validationStatus}. Descripcion: ${executiveModel.territorialSituation.territorialSummary}`
+        ? `Tipo: ${institutionalInput.geography.type}. Estado: ${institutionalInput.geography.validationStatus}. Descripción: ${executiveModel.territorialSituation.territorialSummary}`
         : "NO DISPONIBLE EN EL EXPEDIENTE",
       visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL"
         ? "Representacion cartografica gobernada disponible."
@@ -497,8 +500,8 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     ], [], true),
     section("sources-limitations", "FUENTES, EXCLUSIONES Y LIMITACIONES", "AUDIT_TRACEABILITY", [
       `Elementos excluidos por gobernanza: ${institutionalInput.exclusions.length}`,
-      `Declaraciones de limite: ${institutionalInput.disclosures.length}`,
-      ...institutionalInput.exclusions.map((item) => `Exclusion ${firstText(item.itemType)}: ${firstText(item.reason)}`),
+      `Declaraciones de límite: ${institutionalInput.disclosures.length}`,
+      ...institutionalInput.exclusions.map((item) => `Exclusión ${firstText(item.itemType)}: ${firstText(item.reason)}`),
       ...institutionalInput.disclosures.map((item) => `Declaracion ${firstText(item.itemType)}: ${firstText(item.message)}`),
     ], [], true),
   ];

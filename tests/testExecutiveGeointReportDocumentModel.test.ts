@@ -644,4 +644,12 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
       expect(excluded.technicalMetadata.sourceProvenance?.some((item) => item.source === "GIM ACE")).toBe(false);
     }
   });
+
+  test("47 una seccion ejecutiva sin contenido no imprime encabezado ni cuerpo", async () => {
+    const model = documentModel({ decisionImplications: [] });
+    const section = model.sections.find((item) => item.sectionId === "decision-implications");
+    expect(section).toEqual(expect.objectContaining({ content: [], status: "OPTIONAL_SUPPRESSED" }));
+    const xml = await documentXml(renderExecutiveGeointWordDocument(model).document);
+    expect(xml).not.toContain("IMPLICACIONES PARA LA DECISIÓN");
+  });
 });

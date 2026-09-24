@@ -26,6 +26,12 @@ export type NarrativeStrength =
 export type NarrativeSourceItemType = PublicationItemType | "RECOMMENDATION";
 export type InstitutionalContentRole = "OBSERVATION" | "CONTEXT" | "INSTRUCTION" | "ANALYSIS" | "CONCLUSION" | "HYPOTHESIS";
 
+export interface InstitutionalNarrativeSegments {
+  contextText: string;
+  instructionText: string;
+  status: "SEPARATED" | "INSTRUCTION_ONLY" | "NOT_SEPARABLE" | "NO_INSTRUCTION";
+}
+
 export interface NarrativeAssertion {
   assertionId: string;
   text: string;
@@ -183,6 +189,32 @@ function pickText(item: any, fallback: string): string {
     item?.caption ||
     fallback
   ).trim();
+}
+
+export function segmentInstitutionalNarrative(value: unknown, role?: InstitutionalContentRole): InstitutionalNarrativeSegments {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (!text) return { contextText: "", instructionText: "", status: "NO_INSTRUCTION" };
+
+  const requestIndex = text.search(/\b(?:se solicita|se instruye|se requiere)\b/i);
+  if (requestIndex >= 0) {
+    const headingMatch = Array.from(text.matchAll(/\bBARRIDO DE [A-ZÁÉÍÓÚÜÑ0-9 /-]{3,120}(?=\s+Se solicita\b)/g)).at(-1);
+    const instructionIndex = headingMatch?.index !== undefined && headingMatch.index <= requestIndex
+      ? headingMatch.index
+      : requestIndex;
+    if (instructionIndex > 0) {
+      return {
+        contextText: text.slice(0, instructionIndex).trim(),
+        instructionText: text.slice(instructionIndex).trim(),
+        status: "SEPARATED",
+      };
+    }
+    return { contextText: "", instructionText: text, status: "INSTRUCTION_ONLY" };
+  }
+
+  if (role === "INSTRUCTION") {
+    return { contextText: text, instructionText: "", status: "NOT_SEPARABLE" };
+  }
+  return { contextText: text, instructionText: "", status: "NO_INSTRUCTION" };
 }
 
 export function classifyInstitutionalContentRole(item: any): InstitutionalContentRole {

@@ -723,6 +723,19 @@ function buildDecisionImplications(findings: ExecutiveFinding[], prospective: Ex
   return limited(fromFindings, EXECUTIVE_GEOINT_LIMITS.decisionesSugeridas);
 }
 
+function completeSentenceExcerpt(value: string, maxLength: number): string {
+  const text = clean(value);
+  if (text.length <= maxLength) return text;
+  const sentences = text.match(/[^.!?]+[.!?]+(?:["')\]]+)?/g) || [];
+  let excerpt = "";
+  for (const sentence of sentences) {
+    const candidate = `${excerpt}${sentence}`.trim();
+    if (candidate.length > maxLength) break;
+    excerpt = candidate;
+  }
+  return excerpt || "Síntesis ejecutiva gobernada no disponible dentro del límite editorial.";
+}
+
 function buildPanorama(
   input: InstitutionalReportInput,
   findings: ExecutiveFinding[],
@@ -734,12 +747,15 @@ function buildPanorama(
   const governedSummary = firstText((input as any).governedExecutiveSummary?.text, (input as any).executiveSummary);
   const hypothesisOpening = clean(input.hypothesis?.currentHypothesis).split(/\n\s*\n/)[0] || "";
   const situation = governedSummary || hypothesisOpening || "Situación insuficiente o no disponible en el insumo institucional.";
+  const hasEvaluableMultisourceSupport = input.analyses.some(isAdmitted);
   return {
-    situacion: visible(situation.length > 420 ? `${situation.slice(0, 417).trimEnd()}...` : situation),
+    situacion: visible(completeSentenceExcerpt(situation, 420)),
     hallazgosClave: limited(findings.map((finding) => finding.summary), EXECUTIVE_GEOINT_LIMITS.hallazgosClave),
     escenario: prospective.escenario,
     decisionesSugeridas: limited(decisions.map((decision) => decision.accionSugerida), EXECUTIVE_GEOINT_LIMITS.decisionesSugeridas),
-    nivelConfianza: findings[0]?.confidence || (multisource.nivelSoporte === "ALTO" ? "ALTO" : multisource.nivelSoporte === "MEDIO" ? "MEDIO" : multisource.nivelSoporte === "BAJO" ? "BAJO" : "NO DISPONIBLE"),
+    nivelConfianza: findings[0]?.confidence || (hasEvaluableMultisourceSupport
+      ? multisource.nivelSoporte === "ALTO" ? "ALTO" : multisource.nivelSoporte === "MEDIO" ? "MEDIO" : multisource.nivelSoporte === "BAJO" ? "BAJO" : "NO DISPONIBLE"
+      : "NO DISPONIBLE"),
     incertidumbre: prospective.incertidumbre,
     vigencia: identity.vigenciaAnalisis,
   };

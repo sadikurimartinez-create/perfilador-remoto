@@ -275,7 +275,7 @@ function isProspectiveAllowed(candidate: Candidate, model: ExecutiveGeointReport
 
 function headlineFromFinding(findings: ExecutiveFinding[], relatedIds: string[]): string {
   const finding = findings.find((item) => relatedIds.includes(item.findingId));
-  return clean(finding?.title) || clean(finding?.summary) || "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA";
+  return clean(finding?.title) || clean(finding?.summary) || "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA";
 }
 
 function duplicateKey(candidate: Candidate): string {
@@ -380,12 +380,12 @@ function buildPrincipalMap(
     return {
       mapId: "principal-territorial-map",
       status: "NO_CANONICAL_GEOGRAPHY",
-      executiveHeadline: "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA",
+      executiveHeadline: "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA",
       caption: "Geografia canonica no disponible para renderizado.",
       renderInstruction: "CANONICAL_GEOGRAPHY_REQUIRED",
       visualReference: null,
       presentation: {
-        title: "CONFIGURACION TERRITORIAL DEL AREA ANALIZADA",
+        title: "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA",
         visibleSourceLabel: null,
       },
       technicalMetadata: {
@@ -429,7 +429,7 @@ function buildPrincipalMap(
     mapId: "principal-territorial-map",
     status: mapCandidate ? "READY_FROM_GOVERNED_VISUAL" : "MAP_RENDER_REQUIRED",
     executiveHeadline: headline,
-    caption: mapCandidate?.summary || "Representacion territorial derivada de la geografia canonica.",
+    caption: mapCandidate?.summary || "Representación territorial derivada de la geografía canónica.",
     renderInstruction: mapCandidate ? "USE_GOVERNED_VISUAL" : "MAP_RENDER_REQUIRED",
     visualReference: mapCandidate?.reference || null,
     presentation: {

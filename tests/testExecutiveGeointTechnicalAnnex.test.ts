@@ -555,7 +555,12 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     );
     const photos = model.sections.find((section) => section.sectionId === "field-photographs")?.records || [];
     expect(photos).toHaveLength(3);
-    expect(photos[0]).toEqual(expect.objectContaining({ contentRole: "INSTRUCTION", contextOriginal: instruction }));
+    expect(photos[0]).toEqual(expect.objectContaining({
+      contentRole: "INSTRUCTION",
+      contextOriginal: "",
+      instructionOriginal: instruction,
+      narrativeSegmentationStatus: "INSTRUCTION_ONLY",
+    }));
     for (const sectionId of ["scince", "denue", "incidence", "osint", "multisource-correlation"] as const) {
       expect(model.sections.find((section) => section.sectionId === sectionId)?.content).toContain("NO DISPONIBLE EN EL EXPEDIENTE");
     }
@@ -573,7 +578,7 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(renderedReport.renderAudit.renderedVisualIds).toContain(composition.principalTerritorialMap.mapId);
     expect(renderedAnnex.renderAudit.renderedVisualIds).toContain(composition.principalTerritorialMap.mapId);
     expect(reportPackage.document).toContain("Hipótesis vigente: Sin modificación respecto de la hipótesis inicial.");
-    expect(annexPackage.document).toContain(`Contexto o instrucción de análisis: ${instruction}`);
+    expect(annexPackage.document).toContain(`Instrucción original de análisis: ${instruction}`);
     expect(annexPackage.document).not.toContain(`Hallazgo: ${instruction}`);
     expect(annexPackage.document).not.toContain(`Resultado: ${instruction}`);
     expect(annexPackage.document).not.toContain("requiere resolver el activo visual");
@@ -597,5 +602,69 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     const approved = annex(input({ evidence: [{ ...analyticalEvidence, humanValidationStatus: "APPROVED" }] }));
     const xml = (await packageXml(renderExecutiveGeointTechnicalAnnexWordDocument(approved).document)).document;
     expect(xml).toContain("Síntesis analítica validada: Lectura analítica controlada.");
+  });
+
+  test("41 separa observacion e instruccion incrustada sin reinterpretar el texto", async () => {
+    const observation = "La vialidad presenta iluminación y circulación peatonal observable.";
+    const instruction = "BARRIDO DE INCIDENCIA DELICTIVA Se solicita al Perfilador Remoto realizar un barrido exhaustivo del sector.";
+    const model = annex(input({ evidence: [{
+      evidenceId: "mixed-photo",
+      title: "FOTOGRAFIA_DE_CAMPO",
+      sourceType: "FOTOGRAFIA_DE_CAMPO",
+      comentario: `${observation} ${instruction}`,
+      imageUrl: "asset://mixed-photo",
+      traceabilityIds: ["trace-mixed-photo"],
+      publicationEligibility: { role: "INSTITUTIONAL_FACT" },
+    }] }));
+    const record = model.sections.find((section) => section.sectionId === "field-photographs")?.records[0];
+    expect(record).toEqual(expect.objectContaining({
+      contentRole: "OBSERVATION",
+      contextOriginal: observation,
+      instructionOriginal: instruction,
+      narrativeSegmentationStatus: "SEPARATED",
+    }));
+    const xml = (await packageXml(renderExecutiveGeointTechnicalAnnexWordDocument(model).document)).document;
+    expect(xml).toContain(`Contexto original: ${observation}`);
+    expect(xml).toContain(`Instrucción original de análisis: ${instruction}`);
+    expect(xml).not.toContain(`Hallazgo: ${instruction}`);
+    expect(xml).not.toContain(`Conclusión: ${instruction}`);
+    expect(xml).not.toContain(`Síntesis analítica validada: ${instruction}`);
+    expect(xml).toContain("Título: Fotografía de campo");
+    expect(xml).toContain("Fuente: Fotografía de campo.");
+  });
+
+  test("42 normaliza labels editoriales sin renombrar identificadores internos", () => {
+    const model = annex(input({
+      exclusions: [{ itemType: "EVIDENCE", reason: "Fuente no admisible" }],
+      disclosures: [{ itemType: "SOURCE", message: "Cobertura limitada" }],
+    }));
+    const geographyText = model.sections.find((section) => section.sectionId === "canonical-geography")?.content.join(" ") || "";
+    const limitationsText = model.sections.find((section) => section.sectionId === "sources-limitations")?.content.join(" ") || "";
+    const photo = model.sections.find((section) => section.sectionId === "field-photographs")?.records[0];
+    expect(geographyText).toContain("Descripción:");
+    expect(limitationsText).toContain("Declaraciones de límite: 1");
+    expect(limitationsText).toContain("Exclusión EVIDENCE: Fuente no admisible");
+    expect(photo?.sourceType).toBe("FIELD_PHOTO");
+  });
+
+  test("43 conserva sin reinterpretar una instruccion que no puede segmentarse automaticamente", async () => {
+    const opaqueInstruction = "Revisión operativa especial conforme a la consigna recibida.";
+    const model = annex(input({ evidence: [{
+      evidenceId: "opaque-instruction",
+      title: "Registro recibido",
+      imageUrl: "asset://opaque-instruction",
+      traceabilityIds: ["trace-opaque-instruction"],
+      contentRole: "INSTRUCTION",
+      context: opaqueInstruction,
+    }] }));
+    const record = model.sections.find((section) => section.sectionId === "field-photographs")?.records[0];
+    expect(record).toEqual(expect.objectContaining({
+      contextOriginal: opaqueInstruction,
+      instructionOriginal: "",
+      narrativeSegmentationStatus: "NOT_SEPARABLE",
+    }));
+    const xml = (await packageXml(renderExecutiveGeointTechnicalAnnexWordDocument(model).document)).document;
+    expect(xml).toContain(`Contexto original: ${opaqueInstruction}`);
+    expect(xml).toContain("Clasificación narrativa no separable automáticamente.");
   });
 });

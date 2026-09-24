@@ -298,7 +298,14 @@ describe("Fase C - ExecutiveVisualComposition", () => {
 
   test("19 headline procede de hallazgo gobernado o fallback neutro", () => {
     expect(buildExecutiveVisualComposition(executiveModel(), institutionalInput()).principalTerritorialMap.executiveHeadline).toBe("Concentracion gobernada en acceso oriental");
-    expect(buildExecutiveVisualComposition(executiveModel({ findings: [] }), institutionalInput()).principalTerritorialMap.executiveHeadline).toBe("CONFIGURACION TERRITORIAL DEL AREA ANALIZADA");
+    expect(buildExecutiveVisualComposition(executiveModel({ findings: [] }), institutionalInput()).principalTerritorialMap.executiveHeadline).toBe("CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA");
+    const base = executiveModel();
+    expect(buildExecutiveVisualComposition(executiveModel({
+      findings: [],
+      visualCandidates: [],
+      territorialSituation: { ...base.territorialSituation, principalMapCandidate: null },
+    }), institutionalInput()).principalTerritorialMap.caption)
+      .toBe("Representación territorial derivada de la geografía canónica.");
   });
 
   test("20 visual conserva traceabilityIds internamente", () => {
@@ -400,8 +407,8 @@ describe("Fase C - ExecutiveVisualComposition", () => {
       technicalMetadata: { sourceItemId: "temporal-no-finding", sourceType: "VISUAL_CANDIDATE" },
     });
     const composition = buildExecutiveVisualComposition(executiveModel({ visualCandidates: [secondary] }), institutionalInput());
-    expect(composition.secondaryVisuals.find((item) => item.visualId === "temporal-no-finding")?.executiveHeadline).toBe("CONFIGURACION TERRITORIAL DEL AREA ANALIZADA");
-    expect(buildExecutiveVisualComposition(executiveModel({ findings: [] }), institutionalInput()).principalTerritorialMap.executiveHeadline).toBe("CONFIGURACION TERRITORIAL DEL AREA ANALIZADA");
+    expect(composition.secondaryVisuals.find((item) => item.visualId === "temporal-no-finding")?.executiveHeadline).toBe("CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA");
+    expect(buildExecutiveVisualComposition(executiveModel({ findings: [] }), institutionalInput()).principalTerritorialMap.executiveHeadline).toBe("CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA");
   });
 
   test("33 relatedFinding valido usa headline correcto", () => {
@@ -422,7 +429,7 @@ describe("Fase C - ExecutiveVisualComposition", () => {
       technicalMetadata: { sourceItemId: "trend-1", sourceType: "VISUAL_CANDIDATE" },
     });
     const composition = buildExecutiveVisualComposition(executiveModel({ findings, visualCandidates: [visual] }), institutionalInput());
-    expect(composition.secondaryVisuals.find((item) => item.visualId === "trend-1")?.executiveHeadline).toBe("CONFIGURACION TERRITORIAL DEL AREA ANALIZADA");
+    expect(composition.secondaryVisuals.find((item) => item.visualId === "trend-1")?.executiveHeadline).toBe("CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA");
   });
 
   test("35 prospective visual relacionado entra", () => {
