@@ -197,9 +197,12 @@ export async function getImageDimensionsAndBuffer(
       }
     }
 
-    if (imgSrc.startsWith("/") || imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
-      const isExternal = typeof window !== "undefined" && !imgSrc.includes(window.location.host);
+    const isInternalPath = imgSrc.startsWith("/");
+    const isHttpUrl = imgSrc.startsWith("http://") || imgSrc.startsWith("https://");
+    if (isInternalPath || isHttpUrl) {
       let fetchUrl = imgSrc;
+      const isExternal = !isInternalPath && typeof window !== "undefined" &&
+        new URL(imgSrc, window.location.origin).origin !== window.location.origin;
 
       if (isExternal) {
         if (imgSrc.includes("maps.googleapis.com/maps/api/streetview")) {

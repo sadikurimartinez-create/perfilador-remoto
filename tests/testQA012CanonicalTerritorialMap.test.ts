@@ -533,6 +533,63 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     expect(ImageFingerprintService.registerAndCheckDuplicate("map-a", bytes, "map-1", "generation-b").duplicate).toBe(false);
     ImageFingerprintService.clearRegistry();
   });
+
+  test("39 referencia interna del proxy cartografico se solicita directamente sin doble envoltura", async () => {
+    const restoreHarness = installImageResolutionHarness();
+    const originalWindow = (global as any).window;
+    const originalFetch = global.fetch;
+    const originalCreateObjectURL = URL.createObjectURL;
+    (global as any).window = { location: { origin: "https://perfil.example", host: "perfil.example" } };
+    URL.createObjectURL = jest.fn(() => "blob:institutional-map");
+    global.fetch = jest.fn(async () => new Response(new Uint8Array(2048), {
+      status: 200,
+      headers: { "content-type": "image/png" },
+    })) as any;
+    const internalReference = "/api/proxy-image?provider=google-static-map&center=22%2C-102&size=640x480&scale=2";
+
+    try {
+      const result = await getImageDimensionsAndBuffer(internalReference, 500, 320);
+      expect(result).not.toBeNull();
+      expect(global.fetch).toHaveBeenCalledWith(internalReference, { cache: "no-cache" });
+      expect((global.fetch as jest.Mock).mock.calls[0][0]).not.toContain("/api/proxy-image?url=");
+    } finally {
+      global.fetch = originalFetch;
+      URL.createObjectURL = originalCreateObjectURL;
+      if (originalWindow === undefined) delete (global as any).window;
+      else (global as any).window = originalWindow;
+      restoreHarness();
+    }
+  });
+
+  test("40 URL externa legitima conserva una unica envoltura por proxy", async () => {
+    const restoreHarness = installImageResolutionHarness();
+    const originalWindow = (global as any).window;
+    const originalFetch = global.fetch;
+    const originalCreateObjectURL = URL.createObjectURL;
+    (global as any).window = { location: { origin: "https://perfil.example", host: "perfil.example" } };
+    URL.createObjectURL = jest.fn(() => "blob:external-image");
+    global.fetch = jest.fn(async () => new Response(new Uint8Array(2048), {
+      status: 200,
+      headers: { "content-type": "image/jpeg" },
+    })) as any;
+    const externalReference = "https://storage.googleapis.com/qa08/evidence.jpg";
+
+    try {
+      const result = await getImageDimensionsAndBuffer(externalReference, 500, 320);
+      expect(result).not.toBeNull();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `/api/proxy-image?url=${encodeURIComponent(externalReference)}`,
+        { cache: "no-cache" }
+      );
+      expect((global.fetch as jest.Mock).mock.calls[0][0].match(/\/api\/proxy-image\?/g)).toHaveLength(1);
+    } finally {
+      global.fetch = originalFetch;
+      URL.createObjectURL = originalCreateObjectURL;
+      if (originalWindow === undefined) delete (global as any).window;
+      else (global as any).window = originalWindow;
+      restoreHarness();
+    }
+  });
 });
 
 function proxyRequest(query: string) {
