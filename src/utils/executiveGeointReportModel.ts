@@ -6,6 +6,7 @@ import type {
 import { evaluatePredictiveProductAdmission } from "@/utils/institutionalPredictiveProductIntegration";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
+import { classifyInstitutionalContentRole } from "@/utils/analyticalNarrativeGovernance";
 
 export const EXECUTIVE_GEOINT_REPORT_MODEL_VERSION = "1.0";
 
@@ -103,6 +104,8 @@ export interface ExecutiveEvidenceItem {
   selectionReason: string;
   limitations: string[];
   traceabilityIds: string[];
+  governanceStatus?: "KEY" | "AVAILABLE";
+  contentRole?: ReturnType<typeof classifyInstitutionalContentRole>;
   technicalMetadata: {
     originalItemType: PublicationItemType | "VISUAL_CANDIDATE";
     sourceItemId: string;
@@ -558,22 +561,38 @@ function buildKeyEvidence(input: InstitutionalReportInput, findings: ExecutiveFi
     if (selected.length >= EXECUTIVE_GEOINT_LIMITS.evidenciasClave) break;
   }
 
-  return selected.map(({ item, type }, index) => ({
-    evidenceId: itemId(item, `evidence-${index + 1}`),
-    title: visible(firstText(item?.title, item?.titulo, item?.caption, `Evidencia clave ${index + 1}`)),
-    summary: visible(visibleSummary(item, "Evidencia seleccionada sin sintesis disponible.")),
-    visualReference: firstText(item?.dataUrl, item?.imageUrl, item?.previewUrl, item?.url, item?.assetRef) || null,
-    evidenceReferences: evidenceIds(item),
-    sourceTypes: dedupe([sourceType(item, type)]),
-    relatedFindingIds: findingIds(item).filter((id) => priorityFindingIds.includes(id)),
-    selectionReason: "Seleccionada por relevancia ejecutiva, trazabilidad y disponibilidad visual gobernada.",
-    limitations: visibleList(dedupe([...(asArray<string>(item?.limitations)), ...(asArray<string>(item?.limitaciones))])),
-    traceabilityIds: traceabilityIds(item),
-    technicalMetadata: {
-      originalItemType: type,
-      sourceItemId: itemId(item, `${type}-${index + 1}`),
-    },
-  }));
+  return selected.map(({ item, type }, index) => {
+    const relatedFindingIds = findingIds(item).filter((id) => priorityFindingIds.includes(id));
+    const traces = traceabilityIds(item);
+    const visualReference = firstText(item?.dataUrl, item?.imageUrl, item?.previewUrl, item?.url, item?.assetRef) || null;
+    const contentRole = classifyInstitutionalContentRole(item);
+    const governanceStatus = relatedFindingIds.length > 0 && traces.length > 0 && Boolean(visualReference) &&
+      contentRole !== "INSTRUCTION" && contentRole !== "CONTEXT" ? "KEY" as const : "AVAILABLE" as const;
+    const summaryFallback = governanceStatus === "KEY"
+      ? "Sin síntesis analítica validada."
+      : "Registro visual disponible; interpretación analítica pendiente de validación.";
+    return {
+      evidenceId: itemId(item, `evidence-${index + 1}`),
+      title: visible(firstText(item?.title, item?.titulo, item?.caption,
+        `${governanceStatus === "KEY" ? "Evidencia clave" : "Evidencia disponible"} ${index + 1}`)),
+      summary: contentRole === "INSTRUCTION" ? summaryFallback : visible(visibleSummary(item, summaryFallback)),
+      visualReference,
+      evidenceReferences: evidenceIds(item),
+      sourceTypes: dedupe([sourceType(item, type)]),
+      relatedFindingIds,
+      selectionReason: governanceStatus === "KEY"
+        ? "Seleccionada por vinculación con hallazgo prioritario, trazabilidad y disponibilidad visual gobernada."
+        : "Disponible y trazable; no reúne fundamento suficiente para clasificarse como evidencia clave.",
+      limitations: visibleList(dedupe([...(asArray<string>(item?.limitations)), ...(asArray<string>(item?.limitaciones))])),
+      traceabilityIds: traces,
+      governanceStatus,
+      contentRole,
+      technicalMetadata: {
+        originalItemType: type,
+        sourceItemId: itemId(item, `${type}-${index + 1}`),
+      },
+    };
+  });
 }
 
 function buildVisualCandidates(input: InstitutionalReportInput): ExecutiveVisualCandidate[] {
@@ -712,17 +731,15 @@ function buildPanorama(
   multisource: ExecutiveMultisourceAnalysis,
   identity: ExecutiveDocumentIdentity
 ): ExecutivePanorama {
+  const governedSummary = firstText((input as any).governedExecutiveSummary?.text, (input as any).executiveSummary);
+  const hypothesisOpening = clean(input.hypothesis?.currentHypothesis).split(/\n\s*\n/)[0] || "";
+  const situation = governedSummary || hypothesisOpening || "Situación insuficiente o no disponible en el insumo institucional.";
   return {
-    situacion: visible(firstText(
-      (input as any).governedExecutiveSummary?.text,
-      (input as any).executiveSummary,
-      input.hypothesis?.currentHypothesis,
-      "Situacion insuficiente/no disponible en el insumo institucional."
-    )),
+    situacion: visible(situation.length > 420 ? `${situation.slice(0, 417).trimEnd()}...` : situation),
     hallazgosClave: limited(findings.map((finding) => finding.summary), EXECUTIVE_GEOINT_LIMITS.hallazgosClave),
     escenario: prospective.escenario,
     decisionesSugeridas: limited(decisions.map((decision) => decision.accionSugerida), EXECUTIVE_GEOINT_LIMITS.decisionesSugeridas),
-    nivelConfianza: findings[0]?.confidence || (multisource.nivelSoporte === "ALTO" ? "ALTO" : multisource.nivelSoporte === "MEDIO" ? "MEDIO" : "BAJO"),
+    nivelConfianza: findings[0]?.confidence || (multisource.nivelSoporte === "ALTO" ? "ALTO" : multisource.nivelSoporte === "MEDIO" ? "MEDIO" : multisource.nivelSoporte === "BAJO" ? "BAJO" : "NO DISPONIBLE"),
     incertidumbre: prospective.incertidumbre,
     vigencia: identity.vigenciaAnalisis,
   };

@@ -8,6 +8,11 @@ import type { ExecutiveGeointReportDocumentModel } from "@/utils/executiveGeoint
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { hasStreetViewProvenance } from "@/utils/visualEvidenceEngine/streetViewCollector";
 import { isValidStreetViewImage } from "@/utils/streetViewValidator";
+import {
+  classifyInstitutionalContentRole,
+  type InstitutionalContentRole,
+} from "@/utils/analyticalNarrativeGovernance";
+import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 
 export const EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION = "1.0.0";
 
@@ -47,6 +52,10 @@ export interface TechnicalAnnexRecord {
   referenceLabel?: string;
   traceabilityStatus?: string;
   reportUsage?: "SI" | "NO" | "NO DETERMINADO";
+  contentRole?: InstitutionalContentRole;
+  contextOriginal?: string;
+  validatedAnalysis?: string;
+  locationLabel?: string;
 }
 
 export interface ExecutiveGeointTechnicalAnnexSection {
@@ -232,6 +241,10 @@ function displayedNumber(value: unknown): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "No disponible";
 }
 
+function availableNarrative(values: string[]): string[] {
+  return values.filter((value) => !/\bno disponibles?\b|\bno consta\b/i.test(value));
+}
+
 function safeReference(item: any, fallback: string): string {
   const value = firstText(item?.evidenceId, item?.findingId, item?.traceabilityId);
   return /^[A-Za-z0-9_-]{1,64}$/.test(value) && !/token|secret|apikey|password/i.test(value) ? value : fallback;
@@ -239,10 +252,13 @@ function safeReference(item: any, fallback: string): string {
 
 function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fallback: string): TechnicalAnnexRecord {
   const id = itemId(item, fallback);
+  const contentRole = classifyInstitutionalContentRole(item);
+  const rawSummary = summary(item, "NO DISPONIBLE EN EL EXPEDIENTE");
+  const humanApproved = evaluateHumanValidation(item?.multimodalEvidence || item).status === "APPROVED";
   return {
     recordId: id,
     title: firstText(item?.title, item?.titulo, item?.caption, source),
-    summary: summary(item, "NO DISPONIBLE EN EL EXPEDIENTE"),
+    summary: rawSummary,
     sourceType: sourceType(item, source),
     selectedForExecutiveBody: selectedIds.has(id) || selectedIds.has(item?.technicalMetadata?.sourceItemId),
     visualReference: visualReference(item),
@@ -257,6 +273,16 @@ function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fal
     traceabilityStatus: firstText(item?.lineageStatus, item?.multimodalEvidence?.lineageStatus,
       traceabilityIds(item).length ? "TRAZABLE" : "NO CONSIGNADO"),
     reportUsage: selectedIds.has(id) ? "SI" : "NO DETERMINADO",
+    contentRole,
+    contextOriginal: firstText(
+      item?.context,
+      item?.comentario,
+      contentRole === "INSTRUCTION" ? rawSummary : ""
+    ),
+    validatedAnalysis: humanApproved && (contentRole === "ANALYSIS" || contentRole === "CONCLUSION")
+      ? firstText(item?.analysis, item?.analyticalFinding, item?.interpretation)
+      : "",
+    locationLabel: firstText(item?.locationName, item?.address, item?.location?.name),
   };
 }
 
@@ -324,16 +350,13 @@ export function buildExecutiveGeointTechnicalAnnexModel(
   ]).filter((item) => isTraceable({ ...item, ...item.technicalIds }));
   const fieldPhotoRecords = dedupeImageRecords(institutionalInput.evidence
     .filter((item) => visualReference(item) && !hasStreetViewProvenance(item) && item?.sourceType !== "GOOGLE_STREET_VIEW")
-    .map((item, index) => {
-      const record = evidenceRecord(item, "FOTOGRAFIA_DE_CAMPO", selectedIds, `foto-${index + 1}`);
-      return { ...record, summary: `${record.summary}; fecha: ${record.capturedAt || "No disponible"}; contexto: ${firstText(item?.context, item?.comentario, "No disponible")}` };
-    }))
+    .map((item, index) => evidenceRecord(item, "FOTOGRAFIA_DE_CAMPO", selectedIds, `foto-${index + 1}`)))
     .filter((item) => isTraceable({ ...item, ...item.technicalIds }));
   const streetViewRecords = dedupeImageRecords(institutionalInput.streetView.filter(governedStreetView)
-    .map((item, index) => {
-      const record = evidenceRecord(item, "GOOGLE_STREET_VIEW", selectedIds, `street-view-${index + 1}`);
-      return { ...record, sourceType: "GOOGLE_STREET_VIEW", summary: `${record.summary}; fecha: ${record.capturedAt || "No disponible"}` };
-    }))
+    .map((item, index) => ({
+      ...evidenceRecord(item, "GOOGLE_STREET_VIEW", selectedIds, `street-view-${index + 1}`),
+      sourceType: "GOOGLE_STREET_VIEW",
+    })))
     .filter((item) => isTraceable({ ...item, ...item.technicalIds }));
   const osintRecords = institutionalInput.osint
     .filter((item) => isTraceable(item) && observedFact(item))
@@ -414,36 +437,36 @@ export function buildExecutiveGeointTechnicalAnnexModel(
   ];
 
   const sections = [
-    section("identity", "IDENTIDAD DEL ANEXO TECNICO", "INSTITUTIONAL_IDENTITY", [
-      `Numero de expediente: ${numeroExpediente}`,
+    section("identity", "IDENTIDAD DEL ANEXO TÉCNICO", "INSTITUTIONAL_IDENTITY", [
+      `Número de expediente: ${numeroExpediente}`,
       `Nombre del expediente: ${firstText(context.nombreExpediente, executiveModel.identity.nombreExpediente, "NO DISPONIBLE EN EL EXPEDIENTE")}`,
       `Fecha: ${firstText(context.fecha, documentModel.identity.fechaEmision, executiveModel.identity.fecha, institutionalInput.generatedAt)}`,
       `Persona perfiladora: ${firstText(context.personaPerfiladora, executiveModel.identity.personaPerfiladora, "NO DISPONIBLE EN EL EXPEDIENTE")}`,
-      `Clasificacion: ${firstText(context.clasificacion, documentModel.identity.clasificacion, executiveModel.identity.clasificacion)}`,
+      `Clasificación: ${firstText(context.clasificacion, documentModel.identity.clasificacion, executiveModel.identity.clasificacion)}`,
     ]),
-    section("canonical-geography", "GEOGRAFIA CANONICA", "TECHNICAL_SUPPORT", [
+    section("canonical-geography", "GEOGRAFÍA CANÓNICA", "TECHNICAL_SUPPORT", [
       institutionalInput.geography
         ? `Tipo: ${institutionalInput.geography.type}. Estado: ${institutionalInput.geography.validationStatus}. Descripcion: ${executiveModel.territorialSituation.territorialSummary}`
         : "NO DISPONIBLE EN EL EXPEDIENTE",
       visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL"
         ? "Representacion cartografica gobernada disponible."
         : visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
-          ? "Cartografia canonica disponible; requiere resolver el activo visual gobernado."
-          : "Representacion cartografica no disponible como activo gobernado.",
+          ? "Cartografía canónica disponible y representada mediante mapa territorial gobernado."
+          : "Representación cartográfica no disponible como activo gobernado.",
     ], [], true),
     section("evidence-inventory", "INVENTARIO DE EVIDENCIA", "TECHNICAL_SUPPORT",
       evidenceRecords.length ? [`Evidencias inventariadas: ${evidenceRecords.length}`] : [], evidenceRecords),
-    section("field-photographs", "EVIDENCIA FOTOGRAFICA DE CAMPO", "TECHNICAL_SUPPORT",
-      fieldPhotoRecords.length ? [`Fotografias de campo elegibles: ${fieldPhotoRecords.length}`] : [], fieldPhotoRecords),
+    section("field-photographs", "EVIDENCIA FOTOGRÁFICA DE CAMPO", "TECHNICAL_SUPPORT",
+      fieldPhotoRecords.length ? [`Fotografías de campo elegibles: ${fieldPhotoRecords.length}`] : [], fieldPhotoRecords),
     section("street-view", "GOOGLE STREET VIEW", "TECHNICAL_SUPPORT",
       streetViewRecords.length ? [`Capturas gobernadas: ${streetViewRecords.length}`] : [], streetViewRecords),
     section("territorial-sources", "FUENTES TERRITORIALES", "TECHNICAL_SUPPORT",
       territorialSourceRecords.length ? [`Fuentes territoriales registradas: ${territorialSourceRecords.length}`] : [], territorialSourceRecords),
     section("scince", "CONTEXTO TERRITORIAL SCINCE", "TECHNICAL_SUPPORT", [], [], true, scinceFacts),
-    section("denue", "ACTIVIDAD ECONOMICA DENUE", "TECHNICAL_SUPPORT",
+    section("denue", "ACTIVIDAD ECONÓMICA DENUE", "TECHNICAL_SUPPORT",
       denueRecords.length ? [`Establecimientos observados: ${denueRecords.length}`] : [], denueRecords),
     section("incidence", "INCIDENCIA DELICTIVA", "TECHNICAL_SUPPORT", [], [], true, incidenceFacts),
-    section("osint", "CIFA / CEFI - FUENTES ABIERTAS", "TECHNICAL_SUPPORT",
+    section("osint", "CEFI - FUENTES ABIERTAS", "TECHNICAL_SUPPORT",
       osintRecords.length ? [`Registros observados, adquiridos y trazables: ${osintRecords.length}`] : [], osintRecords),
     ...(gim ? [section("gang-intelligence", "PANDILLAS / GIM", "TECHNICAL_SUPPORT",
       ["Producto especializado certificado y admitido por ACE.",
@@ -451,11 +474,11 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       [evidenceRecord(gim, "GIM_CERTIFICADO", selectedIds, "gim-1")])] : []),
     section("findings-matrix", "MATRIZ DE HALLAZGOS Y EVIDENCIA", "TECHNICAL_SUPPORT",
       findingRecords.length ? [`Hallazgos gobernados: ${findingRecords.length}`] : [], findingRecords),
-    section("multisource-correlation", "CORRELACION MULTIFUENTE", "TECHNICAL_SUPPORT", [
-      ...executiveModel.multisourceAnalysis.convergencias.map((item) => `Convergencia aceptada: ${item}`),
-      ...executiveModel.multisourceAnalysis.contradicciones.map((item) => `Contradiccion: ${item}`),
-      ...executiveModel.multisourceAnalysis.dependenciasParciales.map((item) => `Dependencia: ${item}`),
-      ...executiveModel.multisourceAnalysis.brechasInformacion.map((item) => `Brecha: ${item}`),
+    section("multisource-correlation", "CORRELACIÓN MULTIFUENTE", "TECHNICAL_SUPPORT", [
+      ...availableNarrative(executiveModel.multisourceAnalysis.convergencias).map((item) => `Convergencia aceptada: ${item}`),
+      ...availableNarrative(executiveModel.multisourceAnalysis.contradicciones).map((item) => `Contradicción: ${item}`),
+      ...availableNarrative(executiveModel.multisourceAnalysis.dependenciasParciales).map((item) => `Dependencia: ${item}`),
+      ...availableNarrative(executiveModel.multisourceAnalysis.brechasInformacion).map((item) => `Brecha: ${item}`),
     ], [], true),
     section("prospective-products", "PROSPECTIVA GOBERNADA", "TECHNICAL_SUPPORT", executiveModel.prospectiveAnalysis.technicalMetadata.sourceProductIds.length ? [
       `Tendencia: ${executiveModel.prospectiveAnalysis.tendencia}`,
@@ -463,11 +486,11 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       `Vigencia: ${executiveModel.prospectiveAnalysis.vigencia}`,
       ...executiveModel.prospectiveAnalysis.limitaciones.map((item) => `Limitacion: ${item}`),
     ] : [] , [], true),
-    section("hypothesis-history", "HIPOTESIS E HISTORIAL", "TECHNICAL_SUPPORT", [
+    section("hypothesis-history", "HIPÓTESIS E HISTORIAL", "TECHNICAL_SUPPORT", [
       firstText((institutionalInput.hypothesis as any)?.currentHypothesis, (institutionalInput as any)?.initialHypothesis, "NO DISPONIBLE EN EL EXPEDIENTE"),
       ...asArray<any>((institutionalInput as any)?.hypothesisHistory).map((item) => firstText(item?.summary, item?.text, item?.status)),
     ], [], true),
-    section("technical-traceability", "TRAZABILIDAD TECNICA", "AUDIT_TRACEABILITY", [
+    section("technical-traceability", "TRAZABILIDAD TÉCNICA", "AUDIT_TRACEABILITY", [
       `Expediente: ${numeroExpediente}`,
       `Registros con trazabilidad: ${allTechnicalRecords.filter((record) => record.traceabilityIds.length).length}`,
       `Fuentes vinculadas: ${dedupe(allTechnicalRecords.map((record) => record.sourceType)).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,

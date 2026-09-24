@@ -5,6 +5,10 @@ import JSZip from "jszip";
 import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
+import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
+import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
+import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
+import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
 
 const root = process.cwd();
 const generatedAt = "2026-09-06T12:00:00.000Z";
@@ -351,7 +355,9 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     const renderRequired = annex(input(), {}, { principalTerritorialMap: {
       ...visualComposition().principalTerritorialMap, status: "MAP_RENDER_REQUIRED", visualReference: null,
     } });
-    expect(renderRequired.sections.find((s) => s.sectionId === "canonical-geography")?.content.join(" ")).toContain("requiere resolver");
+    const mapNarrative = renderRequired.sections.find((s) => s.sectionId === "canonical-geography")?.content.join(" ") || "";
+    expect(mapNarrative).toContain("representada mediante mapa territorial gobernado");
+    expect(mapNarrative).not.toContain("requiere resolver");
     expect(renderExecutiveGeointTechnicalAnnexWordDocument(renderRequired, {
       visualAssetsById: { [mapId]: { data: new Uint8Array(1024), type: "png" } },
     }).renderAudit.renderedVisualIds).toContain(mapId);
@@ -379,7 +385,7 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(records[0].title).toBe("Comercio observado");
   });
 
-  test("29 CIFA solo promueve fuente observada adquirida y no sintesis", () => {
+  test("29 CEFI solo promueve fuente observada adquirida y no sintesis", () => {
     const base = input().osint[0];
     const records = annex(input({ osint: [base,
       { ...base, id: "failed", epistemicIntegrity: { ...base.epistemicIntegrity, acquisitionStatus: "FAILED" } },
@@ -387,6 +393,7 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
       { ...base, id: "not-configured", epistemicIntegrity: { ...base.epistemicIntegrity, acquisitionStatus: "NOT_CONFIGURED" } },
     ] })).sections.find((s) => s.sectionId === "osint")?.records || [];
     expect(records.map((record) => record.recordId)).toEqual(["denue-1"]);
+    expect(annex().sections.find((section) => section.sectionId === "osint")?.title).toBe("CEFI - FUENTES ABIERTAS");
   });
 
   test("30 GIM solo crea capitulo con certificacion ACE", () => {
@@ -431,11 +438,11 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(visible).toContain("Google Street View");
   });
 
-  test("33 renderer no trunca silenciosamente mas de 40 registros", () => {
+  test("33 renderer conserva mas de 40 referencias en el inventario sintetico", () => {
     const many = Array.from({ length: 41 }, (_, index) => ({ evidenceId: `ev-${index}`, title: `Foto ${index}`,
       traceabilityIds: [`trace-${index}`], imageUrl: `asset://photo-${index}` }));
     const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex(input({ evidence: many })));
-    expect(JSON.stringify(rendered.children)).toContain("Foto 40");
+    expect(JSON.stringify(rendered.children)).toContain("ev-40");
   });
 
   test("34 matriz liga hallazgo con tipo y referencia de evidencia", () => {
@@ -470,10 +477,10 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     const rendererSource = source("src/utils/executiveGeointTechnicalAnnexWordRenderer.ts");
     expect(rendererSource).toContain("renderStructuredTable");
     expect(rendererSource).not.toMatch(/new Table\(|new TableRow\(|new TableCell\(/);
-    expect(rendererSource).not.toMatch(/\.(?:substring|slice)\(/);
+    expect(rendererSource).toContain("compactCell");
   });
 
-  test("38 caso adversarial conserva 24 filas y texto largo en OOXML", async () => {
+  test("38 caso adversarial conserva 24 filas sin descargar narrativa extensa en las celdas", async () => {
     const model = annex();
     const longText = "CONTENIDO_LARGO_INTEGRO_" + "evidencia trazable con observaciones y limitaciones completas ".repeat(18);
     const records = Array.from({ length: 24 }, (_, index) => ({
@@ -498,13 +505,97 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(xml).toContain("<w:tblW");
     expect(xml).toContain("<w:tcW");
     expect(xml).toContain('<w:tblLayout w:type="fixed"/>');
-    expect(xml).toContain(longText);
+    expect(xml).not.toContain(longText);
     expect(xml).not.toContain("[object Object]");
     for (const record of records) {
-      expect(xml.match(new RegExp(record.title, "g"))).toHaveLength(1);
-      expect(xml).toContain(`FILA_FINAL_${record.recordId.split("-")[1]}`);
+      expect(xml.match(new RegExp(`>${record.referenceLabel!}<`, "g"))).toHaveLength(1);
     }
     expect(xml).toContain("SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES");
     expect(xml).toContain("ANEXO TÉCNICO");
+  });
+
+  test("39 consigna fotografica se conserva como contexto y nunca se rotula como hallazgo", async () => {
+    const instruction = "Se solicita al Perfilador Remoto realizar análisis del corredor y determinar factores territoriales.";
+    const controlled = input({
+      geography: buildCanonicalProjectGeography({
+        projectId: "project-technical-id",
+        type: "CORRIDOR",
+        points: [{ lat: 22.1, lng: -101.9 }, { lat: 22.2, lng: -101.8 }],
+        now: 1,
+      }),
+      evidence: Array.from({ length: 3 }, (_, index) => ({
+        evidenceId: `controlled-photo-${index + 1}`,
+        title: `Fotografía controlada ${index + 1}`,
+        summary: index === 0 ? instruction : `Registro visual ${index + 1}`,
+        imageUrl: `asset://controlled-${index + 1}`,
+        traceabilityIds: [`trace-controlled-${index + 1}`],
+        sourceItemId: `source-controlled-${index + 1}`,
+      })),
+      streetView: [], osint: [], denuePois: [], analyses: [], predictiveAnalyticalProducts: [],
+      hypothesis: {
+        initialHypothesis: instruction,
+        currentHypothesis: instruction,
+        versions: [{ text: instruction, authorType: "HUMAN", status: "FORMULATED", createdAt: "2026-09-23T12:00:00.000Z" }],
+      } as any,
+    });
+    const reportModel = buildExecutiveGeointReportModel(controlled as any, {
+      documentIdentity: { numeroExpediente: "08092026-0045-BRPD" },
+      nombreExpediente: "Expediente BRPD",
+      fecha: "2026-09-24T02:54:17.387Z",
+      personaPerfiladora: "NO DISPONIBLE",
+    });
+    const composition = buildExecutiveVisualComposition(reportModel, controlled as any);
+    const reportDocumentModel = buildExecutiveGeointReportDocumentModel(reportModel, composition, controlled as any);
+    const model = buildExecutiveGeointTechnicalAnnexModel(
+      controlled as any,
+      reportModel,
+      composition,
+      reportDocumentModel,
+      { numeroExpediente: "08092026-0045-BRPD", nombreExpediente: "Expediente BRPD" }
+    );
+    const photos = model.sections.find((section) => section.sectionId === "field-photographs")?.records || [];
+    expect(photos).toHaveLength(3);
+    expect(photos[0]).toEqual(expect.objectContaining({ contentRole: "INSTRUCTION", contextOriginal: instruction }));
+    for (const sectionId of ["scince", "denue", "incidence", "osint", "multisource-correlation"] as const) {
+      expect(model.sections.find((section) => section.sectionId === sectionId)?.content).toContain("NO DISPONIBLE EN EL EXPEDIENTE");
+    }
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==", "base64");
+    const assets = Object.fromEntries([
+      [composition.principalTerritorialMap.mapId, { data: png, type: "png" as const, width: 500, height: 280 }],
+      ...photos.map((photo) => [photo.recordId, { data: png, type: "png" as const, width: 360, height: 220 }]),
+    ]);
+    const renderedReport = renderExecutiveGeointWordDocument(reportDocumentModel, { visualAssetsById: assets });
+    const renderedAnnex = renderExecutiveGeointTechnicalAnnexWordDocument(model, { visualAssetsById: assets });
+    const reportPackage = await packageXml(renderedReport.document);
+    const annexPackage = await packageXml(renderedAnnex.document);
+    expect((await Packer.toBuffer(renderedReport.document)).byteLength).toBeGreaterThan(1000);
+    expect((await Packer.toBuffer(renderedAnnex.document)).byteLength).toBeGreaterThan(1000);
+    expect(renderedReport.renderAudit.renderedVisualIds).toContain(composition.principalTerritorialMap.mapId);
+    expect(renderedAnnex.renderAudit.renderedVisualIds).toContain(composition.principalTerritorialMap.mapId);
+    expect(reportPackage.document).toContain("Hipótesis vigente: Sin modificación respecto de la hipótesis inicial.");
+    expect(annexPackage.document).toContain(`Contexto o instrucción de análisis: ${instruction}`);
+    expect(annexPackage.document).not.toContain(`Hallazgo: ${instruction}`);
+    expect(annexPackage.document).not.toContain(`Resultado: ${instruction}`);
+    expect(annexPackage.document).not.toContain("requiere resolver el activo visual");
+    expect(annexPackage.document).toContain("CEFI - FUENTES ABIERTAS");
+    expect(annexPackage.document).not.toContain("CIFA / CEFI");
+    expect(annexPackage.document).not.toContain(instruction.repeat(2));
+  });
+
+  test("40 solo una revision humana aprobada recibe etiqueta de sintesis analitica validada", async () => {
+    const analyticalEvidence = {
+      evidenceId: "analysis-photo",
+      title: "Fotografía analítica",
+      imageUrl: "asset://analysis-photo",
+      traceabilityIds: ["trace-analysis-photo"],
+      contentRole: "ANALYSIS",
+      analysis: "Lectura analítica controlada.",
+    };
+    const unapproved = annex(input({ evidence: [analyticalEvidence] }));
+    expect(unapproved.sections.find((section) => section.sectionId === "field-photographs")?.records[0].validatedAnalysis).toBe("");
+
+    const approved = annex(input({ evidence: [{ ...analyticalEvidence, humanValidationStatus: "APPROVED" }] }));
+    const xml = (await packageXml(renderExecutiveGeointTechnicalAnnexWordDocument(approved).document)).document;
+    expect(xml).toContain("Síntesis analítica validada: Lectura analítica controlada.");
   });
 });

@@ -20,7 +20,7 @@ import {
 import { buildNumeroExpedienteFilename } from "@/utils/documentIdentity";
 import type { ExecutiveGeointWordVisualAsset } from "@/utils/executiveGeointWordRenderer";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
-import { TECHNICAL_ANNEX_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
+import { TECHNICAL_ANNEX_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import { renderStructuredTable } from "@/utils/documentTableRenderer";
 
 export interface TechnicalAnnexWordRenderResult {
@@ -62,21 +62,51 @@ function para(text: string, options: { bold?: boolean; size?: number; color?: st
   );
 }
 
+function compactCell(value: unknown, maxLength = 160): string {
+  const text = clean(value);
+  if (text.length <= maxLength) return text;
+  const candidate = text.slice(0, maxLength - 1);
+  const lastSpace = candidate.lastIndexOf(" ");
+  return `${candidate.slice(0, lastSpace > maxLength * 0.65 ? lastSpace : candidate.length).trim()}…`;
+}
+
 function renderRecords(records: TechnicalAnnexRecord[]): any[] {
   if (!records.length) return [];
   return [
     renderStructuredTable({
-      headers: ["HALLAZGO / ELEMENTO", "TIPO / FUENTE", "DETALLE", "REFERENCIA", "TRAZABILIDAD", "INFORME"],
+      headers: ["ID / REFERENCIA", "TIPO", "FUENTE", "FECHA", "TRAZABILIDAD", "ESTATUS", "INFORME"],
       rows: records.map((record) => [
-        clean(record.title),
-        clean(record.sourceType),
-        clean(record.summary),
-        clean(record.referenceLabel || "Referencia no consignada"),
+        compactCell(record.referenceLabel || record.recordId),
+        clean(record.contentRole || "OBSERVATION"),
+        compactCell(record.sourceType),
+        record.capturedAt ? formatInstitutionalDate(record.capturedAt) : "NO CONSIGNADA",
         clean(record.traceabilityStatus || "NO CONSIGNADO"),
+        record.visualReference ? "DISPONIBLE" : "SIN ACTIVO VISUAL",
         clean(record.reportUsage || (record.selectedForExecutiveBody ? "SI" : "NO DETERMINADO")),
       ]),
-    }, { columnWidths: [18, 14, 28, 14, 14, 12] }),
+    }, { columnWidths: [16, 12, 17, 15, 15, 13, 12] }),
   ];
+}
+
+function renderEvidenceDossier(record: TechnicalAnnexRecord): any[] {
+  const children = [
+    para(`FICHA DE EVIDENCIA - ${record.referenceLabel || record.recordId}`, { bold: true, size: 20, color: "0D2B52" }),
+    para(`Título: ${record.title}`),
+    para(`Tipo: ${record.contentRole || "OBSERVATION"}. Fuente: ${record.sourceType}.`),
+    para(`Fecha: ${record.capturedAt ? formatInstitutionalDate(record.capturedAt) : "NO CONSIGNADA"}. Trazabilidad: ${record.traceabilityStatus || "NO CONSIGNADO"}.`),
+  ];
+  if (record.locationLabel) children.push(para(`Ubicación: ${record.locationLabel}.`));
+  if (record.contentRole === "INSTRUCTION" && record.contextOriginal) {
+    children.push(para(`Contexto o instrucción de análisis: ${record.contextOriginal}`));
+  } else if (record.validatedAnalysis) {
+    children.push(para(`Síntesis analítica validada: ${record.validatedAnalysis}`));
+  } else if (record.contextOriginal) {
+    children.push(para(`Contexto original: ${record.contextOriginal}`));
+  } else {
+    children.push(para("Interpretación analítica: NO CONSIGNADA."));
+  }
+  if (record.limitations.length) children.push(para(`Limitaciones: ${record.limitations.join("; ")}`));
+  return children;
 }
 
 function renderFactTable(facts: ExecutiveGeointTechnicalAnnexSection["facts"]): any[] {
@@ -110,7 +140,9 @@ function renderSection(
     para(section.title, { bold: true, size: 22, color: "0D2B52" }),
     ...section.content.map((item) => para(item)),
     ...renderFactTable(section.facts),
-    ...renderRecords(section.records),
+    ...(section.sectionId === "field-photographs" || section.sectionId === "street-view"
+      ? []
+      : renderRecords(section.records)),
   ];
   if (section.sectionId === "canonical-geography") {
     const id = annexModel.executiveReportReference.principalMapId;
@@ -124,12 +156,13 @@ function renderSection(
   }
   if (section.sectionId === "field-photographs" || section.sectionId === "street-view") {
     for (const record of section.records) {
+      children.push(...renderEvidenceDossier(record));
       const asset = assets[record.recordId];
       if (!asset?.data) {
         if (record.visualReference) missingVisualAssetIds.push(record.recordId);
         continue;
       }
-      children.push(...renderAsset(asset, `${record.title}. ${record.sourceType}. ${record.referenceLabel || ""}`));
+      children.push(...renderAsset(asset, `${record.title}. Fuente: ${record.sourceType}. Referencia: ${record.referenceLabel || record.recordId}.`));
       renderedVisualIds.push(record.recordId);
     }
   }
@@ -151,10 +184,10 @@ export function renderExecutiveGeointTechnicalAnnexWordDocument(
   const bodySections = annexModel.sections.filter((section) => section.sectionId !== "identity");
   const children = [
     ...InstitutionalBrandManager.createCoverIdentity(TECHNICAL_ANNEX_OFFICIAL_TITLE, options.institutionalLogos),
-    para(`Numero de expediente: ${annexModel.identity.numeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
+    para(`Número de expediente: ${annexModel.identity.numeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
     para(`Nombre del expediente: ${annexModel.identity.nombreExpediente}`, { align: AlignmentType.CENTER }),
-    para(`Clasificacion: ${annexModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
-    para(`Fecha de emision: ${annexModel.identity.fecha}`, { align: AlignmentType.CENTER }),
+    para(`Clasificación: ${annexModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
+    para(`Fecha de emisión: ${formatInstitutionalDate(annexModel.identity.fecha)}`, { align: AlignmentType.CENTER }),
     para("Soporte técnico, trazabilidad ampliada y evidencia complementaria del Informe Ejecutivo GEOINT.", { align: AlignmentType.CENTER }),
     new Paragraph({ children: [new PageBreak()] }),
     ...bodySections.flatMap((section) => renderSection(section, annexModel, options.visualAssetsById || {}, renderedVisualIds, missingVisualAssetIds)),

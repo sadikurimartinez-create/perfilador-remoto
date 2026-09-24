@@ -24,6 +24,7 @@ export type NarrativeStrength =
   | "VALIDATED_CONCLUSION";
 
 export type NarrativeSourceItemType = PublicationItemType | "RECOMMENDATION";
+export type InstitutionalContentRole = "OBSERVATION" | "CONTEXT" | "INSTRUCTION" | "ANALYSIS" | "CONCLUSION" | "HYPOTHESIS";
 
 export interface NarrativeAssertion {
   assertionId: string;
@@ -182,6 +183,28 @@ function pickText(item: any, fallback: string): string {
     item?.caption ||
     fallback
   ).trim();
+}
+
+export function classifyInstitutionalContentRole(item: any): InstitutionalContentRole {
+  const explicitRole = String(
+    item?.contentRole || item?.narrativeRole || item?.semanticRole || item?.epistemicClass ||
+    item?.publicationEligibility?.role || ""
+  ).toUpperCase();
+  if (explicitRole.includes("INSTRUCTION") || explicitRole.includes("CONSIGNA")) return "INSTRUCTION";
+  if (explicitRole === "CONTEXT" || explicitRole === "CONTEXTUAL") return "CONTEXT";
+  if (explicitRole.includes("HYPOTHESIS") || explicitRole.includes("HIPOTESIS")) return "HYPOTHESIS";
+  if (explicitRole.includes("CONCLUSION")) return isHumanApprovedForRole(item) ? "CONCLUSION" : "ANALYSIS";
+  if (explicitRole.includes("ANALYSIS") || explicitRole.includes("ANALISIS")) return "ANALYSIS";
+  if (explicitRole.includes("OBSERVATION") || explicitRole.includes("OBSERVACION") || explicitRole === "INSTITUTIONAL_FACT") return "OBSERVATION";
+  const text = pickText(item, "");
+  if (/\b(?:se solicita|se instruye|se requiere)\b[\s\S]*\b(?:realizar|llevar a cabo|efectuar|determinar|establecer|generar)\b/i.test(text)) {
+    return "INSTRUCTION";
+  }
+  return "OBSERVATION";
+}
+
+function isHumanApprovedForRole(item: any): boolean {
+  return evaluateHumanValidation(item?.multimodalEvidence || item).status === "APPROVED";
 }
 
 function isLineageSupported(status: LineageStatus): boolean {

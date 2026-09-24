@@ -22,7 +22,7 @@ import {
 } from "@/utils/documentCompositionEngine";
 import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
-import { EXECUTIVE_GEOINT_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
+import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 
 export interface ExecutiveGeointWordVisualAsset {
   data: ArrayBuffer | Uint8Array;
@@ -119,9 +119,9 @@ function renderCover(documentModel: ExecutiveGeointReportDocumentModel, visibleN
       documentModel.presentation.documentTitle || EXECUTIVE_GEOINT_OFFICIAL_TITLE,
       options.institutionalLogos
     ),
-    paragraph(`Numero de expediente: ${visibleNumeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
-    paragraph(`Clasificacion: ${documentModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
-    paragraph(`Fecha de emision: ${documentModel.identity.fechaEmision}`, { align: AlignmentType.CENTER }),
+    paragraph(`Número de expediente: ${visibleNumeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
+    paragraph(`Clasificación: ${documentModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
+    paragraph(`Fecha de emisión: ${formatInstitutionalDate(documentModel.identity.fechaEmision)}`, { align: AlignmentType.CENTER }),
   ];
 }
 

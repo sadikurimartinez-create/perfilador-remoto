@@ -10,7 +10,7 @@ import {
   isCertifiedGimAnalysisPayload,
   type InstitutionalReportInput,
 } from "@/utils/institutionalReportPublicationContract";
-import { EXECUTIVE_GEOINT_OFFICIAL_TITLE } from "@/utils/institutionalDocumentIdentity";
+import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 
 export const EXECUTIVE_GEOINT_DOCUMENT_MODEL_VERSION = "1.0.0";
 export const EXECUTIVE_DOCUMENT_MAX_VISUALS = 5;
@@ -137,6 +137,11 @@ function visible(value: unknown, fallback = ""): string {
 
 function visibleList(values: unknown[], max: number): string[] {
   return limited(values.map((item) => visible(item)).filter(Boolean), max);
+}
+
+function equivalentVisibleText(left: string, right: string): boolean {
+  const normalize = (value: string) => value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("es-MX");
+  return Boolean(normalize(left)) && normalize(left) === normalize(right);
 }
 
 function resolveNumeroExpediente(model: ExecutiveGeointReportModel, options?: { numeroExpediente?: string; ceipolId?: string }): string {
@@ -298,7 +303,7 @@ function buildSections(
   const profiler = clean(model.identity.personaPerfiladora) && !/no disponible/i.test(model.identity.personaPerfiladora)
     ? model.identity.personaPerfiladora
     : "NO CONSIGNADO";
-  const formulationDate = clean(initialVersion?.createdAt) || "NO CONSIGNADO";
+  const formulationDate = clean(initialVersion?.createdAt) ? formatInstitutionalDate(initialVersion.createdAt) : "NO CONSIGNADO";
   const initialStatus = clean(initialVersion?.status) || "NO CONSIGNADO";
   const hypothesisEvidenceIds = [
     ...asArray<string>(hypothesis?.supportingEvidenceIds),
@@ -330,8 +335,8 @@ function buildSections(
       role: "Identidad institucional del informe",
       content: [
         EXECUTIVE_GEOINT_OFFICIAL_TITLE,
-        `Numero de expediente: ${numeroExpediente}`,
-        `Clasificacion: ${visible(model.identity.clasificacion, "CONFIDENCIAL - USO INSTITUCIONAL")}`,
+        `Número de expediente: ${numeroExpediente}`,
+        `Clasificación: ${visible(model.identity.clasificacion, "CONFIDENCIAL - USO INSTITUCIONAL")}`,
       ],
       densityPolicy: { targetPages: "1" },
       status: "READY",
@@ -340,17 +345,14 @@ function buildSections(
       sectionId: "executive-panorama",
       order: 2,
       title: "PANORAMA EJECUTIVO",
-      role: "Sintesis ejecutiva para decision",
+      role: "Síntesis ejecutiva para decisión",
       content: [
-        `Situacion: ${visible(model.panorama.situacion, "Situacion institucional sintetizada.")}`,
-        ...visibleList(model.panorama.hallazgosClave, EXECUTIVE_DOCUMENT_LIMITS.panoramaFindings).map((item) => `Hallazgo clave: ${item}`),
+        `Situación: ${visible(model.panorama.situacion, "Situación institucional sintetizada.")}`,
+        ...visibleList(model.panorama.hallazgosClave, 2).map((item) => `Hallazgo prioritario: ${item}`),
         ...(visible(model.panorama.escenario) ? [`Escenario: ${visible(model.panorama.escenario)}`] : []),
-        ...visibleList(model.panorama.decisionesSugeridas, EXECUTIVE_DOCUMENT_LIMITS.panoramaDecisions).map((item) => `Decision sugerida: ${item}`),
         `Nivel institucional de confianza: ${visible(model.panorama.nivelConfianza, "NO DETERMINADO")}`,
-        `Incertidumbre: ${visible(model.panorama.incertidumbre, "NO DETERMINADA")}`,
-        `Vigencia: ${visible(model.panorama.vigencia, "NO DEFINIDA")}`,
-      ],
-      densityPolicy: { targetPages: "1", maxItems: 14 },
+      ].slice(0, 5),
+      densityPolicy: { targetPages: "1", maxItems: 5 },
       status: "READY",
     },
     {
@@ -360,7 +362,9 @@ function buildSections(
       role: "Trayectoria de la hipótesis humana y su contraste con evidencia gobernada",
       content: [
         `Hipótesis inicial: ${initialText}`,
-        `Hipótesis vigente: ${currentText}`,
+        equivalentVisibleText(initialText, currentText)
+          ? "Hipótesis vigente: Sin modificación respecto de la hipótesis inicial."
+          : `Hipótesis vigente: ${currentText}`,
         `Hallazgos relevantes: ${visibleList(linkedFindings.map((item) => item.title || item.summary), 3).join("; ") || "No constan hallazgos vinculados y publicables."}`,
         `Elementos de confirmación: ${linkedHypothesisElements(input, asArray<string>(hypothesis?.supportingEvidenceIds), asArray<string>(hypothesis?.supportingFindingIds))}`,
         `Elementos de refutación: ${linkedHypothesisElements(input, asArray<string>(hypothesis?.contradictingEvidenceIds), asArray<string>(hypothesis?.contradictingFindingIds))}`,
@@ -377,15 +381,15 @@ function buildSections(
     {
       sectionId: "territorial-situation",
       order: 4,
-      title: "SITUACION TERRITORIAL",
+      title: "SITUACIÓN TERRITORIAL",
       role: "Contexto territorial y mapa principal",
       content: [
         visible(model.territorialSituation.territorialSummary, "Resumen territorial gobernado no disponible."),
         visualComposition.principalTerritorialMap.status === "NO_CANONICAL_GEOGRAPHY"
           ? "Mapa territorial principal incompleto por ausencia de geografia canonica."
           : visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
-            ? "Mapa territorial principal requerido desde geografia canonica gobernada."
-            : "Mapa territorial principal disponible desde visual gobernado.",
+            ? "Cartografía canónica disponible y representada mediante mapa territorial gobernado."
+            : "Cartografía canónica disponible y representada mediante visual territorial gobernado.",
         scinceContext(input),
         denueContext(input),
         incidenceContext(input),
@@ -405,8 +409,10 @@ function buildSections(
     {
       sectionId: "key-evidence",
       order: 6,
-      title: "EVIDENCIA CLAVE",
-      role: "Evidencia estrictamente seleccionada para cuerpo ejecutivo",
+      title: evidence.some((item) => item.governanceStatus !== "AVAILABLE") ? "EVIDENCIA CLAVE" : "EVIDENCIA DISPONIBLE",
+      role: evidence.some((item) => item.governanceStatus !== "AVAILABLE")
+        ? "Evidencia seleccionada con vinculación, relevancia y trazabilidad"
+        : "Evidencia disponible sin fundamento suficiente para elevarla a clave",
       content: evidence.map(evidenceContent),
       densityPolicy: { targetPages: "1-2", maxItems: EXECUTIVE_DOCUMENT_LIMITS.keyEvidence },
       status: "READY",
@@ -414,8 +420,8 @@ function buildSections(
     {
       sectionId: "multisource-analysis",
       order: 7,
-      title: "ANALISIS MULTIFUENTE",
-      role: "Sintesis de convergencia, contradiccion y brechas",
+      title: "ANÁLISIS MULTIFUENTE",
+      role: "Síntesis de convergencia, contradicción y brechas",
       content: [
         ...observedOsint,
         ...(observedOsint.length ? [] : ["Inteligencia de fuentes abiertas: no constan registros observados adquiridos y publicables."]),
@@ -436,7 +442,7 @@ function buildSections(
     sections.push({
       sectionId: "prospective-analysis",
       order: 8,
-      title: "ANALISIS PROSPECTIVO",
+      title: "ANÁLISIS PROSPECTIVO",
       role: "Escenario prospectivo gobernado",
       content: [
         `Tendencia: ${visible(model.prospectiveAnalysis.tendencia, "NO DETERMINADA")}`,
@@ -457,7 +463,7 @@ function buildSections(
   sections.push({
     sectionId: "decision-implications",
     order: hasGovernedProspective(model) ? 9 : 8,
-    title: "IMPLICACIONES PARA LA DECISION",
+    title: "IMPLICACIONES PARA LA DECISIÓN",
     role: "Acciones derivadas de implicaciones gobernadas",
     content: decisions.map(decisionContent),
     densityPolicy: { targetPages: "1", maxItems: EXECUTIVE_DOCUMENT_LIMITS.decisions },

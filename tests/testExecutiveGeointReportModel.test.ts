@@ -492,4 +492,55 @@ describe("ExecutiveGeointReportModel", () => {
     expect(text).not.toContain("trace-finding-1");
     expect(text).not.toContain("ev-1");
   });
+
+  test("38 evidencia sin sintesis usa ausencia editorial y conserva estado de gobernanza", () => {
+    const model = buildExecutiveGeointReportModel(institutionalInput({
+      evidence: [{
+        evidenceId: "ev-no-summary",
+        title: "Registro visual",
+        dataUrl: "data:image/png;base64,uno",
+        findingIds: ["finding-1"],
+        traceabilityIds: ["trace-no-summary"],
+      }],
+      visualProducts: [],
+    }), context());
+    expect(model.keyEvidence[0]).toEqual(expect.objectContaining({
+      governanceStatus: "KEY",
+      summary: "Sin síntesis analítica validada.",
+    }));
+  });
+
+  test("39 instruccion no se promueve como sintesis ni evidencia clave", () => {
+    const instruction = "Se solicita al Perfilador Remoto realizar análisis y determinar factores del corredor.";
+    const model = buildExecutiveGeointReportModel(institutionalInput({
+      evidence: [{
+        evidenceId: "ev-instruction",
+        title: "Registro visual",
+        summary: instruction,
+        dataUrl: "data:image/png;base64,uno",
+        findingIds: ["finding-1"],
+        traceabilityIds: ["trace-instruction"],
+      }],
+      visualProducts: [],
+    }), context());
+    expect(model.keyEvidence[0]).toEqual(expect.objectContaining({
+      contentRole: "INSTRUCTION",
+      governanceStatus: "AVAILABLE",
+      summary: "Registro visual disponible; interpretación analítica pendiente de validación.",
+    }));
+    expect(model.keyEvidence[0].summary).not.toContain("Se solicita");
+  });
+
+  test("40 confianza MEDIO solo deriva de dato explicito; soporte insuficiente queda no disponible", () => {
+    const explicit = buildExecutiveGeointReportModel(institutionalInput({
+      findings: [{ findingId: "f-medium", confidence: 0.61, traceabilityIds: ["trace-medium"] }],
+    }), context());
+    expect(explicit.panorama.nivelConfianza).toBe("MEDIO");
+
+    const absent = buildExecutiveGeointReportModel(institutionalInput({
+      findings: [], analyses: [], evidence: [], visualProducts: [], streetView: [],
+      lineageSummary: { geographyId: "geo-1", sourceIds: [], evidenceIds: [], findingIds: [], analysisIds: [], conclusionIds: [], itemCount: 0 },
+    }), context());
+    expect(absent.panorama.nivelConfianza).toBe("NO DISPONIBLE");
+  });
 });

@@ -444,6 +444,21 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(model.presentation.visibleText).toContain(`Hipótesis inicial: ${initial}`);
   });
 
+  test("38A no repite una hipótesis inicial y vigente editorialmente equivalentes", () => {
+    const text = "Hipótesis humana sin contraste posterior.";
+    const model = documentModel({}, {
+      hypothesis: {
+        initialHypothesis: text,
+        currentHypothesis: `  ${text.toUpperCase()}  `,
+        versions: [{ text, authorType: "HUMAN", status: "FORMULATED", createdAt: "2026-09-01T10:30:00.000Z" }],
+      },
+    });
+    const content = model.sections.find((item) => item.sectionId === "initial-hypothesis")?.content || [];
+    expect(content).toContain(`Hipótesis inicial: ${text}`);
+    expect(content).toContain("Hipótesis vigente: Sin modificación respecto de la hipótesis inicial.");
+    expect(content).not.toContain(`Hipótesis vigente: ${text}`);
+  });
+
   test("39 no sustituye un historial inicial ausente por la hipótesis vigente", () => {
     const model = documentModel({}, { hypothesis: {
       initialHypothesis: "Texto no verificable",
@@ -502,7 +517,7 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(content).toContain("Hipótesis vigente: Hipótesis vigente distinta");
     expect(content).toContain("Geografía de referencia: Punto territorial individual; estado VALID");
     expect(content).toContain("Persona perfiladora criminológica (PPC): PPC Laura Méndez");
-    expect(content).toContain("Fecha de formulación: 2026-09-01T10:30:00.000Z");
+    expect(content).toContain("Fecha de formulación: 1 de septiembre de 2026");
     expect(content).toContain("Estado de la hipótesis inicial: FORMULATED");
   });
 
@@ -545,7 +560,7 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(xml).toContain("Hipótesis inicial: Hipótesis inicial formulada por la PPC");
     expect(xml).toContain("Hipótesis vigente: Hipótesis vigente después del contraste humano");
     expect(xml).toContain("Persona perfiladora criminológica (PPC): PPC Laura Méndez");
-    expect(xml).toContain("Fecha de formulación: 2026-09-01T10:30:00.000Z");
+    expect(xml).toContain("Fecha de formulación: 1 de septiembre de 2026");
     expect(xml).not.toContain("ppc-1");
   });
 

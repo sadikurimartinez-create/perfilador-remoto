@@ -520,4 +520,18 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(xml).not.toContain("Escala:");
     expect(xml).not.toContain("Orientación:");
   });
+
+  test("41 portada usa ortografia institucional y fecha visible sin exponer timestamp ISO", async () => {
+    const model = documentModel({ identity: {
+      numeroExpediente: "08092026-0045-BRPD",
+      clasificacion: "CONFIDENCIAL - USO INSTITUCIONAL",
+      fechaEmision: "2026-09-24T02:54:17.387Z",
+    } });
+    const xml = (await packageXml(renderExecutiveGeointWordDocument(model).document)).document;
+    expect(xml).toContain("Número de expediente: 08092026-0045-BRPD");
+    expect(xml).toContain("Clasificación: CONFIDENCIAL - USO INSTITUCIONAL");
+    expect(xml).toContain("Fecha de emisión: 23 de septiembre de 2026");
+    expect(xml).not.toContain("2026-09-24T02:54:17.387Z");
+    expect(model.identity.fechaEmision).toBe("2026-09-24T02:54:17.387Z");
+  });
 });
