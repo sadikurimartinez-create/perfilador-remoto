@@ -18,6 +18,7 @@ import {
   selectPredictiveProductsForInstitutionalReport,
 } from "@/utils/institutionalPredictiveProductIntegration";
 import { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
+import { isAdditionalPhotoEvidence } from "@/utils/institutionalProductsUi";
 
 export { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
 
@@ -252,6 +253,20 @@ export function assessReportItemEligibility(item: any, context: {
     if (evaluateHumanValidation(item?.multimodalEvidence || item).status === "REJECTED") {
       return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "HUMAN_REJECTED", "Human validation rejected this evidence.")], disclosures);
     }
+    if (isAdditionalPhotoEvidence(item)) {
+      if (!isHumanApproved(item)) {
+        return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "ADDITIONAL_PHOTO_HUMAN_REVIEW_REQUIRED", "Additional photographic evidence requires explicit human approval.")], disclosures);
+      }
+      const missingTraceability = [
+        item?.sourceEvidenceId ? null : "sourceEvidenceId",
+        item?.traceabilityId ? null : "traceabilityId",
+        (item?.expedienteId || item?.projectId) ? null : "expedienteId",
+        item?.geographyId ? null : "geographyId",
+      ].filter(Boolean);
+      if (missingTraceability.length > 0) {
+        return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "ADDITIONAL_PHOTO_TRACEABILITY_INCOMPLETE", `Additional photographic evidence lacks ${missingTraceability.join(", ")}.`)], disclosures);
+      }
+    }
     if (!isSupported(item) && lineage(item).length === 0) {
       return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "UNTRACEABLE_EVIDENCE", "Evidence lacks resolvable lineage.")], disclosures);
     }
@@ -485,14 +500,31 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   exclusions.push(...governedVisuals.exclusions);
   disclosures.push(...governedVisuals.disclosures);
 
+  // Non-geometric photographs have contextual geography but intentionally no coordinates.
+  // They pass the publication contract above and are omitted only from the coordinate-based gate.
+  const coordinateGovernedEvidence = evidence.filter((item) => !isAdditionalPhotoEvidence(item));
+  const additionalPhotoEvidence = evidence.filter(isAdditionalPhotoEvidence);
   const traceabilityGate = validateInstitutionalReportTraceability({
     projectId: reportReadyAssessment.projectId,
-    evidence,
+    evidence: coordinateGovernedEvidence,
     findings,
     analyses,
     streetView,
     analyticalProducts: predictiveAnalyticalProducts,
   });
+  if (additionalPhotoEvidence.length > 0) {
+    traceabilityGate.itemResults.push(...additionalPhotoEvidence.map((item) => ({
+      itemId: itemId(item, "EVIDENCE"),
+      itemType: "EVIDENCE" as const,
+      eligible: true,
+      contextualOnly: false,
+      reasons: ["NON_GEOMETRIC_ADDITIONAL_PHOTO_TRACEABILITY_ACCEPTED"],
+      missingFields: [],
+      exclusionCodes: [],
+    })));
+    traceabilityGate.evidenceSummary.total += additionalPhotoEvidence.length;
+    traceabilityGate.evidenceSummary.eligible += additionalPhotoEvidence.length;
+  }
   exclusions.push(...traceabilityGate.exclusions.map((item) => ({
     itemId: item.itemId,
     itemType: item.itemType as PublicationItemType,

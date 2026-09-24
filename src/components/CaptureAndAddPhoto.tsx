@@ -6,6 +6,7 @@ import { useProject } from "@/context/ProjectContext";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
+import { isAdditionalPhotoEvidence } from "@/utils/institutionalProductsUi";
 
 function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
@@ -155,7 +156,7 @@ export function CaptureAndAddPhoto() {
   const requiredPhotos =
     minimumPhotos[geom] || 1;
 
-  const currentPhotos = album.length;
+  const currentPhotos = album.filter((photo) => !isAdditionalPhotoEvidence(photo)).length;
 
   const remainingPhotos =
     requiredPhotos - currentPhotos;

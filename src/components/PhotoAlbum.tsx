@@ -56,6 +56,7 @@ import {
   buildInstitutionalProductsViewModel,
   collectInstitutionalAnalysisEvidenceIds,
   collectInstitutionalAnalysisFindingIds,
+  isAdditionalPhotoEvidence,
   shouldShowInstitutionalAnalysisCreationTrigger,
   type InstitutionalReportKind,
 } from "@/utils/institutionalProductsUi";
@@ -807,6 +808,14 @@ export function PhotoAlbum({
 
   // Sobrescribir "album" local para que todo el componente herede las reglas gobernadas
   const album: AlbumPhoto[] = normalizedAlbum;
+  const additionalPhotoEvidence = useMemo(
+    () => album.filter(isAdditionalPhotoEvidence),
+    [album]
+  );
+  const geometricPhotoEvidence = useMemo(
+    () => album.filter((photo) => !isAdditionalPhotoEvidence(photo)),
+    [album]
+  );
 
   const [activeDelitos, setActiveDelitos] = useState<string[]>(DELITOS_CATEGORIES.map(d => d.id));
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -1659,7 +1668,7 @@ const geom = (project?.geometryType as keyof typeof minimumPhotos) || "individua
 const requiredPhotos =
   minimumPhotos[geom] || 1;
 
-const currentPhotos = album.length;
+const currentPhotos = geometricPhotoEvidence.length;
 
 const hasMinimumPhotos =
   currentPhotos >= requiredPhotos;
@@ -2994,24 +3003,62 @@ const hasMinimumPhotos =
         </div>
       </div>
 
+      {additionalPhotoEvidence.length > 0 && (
+        <section className="mb-6 border-t border-slate-800 pt-5" aria-labelledby="additional-photo-evidence-title">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 id="additional-photo-evidence-title" className="text-sm font-semibold text-fuchsia-300">
+                Evidencias Fotográficas Adicionales
+              </h4>
+              <p className="mt-1 text-xs text-slate-400">
+                Evidencia visual vinculada al expediente sin función de nodo, vértice o punto canónico.
+              </p>
+            </div>
+            <span className="rounded border border-fuchsia-700/60 bg-fuchsia-950/30 px-2 py-1 text-[10px] font-semibold text-fuchsia-200">
+              {additionalPhotoEvidence.length} registrada{additionalPhotoEvidence.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {additionalPhotoEvidence.map((photo: any) => (
+              <article key={photo.evidenceId || photo.id} className="overflow-hidden rounded-lg border border-fuchsia-800/50 bg-slate-900/70">
+                <div className="aspect-video bg-black">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.previewUrl || photo.url || "/no-image.png"} alt="Evidencia fotográfica adicional" className="h-full w-full object-contain" />
+                </div>
+                <div className="space-y-2 p-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-fuchsia-200">Sin rol geométrico</span>
+                    <span className="text-[10px] text-slate-400">{photo.humanValidationStatus || "PENDING_REVIEW"}</span>
+                  </div>
+                  <p className="text-slate-300">{photo.comentario || "Pendiente de contextualización."}</p>
+                  <div className="text-[10px] text-slate-500">
+                    Evidencia: {photo.evidenceId || photo.id} · Origen: {photo.fuente || "Carga adicional"}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
       {(() => {
         let groups: { title: string; photos: typeof album }[] = [];
         if (project?.geometryType === "lineal") {
           groups = [
-            { title: "Nodo Inicial", photos: album.filter((p) => p.tipo === "Nodo Inicial") },
-            { title: "Corredor", photos: album.filter((p) => p.tipo === "Corredor") },
-            { title: "Nodo Final", photos: album.filter((p) => p.tipo === "Nodo Final") },
-            { title: "Sin Clasificar / Otros", photos: album.filter((p) => !["Nodo Inicial", "Corredor", "Nodo Final"].includes(p.tipo)) },
+            { title: "Nodo Inicial", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Nodo Inicial") },
+            { title: "Corredor", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Corredor") },
+            { title: "Nodo Final", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Nodo Final") },
+            { title: "Sin Clasificar / Otros", photos: geometricPhotoEvidence.filter((p) => !["Nodo Inicial", "Corredor", "Nodo Final"].includes(p.tipo)) },
           ];
         } else if (project?.geometryType === "poligono") {
           groups = [
-            { title: "Perímetro", photos: album.filter((p) => p.tipo === "Perímetro") },
-            { title: "Interior", photos: album.filter((p) => p.tipo === "Interior") },
-            { title: "Sin Clasificar / Otros", photos: album.filter((p) => !["Perímetro", "Interior"].includes(p.tipo)) },
+            { title: "Perímetro", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Perímetro") },
+            { title: "Interior", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Interior") },
+            { title: "Sin Clasificar / Otros", photos: geometricPhotoEvidence.filter((p) => !["Perímetro", "Interior"].includes(p.tipo)) },
           ];
         } else {
           groups = [
-            { title: "Nodo y Entorno", photos: album }
+            { title: "Nodo y Entorno", photos: geometricPhotoEvidence }
           ];
         }
         groups = groups.filter((g) => g.photos.length > 0);

@@ -81,6 +81,13 @@ import {
   resolvePerfiladorIniciales,
 } from "@/utils/documentIdentity";
 import { makeFirestoreSafe } from "@/utils/firestoreSafe";
+import {
+  ADDITIONAL_PHOTO_EVIDENCE_TYPE,
+  NON_GEOMETRIC_PHOTO_ROLE,
+  isAdditionalPhotoEvidence,
+  isImageEvidenceMimeType,
+  mergeAdditionalPhotoEvidence,
+} from "@/utils/institutionalProductsUi";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -163,6 +170,18 @@ export type AlbumPhoto = {
   coordinates?: { lat: number; lng: number } | null;
   evidenceClass?: "INSTITUTIONAL_EVIDENCE" | "CONTEXTUAL_EVIDENCE";
   aiAnalyticalOutput?: AiAnalyticalOutput | null;
+  geometryRole?: "NONE" | string;
+  isGeometry?: boolean;
+  sourceDocumentId?: string | null;
+  storagePath?: string | null;
+  mimeType?: string | null;
+  forensicIntegrity?: any;
+  multimodalEvidence?: MultimodalEvidenceContract;
+  evidenceType?: string;
+  fuente?: string;
+  analysisType?: string | null;
+  createdAt?: number;
+  deleted?: boolean;
 
   // Extensión de Gobernanza Street View Evidence v2.1 y Contrato Determinista
   evidenceOrigin?: EvidenceOrigin;
@@ -308,7 +327,39 @@ export type ProjectDocument = {
   context: string;
   createdAt: number;
   multimodalEvidence?: MultimodalEvidenceContract;
+  evidenceType?: typeof ADDITIONAL_PHOTO_EVIDENCE_TYPE;
+  geometryRole?: typeof NON_GEOMETRIC_PHOTO_ROLE;
+  projectId?: string | null;
+  expedienteId?: string | null;
+  geographyId?: string | null;
+  geographyType?: CanonicalGeographyType | null;
+  evidenceId?: string | null;
+  sourceEvidenceId?: string | null;
+  traceabilityId?: string | null;
+  lineage?: CanonicalLineageNode[];
+  lineageStatus?: LineageStatus;
+  storagePath?: string | null;
 };
+
+export async function persistPhotoMetadataWithStorageRollback<T>(params: {
+  persistMetadata: () => Promise<T>;
+  cleanupStorage: () => Promise<void>;
+}): Promise<T> {
+  try {
+    return await params.persistMetadata();
+  } catch (persistenceError: any) {
+    try {
+      await params.cleanupStorage();
+    } catch (cleanupError: any) {
+      throw new Error(
+        `PHOTO_METADATA_PERSISTENCE_FAILED_STORAGE_CLEANUP_FAILED: ${persistenceError?.message || "Firestore rechazó la evidencia"}; limpieza: ${cleanupError?.message || "Storage no pudo limpiarse"}`
+      );
+    }
+    throw new Error(
+      `PHOTO_METADATA_PERSISTENCE_FAILED: ${persistenceError?.message || "Firestore rechazó la evidencia"}`
+    );
+  }
+}
 
 type ProjectContextValue = {
   project: Project | null;
@@ -1135,6 +1186,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           ...doc.data()
         } as any))
         .filter((d: any) => !d.deleted);
+      const governedAlbumPhotos = mergeAdditionalPhotoEvidence(albumPhotos, projectDocs, {
+        projectId,
+        geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
+        geographyType: canonicalGeography?.type ?? null,
+      }) as AlbumPhoto[];
 
       const loadedProject = {
         id: projectId,
@@ -1152,12 +1208,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ...loadedProject,
         reportReadyAssessment: assessReportReadiness({
           ...loadedProject,
-          album: albumPhotos,
+          album: governedAlbumPhotos,
           documents: projectDocs,
         }),
       });
-      setAlbum(albumPhotos);
-      setSelectedIds(albumPhotos.map((p) => p.id));
+      setAlbum(governedAlbumPhotos);
+      setSelectedIds(governedAlbumPhotos.filter((photo) => !isAdditionalPhotoEvidence(photo)).map((photo) => photo.id));
       setDocuments(projectDocs);
 
       if (projectData.iaAnalysis) {
@@ -1255,11 +1311,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       legacy: false,
     });
 
-    // 3. Guardar metadatos en Firestore (con fallback local ante cuotas agotadas)
-    try {
-      const firestore = getDb();
-      const photosColRef = collection(firestore, "projects", project.id, "photos");
-      const photoDocData = {
+    // 3. Guardar metadatos en Firestore. Si falla, retirar el binario para no dejar un éxito parcial.
+    const firestore = getDb();
+    const photosColRef = collection(firestore, "projects", project.id, "photos");
+    const photoDocData = {
         url: downloadURL,
         storagePath: snapshot.ref.fullPath,
         lat,
@@ -1303,17 +1358,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           sourceProvider: "GOOGLE_STREET_VIEW",
           isStreetView: true
         } : {})
-      };
-      const photoDocRef = await addDoc(photosColRef, photoDocData);
-      photoDocId = photoDocRef.id;
+    };
+    const photoDocRef = await persistPhotoMetadataWithStorageRollback({
+      persistMetadata: () => addDoc(photosColRef, photoDocData),
+      cleanupStorage: () => deleteObject(snapshot.ref),
+    });
+    photoDocId = photoDocRef.id;
 
-      // 4. Actualizar contador en el proyecto padre
+    // 4. El contador es derivado: su fallo no invalida la evidencia ya persistida.
+    try {
       const projectDocRef = doc(firestore, "projects", project.id);
       await updateDoc(projectDocRef, {
         photoCount: increment(1)
       });
     } catch (err: any) {
-      console.warn("[ProjectContext] Falló la persistencia en Firestore (posible cuota agotada), agregando en memoria local:", err);
+      console.warn("[ProjectContext] La foto quedó persistida, pero no se pudo actualizar photoCount:", err);
     }
 
     // 5. Actualizar estado local para reflejar en UI
@@ -1453,12 +1512,41 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const firestore = getDb();
     const docsColRef = collection(firestore, "projects", project.id, "documents");
     const storagePath = snapshot.ref.fullPath;
+    const isAdditionalPhoto = isImageEvidenceMimeType(file.type);
+    const normalizedAdditionalPhoto = isAdditionalPhoto
+      ? normalizeInstitutionalBaseEvidence({
+          id: docId,
+          evidenceId: docId,
+          sourceEvidenceId: docId,
+          expedienteId: project.id,
+          geographyId: project.canonicalGeography?.geographyId ?? project.geographyId ?? null,
+          geographyType: project.canonicalGeography?.type ?? null,
+          legacy: false,
+        })
+      : null;
     const docData = {
       name: file.name,
       url: downloadURL,
       type: file.type || "unknown",
       context,
       createdAt: Date.now(),
+      storagePath,
+      ...(isAdditionalPhoto && normalizedAdditionalPhoto ? {
+        evidenceType: ADDITIONAL_PHOTO_EVIDENCE_TYPE,
+        geometryRole: NON_GEOMETRIC_PHOTO_ROLE,
+        isGeometry: false,
+        projectId: project.id,
+        expedienteId: project.id,
+        geographyId: project.canonicalGeography?.geographyId ?? project.geographyId ?? null,
+        geographyType: project.canonicalGeography?.type ?? null,
+        evidenceId: normalizedAdditionalPhoto.fields.evidenceId,
+        sourceEvidenceId: normalizedAdditionalPhoto.fields.sourceEvidenceId,
+        traceabilityId: normalizedAdditionalPhoto.fields.traceabilityId,
+        lineage: normalizedAdditionalPhoto.fields.lineage,
+        lineageStatus: "SUPPORTED" as const,
+        evidenceClass: "INSTITUTIONAL_EVIDENCE" as const,
+        coordinates: null,
+      } : {}),
       multimodalEvidence: createStoredRawMultimodalEvidence({
         evidenceId: docId,
         expedienteId: project.id,
@@ -1470,13 +1558,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ingestionSource: "USER_UPLOAD",
         geographyId: project.canonicalGeography?.geographyId ?? null,
         geographyType: project.canonicalGeography?.type ?? null,
-        traceabilityId: null,
+        traceabilityId: normalizedAdditionalPhoto?.fields.traceabilityId ?? null,
         analystContext: context,
         forensicIntegrity,
       })
     };
-    const docRef = await addDoc(docsColRef, docData);
-    setDocuments(prev => [...prev, { id: docRef.id, ...docData }]);
+    const docRef = await persistPhotoMetadataWithStorageRollback({
+      persistMetadata: () => addDoc(docsColRef, docData),
+      cleanupStorage: () => deleteObject(snapshot.ref),
+    });
+    const persistedDocument = { id: docRef.id, ...docData } as ProjectDocument;
+    setDocuments(prev => [...prev, persistedDocument]);
+    if (isAdditionalPhoto) {
+      setAlbum((prev) => mergeAdditionalPhotoEvidence(prev, [persistedDocument], {
+        projectId: project.id,
+        geographyId: project.canonicalGeography?.geographyId ?? project.geographyId ?? null,
+        geographyType: project.canonicalGeography?.type ?? null,
+      }) as AlbumPhoto[]);
+    }
   }, [project, isReadOnly]);
 
   const saveCustomDocument = useCallback(async (name: string, type: string, context: string, url = "") => {
@@ -1502,6 +1601,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const firestore = getDb();
     await deleteDoc(doc(firestore, "projects", project.id, "documents", id));
     setDocuments(prev => prev.filter(d => d.id !== id));
+    setAlbum(prev => prev.filter(photo => photo.sourceDocumentId !== id && photo.id !== id));
+    setSelectedIds(prev => prev.filter(photoId => photoId !== id));
   }, [project, isReadOnly]);
 
   const removePhotoFromAlbum = useCallback(async (id: string) => {

@@ -1,4 +1,117 @@
 import type { ReportReadyAssessment, ReportReadyReason, ReportReadyStatus } from "@/utils/reportReadyGovernance";
+import { buildEvidenceLineage, validateLineage } from "@/utils/evidenceLineage";
+
+export const ADDITIONAL_PHOTO_EVIDENCE_TYPE = "ADDITIONAL_PHOTO" as const;
+export const NON_GEOMETRIC_PHOTO_ROLE = "NONE" as const;
+
+export function isImageEvidenceMimeType(value: unknown): boolean {
+  return typeof value === "string" && /^image\//i.test(value.trim());
+}
+
+export function isAdditionalPhotoEvidence(item: any): boolean {
+  return item?.evidenceType === ADDITIONAL_PHOTO_EVIDENCE_TYPE
+    || (item?.geometryRole === NON_GEOMETRIC_PHOTO_ROLE && isImageEvidenceMimeType(
+      item?.mimeType || item?.type || item?.multimodalEvidence?.mimeType
+    ));
+}
+
+export function adaptDocumentToAdditionalPhotoEvidence(
+  document: any,
+  fallback: { projectId?: string | null; geographyId?: string | null; geographyType?: string | null } = {}
+): any | null {
+  const multimodal = document?.multimodalEvidence || {};
+  const mimeType = document?.type || document?.mimeType || multimodal?.mimeType || "";
+  if (!isImageEvidenceMimeType(mimeType)) return null;
+
+  const evidenceId = document?.evidenceId || multimodal?.evidenceId || document?.id;
+  const expedienteId = document?.expedienteId || document?.projectId || multimodal?.expedienteId || fallback.projectId || null;
+  const geographyId = document?.geographyId ?? multimodal?.geographyId ?? fallback.geographyId ?? null;
+  const geographyType = document?.geographyType ?? multimodal?.geographyType ?? fallback.geographyType ?? null;
+  const sourceEvidenceId = document?.sourceEvidenceId || multimodal?.sourceEvidenceId || evidenceId;
+  const lineage = document?.lineage || multimodal?.lineage || buildEvidenceLineage({
+    sourceId: sourceEvidenceId,
+    sourceReference: multimodal?.storageReference || document?.storagePath || document?.url || sourceEvidenceId,
+    geographyId,
+    geographyType,
+    evidenceId,
+  });
+  const lineageStatus = document?.lineageStatus || multimodal?.lineageStatus || validateLineage(lineage).status;
+
+  return {
+    ...document,
+    id: document.id,
+    sourceDocumentId: document.id,
+    previewUrl: document.url || "",
+    lat: null,
+    lng: null,
+    coordinates: null,
+    tipo: "Evidencia Fotográfica Adicional",
+    comentario: document.context || "",
+    evidenceType: ADDITIONAL_PHOTO_EVIDENCE_TYPE,
+    geometryRole: NON_GEOMETRIC_PHOTO_ROLE,
+    isGeometry: false,
+    evidenceId,
+    sourceEvidenceId,
+    expedienteId,
+    projectId: document?.projectId || expedienteId,
+    geographyId,
+    geographyType,
+    traceabilityId: document?.traceabilityId || multimodal?.traceabilityId || `trace-additional-photo-${expedienteId || "unknown"}-${evidenceId}`,
+    lineage,
+    lineageStatus,
+    storagePath: document?.storagePath || multimodal?.storageReference || null,
+    mimeType,
+    humanValidationStatus: document?.humanValidationStatus || multimodal?.humanValidationStatus || "PENDING_REVIEW",
+    validationSource: document?.validationSource || multimodal?.validationSource || null,
+    forensicIntegrity: document?.forensicIntegrity || multimodal?.forensicIntegrity || null,
+    fuente: "Carga de Evidencia Adicional",
+    multimodalEvidence: multimodal,
+  };
+}
+
+function photographicIdentityKeys(item: any): string[] {
+  const values = [
+    item?.evidenceId || item?.multimodalEvidence?.evidenceId,
+    item?.storagePath || item?.multimodalEvidence?.storageReference,
+    item?.sourceDocumentId,
+    item?.id,
+  ];
+  return Array.from(new Set(values
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim())));
+}
+
+export function mergeAdditionalPhotoEvidence(
+  album: any[] = [],
+  documents: any[] = [],
+  fallback: { projectId?: string | null; geographyId?: string | null; geographyType?: string | null } = {}
+): any[] {
+  const result: any[] = [];
+  const identityToIndex = new Map<string, number>();
+
+  const add = (item: any, preferDocumentProjection = false) => {
+    const keys = photographicIdentityKeys(item);
+    const existingIndex = keys.map((key) => identityToIndex.get(key)).find((index) => index !== undefined);
+    if (existingIndex !== undefined) {
+      if (preferDocumentProjection && isAdditionalPhotoEvidence(result[existingIndex])) {
+        result[existingIndex] = { ...result[existingIndex], ...item };
+        photographicIdentityKeys(result[existingIndex]).forEach((key) => identityToIndex.set(key, existingIndex));
+      }
+      return;
+    }
+    const nextIndex = result.length;
+    result.push(item);
+    keys.forEach((key) => identityToIndex.set(key, nextIndex));
+  };
+
+  album.filter(Boolean).forEach((item) => add(item));
+  documents
+    .map((document) => adaptDocumentToAdditionalPhotoEvidence(document, fallback))
+    .filter(Boolean)
+    .forEach((item) => add(item, true));
+
+  return result;
+}
 
 export type InstitutionalReportKind = "EXECUTIVE_GEOINT" | "EXECUTIVE_GEOINT_TECHNICAL_ANNEX";
 
@@ -48,9 +161,22 @@ export function buildInstitutionalProductExportPayload(
 ) {
   const numeroExpediente = resolveInstitutionalNumeroExpediente(project);
   if (!numeroExpediente) throw new Error("INSTITUTIONAL_NUMERO_EXPEDIENTE_REQUIRED");
+  const projectId = project?.projectId || project?.id || context.projectId;
+  const photoEvidence = mergeAdditionalPhotoEvidence(
+    [
+      ...asArray(project?.photoEvidence),
+      ...asArray(context.album),
+    ],
+    context.documents,
+    {
+      projectId,
+      geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
+      geographyType: project?.canonicalGeography?.type || null,
+    }
+  );
   return {
     ...(project || {}),
-    projectId: project?.projectId || project?.id || context.projectId,
+    projectId,
     expedienteId: project?.expedienteId || project?.id || context.projectId,
     nombre: project?.nombre,
     numeroExpediente,
@@ -64,8 +190,8 @@ export function buildInstitutionalProductExportPayload(
     briefing: context.editableProfile || context.aiProfile || project?.analysisContent || "",
     reportSummary: context.reportSummary,
     reportReadyAssessment: context.reportReadyAssessment,
-    album: context.album || [],
-    photoEvidence: project?.photoEvidence || context.album || [],
+    album: photoEvidence,
+    photoEvidence,
     documents: context.documents || [],
     mapSnapshots: context.mapSnapshots || [],
     sweeps: project?.sweeps || [],
