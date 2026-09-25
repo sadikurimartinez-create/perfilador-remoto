@@ -21,6 +21,7 @@ import { getDb } from "@/lib/firebase";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CabinetIndividualWorkspace } from "./cabinet/CabinetIndividualWorkspace";
+import { CabinetLinearWorkspace } from "./cabinet/CabinetLinearWorkspace";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import {
   buildDraftGeographyPreview,
@@ -1294,12 +1295,17 @@ export function ProjectList() {
           onBack={() => setCabinetGeometryType(null)}
           onCancel={handleCloseCreationFlow}
         />
-      ) : projectCreationMode === "CABINET" && (cabinetGeometryType === "lineal" || cabinetGeometryType === "poligono") ? (
+      ) : projectCreationMode === "CABINET" && cabinetGeometryType === "lineal" ? (
+        <CabinetLinearWorkspace
+          onBack={() => setCabinetGeometryType(null)}
+          onCancel={handleCloseCreationFlow}
+        />
+      ) : projectCreationMode === "CABINET" && cabinetGeometryType === "poligono" ? (
         <div className="card p-6 space-y-5 max-w-2xl w-full">
           <div>
             <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>
             <h3 className="mt-2 text-lg font-bold text-slate-100">
-              Geometría seleccionada: {cabinetGeometryType === "poligono" ? "POLÍGONO" : cabinetGeometryType.toUpperCase()}
+              Geometría seleccionada: POLÍGONO
             </h3>
             <p className="mt-3 text-sm text-slate-400">
               El espacio de trabajo de Gabinete se habilitará en la siguiente fase.
