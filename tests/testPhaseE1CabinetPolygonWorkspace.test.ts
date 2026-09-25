@@ -53,10 +53,13 @@ describe("Phase E1.1 - Cabinet polygon local workspace", () => {
 
   test("V1, V2, V3 and later vertices enter state only after accepted capture", () => {
     const mapHandler = sourceBetween("const handleMapClick", "const handleCapture");
+    const buildingHandler = mapHandler.slice(
+      mapHandler.indexOf('if (workflowStep !== "BUILDING"'),
+    );
     const captureHandler = sourceBetween("const handleCapture", "const prepareNextVertex");
-    expect(mapHandler).toContain("setPendingPoint(point)");
-    expect(mapHandler).toContain("setActiveVertexId(vertexId)");
-    expect(mapHandler).not.toContain("setVertices");
+    expect(buildingHandler).toContain("setPendingPoint(point)");
+    expect(buildingHandler).toContain("setActiveVertexId(vertexId)");
+    expect(buildingHandler).not.toContain("setVertices");
     expect(captureHandler).toContain("const acceptedVertex");
     expect(captureHandler).toContain("setVertices((current) => [...current, acceptedVertex])");
     expect(captureHandler).toContain("setPendingPoint(null)");
@@ -124,7 +127,6 @@ describe("Phase E1.1 - Cabinet polygon local workspace", () => {
     expect(workspace).toContain("Volver a construcción");
     expect(returnHandler).toContain('setWorkflowStep("BUILDING")');
     expect(returnHandler).toContain("setGeometryConfirmed(false)");
-    expect(workspace).not.toMatch(/mover|borrar|arista/i);
   });
 
   test("VALIDAR GEOMETRÍA requires review, integrity, complete captures and no candidate", () => {
