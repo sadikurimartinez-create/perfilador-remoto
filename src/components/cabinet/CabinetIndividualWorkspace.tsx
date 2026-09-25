@@ -1,32 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoramaPicker";
 import type { StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
-
-type TerritorialPoint = {
-  lat: number;
-  lng: number;
-};
+import { CEIPOLConfirmModal } from "@/components/ui/CEIPOLConfirmModal";
+import type { LatLngPoint } from "@/utils/canonicalProjectGeography";
+import {
+  createCabinetContextPoi,
+  createCabinetContextPoiId,
+  moveCabinetContextPoi,
+  updateCabinetContextPoi,
+  type CabinetContextPoi,
+  type CabinetMapActionMode,
+} from "./cabinetContextPoi";
 
 interface CabinetIndividualWorkspaceProps {
   onBack: () => void;
   onCancel: () => void;
 }
 
-const INITIAL_CENTER: TerritorialPoint = { lat: 21.8853, lng: -102.2916 };
+const INITIAL_CENTER: LatLngPoint = { lat: 21.8853, lng: -102.2916 };
 const MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
 
 export function CabinetIndividualWorkspace({
   onBack,
   onCancel,
 }: CabinetIndividualWorkspaceProps) {
-  const [candidate, setCandidate] = useState<TerritorialPoint | null>(null);
+  const [candidate, setCandidate] = useState<LatLngPoint | null>(null);
   const [isStreetViewOpen, setIsStreetViewOpen] = useState(false);
   const [capture, setCapture] = useState<StreetViewCapturePayload | null>(null);
   const [validated, setValidated] = useState(false);
+  const [contextPois, setContextPois] = useState<CabinetContextPoi[]>([]);
+  const [mapActionMode, setMapActionMode] = useState<CabinetMapActionMode>("GEOMETRY");
+  const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  const [pendingPoiPoint, setPendingPoiPoint] = useState<LatLngPoint | null>(null);
+  const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
+  const [poiLabelInput, setPoiLabelInput] = useState("");
+  const [poiDescriptionInput, setPoiDescriptionInput] = useState("");
+  const [poiDeleteCandidateId, setPoiDeleteCandidateId] = useState<string | null>(null);
+  const nextPoiId = useRef(1);
 
   const apiKey = typeof process !== "undefined"
     ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "")
@@ -36,15 +50,88 @@ export function CabinetIndividualWorkspace({
     googleMapsApiKey: apiKey,
   });
 
+  const territorialFlowPending = Boolean(candidate && !capture) || isStreetViewOpen;
+
+  const resetPoiInteraction = () => {
+    setMapActionMode("GEOMETRY");
+    setSelectedPoiId(null);
+    setPendingPoiPoint(null);
+    setEditingPoiId(null);
+    setPoiLabelInput("");
+    setPoiDescriptionInput("");
+  };
+
+  const beginAddPoi = () => {
+    if (territorialFlowPending) return;
+    resetPoiInteraction();
+    setMapActionMode("ADD_POI");
+  };
+
+  const beginEditPoi = (poi: CabinetContextPoi) => {
+    resetPoiInteraction();
+    setEditingPoiId(poi.id);
+    setPoiLabelInput(poi.label);
+    setPoiDescriptionInput(poi.description ?? "");
+  };
+
+  const beginMovePoi = (poiId: string) => {
+    if (territorialFlowPending) return;
+    resetPoiInteraction();
+    setSelectedPoiId(poiId);
+    setMapActionMode("MOVE_POI");
+  };
+
   const handleMapClick = (event: google.maps.MapMouseEvent) => {
     if (!event.latLng) return;
+    const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
 
-    setCandidate({
-      lat: event.latLng.lat(),
-      lng: event.latLng.lng(),
-    });
+    if (mapActionMode === "ADD_POI") {
+      setPendingPoiPoint(point);
+      return;
+    }
+
+    if (mapActionMode === "MOVE_POI" && selectedPoiId) {
+      setContextPois((current) => current.map((poi) => (
+        poi.id === selectedPoiId ? moveCabinetContextPoi(poi, point) : poi
+      )));
+      resetPoiInteraction();
+      return;
+    }
+
+    if (editingPoiId) return;
+
+    setCandidate(point);
     setCapture(null);
     setValidated(false);
+  };
+
+  const savePoi = () => {
+    if (!poiLabelInput.trim()) return;
+
+    if (editingPoiId) {
+      setContextPois((current) => current.map((poi) => (
+        poi.id === editingPoiId
+          ? updateCabinetContextPoi(poi, { label: poiLabelInput, description: poiDescriptionInput })
+          : poi
+      )));
+      resetPoiInteraction();
+      return;
+    }
+
+    if (!pendingPoiPoint) return;
+    const id = createCabinetContextPoiId(nextPoiId.current++);
+    setContextPois((current) => [
+      ...current,
+      createCabinetContextPoi(id, pendingPoiPoint, poiLabelInput, poiDescriptionInput),
+    ]);
+    resetPoiInteraction();
+  };
+
+  const confirmPoiDeletion = () => {
+    if (!poiDeleteCandidateId) return;
+    setContextPois((current) => current.filter((poi) => poi.id !== poiDeleteCandidateId));
+    if (selectedPoiId === poiDeleteCandidateId || editingPoiId === poiDeleteCandidateId) resetPoiInteraction();
+    setPoiDeleteCandidateId(null);
   };
 
   const handleCapture = (payload: StreetViewCapturePayload) => {
@@ -105,6 +192,16 @@ export function CabinetIndividualWorkspace({
                 }}
               >
                 {candidate && <Marker position={candidate} />}
+                {contextPois.map((poi) => (
+                  <Marker
+                    key={poi.id}
+                    position={poi.point}
+                    title={`POI — ${poi.label}`}
+                    label={{ text: "POI", color: "#111827", fontSize: "10px", fontWeight: "700" }}
+                    icon={{ path: google.maps.SymbolPath.CIRCLE, fillColor: "#f59e0b", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2, scale: 13 }}
+                    onClick={() => { if (mapActionMode === "GEOMETRY") beginEditPoi(poi); }}
+                  />
+                ))}
               </GoogleMap>
             )}
           </div>
@@ -128,6 +225,55 @@ export function CabinetIndividualWorkspace({
             >
               Abrir Street View
             </CEIPOLButton>
+          </div>
+
+          <div className="space-y-3 border border-amber-900/60 bg-amber-950/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-amber-300">POIs contextuales</p>
+                <p className="mt-1 text-xs text-slate-400">Referencias locales independientes del punto territorial.</p>
+              </div>
+              <CEIPOLButton type="button" variant="secondary" disabled={territorialFlowPending} onClick={beginAddPoi}>Agregar POI</CEIPOLButton>
+            </div>
+
+            {mapActionMode === "ADD_POI" && !pendingPoiPoint && <p className="text-xs text-amber-200">Seleccione libremente la ubicación del POI en el mapa.</p>}
+            {mapActionMode === "MOVE_POI" && <p className="text-xs text-amber-200">Seleccione la nueva ubicación del POI en el mapa.</p>}
+
+            {(pendingPoiPoint || editingPoiId) && (
+              <div className="grid gap-3 border-t border-amber-900/40 pt-3">
+                <label className="grid gap-1 text-xs text-slate-300">Nombre / etiqueta
+                  <input value={poiLabelInput} onChange={(event) => setPoiLabelInput(event.target.value)} className="w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label className="grid gap-1 text-xs text-slate-300">Descripción opcional
+                  <textarea value={poiDescriptionInput} onChange={(event) => setPoiDescriptionInput(event.target.value)} rows={2} className="w-full resize-y border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <CEIPOLButton type="button" variant="confirm" disabled={!poiLabelInput.trim()} onClick={savePoi}>Guardar POI</CEIPOLButton>
+                  <CEIPOLButton type="button" variant="ghost" onClick={resetPoiInteraction}>Cancelar</CEIPOLButton>
+                </div>
+              </div>
+            )}
+
+            {contextPois.length === 0 ? (
+              <p className="text-xs text-slate-500">Sin POIs contextuales.</p>
+            ) : (
+              <div className="space-y-2">
+                {contextPois.map((poi) => (
+                  <div key={poi.id} className="flex flex-col gap-3 border-t border-slate-800 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 text-xs text-slate-300">
+                      <p className="font-bold text-amber-300">{poi.label}</p>
+                      {poi.description && <p className="mt-1 text-slate-400">{poi.description}</p>}
+                      <p className="mt-1 font-mono text-slate-500">{poi.point.lat.toFixed(6)}, {poi.point.lng.toFixed(6)}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <CEIPOLButton type="button" size="sm" variant="secondary" onClick={() => beginEditPoi(poi)}>Editar</CEIPOLButton>
+                      <CEIPOLButton type="button" size="sm" variant="secondary" disabled={territorialFlowPending} onClick={() => beginMovePoi(poi.id)}>Mover</CEIPOLButton>
+                      <CEIPOLButton type="button" size="sm" variant="danger" onClick={() => setPoiDeleteCandidateId(poi.id)}>Eliminar</CEIPOLButton>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
@@ -193,6 +339,16 @@ export function CabinetIndividualWorkspace({
           onCapture={handleCapture}
         />
       )}
+
+      <CEIPOLConfirmModal
+        isOpen={Boolean(poiDeleteCandidateId)}
+        onClose={() => setPoiDeleteCandidateId(null)}
+        onConfirm={confirmPoiDeletion}
+        title="Eliminar POI contextual"
+        message="¿Desea eliminar únicamente este POI contextual?"
+        confirmText="Eliminar POI"
+        variant="danger"
+      />
     </div>
   );
 }

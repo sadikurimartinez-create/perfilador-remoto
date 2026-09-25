@@ -13,6 +13,14 @@ import {
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 import { CEIPOLConfirmModal } from "@/components/ui/CEIPOLConfirmModal";
 import { findNearestCorridorSegment } from "./cabinetLinearGeometry";
+import {
+  createCabinetContextPoi,
+  createCabinetContextPoiId,
+  moveCabinetContextPoi,
+  updateCabinetContextPoi,
+  type CabinetContextPoi,
+  type CabinetMapActionMode,
+} from "./cabinetContextPoi";
 
 type LinearWorkflowStep = "START" | "NEXT_NODE" | "INTERMEDIATE" | "END" | "REVIEW";
 type EditAction = "MOVE" | "ADD_PI" | "DELETE_PI" | null;
@@ -58,7 +66,16 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   const [deleteConfirmationStage, setDeleteConfirmationStage] = useState<0 | 1 | 2>(0);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const [contextPois, setContextPois] = useState<CabinetContextPoi[]>([]);
+  const [mapActionMode, setMapActionMode] = useState<CabinetMapActionMode>("GEOMETRY");
+  const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  const [pendingPoiPoint, setPendingPoiPoint] = useState<LatLngPoint | null>(null);
+  const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
+  const [poiLabelInput, setPoiLabelInput] = useState("");
+  const [poiDescriptionInput, setPoiDescriptionInput] = useState("");
+  const [poiDeleteCandidateId, setPoiDeleteCandidateId] = useState<string | null>(null);
   const nextVertexId = useRef(1);
+  const nextPoiId = useRef(1);
   const lastFittedVertexCount = useRef(0);
 
   const apiKey = typeof process !== "undefined"
@@ -79,6 +96,7 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
     && corridorIntegrity.isValid
     && allVerticesCaptured;
   const canSelectInitialPoint = workflowStep === "START" || workflowStep === "INTERMEDIATE" || workflowStep === "END";
+  const poiInteractionActive = mapActionMode !== "GEOMETRY" || Boolean(pendingPoiPoint || editingPoiId);
 
   useEffect(() => {
     if (!mapInstance || vertexPath.length < 2 || lastFittedVertexCount.current === vertexPath.length) return;
@@ -104,9 +122,54 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
     setIsStreetViewOpen(true);
   };
 
+  const resetPoiInteraction = () => {
+    setMapActionMode("GEOMETRY");
+    setSelectedPoiId(null);
+    setPendingPoiPoint(null);
+    setEditingPoiId(null);
+    setPoiLabelInput("");
+    setPoiDescriptionInput("");
+  };
+
+  const beginAddPoi = () => {
+    if (hasPendingCandidate || isStreetViewOpen || isEditing) return;
+    resetPoiInteraction();
+    setMapActionMode("ADD_POI");
+  };
+
+  const beginEditPoi = (poi: CabinetContextPoi) => {
+    if (hasPendingCandidate || isStreetViewOpen || isEditing) return;
+    resetPoiInteraction();
+    setEditingPoiId(poi.id);
+    setPoiLabelInput(poi.label);
+    setPoiDescriptionInput(poi.description ?? "");
+  };
+
+  const beginMovePoi = (poiId: string) => {
+    if (hasPendingCandidate || isStreetViewOpen || isEditing) return;
+    resetPoiInteraction();
+    setSelectedPoiId(poiId);
+    setMapActionMode("MOVE_POI");
+  };
+
   const handleMapClick = (event: google.maps.MapMouseEvent) => {
     if (!event.latLng || hasPendingCandidate) return;
     const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
+
+    if (mapActionMode === "ADD_POI") {
+      setPendingPoiPoint(point);
+      return;
+    }
+
+    if (mapActionMode === "MOVE_POI" && selectedPoiId) {
+      setContextPois((current) => current.map((poi) => (
+        poi.id === selectedPoiId ? moveCabinetContextPoi(poi, point) : poi
+      )));
+      resetPoiInteraction();
+      return;
+    }
+
+    if (editingPoiId) return;
 
     if (isEditing && editAction === "MOVE" && selectedVertexId) {
       setVertices((current) => current.map((vertex) => (
@@ -141,6 +204,35 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
       vertexId,
       completesCorridor: workflowStep === "END",
     });
+  };
+
+  const savePoi = () => {
+    if (!poiLabelInput.trim()) return;
+
+    if (editingPoiId) {
+      setContextPois((current) => current.map((poi) => (
+        poi.id === editingPoiId
+          ? updateCabinetContextPoi(poi, { label: poiLabelInput, description: poiDescriptionInput })
+          : poi
+      )));
+      resetPoiInteraction();
+      return;
+    }
+
+    if (!pendingPoiPoint) return;
+    const id = createCabinetContextPoiId(nextPoiId.current++);
+    setContextPois((current) => [
+      ...current,
+      createCabinetContextPoi(id, pendingPoiPoint, poiLabelInput, poiDescriptionInput),
+    ]);
+    resetPoiInteraction();
+  };
+
+  const confirmPoiDeletion = () => {
+    if (!poiDeleteCandidateId) return;
+    setContextPois((current) => current.filter((poi) => poi.id !== poiDeleteCandidateId));
+    if (selectedPoiId === poiDeleteCandidateId || editingPoiId === poiDeleteCandidateId) resetPoiInteraction();
+    setPoiDeleteCandidateId(null);
   };
 
   const handleCapture = (payload: StreetViewCapturePayload) => {
@@ -306,6 +398,16 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
                     />
                   );
                 })}
+                {contextPois.map((poi) => (
+                  <Marker
+                    key={poi.id}
+                    position={poi.point}
+                    title={`POI — ${poi.label}`}
+                    label={{ text: "POI", color: "#111827", fontSize: "10px", fontWeight: "700" }}
+                    icon={{ path: google.maps.SymbolPath.CIRCLE, fillColor: "#f59e0b", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2, scale: 13 }}
+                    onClick={() => { if (mapActionMode === "GEOMETRY") beginEditPoi(poi); }}
+                  />
+                ))}
                 {pendingPoint && pendingOperation?.kind !== "MOVE" && (
                   <Marker position={pendingPoint} title={`${pendingRole} pendiente de captura`} />
                 )}
@@ -344,12 +446,61 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-slate-400">Seleccione el siguiente tipo de nodo territorial.</p>
                 <div className="flex flex-wrap gap-2">
-                  <CEIPOLButton type="button" variant="secondary" onClick={() => chooseNextStep("INTERMEDIATE")}>Agregar PI</CEIPOLButton>
-                  <CEIPOLButton type="button" variant="primary" onClick={() => chooseNextStep("END")}>Definir NF</CEIPOLButton>
+                  <CEIPOLButton type="button" variant="secondary" disabled={poiInteractionActive} onClick={() => chooseNextStep("INTERMEDIATE")}>Agregar PI</CEIPOLButton>
+                  <CEIPOLButton type="button" variant="primary" disabled={poiInteractionActive} onClick={() => chooseNextStep("END")}>Definir NF</CEIPOLButton>
                 </div>
               </div>
             ) : (
               <p className="text-slate-400">Corredor completo en revisión humana.</p>
+            )}
+          </div>
+
+          <div className="space-y-3 border border-amber-900/60 bg-amber-950/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-amber-300">POIs contextuales</p>
+                <p className="mt-1 text-xs text-slate-400">Referencias locales que no forman parte de NI, PI, NF ni de la Polyline.</p>
+              </div>
+              <CEIPOLButton type="button" variant="secondary" disabled={hasPendingCandidate || isStreetViewOpen || isEditing} onClick={beginAddPoi}>Agregar POI</CEIPOLButton>
+            </div>
+
+            {mapActionMode === "ADD_POI" && !pendingPoiPoint && <p className="text-xs text-amber-200">Seleccione libremente la ubicación del POI en el mapa.</p>}
+            {mapActionMode === "MOVE_POI" && <p className="text-xs text-amber-200">Seleccione la nueva ubicación del POI en el mapa.</p>}
+
+            {(pendingPoiPoint || editingPoiId) && (
+              <div className="grid gap-3 border-t border-amber-900/40 pt-3">
+                <label className="grid gap-1 text-xs text-slate-300">Nombre / etiqueta
+                  <input value={poiLabelInput} onChange={(event) => setPoiLabelInput(event.target.value)} className="w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label className="grid gap-1 text-xs text-slate-300">Descripción opcional
+                  <textarea value={poiDescriptionInput} onChange={(event) => setPoiDescriptionInput(event.target.value)} rows={2} className="w-full resize-y border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <CEIPOLButton type="button" variant="confirm" disabled={!poiLabelInput.trim()} onClick={savePoi}>Guardar POI</CEIPOLButton>
+                  <CEIPOLButton type="button" variant="ghost" onClick={resetPoiInteraction}>Cancelar</CEIPOLButton>
+                </div>
+              </div>
+            )}
+
+            {contextPois.length === 0 ? (
+              <p className="text-xs text-slate-500">Sin POIs contextuales.</p>
+            ) : (
+              <div className="space-y-2">
+                {contextPois.map((poi) => (
+                  <div key={poi.id} className="flex flex-col gap-3 border-t border-slate-800 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 text-xs text-slate-300">
+                      <p className="font-bold text-amber-300">{poi.label}</p>
+                      {poi.description && <p className="mt-1 text-slate-400">{poi.description}</p>}
+                      <p className="mt-1 font-mono text-slate-500">{poi.point.lat.toFixed(6)}, {poi.point.lng.toFixed(6)}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <CEIPOLButton type="button" size="sm" variant="secondary" disabled={isEditing} onClick={() => beginEditPoi(poi)}>Editar</CEIPOLButton>
+                      <CEIPOLButton type="button" size="sm" variant="secondary" disabled={hasPendingCandidate || isEditing} onClick={() => beginMovePoi(poi.id)}>Mover</CEIPOLButton>
+                      <CEIPOLButton type="button" size="sm" variant="danger" onClick={() => setPoiDeleteCandidateId(poi.id)}>Eliminar</CEIPOLButton>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </section>
@@ -422,7 +573,7 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
               )}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <CEIPOLButton type="button" variant="confirm" disabled={!canValidateGeometry || geometryConfirmed} onClick={() => setGeometryConfirmed(true)}>Validar geometría</CEIPOLButton>
-                <CEIPOLButton type="button" variant="secondary" disabled={!geometryConfirmed || isEditing} onClick={startEditing}>Editar</CEIPOLButton>
+                <CEIPOLButton type="button" variant="secondary" disabled={!geometryConfirmed || isEditing || poiInteractionActive} onClick={startEditing}>Editar</CEIPOLButton>
               </div>
             </div>
           )}
@@ -439,6 +590,15 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
         />
       )}
 
+      <CEIPOLConfirmModal
+        isOpen={Boolean(poiDeleteCandidateId)}
+        onClose={() => setPoiDeleteCandidateId(null)}
+        onConfirm={confirmPoiDeletion}
+        title="Eliminar POI contextual"
+        message="¿Desea eliminar únicamente este POI contextual?"
+        confirmText="Eliminar POI"
+        variant="danger"
+      />
       <CEIPOLConfirmModal
         isOpen={deleteConfirmationStage === 1}
         onClose={cancelVertexDeletion}
