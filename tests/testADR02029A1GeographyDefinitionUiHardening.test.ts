@@ -124,12 +124,12 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     expect(source).toContain("draftGeography,");
   });
 
-  test("TEST 16 project list camera capture feeds draft geography without auto-confirming", () => {
+  test("TEST 16 project list camera capture remains evidence and does not feed draft geography", () => {
     const source = readSource("src/components/ProjectList.tsx");
     expect(source).toContain("import exifr from \"exifr\"");
     expect(source).toContain("readPhotoGps(file, isLiveCapture)");
-    expect(source).toContain("updateDraftProjectGeography(draftGeography, rectorPoints)");
-    expect(source).toContain("confirmDraftProjectGeography(creationDraft)");
+    expect(source).toContain("Fotografía agregada como evidencia pendiente. No modifica los nodos territoriales del expediente.");
+    expect(source).not.toContain("buildDraftPointsFromRectorPhotos");
     expect(source).toContain("Confirmar geografía");
     expect(source).not.toContain("Usar GPS actual");
   });
@@ -144,22 +144,20 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     expect(source).toContain("gpsSource: \"NO_GPS\"");
   });
 
-  test("TEST 18 project list enforces rector photo minimums before creation", () => {
+  test("TEST 18 project list enforces manually confirmed geography instead of photo minimums", () => {
     const source = readSource("src/components/ProjectList.tsx");
-    expect(source).toContain("minimumRectorPhotoCount");
-    expect(source).toContain("if (geometryType === \"lineal\") return 2");
-    expect(source).toContain("if (geometryType === \"poligono\") return 3");
-    expect(source).toContain("return 1");
-    expect(source).toContain("const hasRequiredPhotosToCreate = validRectorPhotoCount(photosToCreate) >= requiredRectorPhotos");
-    expect(source).toContain("!hasRequiredPhotosToCreate || !creationPreview.canConfirm");
+    expect(source).toContain("if (!geometryConfirmed || !creationPreview.canConfirm)");
+    expect(source).toContain("const confirmedDraftGeography = draftGeography");
+    expect(source).not.toContain("minimumRectorPhotoCount");
+    expect(source).not.toContain("validRectorPhotoCount");
   });
 
-  test("TEST 19 rector photos drive individual, corridor, and polygon draft points", () => {
+  test("TEST 19 only explicit draft nodes drive individual, corridor, and polygon geography", () => {
     const source = readSource("src/components/ProjectList.tsx");
-    expect(source).toContain("buildDraftPointsFromRectorPhotos");
-    expect(source).toContain("geometryType === \"individual\" ? points.slice(-1) : points");
-    expect(source).toContain("photo.gpsSource !== \"NO_GPS\"");
-    expect(source).toContain("isValidLatLng({ lat: photo.lat, lng: photo.lng })");
+    expect(source).toContain("const handleAddDraftPoint");
+    expect(source).toContain("[...draftGeography.points, point]");
+    expect(source).toContain("corridorVertexRole(index, draftGeography.points.length)");
+    expect(source).not.toContain("buildDraftPointsFromRectorPhotos");
   });
 
   test("TEST 20 pending project photo bridge preserves metadata without widening upload metadata", () => {

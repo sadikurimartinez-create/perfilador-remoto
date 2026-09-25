@@ -9,6 +9,9 @@ export type CanonicalGeographySource =
   | "HUMAN_MAP_VERTEX";
 
 export type CanonicalGeographyValidationStatus = "VALID" | "PARTIAL" | "INVALID";
+export type CorridorVertexRole = "START" | "INTERMEDIATE" | "END";
+
+export const CORRIDOR_REQUIRES_TERRITORIAL_RECONCILIATION = "CORRIDOR_REQUIRES_TERRITORIAL_RECONCILIATION";
 
 export type LatLngPoint = { lat: number; lng: number };
 export type GeoJsonPosition = [number, number];
@@ -47,6 +50,8 @@ export interface CanonicalProjectGeography {
     type: "TERRITORIAL_VERTEX";
     id: string;
     order: number;
+    role?: CorridorVertexRole;
+    humanValidated?: boolean;
   }>;
 }
 
@@ -102,8 +107,41 @@ function normalizePoints(points: LatLngPoint[] | null | undefined): LatLngPoint[
   return (points || []).filter(isValidLatLng).map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }));
 }
 
-function distinctPointKey(point: LatLngPoint): string {
-  return `${point.lat.toFixed(7)},${point.lng.toFixed(7)}`;
+export function canonicalCoordinateKey(point: LatLngPoint): string {
+  return `${Number(point.lat).toFixed(7)},${Number(point.lng).toFixed(7)}`;
+}
+
+export function corridorVertexRole(index: number, total: number): CorridorVertexRole {
+  if (index === 0) return "START";
+  if (index === total - 1) return "END";
+  return "INTERMEDIATE";
+}
+
+export function assessCorridorIntegrity(points: LatLngPoint[] | null | undefined) {
+  const validPoints = normalizePoints(points);
+  const uniquePositionCount = new Set(validPoints.map(canonicalCoordinateKey)).size;
+  const hasConsecutiveDuplicates = validPoints.some(
+    (point, index) => index > 0 && canonicalCoordinateKey(point) === canonicalCoordinateKey(validPoints[index - 1])
+  );
+  const hasStartAndEnd = validPoints.length >= 2;
+  const hasDistinctStartAndEnd =
+    hasStartAndEnd &&
+    canonicalCoordinateKey(validPoints[0]) !== canonicalCoordinateKey(validPoints[validPoints.length - 1]);
+  const hasMinimumUniquePositions = uniquePositionCount >= 2;
+  const requiresReconciliation =
+    validPoints.length >= 2 && (!hasMinimumUniquePositions || !hasDistinctStartAndEnd || hasConsecutiveDuplicates);
+
+  return {
+    validPoints,
+    nodeCount: validPoints.length,
+    uniquePositionCount,
+    hasConsecutiveDuplicates,
+    hasStartAndEnd,
+    hasDistinctStartAndEnd,
+    isValid: hasStartAndEnd && hasMinimumUniquePositions && hasDistinctStartAndEnd && !hasConsecutiveDuplicates,
+    requiresReconciliation,
+    reason: requiresReconciliation ? CORRIDOR_REQUIRES_TERRITORIAL_RECONCILIATION : null,
+  };
 }
 
 export function normalizeCanonicalGeographyType(type: string | null | undefined): CanonicalGeographyType {
@@ -122,7 +160,7 @@ function closeLogicalRing(points: LatLngPoint[]): LatLngPoint[] {
   if (points.length === 0) return points;
   const first = points[0];
   const last = points[points.length - 1];
-  if (distinctPointKey(first) === distinctPointKey(last)) return points;
+  if (canonicalCoordinateKey(first) === canonicalCoordinateKey(last)) return points;
   return [...points, first];
 }
 
@@ -310,9 +348,24 @@ function deriveCentroid(type: CanonicalGeographyType, points: LatLngPoint[]) {
 
 function validatePointCount(type: CanonicalGeographyType, points: LatLngPoint[]): CanonicalGeographyValidationStatus {
   if (type === "INDIVIDUAL") return points.length === 1 ? "VALID" : points.length > 0 ? "PARTIAL" : "INVALID";
-  if (type === "CORRIDOR") return points.length >= 2 ? "VALID" : points.length > 0 ? "PARTIAL" : "INVALID";
-  const distinctCount = new Set(points.map(distinctPointKey)).size;
+  if (type === "CORRIDOR") {
+    const integrity = assessCorridorIntegrity(points);
+    return integrity.isValid ? "VALID" : integrity.nodeCount > 0 ? "PARTIAL" : "INVALID";
+  }
+  const distinctCount = new Set(points.map(canonicalCoordinateKey)).size;
   return distinctCount >= 3 ? "VALID" : points.length > 0 ? "PARTIAL" : "INVALID";
+}
+
+function deriveValidationLimitations(
+  type: CanonicalGeographyType,
+  points: LatLngPoint[],
+  validationStatus: CanonicalGeographyValidationStatus
+): string[] {
+  if (validationStatus === "VALID") return [];
+  if (type === "CORRIDOR" && assessCorridorIntegrity(points).requiresReconciliation) {
+    return [CORRIDOR_REQUIRES_TERRITORIAL_RECONCILIATION];
+  }
+  return ["INCOMPLETE_CANONICAL_GEOMETRY"];
 }
 
 export function buildCanonicalProjectGeography(params: {
@@ -342,7 +395,7 @@ export function buildCanonicalProjectGeography(params: {
       bounds: deriveBounds(points),
       closedRing: type === "POLYGON" && points.length > 0,
     },
-    limitations: validationStatus === "VALID" ? [] : ["INCOMPLETE_CANONICAL_GEOMETRY"],
+    limitations: deriveValidationLimitations(type, points, validationStatus),
   };
 }
 
@@ -422,9 +475,12 @@ export function canonicalizeConfirmedDraftGeography(params: {
 export function rehydrateCanonicalProjectGeography(geography: CanonicalProjectGeography | null | undefined) {
   if (!geography) return null;
   const points = getCanonicalGeographyCoordinates(geography);
+  const validationStatus = validatePointCount(geography.type, points);
+  const validationLimitations = deriveValidationLimitations(geography.type, points, validationStatus);
   return {
     ...geography,
-    validationStatus: validatePointCount(geography.type, points),
+    validationStatus,
+    limitations: Array.from(new Set([...(geography.limitations || []), ...validationLimitations])),
     derived: geography.derived || {
       centroid: deriveCentroid(geography.type, points),
       bounds: deriveBounds(points),

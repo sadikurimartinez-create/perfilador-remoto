@@ -1,5 +1,6 @@
 import {
   buildCanonicalProjectGeography,
+  canonicalCoordinateKey,
   CanonicalGeographyType,
   CanonicalProjectGeography,
   isValidLatLng,
@@ -104,10 +105,6 @@ export interface HistoricalGeographyReconciliation {
   limitations: string[];
 }
 
-function coordinateKey(point: LatLngPoint): string {
-  return `${Number(point.lat).toFixed(7)},${Number(point.lng).toFixed(7)}`;
-}
-
 function uniqueStringList(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }
@@ -198,7 +195,7 @@ export function deduplicateHistoricalGeographyCandidates(
 ): HistoricalGeographyCandidate[] {
   const groups = new Map<string, HistoricalGeographyCandidate[]>();
   normalizeHistoricalGeographyCandidates(candidates).forEach((candidate) => {
-    const key = coordinateKey(candidate);
+    const key = canonicalCoordinateKey(candidate);
     groups.set(key, [...(groups.get(key) || []), candidate]);
   });
 
@@ -318,7 +315,7 @@ export function confirmHistoricalGeographyReconciliation(params: {
   }
 
   const uniqueCoordinateCount = new Set(
-    confirmedCandidates.map((candidate) => coordinateKey({ lat: candidate!.lat, lng: candidate!.lng }))
+    confirmedCandidates.map((candidate) => canonicalCoordinateKey({ lat: candidate!.lat, lng: candidate!.lng }))
   ).size;
   if (confirmedCandidates.length < 2 || uniqueCoordinateCount < 2) {
     throw new Error("HISTORICAL_GEOGRAPHY_INSUFFICIENT_POINTS");

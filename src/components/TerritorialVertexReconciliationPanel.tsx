@@ -4,7 +4,9 @@ import * as React from "react";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CEIPOLConfirmModal } from "./ui/CEIPOLConfirmModal";
 import {
+  assessCorridorIntegrity,
   buildCanonicalProjectGeography,
+  corridorVertexRole,
   type CanonicalProjectGeography,
 } from "@/utils/canonicalProjectGeography";
 import type { GeographicEntity } from "@/services/geographicEntityService";
@@ -32,14 +34,6 @@ type Props = {
   onConfirm: (geography: CanonicalProjectGeography) => Promise<unknown>;
 };
 
-function coordinateKey(vertex: Pick<TerritorialVertex, "lat" | "lng">): string {
-  return `${Number(vertex.lat).toFixed(7)},${Number(vertex.lng).toFixed(7)}`;
-}
-
-function hasConsecutiveDuplicate(vertices: TerritorialVertex[]) {
-  return vertices.some((vertex, index) => index > 0 && coordinateKey(vertex) === coordinateKey(vertices[index - 1]));
-}
-
 function sortVertices(vertices: TerritorialVertex[]) {
   return [...vertices].sort((a, b) => Number(a.metadata?.order || 0) - Number(b.metadata?.order || 0));
 }
@@ -63,9 +57,10 @@ export function TerritorialVertexReconciliationPanel({
     () => orderedVertices.map((vertex) => ({ lat: Number(vertex.lat), lng: Number(vertex.lng) })),
     [orderedVertices]
   );
-  const distinctCount = React.useMemo(() => new Set(orderedVertices.map(coordinateKey)).size, [orderedVertices]);
-  const hasDuplicate = hasConsecutiveDuplicate(orderedVertices);
-  const canConfirm = !canonicalGeographyExists && orderedVertices.length >= 2 && distinctCount >= 2 && !hasDuplicate && !isPersisting;
+  const corridorIntegrity = React.useMemo(() => assessCorridorIntegrity(previewPath), [previewPath]);
+  const distinctCount = corridorIntegrity.uniquePositionCount;
+  const hasDuplicate = corridorIntegrity.hasConsecutiveDuplicates;
+  const canConfirm = !canonicalGeographyExists && corridorIntegrity.isValid && !isPersisting;
 
   React.useEffect(() => {
     onPreviewChange?.(previewPath);
@@ -99,6 +94,8 @@ export function TerritorialVertexReconciliationPanel({
           type: "TERRITORIAL_VERTEX",
           id: vertex.id,
           order: index + 1,
+          role: corridorVertexRole(index, orderedVertices.length),
+          humanValidated: true,
         })),
         limitations: [
           "CANONICAL_GEOGRAPHY_BUILT_FROM_CONFIRMED_TERRITORIAL_VERTICES",
@@ -148,7 +145,9 @@ export function TerritorialVertexReconciliationPanel({
             <li key={vertex.id} className="border border-slate-800 bg-slate-900/20 px-3 py-2 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="font-black uppercase text-slate-200">Orden {index + 1} | HUMAN_MAP_VERTEX</p>
+                  <p className="font-black uppercase text-slate-200">
+                    {corridorVertexRole(index, orderedVertices.length)} | Orden {index + 1} | HUMAN_MAP_VERTEX
+                  </p>
                   <p className="mt-1 font-mono text-[11px] text-cyan-300">ID: {vertex.id}</p>
                   <p className="mt-1 font-mono text-[11px] text-slate-400">{Number(vertex.lat).toFixed(6)}, {Number(vertex.lng).toFixed(6)}</p>
                 </div>

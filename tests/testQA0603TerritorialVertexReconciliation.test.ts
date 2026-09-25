@@ -24,8 +24,8 @@ describe("QA-06.03E territorial vertex reconciliation", () => {
   });
 
   test("two distinct territorial vertices allow LineString preview", () => {
-    expect(panel).toContain("orderedVertices.length >= 2");
-    expect(panel).toContain("distinctCount >= 2");
+    expect(panel).toContain("assessCorridorIntegrity(previewPath)");
+    expect(panel).toContain("corridorIntegrity.isValid");
     expect(panel).toContain("Previsualizacion LineString");
     expect(professionalMap).toContain("territorialPreviewPath.length >= 2");
     expect(professionalMap).toContain("<Polyline");
@@ -41,9 +41,7 @@ describe("QA-06.03E territorial vertex reconciliation", () => {
   });
 
   test("consecutive duplicate coordinates are blocked", () => {
-    expect(panel).toContain("function hasConsecutiveDuplicate");
-    expect(panel).toContain("coordinateKey(vertex) === coordinateKey(vertices[index - 1])");
-    expect(panel).toContain("!hasDuplicate");
+    expect(panel).toContain("corridorIntegrity.hasConsecutiveDuplicates");
     expect(panel).toContain("Duplicado consecutivo bloqueado.");
   });
 
@@ -62,6 +60,8 @@ describe("QA-06.03E territorial vertex reconciliation", () => {
     expect(panel).toContain("geography.geometry.type !== \"LineString\"");
     expect(panel).toContain("geography.validationStatus !== \"VALID\"");
     expect(panel).toContain("sourceRefs: orderedVertices.map");
+    expect(panel).toContain("role: corridorVertexRole(index, orderedVertices.length)");
+    expect(panel).toContain("humanValidated: true");
     expect(panel).toContain("TERRITORIAL_VERTEX");
     expect(canonical).toContain("| \"HUMAN_MAP_VERTEX\"");
     expect(canonical).toContain("sourceRefs?: Array");

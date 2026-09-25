@@ -24,8 +24,8 @@ import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import {
   buildDraftGeographyPreview,
   confirmDraftProjectGeography,
+  corridorVertexRole,
   createDraftProjectGeography,
-  isValidLatLng,
   resetDraftProjectGeography,
   updateDraftProjectGeography,
   type DraftProjectGeography,
@@ -65,32 +65,6 @@ type PendingProjectPhoto = {
   gpsAccuracy: number | null;
   gpsTimestamp: number | null;
 };
-
-function isRectorPhotoWithCoordinates(
-  photo: PendingProjectPhoto
-): photo is PendingProjectPhoto & { lat: number; lng: number } {
-  return photo.gpsSource !== "NO_GPS" && isValidLatLng({ lat: photo.lat, lng: photo.lng });
-}
-
-function minimumRectorPhotoCount(geometryType: "individual" | "lineal" | "poligono") {
-  if (geometryType === "lineal") return 2;
-  if (geometryType === "poligono") return 3;
-  return 1;
-}
-
-function buildDraftPointsFromRectorPhotos(
-  photos: PendingProjectPhoto[],
-  geometryType: "individual" | "lineal" | "poligono"
-): LatLngPoint[] {
-  const points = photos
-    .filter(isRectorPhotoWithCoordinates)
-    .map((photo) => ({ lat: photo.lat, lng: photo.lng }));
-  return geometryType === "individual" ? points.slice(-1) : points;
-}
-
-function validRectorPhotoCount(photos: PendingProjectPhoto[]) {
-  return photos.filter(isRectorPhotoWithCoordinates).length;
-}
 
 function getCameraDeviceLocation(): Promise<{ lat: number; lng: number; accuracy: number | null; timestamp: number | null }> {
   return new Promise((resolve, reject) => {
@@ -188,9 +162,6 @@ export function ProjectList() {
   const [isListening, setIsListening] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<PendingProjectPhoto[]>([]);
   const pendingPhotosRef = useRef<PendingProjectPhoto[]>([]);
-  const requiredRectorPhotos = minimumRectorPhotoCount(geometryType);
-  const currentRectorPhotos = validRectorPhotoCount(pendingPhotos);
-  const hasRequiredRectorPhotos = currentRectorPhotos >= requiredRectorPhotos;
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -412,31 +383,8 @@ export function ProjectList() {
     const allPendingPhotos = [...pendingPhotosRef.current, ...newItems];
     pendingPhotosRef.current = allPendingPhotos;
     setPendingPhotos(allPendingPhotos);
-
-    const rectorPoints = buildDraftPointsFromRectorPhotos(allPendingPhotos, geometryType);
-
-    if (rectorPoints.length === 0) {
-      setDraftFeedback(
-        isLiveCapture
-          ? "La captura in situ no contiene coordenadas GPS válidas. Capture nuevamente o ingrese Latitud/Longitud manualmente."
-          : "Fotografía de galería agregada como evidencia pendiente; no contiene EXIF GPS para geografía rectora."
-      );
-      return;
-    }
-
-    setDraftGeography(
-      updateDraftProjectGeography(draftGeography, rectorPoints)
-    );
-    const lastPoint = rectorPoints[rectorPoints.length - 1];
-    setDraftLatInput(String(lastPoint.lat));
-    setDraftLngInput(String(lastPoint.lng));
-    const nextRectorCount = validRectorPhotoCount(allPendingPhotos);
     setDraftFeedback(
-      draftGeography.confirmed || draftWasConfirmed
-        ? "Geografía modificada por fotografía rectora. Puede crear cuando cumpla el mínimo de fotografías rectoras."
-        : geometryType === "individual"
-          ? "Fotografía rectora vinculada como punto del expediente."
-          : `Fotografía rectora agregada como nodo ${nextRectorCount} de ${requiredRectorPhotos}.`
+      "Fotografía agregada como evidencia pendiente. No modifica los nodos territoriales del expediente."
     );
   };
 
@@ -446,17 +394,7 @@ export function ProjectList() {
     updated.splice(index, 1);
     pendingPhotosRef.current = updated;
     setPendingPhotos(updated);
-    const rectorPoints = buildDraftPointsFromRectorPhotos(updated, geometryType);
-    setDraftGeography(updateDraftProjectGeography(draftGeography, rectorPoints));
-    if (rectorPoints.length > 0) {
-      const lastPoint = rectorPoints[rectorPoints.length - 1];
-      setDraftLatInput(String(lastPoint.lat));
-      setDraftLngInput(String(lastPoint.lng));
-    } else {
-      setDraftLatInput("");
-      setDraftLngInput("");
-    }
-    setDraftFeedback("Fotografía retirada. La geografía rectora fue recalculada desde las fotografías pendientes.");
+    setDraftFeedback("Fotografía retirada. Los nodos territoriales permanecen sin cambios.");
   };
 
   const handleNuevoProyecto = () => {
@@ -477,17 +415,11 @@ export function ProjectList() {
 
   const handleGeometryTypeChange = (nextType: "individual" | "lineal" | "poligono") => {
     setGeometryType(nextType);
-    const rectorPoints = buildDraftPointsFromRectorPhotos(pendingPhotos, nextType);
-    setDraftGeography(
-      rectorPoints.length > 0
-        ? updateDraftProjectGeography(resetDraftProjectGeography(nextType), rectorPoints)
-        : resetDraftProjectGeography(nextType)
-    );
+    setDraftGeography(resetDraftProjectGeography(nextType));
     setDraftWasConfirmed(false);
-    const lastPoint = rectorPoints[rectorPoints.length - 1];
-    setDraftLatInput(lastPoint ? String(lastPoint.lat) : "");
-    setDraftLngInput(lastPoint ? String(lastPoint.lng) : "");
-    setDraftFeedback("Geografía rectora recalculada para la modalidad seleccionada.");
+    setDraftLatInput("");
+    setDraftLngInput("");
+    setDraftFeedback("Defina y confirme los nodos territoriales para la modalidad seleccionada.");
   };
 
   const parseDraftPoint = (): LatLngPoint | null => {
@@ -589,21 +521,16 @@ export function ProjectList() {
     setIsCreatingProject(true);
     try {
       const photosToCreate = pendingPhotosRef.current;
-      const rectorPoints = buildDraftPointsFromRectorPhotos(photosToCreate, geometryType);
-      const creationDraft = updateDraftProjectGeography(draftGeography, rectorPoints);
-      const creationPreview = buildDraftGeographyPreview(creationDraft);
-      const hasRequiredPhotosToCreate = validRectorPhotoCount(photosToCreate) >= requiredRectorPhotos;
-      if (!hasRequiredPhotosToCreate || !creationPreview.canConfirm) {
+      const creationPreview = buildDraftGeographyPreview(draftGeography);
+      if (!geometryConfirmed || !creationPreview.canConfirm) {
         setDraftFeedback(
-          `Debe capturar ${requiredRectorPhotos} fotografía(s) rectora(s) con coordenadas válidas antes de crear el expediente.`
+          "Debe definir y confirmar manualmente una geografía territorial válida antes de crear el expediente."
         );
         isCreatingProjectRef.current = false;
         setIsCreatingProject(false);
         return;
       }
-      const confirmedDraftGeography = geometryConfirmed
-        ? draftGeography
-        : confirmDraftProjectGeography(creationDraft);
+      const confirmedDraftGeography = draftGeography;
       if (photosToCreate.length > 0) {
         (window as any).pendingProjectPhotos = photosToCreate.map(p => ({ ...p }));
       }
@@ -1408,11 +1335,7 @@ export function ProjectList() {
                     {draftGeography.points.map((point, index) => {
                       const role =
                         geometryType === "lineal"
-                          ? index === 0
-                            ? "START"
-                            : index === draftGeography.points.length - 1
-                              ? "END"
-                              : "INTERMEDIATE"
+                            ? corridorVertexRole(index, draftGeography.points.length)
                           : geometryType === "poligono"
                             ? `VERTEX ${index + 1}`
                             : "POINT";
@@ -1448,7 +1371,7 @@ export function ProjectList() {
             {/* Columna Derecha: Evidencia y Multimedia */}
             <div className="space-y-4">
               <div>
-                <span className="block text-sm font-medium text-slate-200 mb-2">Captura de fotografías in-situ (Opcional en este paso)</span>
+                <span className="block text-sm font-medium text-slate-200 mb-2">Evidencia fotográfica (no modifica nodos territoriales)</span>
                 <div className="flex gap-3">
                   <label className="flex-1 text-center cursor-pointer rounded-lg border border-emerald-600 bg-emerald-900/30 text-emerald-100 py-2.5 text-sm font-semibold hover:bg-emerald-800/50 shadow-md transition-colors flex items-center justify-center gap-2">
                     📷 Usar Cámara
