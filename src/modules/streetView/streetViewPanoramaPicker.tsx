@@ -193,7 +193,7 @@ export function StreetViewPanoramaPicker({
 
   return (
     <div className="fixed inset-0 z-[9999] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 md:p-6 font-sans animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-5xl w-full h-[88vh] flex flex-col shadow-2xl overflow-hidden relative text-slate-100">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-[96vw] max-w-[1700px] h-[78vh] max-h-[900px] flex flex-col shadow-2xl overflow-hidden relative text-slate-100">
         
         {/* Header Táctico */}
         <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
@@ -228,7 +228,7 @@ export function StreetViewPanoramaPicker({
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden bg-slate-950">
           
           {/* Contenedor del Panorama 360° */}
-          <div className="lg:col-span-8 h-full relative bg-slate-950 border-r border-slate-800/80 flex flex-col">
+          <div className="lg:col-span-9 h-full relative bg-slate-950 border-r border-slate-800/80 flex flex-col">
             {noImagery ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-slate-950/90 text-amber-400 space-y-3">
                 <span className="text-4xl">⚠️</span>
@@ -252,7 +252,7 @@ export function StreetViewPanoramaPicker({
           </div>
 
           {/* Panel Lateral de Calificación & Controles */}
-          <div className="lg:col-span-4 p-5 bg-slate-900 flex flex-col justify-between overflow-y-auto space-y-4 font-sans border-t lg:border-t-0 border-slate-800">
+          <div className="lg:col-span-3 p-5 bg-slate-900 flex flex-col justify-between overflow-y-auto space-y-4 font-sans border-t lg:border-t-0 border-slate-800">
             <div className="space-y-4">
               <div className="text-[10px] font-black tracking-wider text-slate-400 uppercase border-b border-slate-800 pb-1.5 flex items-center gap-1.5">
                 <span>🎯</span> METADATOS Y CALIFICACIÓN TÁCTICA

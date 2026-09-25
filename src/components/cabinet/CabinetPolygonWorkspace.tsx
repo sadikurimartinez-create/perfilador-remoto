@@ -368,7 +368,7 @@ export function CabinetPolygonWorkspace({ onBack, onCancel }: CabinetPolygonWork
       : nextVertexLabel;
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-5">
+    <div className="w-full space-y-5">
       <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>

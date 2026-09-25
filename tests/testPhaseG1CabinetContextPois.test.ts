@@ -15,11 +15,14 @@ const polygon = fs.readFileSync(path.join(cabinetDir, "CabinetPolygonWorkspace.t
 const workspaces = [individual, linear, polygon];
 
 function sourceBetween(source: string, start: string, end: string) {
-  const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex);
+  const normalizedSource = source.replace(/\r\n/g, "\n");
+  const normalizedStart = start.replace(/\r\n/g, "\n");
+  const normalizedEnd = end.replace(/\r\n/g, "\n");
+  const startIndex = normalizedSource.indexOf(normalizedStart);
+  const endIndex = normalizedSource.indexOf(normalizedEnd, startIndex);
   expect(startIndex).toBeGreaterThanOrEqual(0);
   expect(endIndex).toBeGreaterThan(startIndex);
-  return source.slice(startIndex, endIndex);
+  return normalizedSource.slice(startIndex, endIndex);
 }
 
 const point = { lat: 21.88, lng: -102.29 };
