@@ -163,13 +163,6 @@ export function ProjectMap({
     [canonicalGeography]
   );
 
-  const uniqueCanonicalCoordinates = useMemo(
-    () => Array.from(
-      new Map(canonicalCoordinates.map((point) => [`${point.lat}|${point.lng}`, point])).values()
-    ),
-    [canonicalCoordinates]
-  );
-
   const canonicalViewport = useMemo(
     () => getCanonicalMapViewport(canonicalGeography),
     [canonicalGeography]
@@ -344,43 +337,6 @@ export function ProjectMap({
     && geoShapePath.length > 2;
 
   useEffect(() => {
-    console.info("[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC]", {
-      geometryType,
-      showAreas,
-      canonicalGeographyType: canonicalGeography?.type,
-      canonicalGeometryType: canonicalGeography?.geometry?.type,
-      canonicalCoordinatesLength: canonicalCoordinates.length,
-      uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
-      uniqueCanonicalCoordinates,
-      geoShapePathLength: geoShapePath.length,
-      canonicalCoordinates,
-      geoShapePath,
-      shouldRenderCorridor,
-      shouldRenderPolygon,
-    });
-  }, [
-    geometryType,
-    showAreas,
-    canonicalGeography,
-    canonicalCoordinates,
-    uniqueCanonicalCoordinates,
-    geoShapePath,
-    shouldRenderCorridor,
-    shouldRenderPolygon,
-  ]);
-
-  useEffect(() => {
-    console.info("[PROJECTMAP-VIEWPORT-EFFECT]", {
-      phase: "evaluate",
-      isLoaded,
-      hasMapInstance: Boolean(mapInstance),
-      mapRefMatchesInstance: mapRef.current === mapInstance,
-      hasCanonicalViewportBounds: Boolean(canonicalViewport.bounds),
-      canonicalCoordinatesLength: canonicalCoordinates.length,
-      uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
-      geometryType,
-    });
-
     if (
       !isLoaded
       || !mapInstance
@@ -391,109 +347,12 @@ export function ProjectMap({
 
     const bounds = new google.maps.LatLngBounds();
     canonicalCoordinates.forEach((point) => bounds.extend(point));
-    let idleObserved = false;
-
-    const readViewportState = () => {
-      const currentCenter = mapInstance.getCenter();
-      const currentBounds = mapInstance.getBounds();
-      return {
-        zoom: mapInstance.getZoom() ?? null,
-        center: currentCenter ? { lat: currentCenter.lat(), lng: currentCenter.lng() } : null,
-        bounds: currentBounds ? {
-          north: currentBounds.getNorthEast().lat(),
-          east: currentBounds.getNorthEast().lng(),
-          south: currentBounds.getSouthWest().lat(),
-          west: currentBounds.getSouthWest().lng(),
-        } : null,
-      };
-    };
-
-    const readMapDivDimensions = () => {
-      const mapDivRect = mapInstance.getDiv().getBoundingClientRect();
-      return {
-        divWidth: mapDivRect.width,
-        divHeight: mapDivRect.height,
-      };
-    };
-
-    console.info("[PROJECTMAP-VIEWPORT-BEFORE]", {
-      ...readViewportState(),
-      ...readMapDivDimensions(),
-      padding: CANONICAL_VIEWPORT_PADDING_PX,
-      canonicalCoordinatesLength: canonicalCoordinates.length,
-      uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
-    });
-
-    const viewportEventListeners = ([
-      "zoom_changed",
-      "bounds_changed",
-      "center_changed",
-      "idle",
-    ] as const).map((event) => google.maps.event.addListener(mapInstance, event, () => {
-      console.info("[PROJECTMAP-VIEWPORT-EVENT]", {
-        event,
-        ...readViewportState(),
-      });
-    }));
-
-    const idleListener = google.maps.event.addListenerOnce(mapInstance, "idle", () => {
-      idleObserved = true;
-      const finalCenter = mapInstance.getCenter();
-      const finalBounds = mapInstance.getBounds();
-
-      console.info("[PROJECTMAP-VIEWPORT-IDLE]", {
-        zoom: mapInstance.getZoom() ?? null,
-        center: finalCenter ? { lat: finalCenter.lat(), lng: finalCenter.lng() } : null,
-        bounds: finalBounds ? {
-          north: finalBounds.getNorthEast().lat(),
-          east: finalBounds.getNorthEast().lng(),
-          south: finalBounds.getSouthWest().lat(),
-          west: finalBounds.getSouthWest().lng(),
-        } : null,
-        canonicalCoordinatesLength: canonicalCoordinates.length,
-        uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
-        geometryType,
-        fitBoundsApplied: true,
-      });
-    });
-
-    console.info("[PROJECTMAP-VIEWPORT-FITBOUNDS]", {
-      aboutToApply: true,
-      padding: CANONICAL_VIEWPORT_PADDING_PX,
-      boundsPoints: canonicalCoordinates,
-    });
     mapInstance.fitBounds(bounds, CANONICAL_VIEWPORT_PADDING_PX);
-    console.info("[PROJECTMAP-VIEWPORT-FITBOUNDS]", {
-      applied: true,
-    });
-
-    console.info("[PROJECTMAP-VIEWPORT-AFTER-IMMEDIATE]", {
-      ...readViewportState(),
-    });
-
-    const animationFrameId = requestAnimationFrame(() => {
-      console.info("[PROJECTMAP-VIEWPORT-AFTER-RAF]", {
-        ...readViewportState(),
-        ...readMapDivDimensions(),
-      });
-    });
-
-    return () => {
-      console.info("[PROJECTMAP-VIEWPORT-EFFECT]", {
-        phase: "cleanup",
-        idleObserved,
-      });
-      cancelAnimationFrame(animationFrameId);
-      viewportEventListeners.forEach((listener) => listener.remove());
-      idleListener.remove();
-    };
   }, [
     isLoaded,
     mapInstance,
     canonicalViewport,
     canonicalCoordinates,
-    uniqueCanonicalCoordinates.length,
-    geometryType,
   ]);
 
   // Carga y cálculo de densidad analítica de calor compatible con Google Maps JS v3.65+ (GEO-ENH-01 v1.1)
@@ -863,49 +722,6 @@ export function ProjectMap({
         {shouldRenderCorridor && (
           <Polyline
             path={geoShapePath}
-            onLoad={(polyline) => {
-              const nativeMap = polyline.getMap();
-              const nativePath = polyline.getPath();
-              const pathCoordinates = Array.from(
-                { length: nativePath.getLength() },
-                (_, index) => {
-                  const point = nativePath.getAt(index);
-                  return { lat: point.lat(), lng: point.lng() };
-                }
-              );
-              const mapCenter = mapRef.current?.getCenter();
-              const mapBounds = mapRef.current?.getBounds();
-
-              console.info("[PROJECTMAP-POLYLINE-NATIVE]", {
-                event: "onLoad",
-                nativeInstanceCreated: true,
-                hasMap: Boolean(nativeMap),
-                visible: polyline.getVisible(),
-                pathLength: nativePath.getLength(),
-                pathCoordinates,
-                strokeColor: polyline.get("strokeColor"),
-                strokeOpacity: polyline.get("strokeOpacity"),
-                strokeWeight: polyline.get("strokeWeight"),
-                zIndex: polyline.get("zIndex"),
-                mapZoom: mapRef.current?.getZoom() ?? null,
-                mapCenter: mapCenter ? { lat: mapCenter.lat(), lng: mapCenter.lng() } : null,
-                mapBounds: mapBounds ? {
-                  north: mapBounds.getNorthEast().lat(),
-                  east: mapBounds.getNorthEast().lng(),
-                  south: mapBounds.getSouthWest().lat(),
-                  west: mapBounds.getSouthWest().lng(),
-                } : null,
-              });
-            }}
-            onUnmount={(polyline) => {
-              console.info("[PROJECTMAP-POLYLINE-NATIVE]", {
-                event: "onUnmount",
-                nativeInstanceCreated: true,
-                hasMap: Boolean(polyline.getMap()),
-                visible: polyline.getVisible(),
-                pathLength: polyline.getPath().getLength(),
-              });
-            }}
             options={{
               strokeColor: "#f43f5e",
               strokeOpacity: 0.9,

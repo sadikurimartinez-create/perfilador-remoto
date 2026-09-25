@@ -53,73 +53,36 @@ describe("ProjectMap canonical rector overlay render contract", () => {
     expect(projectMapSource).toMatch(/\{shouldRenderPolygon && \(\s*<Polygon\s+paths=\{geoShapePath\}/);
   });
 
-  test("the runtime diagnostic exposes both render decisions without changing data", () => {
-    expect(projectMapSource).toContain("[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC]");
-    expect(projectMapSource).toContain("uniqueCanonicalCoordinatesLength:");
-    expect(projectMapSource).toContain("uniqueCanonicalCoordinates,");
-    expect(projectMapSource).toContain("shouldRenderCorridor,");
-    expect(projectMapSource).toContain("shouldRenderPolygon,");
-    expect(projectMapSource).not.toContain("[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC] write");
-  });
-
-  test("the native Polyline lifecycle diagnostic uses Google Maps APIs", () => {
-    expect(projectMapSource).toContain("[PROJECTMAP-POLYLINE-NATIVE]");
-    expect(projectMapSource).toContain("polyline.getMap()");
-    expect(projectMapSource).toContain("polyline.getVisible()");
-    expect(projectMapSource).toContain("polyline.getPath()");
-    expect(projectMapSource).toContain('polyline.get("strokeColor")');
-    expect(projectMapSource).toContain('polyline.get("strokeOpacity")');
-    expect(projectMapSource).toContain('polyline.get("strokeWeight")');
-    expect(projectMapSource).toContain('polyline.get("zIndex")');
-    expect(projectMapSource).toContain('event: "onUnmount"');
-  });
-
   test("canonical fitBounds waits for a reactive loaded map instance", () => {
     expect(projectMapSource).toContain("const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null)");
     expect(projectMapSource).toContain("mapRef.current !== mapInstance");
     expect(projectMapSource).toContain("setMapInstance(map)");
+    expect(projectMapSource).toContain("setMapInstance(null)");
+    expect(projectMapSource).toContain("const CANONICAL_VIEWPORT_PADDING_PX = 48");
+    expect(projectMapSource).toContain("mapInstance.fitBounds(bounds, CANONICAL_VIEWPORT_PADDING_PX)");
     expect(projectMapSource).toMatch(/useEffect\(\(\) => \{[\s\S]*?mapInstance\.fitBounds\(bounds, CANONICAL_VIEWPORT_PADDING_PX\);[\s\S]*?\}, \[[\s\S]*?mapInstance,[\s\S]*?canonicalViewport,[\s\S]*?canonicalCoordinates,/);
   });
 
-  test("canonical viewport telemetry is emitted on idle after fitBounds", () => {
-    expect(projectMapSource).toContain('google.maps.event.addListenerOnce(mapInstance, "idle"');
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-IDLE]");
-    expect(projectMapSource).toContain("fitBoundsApplied: true");
-    expect(projectMapSource).toContain("uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length");
-  });
+  test("temporary viewport and overlay diagnostics are absent", () => {
+    const temporaryPrefixes = [
+      "[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC]",
+      "[PROJECTMAP-POLYLINE-NATIVE]",
+      "[PROJECTMAP-VIEWPORT-EFFECT]",
+      "[PROJECTMAP-VIEWPORT-FITBOUNDS]",
+      "[PROJECTMAP-VIEWPORT-IDLE]",
+      "[PROJECTMAP-VIEWPORT-BEFORE]",
+      "[PROJECTMAP-VIEWPORT-EVENT]",
+      "[PROJECTMAP-VIEWPORT-AFTER-IMMEDIATE]",
+      "[PROJECTMAP-VIEWPORT-AFTER-RAF]",
+    ];
 
-  test("viewport effect diagnostics identify guards, fitBounds, and premature cleanup", () => {
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-EFFECT]");
-    expect(projectMapSource).toContain('phase: "evaluate"');
-    expect(projectMapSource).toContain("hasMapInstance: Boolean(mapInstance)");
-    expect(projectMapSource).toContain("mapRefMatchesInstance: mapRef.current === mapInstance");
-    expect(projectMapSource).toContain("hasCanonicalViewportBounds: Boolean(canonicalViewport.bounds)");
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-FITBOUNDS]");
-    expect(projectMapSource).toContain("boundsPoints: canonicalCoordinates");
-    expect(projectMapSource).toContain('phase: "cleanup"');
-    expect(projectMapSource).toContain("idleObserved,");
-  });
-
-  test("viewport diagnostics trace state before, during, and after fitBounds", () => {
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-BEFORE]");
-    expect(projectMapSource).toContain("mapInstance.getDiv().getBoundingClientRect()");
-    expect(projectMapSource).toContain("divWidth: mapDivRect.width");
-    expect(projectMapSource).toContain("divHeight: mapDivRect.height");
-    expect(projectMapSource).toContain('"zoom_changed"');
-    expect(projectMapSource).toContain('"bounds_changed"');
-    expect(projectMapSource).toContain('"center_changed"');
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-EVENT]");
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-AFTER-IMMEDIATE]");
-    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-AFTER-RAF]");
-    expect(projectMapSource).toContain("requestAnimationFrame(() =>");
-    expect(projectMapSource).toContain("cancelAnimationFrame(animationFrameId)");
-    expect(projectMapSource).toContain("viewportEventListeners.forEach((listener) => listener.remove())");
-    expect(projectMapSource).not.toContain("setTimeout(");
+    temporaryPrefixes.forEach((prefix) => expect(projectMapSource).not.toContain(prefix));
   });
 
   test("viewport readiness does not change or deduplicate the rendered canonical path", () => {
     expect(projectMapSource).toMatch(/const geoShapePath = useMemo\(\(\) => \{\s*if \(canonicalCoordinates\.length > 0\) return canonicalCoordinates;/);
-    expect(projectMapSource).not.toMatch(/geoShapePath[\s\S]*?return uniqueCanonicalCoordinates/);
+    expect(projectMapSource).toContain("if (!canonicalGeography && coordinates.length > 0) return coordinates;");
+    expect(projectMapSource).not.toContain("uniqueCanonicalCoordinates");
     expect(projectMapSource).toContain("path={geoShapePath}");
     expect(projectMapSource).toContain("paths={geoShapePath}");
   });
