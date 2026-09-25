@@ -161,6 +161,13 @@ export function ProjectMap({
     [canonicalGeography]
   );
 
+  const uniqueCanonicalCoordinates = useMemo(
+    () => Array.from(
+      new Map(canonicalCoordinates.map((point) => [`${point.lat}|${point.lng}`, point])).values()
+    ),
+    [canonicalCoordinates]
+  );
+
   const canonicalViewport = useMemo(
     () => getCanonicalMapViewport(canonicalGeography),
     [canonicalGeography]
@@ -341,6 +348,8 @@ export function ProjectMap({
       canonicalGeographyType: canonicalGeography?.type,
       canonicalGeometryType: canonicalGeography?.geometry?.type,
       canonicalCoordinatesLength: canonicalCoordinates.length,
+      uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
+      uniqueCanonicalCoordinates,
       geoShapePathLength: geoShapePath.length,
       canonicalCoordinates,
       geoShapePath,
@@ -352,6 +361,7 @@ export function ProjectMap({
     showAreas,
     canonicalGeography,
     canonicalCoordinates,
+    uniqueCanonicalCoordinates,
     geoShapePath,
     shouldRenderCorridor,
     shouldRenderPolygon,
@@ -729,6 +739,49 @@ export function ProjectMap({
         {shouldRenderCorridor && (
           <Polyline
             path={geoShapePath}
+            onLoad={(polyline) => {
+              const nativeMap = polyline.getMap();
+              const nativePath = polyline.getPath();
+              const pathCoordinates = Array.from(
+                { length: nativePath.getLength() },
+                (_, index) => {
+                  const point = nativePath.getAt(index);
+                  return { lat: point.lat(), lng: point.lng() };
+                }
+              );
+              const mapCenter = mapRef.current?.getCenter();
+              const mapBounds = mapRef.current?.getBounds();
+
+              console.info("[PROJECTMAP-POLYLINE-NATIVE]", {
+                event: "onLoad",
+                nativeInstanceCreated: true,
+                hasMap: Boolean(nativeMap),
+                visible: polyline.getVisible(),
+                pathLength: nativePath.getLength(),
+                pathCoordinates,
+                strokeColor: polyline.get("strokeColor"),
+                strokeOpacity: polyline.get("strokeOpacity"),
+                strokeWeight: polyline.get("strokeWeight"),
+                zIndex: polyline.get("zIndex"),
+                mapZoom: mapRef.current?.getZoom() ?? null,
+                mapCenter: mapCenter ? { lat: mapCenter.lat(), lng: mapCenter.lng() } : null,
+                mapBounds: mapBounds ? {
+                  north: mapBounds.getNorthEast().lat(),
+                  east: mapBounds.getNorthEast().lng(),
+                  south: mapBounds.getSouthWest().lat(),
+                  west: mapBounds.getSouthWest().lng(),
+                } : null,
+              });
+            }}
+            onUnmount={(polyline) => {
+              console.info("[PROJECTMAP-POLYLINE-NATIVE]", {
+                event: "onUnmount",
+                nativeInstanceCreated: true,
+                hasMap: Boolean(polyline.getMap()),
+                visible: polyline.getVisible(),
+                pathLength: polyline.getPath().getLength(),
+              });
+            }}
             options={{
               strokeColor: "#f43f5e",
               strokeOpacity: 0.9,

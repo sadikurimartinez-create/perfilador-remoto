@@ -55,8 +55,22 @@ describe("ProjectMap canonical rector overlay render contract", () => {
 
   test("the runtime diagnostic exposes both render decisions without changing data", () => {
     expect(projectMapSource).toContain("[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC]");
+    expect(projectMapSource).toContain("uniqueCanonicalCoordinatesLength:");
+    expect(projectMapSource).toContain("uniqueCanonicalCoordinates,");
     expect(projectMapSource).toContain("shouldRenderCorridor,");
     expect(projectMapSource).toContain("shouldRenderPolygon,");
     expect(projectMapSource).not.toContain("[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC] write");
+  });
+
+  test("the native Polyline lifecycle diagnostic uses Google Maps APIs", () => {
+    expect(projectMapSource).toContain("[PROJECTMAP-POLYLINE-NATIVE]");
+    expect(projectMapSource).toContain("polyline.getMap()");
+    expect(projectMapSource).toContain("polyline.getVisible()");
+    expect(projectMapSource).toContain("polyline.getPath()");
+    expect(projectMapSource).toContain('polyline.get("strokeColor")');
+    expect(projectMapSource).toContain('polyline.get("strokeOpacity")');
+    expect(projectMapSource).toContain('polyline.get("strokeWeight")');
+    expect(projectMapSource).toContain('polyline.get("zIndex")');
+    expect(projectMapSource).toContain('event: "onUnmount"');
   });
 });
