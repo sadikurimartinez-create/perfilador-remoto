@@ -11,13 +11,21 @@ import {
   type LatLngPoint,
 } from "@/utils/canonicalProjectGeography";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
+import { CEIPOLConfirmModal } from "@/components/ui/CEIPOLConfirmModal";
+import { findNearestCorridorSegment } from "./cabinetLinearGeometry";
 
 type LinearWorkflowStep = "START" | "NEXT_NODE" | "INTERMEDIATE" | "END" | "REVIEW";
+type EditAction = "MOVE" | "ADD_PI" | "DELETE_PI" | null;
 
 type LinearVertex = {
   id: string;
   point: LatLngPoint;
 };
+
+type PendingOperation =
+  | { kind: "APPEND"; vertexId: string; completesCorridor: boolean }
+  | { kind: "MOVE"; vertexId: string }
+  | { kind: "INSERT"; vertexId: string; insertIndex: number };
 
 interface CabinetLinearWorkspaceProps {
   onBack: () => void;
@@ -26,6 +34,7 @@ interface CabinetLinearWorkspaceProps {
 
 const INITIAL_CENTER: LatLngPoint = { lat: 21.8853, lng: -102.2916 };
 const MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
+const MAX_INSERT_DISTANCE_METERS = 75;
 
 function displayRole(role: CorridorVertexRole, index: number) {
   if (role === "START") return "NI";
@@ -40,7 +49,14 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
   const [workflowStep, setWorkflowStep] = useState<LinearWorkflowStep>("START");
   const [geometryConfirmed, setGeometryConfirmed] = useState(false);
   const [pendingPoint, setPendingPoint] = useState<LatLngPoint | null>(null);
+  const [pendingOperation, setPendingOperation] = useState<PendingOperation | null>(null);
   const [isStreetViewOpen, setIsStreetViewOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editAction, setEditAction] = useState<EditAction>(null);
+  const [selectedVertexId, setSelectedVertexId] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
+  const [deleteConfirmationStage, setDeleteConfirmationStage] = useState<0 | 1 | 2>(0);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const nextVertexId = useRef(1);
   const lastFittedVertexCount = useRef(0);
@@ -56,8 +72,13 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
   const vertexPath = useMemo(() => vertices.map((vertex) => vertex.point), [vertices]);
   const corridorIntegrity = useMemo(() => assessCorridorIntegrity(vertexPath), [vertexPath]);
   const allVerticesCaptured = vertices.length > 0 && vertices.every((vertex) => Boolean(captureByVertexId[vertex.id]));
-  const canValidateGeometry = workflowStep === "REVIEW" && corridorIntegrity.isValid && allVerticesCaptured;
-  const canSelectPoint = workflowStep === "START" || workflowStep === "INTERMEDIATE" || workflowStep === "END";
+  const hasPendingCandidate = Boolean(pendingPoint || activeVertexId || pendingOperation);
+  const canValidateGeometry = workflowStep === "REVIEW"
+    && !isEditing
+    && !hasPendingCandidate
+    && corridorIntegrity.isValid
+    && allVerticesCaptured;
+  const canSelectInitialPoint = workflowStep === "START" || workflowStep === "INTERMEDIATE" || workflowStep === "END";
 
   useEffect(() => {
     if (!mapInstance || vertexPath.length < 2 || lastFittedVertexCount.current === vertexPath.length) return;
@@ -67,26 +88,86 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
     lastFittedVertexCount.current = vertexPath.length;
   }, [mapInstance, vertexPath]);
 
-  const handleMapClick = (event: google.maps.MapMouseEvent) => {
-    if (!canSelectPoint || !event.latLng) return;
+  const removeCapture = (vertexId: string) => {
+    setCaptureByVertexId((current) => {
+      const next = { ...current };
+      delete next[vertexId];
+      return next;
+    });
+  };
 
-    const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-    const vertexId = `cabinet-linear-vertex-${nextVertexId.current++}`;
+  const beginPendingCapture = (point: LatLngPoint, operation: PendingOperation) => {
     setPendingPoint(point);
-    setActiveVertexId(vertexId);
+    setActiveVertexId(operation.vertexId);
+    setPendingOperation(operation);
     setGeometryConfirmed(false);
     setIsStreetViewOpen(true);
   };
 
-  const handleCapture = (payload: StreetViewCapturePayload) => {
-    if (!pendingPoint || !activeVertexId) return;
+  const handleMapClick = (event: google.maps.MapMouseEvent) => {
+    if (!event.latLng || hasPendingCandidate) return;
+    const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
 
-    const acceptedVertex = { id: activeVertexId, point: pendingPoint };
-    setVertices((current) => [...current, acceptedVertex]);
+    if (isEditing && editAction === "MOVE" && selectedVertexId) {
+      setVertices((current) => current.map((vertex) => (
+        vertex.id === selectedVertexId ? { ...vertex, point } : vertex
+      )));
+      removeCapture(selectedVertexId);
+      beginPendingCapture(point, { kind: "MOVE", vertexId: selectedVertexId });
+      setEditMessage("Nodo movido. Realice una nueva captura Street View para completar la edición.");
+      return;
+    }
+
+    if (isEditing && editAction === "ADD_PI") {
+      const nearestSegment = findNearestCorridorSegment(point, vertexPath);
+      if (!nearestSegment || nearestSegment.distanceMeters > MAX_INSERT_DISTANCE_METERS) {
+        setEditMessage("Seleccione un punto sobre la línea o a menos de 75 metros de un segmento.");
+        return;
+      }
+      const vertexId = `cabinet-linear-vertex-${nextVertexId.current++}`;
+      beginPendingCapture(point, {
+        kind: "INSERT",
+        vertexId,
+        insertIndex: nearestSegment.segmentIndex + 1,
+      });
+      setEditMessage(`Nuevo PI candidato para el segmento ${nearestSegment.segmentIndex + 1}.`);
+      return;
+    }
+
+    if (isEditing || !canSelectInitialPoint) return;
+    const vertexId = `cabinet-linear-vertex-${nextVertexId.current++}`;
+    beginPendingCapture(point, {
+      kind: "APPEND",
+      vertexId,
+      completesCorridor: workflowStep === "END",
+    });
+  };
+
+  const handleCapture = (payload: StreetViewCapturePayload) => {
+    if (!pendingPoint || !activeVertexId || !pendingOperation) return;
+
+    if (pendingOperation.kind === "APPEND") {
+      setVertices((current) => [...current, { id: pendingOperation.vertexId, point: pendingPoint }]);
+      setWorkflowStep(pendingOperation.completesCorridor ? "REVIEW" : "NEXT_NODE");
+    } else if (pendingOperation.kind === "INSERT") {
+      setVertices((current) => {
+        const next = [...current];
+        next.splice(pendingOperation.insertIndex, 0, {
+          id: pendingOperation.vertexId,
+          point: pendingPoint,
+        });
+        return next;
+      });
+      setEditMessage("PI agregado en el segmento seleccionado.");
+    } else {
+      setEditMessage("Nodo movido y captura Street View actualizada.");
+    }
+
     setCaptureByVertexId((current) => ({ ...current, [activeVertexId]: payload }));
-    setWorkflowStep(workflowStep === "END" ? "REVIEW" : "NEXT_NODE");
     setPendingPoint(null);
     setActiveVertexId(null);
+    setPendingOperation(null);
+    setSelectedVertexId(null);
     setGeometryConfirmed(false);
     setIsStreetViewOpen(false);
   };
@@ -94,12 +175,84 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
   const chooseNextStep = (step: "INTERMEDIATE" | "END") => {
     setPendingPoint(null);
     setActiveVertexId(null);
+    setPendingOperation(null);
     setIsStreetViewOpen(false);
     setWorkflowStep(step);
   };
 
-  const reviewRole = (index: number) => corridorVertexRole(index, vertices.length);
-  const pendingRole = workflowStep === "START" ? "NI" : workflowStep === "END" ? "NF" : `PI ${Math.max(1, vertices.length)}`;
+  const startEditing = () => {
+    setGeometryConfirmed(false);
+    setIsEditing(true);
+    setEditAction(null);
+    setSelectedVertexId(null);
+    setEditMessage("Seleccione una acción de edición estructural.");
+  };
+
+  const selectEditAction = (action: Exclude<EditAction, null>) => {
+    if (hasPendingCandidate) return;
+    setEditAction(action);
+    setSelectedVertexId(null);
+    setEditMessage(
+      action === "MOVE"
+        ? "Seleccione un nodo y después su nueva coordenada territorial en el mapa."
+        : action === "ADD_PI"
+          ? "Seleccione sobre o cerca del segmento donde desea insertar el PI."
+          : "Seleccione el PI que desea eliminar.",
+    );
+  };
+
+  const finishEditing = () => {
+    if (hasPendingCandidate) return;
+    setIsEditing(false);
+    setEditAction(null);
+    setSelectedVertexId(null);
+    setEditMessage(null);
+  };
+
+  const selectVertexForMove = (vertexId: string) => {
+    if (!isEditing || editAction !== "MOVE" || hasPendingCandidate) return;
+    setSelectedVertexId(vertexId);
+    setEditMessage("Nodo seleccionado. Marque ahora su nueva coordenada territorial en el mapa.");
+  };
+
+  const requestVertexDeletion = (vertexId: string, index: number) => {
+    if (!isEditing || editAction !== "DELETE_PI" || hasPendingCandidate) return;
+    if (corridorVertexRole(index, vertices.length) !== "INTERMEDIATE") return;
+    setDeleteCandidateId(vertexId);
+    setDeleteConfirmationStage(1);
+  };
+
+  const cancelVertexDeletion = () => {
+    setDeleteCandidateId(null);
+    setDeleteConfirmationStage(0);
+  };
+
+  const confirmVertexDeletion = () => {
+    if (!deleteCandidateId) return;
+    const candidateIndex = vertices.findIndex((vertex) => vertex.id === deleteCandidateId);
+    if (candidateIndex < 0 || corridorVertexRole(candidateIndex, vertices.length) !== "INTERMEDIATE") {
+      cancelVertexDeletion();
+      return;
+    }
+
+    setVertices((current) => current.filter((vertex) => vertex.id !== deleteCandidateId));
+    removeCapture(deleteCandidateId);
+    setGeometryConfirmed(false);
+    setSelectedVertexId(null);
+    setEditMessage("PI eliminado. La geometría y los roles fueron recalculados.");
+    cancelVertexDeletion();
+  };
+
+  const vertexRole = (index: number) => (
+    workflowStep === "REVIEW"
+      ? corridorVertexRole(index, vertices.length)
+      : index === 0 ? "START" : "INTERMEDIATE"
+  );
+  const pendingRole = pendingOperation?.kind === "MOVE"
+    ? "Nodo movido"
+    : pendingOperation?.kind === "INSERT"
+      ? `PI ${pendingOperation.insertIndex}`
+      : workflowStep === "START" ? "NI" : workflowStep === "END" ? "NF" : `PI ${Math.max(1, vertices.length)}`;
   const mapCenter = pendingPoint ?? vertices[vertices.length - 1]?.point ?? INITIAL_CENTER;
 
   return (
@@ -133,47 +286,58 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
                 onClick={handleMapClick}
                 onLoad={setMapInstance}
                 onUnmount={() => setMapInstance(null)}
-                options={{
-                  mapTypeControl: false,
-                  streetViewControl: false,
-                  fullscreenControl: false,
-                  gestureHandling: "greedy",
-                }}
+                options={{ mapTypeControl: false, streetViewControl: false, fullscreenControl: false, gestureHandling: "greedy" }}
               >
                 {vertexPath.length >= 2 && (
-                  <Polyline
-                    path={vertexPath}
-                    options={{ strokeColor: "#38bdf8", strokeOpacity: 0.95, strokeWeight: 4, clickable: false }}
-                  />
+                  <Polyline path={vertexPath} options={{ strokeColor: "#38bdf8", strokeOpacity: 0.95, strokeWeight: 4, clickable: false }} />
                 )}
                 {vertices.map((vertex, index) => {
-                  const role = workflowStep === "REVIEW" ? reviewRole(index) : index === 0 ? "START" : "INTERMEDIATE";
+                  const role = vertexRole(index);
                   return (
                     <Marker
                       key={vertex.id}
                       position={vertex.point}
                       title={`${displayRole(role, index)} - nodo territorial`}
                       label={{ text: displayRole(role, index), color: "#ffffff", fontWeight: "700" }}
+                      onClick={() => {
+                        if (editAction === "MOVE") selectVertexForMove(vertex.id);
+                        if (editAction === "DELETE_PI") requestVertexDeletion(vertex.id, index);
+                      }}
                     />
                   );
                 })}
-                {pendingPoint && <Marker position={pendingPoint} title={`${pendingRole} pendiente de captura`} />}
+                {pendingPoint && pendingOperation?.kind !== "MOVE" && (
+                  <Marker position={pendingPoint} title={`${pendingRole} pendiente de captura`} />
+                )}
               </GoogleMap>
             )}
           </div>
 
           <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-            {canSelectPoint ? (
+            {isEditing ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <CEIPOLButton type="button" variant={editAction === "MOVE" ? "primary" : "secondary"} disabled={hasPendingCandidate} onClick={() => selectEditAction("MOVE")}>Mover nodo</CEIPOLButton>
+                  <CEIPOLButton type="button" variant={editAction === "ADD_PI" ? "primary" : "secondary"} disabled={hasPendingCandidate} onClick={() => selectEditAction("ADD_PI")}>Agregar PI</CEIPOLButton>
+                  <CEIPOLButton type="button" variant={editAction === "DELETE_PI" ? "danger" : "secondary"} disabled={hasPendingCandidate} onClick={() => selectEditAction("DELETE_PI")}>Borrar PI</CEIPOLButton>
+                  <CEIPOLButton type="button" variant="confirm" disabled={hasPendingCandidate} onClick={finishEditing}>Finalizar edición</CEIPOLButton>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-slate-400">
+                    {pendingPoint
+                      ? `${pendingRole}: ${pendingPoint.lat.toFixed(6)}, ${pendingPoint.lng.toFixed(6)}. Captura pendiente.`
+                      : editMessage ?? "Seleccione una acción de edición estructural."}
+                  </p>
+                  {pendingPoint && (
+                    <CEIPOLButton type="button" variant="primary" onClick={() => setIsStreetViewOpen(true)}>Abrir Street View</CEIPOLButton>
+                  )}
+                </div>
+              </div>
+            ) : canSelectInitialPoint ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  {pendingPoint
-                    ? `${pendingRole} territorial: ${pendingPoint.lat.toFixed(6)}, ${pendingPoint.lng.toFixed(6)}`
-                    : `Seleccione en el mapa la coordenada territorial para ${pendingRole}.`}
-                </p>
+                <p>{pendingPoint ? `${pendingRole} territorial: ${pendingPoint.lat.toFixed(6)}, ${pendingPoint.lng.toFixed(6)}` : `Seleccione en el mapa la coordenada territorial para ${pendingRole}.`}</p>
                 {pendingPoint && (
-                  <CEIPOLButton type="button" variant="primary" onClick={() => setIsStreetViewOpen(true)}>
-                    Abrir Street View
-                  </CEIPOLButton>
+                  <CEIPOLButton type="button" variant="primary" onClick={() => setIsStreetViewOpen(true)}>Abrir Street View</CEIPOLButton>
                 )}
               </div>
             ) : workflowStep === "NEXT_NODE" ? (
@@ -207,17 +371,29 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
             <div className="space-y-4">
               {vertices.map((vertex, index) => {
                 const capture = captureByVertexId[vertex.id];
-                const role = workflowStep === "REVIEW" ? reviewRole(index) : index === 0 ? "START" : "INTERMEDIATE";
+                const role = vertexRole(index);
+                const roleLabel = displayRole(role, index);
                 return (
                   <article key={vertex.id} className="border border-slate-800 bg-slate-900/30 p-4">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-sm font-bold text-slate-100">{displayRole(role, index)}</h4>
+                      <h4 className="text-sm font-bold text-slate-100">{roleLabel}</h4>
                       <span className="font-mono text-xs text-cyan-300">{vertex.point.lat.toFixed(6)}, {vertex.point.lng.toFixed(6)}</span>
                     </div>
+                    {isEditing && editAction === "MOVE" && (
+                      <CEIPOLButton type="button" size="sm" variant={selectedVertexId === vertex.id ? "primary" : "secondary"} disabled={hasPendingCandidate} onClick={() => selectVertexForMove(vertex.id)}>Mover {roleLabel}</CEIPOLButton>
+                    )}
+                    {isEditing && editAction === "DELETE_PI" && (
+                      <CEIPOLButton type="button" size="sm" variant="danger" disabled={role !== "INTERMEDIATE" || hasPendingCandidate} onClick={() => requestVertexDeletion(vertex.id, index)}>
+                        {role === "INTERMEDIATE" ? `Borrar ${roleLabel}` : `${roleLabel} no se puede borrar`}
+                      </CEIPOLButton>
+                    )}
+                    {!capture && (
+                      <p className="mt-3 border border-amber-900/60 bg-amber-950/30 p-3 text-xs font-bold text-amber-300">Este nodo requiere una nueva captura Street View antes de validar la geometría.</p>
+                    )}
                     {capture && (
-                      <div className="space-y-3">
+                      <div className="mt-3 space-y-3">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={capture.dataUrl} alt={`Captura Street View ${displayRole(role, index)}`} className="max-h-[460px] w-full object-contain" />
+                        <img src={capture.dataUrl} alt={`Captura Street View ${roleLabel}`} className="max-h-[460px] w-full object-contain" />
                         <dl className="grid grid-cols-1 gap-2 text-xs text-slate-300 sm:grid-cols-2">
                           <div><dt className="text-slate-500">Coordenada territorial</dt><dd className="font-mono">{vertex.point.lat.toFixed(6)}, {vertex.point.lng.toFixed(6)}</dd></div>
                           <div><dt className="text-slate-500">Cámara Google</dt><dd className="font-mono">{capture.panoramaLat.toFixed(6)}, {capture.panoramaLng.toFixed(6)}</dd></div>
@@ -242,17 +418,11 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
                   : "El corredor no cumple la integridad territorial requerida."}
               </p>
               {geometryConfirmed && (
-                <p className="border border-emerald-800 bg-emerald-950/40 p-3 text-center text-sm font-bold text-emerald-300">
-                  Geometría lineal validada
-                </p>
+                <p className="border border-emerald-800 bg-emerald-950/40 p-3 text-center text-sm font-bold text-emerald-300">Geometría lineal validada</p>
               )}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <CEIPOLButton type="button" variant="confirm" disabled={!canValidateGeometry || geometryConfirmed} onClick={() => setGeometryConfirmed(true)}>
-                  Validar geometría
-                </CEIPOLButton>
-                <CEIPOLButton type="button" variant="secondary" disabled={!geometryConfirmed} onClick={() => setGeometryConfirmed(false)}>
-                  Editar
-                </CEIPOLButton>
+                <CEIPOLButton type="button" variant="confirm" disabled={!canValidateGeometry || geometryConfirmed} onClick={() => setGeometryConfirmed(true)}>Validar geometría</CEIPOLButton>
+                <CEIPOLButton type="button" variant="secondary" disabled={!geometryConfirmed || isEditing} onClick={startEditing}>Editar</CEIPOLButton>
               </div>
             </div>
           )}
@@ -268,6 +438,25 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
           onCapture={handleCapture}
         />
       )}
+
+      <CEIPOLConfirmModal
+        isOpen={deleteConfirmationStage === 1}
+        onClose={cancelVertexDeletion}
+        onConfirm={() => setDeleteConfirmationStage(2)}
+        title="Eliminar punto intermedio"
+        message="¿Desea eliminar este punto intermedio?"
+        confirmText="Continuar"
+        variant="warning"
+      />
+      <CEIPOLConfirmModal
+        isOpen={deleteConfirmationStage === 2}
+        onClose={cancelVertexDeletion}
+        onConfirm={confirmVertexDeletion}
+        title="Confirmar eliminación definitiva"
+        message="Esta acción modificará la geometría del corredor. ¿Confirma la eliminación definitiva?"
+        confirmText="Eliminar PI"
+        variant="danger"
+      />
     </div>
   );
 }
