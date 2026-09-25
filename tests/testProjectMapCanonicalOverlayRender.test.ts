@@ -100,6 +100,23 @@ describe("ProjectMap canonical rector overlay render contract", () => {
     expect(projectMapSource).toContain("idleObserved,");
   });
 
+  test("viewport diagnostics trace state before, during, and after fitBounds", () => {
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-BEFORE]");
+    expect(projectMapSource).toContain("mapInstance.getDiv().getBoundingClientRect()");
+    expect(projectMapSource).toContain("divWidth: mapDivRect.width");
+    expect(projectMapSource).toContain("divHeight: mapDivRect.height");
+    expect(projectMapSource).toContain('"zoom_changed"');
+    expect(projectMapSource).toContain('"bounds_changed"');
+    expect(projectMapSource).toContain('"center_changed"');
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-EVENT]");
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-AFTER-IMMEDIATE]");
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-AFTER-RAF]");
+    expect(projectMapSource).toContain("requestAnimationFrame(() =>");
+    expect(projectMapSource).toContain("cancelAnimationFrame(animationFrameId)");
+    expect(projectMapSource).toContain("viewportEventListeners.forEach((listener) => listener.remove())");
+    expect(projectMapSource).not.toContain("setTimeout(");
+  });
+
   test("viewport readiness does not change or deduplicate the rendered canonical path", () => {
     expect(projectMapSource).toMatch(/const geoShapePath = useMemo\(\(\) => \{\s*if \(canonicalCoordinates\.length > 0\) return canonicalCoordinates;/);
     expect(projectMapSource).not.toMatch(/geoShapePath[\s\S]*?return uniqueCanonicalCoordinates/);

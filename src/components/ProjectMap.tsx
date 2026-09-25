@@ -393,6 +393,49 @@ export function ProjectMap({
     canonicalCoordinates.forEach((point) => bounds.extend(point));
     let idleObserved = false;
 
+    const readViewportState = () => {
+      const currentCenter = mapInstance.getCenter();
+      const currentBounds = mapInstance.getBounds();
+      return {
+        zoom: mapInstance.getZoom() ?? null,
+        center: currentCenter ? { lat: currentCenter.lat(), lng: currentCenter.lng() } : null,
+        bounds: currentBounds ? {
+          north: currentBounds.getNorthEast().lat(),
+          east: currentBounds.getNorthEast().lng(),
+          south: currentBounds.getSouthWest().lat(),
+          west: currentBounds.getSouthWest().lng(),
+        } : null,
+      };
+    };
+
+    const readMapDivDimensions = () => {
+      const mapDivRect = mapInstance.getDiv().getBoundingClientRect();
+      return {
+        divWidth: mapDivRect.width,
+        divHeight: mapDivRect.height,
+      };
+    };
+
+    console.info("[PROJECTMAP-VIEWPORT-BEFORE]", {
+      ...readViewportState(),
+      ...readMapDivDimensions(),
+      padding: CANONICAL_VIEWPORT_PADDING_PX,
+      canonicalCoordinatesLength: canonicalCoordinates.length,
+      uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
+    });
+
+    const viewportEventListeners = ([
+      "zoom_changed",
+      "bounds_changed",
+      "center_changed",
+      "idle",
+    ] as const).map((event) => google.maps.event.addListener(mapInstance, event, () => {
+      console.info("[PROJECTMAP-VIEWPORT-EVENT]", {
+        event,
+        ...readViewportState(),
+      });
+    }));
+
     const idleListener = google.maps.event.addListenerOnce(mapInstance, "idle", () => {
       idleObserved = true;
       const finalCenter = mapInstance.getCenter();
@@ -424,11 +467,24 @@ export function ProjectMap({
       applied: true,
     });
 
+    console.info("[PROJECTMAP-VIEWPORT-AFTER-IMMEDIATE]", {
+      ...readViewportState(),
+    });
+
+    const animationFrameId = requestAnimationFrame(() => {
+      console.info("[PROJECTMAP-VIEWPORT-AFTER-RAF]", {
+        ...readViewportState(),
+        ...readMapDivDimensions(),
+      });
+    });
+
     return () => {
       console.info("[PROJECTMAP-VIEWPORT-EFFECT]", {
         phase: "cleanup",
         idleObserved,
       });
+      cancelAnimationFrame(animationFrameId);
+      viewportEventListeners.forEach((listener) => listener.remove());
       idleListener.remove();
     };
   }, [
