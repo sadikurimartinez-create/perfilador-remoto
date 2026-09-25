@@ -256,7 +256,7 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
   const mapCenter = pendingPoint ?? vertices[vertices.length - 1]?.point ?? INITIAL_CENTER;
 
   return (
-    <div className="w-full space-y-5">
+    <div className="mx-auto w-full max-w-[1500px] space-y-5">
       <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>
@@ -271,7 +271,7 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
 
       <div className="space-y-5">
         <section className="w-full space-y-3">
-          <div className="h-[420px] overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
+          <div className="h-[420px] overflow-hidden rounded-lg border border-slate-700 bg-slate-950 sm:h-[460px] lg:h-[480px]">
             {!apiKey || loadError ? (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-amber-300">
                 Google Maps no está disponible. Verifique la clave pública configurada.
@@ -393,7 +393,7 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
                     {capture && (
                       <div className="mt-3 space-y-3">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={capture.dataUrl} alt={`Captura Street View ${roleLabel}`} className="max-h-[460px] w-full object-contain" />
+                        <img src={capture.dataUrl} alt={`Captura Street View ${roleLabel}`} className="h-[240px] w-full bg-black object-contain sm:h-[380px] lg:h-[500px]" />
                         <dl className="grid grid-cols-1 gap-2 text-xs text-slate-300 sm:grid-cols-2">
                           <div><dt className="text-slate-500">Coordenada territorial</dt><dd className="font-mono">{vertex.point.lat.toFixed(6)}, {vertex.point.lng.toFixed(6)}</dd></div>
                           <div><dt className="text-slate-500">Cámara Google</dt><dd className="font-mono">{capture.panoramaLat.toFixed(6)}, {capture.panoramaLng.toFixed(6)}</dd></div>

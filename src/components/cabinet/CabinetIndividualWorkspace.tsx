@@ -61,7 +61,7 @@ export function CabinetIndividualWorkspace({
   };
 
   return (
-    <div className="w-full space-y-5">
+    <div className="mx-auto w-full max-w-[1500px] space-y-5">
       <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>
@@ -82,7 +82,7 @@ export function CabinetIndividualWorkspace({
 
       <div className="space-y-5">
         <section className="w-full space-y-3">
-          <div className="h-[420px] overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
+          <div className="h-[420px] overflow-hidden rounded-lg border border-slate-700 bg-slate-950 sm:h-[460px] lg:h-[480px]">
             {!apiKey || loadError ? (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-amber-300">
                 Google Maps no está disponible. Verifique la clave pública configurada.
@@ -131,9 +131,9 @@ export function CabinetIndividualWorkspace({
           </div>
         </section>
 
-        <section className="min-h-[420px] w-full rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+        <section className="w-full rounded-lg border border-slate-800 bg-slate-950/40 p-4">
           {!capture || !candidate ? (
-            <div className="flex h-full min-h-[388px] items-center justify-center text-center text-sm text-slate-500">
+            <div className="flex h-[240px] items-center justify-center text-center text-sm text-slate-500 sm:h-[380px] lg:h-[500px]">
               La captura aceptada de Street View aparecerá aquí.
             </div>
           ) : (
@@ -142,7 +142,7 @@ export function CabinetIndividualWorkspace({
               <img
                 src={capture.dataUrl}
                 alt="Vista capturada desde Google Street View"
-                className="aspect-[4/3] w-full rounded-lg border border-slate-700 object-cover"
+                className="h-[240px] w-full rounded-lg border border-slate-700 bg-black object-contain sm:h-[380px] lg:h-[500px]"
               />
 
               <dl className="space-y-2 text-xs text-slate-300">
