@@ -80,8 +80,8 @@ export function CabinetIndividualWorkspace({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
-        <section className="space-y-3">
+      <div className="space-y-5">
+        <section className="w-full space-y-3">
           <div className="h-[420px] overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
             {!apiKey || loadError ? (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-amber-300">
@@ -131,7 +131,7 @@ export function CabinetIndividualWorkspace({
           </div>
         </section>
 
-        <section className="min-h-[420px] rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+        <section className="min-h-[420px] w-full rounded-lg border border-slate-800 bg-slate-950/40 p-4">
           {!capture || !candidate ? (
             <div className="flex h-full min-h-[388px] items-center justify-center text-center text-sm text-slate-500">
               La captura aceptada de Street View aparecerá aquí.
