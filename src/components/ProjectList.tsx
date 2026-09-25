@@ -20,6 +20,7 @@ import {
 import { getDb } from "@/lib/firebase";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { CabinetIndividualWorkspace } from "./cabinet/CabinetIndividualWorkspace";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import {
   buildDraftGeographyPreview,
@@ -1288,7 +1289,12 @@ export function ProjectList() {
             </CEIPOLButton>
           </div>
         </div>
-      ) : projectCreationMode === "CABINET" && cabinetGeometryType ? (
+      ) : projectCreationMode === "CABINET" && cabinetGeometryType === "individual" ? (
+        <CabinetIndividualWorkspace
+          onBack={() => setCabinetGeometryType(null)}
+          onCancel={handleCloseCreationFlow}
+        />
+      ) : projectCreationMode === "CABINET" && (cabinetGeometryType === "lineal" || cabinetGeometryType === "poligono") ? (
         <div className="card p-6 space-y-5 max-w-2xl w-full">
           <div>
             <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>
