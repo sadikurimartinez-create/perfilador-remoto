@@ -370,6 +370,17 @@ export function ProjectMap({
   ]);
 
   useEffect(() => {
+    console.info("[PROJECTMAP-VIEWPORT-EFFECT]", {
+      phase: "evaluate",
+      isLoaded,
+      hasMapInstance: Boolean(mapInstance),
+      mapRefMatchesInstance: mapRef.current === mapInstance,
+      hasCanonicalViewportBounds: Boolean(canonicalViewport.bounds),
+      canonicalCoordinatesLength: canonicalCoordinates.length,
+      uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
+      geometryType,
+    });
+
     if (
       !isLoaded
       || !mapInstance
@@ -380,8 +391,10 @@ export function ProjectMap({
 
     const bounds = new google.maps.LatLngBounds();
     canonicalCoordinates.forEach((point) => bounds.extend(point));
+    let idleObserved = false;
 
     const idleListener = google.maps.event.addListenerOnce(mapInstance, "idle", () => {
+      idleObserved = true;
       const finalCenter = mapInstance.getCenter();
       const finalBounds = mapInstance.getBounds();
 
@@ -401,9 +414,23 @@ export function ProjectMap({
       });
     });
 
+    console.info("[PROJECTMAP-VIEWPORT-FITBOUNDS]", {
+      aboutToApply: true,
+      padding: CANONICAL_VIEWPORT_PADDING_PX,
+      boundsPoints: canonicalCoordinates,
+    });
     mapInstance.fitBounds(bounds, CANONICAL_VIEWPORT_PADDING_PX);
+    console.info("[PROJECTMAP-VIEWPORT-FITBOUNDS]", {
+      applied: true,
+    });
 
-    return () => idleListener.remove();
+    return () => {
+      console.info("[PROJECTMAP-VIEWPORT-EFFECT]", {
+        phase: "cleanup",
+        idleObserved,
+      });
+      idleListener.remove();
+    };
   }, [
     isLoaded,
     mapInstance,

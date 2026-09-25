@@ -88,6 +88,18 @@ describe("ProjectMap canonical rector overlay render contract", () => {
     expect(projectMapSource).toContain("uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length");
   });
 
+  test("viewport effect diagnostics identify guards, fitBounds, and premature cleanup", () => {
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-EFFECT]");
+    expect(projectMapSource).toContain('phase: "evaluate"');
+    expect(projectMapSource).toContain("hasMapInstance: Boolean(mapInstance)");
+    expect(projectMapSource).toContain("mapRefMatchesInstance: mapRef.current === mapInstance");
+    expect(projectMapSource).toContain("hasCanonicalViewportBounds: Boolean(canonicalViewport.bounds)");
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-FITBOUNDS]");
+    expect(projectMapSource).toContain("boundsPoints: canonicalCoordinates");
+    expect(projectMapSource).toContain('phase: "cleanup"');
+    expect(projectMapSource).toContain("idleObserved,");
+  });
+
   test("viewport readiness does not change or deduplicate the rendered canonical path", () => {
     expect(projectMapSource).toMatch(/const geoShapePath = useMemo\(\(\) => \{\s*if \(canonicalCoordinates\.length > 0\) return canonicalCoordinates;/);
     expect(projectMapSource).not.toMatch(/geoShapePath[\s\S]*?return uniqueCanonicalCoordinates/);
