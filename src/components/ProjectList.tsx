@@ -66,6 +66,9 @@ type PendingProjectPhoto = {
   gpsTimestamp: number | null;
 };
 
+type ProjectCreationMode = "IN_SITU" | "CABINET";
+type CabinetGeometryType = "individual" | "lineal" | "poligono";
+
 function getCameraDeviceLocation(): Promise<{ lat: number; lng: number; accuracy: number | null; timestamp: number | null }> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || typeof navigator.geolocation?.getCurrentPosition !== "function") {
@@ -149,6 +152,9 @@ export function ProjectList() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
+  const [showCreationModeSelection, setShowCreationModeSelection] = useState(false);
+  const [projectCreationMode, setProjectCreationMode] = useState<ProjectCreationMode | null>(null);
+  const [cabinetGeometryType, setCabinetGeometryType] = useState<CabinetGeometryType | null>(null);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [draftGeography, setDraftGeography] = useState<DraftProjectGeography>(() => createDraftProjectGeography("individual"));
   const [draftLatInput, setDraftLatInput] = useState("");
@@ -397,6 +403,35 @@ export function ProjectList() {
     setDraftFeedback("Fotografía retirada. Los nodos territoriales permanecen sin cambios.");
   };
 
+  const handleStartProjectCreation = () => {
+    setProjectCreationMode(null);
+    setCabinetGeometryType(null);
+    setShowCreationModeSelection(true);
+  };
+
+  const handleSelectCabinet = () => {
+    setProjectCreationMode("CABINET");
+    setCabinetGeometryType(null);
+    setShowCreationModeSelection(false);
+  };
+
+  const handleSelectCabinetGeometry = (nextType: CabinetGeometryType) => {
+    setCabinetGeometryType(nextType);
+  };
+
+  const handleBackToModeSelection = () => {
+    setProjectCreationMode(null);
+    setCabinetGeometryType(null);
+    setShowCreationModeSelection(true);
+  };
+
+  const handleCloseCreationFlow = () => {
+    setShowPrompt(false);
+    setShowCreationModeSelection(false);
+    setProjectCreationMode(null);
+    setCabinetGeometryType(null);
+  };
+
   const handleNuevoProyecto = () => {
     setNombreInput("");
     setGeometryType("individual");
@@ -410,6 +445,9 @@ export function ProjectList() {
     setPendingPhotos([]);
     isCreatingProjectRef.current = false;
     setIsCreatingProject(false);
+    setProjectCreationMode("IN_SITU");
+    setCabinetGeometryType(null);
+    setShowCreationModeSelection(false);
     setShowPrompt(true);
   };
 
@@ -811,6 +849,7 @@ export function ProjectList() {
   const g1 = pAbiertos; const g2 = g1 + pRevision; const g3 = g2 + pAuditoria; const g4 = g3 + pDevueltos;
   
   const chartStyle = { background: `conic-gradient(#64748b 0% ${g1}%, #3b82f6 ${g1}% ${g2}%, #a855f7 ${g2}% ${g3}%, #ef4444 ${g3}% ${g4}%, #10b981 ${g4}% 100%)` };
+  const creationFlowOpen = showPrompt || showCreationModeSelection || projectCreationMode === "CABINET";
 
   return (
     <div className="space-y-6">
@@ -823,7 +862,7 @@ export function ProjectList() {
         </p>
       </header>
 
-      {list.length > 0 && !showPrompt && (
+      {list.length > 0 && !creationFlowOpen && (
         <CEIPOLCard
           variant="default"
           className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-900/40 border border-slate-800 rounded-xl p-6 shadow-lg"
@@ -849,7 +888,7 @@ export function ProjectList() {
         </CEIPOLCard>
       )}
 
-      {devueltosPropios.length > 0 && !showPrompt && (
+      {devueltosPropios.length > 0 && !creationFlowOpen && (
         <div className="flex flex-col gap-4">
           {expedientesVencidos.length > 0 && (
             <div className="bg-red-900/60 border border-red-700 border-l-4 border-l-red-500 p-4 rounded-lg shadow-lg">
@@ -885,7 +924,7 @@ export function ProjectList() {
         </div>
       )}
 
-      {isAdmin && enRevisionAdmin.length > 0 && !showPrompt && (
+      {isAdmin && enRevisionAdmin.length > 0 && !creationFlowOpen && (
         <div className="bg-blue-950/40 border border-blue-900 border-l-4 border-l-blue-500 p-4 rounded-lg shadow-lg">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-lg animate-pulse">📋</span>
@@ -897,7 +936,7 @@ export function ProjectList() {
         </div>
       )}
 
-      {!showPrompt ? (
+      {!creationFlowOpen ? (
         <>
           <div className="flex flex-col sm:flex-row flex-wrap justify-between gap-4 mb-2">
             <div className="relative w-full sm:max-w-md">
@@ -948,7 +987,7 @@ export function ProjectList() {
             )}
             <CEIPOLButton
               variant="primary"
-              onClick={handleNuevoProyecto}
+              onClick={handleStartProjectCreation}
             >
               Nuevo Proyecto
             </CEIPOLButton>
@@ -964,7 +1003,7 @@ export function ProjectList() {
               <p className="text-xs mt-1">Cree un proyecto nuevo o modifique su búsqueda.</p>
               <CEIPOLButton
                 variant="ghost"
-                onClick={handleNuevoProyecto}
+                onClick={handleStartProjectCreation}
                 className="mt-4 text-cyan-400 hover:text-cyan-300 mx-auto"
               >
                 Crear primer proyecto
@@ -1189,6 +1228,87 @@ export function ProjectList() {
             </div>
           )}
         </>
+      ) : showCreationModeSelection ? (
+        <div className="card p-6 space-y-5 max-w-2xl w-full">
+          <div>
+            <h3 className="text-lg font-bold text-slate-100">Seleccione la modalidad de levantamiento</h3>
+            <p className="mt-1 text-sm text-slate-400">Elija cómo se integrará inicialmente el expediente.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <CEIPOLButton
+              type="button"
+              variant="confirm"
+              size="lg"
+              onClick={handleNuevoProyecto}
+            >
+              IN SITU
+            </CEIPOLButton>
+            <CEIPOLButton
+              type="button"
+              variant="primary"
+              size="lg"
+              onClick={handleSelectCabinet}
+            >
+              GABINETE
+            </CEIPOLButton>
+          </div>
+
+          <div className="flex justify-end border-t border-slate-800 pt-4">
+            <CEIPOLButton type="button" variant="ghost" onClick={handleCloseCreationFlow}>
+              Cancelar
+            </CEIPOLButton>
+          </div>
+        </div>
+      ) : projectCreationMode === "CABINET" && !cabinetGeometryType ? (
+        <div className="card p-6 space-y-5 max-w-2xl w-full">
+          <div>
+            <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-100">Seleccione el tipo de geometría</h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <CEIPOLButton type="button" variant="secondary" onClick={() => handleSelectCabinetGeometry("individual")}>
+              Individual
+            </CEIPOLButton>
+            <CEIPOLButton type="button" variant="secondary" onClick={() => handleSelectCabinetGeometry("lineal")}>
+              Lineal
+            </CEIPOLButton>
+            <CEIPOLButton type="button" variant="secondary" onClick={() => handleSelectCabinetGeometry("poligono")}>
+              Polígono
+            </CEIPOLButton>
+          </div>
+
+          <div className="flex justify-between gap-2 border-t border-slate-800 pt-4">
+            <CEIPOLButton type="button" variant="ghost" onClick={handleBackToModeSelection}>
+              Volver
+            </CEIPOLButton>
+            <CEIPOLButton type="button" variant="ghost" onClick={handleCloseCreationFlow}>
+              Cancelar
+            </CEIPOLButton>
+          </div>
+        </div>
+      ) : projectCreationMode === "CABINET" && cabinetGeometryType ? (
+        <div className="card p-6 space-y-5 max-w-2xl w-full">
+          <div>
+            <p className="text-xs font-bold uppercase text-cyan-400">Modalidad Gabinete</p>
+            <h3 className="mt-2 text-lg font-bold text-slate-100">
+              Geometría seleccionada: {cabinetGeometryType === "poligono" ? "POLÍGONO" : cabinetGeometryType.toUpperCase()}
+            </h3>
+            <p className="mt-3 text-sm text-slate-400">
+              El espacio de trabajo de Gabinete se habilitará en la siguiente fase.
+            </p>
+          </div>
+
+          <div className="flex justify-between gap-2 border-t border-slate-800 pt-4">
+            <CEIPOLButton type="button" variant="secondary" onClick={handleBackToModeSelection}>
+              Volver
+            </CEIPOLButton>
+            <CEIPOLButton type="button" variant="ghost" onClick={handleCloseCreationFlow}>
+              Cancelar
+            </CEIPOLButton>
+          </div>
+        </div>
       ) : (
         <div className="card p-6 space-y-4 max-w-6xl w-full">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1435,7 +1555,7 @@ export function ProjectList() {
             </button>
             <button
               type="button"
-              onClick={() => setShowPrompt(false)}
+              onClick={handleCloseCreationFlow}
               className="px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 text-sm hover:bg-slate-800 font-semibold transition-colors"
             >
               Cancelar
