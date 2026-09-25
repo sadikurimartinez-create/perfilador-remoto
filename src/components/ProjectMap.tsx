@@ -327,6 +327,36 @@ export function ProjectMap({
     return [];
   }, [canonicalCoordinates, canonicalGeography, coordinates]);
 
+  const shouldRenderCorridor = showAreas
+    && (geometryType === "lineal" || geometryType === "corredor")
+    && geoShapePath.length > 1;
+  const shouldRenderPolygon = showAreas
+    && geometryType === "poligono"
+    && geoShapePath.length > 2;
+
+  useEffect(() => {
+    console.info("[PROJECTMAP-GEOGRAPHY-DIAGNOSTIC]", {
+      geometryType,
+      showAreas,
+      canonicalGeographyType: canonicalGeography?.type,
+      canonicalGeometryType: canonicalGeography?.geometry?.type,
+      canonicalCoordinatesLength: canonicalCoordinates.length,
+      geoShapePathLength: geoShapePath.length,
+      canonicalCoordinates,
+      geoShapePath,
+      shouldRenderCorridor,
+      shouldRenderPolygon,
+    });
+  }, [
+    geometryType,
+    showAreas,
+    canonicalGeography,
+    canonicalCoordinates,
+    geoShapePath,
+    shouldRenderCorridor,
+    shouldRenderPolygon,
+  ]);
+
   useEffect(() => {
     if (!isLoaded || !mapRef.current || !canonicalViewport.bounds || canonicalCoordinates.length < 2) return;
     const bounds = new google.maps.LatLngBounds();
@@ -696,7 +726,7 @@ export function ProjectMap({
         )}
 
         {/* Draw polyline for lineal (corridor) type projects (Controlled by showAreas) */}
-        {showAreas && (geometryType === "lineal" || geometryType === "corredor") && geoShapePath.length > 1 && (
+        {shouldRenderCorridor && (
           <Polyline
             path={geoShapePath}
             options={{
@@ -710,7 +740,7 @@ export function ProjectMap({
         )}
 
         {/* Draw polygon for shape area type projects (Controlled by showAreas) */}
-        {showAreas && geometryType === "poligono" && geoShapePath.length > 2 && (
+        {shouldRenderPolygon && (
           <Polygon
             paths={geoShapePath}
             options={{
