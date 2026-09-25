@@ -49,7 +49,7 @@ describe("Phase B1 - Project creation mode selector", () => {
     expect(cabinetHandlers).not.toContain("createProject");
     expect(cabinetHandlers).not.toContain("setDraftGeography");
     expect(cabinetHandlers).not.toContain("pendingPhotos");
-    expect(source).toContain("El espacio de trabajo de Gabinete se habilitará en la siguiente fase.");
+    expect(source).toContain("<CabinetPolygonWorkspace");
   });
 
   test("the existing duplicate-creation guard remains intact", () => {

@@ -42,10 +42,10 @@ describe("Phase C1 - Cabinet individual local workspace", () => {
     expect(projectList).toContain("<CabinetIndividualWorkspace");
   });
 
-  test("polygon Cabinet mode retains the placeholder", () => {
+  test("polygon Cabinet mode remains isolated from the Individual workspace", () => {
     expect(projectList).toContain(
       'projectCreationMode === "CABINET" && cabinetGeometryType === "poligono"'
     );
-    expect(projectList).toContain("El espacio de trabajo de Gabinete se habilitará en la siguiente fase.");
+    expect(projectList).toContain("<CabinetPolygonWorkspace");
   });
 });

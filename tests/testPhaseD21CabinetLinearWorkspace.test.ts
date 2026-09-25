@@ -34,7 +34,7 @@ describe("Phase D2.1 - Cabinet linear local workspace", () => {
     expect(projectList).toContain('projectCreationMode === "CABINET" && cabinetGeometryType === "individual"');
     expect(projectList).toContain("<CabinetIndividualWorkspace");
     expect(projectList).toContain('projectCreationMode === "CABINET" && cabinetGeometryType === "poligono"');
-    expect(projectList).toContain("El espacio de trabajo de Gabinete se habilitará en la siguiente fase.");
+    expect(projectList).toContain("<CabinetPolygonWorkspace");
   });
 
   test("NI, PI and NF preserve valid ordered corridors", () => {
