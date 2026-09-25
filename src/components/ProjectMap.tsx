@@ -118,6 +118,7 @@ const darkMapStyles = [
 ];
 
 const GOOGLE_MAPS_LIBRARIES: any = ["places", "visualization", "drawing"];
+const CANONICAL_VIEWPORT_PADDING_PX = 48;
 
 export function ProjectMap({
   geometryType,
@@ -155,6 +156,7 @@ export function ProjectMap({
   const [selectedOsintSingle, setSelectedOsintSingle] = useState<any | null>(null);
   const [selectedOsintGroup, setSelectedOsintGroup] = useState<any | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
   const canonicalCoordinates = useMemo(
     () => getCanonicalGeographyCoordinates(canonicalGeography),
@@ -368,11 +370,48 @@ export function ProjectMap({
   ]);
 
   useEffect(() => {
-    if (!isLoaded || !mapRef.current || !canonicalViewport.bounds || canonicalCoordinates.length < 2) return;
+    if (
+      !isLoaded
+      || !mapInstance
+      || mapRef.current !== mapInstance
+      || !canonicalViewport.bounds
+      || canonicalCoordinates.length < 2
+    ) return;
+
     const bounds = new google.maps.LatLngBounds();
     canonicalCoordinates.forEach((point) => bounds.extend(point));
-    mapRef.current.fitBounds(bounds);
-  }, [isLoaded, canonicalViewport, canonicalCoordinates]);
+
+    const idleListener = google.maps.event.addListenerOnce(mapInstance, "idle", () => {
+      const finalCenter = mapInstance.getCenter();
+      const finalBounds = mapInstance.getBounds();
+
+      console.info("[PROJECTMAP-VIEWPORT-IDLE]", {
+        zoom: mapInstance.getZoom() ?? null,
+        center: finalCenter ? { lat: finalCenter.lat(), lng: finalCenter.lng() } : null,
+        bounds: finalBounds ? {
+          north: finalBounds.getNorthEast().lat(),
+          east: finalBounds.getNorthEast().lng(),
+          south: finalBounds.getSouthWest().lat(),
+          west: finalBounds.getSouthWest().lng(),
+        } : null,
+        canonicalCoordinatesLength: canonicalCoordinates.length,
+        uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length,
+        geometryType,
+        fitBoundsApplied: true,
+      });
+    });
+
+    mapInstance.fitBounds(bounds, CANONICAL_VIEWPORT_PADDING_PX);
+
+    return () => idleListener.remove();
+  }, [
+    isLoaded,
+    mapInstance,
+    canonicalViewport,
+    canonicalCoordinates,
+    uniqueCanonicalCoordinates.length,
+    geometryType,
+  ]);
 
   // Carga y cálculo de densidad analítica de calor compatible con Google Maps JS v3.65+ (GEO-ENH-01 v1.1)
   const heatmapDensityClusters = useMemo(() => {
@@ -669,9 +708,11 @@ export function ProjectMap({
         onClick={handleMapClick}
         onLoad={(map) => {
           mapRef.current = map;
+          setMapInstance(map);
         }}
         onUnmount={() => {
           mapRef.current = null;
+          setMapInstance(null);
         }}
       >
         {/* Renderizado de Capa de Densidad Analítica de Calor v1.1 (GEO-ENH-01) */}

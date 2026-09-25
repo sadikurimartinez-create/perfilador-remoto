@@ -73,4 +73,25 @@ describe("ProjectMap canonical rector overlay render contract", () => {
     expect(projectMapSource).toContain('polyline.get("zIndex")');
     expect(projectMapSource).toContain('event: "onUnmount"');
   });
+
+  test("canonical fitBounds waits for a reactive loaded map instance", () => {
+    expect(projectMapSource).toContain("const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null)");
+    expect(projectMapSource).toContain("mapRef.current !== mapInstance");
+    expect(projectMapSource).toContain("setMapInstance(map)");
+    expect(projectMapSource).toMatch(/useEffect\(\(\) => \{[\s\S]*?mapInstance\.fitBounds\(bounds, CANONICAL_VIEWPORT_PADDING_PX\);[\s\S]*?\}, \[[\s\S]*?mapInstance,[\s\S]*?canonicalViewport,[\s\S]*?canonicalCoordinates,/);
+  });
+
+  test("canonical viewport telemetry is emitted on idle after fitBounds", () => {
+    expect(projectMapSource).toContain('google.maps.event.addListenerOnce(mapInstance, "idle"');
+    expect(projectMapSource).toContain("[PROJECTMAP-VIEWPORT-IDLE]");
+    expect(projectMapSource).toContain("fitBoundsApplied: true");
+    expect(projectMapSource).toContain("uniqueCanonicalCoordinatesLength: uniqueCanonicalCoordinates.length");
+  });
+
+  test("viewport readiness does not change or deduplicate the rendered canonical path", () => {
+    expect(projectMapSource).toMatch(/const geoShapePath = useMemo\(\(\) => \{\s*if \(canonicalCoordinates\.length > 0\) return canonicalCoordinates;/);
+    expect(projectMapSource).not.toMatch(/geoShapePath[\s\S]*?return uniqueCanonicalCoordinates/);
+    expect(projectMapSource).toContain("path={geoShapePath}");
+    expect(projectMapSource).toContain("paths={geoShapePath}");
+  });
 });
