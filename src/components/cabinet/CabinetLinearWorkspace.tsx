@@ -6,7 +6,10 @@ import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoram
 import type { StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import {
   assessCorridorIntegrity,
+  confirmDraftProjectGeography,
   corridorVertexRole,
+  createDraftProjectGeography,
+  updateDraftProjectGeography,
   type CorridorVertexRole,
   type LatLngPoint,
 } from "@/utils/canonicalProjectGeography";
@@ -21,6 +24,7 @@ import {
   type CabinetContextPoi,
   type CabinetMapActionMode,
 } from "./cabinetContextPoi";
+import type { CabinetCompletionResult } from "./cabinetCompletionContract";
 
 type LinearWorkflowStep = "START" | "NEXT_NODE" | "INTERMEDIATE" | "END" | "REVIEW";
 type EditAction = "MOVE" | "ADD_PI" | "DELETE_PI" | null;
@@ -38,6 +42,7 @@ type PendingOperation =
 interface CabinetLinearWorkspaceProps {
   onBack: () => void;
   onCancel: () => void;
+  onComplete?: (result: CabinetCompletionResult) => void;
 }
 
 const GOOGLE_MAPS_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
@@ -52,7 +57,11 @@ function displayRole(role: CorridorVertexRole, index: number) {
   return `PI ${index}`;
 }
 
-export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorkspaceProps) {
+export function CabinetLinearWorkspace({
+  onBack,
+  onCancel,
+  onComplete,
+}: CabinetLinearWorkspaceProps) {
   const [vertices, setVertices] = useState<LinearVertex[]>([]);
   const [activeVertexId, setActiveVertexId] = useState<string | null>(null);
   const [captureByVertexId, setCaptureByVertexId] = useState<Record<string, StreetViewCapturePayload>>({});
@@ -349,6 +358,39 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
       ? `PI ${pendingOperation.insertIndex}`
       : workflowStep === "START" ? "NI" : workflowStep === "END" ? "NF" : `PI ${Math.max(1, vertices.length)}`;
   const mapCenter = pendingPoint ?? vertices[vertices.length - 1]?.point ?? INITIAL_CENTER;
+  const handleComplete = () => {
+    if (
+      !geometryConfirmed ||
+      !onComplete ||
+      workflowStep !== "REVIEW" ||
+      isEditing ||
+      hasPendingCandidate ||
+      poiInteractionActive ||
+      !corridorIntegrity.isValid ||
+      !allVerticesCaptured
+    ) {
+      return;
+    }
+
+    const draft = createDraftProjectGeography("lineal");
+    const populatedDraft = updateDraftProjectGeography(draft, vertexPath);
+    const confirmedDraft = confirmDraftProjectGeography(populatedDraft);
+
+    onComplete({
+      geometryType: "lineal",
+      draftGeography: confirmedDraft,
+      streetViewEvidence: vertices.map((vertex, index) => ({
+        territorialRef: {
+          geometryType: "lineal",
+          nodeId: vertex.id,
+          order: index + 1,
+          role: corridorVertexRole(index, vertices.length),
+        },
+        capture: captureByVertexId[vertex.id],
+      })),
+      contextPois: [...contextPois],
+    });
+  };
 
   return (
     <div className="w-full space-y-5">
@@ -578,6 +620,16 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
                 <CEIPOLButton type="button" variant="confirm" disabled={!canValidateGeometry || geometryConfirmed} onClick={() => setGeometryConfirmed(true)}>Validar geometría</CEIPOLButton>
                 <CEIPOLButton type="button" variant="secondary" disabled={!geometryConfirmed || isEditing || poiInteractionActive} onClick={startEditing}>Editar</CEIPOLButton>
               </div>
+              {geometryConfirmed && (
+                <CEIPOLButton
+                  type="button"
+                  variant="primary"
+                  disabled={!onComplete || isEditing || hasPendingCandidate || poiInteractionActive}
+                  onClick={handleComplete}
+                >
+                  Continuar con creación del expediente
+                </CEIPOLButton>
+              )}
             </div>
           )}
         </section>

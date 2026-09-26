@@ -1336,6 +1336,7 @@ export function ProjectList() {
         <CabinetLinearWorkspace
           onBack={() => setCabinetGeometryType(null)}
           onCancel={handleCloseCreationFlow}
+          onComplete={handleCabinetCompletion}
         />
       ) : projectCreationMode === "CABINET" && cabinetGeometryType === "poligono" ? (
         <CabinetPolygonWorkspace
