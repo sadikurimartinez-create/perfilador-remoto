@@ -3,6 +3,7 @@
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
 import { ImageDeletionGovernanceService } from "@/utils/imageDeletionGovernanceService";
 import { EvidenceRelationship } from "@/utils/evidenceRelationshipEngine";
+import type { TerritorialEvidenceReference } from "@/utils/territorialEvidenceReference";
 
 import {
   createContext,
@@ -165,6 +166,7 @@ export type AlbumPhoto = {
   lineageStatus?: LineageStatus;
   isIndependentPoi?: boolean;
   evidenceRelationship?: EvidenceRelationship | null;
+  territorialRef?: TerritorialEvidenceReference | null;
   geographyId?: string | null;
   geographyType?: CanonicalGeographyType | null;
   coordinates?: { lat: number; lng: number } | null;
@@ -408,6 +410,24 @@ type ProjectContextValue = {
       tipo?: string;
       comentario?: string;
       isIndependentPoi?: boolean;
+      territorialRef?: TerritorialEvidenceReference | null;
+      evidenceOrigin?: EvidenceOrigin;
+      collectionMethod?: CollectionMethod;
+      evidenceCategoryClass?: EvidenceCategoryClass;
+      sourceProvider?: SourceProvider;
+      confidenceLevel?: EvidenceConfidenceLevel;
+      confidencePercentage?: number;
+      confidenceFactors?: ConfidenceFactors;
+      streetViewCategory?: string;
+      streetViewSource?: string;
+      streetViewMetadata?: StreetViewMetadata;
+      humanValidationStatus?: AlbumPhoto["humanValidationStatus"];
+      validationSource?: AlbumPhoto["validationSource"];
+      lineage?: CanonicalLineageNode[];
+      lineageStatus?: LineageStatus;
+      aiAnalyticalOutput?: AiAnalyticalOutput | null;
+      analysisType?: string | null;
+      evidenceType?: string;
     }
   ) => Promise<void>;
   createGeographicEntity?: (params: {
@@ -1115,10 +1135,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             contextualizedBy: data.contextualizedBy || null,
             isContextualized: data.isContextualized || false,
             evidenceRelationship: data.evidenceRelationship || null,
+            territorialRef: data.territorialRef || null,
             evidenceType: data.evidenceType || "ANALYST_PHOTO",
             streetViewCategory: data.streetViewCategory || null,
             streetViewSource: data.streetViewSource || null,
             analysisType: data.analysisType || null,
+            evidenceOrigin: data.evidenceOrigin || null,
+            collectionMethod: data.collectionMethod || null,
+            evidenceCategoryClass: data.evidenceCategoryClass || null,
+            sourceProvider: data.sourceProvider || null,
+            confidenceLevel: data.confidenceLevel || null,
+            confidencePercentage: data.confidencePercentage ?? null,
+            confidenceFactors: data.confidenceFactors || null,
+            streetViewMetadata: data.streetViewMetadata || null,
+            aiAnalyticalOutput: data.aiAnalyticalOutput || null,
+            category: data.category || null,
+            classification: data.classification || null,
+            isStreetView: data.isStreetView === true,
             fuente: data.fuente || "Inspección de Campo",
             validado: data.validado === true,
             humanValidationStatus: data.humanValidationStatus || null,
@@ -1268,6 +1301,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       tipo?: string;
       comentario?: string;
       isIndependentPoi?: boolean;
+      territorialRef?: TerritorialEvidenceReference | null;
+      evidenceOrigin?: EvidenceOrigin;
+      collectionMethod?: CollectionMethod;
+      evidenceCategoryClass?: EvidenceCategoryClass;
+      sourceProvider?: SourceProvider;
+      confidenceLevel?: EvidenceConfidenceLevel;
+      confidencePercentage?: number;
+      confidenceFactors?: ConfidenceFactors;
+      streetViewCategory?: string;
+      streetViewSource?: string;
+      streetViewMetadata?: StreetViewMetadata;
+      humanValidationStatus?: AlbumPhoto["humanValidationStatus"];
+      validationSource?: AlbumPhoto["validationSource"];
+      lineage?: CanonicalLineageNode[];
+      lineageStatus?: LineageStatus;
+      aiAnalyticalOutput?: AiAnalyticalOutput | null;
+      analysisType?: string | null;
+      evidenceType?: string;
     }
   ) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura (Auditoría).");
@@ -1324,16 +1375,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         evidenceId: normalizedBaseEvidence.fields.evidenceId,
         sourceEvidenceId: normalizedBaseEvidence.fields.sourceEvidenceId,
         traceabilityId: normalizedBaseEvidence.fields.traceabilityId,
-        lineage: normalizedBaseEvidence.fields.lineage,
-        lineageStatus: normalizedBaseEvidence.fields.lineageStatus,
+        lineage: metadata?.lineage ?? normalizedBaseEvidence.fields.lineage,
+        lineageStatus: metadata?.lineageStatus ?? normalizedBaseEvidence.fields.lineageStatus,
         coordinates: normalizedBaseEvidence.fields.coordinates,
         evidenceClass: normalizedBaseEvidence.evidenceClass,
         createdAt: Date.now(),
         tipo: resolvedTipo,
         fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
-        evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : ((metadata as any)?.evidenceType || "ANALYST_PHOTO"),
+        evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : (metadata?.evidenceType || "ANALYST_PHOTO"),
         comentario: metadata?.comentario || "",
         isIndependentPoi: metadata?.isIndependentPoi || false,
+        territorialRef: metadata?.territorialRef ?? null,
         gpsAccuracy: metadata?.gpsAccuracy ?? null,
         gpsTimestamp: metadata?.gpsTimestamp ?? null,
         gpsSource: metadata?.gpsSource ?? "SOLO_EXIF",
@@ -1346,16 +1398,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         geographyId: project.canonicalGeography?.geographyId ?? null,
         geographyType: project.canonicalGeography?.type ?? null,
         humanValidationStatus: (metadata as any)?.humanValidationStatus || (isStreetView ? "PENDING_REVIEW" : "UNREVIEWED"),
-        validationSource: (metadata as any)?.validationSource || (isStreetView ? "CANONICAL_FIELD" : "ABSENT"),
-        streetViewCategory: (metadata as any)?.streetViewCategory || null,
-        streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
-        analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
+        validationSource: metadata?.validationSource || (isStreetView ? "CANONICAL_FIELD" : "ABSENT"),
+        evidenceOrigin: metadata?.evidenceOrigin ?? null,
+        collectionMethod: metadata?.collectionMethod ?? null,
+        evidenceCategoryClass: metadata?.evidenceCategoryClass ?? null,
+        confidenceLevel: metadata?.confidenceLevel ?? null,
+        confidencePercentage: metadata?.confidencePercentage ?? null,
+        confidenceFactors: metadata?.confidenceFactors ?? null,
+        streetViewMetadata: metadata?.streetViewMetadata ?? null,
+        aiAnalyticalOutput: metadata?.aiAnalyticalOutput ?? null,
+        streetViewCategory: metadata?.streetViewCategory || null,
+        streetViewSource: metadata?.streetViewSource || (isStreetView ? "Google Street View" : null),
+        analysisType: metadata?.analysisType || (isStreetView ? "STREET_VIEW" : null),
 
         // Regla gobernada por contrato determinista (EGE Contract Rules)
         ...(isStreetView || resolvedTipo === "REMOTE_STREET_VIEW" ? {
           category: "STREET_VIEW",
           classification: "REMOTE_VISUAL",
-          sourceProvider: "GOOGLE_STREET_VIEW",
+          sourceProvider: metadata?.sourceProvider || "GOOGLE_STREET_VIEW",
           isStreetView: true
         } : {})
     };
@@ -1382,16 +1442,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       lng,
       tipo: resolvedTipo,
       fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
-      evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : ((metadata as any)?.evidenceType || "ANALYST_PHOTO"),
+      evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : (metadata?.evidenceType || "ANALYST_PHOTO"),
       comentario: metadata?.comentario || "",
       isIndependentPoi: metadata?.isIndependentPoi || false,
+      territorialRef: metadata?.territorialRef ?? null,
       file: compressedFile,
       evidenceId: normalizedBaseEvidence.fields.evidenceId || undefined,
       sourceEvidenceId: normalizedBaseEvidence.fields.sourceEvidenceId,
       traceabilityId: normalizedBaseEvidence.fields.traceabilityId,
       expedienteId: normalizedBaseEvidence.fields.expedienteId,
-      lineage: normalizedBaseEvidence.fields.lineage,
-      lineageStatus: normalizedBaseEvidence.fields.lineageStatus,
+      lineage: metadata?.lineage ?? normalizedBaseEvidence.fields.lineage,
+      lineageStatus: metadata?.lineageStatus ?? normalizedBaseEvidence.fields.lineageStatus,
       coordinates: normalizedBaseEvidence.fields.coordinates,
       evidenceClass: normalizedBaseEvidence.evidenceClass,
       gpsAccuracy: metadata?.gpsAccuracy ?? null,
@@ -1405,15 +1466,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       validado: metadata?.validado ?? false,
       geographyId: project.canonicalGeography?.geographyId ?? null,
       geographyType: project.canonicalGeography?.type ?? null,
-      streetViewCategory: (metadata as any)?.streetViewCategory || null,
-      streetViewSource: (metadata as any)?.streetViewSource || (isStreetView ? "Google Street View" : null),
-      analysisType: (metadata as any)?.analysisType || (isStreetView ? "STREET_VIEW" : null),
+      humanValidationStatus: metadata?.humanValidationStatus || (isStreetView ? "PENDING_REVIEW" : "UNREVIEWED"),
+      validationSource: metadata?.validationSource || (isStreetView ? "CANONICAL_FIELD" : "ABSENT"),
+      evidenceOrigin: metadata?.evidenceOrigin ?? null,
+      collectionMethod: metadata?.collectionMethod ?? null,
+      evidenceCategoryClass: metadata?.evidenceCategoryClass ?? null,
+      confidenceLevel: metadata?.confidenceLevel ?? null,
+      confidencePercentage: metadata?.confidencePercentage ?? null,
+      confidenceFactors: metadata?.confidenceFactors ?? null,
+      streetViewMetadata: metadata?.streetViewMetadata ?? null,
+      aiAnalyticalOutput: metadata?.aiAnalyticalOutput ?? null,
+      streetViewCategory: metadata?.streetViewCategory || null,
+      streetViewSource: metadata?.streetViewSource || (isStreetView ? "Google Street View" : null),
+      analysisType: metadata?.analysisType || (isStreetView ? "STREET_VIEW" : null),
 
       // Regla gobernada por contrato determinista (EGE Contract Rules)
       ...(isStreetView || resolvedTipo === "REMOTE_STREET_VIEW" ? {
         category: "STREET_VIEW",
         classification: "REMOTE_VISUAL",
-        sourceProvider: "GOOGLE_STREET_VIEW",
+        sourceProvider: metadata?.sourceProvider || "GOOGLE_STREET_VIEW",
         isStreetView: true
       } : {})
     } as any, photoDocId);

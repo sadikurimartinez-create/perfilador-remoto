@@ -988,6 +988,11 @@ export function PhotoAlbum({
           streetViewCategory: albumPhoto.streetViewCategory,
           streetViewSource: albumPhoto.streetViewSource,
           streetViewMetadata: albumPhoto.streetViewMetadata,
+          humanValidationStatus: albumPhoto.humanValidationStatus,
+          validationSource: albumPhoto.validationSource,
+          lineage: albumPhoto.lineage,
+          lineageStatus: albumPhoto.lineageStatus,
+          aiAnalyticalOutput: albumPhoto.aiAnalyticalOutput,
         } as any);
         alert("Evidencia remota Street View v2.1 incorporada exitosamente al expediente.");
       }
@@ -1032,6 +1037,11 @@ export function PhotoAlbum({
             streetViewCategory: albumPhoto.streetViewCategory,
             streetViewSource: albumPhoto.streetViewSource,
             streetViewMetadata: albumPhoto.streetViewMetadata,
+            humanValidationStatus: albumPhoto.humanValidationStatus,
+            validationSource: albumPhoto.validationSource,
+            lineage: albumPhoto.lineage,
+            lineageStatus: albumPhoto.lineageStatus,
+            aiAnalyticalOutput: albumPhoto.aiAnalyticalOutput,
           } as any);
           savedCount++;
         }

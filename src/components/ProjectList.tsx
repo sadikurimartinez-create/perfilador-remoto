@@ -23,6 +23,7 @@ import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CabinetIndividualWorkspace } from "./cabinet/CabinetIndividualWorkspace";
 import { CabinetLinearWorkspace } from "./cabinet/CabinetLinearWorkspace";
 import { CabinetPolygonWorkspace } from "./cabinet/CabinetPolygonWorkspace";
+import type { CabinetCompletionResult } from "./cabinet/cabinetCompletionContract";
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import {
   buildDraftGeographyPreview,
@@ -158,6 +159,7 @@ export function ProjectList() {
   const [showCreationModeSelection, setShowCreationModeSelection] = useState(false);
   const [projectCreationMode, setProjectCreationMode] = useState<ProjectCreationMode | null>(null);
   const [cabinetGeometryType, setCabinetGeometryType] = useState<CabinetGeometryType | null>(null);
+  const [pendingCabinetResult, setPendingCabinetResult] = useState<CabinetCompletionResult | null>(null);
   const [geometryType, setGeometryType] = useState<"individual" | "lineal" | "poligono">("individual");
   const [draftGeography, setDraftGeography] = useState<DraftProjectGeography>(() => createDraftProjectGeography("individual"));
   const [draftLatInput, setDraftLatInput] = useState("");
@@ -407,6 +409,7 @@ export function ProjectList() {
   };
 
   const handleStartProjectCreation = () => {
+    setPendingCabinetResult(null);
     setProjectCreationMode(null);
     setCabinetGeometryType(null);
     setShowCreationModeSelection(true);
@@ -422,6 +425,21 @@ export function ProjectList() {
     setCabinetGeometryType(nextType);
   };
 
+  const handleCabinetCompletion = (result: CabinetCompletionResult) => {
+    setPendingCabinetResult(result);
+    setGeometryType(result.geometryType);
+    setDraftGeography(result.draftGeography);
+    setDraftWasConfirmed(result.draftGeography.confirmed);
+    setDraftLatInput("");
+    setDraftLngInput("");
+    setDraftFeedback("Geografía validada en modalidad Gabinete. Asigne nombre al expediente para continuar.");
+    setNombreInput("");
+    setShowCreationModeSelection(false);
+    setCabinetGeometryType(null);
+    setProjectCreationMode(null);
+    setShowPrompt(true);
+  };
+
   const handleBackToModeSelection = () => {
     setProjectCreationMode(null);
     setCabinetGeometryType(null);
@@ -429,6 +447,7 @@ export function ProjectList() {
   };
 
   const handleCloseCreationFlow = () => {
+    setPendingCabinetResult(null);
     setShowPrompt(false);
     setShowCreationModeSelection(false);
     setProjectCreationMode(null);
@@ -436,6 +455,7 @@ export function ProjectList() {
   };
 
   const handleNuevoProyecto = () => {
+    setPendingCabinetResult(null);
     setNombreInput("");
     setGeometryType("individual");
     setDraftGeography(createDraftProjectGeography("individual"));
@@ -562,8 +582,13 @@ export function ProjectList() {
     setIsCreatingProject(true);
     try {
       const photosToCreate = pendingPhotosRef.current;
-      const creationPreview = buildDraftGeographyPreview(draftGeography);
-      if (!geometryConfirmed || !creationPreview.canConfirm) {
+      const effectiveDraftGeography = pendingCabinetResult?.draftGeography ?? draftGeography;
+      const effectiveGeometryType = pendingCabinetResult?.geometryType ?? geometryType;
+      const creationPreview = buildDraftGeographyPreview(effectiveDraftGeography);
+      const effectiveGeometryConfirmed =
+        effectiveDraftGeography.confirmed && creationPreview.canConfirm;
+
+      if (!effectiveGeometryConfirmed || !creationPreview.canConfirm) {
         setDraftFeedback(
           "Debe definir y confirmar manualmente una geografía territorial válida antes de crear el expediente."
         );
@@ -571,20 +596,29 @@ export function ProjectList() {
         setIsCreatingProject(false);
         return;
       }
-      const confirmedDraftGeography = draftGeography;
+      const confirmedDraftGeography = effectiveDraftGeography;
       if (photosToCreate.length > 0) {
         (window as any).pendingProjectPhotos = photosToCreate.map(p => ({ ...p }));
       }
 
       const newId = await createProject({
         nombre,
-        geometryType,
+        geometryType: effectiveGeometryType,
         descripcion: "",
         draftGeography: confirmedDraftGeography,
       });
+
+      if (pendingCabinetResult) {
+        (window as any).pendingCabinetProjectData = {
+          projectId: newId,
+          result: pendingCabinetResult,
+          createdAt: Date.now(),
+        };
+      }
       photosToCreate.forEach(p => URL.revokeObjectURL(p.url));
       setShowPrompt(false);
       setNombreInput("");
+      setPendingCabinetResult(null);
       pendingPhotosRef.current = [];
       setPendingPhotos([]);
       setGeometryType("individual");
@@ -594,6 +628,7 @@ export function ProjectList() {
       setIsCreatingProject(false);
     } catch (err: any) {
       delete (window as any).pendingProjectPhotos;
+      delete (window as any).pendingCabinetProjectData;
       isCreatingProjectRef.current = false;
       setIsCreatingProject(false);
       console.error("Error creando proyecto:", err);
@@ -1295,6 +1330,7 @@ export function ProjectList() {
         <CabinetIndividualWorkspace
           onBack={() => setCabinetGeometryType(null)}
           onCancel={handleCloseCreationFlow}
+          onComplete={handleCabinetCompletion}
         />
       ) : projectCreationMode === "CABINET" && cabinetGeometryType === "lineal" ? (
         <CabinetLinearWorkspace
@@ -1339,7 +1375,46 @@ export function ProjectList() {
                 />
               </label>
 
-              <div className="geometry-selector">
+              {pendingCabinetResult && (
+                <div className="rounded-lg border border-emerald-800 bg-emerald-950/30 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                        Geografía validada en Gabinete
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">
+                        {pendingCabinetResult.geometryType === "individual"
+                          ? "Individual"
+                          : pendingCabinetResult.geometryType === "lineal"
+                            ? "Lineal"
+                            : "Polígono"}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-emerald-700 bg-emerald-900/40 px-3 py-1 text-[10px] font-black uppercase text-emerald-300">
+                      Validada y bloqueada
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 sm:grid-cols-2">
+                    <div>
+                      <span className="text-slate-500">Puntos territoriales:</span>{" "}
+                      <span className="font-mono">
+                        {pendingCabinetResult.draftGeography.points.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Origen:</span>{" "}
+                      <span className="font-semibold">Modalidad Gabinete</span>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-xs text-slate-400">
+                    La geografía territorial fue validada previamente y no puede modificarse durante la creación del expediente.
+                  </p>
+                </div>
+              )}
+
+              <div className={pendingCabinetResult ? "hidden" : "geometry-selector"}>
                 <span className="block text-sm font-medium text-slate-200 mb-2">Tipo de geometría operacional</span>
                 <div className="flex flex-col gap-2.5 text-sm text-slate-300 bg-slate-950/40 p-3 rounded-lg border border-slate-800">
                   <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
@@ -1379,7 +1454,7 @@ export function ProjectList() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <div className={pendingCabinetResult ? "hidden" : "space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3"}>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-slate-200">
                   Definición geográfica en borrador

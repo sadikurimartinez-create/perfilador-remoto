@@ -7,6 +7,8 @@ import { CEIPOLButton } from "./ui/CEIPOLButton";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
 import { isAdditionalPhotoEvidence } from "@/utils/institutionalProductsUi";
+import { mapStreetViewToAlbumPhoto } from "@/modules/streetView/streetViewMapper";
+import type { CabinetCompletionResult } from "./cabinet/cabinetCompletionContract";
 
 function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
   return new Promise((resolve, reject) => {
@@ -145,7 +147,7 @@ function isPendingProjectPhotoBridgeItem(value: unknown): value is PendingProjec
 }
 
 export function CaptureAndAddPhoto() {
-  const { uploadAndAddPhoto, project, album, uploadDocument } = useProject();
+  const { uploadAndAddPhoto, createGeographicEntity, project, album, uploadDocument } = useProject();
   const minimumPhotos = {
     individual: 1,
     lineal: 2,
@@ -169,6 +171,8 @@ export function CaptureAndAddPhoto() {
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const pendingProcessed = useRef(false);
+  const cabinetProcessing = useRef(false);
+  const [cabinetRetryNonce, setCabinetRetryNonce] = useState(0);
   
   const [isUploadingEvidencia, setIsUploadingEvidencia] = useState(false);
   
@@ -371,6 +375,172 @@ export function CaptureAndAddPhoto() {
     await processFiles(files, isLiveCapture);
     e.target.value = "";
   };
+
+  useEffect(() => {
+    if (!project || cabinetProcessing.current) return;
+
+    const pending = (window as any).pendingCabinetProjectData as
+      | {
+          projectId: string;
+          result: CabinetCompletionResult;
+          createdAt: number;
+          completedEvidenceIndexes?: number[];
+          completedPoiIds?: string[];
+          retryCount?: number;
+        }
+      | undefined;
+
+    if (!pending) return;
+    if (pending.projectId !== project.id) return;
+
+    if (pending.result.geometryType !== "individual") {
+      console.warn(
+        "[CaptureAndAddPhoto] Puente Gabinete recibido para geometría todavía no habilitada:",
+        pending.result.geometryType
+      );
+      return;
+    }
+
+    if (!createGeographicEntity) {
+      setError("No está disponible el servicio rector para persistir POIs de Gabinete.");
+      return;
+    }
+
+    cabinetProcessing.current = true;
+
+    const processCabinetData = async () => {
+      try {
+        const completedEvidenceIndexes = Array.isArray(pending.completedEvidenceIndexes)
+          ? pending.completedEvidenceIndexes
+          : [];
+
+        const completedPoiIds = Array.isArray(pending.completedPoiIds)
+          ? pending.completedPoiIds
+          : [];
+
+        pending.completedEvidenceIndexes = completedEvidenceIndexes;
+        pending.completedPoiIds = completedPoiIds;
+
+        for (let index = 0; index < pending.result.streetViewEvidence.length; index++) {
+          if (completedEvidenceIndexes.includes(index)) continue;
+
+          const evidence = pending.result.streetViewEvidence[index];
+
+          const capture = {
+            ...evidence.capture,
+            geographyId:
+              evidence.capture.geographyId ??
+              project.canonicalGeography?.geographyId ??
+              null,
+          };
+
+          const albumPhoto = mapStreetViewToAlbumPhoto(capture);
+
+          const blobResponse = await fetch(albumPhoto.previewUrl);
+
+          if (!blobResponse.ok) {
+            throw new Error(
+              `No se pudo materializar la evidencia Street View de Gabinete (${blobResponse.status}).`
+            );
+          }
+
+          const blob = await blobResponse.blob();
+
+          const file = new File(
+            [blob],
+            `Gabinete_StreetView_${project.id}_${index + 1}.jpg`,
+            { type: blob.type || "image/jpeg" }
+          );
+
+          await uploadAndAddPhoto(
+            file,
+            albumPhoto.lat as number,
+            albumPhoto.lng as number,
+            {
+              tipo: albumPhoto.tipo,
+              comentario: albumPhoto.comentario,
+              gpsAccuracy: albumPhoto.gpsAccuracy ?? null,
+              gpsTimestamp: albumPhoto.gpsTimestamp ?? null,
+              gpsSource: albumPhoto.gpsSource,
+              validado: albumPhoto.validado ?? true,
+              isIndependentPoi: albumPhoto.isIndependentPoi ?? true,
+              territorialRef: evidence.territorialRef,
+              evidenceOrigin: albumPhoto.evidenceOrigin,
+              collectionMethod: albumPhoto.collectionMethod,
+              evidenceCategoryClass: albumPhoto.evidenceCategoryClass,
+              sourceProvider: albumPhoto.sourceProvider,
+              confidenceLevel: albumPhoto.confidenceLevel,
+              confidencePercentage: albumPhoto.confidencePercentage,
+              confidenceFactors: albumPhoto.confidenceFactors,
+              streetViewCategory: albumPhoto.streetViewCategory,
+              streetViewSource: albumPhoto.streetViewSource,
+              streetViewMetadata: albumPhoto.streetViewMetadata,
+              humanValidationStatus: albumPhoto.humanValidationStatus,
+              validationSource: albumPhoto.validationSource,
+              lineage: albumPhoto.lineage,
+              lineageStatus: albumPhoto.lineageStatus,
+              aiAnalyticalOutput: albumPhoto.aiAnalyticalOutput,
+            }
+          );
+
+          completedEvidenceIndexes.push(index);
+        }
+
+        for (const poi of pending.result.contextPois) {
+          if (completedPoiIds.includes(poi.id)) continue;
+
+          await createGeographicEntity({
+            lat: poi.point.lat,
+            lng: poi.point.lng,
+            type: "POI",
+            name: poi.label,
+            comentario: poi.description || poi.label,
+            isIndependentPoi: true,
+            isVertex: false,
+          });
+
+          completedPoiIds.push(poi.id);
+        }
+
+        pending.retryCount = 0;
+        delete (window as any).pendingCabinetProjectData;
+
+        setError(null);
+        setToast({
+          type: "success",
+          message: "Expediente Gabinete integrado: geometría, Street View y POIs persistidos correctamente.",
+        });
+      } catch (err) {
+        console.error(
+          "[CaptureAndAddPhoto] Error integrando datos pendientes de Gabinete:",
+          err
+        );
+
+        const nextRetryCount = (pending.retryCount ?? 0) + 1;
+        pending.retryCount = nextRetryCount;
+
+        if (nextRetryCount < 3) {
+          setError(
+            `Error temporal integrando Gabinete. Reintento ${nextRetryCount + 1} de 3 en curso.`
+          );
+
+          window.setTimeout(() => {
+            setCabinetRetryNonce((value) => value + 1);
+          }, 1500);
+        } else {
+          setError(
+            err instanceof Error
+              ? `${err.message} Se agotaron 3 intentos automáticos; los datos pendientes se conservan en esta sesión.`
+              : "Error al integrar la evidencia pendiente de Gabinete. Se agotaron 3 intentos automáticos."
+          );
+        }
+      } finally {
+        cabinetProcessing.current = false;
+      }
+    };
+
+    void processCabinetData();
+  }, [project, uploadAndAddPhoto, createGeographicEntity, cabinetRetryNonce]);
 
   useEffect(() => {
     const pending = (window as any).pendingProjectPhotos;

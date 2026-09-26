@@ -6,7 +6,13 @@ import { StreetViewPanoramaPicker } from "@/modules/streetView/streetViewPanoram
 import type { StreetViewCapturePayload } from "@/modules/streetView/streetViewMapper";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 import { CEIPOLConfirmModal } from "@/components/ui/CEIPOLConfirmModal";
-import type { LatLngPoint } from "@/utils/canonicalProjectGeography";
+import {
+  confirmDraftProjectGeography,
+  createDraftProjectGeography,
+  updateDraftProjectGeography,
+  type LatLngPoint,
+} from "@/utils/canonicalProjectGeography";
+import type { CabinetCompletionResult } from "./cabinetCompletionContract";
 import {
   createCabinetContextPoi,
   createCabinetContextPoiId,
@@ -19,6 +25,7 @@ import {
 interface CabinetIndividualWorkspaceProps {
   onBack: () => void;
   onCancel: () => void;
+  onComplete?: (result: CabinetCompletionResult) => void;
 }
 
 const INITIAL_CENTER: LatLngPoint = { lat: 21.8853, lng: -102.2916 };
@@ -27,6 +34,7 @@ const MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
 export function CabinetIndividualWorkspace({
   onBack,
   onCancel,
+  onComplete,
 }: CabinetIndividualWorkspaceProps) {
   const [candidate, setCandidate] = useState<LatLngPoint | null>(null);
   const [isStreetViewOpen, setIsStreetViewOpen] = useState(false);
@@ -145,6 +153,31 @@ export function CabinetIndividualWorkspace({
     setCandidate(null);
     setValidated(false);
     setIsStreetViewOpen(false);
+  };
+
+  const handleComplete = () => {
+    if (!candidate || !capture || !validated || !onComplete) return;
+
+    const draft = createDraftProjectGeography("individual");
+    const populatedDraft = updateDraftProjectGeography(draft, [candidate]);
+    const confirmedDraft = confirmDraftProjectGeography(populatedDraft);
+
+    onComplete({
+      geometryType: "individual",
+      draftGeography: confirmedDraft,
+      streetViewEvidence: [
+        {
+          territorialRef: {
+            geometryType: "individual",
+            nodeId: "INDIVIDUAL",
+            order: 1,
+            role: "POINT",
+          },
+          capture,
+        },
+      ],
+      contextPois: [...contextPois],
+    });
   };
 
   return (
@@ -325,6 +358,14 @@ export function CabinetIndividualWorkspace({
                   Cambiar punto
                 </CEIPOLButton>
               </div>
+              <CEIPOLButton
+                type="button"
+                variant="primary"
+                disabled={!validated || !onComplete}
+                onClick={handleComplete}
+              >
+                Continuar con creación del expediente
+              </CEIPOLButton>
             </div>
           )}
         </section>
