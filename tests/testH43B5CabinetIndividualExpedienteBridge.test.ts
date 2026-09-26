@@ -279,4 +279,16 @@ describe("H4.3B.5A - Cabinet Individual expediente bridge", () => {
       ).toBe(2);
     }
   });
+
+  it("13. sanitizes nested undefined values before Firestore photo persistence", () => {
+    const contextSource = read("src/context/ProjectContext.tsx");
+
+    expect(contextSource).toContain("function sanitizeFirestorePayload(value: any): any {");
+    expect(contextSource).toContain("if (value === undefined) return undefined;");
+    expect(contextSource).toContain(".filter((item) => item !== undefined)");
+    expect(contextSource).toContain("Object.getPrototypeOf(value) === Object.prototype");
+    expect(contextSource).toContain("addDoc(photosColRef, sanitizeFirestorePayload(photoDocData))");
+    expect(contextSource).toContain("}, [project, addPhotoToAlbum, isReadOnly, setSelectedIds]);");
+    expect(contextSource.indexOf("function sanitizeFirestorePayload(value: any): any {")).toBeLessThan(contextSource.indexOf("export function ProjectProvider"));
+  });
 });

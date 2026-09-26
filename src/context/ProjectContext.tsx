@@ -580,6 +580,29 @@ function buildGeointSweepEventActor(user: any): string {
   return identity?.username || identity?.name || (identity?.id != null ? String(identity.id) : "UNAVAILABLE");
 }
 
+function sanitizeFirestorePayload(value: any): any {
+  if (value === undefined) return undefined;
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeFirestorePayload(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, item]) => [key, sanitizeFirestorePayload(item)])
+        .filter(([, item]) => item !== undefined),
+    );
+  }
+
+  return value;
+}
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -1420,7 +1443,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         } : {})
     };
     const photoDocRef = await persistPhotoMetadataWithStorageRollback({
-      persistMetadata: () => addDoc(photosColRef, photoDocData),
+      persistMetadata: () => addDoc(photosColRef, sanitizeFirestorePayload(photoDocData)),
       cleanupStorage: () => deleteObject(snapshot.ref),
     });
     photoDocId = photoDocRef.id;
