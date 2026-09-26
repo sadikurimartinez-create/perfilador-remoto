@@ -40,6 +40,8 @@ interface CabinetLinearWorkspaceProps {
   onCancel: () => void;
 }
 
+const GOOGLE_MAPS_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
+
 const INITIAL_CENTER: LatLngPoint = { lat: 21.8853, lng: -102.2916 };
 const MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
 const MAX_INSERT_DISTANCE_METERS = 75;
@@ -84,6 +86,7 @@ export function CabinetLinearWorkspace({ onBack, onCancel }: CabinetLinearWorksp
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: apiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const vertexPath = useMemo(() => vertices.map((vertex) => vertex.point), [vertices]);
