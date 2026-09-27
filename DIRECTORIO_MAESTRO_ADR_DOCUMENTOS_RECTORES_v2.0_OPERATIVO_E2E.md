@@ -1369,3 +1369,27 @@ Antes de crear un nuevo motor, servicio, adapter, panel, workflow, colección o 
 - origin/main: `94c3f781ebd34f2a1fc5fa78e2d9c3a024bc6099`
 - Relación: HEAD está 2 commits adelante y 0 atrás.
 - Vercel Production: NO VERIFICABLE con la evidencia local disponible.
+
+## ACTUALIZACION DOCUMENTAL - 27/09/2026
+
+### CERT-011 - GABINETE Geometry & Expediente Final Certification
+
+| Campo | Valor |
+|---|---|
+| ID | CERT-011 |
+| Documento | GABINETE Geometry & Expediente Final Certification |
+| Ruta | docs/GABINETE-GEOMETRY-EXPEDIENTE-FINAL-CERTIFICATION.md |
+| Tipo | Certificacion |
+| Estado | CERTIFICATION |
+| Area regulada | GABINETE - geometria Individual, Lineal y Poligono hasta creacion real de expediente |
+| Baseline funcional certificada | 0d57d77096833ae7df2b2660465b98e7ae06c10c |
+| Certificado | Si |
+| Estado operativo | PRODUCTION READY |
+| Gobernanza | FROZEN |
+| Validacion | Suites GABINETE + TypeScript + build + E2E funcional de las tres geometrias |
+| Regla | No reabrir ni reimplementar estas geometrías salvo regresion demostrada o nueva decision arquitectonica formal |
+| Pendiente transversal | Auditoria de todos los consumidores compartidos de streetViewPanoramaPicker.tsx antes de certificar GABINETE integral |
+
+**Precedencia aplicable:** ADR-000 -> Manual rector -> ADR vigente -> CERT-011 -> implementacion certificada.
+
+**Nota:** esta actualizacion no elimina ni reescribe registros historicos anteriores.

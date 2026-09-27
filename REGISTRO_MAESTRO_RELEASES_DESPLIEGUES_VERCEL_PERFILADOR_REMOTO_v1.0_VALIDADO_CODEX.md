@@ -369,3 +369,28 @@ NINGÚN BLOQUEADOR DE CÓDIGO PRODUCTIVO FUE MODIFICADO EN ESTA AUDITORÍA.
 - Divergencia: `0 behind / 2 ahead`.
 - E2E-004 y ADR-INC-001 aún no están publicados en `origin/main`.
 - Ninguno de estos commits puede declararse Vercel Production hasta contar con evidencia directa de deployment.
+
+## 24. ACTUALIZACION DE TRAZABILIDAD - 27/09/2026
+
+### GABINETE Geometry & Expediente v1.0
+
+| Campo | Valor |
+|---|---|
+| Fecha | 2026-09-27 |
+| Subsistema | GABINETE - Individual / Lineal / Poligono |
+| Baseline funcional | 0d57d77096833ae7df2b2660465b98e7ae06c10c |
+| Rama | main |
+| origin/main | 0d57d77096833ae7df2b2660465b98e7ae06c10c |
+| Certificacion | docs/GABINETE-GEOMETRY-EXPEDIENTE-FINAL-CERTIFICATION.md |
+| Estado funcional | CERTIFIED |
+| Estado operativo | PRODUCTION READY |
+| Gobernanza | FROZEN |
+| Validacion automatizada | PASS - GABINETE focal/regresion + TypeScript + build |
+| Validacion funcional humana | PASS - Individual / Lineal / Poligono con creacion real de expediente |
+| Tag de congelamiento | PENDIENTE de cierre documental |
+| Deployment ID/URL | NO REGISTRADO EN ESTE CIERRE DOCUMENTAL |
+| Auditoria transversal Street View | PENDIENTE antes de certificacion integral de GABINETE |
+
+Esta entrada registra la baseline funcional certificada. No atribuye un deployment ID de Vercel no verificado documentalmente.
+
+El tag anotado de congelamiento sera creado unicamente despues del commit y push del presente cierre documental.

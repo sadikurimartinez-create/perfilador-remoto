@@ -1043,3 +1043,33 @@ EXPEDIENTES LIMPIOS
 3. Confirmar `origin/main` sin nuevos commits remotos.
 4. Publicar commits funcionales y documental en orden controlado.
 5. Verificar posteriormente deployment remoto/Vercel antes de declarar Production.
+
+## ACTUALIZACION DE CIERRE - 27/09/2026
+
+### GABINETE - GEOMETRIAS Y CREACION DE EXPEDIENTE v1.0
+
+- Estado: CERTIFIED / PRODUCTION READY / FROZEN.
+- Certificacion: docs/GABINETE-GEOMETRY-EXPEDIENTE-FINAL-CERTIFICATION.md
+- Baseline funcional certificada: 0d57d77096833ae7df2b2660465b98e7ae06c10c.
+- INDIVIDUAL iniciado desde GABINETE: CERRADO / PASS.
+- LINEAL iniciado desde GABINETE: CERRADO / PASS.
+- POLIGONO iniciado desde GABINETE: CERRADO / PASS.
+- Creacion real de expediente desde las tres geometrias: PASS.
+- Street View territorial asociado: PASS.
+- POIs contextuales independientes: PASS.
+- Persistencia gobernada: PASS.
+- Regla de congelamiento: no modificar los contratos e invariantes certificados salvo defecto demostrado o cambio formal de arquitectura.
+
+### Reconciliacion con el estado historico de arranque
+
+Los estados INDIVIDUAL / CORREDOR / POLIGONO marcados anteriormente como PENDIENTE se conservan como fotografia historica del inicio del E2E.
+
+El estado operativo vigente al 27/09/2026 para la ruta GABINETE es:
+
+INDIVIDUAL: CERTIFIED / FROZEN
+LINEAL:     CERTIFIED / FROZEN
+POLIGONO:   CERTIFIED / FROZEN
+
+### Siguiente gate
+
+Auditar transversalmente todos los consumidores compartidos de streetViewPanoramaPicker.tsx, especialmente IN SITU, antes de emitir certificacion integral de GABINETE.
