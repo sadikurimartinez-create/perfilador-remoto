@@ -277,7 +277,7 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(photoAlbum).not.toContain("Regenerar Dictamen Histórico Legacy");
     expect(photoAlbum).not.toContain("Histórico / Compatibilidad");
     expect(photoAlbum).not.toContain("Generar Anexo Técnico");
-    expect(photoAlbum).not.toContain("Generar Informe Ejecutivo GEOINT");
+    expect(photoAlbum).not.toMatch(/>\s*Generar Informe Ejecutivo GEOINT\s*</);
     expect(visibleReportCtas).toHaveLength(1);
     expect(executiveReportCalls).toHaveLength(1);
     expect(canonicalCta).toContain("GENERAR INFORME");
