@@ -54,7 +54,7 @@ describe("ADR-020.27 - No auto-sweep / operational trigger governance", () => {
 
   test("TEST 4 expedienteId change/navigation does not automatic sweep", () => {
     const source = readSource("src/components/GeographicWorkspace.tsx");
-    const expedienteEffects = (source.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[expedienteId\]\);/g) || []).join("\n");
+    const expedienteEffects = (source.match(/useEffect\(\(\) => \{[\s\S]*?fetchFindings\(\);[\s\S]*?\}, \[[^\]]*expedienteId[^\]]*\]\);/g) || []).join("\n");
 
     expect(expedienteEffects).toContain("fetchFindings");
     expect(expedienteEffects).not.toContain("executeAutomaticGeointSweep");
