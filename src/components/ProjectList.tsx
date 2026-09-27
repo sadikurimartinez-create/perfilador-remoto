@@ -1342,6 +1342,7 @@ export function ProjectList() {
         <CabinetPolygonWorkspace
           onBack={() => setCabinetGeometryType(null)}
           onCancel={handleCloseCreationFlow}
+          onComplete={handleCabinetCompletion}
         />
       ) : (
         <div className="card p-6 space-y-4 max-w-6xl w-full">

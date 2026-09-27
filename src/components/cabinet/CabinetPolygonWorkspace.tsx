@@ -9,6 +9,9 @@ import type { StreetViewCapturePayload } from "@/modules/streetView/streetViewMa
 import {
   buildDraftGeographyPreview,
   canonicalCoordinateKey,
+  confirmDraftProjectGeography,
+  createDraftProjectGeography,
+  updateDraftProjectGeography,
   type LatLngPoint,
 } from "@/utils/canonicalProjectGeography";
 import {
@@ -23,6 +26,7 @@ import {
   type CabinetContextPoi,
   type CabinetMapActionMode,
 } from "./cabinetContextPoi";
+import type { CabinetCompletionResult } from "./cabinetCompletionContract";
 
 type PolygonVertex = {
   id: string;
@@ -38,6 +42,7 @@ type PolygonPendingOperation =
 interface CabinetPolygonWorkspaceProps {
   onBack: () => void;
   onCancel: () => void;
+  onComplete?: (result: CabinetCompletionResult) => void;
 }
 
 const GOOGLE_MAPS_LIBRARIES: ("places" | "visualization" | "drawing")[] = ["places", "visualization", "drawing"];
@@ -46,7 +51,11 @@ const INITIAL_CENTER: LatLngPoint = { lat: 21.8853, lng: -102.2916 };
 const MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
 const MAX_INSERT_DISTANCE_METERS = 75;
 
-export function CabinetPolygonWorkspace({ onBack, onCancel }: CabinetPolygonWorkspaceProps) {
+export function CabinetPolygonWorkspace({
+  onBack,
+  onCancel,
+  onComplete,
+}: CabinetPolygonWorkspaceProps) {
   const [vertices, setVertices] = useState<PolygonVertex[]>([]);
   const [activeVertexId, setActiveVertexId] = useState<string | null>(null);
   const [captureByVertexId, setCaptureByVertexId] = useState<Record<string, StreetViewCapturePayload>>({});
@@ -117,6 +126,39 @@ export function CabinetPolygonWorkspace({ onBack, onCancel }: CabinetPolygonWork
     && !poiInteractionActive;
   const nextVertexLabel = `V${vertices.length + 1}`;
   const mapCenter = pendingPoint ?? vertices[vertices.length - 1]?.point ?? INITIAL_CENTER;
+  const handleComplete = () => {
+    if (
+      !geometryConfirmed ||
+      !onComplete ||
+      workflowStep !== "REVIEW" ||
+      isEditing ||
+      hasPendingCandidate ||
+      poiInteractionActive ||
+      !polygonIntegrityValid ||
+      !allVerticesCaptured
+    ) {
+      return;
+    }
+
+    const draft = createDraftProjectGeography("poligono");
+    const populatedDraft = updateDraftProjectGeography(draft, vertexPath);
+    const confirmedDraft = confirmDraftProjectGeography(populatedDraft);
+
+    onComplete({
+      geometryType: "poligono",
+      draftGeography: confirmedDraft,
+      streetViewEvidence: vertices.map((vertex, index) => ({
+        territorialRef: {
+          geometryType: "poligono",
+          nodeId: vertex.id,
+          order: index + 1,
+          role: "VERTEX",
+        },
+        capture: captureByVertexId[vertex.id],
+      })),
+      contextPois: [...contextPois],
+    });
+  };
 
   const removeCapture = (vertexId: string) => {
     setCaptureByVertexId((current) => {
@@ -599,6 +641,16 @@ export function CabinetPolygonWorkspace({ onBack, onCancel }: CabinetPolygonWork
                   <CEIPOLButton type="button" variant="secondary" disabled={hasPendingCandidate || poiInteractionActive} onClick={startEditing}>Editar</CEIPOLButton>
                   <CEIPOLButton type="button" variant="secondary" disabled={poiInteractionActive} onClick={returnToBuilding}>Volver a construcción</CEIPOLButton>
                 </div>
+              )}
+              {geometryConfirmed && (
+                <CEIPOLButton
+                  type="button"
+                  variant="primary"
+                  disabled={!onComplete || isEditing || hasPendingCandidate || poiInteractionActive}
+                  onClick={handleComplete}
+                >
+                  Continuar con creación del expediente
+                </CEIPOLButton>
               )}
             </div>
           )}

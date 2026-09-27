@@ -393,7 +393,7 @@ export function CaptureAndAddPhoto() {
     if (!pending) return;
     if (pending.projectId !== project.id) return;
 
-    if (pending.result.geometryType !== "individual" && pending.result.geometryType !== "lineal") {
+    if (pending.result.geometryType !== "individual" && pending.result.geometryType !== "lineal" && pending.result.geometryType !== "poligono") {
       console.warn(
         "[CaptureAndAddPhoto] Puente Gabinete recibido para geometría todavía no habilitada:",
         pending.result.geometryType
