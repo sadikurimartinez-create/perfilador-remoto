@@ -30,6 +30,7 @@ import {
 } from "@/utils/canonicalProjectGeography";
 import { isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
 import type { HistoricalGeographyCandidate } from "@/utils/historicalGeographyReconciliation";
+import { compactFindingRef } from "@/utils/projectRootReconciliation";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
@@ -441,6 +442,56 @@ export function GeographicWorkspace({
           const loadedFindings = Array.isArray(data) ? data : (data?.findings || []);
           console.log("[AUDIT ADR-019.5 v1.3] Hallazgos sincronizados desde backend:", loadedFindings.length);
           setFindings(loadedFindings);
+
+          const approvedRefs = loadedFindings.flatMap((finding: any) => {
+            const isApprovedFinding =
+              finding?.estado === GeointGovernanceStatus.APPROVED_EVIDENCE ||
+              String(finding?.humanValidationStatus || "").toUpperCase() === "APPROVED";
+
+            if (!isApprovedFinding) return [];
+
+            const compactRef = compactFindingRef(finding);
+            return compactRef ? [compactRef] : [];
+          });
+
+          if (approvedRefs.length > 0) {
+            const existingApprovedFindingRefs = Array.isArray(project?.approvedFindingRefs)
+              ? project.approvedFindingRefs
+              : [];
+
+            const refsByFindingId = new Map<string, any>();
+
+            [...existingApprovedFindingRefs, ...approvedRefs].forEach((ref: any) => {
+              const refId =
+                ref?.findingId ||
+                ref?.id ||
+                ref?.traceabilityId;
+
+              if (refId) {
+                refsByFindingId.set(refId, ref);
+              }
+            });
+
+            const reconciledApprovedFindingRefs =
+              [...refsByFindingId.values()];
+
+            const beforeSignature =
+              JSON.stringify(existingApprovedFindingRefs);
+
+            const afterSignature =
+              JSON.stringify(reconciledApprovedFindingRefs);
+
+            if (beforeSignature !== afterSignature) {
+              await updateProjectDetails({
+                approvedFindingRefs: reconciledApprovedFindingRefs,
+              });
+
+              console.info("[GEOINT FINDING REFS REHYDRATED]", {
+                projectId: project?.id || expedienteId,
+                approvedFindingRefsCount: reconciledApprovedFindingRefs.length,
+              });
+            }
+          }
         } else {
           console.warn("[AUDIT ADR-019.5 v1.3] Error HTTP al consultar hallazgos:", res.status);
         }
@@ -449,7 +500,7 @@ export function GeographicWorkspace({
       }
     }
     fetchFindings();
-  }, [expedienteId]);
+  }, [expedienteId, project?.id, project?.approvedFindingRefs, updateProjectDetails]);
 
   const handlePoiSelect = (poi: any) => {
     setSelectedPoi(poi);
@@ -522,32 +573,42 @@ export function GeographicWorkspace({
       return;
     }
 
-    const existingApprovedFindings = Array.isArray(project?.approvedFindings)
-      ? project.approvedFindings
+    const compactRef = compactFindingRef(savedFinding);
+
+    if (!compactRef) {
+      console.warn("[GEOINT FINDING RECONCILIATION BLOCKED] No fue posible construir referencia compacta.", {
+        projectId: project?.id || expedienteId,
+        findingId,
+      });
+      return;
+    }
+
+    const existingApprovedFindingRefs = Array.isArray(project?.approvedFindingRefs)
+      ? project.approvedFindingRefs
       : [];
 
-    const reconciledApprovedFindings = [
-      ...existingApprovedFindings.filter((item: any) => {
+    const reconciledApprovedFindingRefs = [
+      ...existingApprovedFindingRefs.filter((item: any) => {
         const currentId =
-          item?.id ||
           item?.findingId ||
+          item?.id ||
           item?.traceabilityId;
 
-        return currentId !== findingId;
+        return currentId !== compactRef.findingId;
       }),
-      savedFinding,
+      compactRef,
     ];
 
     await updateProjectDetails({
-      approvedFindings: reconciledApprovedFindings,
+      approvedFindingRefs: reconciledApprovedFindingRefs,
     });
 
-    console.info("[GEOINT FINDING RECONCILED]", {
+    console.info("[GEOINT FINDING REF RECONCILED]", {
       projectId: project?.id || expedienteId,
-      findingId,
-      approvedFindingsCount: reconciledApprovedFindings.length,
+      findingId: compactRef.findingId,
+      approvedFindingRefsCount: reconciledApprovedFindingRefs.length,
     });
-  }, [project?.id, project?.approvedFindings, expedienteId, updateProjectDetails]);
+  }, [project?.id, project?.approvedFindingRefs, expedienteId, updateProjectDetails]);
 
   const persistFindingAndReconcile = React.useCallback(async (newFinding: StreetViewFinding) => {
     try {
