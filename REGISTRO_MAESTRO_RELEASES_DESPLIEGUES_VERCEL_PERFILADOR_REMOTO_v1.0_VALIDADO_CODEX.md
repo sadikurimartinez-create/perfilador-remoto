@@ -387,10 +387,10 @@ NINGÚN BLOQUEADOR DE CÓDIGO PRODUCTIVO FUE MODIFICADO EN ESTA AUDITORÍA.
 | Gobernanza | FROZEN |
 | Validacion automatizada | PASS - GABINETE focal/regresion + TypeScript + build |
 | Validacion funcional humana | PASS - Individual / Lineal / Poligono con creacion real de expediente |
-| Tag de congelamiento | PENDIENTE de cierre documental |
+| Tag de congelamiento | GABINETE-GEOMETRY-EXPEDIENTE-v1.0 |
 | Deployment ID/URL | NO REGISTRADO EN ESTE CIERRE DOCUMENTAL |
 | Auditoria transversal Street View | PENDIENTE antes de certificacion integral de GABINETE |
 
 Esta entrada registra la baseline funcional certificada. No atribuye un deployment ID de Vercel no verificado documentalmente.
 
-El tag anotado de congelamiento sera creado unicamente despues del commit y push del presente cierre documental.
+El tag anotado rector asociado a este cierre es GABINETE-GEOMETRY-EXPEDIENTE-v1.0 y debera apuntar al commit documental final que contenga esta entrada.
