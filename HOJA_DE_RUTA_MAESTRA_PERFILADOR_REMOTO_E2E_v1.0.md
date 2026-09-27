@@ -1073,3 +1073,30 @@ POLIGONO:   CERTIFIED / FROZEN
 ### Siguiente gate
 
 Auditar transversalmente todos los consumidores compartidos de streetViewPanoramaPicker.tsx, especialmente IN SITU, antes de emitir certificacion integral de GABINETE.
+---
+
+## CIERRE INTEGRAL GABINETE - 27/09/2026
+
+Estado del subsistema GABINETE:
+
+| Componente | Estado |
+|---|---|
+| Geometria INDIVIDUAL | CERTIFIED / PRODUCTION READY / FROZEN |
+| Geometria LINEAL | CERTIFIED / PRODUCTION READY / FROZEN |
+| Geometria POLIGONO | CERTIFIED / PRODUCTION READY / FROZEN |
+| Creacion real de expediente | CERTIFIED |
+| Street View compartido | NO REGRESSION / VALIDATED |
+| PhotoAlbum consumidor transversal | VALIDATED |
+| Flujo IN SITU | PRESERVED / SEPARATE FLOW |
+| streetViewPanoramaPicker.tsx | SHARED PICKER VALIDATED |
+| Certificacion integral | docs/GABINETE-INTEGRAL-FINAL-CERTIFICATION.md |
+
+Gate transversal completado:
+
+SV-T1 -> SV-T2 -> SV-T3 -> TypeScript -> SV-T4 Build -> SV-T5 Production -> SV-T6 -> SV-T6A
+
+Resultado final:
+
+GABINETE INTEGRAL = CERTIFIED / PRODUCTION READY / FROZEN
+
+La auditoria transversal que permanecia pendiente despues del congelamiento GABINETE-GEOMETRY-EXPEDIENTE-v1.0 queda formalmente satisfecha.

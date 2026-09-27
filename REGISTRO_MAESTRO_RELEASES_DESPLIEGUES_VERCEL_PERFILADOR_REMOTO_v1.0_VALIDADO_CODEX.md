@@ -394,3 +394,48 @@ NINGÚN BLOQUEADOR DE CÓDIGO PRODUCTIVO FUE MODIFICADO EN ESTA AUDITORÍA.
 Esta entrada registra la baseline funcional certificada. No atribuye un deployment ID de Vercel no verificado documentalmente.
 
 El tag anotado rector asociado a este cierre es GABINETE-GEOMETRY-EXPEDIENTE-v1.0 y debera apuntar al commit documental final que contenga esta entrada.
+---
+
+## 25. CERTIFICACION INTEGRAL GABINETE - 27/09/2026
+
+### 25.1 Cierre documental integral
+
+| Campo | Valor |
+|---|---|
+| Subsistema | GABINETE |
+| Certificacion | Integral Final Certification v1.0 |
+| Documento | docs/GABINETE-INTEGRAL-FINAL-CERTIFICATION.md |
+| Baseline previa | a32504a024d5c21ab801665ab13c4326345b8919 |
+| Certificacion anterior | GABINETE Geometry & Expediente v1.0 |
+| Tag anterior | GABINETE-GEOMETRY-EXPEDIENTE-v1.0 |
+| Estado | CERTIFIED / PRODUCTION READY / FROZEN |
+| Shared Street View Picker | NO REGRESSION / VALIDATED |
+| IN SITU | PRESERVED / SEPARATE FLOW |
+| Validacion focal | 7 suites / 92 tests PASS |
+| TypeScript | PASS |
+| Build | PASS |
+| Validacion Production | SV-T5 PERFECTO |
+
+### 25.2 Trazabilidad transversal
+
+SV-T1: inventario de consumidores - PASS.
+
+SV-T2: trazabilidad PhotoAlbum / Street View / IN SITU - PASS.
+
+SV-T3: regresion focal, 7 suites y 92 pruebas - PASS.
+
+TypeScript: npx tsc --noEmit - PASS.
+
+SV-T4: npm run build - PASS.
+
+SV-T5: validacion funcional manual en Production - PERFECTO.
+
+SV-T6 / SV-T6A: auditoria documental y matriz rectora - PASS.
+
+### 25.3 Regla de continuidad
+
+El tag GABINETE-GEOMETRY-EXPEDIENTE-v1.0 permanece inmutable y conserva el congelamiento historico de Geometrias y Creacion de Expediente.
+
+La certificacion integral documenta el cierre del gate transversal Street View que quedo expresamente fuera de aquel tag.
+
+Cualquier tag integral posterior debera crearse unicamente despues del commit y push del presente cierre documental y debera apuntar al commit final que contenga esta certificacion y los tres registros rectores actualizados.

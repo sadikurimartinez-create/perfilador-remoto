@@ -1393,3 +1393,25 @@ Antes de crear un nuevo motor, servicio, adapter, panel, workflow, colección o 
 **Precedencia aplicable:** ADR-000 -> Manual rector -> ADR vigente -> CERT-011 -> implementacion certificada.
 
 **Nota:** esta actualizacion no elimina ni reescribe registros historicos anteriores.
+---
+
+## ACTUALIZACION DOCUMENTAL - 27/09/2026
+
+### CERT-012 - GABINETE Integral Final Certification
+
+| Campo | Valor |
+|---|---|
+| Certificacion | GABINETE Integral Final Certification |
+| Documento | docs/GABINETE-INTEGRAL-FINAL-CERTIFICATION.md |
+| Version | v1.0 |
+| Estado | CERTIFIED / PRODUCTION READY / FROZEN |
+| Street View compartido | NO REGRESSION / VALIDATED |
+| IN SITU | PRESERVED / SEPARATE FLOW |
+| Geometrias | INDIVIDUAL / LINEAL / POLIGONO CERTIFIED |
+| Baseline documental previa | a32504a024d5c21ab801665ab13c4326345b8919 |
+| Certificacion previa | CERT-011 - GABINETE Geometry & Expediente Final Certification |
+| Tag previo | GABINETE-GEOMETRY-EXPEDIENTE-v1.0 |
+
+La auditoria transversal obligatoria de todos los consumidores de streetViewPanoramaPicker.tsx fue completada mediante SV-T1 a SV-T6A. Se ratifico que PhotoAlbum utiliza el picker dentro del flujo de evidencia remota Street View y no sustituye la captura primaria IN SITU.
+
+El certificado integral extiende el alcance documental sin reescribir ni mover el tag previo GABINETE-GEOMETRY-EXPEDIENTE-v1.0.
