@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse } from "csv-parse/sync";
-import { VertexAI } from "@google-cloud/vertexai";
-import { GCP_PROJECT_ID, GCP_LOCATION, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+import { GoogleGenAI } from "@google/genai";
+import { GCP_PROJECT_ID, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
 import { matchPandillasDatasetRows } from "@/modules/pandillas/pandillas.fusion";
 import { GangEntity } from "@/modules/pandillas/pandillas.mapper";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
@@ -284,20 +284,25 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
             private_key: GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
           },
         };
-        const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION, googleAuthOptions: authOptions });
-        const model = vertexAI.getGenerativeModel({
-          model: GEMINI_MODEL,
-          tools: [{ googleSearch: {} } as any],
+        const vertexAI = new GoogleGenAI({
+          vertexai: true,
+          project: GCP_PROJECT_ID,
+          location: "global",
+          googleAuthOptions: authOptions,
         });
-        
-        const result = await withProviderTimeout(model.generateContent({
-          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json"
-          }
-        }));
-        const responseText = result.response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+        const result = await withProviderTimeout(
+          vertexAI.models.generateContent({
+            model: GEMINI_MODEL,
+            contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+            config: {
+              temperature: 0.2,
+              responseMimeType: "application/json",
+              tools: [{ googleSearch: {} }],
+            },
+          })
+        );
+        const responseText = result.text || "";
         console.log("[API Pandillas] Respuesta cruda de Vertex AI recibida.");
         const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
         parsedResult = JSON.parse(cleanJson);
