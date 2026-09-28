@@ -314,7 +314,9 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
           source: "PANDILLAS_SWEEP_PROVIDER",
         };
       } catch (vertexErr: any) {
-        if (vertexErr?.name === "PandillasProviderTimeout") throw vertexErr;
+        if (vertexErr?.name === "PandillasProviderTimeout") {
+          console.warn("[API Pandillas] Vertex AI excedió su presupuesto temporal; activando fallback REST gobernado.");
+        }
         console.warn("[API Pandillas] Vertex AI generation failed, falling back to REST API:", vertexErr.message);
       }
     }

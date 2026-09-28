@@ -7,7 +7,7 @@ export type PandillasSweepStatus =
   | "VALIDATION_ERROR";
 
 export const PANDILLAS_SWEEP_CLIENT_TIMEOUT_MS = 55000;
-export const PANDILLAS_PROVIDER_TIMEOUT_MS = 55000;
+export const PANDILLAS_PROVIDER_TIMEOUT_MS = 25000;
 
 export class PandillasSweepError extends Error {
   constructor(
