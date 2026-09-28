@@ -225,7 +225,7 @@ describe("P1-E Pandillas non-blocking lifecycle", () => {
     expect(body.sweepStatus).toBe("SUCCESS");
     expect(body.providerProvenance).toMatchObject({
       provider: "GEMINI_REST",
-      model: "gemini-test",
+      model: "gemini-3.1-flash-lite",
       source: "PANDILLAS_SWEEP_PROVIDER",
     });
     expect(typeof body.providerProvenance.generatedAt).toBe("string");

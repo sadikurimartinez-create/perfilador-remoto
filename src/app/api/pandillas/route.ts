@@ -7,6 +7,11 @@ import path from "node:path";
 import { parse } from "csv-parse/sync";
 import { GoogleGenAI } from "@google/genai";
 import { GCP_PROJECT_ID, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
+
+const PANDILLAS_REST_FALLBACK_MODEL =
+  (process.env.PANDILLAS_REST_FALLBACK_MODEL || "gemini-3.1-flash-lite")
+    .trim()
+    .replace(/^models\//, "");
 import { matchPandillasDatasetRows } from "@/modules/pandillas/pandillas.fusion";
 import { GangEntity } from "@/modules/pandillas/pandillas.mapper";
 import { validateGeoIntegrity } from "@/utils/geoIntegrityEngine";
@@ -326,13 +331,13 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
       if (apiKey) {
         try {
           console.log("[API Pandillas] Calling Gemini REST API...");
-          const responseText = await callGeminiRestApi(fullPrompt, GEMINI_MODEL, apiKey);
+          const responseText = await callGeminiRestApi(fullPrompt, PANDILLAS_REST_FALLBACK_MODEL, apiKey);
           const cleanJson = responseText.replace(/```json/gi, "").replace(/```/g, "").trim();
           parsedResult = JSON.parse(cleanJson);
           isAiGenerated = true;
           providerProvenance = {
             provider: "GEMINI_REST",
-            model: GEMINI_MODEL,
+            model: PANDILLAS_REST_FALLBACK_MODEL,
             generatedAt: new Date().toISOString(),
             source: "PANDILLAS_SWEEP_PROVIDER",
           };
