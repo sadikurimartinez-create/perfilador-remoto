@@ -18,6 +18,32 @@ jest.mock("@/lib/geminiEnv", () => ({
   GCP_PRIVATE_KEY: "",
 }));
 
+jest.mock("@/lib/pandillas/pandillasDatasetLoader", () => ({
+  loadPandillasDatasetBuffer: jest.fn(async () => {
+    const XLSX = require("xlsx");
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["AreaInfluencia", "Pandilla"],
+      ["Subheader Area", "Subheader Pandilla"],
+    ]);
+
+    XLSX.utils.book_append_sheet(workbook, sheet, "INVENTARIO");
+
+    return {
+      buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+      provenance: {
+        datasetAvailable: true,
+        source: "GCS_PRIVATE_BUCKET",
+        bucket: "TEST_BUCKET",
+        object: "INVENTARIO PANDILLAS.xlsx",
+        version: "TEST_FIXTURE",
+        hash: "TEST_FIXTURE_HASH",
+        loadedAt: "2026-09-28T00:00:00.000Z",
+        recordCount: 0,
+      },
+    };
+  }),
+}));
 jest.mock("@google-cloud/vertexai", () => ({ VertexAI: jest.fn() }));
 
 jest.mock("exifr", () => ({

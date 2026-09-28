@@ -2,8 +2,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { loadPandillasDatasetBuffer } from "@/lib/pandillas/pandillasDatasetLoader";
 import { parse } from "csv-parse/sync";
 import { GoogleGenAI } from "@google/genai";
 import { GCP_PROJECT_ID, GEMINI_MODEL, GCP_CLIENT_EMAIL, GCP_PRIVATE_KEY } from "@/lib/geminiEnv";
@@ -132,31 +131,25 @@ export async function POST(req: Request) {
       estatus: body.estatus || "Sin determinar"
     };
 
-    // 1. CARGAR Y PARSEAR EL DATASET LOCAL DESDE EXCEL (INVENTARIO PANDILLAS.xlsx)
+    // 1. CARGAR Y PARSEAR EL DATASET INSTITUCIONAL PRIVADO DESDE GCS
     const csvRows: any[] = [];
-    let xlsxPath = path.join(process.cwd(), "INVENTARIO PANDILLAS.xlsx");
-    
+    let datasetProvenance: any = null;
+
     try {
-      let fileBuffer;
-      try {
-        fileBuffer = await fs.readFile(xlsxPath);
-      } catch (e) {
-        // Local Windows absolute path fallback
-        xlsxPath = "C:\\Users\\sadi7\\OneDrive\\Desktop\\ECOSISTEMA SAI\\PERFIL REMOTO\\INVENTARIO PANDILLAS.xlsx";
-        fileBuffer = await fs.readFile(xlsxPath);
-      }
-      
+      const loadedDataset = await loadPandillasDatasetBuffer();
+      const fileBuffer = loadedDataset.buffer;
+
       const XLSX = await import("xlsx");
       const workbook = XLSX.read(fileBuffer, { type: "buffer" });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rawAoA = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-      
+
       // Data rows start from index 2 (row 0 is main headers, row 1 is sub-headers)
       for (let i = 2; i < rawAoA.length; i++) {
         const row = rawAoA[i];
         if (!row || row.length === 0) continue;
-        
+
         csvRows.push({
           AreaInfluencia: String(row[0] || "").trim(),
           Pandilla: String(row[1] || "").trim(),
@@ -178,11 +171,41 @@ export async function POST(req: Request) {
           Lng: row[27] !== undefined ? String(row[27]).trim() : ""
         });
       }
-      console.log(`[API Pandillas] XLSX cargado con éxito. Total registros: ${csvRows.length}`);
-    } catch (err) {
-      console.warn("[API Pandillas] No se pudo leer el archivo XLSX. Continuando con datos vacíos.", err);
-    }
 
+      datasetProvenance = {
+        ...loadedDataset.provenance,
+        recordCount: csvRows.length,
+      };
+
+      console.log(
+        `[API Pandillas] Dataset institucional privado cargado. Total registros: ${csvRows.length}`
+      );
+    } catch (err: any) {
+      console.error("[API Pandillas] Dataset institucional no disponible.", err);
+
+      return NextResponse.json(
+        {
+          error: "PANDILLAS_DATASET_UNAVAILABLE",
+          analysisReadiness: "NOT_READY",
+          sweepStatus: "NOT_CONFIGURED",
+          isAiGenerated: false,
+          datasetProvenance: {
+            datasetAvailable: false,
+            source: "GCS_PRIVATE_BUCKET",
+            bucket: "perfilador-remoto-pandillas-dataset",
+            object: "INVENTARIO PANDILLAS.xlsx",
+            version: "INVENTARIO_PANDILLAS_R6.2",
+            hash: null,
+            expectedHash:
+              process.env.PANDILLAS_DATASET_SHA256?.trim() ||
+              "D4584B334624748C0F4D31592FFFAD2DD2507163102B18882094C613DECF0D62",
+            loadedAt: new Date().toISOString(),
+            recordCount: 0,
+          }
+        },
+        { status: 503 }
+      );
+    }
     // 2. MATCH GEOGRÁFICO Y CORRELACIÓN DE DOMICILIOS
     // Primero intentamos emparejar por el nombre de la pandilla
     const matchesCsv = matchPandillasDatasetRows(csvRows, nombre, zonaInfluencia);
@@ -359,6 +382,7 @@ Ejecuta un barrido inteligente OSINT mediante Google Search sobre la pandilla "$
         isAiGenerated: true,
         sweepStatus: isEmpty ? "EMPTY" : "SUCCESS",
         providerProvenance,
+        datasetProvenance,
       });
     } else {
       console.warn("[API Pandillas] Los servicios de IA no están disponibles. El análisis queda NOT_READY.");
