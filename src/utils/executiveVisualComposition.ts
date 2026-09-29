@@ -287,6 +287,13 @@ function headlineFromFinding(findings: ExecutiveFinding[], relatedIds: string[])
 }
 
 function duplicateKey(candidate: Candidate): string {
+  if (
+    candidate.visualType === "STATISTICAL_CHART" &&
+    clean(candidate.chartKind)
+  ) {
+    return `${candidate.visualType}:${clean(candidate.chartKind)}:${candidate.id}`;
+  }
+
   return `${candidate.visualType}:${candidate.reference || candidate.sourceItemId || candidate.id}`;
 }
 
@@ -515,7 +522,7 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
     ...asArray<string>(item?.datasetSourceRefs),
   ]);
 
-  return {
+  const candidate: Candidate = {
     id: itemId(item, `input-visual-${index + 1}`),
     kind: "INPUT_VISUAL_PRODUCT",
     visualType: classifyVisualType(item),
@@ -543,6 +550,12 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
     chartKind: clean(item?.kind),
     publicationEligibility: clean(item?.publicationEligibility),
   };
+
+  if (isGovernedDescriptiveStatisticalChart(candidate)) {
+    candidate.score = 80 - index;
+  }
+
+  return candidate;
 }
 
 function isGovernedDescriptiveStatisticalChart(candidate: Candidate): boolean {
@@ -688,9 +701,29 @@ export function buildExecutiveVisualComposition(
   const secondaryBudget = Math.max(0, maxVisuals - 1);
   const priorityFindingIds = executiveModel.findings.map((finding) => finding.findingId);
   const decisionLabels = executiveModel.decisionImplications.map((decision) => decision.hallazgoRelacionado);
+  const inputVisualIds = new Set(
+    institutionalInput.visualProducts
+      .map((item) => itemId(item, ""))
+      .filter(Boolean)
+  );
+  const inputVisualReferences = new Set(
+    institutionalInput.visualProducts
+      .map(visualReference)
+      .filter(Boolean)
+  );
   const candidates = [
     ...executiveModel.keyEvidence.map(candidateFromKeyEvidence),
-    ...executiveModel.visualCandidates.map(candidateFromVisual),
+    ...executiveModel.visualCandidates
+      .filter((item) => {
+        const id = itemId(item, "");
+        const reference = visualReference(item);
+
+        return !(
+          (id && inputVisualIds.has(id)) ||
+          (reference && inputVisualReferences.has(reference))
+        );
+      })
+      .map(candidateFromVisual),
     ...institutionalInput.visualProducts.map(candidateFromInputVisual),
   ].map((candidate) => ({
     ...candidate,

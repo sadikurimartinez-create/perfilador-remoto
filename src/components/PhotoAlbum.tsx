@@ -1535,7 +1535,21 @@ export function PhotoAlbum({
 
       const payloadWithCrimeIncidenceVisuals =
         await enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
-          institutionalPayload
+          institutionalPayload,
+          {
+            recoverIncompleteSnapshot: {
+              expedienteId: projectId || project?.id || "",
+              canonicalGeography: project?.canonicalGeography,
+              radiusMeters:
+                project?.canonicalGeography?.type === "POLYGON"
+                  ? null
+                  : analysisRadius,
+              requestedBy:
+                user?.id
+                  ? String(user.id)
+                  : user?.username || user?.email || "",
+            },
+          }
         );
 
       const generatedPackage = await exportToWord(
@@ -1567,7 +1581,7 @@ export function PhotoAlbum({
       institutionalGenerationInFlightRef.current = false;
       setIsSavingAnalysis(false);
     }
-  }, [institutionalProducts, project, projectId, user, editableProfile, aiProfile, reportSummary, reportReadyAssessment, album, documents, mapSnapshots, analysisResult]);
+  }, [institutionalProducts, project, projectId, user, editableProfile, aiProfile, reportSummary, reportReadyAssessment, album, documents, mapSnapshots, analysisResult, analysisRadius]);
 
   const handleConsultarHistorialInstitucional = useCallback(async () => {
     const currentProjectId = project?.id || projectId;

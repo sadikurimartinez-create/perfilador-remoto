@@ -1,3 +1,13 @@
+jest.mock("../src/document-engine/ChartRenderer", () => ({
+  ChartRenderer: {
+    renderSvgToPng: jest.fn(async () =>
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    ),
+  },
+}));
+
+import { Packer } from "docx";
+import JSZip from "jszip";
 import { createAiAnalyticalOutput } from "../src/utils/aiAnalysisGovernance";
 import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildEvidenceLineage } from "../src/utils/evidenceLineage";
@@ -15,6 +25,14 @@ import {
 import type { CifaSourceEnvelope } from "../src/utils/cifaAcquisition";
 import type { CrimeIncidenceExportContract } from "../src/types/crimeIncidenceExportContract";
 import { buildCrimeIncidenceInstitutionalVisualSpecifications } from "../src/utils/crimeIncidenceInstitutionalVisualProducer";
+import { enrichInstitutionalPayloadWithCrimeIncidenceVisuals } from "../src/utils/crimeIncidenceInstitutionalPayloadBridge";
+import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
+import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
+import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
+import {
+  buildExecutiveGeointWordVisualAssets,
+  renderExecutiveGeointWordDocument,
+} from "../src/utils/executiveGeointWordRenderer";
 import {
   assessReportItemEligibility,
   buildDraftReportInput,
@@ -297,6 +315,236 @@ describe("QA-08 phase 2B structured persistence round-trip", () => {
     ]);
     expect(input.evidence.some((item: any) => item?.exportId === "inc-1")).toBe(false);
     expect(prepareCrimeIncidenceContractForProject({ ...contract, queryReference: { status: "REJECTED", admission: { accepted: false } } } as any)).toBeNull();
+  });
+
+  test("ADR-022 five records reach BAR + LINE drawings in the final DOCX", async () => {
+    const pngDataUrl =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const makeElement = (tagName: string): any => ({
+      tagName,
+      children: [] as any[],
+      attributes: new Map<string, string>(),
+      style: {} as Record<string, string>,
+      textContent: "",
+      parentNode: null as any,
+      clientWidth: 1200,
+      clientHeight: 700,
+      setAttribute(name: string, value: string) {
+        this.attributes.set(name, String(value));
+      },
+      appendChild(child: any) {
+        child.parentNode = this;
+        this.children.push(child);
+        return child;
+      },
+      remove() {
+        if (!this.parentNode) return;
+        this.parentNode.children = this.parentNode.children.filter(
+          (child: any) => child !== this
+        );
+        this.parentNode = null;
+      },
+    });
+    const previousDocument = (globalThis as any).document;
+    const fakeBody = makeElement("body");
+    (globalThis as any).document = {
+      body: fakeBody,
+      createElement: (tagName: string) => makeElement(tagName),
+      createElementNS: (_namespace: string, tagName: string) =>
+        makeElement(tagName),
+    };
+
+    try {
+      const acquiredAt = "2026-09-29T12:00:00.000Z";
+      const contract = {
+        exportId: "crime-incidence-workspace:ormB9enaK4oVFjnLNtPj",
+        expedienteId: "ormB9enaK4oVFjnLNtPj",
+        productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT",
+        analyticalLevel: "DESCRIPTIVE",
+        createdAtReference: acquiredAt,
+        lineage: {
+          dataset: "incidencia_estadistica",
+          source: "C5i SSPE Aguascalientes",
+          generatedAt: acquiredAt,
+        },
+        limitations: [
+          "DESCRIPTIVE_PROJECTION_IS_NOT_EVIDENCE_FINDING_PROOF_CAUSALITY_OR_PREDICTION",
+        ],
+        datasetReference: {
+          datasetId: "incidencia_estadistica",
+          coverage: {
+            temporal: {
+              start: "2026-09-27",
+              end: "2026-09-28",
+              status: "KNOWN",
+            },
+          },
+        },
+        queryReference: {
+          status: "EXECUTED",
+          admission: { accepted: true },
+        },
+        projectionReference: {
+          metrics: {
+            frequency: {
+              totalRecords: 5,
+              byIncidentType: [
+                { value: "DAÑO", count: 2 },
+                { value: "ROBO", count: 3 },
+              ],
+            },
+            percentage: {
+              byIncidentType: [
+                { value: "DAÑO", count: 2, percentage: 40 },
+                { value: "ROBO", count: 3, percentage: 60 },
+              ],
+            },
+            distribution: {
+              byOccurredDate: [
+                { value: "2026-09-27", count: 2 },
+                { value: "2026-09-28", count: 3 },
+              ],
+            },
+          },
+        },
+      } as unknown as CrimeIncidenceExportContract;
+
+      const persisted =
+        prepareCrimeIncidenceContractForProject(contract);
+      const reopened = JSON.parse(JSON.stringify(persisted));
+      const specifications =
+        buildCrimeIncidenceInstitutionalVisualSpecifications({
+          metrics: reopened.projectionReference.metrics,
+          datasetReference: reopened.datasetReference,
+          sourceQuery: reopened.queryReference,
+          limitations: reopened.limitations,
+          lineage: reopened.lineage,
+        } as any);
+
+      expect(
+        specifications.charts.map((item) => item.chartType)
+      ).toEqual(["BAR", "LINE"]);
+
+      const payload = reopenedInstitutionalPayload({
+        crimeIncidenceExportContract: reopened,
+      });
+      const enriched =
+        await enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
+          payload
+        );
+
+      expect(enriched.visualProducts).toHaveLength(2);
+      expect(
+        enriched.visualProducts.every((item: any) =>
+          /^data:image\/png;base64,/.test(item.assetRef)
+        )
+      ).toBe(true);
+
+      const input = buildInstitutionalReportInput(enriched);
+      const chartIds = [
+        "crime-incidence-type-distribution:incidencia_estadistica",
+        "crime-incidence-temporal-evolution:incidencia_estadistica",
+      ];
+
+      expect(
+        input.visualProducts
+          .map((item: any) => item.visualId)
+          .filter((id: string) => chartIds.includes(id))
+      ).toHaveLength(2);
+
+      (input.visualProducts as any[]).unshift({
+        id: "map-adr022-e2e",
+        visualId: "map-adr022-e2e",
+        visualType: "MAP",
+        title: "Mapa territorial principal",
+        caption: "Geografía canónica del expediente",
+        assetRef: pngDataUrl,
+        visualReference: pngDataUrl,
+        geographyId: geography.geographyId,
+        traceabilityIds: ["map-adr022-e2e"],
+        sourceItemIds: ["map-adr022-e2e"],
+        publicationEligibility: "ELIGIBLE",
+      });
+
+      const executiveModel = buildExecutiveGeointReportModel(
+        input,
+        {
+          documentIdentity: {
+            numeroExpediente: "28092026-0066-BRPD",
+            projectId: "ormB9enaK4oVFjnLNtPj",
+            name: "Prueba Pilar Blanco",
+          },
+          nombreExpediente: "Prueba Pilar Blanco",
+          fecha: acquiredAt,
+          personaPerfiladora: "Analista de prueba",
+          clasificacion: "CONFIDENCIAL",
+        }
+      );
+      const composition = buildExecutiveVisualComposition(
+        executiveModel,
+        input
+      );
+
+      expect(
+        composition.secondaryVisuals
+          .map((item) => item.visualId)
+          .filter((id) => chartIds.includes(id))
+      ).toHaveLength(2);
+
+      const documentModel =
+        buildExecutiveGeointReportDocumentModel(
+          executiveModel,
+          composition,
+          input,
+          { numeroExpediente: "28092026-0066-BRPD" }
+        );
+
+      expect(
+        documentModel.visualPlacements
+          .map((item) => item.visualId)
+          .filter((id) => chartIds.includes(id))
+      ).toHaveLength(2);
+
+      const visualAssetsById =
+        await buildExecutiveGeointWordVisualAssets(composition);
+
+      for (const chartId of chartIds) {
+        expect(visualAssetsById[chartId]?.data).toBeTruthy();
+      }
+      expect(
+        visualAssetsById[composition.principalTerritorialMap.mapId]?.data
+      ).toBeTruthy();
+
+      const rendered = renderExecutiveGeointWordDocument(
+        documentModel,
+        { visualAssetsById }
+      );
+
+      for (const chartId of chartIds) {
+        expect(rendered.renderAudit.renderedVisualIds).toContain(
+          chartId
+        );
+        expect(
+          rendered.renderAudit.missingVisualAssetIds
+        ).not.toContain(chartId);
+      }
+
+      const zip = await JSZip.loadAsync(
+        await Packer.toBuffer(rendered.document)
+      );
+      const documentXml =
+        await zip.file("word/document.xml")!.async("string");
+      const drawingCount =
+        (documentXml.match(/<w:drawing>/g) || []).length;
+
+      expect(drawingCount).toBeGreaterThanOrEqual(3);
+      expect(documentXml).not.toContain("DistribuciÃ³n");
+      expect(documentXml).not.toContain("EvoluciÃ³n");
+      expect(documentXml).not.toContain("NÃºmero");
+      expect(documentXml).not.toContain("DAÃ‘O");
+    } finally {
+      (globalThis as any).document = previousDocument;
+    }
   });
 });
 

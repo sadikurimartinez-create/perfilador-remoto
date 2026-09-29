@@ -1,7 +1,10 @@
 import type { CrimeIncidenceAnalyticalProjection } from "@/types/crimeIncidenceAnalyticalProjection";
+import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
+import { composeCrimeIncidenceProductionWorkspace } from "@/utils/crimeIncidenceProductionComposition";
 import { buildCrimeIncidenceInstitutionalVisualSpecifications } from "@/utils/crimeIncidenceInstitutionalVisualProducer";
 import { materializeCrimeIncidenceInstitutionalCharts } from "@/utils/crimeIncidenceInstitutionalChartMaterializer";
 import { buildCrimeIncidenceInstitutionalVisualProducts } from "@/utils/crimeIncidenceInstitutionalVisualAdapter";
+import { prepareCrimeIncidenceContractForProject } from "@/utils/institutionalStructuredPersistence";
 
 export const CRIME_INCIDENCE_PAYLOAD_BRIDGE_VERSION = "1.0";
 
@@ -13,6 +16,75 @@ function visualIdentity(item: any): string {
   return String(item?.visualId || item?.id || "").trim();
 }
 
+export interface CrimeIncidenceInstitutionalPayloadBridgeOptions {
+  recoverIncompleteSnapshot?: {
+    expedienteId: string;
+    canonicalGeography: CanonicalProjectGeography | null | undefined;
+    radiusMeters: number | null | undefined;
+    requestedBy: string;
+    fetcher?: typeof fetch;
+  };
+}
+
+function hasPersistedMetricArrays(snapshot: any): boolean {
+  const metrics = snapshot?.projectionReference?.metrics;
+  const totalRecords = Number(metrics?.frequency?.totalRecords);
+
+  if (!Number.isFinite(totalRecords)) return false;
+  if (totalRecords <= 0) return true;
+
+  return (
+    Array.isArray(metrics?.frequency?.byIncidentType) &&
+    Array.isArray(metrics?.percentage?.byIncidentType) &&
+    Array.isArray(metrics?.distribution?.byOccurredDate) &&
+    Boolean(snapshot?.lineage)
+  );
+}
+
+async function resolveCrimeIncidenceSnapshot(
+  payload: any,
+  options: CrimeIncidenceInstitutionalPayloadBridgeOptions
+): Promise<any> {
+  const snapshot = payload?.crimeIncidenceExportContract;
+
+  if (!snapshot || hasPersistedMetricArrays(snapshot)) return snapshot;
+
+  const recovery = options.recoverIncompleteSnapshot;
+  const totalRecords = Number(
+    snapshot?.projectionReference?.metrics?.frequency?.totalRecords
+  );
+
+  if (!recovery || !Number.isFinite(totalRecords) || totalRecords <= 0) {
+    return snapshot;
+  }
+
+  const binding = await composeCrimeIncidenceProductionWorkspace({
+    expedienteId: recovery.expedienteId,
+    canonicalGeography: recovery.canonicalGeography,
+    radiusMeters: recovery.radiusMeters,
+    requestedBy: recovery.requestedBy,
+    fetcher: recovery.fetcher,
+  });
+
+  if (!binding.viewModel) {
+    throw new Error(
+      `CRIME_INCIDENCE_VISUAL_RECOVERY_FAILED:${binding.error || "UNKNOWN"}`
+    );
+  }
+
+  const recovered = prepareCrimeIncidenceContractForProject(
+    binding.viewModel.exportReference
+  );
+
+  if (!recovered || !hasPersistedMetricArrays(recovered)) {
+    throw new Error(
+      "CRIME_INCIDENCE_VISUAL_RECOVERY_INCOMPLETE"
+    );
+  }
+
+  return recovered;
+}
+
 /**
  * Reconstruye exclusivamente los visuales descriptivos ADR-022
  * a partir del snapshot persistido del expediente.
@@ -22,11 +94,23 @@ function visualIdentity(item: any): string {
  * No altera el snapshot persistido.
  */
 export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
-  payload: any
+  payload: any,
+  options: CrimeIncidenceInstitutionalPayloadBridgeOptions = {}
 ): Promise<any> {
-  const snapshot = payload?.crimeIncidenceExportContract;
+  const snapshot = await resolveCrimeIncidenceSnapshot(
+    payload,
+    options
+  );
 
   if (!snapshot) return payload;
+
+  const payloadWithResolvedSnapshot =
+    snapshot === payload?.crimeIncidenceExportContract
+      ? payload
+      : {
+          ...payload,
+          crimeIncidenceExportContract: snapshot,
+        };
 
   const metrics = snapshot?.projectionReference?.metrics;
   const datasetId = String(
@@ -61,7 +145,7 @@ export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
     );
 
   if (!visualSet.charts.length) {
-    return payload;
+    return payloadWithResolvedSnapshot;
   }
 
   const assets =
@@ -79,7 +163,7 @@ export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
     );
 
   if (!crimeIncidenceVisualProducts.length) {
-    return payload;
+    return payloadWithResolvedSnapshot;
   }
 
   const generatedIds = new Set(
@@ -89,7 +173,7 @@ export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
   );
 
   const existingVisualProducts = asArray(
-    payload?.visualProducts
+    payloadWithResolvedSnapshot?.visualProducts
   ).filter((item) => {
     const id = visualIdentity(item);
 
@@ -97,7 +181,7 @@ export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
   });
 
   return {
-    ...payload,
+    ...payloadWithResolvedSnapshot,
     visualProducts: [
       ...existingVisualProducts,
       ...crimeIncidenceVisualProducts,
