@@ -5801,6 +5801,7 @@ const hasMinimumPhotos =
                   )}
                 </div>
               )}
+              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
               <div className="pt-3 border-t border-slate-800 space-y-3">
                 <button
                   type="button"
@@ -5842,6 +5843,7 @@ const hasMinimumPhotos =
                   </div>
                 )}
               </div>
+              )}
             </div>
           </div>
     </section>
