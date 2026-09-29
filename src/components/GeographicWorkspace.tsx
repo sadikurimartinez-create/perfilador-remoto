@@ -136,10 +136,12 @@ export function calculateSweepPreparation(input: {
 
 export type GeographicWorkspaceProps = {
   historicalGeographyCandidatesInput?: HistoricalGeographyCandidate[];
+  showReportReadinessFindingGuidance?: boolean;
 };
 
 export function GeographicWorkspace({
   historicalGeographyCandidatesInput = [],
+  showReportReadinessFindingGuidance = false,
 }: GeographicWorkspaceProps = {}) {
   const { project, album, registerSweep, updateProjectDetails, persistHistoricalGeographyReconciliationForProject } = useProject();
   const { user } = useAuth();
@@ -788,7 +790,20 @@ export function GeographicWorkspace({
           />
 
           {/* 2.2 Consola de Convalidación Humana de Hallazgos */}
-          <div className="w-full">
+          <div id="report-readiness-finding" className="w-full">
+            {showReportReadinessFindingGuidance && (
+              <div className="mb-4 rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
+                <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+                  HALLAZGO PENDIENTE DE VALIDACIÓN
+                </p>
+                <p className="mt-1 text-xs font-semibold text-red-100">
+                  El informe requiere al menos un hallazgo válido, sustentado y trazable.
+                </p>
+                <p className="mt-1 text-[11px] text-red-200/80">
+                  Acción requerida: revise la consola, vincule el hallazgo con su evidencia y complete la convalidación humana correspondiente.
+                </p>
+              </div>
+            )}
             <StreetViewFindingsPanel
               expedienteId={expedienteId}
               captures={captures}
