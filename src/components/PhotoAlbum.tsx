@@ -5733,14 +5733,6 @@ const hasMinimumPhotos =
                   </ul>
                 </div>
               )}
-              <div className="space-y-1">
-                <p className="text-[10px] text-cyan-300 font-black uppercase tracking-wider">
-                  Productos Institucionales
-                </p>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Ruta canónica de emisión documental institucional.
-                </p>
-              </div>
               <button
                 type="button"
                 onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)}
@@ -5751,55 +5743,30 @@ const hasMinimumPhotos =
                 <span>📄</span> GENERAR INFORME
               </button>
               {!institutionalProducts.readyForInstitutionalReport && (
-                <div className="rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-3">
-                  <div>
-                    <p className="text-[10px] text-cyan-200 font-black uppercase tracking-wider">
-                      ESTADO DEL INFORME INSTITUCIONAL
-                    </p>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {institutionalProducts.readinessChecks.map((check) => (
-                        <div key={check.label} className="flex items-center gap-2 text-[11px] text-slate-300">
-                          <span className={check.complete ? "text-emerald-300" : "text-rose-300"}>
-                            {check.complete ? "✓" : "✗"}
-                          </span>
-                          <span>{check.label}</span>
-                        </div>
-                      ))}
-                    </div>
+                ((reportAnalysisCandidates.length > 0 && acceptedReportAnalysisCount === 0 && !isReadOnly) || showInstitutionalAnalysisCreationTrigger) && (
+                  <div className="space-y-3">
+                    {reportAnalysisCandidates.length > 0 && acceptedReportAnalysisCount === 0 && !isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => void handleApproveReportAnalysis()}
+                        disabled={isApprovingReportAnalysis}
+                        className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
+                      >
+                        {isApprovingReportAnalysis ? "Confirmando revisión..." : "Confirmar revisión humana del análisis"}
+                      </button>
+                    )}
+                    {showInstitutionalAnalysisCreationTrigger && (
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateInstitutionalAnalysis()}
+                        disabled={isApprovingReportAnalysis}
+                        className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
+                      >
+                        {isApprovingReportAnalysis ? "Creando análisis..." : "Crear análisis institucional revisado"}
+                      </button>
+                    )}
                   </div>
-                  {institutionalProducts.pendingMessages.length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-amber-300 font-black uppercase tracking-wider">
-                        MOTIVOS PENDIENTES:
-                      </p>
-                      <ul className="mt-2 space-y-1 text-[11px] text-amber-100">
-                        {institutionalProducts.pendingMessages.map((message) => (
-                          <li key={message}>- {message}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {reportAnalysisCandidates.length > 0 && acceptedReportAnalysisCount === 0 && !isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => void handleApproveReportAnalysis()}
-                      disabled={isApprovingReportAnalysis}
-                      className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
-                    >
-                      {isApprovingReportAnalysis ? "Confirmando revisión..." : "Confirmar revisión humana del análisis"}
-                    </button>
-                  )}
-                  {showInstitutionalAnalysisCreationTrigger && (
-                    <button
-                      type="button"
-                      onClick={() => void handleCreateInstitutionalAnalysis()}
-                      disabled={isApprovingReportAnalysis}
-                      className="w-full bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-100 border border-emerald-500/40 font-black px-4 py-2.5 rounded-lg uppercase tracking-wider text-[10px] transition disabled:opacity-50"
-                    >
-                      {isApprovingReportAnalysis ? "Creando análisis..." : "Crear análisis institucional revisado"}
-                    </button>
-                  )}
-                </div>
+                )
               )}
               {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
               <div className="pt-3 border-t border-slate-800 space-y-3">
