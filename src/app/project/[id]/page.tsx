@@ -58,6 +58,28 @@ export default function ProjectWorkspacePage() {
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
   const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
+  const [reportReadinessGuidanceDomains, setReportReadinessGuidanceDomains] = useState<string[]>([]);
+
+  const handleReportReadinessGuidance = (domains: string[]) => {
+    setReportReadinessGuidanceDomains(domains);
+
+    const targetId = domains.includes("GEOGRAPHY")
+      ? "report-readiness-geography"
+      : domains.includes("EVIDENCE") || domains.includes("FORENSIC_INTEGRITY")
+        ? "report-readiness-evidence"
+        : domains.includes("FINDING")
+          ? "report-readiness-finding"
+          : null;
+
+    if (!targetId) return;
+
+    window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 120);
+  };
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
   const [pendingDeleteAnalysisId, setPendingDeleteAnalysisId] = useState<string | null>(null);
   const [deletePasswordInput, setDeletePasswordInput] = useState("");
@@ -440,13 +462,46 @@ export default function ProjectWorkspacePage() {
       <div className="w-full space-y-6 overflow-y-auto pb-20 lg:pb-0">
         {activeWorkspaceTab === "environmental" && (
           <>
-            <CaptureAndAddPhoto />
+            <div id="report-readiness-evidence">
+              {reportReadinessGuidanceDomains.some((domain) => domain === "EVIDENCE" || domain === "FORENSIC_INTEGRITY") && (
+                <div className="mb-4 rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+                    EVIDENCIA OBLIGATORIA PENDIENTE
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-red-100">
+                    El expediente no cuenta todavía con evidencia utilizable suficiente o existe una incidencia crítica de integridad documental.
+                  </p>
+                  <p className="mt-1 text-[11px] text-red-200/80">
+                    Acción requerida: incorpore, complete o corrija la evidencia señalada antes de volver a generar el informe.
+                  </p>
+                </div>
+              )}
+              <CaptureAndAddPhoto />
+            </div>
             <PhotoAlbum
               onDeletePhoto={handleDeletePhoto}
               projectId={project.id}
+              onReportReadinessGuidance={handleReportReadinessGuidance}
               onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
             />
-            <GeographicWorkspace />
+            <div id="report-readiness-geography">
+              {reportReadinessGuidanceDomains.includes("GEOGRAPHY") && (
+                <div className="mb-4 rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+                    GEOGRAFÍA DEL EXPEDIENTE PENDIENTE
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-red-100">
+                    La geografía territorial del expediente no está confirmada o no cumple todavía el estado institucional requerido.
+                  </p>
+                  <p className="mt-1 text-[11px] text-red-200/80">
+                    Acción requerida: revise y confirme la geografía del expediente antes de volver a generar el informe.
+                  </p>
+                </div>
+              )}
+              <GeographicWorkspace
+                showReportReadinessFindingGuidance={reportReadinessGuidanceDomains.includes("FINDING")}
+              />
+            </div>
           </>
         )}
         {activeWorkspaceTab === "pandillas" && (

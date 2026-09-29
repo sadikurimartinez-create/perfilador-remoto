@@ -519,6 +519,7 @@ type PhotoAlbumProps = {
     summary?: string,
     metadata?: { reportEngineOutput?: boolean; source?: string }
   ) => Promise<void>;
+  onReportReadinessGuidance?: (domains: string[]) => void;
 };
 
 const DELITOS_CATEGORIES = [
@@ -694,6 +695,7 @@ export function PhotoAlbum({
   onDeletePhoto,
   projectId,
   onSaveAnalysisToCloud,
+  onReportReadinessGuidance,
 }: PhotoAlbumProps = {}) {
   const { user, refreshUser } = useAuth();
   const {
@@ -1096,6 +1098,7 @@ export function PhotoAlbum({
   const [isSweepsListExpanded, setIsSweepsListExpanded] = useState(true);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [showReportPreflightModal, setShowReportPreflightModal] = useState(false);
+  const [reportReadinessGuidanceActive, setReportReadinessGuidanceActive] = useState(false);
   const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
   const [activeReportTab, setActiveReportTab] = useState<"institutional" | "edit" | "preview">("institutional");
   const [showLegacyReportTools, setShowLegacyReportTools] = useState(false);
@@ -1438,6 +1441,70 @@ export function PhotoAlbum({
     setAnalysisResult,
     updateProjectDetails,
     reportReadyAssessment.projectId,
+  ]);
+
+  const handleAcceptReportPreflight = useCallback(() => {
+    setShowReportPreflightModal(false);
+    setReportReadinessGuidanceActive(true);
+
+    const reasons = [
+      ...reportReadyAssessment.blockingReasons,
+      ...reportReadyAssessment.unresolvedItems,
+    ];
+
+    const reasonDomains = new Set(
+      reasons.map((reason: any) => reason.domain)
+    );
+
+    onReportReadinessGuidance?.(Array.from(reasonDomains));
+
+    let targetId = "report-readiness-institutional";
+
+    if (!institutionalProducts.hasInstitutionalIdentity) {
+      targetId = "report-readiness-institutional";
+    } else if (reasonDomains.has("HYPOTHESIS")) {
+      targetId = "report-readiness-hypothesis";
+    } else if (reasonDomains.has("SWEEP_LIFECYCLE")) {
+      targetId = "report-readiness-sweeps";
+    } else if (
+      reasonDomains.has("ANALYSIS") ||
+      reasonDomains.has("HUMAN_VALIDATION") ||
+      reasonDomains.has("LINEAGE") ||
+      reasonDomains.has("SOURCE_INTEGRITY")
+    ) {
+      targetId = "report-readiness-institutional";
+    }
+
+    window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 80);
+  }, [
+    institutionalProducts.hasInstitutionalIdentity,
+    onReportReadinessGuidance,
+    reportReadyAssessment.blockingReasons,
+    reportReadyAssessment.unresolvedItems,
+  ]);
+
+  // Sincroniza los dominios readiness mientras la guía contextual permanece activa.
+  useEffect(() => {
+    if (!reportReadinessGuidanceActive || !onReportReadinessGuidance) return;
+
+    const activeDomains = Array.from(
+      new Set([
+        ...reportReadyAssessment.blockingReasons,
+        ...reportReadyAssessment.unresolvedItems,
+      ].map((reason: any) => reason.domain))
+    );
+
+    onReportReadinessGuidance(activeDomains);
+  }, [
+    onReportReadinessGuidance,
+    reportReadinessGuidanceActive,
+    reportReadyAssessment.blockingReasons,
+    reportReadyAssessment.unresolvedItems,
   ]);
 
   const handleInstitutionalProductExport = useCallback(async (reportKind: InstitutionalReportKind) => {
@@ -3583,7 +3650,20 @@ const hasMinimumPhotos =
       })()}
 
       {/* Formulario de Hipótesis y Precisiones de Barridos en la página principal */}
-      <div className="pt-8 mt-6 border-t border-slate-800 w-full print:hidden">
+      <div id="report-readiness-hypothesis" className="pt-8 mt-6 border-t border-slate-800 w-full print:hidden">
+        {reportReadinessGuidanceActive && !reportReadyAssessment.hypothesisReady && (
+          <div className="max-w-4xl mx-auto mb-4 rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
+            <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+              INFORMACIÓN OBLIGATORIA PENDIENTE
+            </p>
+            <p className="mt-1 text-xs font-semibold text-red-100">
+              Falta formular o ratificar la hipótesis humana obligatoria del expediente.
+            </p>
+            <p className="mt-1 text-[11px] text-red-200/80">
+              Acción requerida: complete y registre la hipótesis humana antes de generar el informe institucional.
+            </p>
+          </div>
+        )}
         {isHypothesisValidatedInWorkspace && (
           <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 max-w-4xl mx-auto mb-6 text-center md:text-left shadow-xl backdrop-blur-sm font-sans">
             <div className="space-y-1">
@@ -5535,6 +5615,21 @@ const hasMinimumPhotos =
 
                   return (
                     <>
+                      <div id="report-readiness-sweeps">
+                        {reportReadinessGuidanceActive && reportReadyAssessment.blockingReasons.some((reason: any) => reason.domain === "SWEEP_LIFECYCLE") && (
+                          <div className="mb-4 rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+                              SOPORTE DE BARRIDO PENDIENTE
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-red-100">
+                              Existe un barrido utilizado como soporte del informe que no cumple el estado institucional requerido.
+                            </p>
+                            <p className="mt-1 text-[11px] text-red-200/80">
+                              Acción requerida: revise el barrido señalado antes de volver a generar el informe.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                       <h3 
                         onClick={() => setIsSweepsListExpanded(!isSweepsListExpanded)}
                         className="text-sm font-black text-slate-200 uppercase tracking-wider border-b border-slate-800 pb-3 flex items-center justify-between cursor-pointer select-none"
@@ -5622,7 +5717,22 @@ const hasMinimumPhotos =
               </div>
             </div>
 
-            <div className="flex flex-col items-stretch gap-3 pt-4 border-t border-slate-800">
+            <div id="report-readiness-institutional" className="flex flex-col items-stretch gap-3 pt-4 border-t border-slate-800">
+              {reportReadinessGuidanceActive && !institutionalProducts.readyForInstitutionalReport && (
+                <div className="rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+                    INFORMACIÓN OBLIGATORIA PENDIENTE
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-red-100">
+                    El expediente todavía contiene requisitos institucionales pendientes.
+                  </p>
+                  <ul className="mt-2 space-y-1 text-[11px] text-red-100/90">
+                    {institutionalProducts.pendingMessages.map((message) => (
+                      <li key={message}>• {message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="space-y-1">
                 <p className="text-[10px] text-cyan-300 font-black uppercase tracking-wider">
                   Productos Institucionales
@@ -5778,82 +5888,41 @@ const hasMinimumPhotos =
             aria-modal="true"
             aria-labelledby="report-preflight-title"
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl bg-slate-950/95 border border-cyan-500/30 p-6 rounded-2xl shadow-2xl space-y-5 text-left max-h-[90vh] overflow-y-auto animate-fadeIn"
+            className="w-full max-w-md bg-slate-950/95 border border-red-500/40 p-6 rounded-2xl shadow-2xl space-y-5 text-left animate-fadeIn"
           >
-            <header className="flex items-start justify-between gap-4 border-b border-slate-800/80 pb-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                  Preflight institucional
-                </p>
-                <h3
-                  id="report-preflight-title"
-                  className="mt-1 text-sm font-black text-cyan-300 uppercase tracking-wider"
-                >
-                  Requisitos pendientes para generar informe
-                </h3>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowReportPreflightModal(false)}
-                className="text-slate-400 hover:text-white transition"
-                aria-label="Cerrar requisitos pendientes"
+            <header className="border-b border-slate-800/80 pb-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-300">
+                Emisión institucional
+              </p>
+              <h3
+                id="report-preflight-title"
+                className="mt-1 text-base font-black text-red-200 uppercase tracking-wider"
               >
-                ✕
-              </button>
+                Informe no disponible
+              </h3>
             </header>
 
-            <p className="text-sm text-slate-300">
-              El expediente todavía no cumple todos los requisitos institucionales.
-              El Informe y el Anexo Técnico no se generarán hasta completar las condiciones pendientes.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {institutionalProducts.readinessChecks.map((check) => (
-                <div
-                  key={check.label}
-                  className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2.5 text-sm"
-                >
-                  <span
-                    className={
-                      check.complete
-                        ? "text-emerald-400 font-black"
-                        : "text-rose-400 font-black"
-                    }
-                  >
-                    {check.complete ? "✓" : "✗"}
-                  </span>
-                  <span className="text-slate-200">{check.label}</span>
-                </div>
-              ))}
+            <div className="space-y-2 text-sm text-slate-200">
+              <p>
+                No es posible generar el Informe y el Anexo Técnico porque existe información obligatoria pendiente o incompleta.
+              </p>
+              <p className="text-xs text-slate-400">
+                Al pulsar Aceptar se señalarán los apartados que requieren atención.
+              </p>
             </div>
-
-            {institutionalProducts.pendingMessages.length > 0 && (
-              <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 p-4">
-                <p className="text-[10px] font-black uppercase tracking-wider text-amber-300">
-                  Requisitos que deben atenderse
-                </p>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-100">
-                  {institutionalProducts.pendingMessages.map((message) => (
-                    <li key={message}>{message}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
 
             <div className="flex justify-end pt-1">
               <button
                 type="button"
-                onClick={() => setShowReportPreflightModal(false)}
-                className="rounded-lg bg-cyan-400 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:bg-cyan-300"
+                onClick={handleAcceptReportPreflight}
+                className="rounded-lg bg-red-600 px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white transition hover:bg-red-500"
               >
-                Aceptar y cerrar
+                Aceptar
               </button>
             </div>
           </div>
         </div>
       )}
-
       {/* MODAL DE DICTAMEN OFICIAL (PREVISUALIZACIÓN, ANEXOS Y DESCARGA) */}
       {showReportModal && editableProfile && (
         <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto print:hidden" onClick={() => setShowReportModal(false)}>
