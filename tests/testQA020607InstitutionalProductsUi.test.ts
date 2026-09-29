@@ -270,7 +270,7 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(helper).toContain("GENERAR INFORME");
     expect(helper).toContain('reportKind: "EXECUTIVE_GEOINT"');
     expect(photoAlbum).toContain("const [showLegacyReportTools, setShowLegacyReportTools] = useState(false)");
-    expect(canonicalCta).toContain("Productos Institucionales");
+    expect(canonicalCta).not.toContain("Productos Institucionales");
     expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
     expect(canonicalCta).not.toContain("Mostrar herramientas históricas");
     expect(canonicalCta).not.toContain("showLegacyReportTools &&");
@@ -320,11 +320,11 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
 
   test("34 panel diagnóstico y telemetría exponen bloqueo sin bypass", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
-    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("Productos Institucionales"), photoAlbum.indexOf("<DynamicPopup"));
+    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)"), photoAlbum.indexOf("<DynamicPopup"));
 
-    expect(canonicalCta).toContain("ESTADO DEL INFORME INSTITUCIONAL");
-    expect(canonicalCta).toContain("MOTIVOS PENDIENTES:");
-    expect(canonicalCta).toContain("institutionalProducts.readinessChecks.map");
+    expect(canonicalCta).not.toContain("ESTADO DEL INFORME INSTITUCIONAL");
+    expect(canonicalCta).not.toContain("MOTIVOS PENDIENTES:");
+    expect(canonicalCta).not.toContain("institutionalProducts.readinessChecks.map");
     expect(photoAlbum).toContain('console.info("[REPORT READY]", {');
     expect(photoAlbum).toContain("blockingReasonCodes");
     expect(photoAlbum).toContain("unresolvedItemCodes");
@@ -354,7 +354,7 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
   test("36 trigger institucional crea analysisOutputs sin depender del legacy", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
     const handler = photoAlbum.slice(photoAlbum.indexOf("const handleCreateInstitutionalAnalysis"), photoAlbum.indexOf("const handleInstitutionalProductExport"));
-    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("Productos Institucionales"), photoAlbum.indexOf("<DynamicPopup"));
+    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)"), photoAlbum.indexOf("<DynamicPopup"));
 
     expect(photoAlbum).toContain("createInstitutionalReviewedAnalysisOutput");
     expect(photoAlbum).toContain("compactReportAnalysisOutputs");
