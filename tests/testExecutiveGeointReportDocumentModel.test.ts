@@ -334,6 +334,122 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(buildExecutiveVisualComposition(model as any, input as any).visualBudget.used).toBeLessThanOrEqual(MAX_EXECUTIVE_VISUALS);
   });
 
+  test("26A ADR-022 charts llegan a visualPlacements documentales", () => {
+    const chart = (
+      visualId: string,
+      title: string
+    ) => ({
+      visualId,
+      visualType: "STATISTICAL_CHART",
+      executiveHeadline: title,
+      caption: title,
+      visualReference:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      presentation: {
+        title,
+        visibleSourceLabel: "ADR-022",
+      },
+      technicalMetadata: {
+        sourceItemId: visualId,
+        sourceType: "VISUAL_PRODUCT",
+        geographyId: null,
+        traceabilityIds: ["dataset-adr022"],
+        relatedFindingIds: [],
+        relatedEvidenceIds: [],
+      },
+    });
+
+    const input = institutionalInput();
+
+    const model = executiveModel({
+      keyEvidence: [],
+      visualCandidates: [],
+    });
+
+    const composition = buildExecutiveVisualComposition(
+      model as any,
+      {
+        ...input,
+        visualProducts: [
+          {
+            id: "crime-incidence-type-distribution:dataset-adr022",
+            visualId: "crime-incidence-type-distribution:dataset-adr022",
+            visualType: "CHART",
+            kind: "INCIDENT_TYPE_DISTRIBUTION",
+            title: "Distribucion de incidencia por tipo",
+            caption: "Distribucion descriptiva",
+            sourceItemIds: ["dataset-adr022"],
+            datasetSourceRefs: ["dataset-adr022"],
+            variables: ["incidentType", "count", "percentage"],
+            transformation: "groupBy incidentType",
+            assetRef:
+              "asset://adr022/incident-type-distribution",
+            publicationEligibility: "ELIGIBLE",
+            findingIds: [],
+            evidenceIds: [],
+            analysisIds: [],
+            assertionIds: [],
+          },
+          {
+            id: "crime-incidence-temporal-evolution:dataset-adr022",
+            visualId: "crime-incidence-temporal-evolution:dataset-adr022",
+            visualType: "CHART",
+            kind: "TEMPORAL_EVOLUTION",
+            title: "Evolucion temporal de la incidencia",
+            caption: "Serie descriptiva temporal",
+            sourceItemIds: ["dataset-adr022"],
+            datasetSourceRefs: ["dataset-adr022"],
+            variables: ["occurredDate", "count"],
+            transformation: "groupBy occurredDate",
+            assetRef:
+              "asset://adr022/temporal-evolution",
+            publicationEligibility: "ELIGIBLE",
+            findingIds: [],
+            evidenceIds: [],
+            analysisIds: [],
+            assertionIds: [],
+          },
+        ],
+      } as any
+    );
+
+    const ids = composition.secondaryVisuals.map(
+      (item) => item.visualId
+    );
+
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "crime-incidence-type-distribution:dataset-adr022",
+        "crime-incidence-temporal-evolution:dataset-adr022",
+      ])
+    );
+
+    const document = buildExecutiveGeointReportDocumentModel(
+      model as any,
+      composition,
+      input as any
+    );
+
+    const placements = document.visualPlacements.filter(
+      (item) =>
+        item.visualId.startsWith("crime-incidence-")
+    );
+
+    expect(placements).toHaveLength(2);
+
+    expect(
+      placements.every(
+        (item) =>
+          item.sectionId === "multisource-analysis" &&
+          item.placementRole === "ANALYTICAL_SUPPORT" &&
+          item.visualClass === "GRAFICA_ESTADISTICA"
+      )
+    ).toBe(true);
+
+    expect(placements.map((item) => item.visualId)).toEqual(
+      expect.arrayContaining(ids)
+    );
+  });
   test("26 ADR-022 pasa", () => {
     expect(documentModel().technicalMetadata.source).toBe("InstitutionalReportInput+ExecutiveGeointReportModel+ExecutiveVisualComposition");
   });

@@ -21,6 +21,7 @@ import {
   prepareDenuePoisForProject,
 } from "@/utils/institutionalStructuredPersistence";
 import { composeCrimeIncidenceProductionWorkspace } from "@/utils/crimeIncidenceProductionComposition";
+import { enrichInstitutionalPayloadWithCrimeIncidenceVisuals } from "@/utils/crimeIncidenceInstitutionalPayloadBridge";
 
 import { CifaCeipolPanel } from "./CifaCeipolPanel";
 import { ProjectMap } from "./ProjectMap";
@@ -1518,7 +1519,7 @@ export function PhotoAlbum({
     setIsSavingAnalysis(true);
     setError(null);
     try {
-      const generatedPackage = await exportToWord(
+      const institutionalPayload =
         buildInstitutionalProductExportPayload(project, {
           projectId,
           user,
@@ -1530,7 +1531,15 @@ export function PhotoAlbum({
           documents,
           mapSnapshots,
           analysisResult,
-        }),
+        });
+
+      const payloadWithCrimeIncidenceVisuals =
+        await enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
+          institutionalPayload
+        );
+
+      const generatedPackage = await exportToWord(
+        payloadWithCrimeIncidenceVisuals,
         project?.nombre || "Expediente",
         institutionalProducts.numeroExpediente,
         user,

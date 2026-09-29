@@ -259,34 +259,33 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(photoAlbum).toContain("Ver Dictamen Actual");
   });
 
-  test("31 CTA legacy queda rotulado como historico y separado del producto ejecutivo", () => {
+  test("31 CTA canonico permanece unico y separado de referencias narrativas", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
     const helper = source("src/utils/institutionalProductsUi.ts");
-    const handler = photoAlbum.slice(photoAlbum.indexOf("const handleInstitutionalProductExport"), photoAlbum.indexOf("}, [institutionalProducts"));
-    const canonicalCta = photoAlbum.slice(photoAlbum.indexOf("const [showLegacyReportTools"), photoAlbum.indexOf("<DynamicPopup"));
-    const visibleReportCtas = photoAlbum.match(/GENERAR INFORME/g) || [];
-    const executiveReportCalls = photoAlbum.match(/handleInstitutionalProductExport\(institutionalProducts\.actions\.executiveReport\.reportKind\)/g) || [];
+
+    const canonicalCta = photoAlbum.slice(
+      photoAlbum.indexOf('onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)}'),
+      photoAlbum.indexOf("</button>", photoAlbum.indexOf('onClick={() => handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)}')) + 9
+    );
+
+    const executiveReportCalls =
+      photoAlbum.match(/handleInstitutionalProductExport\(institutionalProducts\.actions\.executiveReport\.reportKind\)/g) || [];
 
     expect(helper).toContain("GENERAR INFORME");
     expect(helper).toContain('reportKind: "EXECUTIVE_GEOINT"');
-    expect(photoAlbum).toContain("const [showLegacyReportTools, setShowLegacyReportTools] = useState(false)");
-    expect(canonicalCta).not.toContain("Productos Institucionales");
-    expect(canonicalCta).toContain("handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)");
-    expect(canonicalCta).not.toContain("Mostrar herramientas históricas");
-    expect(canonicalCta).not.toContain("showLegacyReportTools &&");
-    expect(photoAlbum).not.toContain("Regenerar Dictamen Histórico Legacy");
-    expect(photoAlbum).not.toContain("Histórico / Compatibilidad");
+
+    expect(canonicalCta).toContain("GENERAR INFORME");
+    expect(executiveReportCalls).toHaveLength(1);
+
     expect(photoAlbum).not.toContain("Generar Anexo Técnico");
     expect(photoAlbum).not.toMatch(/>\s*Generar Informe Ejecutivo GEOINT\s*</);
-    expect(visibleReportCtas).toHaveLength(1);
-    expect(executiveReportCalls).toHaveLength(1);
-    expect(canonicalCta).toContain("GENERAR INFORME");
-    expect(photoAlbum).toContain("PROCESAMIENTO LEGACY DE DICTAMEN HISTÓRICO - GEOINT v8.0");
+    expect(photoAlbum).not.toContain("Regenerar Dictamen Histórico Legacy");
+    expect(photoAlbum).not.toContain("Histórico / Compatibilidad");
     expect(photoAlbum).not.toContain("Regenerar / Actualizar Informe Oficial");
-    expect(handler).toContain("[REPORT PRODUCT]");
-    expect(handler).not.toContain("confirmAndGenerateProfile");
-    expect(handler).not.toContain("/api/generate-profile");
-    expect(photoAlbum).toContain('[REPORT PRODUCT] LEGACY_DICTAMEN');
+
+    expect(photoAlbum).not.toContain("confirmAndGenerateProfile");
+    expect(photoAlbum).not.toContain("LEGACY_DICTAMEN");
+    expect(photoAlbum).not.toContain("setShowReportModal(true)");
   });
 
   test("32 gate de productos institucionales se recalcula desde estado vivo", () => {
@@ -334,21 +333,30 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(canonicalCta).not.toContain("handleInstitutionalProductExport(institutionalProducts.actions.technicalAnnex.reportKind)");
   });
 
-  test("35 PhotoAlbum conserva aiAnalyticalOutput y exige revisión humana del análisis", () => {
+  test("35 PhotoAlbum conserva gobernanza IA y exige revisión humana del análisis", () => {
     const photoAlbum = source("src/components/PhotoAlbum.tsx");
-    const generationBlock = photoAlbum.slice(photoAlbum.indexOf("const generatedAnalysisOutputs"), photoAlbum.indexOf("setAnalysisResult({", photoAlbum.indexOf("const generatedAnalysisOutputs")));
-    const analysisResultBlock = photoAlbum.slice(photoAlbum.indexOf("setAnalysisResult({", photoAlbum.indexOf("const generatedAnalysisOutputs")), photoAlbum.indexOf("historicalCrimes: combinedCrimes"));
 
-    expect(generationBlock).toContain("chapterData.aiAnalyticalOutput");
-    expect(generationBlock).toContain("generatedAnalysisOutputs.push(chapterData.aiAnalyticalOutput)");
-    expect(analysisResultBlock).toContain("analysisOutputs");
-    expect(analysisResultBlock).toContain("generatedAnalysisOutputs");
+    expect(photoAlbum).toContain("const reportAnalysisCandidates = useMemo");
+    expect(photoAlbum).toContain("aiAnalyticalOutputs");
+    expect(photoAlbum).toContain("const acceptedReportAnalysisCount = useMemo");
+
+    expect(photoAlbum).toContain('item.lineageStatus === "SUPPORTED" || item.lineageStatus === "PARTIALLY_SUPPORTED"');
+    expect(photoAlbum).toContain('item.validationStatus === "APPROVED" || item.humanValidationStatus === "APPROVED"');
+
+    expect(photoAlbum).toContain("const handleApproveReportAnalysis = useCallback");
+    expect(photoAlbum).toContain("approveAiAnalyticalOutput(item, validation)");
+    expect(photoAlbum).toContain("approvedAnalysisOutputs");
+    expect(photoAlbum).toContain("analysisOutputs: approvedAnalysisOutputs");
+
+    expect(photoAlbum).toContain("validatedAt: new Date().toISOString()");
+    expect(photoAlbum).toContain("validatedBy: buildValidatorIdentity()");
+
     expect(photoAlbum).toContain('console.info("[REPORT ANALYSIS READINESS]", {');
     expect(photoAlbum).toContain("candidateCount: reportAnalysisCandidates.length");
     expect(photoAlbum).toContain("acceptedCount: acceptedReportAnalysisCount");
+
     expect(photoAlbum).toContain("Confirmar revisión humana del análisis");
-    expect(photoAlbum).toContain("approveAiAnalyticalOutput");
-    expect(photoAlbum).not.toContain("analysisReady = true");
+    expect(photoAlbum).toContain("handleApproveReportAnalysis");
   });
 
   test("36 trigger institucional crea analysisOutputs sin depender del legacy", () => {
@@ -624,4 +632,48 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(projectContext).toContain("} else if (Array.isArray((projectData as any).analysisOutputs))");
     expect(projectContext).toContain("analysisOutputs: (projectData as any).analysisOutputs");
   });
-});
+
+  test("49 gobernanza humana impide reactivar certificacion legacy desde el flujo institucional", () => {
+    const photoAlbum = source("src/components/PhotoAlbum.tsx");
+    const exportToWord = source("src/lib/exportToWord.ts");
+    const projectContext = source("src/context/ProjectContext.tsx");
+    const certificationService = source("src/services/institutionalReportCertificationService.ts");
+
+    // La UI institucional no puede reabrir el modal legacy.
+    expect(photoAlbum).not.toContain("setShowReportModal(true)");
+
+    // El producto institucional debe continuar saliendo por el CTA canonico.
+    expect(photoAlbum).toContain("GENERAR INFORME");
+    expect(photoAlbum).toContain(
+      "handleInstitutionalProductExport(institutionalProducts.actions.executiveReport.reportKind)"
+    );
+
+    // La rama EXECUTIVE_GEOINT retorna su paquete antes del flujo legacy.
+    const executiveStart = exportToWord.indexOf(
+      'if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT")'
+    );
+    const technicalAnnexStart = exportToWord.indexOf(
+      'if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT_TECHNICAL_ANNEX")'
+    );
+
+    expect(executiveStart).toBeGreaterThanOrEqual(0);
+    expect(technicalAnnexStart).toBeGreaterThan(executiveStart);
+
+    const executiveBranch = exportToWord.slice(executiveStart, technicalAnnexStart);
+
+    expect(executiveBranch).toContain("persistGeneratedPackage");
+    expect(executiveBranch).toContain("return reportPackage");
+    expect(executiveBranch).not.toContain("ReportCertificationEngine.certify");
+
+    // Certificar institucionalmente sigue siendo una accion humana separada.
+    expect(projectContext).toContain("certifyInstitutionalReportByHumanAction");
+    expect(projectContext).toContain(
+      'INSTITUTIONAL_CERTIFICATION_BLOCKED:CERTIFIER_IDENTITY_UNAVAILABLE'
+    );
+
+    expect(certificationService).toContain("isRealCertificationActorIdentity");
+    expect(certificationService).toContain(
+      'INSTITUTIONAL_CERTIFICATION_BLOCKED:CERTIFIER_IDENTITY_UNAVAILABLE'
+    );
+    expect(certificationService).toContain("certifyInstitutionalReport");
+  });});

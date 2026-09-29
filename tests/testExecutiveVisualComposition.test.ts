@@ -344,6 +344,196 @@ describe("Fase C - ExecutiveVisualComposition", () => {
     expect(model.identity.numeroExpediente).toBe("06092026-0001-PPC");
   });
 
+  test("25A ADR-022 admite dos charts descriptivos gobernados", () => {
+    const chart = (
+      visualId: string,
+      kind: string,
+      title: string,
+      variables: string[]
+    ) => ({
+      id: visualId,
+      visualId,
+      visualType: "CHART",
+      kind,
+      title,
+      caption: title,
+      sourceType: "ADR-022_CRIME_INCIDENCE",
+      sourceItemIds: ["dataset-adr022"],
+      datasetSourceRefs: ["dataset-adr022"],
+      variables,
+      transformation: `ADR-022:${kind}`,
+      assetRef: `data:image/png;base64,${visualId}`,
+      findingIds: [],
+      evidenceIds: [],
+      analysisIds: [],
+      assertionIds: [],
+      publicationEligibility: "ELIGIBLE",
+    });
+
+    const input = institutionalInput({
+      visualProducts: [
+        chart(
+          "crime-incidence-type-distribution:dataset-adr022",
+          "INCIDENT_TYPE_DISTRIBUTION",
+          "Distribucion de incidencia por tipo",
+          ["incidentType", "count", "percentage"]
+        ),
+        chart(
+          "crime-incidence-temporal-evolution:dataset-adr022",
+          "TEMPORAL_EVOLUTION",
+          "Evolucion temporal de la incidencia",
+          ["occurredDate", "count"]
+        ),
+      ],
+    });
+
+    const composition = buildExecutiveVisualComposition(
+      executiveModel({
+        keyEvidence: [],
+        visualCandidates: [],
+      }),
+      input
+    );
+
+    const chartVisuals = composition.secondaryVisuals.filter(
+      (item) => item.visualType === "STATISTICAL_CHART"
+    );
+
+    expect(chartVisuals.map((item) => item.visualId)).toEqual(
+      expect.arrayContaining([
+        "crime-incidence-type-distribution:dataset-adr022",
+        "crime-incidence-temporal-evolution:dataset-adr022",
+      ])
+    );
+
+    expect(chartVisuals).toHaveLength(2);
+
+    expect(
+      chartVisuals.find(
+        (item) =>
+          item.visualId ===
+          "crime-incidence-type-distribution:dataset-adr022"
+      )?.executiveHeadline
+    ).toBe("Distribucion de incidencia por tipo");
+
+    expect(
+      chartVisuals.every((item) =>
+        item.technicalMetadata.traceabilityIds.includes(
+          "dataset-adr022"
+        )
+      )
+    ).toBe(true);
+  });
+
+  test("25B ADR-022 no admite chart sin contrato descriptivo trazable", () => {
+    const input = institutionalInput({
+      visualProducts: [
+        {
+          id: "chart-orphan",
+          visualId: "chart-orphan",
+          visualType: "CHART",
+          kind: "INCIDENT_TYPE_DISTRIBUTION",
+          title: "Chart sin dataset",
+          caption: "Chart sin dataset",
+          sourceType: "ADR-022_CRIME_INCIDENCE",
+          sourceItemIds: [],
+          datasetSourceRefs: [],
+          variables: ["incidentType", "count"],
+          transformation: "groupBy incidentType",
+          assetRef: "data:image/png;base64,orphan",
+          findingIds: [],
+          evidenceIds: [],
+          analysisIds: [],
+          assertionIds: [],
+          publicationEligibility: "ELIGIBLE",
+        },
+      ],
+    });
+
+    const composition = buildExecutiveVisualComposition(
+      executiveModel({
+        keyEvidence: [],
+        visualCandidates: [],
+      }),
+      input
+    );
+
+    expect(
+      composition.secondaryVisuals.some(
+        (item) => item.visualId === "chart-orphan"
+      )
+    ).toBe(false);
+
+    expect(
+      composition.selectionAudit.excludedItems.some(
+        (item) =>
+          item.itemId === "chart-orphan" &&
+          (
+            item.reasonCode === "NO_TRACEABILITY" ||
+            item.reasonCode === "NO_EXECUTIVE_RELATION"
+          )
+      )
+    ).toBe(true);
+  });
+
+  test("25C ADR-022 no duplica el mismo subtipo estadistico", () => {
+    const base = {
+      visualType: "CHART",
+      kind: "INCIDENT_TYPE_DISTRIBUTION",
+      sourceType: "ADR-022_CRIME_INCIDENCE",
+      sourceItemIds: ["dataset-adr022"],
+      datasetSourceRefs: ["dataset-adr022"],
+      variables: ["incidentType", "count"],
+      transformation: "groupBy incidentType",
+      findingIds: [],
+      evidenceIds: [],
+      analysisIds: [],
+      assertionIds: [],
+      publicationEligibility: "ELIGIBLE",
+    };
+
+    const input = institutionalInput({
+      visualProducts: [
+        {
+          ...base,
+          id: "chart-type-1",
+          visualId: "chart-type-1",
+          title: "Distribucion 1",
+          caption: "Distribucion 1",
+          assetRef: "data:image/png;base64,chart1",
+        },
+        {
+          ...base,
+          id: "chart-type-2",
+          visualId: "chart-type-2",
+          title: "Distribucion 2",
+          caption: "Distribucion 2",
+          assetRef: "data:image/png;base64,chart2",
+        },
+      ],
+    });
+
+    const composition = buildExecutiveVisualComposition(
+      executiveModel({
+        keyEvidence: [],
+        visualCandidates: [],
+      }),
+      input
+    );
+
+    const selected = composition.secondaryVisuals.filter(
+      (item) => item.visualType === "STATISTICAL_CHART"
+    );
+
+    expect(selected).toHaveLength(1);
+
+    expect(
+      composition.selectionAudit.excludedItems.some(
+        (item) =>
+          item.reasonCode === "LOW_EXECUTIVE_VALUE"
+      )
+    ).toBe(true);
+  });
   test("25 ADR-022 regresion pasa", () => {
     const input = institutionalInput({ evidence: [{ evidenceId: "ev-governed", traceabilityIds: ["trace-governed"] }] });
     expect(buildExecutiveVisualComposition(executiveModel(), input).technicalMetadata.source).toBe("ExecutiveGeointReportModel+InstitutionalReportInput");

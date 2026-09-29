@@ -175,6 +175,7 @@ export function prepareCrimeIncidenceContractForProject(contract: CrimeIncidence
     analyticalLevel: contract.analyticalLevel,
     createdAtReference: contract.createdAtReference,
     limitations: contract.limitations,
+    lineage: contract.lineage,
     datasetReference: {
       datasetId: contract.datasetReference.datasetId,
       coverage: { temporal: contract.datasetReference.coverage?.temporal ?? null },
@@ -184,7 +185,18 @@ export function prepareCrimeIncidenceContractForProject(contract: CrimeIncidence
       admission: { accepted: contract.queryReference.admission.accepted },
     },
     projectionReference: {
-      metrics: { frequency: { totalRecords: contract.projectionReference.metrics.frequency.totalRecords } },
+      metrics: {
+        frequency: {
+          totalRecords: contract.projectionReference.metrics.frequency.totalRecords,
+          byIncidentType: contract.projectionReference.metrics.frequency.byIncidentType,
+        },
+        percentage: {
+          byIncidentType: contract.projectionReference.metrics.percentage.byIncidentType,
+        },
+        distribution: {
+          byOccurredDate: contract.projectionReference.metrics.distribution.byOccurredDate,
+        },
+      },
     },
   });
 }

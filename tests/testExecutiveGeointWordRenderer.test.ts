@@ -363,6 +363,109 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(text).toContain("visualAssetsById: generationContext.visualAssetsById");
   });
 
+  test("27A ADR-022 resuelve y renderiza ambos charts", async () => {
+    const chartIds = [
+      "crime-incidence-type-distribution:dataset-adr022",
+      "crime-incidence-temporal-evolution:dataset-adr022",
+    ];
+
+    const composition =
+      visualComposition("READY_FROM_GOVERNED_VISUAL") as any;
+
+    composition.secondaryVisuals = chartIds.map(
+      (visualId: string, index: number) => ({
+        visualId,
+        visualType: "STATISTICAL_CHART",
+        executiveHeadline:
+          index === 0
+            ? "Distribucion de incidencia por tipo"
+            : "Evolucion temporal de la incidencia",
+        caption:
+          index === 0
+            ? "Distribucion descriptiva ADR-022"
+            : "Serie temporal descriptiva ADR-022",
+        visualReference: pngDataUrl,
+        presentation: {
+          title:
+            index === 0
+              ? "Distribucion de incidencia por tipo"
+              : "Evolucion temporal de la incidencia",
+          visibleSourceLabel: "ADR-022",
+        },
+        technicalMetadata: {
+          sourceItemId: visualId,
+          sourceType: "VISUAL_PRODUCT",
+          geographyId: null,
+          traceabilityIds: ["dataset-adr022"],
+          relatedFindingIds: [],
+          relatedEvidenceIds: [],
+        },
+      })
+    );
+
+    const assets =
+      await buildExecutiveGeointWordVisualAssets(composition);
+
+    for (const visualId of chartIds) {
+      expect(Object.keys(assets)).toContain(visualId);
+      expect(assets[visualId]?.data).toBeTruthy();
+    }
+
+    const base = documentModel();
+
+    const model = documentModel({
+      visualPlacements: [
+        base.visualPlacements[0],
+        ...chartIds.map((visualId, index) => ({
+          visualId,
+          sectionId: "multisource-analysis" as const,
+          placementRole: "ANALYTICAL_SUPPORT" as const,
+          headline:
+            index === 0
+              ? "Distribucion de incidencia por tipo"
+              : "Evolucion temporal de la incidencia",
+          caption:
+            index === 0
+              ? "Distribucion descriptiva ADR-022"
+              : "Serie temporal descriptiva ADR-022",
+          visualClass: "GRAFICA_ESTADISTICA" as const,
+          visibleSourceLabel: "ADR-022",
+        })),
+      ],
+    });
+
+    const rendered =
+      renderExecutiveGeointWordDocument(model, {
+        visualAssetsById: {
+          "principal-territorial-map":
+            await buildExecutiveGeointWordVisualAssets(
+              visualComposition("READY_FROM_GOVERNED_VISUAL")
+            ).then(
+              (resolved) =>
+                resolved["principal-territorial-map"]
+            ),
+          ...assets,
+        },
+      });
+
+    for (const visualId of chartIds) {
+      expect(
+        rendered.renderAudit.renderedVisualIds
+      ).toContain(visualId);
+
+      expect(
+        rendered.renderAudit.missingVisualAssetIds
+      ).not.toContain(visualId);
+    }
+
+    const packaged = await packageXml(rendered.document);
+
+    const drawingCount =
+      (packaged.document.match(/<w:drawing>/g) || []).length;
+
+    expect(drawingCount).toBeGreaterThanOrEqual(3);
+    expect(packaged.media.length).toBeGreaterThanOrEqual(1);
+  });
   test("27 data URL se resuelve y renderiza", async () => {
     const assets = await buildExecutiveGeointWordVisualAssets(visualComposition("READY_FROM_GOVERNED_VISUAL"));
     const audit = renderExecutiveGeointWordDocument(documentModel(), { visualAssetsById: assets }).renderAudit;

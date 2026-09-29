@@ -14,6 +14,7 @@ import {
 } from "../src/utils/institutionalStructuredPersistence";
 import type { CifaSourceEnvelope } from "../src/utils/cifaAcquisition";
 import type { CrimeIncidenceExportContract } from "../src/types/crimeIncidenceExportContract";
+import { buildCrimeIncidenceInstitutionalVisualSpecifications } from "../src/utils/crimeIncidenceInstitutionalVisualProducer";
 import {
   assessReportItemEligibility,
   buildDraftReportInput,
@@ -212,21 +213,88 @@ describe("QA-08 phase 2B structured persistence round-trip", () => {
     expect(input.osint).toEqual([]);
   });
 
-  test("governed incidence remains a descriptive product after reopening", () => {
+  test("five governed incidents preserve metrics and rebuild BAR + LINE after reopening", () => {
     const contract = {
       exportId: "inc-1", expedienteId: "project-1", productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT",
       analyticalLevel: "DESCRIPTIVE", createdAtReference: acquiredAt,
+      lineage: {
+        dataset: "c5i-1",
+        source: "TEST",
+        generatedAt: acquiredAt,
+      } as any,
       limitations: ["NOT_EVIDENCE"], datasetReference: { datasetId: "c5i-1", coverage: { temporal: { start: "2026-01-01", end: "2026-06-30" } } },
       queryReference: { status: "EXECUTED", admission: { accepted: true } },
-      projectionReference: { metrics: { frequency: { totalRecords: 3 } } },
+      projectionReference: {
+        metrics: {
+          frequency: {
+            totalRecords: 5,
+            byIncidentType: [
+              { value: "ROBO", count: 3 },
+              { value: "DAÑO", count: 2 },
+            ],
+          },
+          percentage: {
+            byIncidentType: [
+              { value: "ROBO", count: 3, percentage: 60 },
+              { value: "DAÑO", count: 2, percentage: 40 },
+            ],
+          },
+          distribution: {
+            byOccurredDate: [
+              { value: "2026-06-01", count: 2 },
+              { value: "2026-06-02", count: 3 },
+            ],
+          },
+        },
+      },
     } as unknown as CrimeIncidenceExportContract;
     const snapshot = prepareCrimeIncidenceContractForProject(contract);
     const input = buildInstitutionalReportInput(reopenedInstitutionalPayload({ crimeIncidenceExportContract: snapshot }));
     expect(input.crimeIncidenceExportContract).toMatchObject({
       productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT", analyticalLevel: "DESCRIPTIVE",
+      lineage: {
+        dataset: "c5i-1",
+        source: "TEST",
+        generatedAt: acquiredAt,
+      },
       queryReference: { status: "EXECUTED", admission: { accepted: true } },
-      projectionReference: { metrics: { frequency: { totalRecords: 3 } } },
+      projectionReference: {
+        metrics: {
+          frequency: {
+            totalRecords: 5,
+            byIncidentType: [
+              { value: "ROBO", count: 3 },
+              { value: "DAÑO", count: 2 },
+            ],
+          },
+          percentage: {
+            byIncidentType: [
+              { value: "ROBO", count: 3, percentage: 60 },
+              { value: "DAÑO", count: 2, percentage: 40 },
+            ],
+          },
+          distribution: {
+            byOccurredDate: [
+              { value: "2026-06-01", count: 2 },
+              { value: "2026-06-02", count: 3 },
+            ],
+          },
+        },
+      },
     });
+    const reopenedContract = input.crimeIncidenceExportContract as any;
+    const visualSet = buildCrimeIncidenceInstitutionalVisualSpecifications({
+      metrics: reopenedContract.projectionReference.metrics,
+      datasetReference: reopenedContract.datasetReference,
+      sourceQuery: reopenedContract.queryReference,
+      limitations: reopenedContract.limitations,
+      lineage: reopenedContract.lineage,
+    } as any);
+    expect(visualSet.charts.map((chart) => chart.chartType)).toEqual(["BAR", "LINE"]);
+    expect(visualSet.charts.map((chart) => chart.kind)).toEqual([
+      "INCIDENT_TYPE_DISTRIBUTION",
+      "TEMPORAL_EVOLUTION",
+    ]);
     expect(input.evidence.some((item: any) => item?.exportId === "inc-1")).toBe(false);
     expect(prepareCrimeIncidenceContractForProject({ ...contract, queryReference: { status: "REJECTED", admission: { accepted: false } } } as any)).toBeNull();
   });

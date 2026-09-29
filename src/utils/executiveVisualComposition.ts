@@ -146,6 +146,11 @@ interface Candidate {
   score: number;
   originalIndex: number;
   explicitVisibleSourceLabel: string;
+  datasetSourceRefs?: string[];
+  variables?: string[];
+  transformation?: string;
+  chartKind?: string;
+  publicationEligibility?: string;
 }
 
 interface PrincipalMapCandidate {
@@ -505,6 +510,11 @@ function candidateFromVisual(item: ExecutiveVisualCandidate, index: number): Can
 }
 
 function candidateFromInputVisual(item: any, index: number): Candidate {
+  const sourceTraceabilityIds = dedupe([
+    ...asArray<string>(item?.sourceItemIds),
+    ...asArray<string>(item?.datasetSourceRefs),
+  ]);
+
   return {
     id: itemId(item, `input-visual-${index + 1}`),
     kind: "INPUT_VISUAL_PRODUCT",
@@ -512,7 +522,10 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
     title: clean(item?.title || item?.caption || `Visual gobernado ${index + 1}`),
     summary: clean(item?.caption || item?.summary || item?.description || "Visual gobernado sin sintesis disponible."),
     reference: visualReference(item),
-    traceabilityIds: traceabilityIds(item),
+    traceabilityIds: dedupe([
+      ...traceabilityIds(item),
+      ...sourceTraceabilityIds,
+    ]),
     relatedFindingIds: relatedFindingIds(item),
     relatedEvidenceIds: relatedEvidenceIds(item),
     sourceType: "VISUAL_PRODUCT",
@@ -521,7 +534,31 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
     score: 40 - index,
     originalIndex: index,
     explicitVisibleSourceLabel: explicitVisibleSourceLabel(item),
+    datasetSourceRefs: dedupe([
+      ...asArray<string>(item?.datasetSourceRefs),
+      ...asArray<string>(item?.sourceItemIds),
+    ]),
+    variables: dedupe(asArray<string>(item?.variables)),
+    transformation: clean(item?.transformation),
+    chartKind: clean(item?.kind),
+    publicationEligibility: clean(item?.publicationEligibility),
   };
+}
+
+function isGovernedDescriptiveStatisticalChart(candidate: Candidate): boolean {
+  const eligible =
+    candidate.publicationEligibility === "ELIGIBLE" ||
+    candidate.publicationEligibility === "ELIGIBLE_WITH_DISCLOSURE";
+
+  return (
+    candidate.kind === "INPUT_VISUAL_PRODUCT" &&
+    candidate.visualType === "STATISTICAL_CHART" &&
+    eligible &&
+    Boolean(candidate.reference) &&
+    Boolean(candidate.datasetSourceRefs?.length) &&
+    Boolean(candidate.variables?.length) &&
+    Boolean(clean(candidate.transformation))
+  );
 }
 
 function relationScore(candidate: Candidate, priorityFindingIds: string[], decisionFindingLabels: string[]): number {
@@ -553,11 +590,49 @@ function validateCandidate(
     candidate.visualType === "MULTISOURCE_CONVERGENCE" ||
     candidate.visualType === "TEMPORAL_COMPARISON" ||
     candidate.visualType === "TREND_VISUAL" ||
-    candidate.visualType === "PROSPECTIVE_SCENARIO";
+    candidate.visualType === "PROSPECTIVE_SCENARIO" ||
+    isGovernedDescriptiveStatisticalChart(candidate);
+
   if (!hasRelation) return "NO_EXECUTIVE_RELATION";
-  const sameTypeCount = selected.filter((item) => item.visualType === candidate.visualType).length;
-  if (sameTypeCount >= 2 && candidate.visualType === "EVIDENCE_IMAGE") return "LOW_EXECUTIVE_VALUE";
-  if (sameTypeCount >= 1 && candidate.visualType !== "EVIDENCE_IMAGE") return "LOW_EXECUTIVE_VALUE";
+
+  const sameType = selected.filter(
+    (item) => item.visualType === candidate.visualType
+  );
+
+  if (
+    candidate.visualType === "STATISTICAL_CHART" &&
+    isGovernedDescriptiveStatisticalChart(candidate)
+  ) {
+    const chartKind = clean(candidate.chartKind);
+    const duplicateChartKind = sameType.some(
+      (item) => clean(item.chartKind) === chartKind
+    );
+
+    if (
+      !chartKind ||
+      duplicateChartKind ||
+      sameType.length >= 2
+    ) {
+      return "LOW_EXECUTIVE_VALUE";
+    }
+
+    return null;
+  }
+
+  if (
+    sameType.length >= 2 &&
+    candidate.visualType === "EVIDENCE_IMAGE"
+  ) {
+    return "LOW_EXECUTIVE_VALUE";
+  }
+
+  if (
+    sameType.length >= 1 &&
+    candidate.visualType !== "EVIDENCE_IMAGE"
+  ) {
+    return "LOW_EXECUTIVE_VALUE";
+  }
+
   return null;
 }
 
@@ -577,7 +652,9 @@ function exclusionReason(code: ExecutiveVisualExclusionReasonCode): string {
 }
 
 function toSecondaryVisual(candidate: Candidate, model: ExecutiveGeointReportModel): ExecutiveSecondaryVisual {
-  const headline = headlineFromFinding(model.findings, candidate.relatedFindingIds);
+  const headline = isGovernedDescriptiveStatisticalChart(candidate)
+    ? candidate.title
+    : headlineFromFinding(model.findings, candidate.relatedFindingIds);
   const type = candidate.visualType === "MAP" ? "SECONDARY_MAP" : candidate.visualType;
   return {
     visualId: candidate.id,
