@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
@@ -60,7 +60,7 @@ export default function ProjectWorkspacePage() {
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<"environmental" | "pandillas">("environmental");
   const [reportReadinessGuidanceDomains, setReportReadinessGuidanceDomains] = useState<string[]>([]);
 
-  const handleReportReadinessGuidance = (domains: string[]) => {
+  const handleReportReadinessGuidance = useCallback((domains: string[]) => {
     setReportReadinessGuidanceDomains(domains);
 
     const targetId = domains.includes("GEOGRAPHY")
@@ -79,7 +79,7 @@ export default function ProjectWorkspacePage() {
         block: "center",
       });
     }, 120);
-  };
+  }, []);
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
   const [pendingDeleteAnalysisId, setPendingDeleteAnalysisId] = useState<string | null>(null);
   const [deletePasswordInput, setDeletePasswordInput] = useState("");
