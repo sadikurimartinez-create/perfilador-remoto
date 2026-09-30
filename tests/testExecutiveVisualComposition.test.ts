@@ -2,6 +2,7 @@ import { buildCanonicalProjectGeography, type CanonicalProjectGeography } from "
 import { buildExecutiveVisualComposition, MAX_EXECUTIVE_VISUALS } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
 import { buildExecutiveCanonicalTerritorialMapSpec } from "../src/utils/executiveCanonicalTerritorialMap";
+import { DENUE_ANALYTICAL_DOCUMENT_KIND } from "../src/utils/denueAnalyticalDocumentIntegration";
 
 const generatedAt = "2026-09-06T12:00:00.000Z";
 
@@ -158,6 +159,104 @@ function institutionalInput(overrides: any = {}) {
     ...overrides,
   };
 }
+
+function analyticalDenueVisual(geo: CanonicalProjectGeography) {
+  return {
+    visualId: "analytical-map",
+    visualType: "ANALYTICAL_DENUE_MAP",
+    documentIntegrationKind: DENUE_ANALYTICAL_DOCUMENT_KIND,
+    title: "Relaciones analiticas aceptadas",
+    caption: "Relaciones PPC admitidas; proximidad no implica causalidad.",
+    visualReference: "asset://analytical-map",
+    geographyId: geo.geographyId,
+    traceabilityIds: ["trace-accepted-relation"],
+    publicationEligibility: "ELIGIBLE",
+  };
+}
+
+function analyticalMapModel(geo: CanonicalProjectGeography, analytical: any, otherVisuals: any[] = []) {
+  return executiveModel({
+    geography: geo,
+    keyEvidence: [],
+    territorialSituation: { ...executiveModel({ geography: geo }).territorialSituation, principalMapCandidate: analytical },
+    visualCandidates: [analytical, ...otherVisuals],
+  });
+}
+
+describe("H.2F.1R.1 - principal B.5 y secundario B.6G", () => {
+  test("B.5 sin B.6G conserva el mapa territorial principal", () => {
+    const composition = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [] }), institutionalInput());
+    expect(composition.principalTerritorialMap.visualReference).toBe("asset://map-1");
+    expect(composition.secondaryVisuals).toEqual([]);
+  });
+
+  test("B.6G primero nunca sustituye al mapa territorial compatible B.5", () => {
+    const geo = geography("POLYGON");
+    const analytical = analyticalDenueVisual(geo);
+    const territorial = visualCandidate({ geographyId: geo.geographyId });
+    const composition = buildExecutiveVisualComposition(
+      analyticalMapModel(geo, analytical, [territorial]),
+      institutionalInput({ geography: geo, visualProducts: [analytical] })
+    );
+    expect(composition.principalTerritorialMap.status).toBe("READY_FROM_GOVERNED_VISUAL");
+    expect(composition.principalTerritorialMap.visualReference).toBe(territorial.reference);
+    expect(composition.secondaryVisuals).toEqual([expect.objectContaining({ visualId: analytical.visualId, visualType: "SECONDARY_MAP" })]);
+  });
+
+  test("solo B.6G mantiene render principal requerido desde geografia canonica", () => {
+    const geo = geography("POLYGON");
+    const analytical = analyticalDenueVisual(geo);
+    const composition = buildExecutiveVisualComposition(analyticalMapModel(geo, analytical), institutionalInput({ geography: geo, visualProducts: [analytical] }));
+    expect(composition.principalTerritorialMap.status).toBe("MAP_RENDER_REQUIRED");
+    expect(composition.principalTerritorialMap.visualReference).toBeNull();
+    expect(composition.principalTerritorialMap.technicalMetadata.geometry).toEqual(geo.geometry);
+    expect(composition.secondaryVisuals[0]).toEqual(expect.objectContaining({ visualId: analytical.visualId, visualType: "SECONDARY_MAP" }));
+  });
+
+  test.each(["documentIntegrationKind", "technicalMetadata"])("discriminante %s bloquea promocion incluso bajo tipo MAP", (location) => {
+    const geo = geography("POLYGON");
+    const analytical: any = { ...analyticalDenueVisual(geo), visualType: "MAP" };
+    if (location === "technicalMetadata") {
+      delete analytical.documentIntegrationKind;
+      analytical.technicalMetadata = { documentIntegrationKind: DENUE_ANALYTICAL_DOCUMENT_KIND };
+    }
+    const composition = buildExecutiveVisualComposition(analyticalMapModel(geo, analytical), institutionalInput({ geography: geo, visualProducts: [analytical] }));
+    expect(composition.principalTerritorialMap.status).toBe("MAP_RENDER_REQUIRED");
+  });
+
+  test("proyeccion MAP ligada al producto B.6G tampoco es principal", () => {
+    const geo = geography("POLYGON");
+    const analytical = analyticalDenueVisual(geo);
+    const projection = visualCandidate({ visualId: analytical.visualId, reference: analytical.visualReference, geographyId: geo.geographyId });
+    const composition = buildExecutiveVisualComposition(analyticalMapModel(geo, projection), institutionalInput({ geography: geo, visualProducts: [analytical] }));
+    expect(composition.principalTerritorialMap.status).toBe("MAP_RENDER_REQUIRED");
+    expect(composition.secondaryVisuals[0].visualType).toBe("SECONDARY_MAP");
+  });
+
+  test("BAR LINE B.6G photo ocupan cuatro secundarios y exceso permanece determinista", () => {
+    const geo = geography("POLYGON");
+    const analytical = analyticalDenueVisual(geo);
+    const territorial = visualCandidate({ geographyId: geo.geographyId });
+    const charts = ["BAR", "LINE"].map((kind) => ({
+      visualId: kind, visualType: "CHART", kind, title: kind, visualReference: `asset://${kind}`,
+      traceabilityIds: [`trace-${kind}`], publicationEligibility: "ELIGIBLE",
+      datasetSourceRefs: ["dataset-adr022"], variables: ["count"], transformation: "Descriptive frequency",
+    }));
+    const model = analyticalMapModel(geo, analytical, [territorial]);
+    model.keyEvidence = [keyEvidence()];
+    const input = institutionalInput({ geography: geo, visualProducts: [...charts, analytical] });
+    const composition = buildExecutiveVisualComposition(model, input);
+    expect(composition.principalTerritorialMap.visualReference).toBe(territorial.reference);
+    expect(composition.secondaryVisuals.map((item) => item.visualId)).toEqual(["BAR", "LINE", analytical.visualId, "ev-1"]);
+    expect(composition.visualBudget.used).toBe(5);
+    model.keyEvidence.push(keyEvidence({ evidenceId: "extra", title: "Visual complementario", sourceTypes: [], visualReference: "asset://extra", traceabilityIds: ["trace-extra"] }));
+    const overflow = buildExecutiveVisualComposition(model, input);
+    expect(overflow.secondaryVisuals).toHaveLength(4);
+    expect(overflow.selectionAudit.excludedItems).toContainEqual(expect.objectContaining({ itemId: "extra", reasonCode: "VISUAL_BUDGET_EXCEEDED" }));
+    expect(buildExecutiveVisualComposition(model, input)).toEqual(overflow);
+    expect(overflow.principalTerritorialMap.visualReference).toBe(territorial.reference);
+  });
+});
 
 describe("Fase C - ExecutiveVisualComposition", () => {
   test("1 mapa principal siempre existe como candidato o render instruction", () => {

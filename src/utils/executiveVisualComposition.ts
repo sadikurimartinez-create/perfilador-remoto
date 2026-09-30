@@ -7,6 +7,7 @@ import type {
 } from "@/utils/executiveGeointReportModel";
 import type { ExecutiveCanonicalTerritorialMapSpec } from "@/utils/executiveCanonicalTerritorialMap";
 import type { GovernedCartographicScale } from "@/utils/governedCartographicScale";
+import { DENUE_ANALYTICAL_DOCUMENT_KIND } from "@/utils/denueAnalyticalDocumentIntegration";
 import {
   getCanonicalMapViewport,
   type CanonicalGeometry,
@@ -325,10 +326,16 @@ function sourceVisualProductsForCandidate(candidate: any, institutionalInput: In
 function toPrincipalMapCandidate(item: any, institutionalInput: InstitutionalReportInput): PrincipalMapCandidate | null {
   const visualType = clean(item?.visualType || item?.type || item?.kind).toUpperCase();
   if (!visualType.includes("MAP") && !visualType.includes("MAPA")) return null;
+  const sourceProducts = sourceVisualProductsForCandidate(item, institutionalInput);
+  // B.6G and its projections remain secondary; the principal retains B.5/canonical geography.
+  if ([item, ...sourceProducts].some((visual) =>
+    clean(visual?.visualType || visual?.type || visual?.kind).toUpperCase() === "ANALYTICAL_DENUE_MAP" ||
+    visual?.documentIntegrationKind === DENUE_ANALYTICAL_DOCUMENT_KIND ||
+    visual?.technicalMetadata?.documentIntegrationKind === DENUE_ANALYTICAL_DOCUMENT_KIND
+  )) return null;
   const reference = visualReference(item);
   const traces = traceabilityIds(item);
   if (!reference || !traces.length) return null;
-  const sourceProducts = sourceVisualProductsForCandidate(item, institutionalInput);
   return {
     id: itemId(item, "principal-map-candidate"),
     title: clean(item?.title || item?.caption),
