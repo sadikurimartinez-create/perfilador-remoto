@@ -257,7 +257,11 @@ describe("ADR-020.21 Fase 2 - Canonical persistence and query reconciliation", (
           nom_asen: "Centro",
           fuente_archivo: "db.csv",
           source_fingerprint: "f".repeat(64),
-          dataset_version: "2026-TEST-v1",
+          dataset_name: "Dataset observado en PostGIS",
+          dataset_version: "POSTGIS-2026-v2",
+          source_organization: "C5i SSPE Aguascalientes",
+          temporal_start: "2016-01-01",
+          temporal_end: "2026-06-23",
           lat: 21.8818,
           lng: -102.2916,
           distancia_m: null,
@@ -284,7 +288,72 @@ describe("ADR-020.21 Fase 2 - Canonical persistence and query reconciliation", (
     expect(result.querySource).toBe("POSTGIS");
     expect(result.sourceStatus).toBe("POSTGIS_AVAILABLE");
     expect(result.data).toHaveLength(1);
+    expect(result.datasetIdentity).toMatchObject({
+      datasetId: "incidencia_estadistica",
+      datasetName: "Dataset observado en PostGIS",
+      datasetVersion: "POSTGIS-2026-v2",
+      sourceType: "POSTGIS",
+      sourceName: "incidencia_estadistica",
+      sourceOrganization: "C5i SSPE Aguascalientes",
+      temporalCoverage: {
+        start: "2016-01-01",
+        end: "2026-06-23",
+        status: "KNOWN",
+      },
+    });
     expect(String(mockQuery.mock.calls[0][0])).toContain("ST_Intersects");
+    expect(String(mockQuery.mock.calls[0][0])).toContain(
+      "d.provenance_status = 'VERIFIED'"
+    );
+  });
+
+  test("TEST C4 incomplete observed PostGIS provenance remains not admitted", async () => {
+    process.env.DATABASE_URL = "postgresql://configured-for-test";
+    delete process.env.CRIME_INCIDENCE_DATASET_NAME;
+    delete process.env.CRIME_INCIDENCE_DATASET_VERSION;
+    delete process.env.CRIME_INCIDENCE_SOURCE_ORGANIZATION;
+    delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_START;
+    delete process.env.CRIME_INCIDENCE_DATASET_TEMPORAL_END;
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        incidente: "Robo",
+        fecha: "2026-07-01",
+        fuente_archivo: "db.csv",
+        source_fingerprint: "f".repeat(64),
+        dataset_name: "Dataset observado en PostGIS",
+        dataset_version: "POSTGIS-2026-v2",
+        source_organization: null,
+        temporal_start: "2016-01-01",
+        temporal_end: "2026-06-23",
+        lat: 21.8818,
+        lng: -102.2916,
+        distancia_m: null,
+      }],
+    });
+    const { queryCrimeIncidence } = await import("../src/lib/crimeIncidenceRepository");
+    const { evaluateCrimeDatasetAdmission } = await import("../src/utils/crimeDatasetAdmissionGate");
+
+    const result = await queryCrimeIncidence({
+      lat: 21.8818,
+      lng: -102.2916,
+      spatialFilter: {
+        type: "POLYGON",
+        coordinates: [
+          [-102.3, 21.88],
+          [-102.29, 21.88],
+          [-102.29, 21.89],
+          [-102.3, 21.88],
+        ],
+      },
+      allowLegacyFallback: false,
+    });
+    const admission = evaluateCrimeDatasetAdmission(result.datasetIdentity!);
+
+    expect(admission).toMatchObject({
+      accepted: false,
+      status: "INCOMPLETE_PROVENANCE",
+      reasons: ["SOURCE_ORGANIZATION_MISSING"],
+    });
   });
 
   test("TEST D CSV fallback cannot be presented as PostGIS response", async () => {

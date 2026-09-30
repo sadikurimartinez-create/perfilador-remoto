@@ -111,6 +111,15 @@ describe("ADR-022.8K productive dataset provenance activation", () => {
     expect(binding.viewModel?.incidents.excluded).toHaveLength(0);
     expect(binding.viewModel?.metrics).toBe(binding.viewModel?.exportReference.projectionReference.metrics);
     expect(binding.viewModel?.lineage).toBe(binding.viewModel?.exportReference.lineage);
+    expect(binding.viewModel?.exportReference.queryReference.admission).toMatchObject({
+      status: "ADMITTED",
+      accepted: true,
+    });
+    expect(binding.viewModel?.exportReference.queryReference.request.requestProvenance).toEqual({
+      requestedBy: "analyst-k",
+      requestReference: "crime-incidence-workspace:EXP-0228K",
+      sourceReference: "incidencia_estadistica",
+    });
     expect(binding.viewModel?.exportReference.productClassification).toBe("DESCRIPTIVE_ANALYTICAL_PRODUCT");
   });
 

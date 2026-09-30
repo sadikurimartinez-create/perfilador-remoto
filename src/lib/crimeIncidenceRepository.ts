@@ -16,6 +16,7 @@ import type { CrimeDatasetIdentity } from "@/types/crimeDatasetIdentity";
 import {
   buildCrimeIncidenceDatasetIdentity,
   readCrimeIncidenceDatasetProvenanceConfig,
+  type CrimeIncidenceDatasetProvenanceConfig,
 } from "@/utils/crimeIncidenceDatasetProvenance";
 
 export type CrimeQueryInput = {
@@ -48,6 +49,7 @@ export type CrimeQueryResult = {
   data: any[];
   bibliografia: string;
   lineage: ReturnType<typeof buildCrimeQueryLineage>;
+  datasetProvenance?: CrimeIncidenceDatasetProvenanceConfig;
   datasetIdentity?: CrimeDatasetIdentity;
   error?: string;
 };
@@ -58,6 +60,7 @@ export const CSV_LEGACY_POLYGON_UNSUPPORTED_ERROR =
 function configuredDatasetIdentity(result: CrimeQueryResult): CrimeDatasetIdentity {
   return buildCrimeIncidenceDatasetIdentity({
     config: readCrimeIncidenceDatasetProvenanceConfig(),
+    observedConfig: result.datasetProvenance,
     datasetReference: result.lineage.dataset || null,
     querySource: result.querySource,
     sourceStatus: result.sourceStatus,
@@ -65,6 +68,47 @@ function configuredDatasetIdentity(result: CrimeQueryResult): CrimeDatasetIdenti
     recordCount: result.data.length,
     lineage: result.lineage,
   });
+}
+
+function textOrNull(value: unknown): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || null;
+}
+
+function dateOrNull(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const normalized = textOrNull(value);
+  const date = normalized?.slice(0, 10) ?? null;
+  return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+function observedPostgisProvenance(
+  rows: Array<Record<string, unknown>>
+): CrimeIncidenceDatasetProvenanceConfig | undefined {
+  if (rows.length === 0) return undefined;
+
+  const observed = rows.map((row) => ({
+    datasetName: textOrNull(row.dataset_name),
+    datasetVersion: textOrNull(row.dataset_version),
+    sourceOrganization: textOrNull(row.source_organization),
+    temporalStart: dateOrNull(row.temporal_start),
+    temporalEnd: dateOrNull(row.temporal_end),
+  }));
+  const unique = new Set(observed.map((item) => JSON.stringify(item)));
+
+  if (unique.size !== 1) {
+    return {
+      datasetName: null,
+      datasetVersion: null,
+      sourceOrganization: null,
+      temporalStart: null,
+      temporalEnd: null,
+    };
+  }
+
+  return observed[0];
 }
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -273,13 +317,18 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
           nom_asen,
           i.fuente_archivo,
           i.source_fingerprint,
+          d.dataset_name,
           d.dataset_version,
+          d.source_organization,
+          d.temporal_start,
+          d.temporal_end,
           ST_Y(i.geometria::geometry) AS lat,
           ST_X(i.geometria::geometry) AS lng,
           ${spatialQuery.selectDistanceSql}
         FROM incidencia_estadistica i
         LEFT JOIN crime_incidence_datasets d
           ON d.id = i.dataset_id
+          AND d.provenance_status = 'VERIFIED'
         WHERE ${spatialQuery.whereSpatialSql}
           AND ($${startDateParamIndex}::text IS NULL OR i.fecha::date >= $${startDateParamIndex}::date)
           AND ($${endDateParamIndex}::text IS NULL OR i.fecha::date <= $${endDateParamIndex}::date)
@@ -321,6 +370,7 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
       coverageStatus,
       data,
       bibliografia: "",
+      datasetProvenance: observedPostgisProvenance(result.rows),
       lineage: buildCrimeQueryLineage({
         dataset: "incidencia_estadistica",
         querySource: "POSTGIS",

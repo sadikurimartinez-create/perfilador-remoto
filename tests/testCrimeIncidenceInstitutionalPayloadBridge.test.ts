@@ -319,6 +319,8 @@ describe(
           createdAt: 1,
           updatedAt: 1,
         };
+        const historicalContract = historicalSnapshot();
+        historicalContract.expedienteId = "28092026-0066-BRPD";
         let observedUrl = "";
         let observedMethod = "";
         let observedRequest: Record<string, any> = {};
@@ -340,14 +342,14 @@ describe(
         const result =
           await enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
             {
-              projectId: "28092026-0066-BRPD",
+              projectId: "ormB9enaK4oVFjnLNtPj",
               crimeIncidenceExportContract:
-                historicalSnapshot(),
+                historicalContract,
               visualProducts: [],
             },
             {
               recoverIncompleteSnapshot: {
-                expedienteId: "28092026-0066-BRPD",
+                expedienteId: "ormB9enaK4oVFjnLNtPj",
                 canonicalGeography,
                 radiusMeters: null,
                 requestedBy: "analyst-1",
@@ -369,10 +371,10 @@ describe(
             source: "EXPEDIENT",
             metadata: {
               queryId:
-                "crime-incidence-production:28092026-0066-BRPD",
-              expedienteId: "28092026-0066-BRPD",
+                "crime-incidence-production:ormB9enaK4oVFjnLNtPj",
+              expedienteId: "ormB9enaK4oVFjnLNtPj",
               sourceReference:
-                "expedient:28092026-0066-BRPD",
+                "expedient:ormB9enaK4oVFjnLNtPj",
               territoryType: "POLYGON_BOUNDARY",
               radiusMeters: null,
               corridorWidthMeters: null,
@@ -393,6 +395,7 @@ describe(
         const recovered =
           result.crimeIncidenceExportContract;
         expect(recovered.lineage).toBeDefined();
+        expect(recovered.queryReference.admission.accepted).toBe(true);
         expect(recovered.projectionReference.metrics.frequency).toEqual({
           totalRecords: 5,
           byIncidentType: [

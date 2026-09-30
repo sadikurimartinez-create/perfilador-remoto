@@ -165,7 +165,9 @@ describe("ADR-022.8J production composition", () => {
     });
     expect(absent).toMatchObject({ state: "ERROR", error: "CRIME_INCIDENCE_DATASET_IDENTITY_UNAVAILABLE" });
     expect(rejected.state).toBe("ERROR");
-    expect(rejected.error).toContain("CRIME_INCIDENCE_DATASET_NOT_ADMITTED");
+    expect(rejected.error).toBe(
+      "CRIME_INCIDENCE_DATASET_NOT_ADMITTED:INCOMPLETE_PROVENANCE"
+    );
   });
 
   test("page supplies the productive workspace composition", () => {

@@ -24,6 +24,7 @@ export interface CrimeIncidenceDatasetProvenanceConfig {
 
 export interface BuildCrimeIncidenceDatasetIdentityInput {
   config: CrimeIncidenceDatasetProvenanceConfig;
+  observedConfig?: CrimeIncidenceDatasetProvenanceConfig;
   datasetReference: string | null;
   querySource: CrimeIncidenceQuerySource;
   sourceStatus: CrimeIncidenceSourceStatus;
@@ -71,7 +72,7 @@ export function missingCrimeIncidenceProvenanceConfiguration(
 export function buildCrimeIncidenceDatasetIdentity(
   input: BuildCrimeIncidenceDatasetIdentityInput
 ): CrimeDatasetIdentity {
-  const { config } = input;
+  const config = input.observedConfig ?? input.config;
   const temporalValid = validIsoDate(config.temporalStart)
     && validIsoDate(config.temporalEnd)
     && config.temporalStart! <= config.temporalEnd!;
