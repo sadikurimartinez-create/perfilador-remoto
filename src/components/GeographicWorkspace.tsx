@@ -31,6 +31,7 @@ import {
 import { isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
 import type { HistoricalGeographyCandidate } from "@/utils/historicalGeographyReconciliation";
 import { compactFindingRef } from "@/utils/projectRootReconciliation";
+import { DenueAnalyticalReviewPanel } from "./DenueAnalyticalReviewPanel";
 
 // ADR-019.15: Geografía Rectora reactiva basada exclusivamente en datos reales del expediente o fotos in situ.
 const INITIAL_SV_AUTOMATIC: any[] = [];
@@ -812,6 +813,8 @@ export function GeographicWorkspace({
               onTriggerTemporalComparison={handleTriggerTemporalComparison}
             />
           </div>
+
+          <DenueAnalyticalReviewPanel streetViewFindings={findings} />
         </div>
 
         {/* Modales Gobernados de Motores GEOINT (ADR-018 y ADR-019) */}
