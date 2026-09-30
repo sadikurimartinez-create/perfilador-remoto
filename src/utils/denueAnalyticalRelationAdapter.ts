@@ -28,7 +28,7 @@ import {
 } from "@/utils/denueSpatialRelationMetrics";
 
 export interface GovernedDenueAnalyticalObservation {
-  poi: DenueCanonicalPoi;
+  poi: Omit<DenueCanonicalPoi, "raw">;
   layer: DenueGovernedMapLayer;
 }
 

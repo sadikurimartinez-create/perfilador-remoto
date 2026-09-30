@@ -3,7 +3,7 @@ import type { DenueCanonicalPoi } from "@/utils/denueCanonicalPoi";
 import { buildEvidenceLineage } from "@/utils/evidenceLineage";
 import type { ObservedGovernedMapLayer } from "@/utils/governedCartographicProduct";
 
-export type DenueCartographicObservation = DenueCanonicalPoi & {
+export type DenueCartographicObservation = Omit<DenueCanonicalPoi, "raw"> & {
   category?: string | null;
   activityCategory?: string | null;
   distanceMeters?: number | null;
