@@ -236,6 +236,20 @@ describe("R3.2B.6H.2D DENUE analytical publication service", () => {
     expect(result.product?.layers[0].traceabilityIds).toEqual(layer.traceabilityIds);
   });
 
+  test("deriva methodologyVersion del workflow persistido durante generación", async () => {
+    const canonical = geography("POLYGON");
+    const layer = denueLayer(canonical, "methodology-derived");
+    const repository = await repositoryWith(canonical, [{ layer, status: "ACCEPTED" }]);
+    const { methodologyVersion: _methodologyVersion, ...generationRequest } = request(canonical, [layer]);
+    const result = await buildDenueAnalyticalPublicationProduct(
+      PROJECT_ID,
+      generationRequest,
+      dependencies(repository)
+    );
+    expect(result.productStatus).toBe("BUILT");
+    expect(result.product?.methodologyVersion).toBe(METHODOLOGY);
+  });
+
   test("ACCEPTED con fingerprint de ledger inconsistente queda excluida", async () => {
     const canonical = geography("POLYGON");
     const layer = denueLayer(canonical, "invalid-ledger");

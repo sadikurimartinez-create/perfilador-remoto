@@ -98,6 +98,7 @@ import { buildExecutiveGeointTechnicalAnnexModel } from "@/utils/executiveGeoint
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executiveGeointTechnicalAnnexWordRenderer";
 import { institutionalReportPackageService } from "@/services/institutionalReportPackageService";
 import { renderDenueAnalyticalMapBitmap } from "@/utils/denueAnalyticalMapImageRenderer";
+import { integrateDenueAnalyticalPublicationForReport } from "@/services/denueAnalyticalReportGenerationService";
 
 const CARTOGRAPHIC_SCALE_BAR_HEIGHT_LOGICAL_PX = 6;
 const CARTOGRAPHIC_SCALE_LABEL_BASELINE_LOGICAL_PX = 19;
@@ -895,24 +896,27 @@ async function resolveInstitutionalVisualAssets(
 }
 
 async function buildInstitutionalGenerationContext(payload: any, projectName: string, reportNumber?: string, user?: any) {
-  const institutionalReportInput = buildInstitutionalReportInput(payload);
+  const basePayload = {
+    ...payload,
+    denueAnalyticalCartographicProductResult: undefined,
+    denueAnalyticalCartographicProduct: undefined,
+    denueAnalyticalMapRenderModel: undefined,
+    denueAnalyticalRelations: undefined,
+    denueAnalyticalReviewLedger: undefined,
+    denueAnalytical: payload.denueAnalytical ? {
+      ...payload.denueAnalytical,
+      cartographicProductResult: undefined,
+      cartographicProduct: undefined,
+      relations: undefined,
+    } : undefined,
+  };
+  let institutionalReportInput = buildInstitutionalReportInput(basePayload);
   const generatedAt = institutionalReportInput.generatedAt;
   const numeroExpediente = payload.numeroExpediente || reportNumber;
   const projectId = payload.projectId || institutionalReportInput.projectId;
-  const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
-    documentIdentity: {
-      numeroExpediente,
-      ceipolId: payload.ceipolId,
-      projectId,
-      name: projectName,
-    },
-    nombreExpediente: projectName,
-    fecha: generatedAt,
-    personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
-    clasificacion: payload.classification || payload.clasificacion,
-  });
-  const provisionalVisualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
   let governedDenueRenderingInput = null;
+  let denueLayers = [];
+  let contextualDisplayedCount = 0;
   if (institutionalReportInput.geography && institutionalReportInput.denuePois?.length) {
     const denueProductResult = buildDenueGovernedCartographicProduct({
       projectId: institutionalReportInput.projectId,
@@ -927,8 +931,10 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
       createdAtReference: `report-snapshot:${generatedAt}`,
     });
     if (denueProductResult.product) {
+      denueLayers = denueProductResult.product.layers;
       const displaySelection = selectDenueCartographicDisplay(denueProductResult.product);
       if (displaySelection.status === "PLANNED") {
+        contextualDisplayedCount = displaySelection.plan.audit.selectedCount;
         governedDenueRenderingInput = {
           product: denueProductResult.product,
           displayPlan: displaySelection.plan,
@@ -936,6 +942,26 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
       }
     }
   }
+  const denueAnalyticalPublication = await integrateDenueAnalyticalPublicationForReport({
+    institutionalReportInput,
+    denueLayers,
+    contextualDisplayedCount,
+    createdAtReference: `report-snapshot:${generatedAt}`,
+  });
+  institutionalReportInput = denueAnalyticalPublication.institutionalReportInput;
+  const executiveModel = buildExecutiveGeointReportModel(institutionalReportInput, {
+    documentIdentity: {
+      numeroExpediente,
+      ceipolId: payload.ceipolId,
+      projectId,
+      name: projectName,
+    },
+    nombreExpediente: projectName,
+    fecha: generatedAt,
+    personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
+    clasificacion: payload.classification || payload.clasificacion,
+  });
+  const provisionalVisualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
   const principalTerritorialMapSpec = provisionalVisualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
     && institutionalReportInput.geography
     ? buildExecutiveCanonicalTerritorialMapSpec(institutionalReportInput.geography, {
@@ -986,6 +1012,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     principalTerritorialMapSpec,
     fingerprintScope,
     institutionalLogos: { sspe: sspeLogo, ceipol: ceipolLogo },
+    denueAnalyticalPublication,
   };
 }
 

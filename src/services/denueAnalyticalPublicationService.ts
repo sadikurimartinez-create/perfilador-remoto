@@ -23,8 +23,8 @@ import {
 
 export type DenueAnalyticalPublicationProductRequest = Omit<
   DenueAnalyticalCartographicProductInput,
-  "expedienteId" | "relations"
->;
+  "expedienteId" | "relations" | "methodologyVersion"
+> & { methodologyVersion?: string };
 
 export interface DenueAnalyticalPublicationExclusion {
   relationId: string;
@@ -98,6 +98,14 @@ export async function buildDenueAnalyticalPublicationProduct(
   dependencies: DenueAnalyticalPublicationServiceDependencies = DEFAULT_DEPENDENCIES
 ): Promise<DenueAnalyticalPublicationServiceResult> {
   const workflow = await dependencies.loadWorkflow(projectId);
+  const methodologyVersions = uniqueSorted(workflow.relations.map((relation) => relation.methodologyVersion));
+  const methodologyVersion = request.methodologyVersion || (
+    methodologyVersions.length === 1
+      ? methodologyVersions[0]
+      : methodologyVersions.length === 0
+        ? "ADR-026:DENUE_ANALYTICAL_PUBLICATION:v1"
+        : "ADR-026:DENUE_ANALYTICAL_PUBLICATION:MIXED_METHODOLOGY_REJECTED"
+  );
   const ledgerGroups = ledgersByRelationId(workflow.reviewLedgers);
   const eligibleInputs: DenueAnalyticalPublicationInput[] = [];
   const exclusions: DenueAnalyticalPublicationExclusion[] = [];
@@ -147,6 +155,7 @@ export async function buildDenueAnalyticalPublicationProduct(
   const productResult = buildDenueAnalyticalCartographicProduct({
     ...request,
     expedienteId: projectId,
+    methodologyVersion,
     relations: eligibleInputs,
   });
   const exclusionReasons = exclusions
