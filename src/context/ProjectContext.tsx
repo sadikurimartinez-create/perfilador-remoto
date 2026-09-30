@@ -64,6 +64,7 @@ import {
   institutionalReportCertificationService,
 } from "@/services/institutionalReportCertificationService";
 import { institutionalReportPublicationService } from "@/services/institutionalReportPublicationService";
+import { loadDenueAnalyticalWorkflow } from "@/services/denueAnalyticalWorkflowRepository";
 import { assignNumeroExpedienteToExistingProject } from "@/services/historicalNumeroExpedienteAssignmentService";
 import {
   buildHistoricalGeographyReconciliationAuditDetails,
@@ -71,6 +72,8 @@ import {
 } from "@/services/historicalGeographyReconciliationService";
 import type { HistoricalGeographyReconciliation } from "@/utils/historicalGeographyReconciliation";
 import type { PersistedCifaFinding, PersistedDenuePoi } from "@/utils/institutionalStructuredPersistence";
+import type { DenueAnalyticalRelation } from "@/utils/denueAnalyticalRelation";
+import type { DenueAnalyticalReviewLedger } from "@/utils/denueAnalyticalReviewLedger";
 import type {
   InstitutionalReportCertification,
   InstitutionalReportPublication,
@@ -257,6 +260,8 @@ export type Project = {
   reportSummary?: string;
   sweeps?: SweepIntegrationItem[];
   denuePois?: PersistedDenuePoi[];
+  denueAnalyticalRelations?: DenueAnalyticalRelation[];
+  denueAnalyticalReviewLedger?: DenueAnalyticalReviewLedger[];
   osintFindings?: PersistedCifaFinding[];
   crimeIncidenceExportContract?: ReturnType<typeof import("@/utils/institutionalStructuredPersistence").prepareCrimeIncidenceContractForProject>;
   canonicalGeography?: CanonicalProjectGeography | null;
@@ -392,6 +397,7 @@ type ProjectContextValue = {
 
   closeProject: () => void;
   loadProject: (projectId: string) => Promise<void>;
+  reloadDenueAnalyticalWorkflow: () => Promise<void>;
   addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">, id?: string) => void;
   uploadAndAddPhoto: (
     file: File,
@@ -1248,6 +1254,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         geographyType: canonicalGeography?.type ?? null,
       }) as AlbumPhoto[];
 
+      let denueAnalyticalWorkflow: {
+        relations: DenueAnalyticalRelation[];
+        reviewLedgers: DenueAnalyticalReviewLedger[];
+      } = { relations: [], reviewLedgers: [] };
+      try {
+        denueAnalyticalWorkflow = await loadDenueAnalyticalWorkflow(projectId);
+      } catch (workflowError) {
+        console.error("[ProjectContext] DENUE analytical workflow unavailable:", workflowError);
+      }
+
       const loadedProject = {
         id: projectId,
         nombre: projectData.name,
@@ -1259,6 +1275,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         geographyValidationStatus: canonicalGeography?.validationStatus ?? projectData.geographyValidationStatus ?? "INVALID",
         canonicalHypothesis,
         hypothesisRequirementSatisfied: hypothesisGate.hypothesisRequirementSatisfied,
+        denueAnalyticalRelations: denueAnalyticalWorkflow.relations,
+        denueAnalyticalReviewLedger: denueAnalyticalWorkflow.reviewLedgers,
       };
       setProject({
         ...loadedProject,
@@ -1288,6 +1306,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setAlbum([]);
     }
   }, [user]);
+
+  const reloadDenueAnalyticalWorkflow = useCallback(async () => {
+    if (!project?.id) return;
+    const workflow = await loadDenueAnalyticalWorkflow(project.id);
+    setProject((current) => current ? {
+      ...current,
+      denueAnalyticalRelations: workflow.relations,
+      denueAnalyticalReviewLedger: workflow.reviewLedgers,
+    } : current);
+  }, [project?.id]);
 
   const addPhotoToAlbum = useCallback(
     (photo: Omit<AlbumPhoto, "id">, id?: string) => {
@@ -2930,6 +2958,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
+      reloadDenueAnalyticalWorkflow,
       addPhotoToAlbum,
       uploadAndAddPhoto,
       createGeographicEntity,
@@ -2988,6 +3017,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       assignHistoricalNumeroExpediente,
       closeProject,
       loadProject,
+      reloadDenueAnalyticalWorkflow,
       addPhotoToAlbum,
       uploadAndAddPhoto,
       createGeographicEntity,
