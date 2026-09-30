@@ -457,7 +457,17 @@ function buildPrincipalMap(
       visibleSourceLabel: mapCandidate?.visibleSourceLabel || (mapCandidate ? null : "Google Maps; geografía canónica del expediente"),
       cartographicMetadata: {
         geometryLabel: visibleGeometryLabel(geography),
-        legendLabel: mapCandidate ? null : generatedMapLegend(geography),
+        legendLabel: mapCandidate
+          ? null
+          : principalMapSpec?.legend
+            ? [
+                generatedMapLegend(geography),
+                principalMapSpec.legend.canonicalGeometry,
+                principalMapSpec.legend.denueContext,
+                principalMapSpec.legend.interpretationLimit,
+                principalMapSpec.legend.countStatement,
+              ].join(" ")
+            : generatedMapLegend(geography),
         scaleLabel: governedScale?.label ?? null,
         orientationLabel: null,
       },

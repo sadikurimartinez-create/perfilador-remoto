@@ -79,6 +79,8 @@ import {
   buildExecutiveCanonicalTerritorialMapSpec,
   type ExecutiveCanonicalTerritorialMapSpec,
 } from "@/utils/executiveCanonicalTerritorialMap";
+import { buildDenueGovernedCartographicProduct } from "@/utils/denueGovernedCartographicProduct";
+import { selectDenueCartographicDisplay } from "@/utils/denueCartographicDisplaySelection";
 import {
   CARTOGRAPHIC_LOGICAL_HEIGHT,
   CARTOGRAPHIC_LOGICAL_WIDTH,
@@ -907,9 +909,35 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     clasificacion: payload.classification || payload.clasificacion,
   });
   const provisionalVisualComposition = buildExecutiveVisualComposition(executiveModel, institutionalReportInput);
+  let governedDenueRenderingInput = null;
+  if (institutionalReportInput.geography && institutionalReportInput.denuePois?.length) {
+    const denueProductResult = buildDenueGovernedCartographicProduct({
+      projectId: institutionalReportInput.projectId,
+      geographyId: institutionalReportInput.geography.geographyId,
+      canonicalGeographyReference: {
+        geographyId: institutionalReportInput.geography.geographyId,
+        geographyType: institutionalReportInput.geography.type,
+        geometryType: institutionalReportInput.geography.geometry.type,
+        sourceReference: `canonical-geography:${institutionalReportInput.geography.source}:${institutionalReportInput.geography.geographyId}`,
+      },
+      observations: institutionalReportInput.denuePois,
+      createdAtReference: `report-snapshot:${generatedAt}`,
+    });
+    if (denueProductResult.product) {
+      const displaySelection = selectDenueCartographicDisplay(denueProductResult.product);
+      if (displaySelection.status === "PLANNED") {
+        governedDenueRenderingInput = {
+          product: denueProductResult.product,
+          displayPlan: displaySelection.plan,
+        };
+      }
+    }
+  }
   const principalTerritorialMapSpec = provisionalVisualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
     && institutionalReportInput.geography
-    ? buildExecutiveCanonicalTerritorialMapSpec(institutionalReportInput.geography)
+    ? buildExecutiveCanonicalTerritorialMapSpec(institutionalReportInput.geography, {
+        denue: governedDenueRenderingInput || undefined,
+      })
     : null;
   const visualComposition = principalTerritorialMapSpec
     ? buildExecutiveVisualComposition(executiveModel, institutionalReportInput, { principalMapSpec: principalTerritorialMapSpec })

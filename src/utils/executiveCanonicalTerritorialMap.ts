@@ -13,6 +13,12 @@ import {
   type GovernedCartographicScale,
   type GovernedCartographicViewport,
 } from "@/utils/governedCartographicScale";
+import {
+  adaptDenueDisplayPlanToMapRendering,
+  type DenueGovernedMapRendering,
+} from "@/utils/denueGovernedMapRendering";
+import type { DenueCartographicDisplayPlan } from "@/utils/denueCartographicDisplaySelection";
+import type { GovernedCartographicProduct } from "@/utils/governedCartographicProduct";
 
 export interface ExecutiveCanonicalTerritorialMapSpec {
   mapId: "principal-territorial-map";
@@ -29,7 +35,10 @@ export interface ExecutiveCanonicalTerritorialMapSpec {
     vertexCount: number;
   }>;
   markers: LatLngPoint[];
+  denueMarkers: DenueGovernedMapRendering["markers"];
   coordinateCount: number;
+  legend: DenueGovernedMapRendering["legend"] | null;
+  denueRenderAudit: DenueGovernedMapRendering["audit"] | null;
   technicalMetadata: {
     geographyId: string;
     source: "CanonicalProjectGeography";
@@ -135,9 +144,21 @@ function appendCanonicalShape(
   }
 }
 
+function appendDenueMarkers(params: URLSearchParams, rendering: DenueGovernedMapRendering | null): void {
+  if (!rendering?.markers.length) return;
+  params.append("markers", [
+    "size:tiny",
+    "color:0x5B6573",
+    ...rendering.markers.map((marker) => pointParam(marker.position)),
+  ].join("|"));
+}
+
 export function buildExecutiveCanonicalTerritorialMapSpec(
   geography: CanonicalProjectGeography,
-  _options: { apiKey?: string } = {}
+  options: {
+    apiKey?: string;
+    denue?: { product: GovernedCartographicProduct; displayPlan: DenueCartographicDisplayPlan };
+  } = {}
 ): ExecutiveCanonicalTerritorialMapSpec {
   const snapshot = JSON.stringify(geography);
   validateGeography(geography);
@@ -152,6 +173,16 @@ export function buildExecutiveCanonicalTerritorialMapSpec(
   const paths = geometryPaths(geography.geometry);
   const pathMetadata = geometryPathMetadata(geography.geometry, paths);
   const markers = geography.geometry.type === "Point" ? coordinates : [];
+  const denueResult = options.denue
+    ? adaptDenueDisplayPlanToMapRendering(options.denue.product, options.denue.displayPlan)
+    : null;
+  if (denueResult?.status === "REJECTED") {
+    throw new Error(`DENUE_MAP_RENDER_REJECTED:${denueResult.reasons.join(",")}`);
+  }
+  const denueRendering = denueResult?.rendering || null;
+  if (denueRendering && denueRendering.audit.geographyId !== geography.geographyId) {
+    throw new Error("DENUE_MAP_RENDER_REJECTED:DENUE_CANONICAL_GEOGRAPHY_ID_MISMATCH");
+  }
   const params = new URLSearchParams();
   params.set("provider", "google-static-map");
   params.set("size", DEFAULT_STATIC_MAP_SIZE);
@@ -160,6 +191,7 @@ export function buildExecutiveCanonicalTerritorialMapSpec(
   params.set("center", pointParam(governed.viewport.center));
   params.set("zoom", String(governed.viewport.zoom));
   appendCanonicalShape(params, geography, paths, markers, pathMetadata);
+  appendDenueMarkers(params, denueRendering);
   const imageUrl = `/api/proxy-image?${params.toString()}`;
   const modeledProviderUrl = `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}&key=SERVER_SIDE`;
   if (modeledProviderUrl.length > GOOGLE_STATIC_MAPS_URL_MAX_LENGTH) throw new Error("CANONICAL_MAP_URL_TOO_LONG");
@@ -174,7 +206,10 @@ export function buildExecutiveCanonicalTerritorialMapSpec(
     paths,
     pathMetadata,
     markers,
-    coordinateCount: paths.reduce((count, path) => count + path.length, markers.length),
+    denueMarkers: denueRendering?.markers || [],
+    coordinateCount: paths.reduce((count, path) => count + path.length, markers.length) + (denueRendering?.markers.length || 0),
+    legend: denueRendering?.legend || null,
+    denueRenderAudit: denueRendering?.audit || null,
     technicalMetadata: {
       geographyId: geography.geographyId,
       source: "CanonicalProjectGeography",

@@ -43,10 +43,13 @@ function validateSize(value: string): string {
 
 function validateMarker(value: string): string {
   const tokens = value.split("|");
-  parseCoordinate(tokens[tokens.length - 1], "MARKER_COORDINATE");
-  for (const token of tokens.slice(0, -1)) {
-    if (!/^(color:[a-z0-9]+|label:[A-Z0-9])$/i.test(token)) throw new ProxyRequestError("MARKER_STYLE_INVALID");
+  let coordinateCount = 0;
+  for (const token of tokens) {
+    if (/^(color:[a-z0-9]+|label:[A-Z0-9]|size:(tiny|mid|small))$/i.test(token)) continue;
+    parseCoordinate(token, "MARKER_COORDINATE");
+    coordinateCount += 1;
   }
+  if (coordinateCount === 0) throw new ProxyRequestError("MARKER_COORDINATES_REQUIRED");
   return value;
 }
 
