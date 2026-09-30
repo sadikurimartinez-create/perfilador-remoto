@@ -473,6 +473,22 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(audit.renderedVisualIds).toContain("principal-territorial-map");
   });
 
+  test("27A PNG retina ADR-022 se ajusta al area util de Word", async () => {
+    const png = Buffer.from(pngDataUrl.split(",")[1], "base64");
+    png.writeUInt32BE(2400, 16);
+    png.writeUInt32BE(1400, 20);
+    const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
+    composition.secondaryVisuals[0].visualReference =
+      `data:image/png;base64,${png.toString("base64")}`;
+
+    const assets = await buildExecutiveGeointWordVisualAssets(composition);
+
+    expect(assets["evidence-1"]).toMatchObject({
+      width: 411,
+      height: 240,
+    });
+  });
+
   test("28 HTTP/HTTPS visual gobernado se convierte mediante resolver", async () => {
     const composition = visualComposition("READY_FROM_GOVERNED_VISUAL");
     composition.principalTerritorialMap.visualReference = "https://example.test/map.png";

@@ -425,6 +425,79 @@ describe("Fase C - ExecutiveVisualComposition", () => {
     ).toBe(true);
   });
 
+  test("25A.1 ADR-022 reserva BAR + LINE aunque existan visuales previos", () => {
+    const priorVisuals = Array.from({ length: 12 }, (_, index) => ({
+      id: `prior-visual-${index + 1}`,
+      visualId: `prior-visual-${index + 1}`,
+      visualType: "CHART",
+      kind: `LEGACY_CHART_${index + 1}`,
+      title: `Visual previo ${index + 1}`,
+      caption: `Visual previo ${index + 1}`,
+      sourceItemIds: [`legacy-source-${index + 1}`],
+      datasetSourceRefs: [],
+      variables: [],
+      transformation: null,
+      assetRef: `data:image/png;base64,prior-${index + 1}`,
+      publicationEligibility: "ELIGIBLE",
+    }));
+    const governedChart = (
+      visualId: string,
+      kind: "INCIDENT_TYPE_DISTRIBUTION" | "TEMPORAL_EVOLUTION"
+    ) => ({
+      id: visualId,
+      visualId,
+      visualType: "CHART",
+      kind,
+      title: kind === "INCIDENT_TYPE_DISTRIBUTION"
+        ? "Distribución de incidencia por tipo"
+        : "Evolución temporal observada de la incidencia",
+      caption: "Producto descriptivo ADR-022",
+      sourceItemIds: ["incidencia_estadistica"],
+      datasetSourceRefs: ["incidencia_estadistica"],
+      variables: kind === "INCIDENT_TYPE_DISTRIBUTION"
+        ? ["incidentType", "count", "percentage"]
+        : ["occurredDate", "count"],
+      transformation: `ADR-022:${kind}`,
+      assetRef: `data:image/png;base64,${visualId}`,
+      publicationEligibility: "ELIGIBLE",
+    });
+    const chartIds = [
+      "crime-incidence-type-distribution:incidencia_estadistica",
+      "crime-incidence-temporal-evolution:incidencia_estadistica",
+    ];
+    const input = institutionalInput({
+      visualProducts: [
+        ...priorVisuals,
+        governedChart(chartIds[0], "INCIDENT_TYPE_DISTRIBUTION"),
+        governedChart(chartIds[1], "TEMPORAL_EVOLUTION"),
+      ],
+    });
+
+    const composition = buildExecutiveVisualComposition(
+      executiveModel({
+        keyEvidence: Array.from({ length: 4 }, (_, index) => ({
+          evidenceId: `priority-evidence-${index + 1}`,
+          title: `Evidencia prioritaria ${index + 1}`,
+          summary: "Evidencia gobernada",
+          visualReference: `data:image/png;base64,evidence-${index + 1}`,
+          traceabilityIds: [`trace-evidence-${index + 1}`],
+          relatedFindingIds: ["finding-1"],
+          evidenceReferences: [`priority-evidence-${index + 1}`],
+          technicalMetadata: {
+            sourceItemId: `priority-evidence-${index + 1}`,
+          },
+        })),
+        visualCandidates: [],
+      }),
+      input
+    );
+
+    expect(composition.selectionAudit.selectedIds).toEqual(
+      expect.arrayContaining(chartIds)
+    );
+    expect(composition.secondaryVisuals).toHaveLength(4);
+  });
+
   test("25B ADR-022 no admite chart sin contrato descriptivo trazable", () => {
     const input = institutionalInput({
       visualProducts: [

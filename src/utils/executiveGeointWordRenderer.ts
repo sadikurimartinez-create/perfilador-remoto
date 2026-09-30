@@ -186,7 +186,28 @@ function placementsForSection(documentModel: ExecutiveGeointReportDocumentModel,
     .slice(0, 5);
 }
 
-function visualAssetFromDataUrl(reference: string | null | undefined): ExecutiveGeointWordVisualAsset | null {
+function fitImageWithin(
+  width: number | undefined,
+  height: number | undefined,
+  maxWidth: number,
+  maxHeight: number
+): { width: number; height: number } {
+  if (!width || !height || width <= 0 || height <= 0) {
+    return { width: maxWidth, height: maxHeight };
+  }
+
+  const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+function visualAssetFromDataUrl(
+  reference: string | null | undefined,
+  maxWidth: number,
+  maxHeight: number
+): ExecutiveGeointWordVisualAsset | null {
   if (!reference || !reference.startsWith("data:image/")) return null;
   const match = reference.match(/^data:image\/(png|jpg|jpeg|gif|bmp);base64,(.+)$/i);
   if (!match) return null;
@@ -194,11 +215,12 @@ function visualAssetFromDataUrl(reference: string | null | undefined): Executive
   const buffer = Buffer.from(base64, "base64");
   const pngWidth = buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG" ? buffer.readUInt32BE(16) : undefined;
   const pngHeight = buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG" ? buffer.readUInt32BE(20) : undefined;
+  const fitted = fitImageWithin(pngWidth, pngHeight, maxWidth, maxHeight);
   return {
     data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
     type: type.toLowerCase() as ExecutiveGeointWordVisualAsset["type"],
-    width: pngWidth,
-    height: pngHeight,
+    width: fitted.width,
+    height: fitted.height,
   };
 }
 
@@ -214,7 +236,7 @@ async function resolveGovernedVisualReference(
   narrative: string,
   evidenceId: string
 ): Promise<ExecutiveGeointWordVisualAsset | null> {
-  const dataUrlAsset = visualAssetFromDataUrl(reference);
+  const dataUrlAsset = visualAssetFromDataUrl(reference, maxWidth, maxHeight);
   if (dataUrlAsset) return dataUrlAsset;
   if (!isResolvableExternalReference(reference) || !options.resolveImage) return null;
   return options.resolveImage(reference, maxWidth, maxHeight, narrative, evidenceId);

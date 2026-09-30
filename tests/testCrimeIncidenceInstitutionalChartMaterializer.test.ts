@@ -166,14 +166,18 @@ describe("crimeIncidenceInstitutionalChartMaterializer", () => {
   });
 
   test("construye SVG institucional de barras desde datos observados", () => {
-    const svg = buildCrimeIncidenceInstitutionalChartSvg(
-      barSpecification()
-    );
+    const specification = barSpecification();
+    specification.data[1].label = "DAÑO EN LAS COSAS";
+    const svg = buildCrimeIncidenceInstitutionalChartSvg(specification);
 
     expect(svg.tagName.toLowerCase()).toBe("svg");
     expect(svg.getAttribute("viewBox")).toBe("0 0 1200 700");
     expect((svg as any).aggregatedText).toContain("Distribución de incidencia por tipo");
     expect((svg as any).aggregatedText).toContain("ROBO");
+    const longLabel = svg.querySelectorAll("text").find(
+      (item: any) => item.textContent === "DAÑO EN LAS COSAS"
+    );
+    expect(Number(longLabel?.getAttribute("x"))).toBeGreaterThanOrEqual(200);
     expect((svg as any).aggregatedText).toContain("6 (60.0%)");
   });
 
@@ -189,6 +193,21 @@ describe("crimeIncidenceInstitutionalChartMaterializer", () => {
     expect((svg as any).aggregatedText).toContain("5");
     expect(svg.querySelectorAll("polyline")).toHaveLength(1);
     expect(svg.querySelectorAll("circle")).toHaveLength(3);
+  });
+
+  test("usa ticks enteros no duplicados para series pequenas", () => {
+    const specification = lineSpecification();
+    specification.data = [
+      { label: "2026-09-27", value: 1 },
+      { label: "2026-09-28", value: 2 },
+      { label: "2026-09-29", value: 2 },
+    ];
+    const svg = buildCrimeIncidenceInstitutionalChartSvg(specification);
+    const axisLabels = svg.querySelectorAll("text")
+      .filter((item: any) => item.getAttribute("x") === "224")
+      .map((item: any) => item.textContent);
+
+    expect(axisLabels).toEqual(["2", "1", "0"]);
   });
 
   test("materializa PNG mediante ChartRenderer existente a escala 2", async () => {

@@ -8,8 +8,8 @@ export const CRIME_INCIDENCE_CHART_ASSET_VERSION = "1.0";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1200;
 const HEIGHT = 700;
-const MARGIN_LEFT = 170;
-const MARGIN_RIGHT = 70;
+const MARGIN_LEFT = 240;
+const MARGIN_RIGHT = 160;
 const MARGIN_TOP = 130;
 const MARGIN_BOTTOM = 100;
 
@@ -212,8 +212,10 @@ function renderLineChart(
   const yFor = (value: number) =>
     MARGIN_TOP + chartHeight - (value / maxValue) * chartHeight;
 
-  for (let i = 0; i <= 4; i += 1) {
-    const y = MARGIN_TOP + (chartHeight / 4) * i;
+  const tickCount = Math.min(4, Math.max(1, Math.ceil(maxValue)));
+
+  for (let i = 0; i <= tickCount; i += 1) {
+    const y = MARGIN_TOP + (chartHeight / tickCount) * i;
 
     svg.appendChild(
       svgElement("line", {
@@ -226,7 +228,7 @@ function renderLineChart(
       })
     );
 
-    const value = Math.round(maxValue - (maxValue / 4) * i);
+    const value = Math.round(maxValue - (maxValue / tickCount) * i);
 
     appendText(svg, String(value), MARGIN_LEFT - 16, y + 6, {
       size: 16,
