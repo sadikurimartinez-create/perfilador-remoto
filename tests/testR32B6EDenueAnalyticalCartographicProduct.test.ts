@@ -128,6 +128,7 @@ function input(
     expedienteId: EXPEDIENTE_ID,
     geographyId: GEOGRAPHY_ID,
     methodologyVersion: METHODOLOGY,
+    canonicalGeography,
     canonicalGeographyReference: {
       geographyId: GEOGRAPHY_ID,
       geographyType: "POLYGON",

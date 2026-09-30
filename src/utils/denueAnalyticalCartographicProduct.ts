@@ -1,5 +1,6 @@
 import { SpatialLayerEngine, type Coordinate } from "@/lib/providers/spatialLayerEngine";
 import { evaluateCartographicAdmission, type CartographicAdmissionResult } from "@/utils/cartographicAdmissionGate";
+import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 import type { CanonicalGeographyReference, DerivedGovernedMapLayer, GovernedCartographicProduct } from "@/utils/governedCartographicProduct";
 import { validateDenueAnalyticalRelation, type DenueAnalyticalRelation, type DenueAnalyticalRelationType } from "@/utils/denueAnalyticalRelation";
 import type { DenueGovernedMapLayer } from "@/utils/denueGovernedMapAdapter";
@@ -76,6 +77,7 @@ export interface DenueAnalyticalCartographicProduct extends Omit<GovernedCartogr
   layers: DenueAnalyticalDerivedLayer[];
   expedienteId: string;
   methodologyVersion: string;
+  canonicalGeography: CanonicalProjectGeography;
   contextualUniverseCount: number;
   contextualDisplayedCount: number;
   analyticalAcceptedCount: number;
@@ -101,6 +103,7 @@ export interface DenueAnalyticalCartographicProductInput {
   expedienteId: string;
   geographyId: string;
   methodologyVersion: string;
+  canonicalGeography: CanonicalProjectGeography;
   canonicalGeographyReference: CanonicalGeographyReference;
   contextualUniverseCount: number;
   contextualDisplayedCount: number;
@@ -257,6 +260,12 @@ export function validateDenueAnalyticalCartographicProduct(product: DenueAnalyti
   if (!present(product.expedienteId)) reasons.push("EXPEDIENTE_ID_REQUIRED");
   if (!present(product.geographyId)) reasons.push("GEOGRAPHY_ID_REQUIRED");
   if (!present(product.methodologyVersion)) reasons.push("METHODOLOGY_VERSION_REQUIRED");
+  if (!product.canonicalGeography || product.canonicalGeography.geographyId !== product.geographyId) {
+    reasons.push("CANONICAL_GEOGRAPHY_ID_MISMATCH");
+  } else if (product.canonicalGeography.type !== product.canonicalGeographyReference.geographyType ||
+    product.canonicalGeography.geometry.type !== product.canonicalGeographyReference.geometryType) {
+    reasons.push("CANONICAL_GEOGRAPHY_REFERENCE_MISMATCH");
+  }
   if (!Number.isInteger(product.contextualUniverseCount) || product.contextualUniverseCount < 0) reasons.push("CONTEXTUAL_UNIVERSE_COUNT_INVALID");
   if (!Number.isInteger(product.contextualDisplayedCount) || product.contextualDisplayedCount < 0 || product.contextualDisplayedCount > product.contextualUniverseCount) {
     reasons.push("CONTEXTUAL_DISPLAYED_COUNT_INVALID");
@@ -337,6 +346,12 @@ export function buildDenueAnalyticalCartographicProduct(
   if (!present(input?.methodologyVersion)) reasons.push("METHODOLOGY_VERSION_REQUIRED");
   if (!present(input?.createdAtReference)) reasons.push("CREATED_AT_REFERENCE_REQUIRED");
   if (!input?.canonicalGeographyReference || input.canonicalGeographyReference.geographyId !== input.geographyId) reasons.push("CANONICAL_GEOGRAPHY_REFERENCE_MISMATCH");
+  if (!input?.canonicalGeography || input.canonicalGeography.geographyId !== input.geographyId) {
+    reasons.push("CANONICAL_GEOGRAPHY_ID_MISMATCH");
+  } else if (input.canonicalGeography.type !== input.canonicalGeographyReference?.geographyType ||
+    input.canonicalGeography.geometry.type !== input.canonicalGeographyReference?.geometryType) {
+    reasons.push("CANONICAL_GEOGRAPHY_REFERENCE_MISMATCH");
+  }
   if (!Number.isInteger(input?.contextualUniverseCount) || input.contextualUniverseCount < 0) reasons.push("CONTEXTUAL_UNIVERSE_COUNT_INVALID");
   if (!Number.isInteger(input?.contextualDisplayedCount) || input.contextualDisplayedCount < 0 || input.contextualDisplayedCount > input.contextualUniverseCount) {
     reasons.push("CONTEXTUAL_DISPLAYED_COUNT_INVALID");
@@ -505,6 +520,7 @@ export function buildDenueAnalyticalCartographicProduct(
     expedienteId: input.expedienteId,
     geographyId: input.geographyId,
     methodologyVersion: input.methodologyVersion,
+    canonicalGeography: structuredClone(input.canonicalGeography),
     canonicalGeographyReference: { ...input.canonicalGeographyReference },
     title: "RELACIONES ANALITICAS DENUE VALIDADAS POR PPC",
     purpose: "Representar relaciones analiticas DENUE elegibles sin convertir observaciones territoriales en evidencia criminal",
