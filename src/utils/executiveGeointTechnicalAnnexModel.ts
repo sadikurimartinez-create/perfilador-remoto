@@ -117,6 +117,16 @@ export interface ExecutiveGeointTechnicalAnnexModel {
   };
 }
 
+export interface DenueContextualAnnexSummary {
+  contextualUniverseCount: number;
+  contextualDisplayedCount: number;
+  selectionPolicy: string;
+  methodology: string;
+  limitations: string[];
+  sourceReferences: string[];
+  traceabilityIds: string[];
+}
+
 interface AnnexContext {
   nombreExpediente?: unknown;
   fecha?: unknown;
@@ -124,6 +134,7 @@ interface AnnexContext {
   clasificacion?: unknown;
   numeroExpediente?: unknown;
   ceipolId?: unknown;
+  denueContextualSummary?: DenueContextualAnnexSummary | null;
 }
 
 function asArray<T = any>(value: unknown): T[] {
@@ -397,32 +408,30 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     unit: null,
     reasons: [] as [],
   };
-  const compactDenuePresentation = denueDocument.sourcePresent;
-  const allDenueRecords = asArray<any>(institutionalInput.denuePois)
+  const contextualDenuePois = asArray<any>(institutionalInput.denuePois)
     .filter((item) => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
       item?.territorialStatus === "INSTITUTIONAL" && observedFact(item) &&
-      (isTraceable(item) || Boolean(item?.sourceEvidenceId)))
-    .map((item, index) => ({
-      ...evidenceRecord(item, "INEGI_DENUE", selectedIds, `denue-${index + 1}`),
-      sourceType: "INEGI_DENUE",
-      title: firstText(item?.name, "Establecimiento sin nombre"),
-      summary: [
-        `Actividad: ${firstText(item?.activityCode, "No disponible")}`,
-        `Categoria: ${firstText(item?.category, item?.activityCategory, "No disponible")}`,
-        `Distancia: ${typeof item?.distanceMeters === "number" && Number.isFinite(item.distanceMeters) ? `${item.distanceMeters} m` : "No disponible"}`,
-        `Ubicacion: ${firstText(item?.address, item?.locationName, "No disponible")}`,
-      ].join("; "),
-    }));
-  const denueRecords = compactDenuePresentation ? [] : allDenueRecords;
+      (isTraceable(item) || Boolean(item?.sourceEvidenceId)));
+  const hasContextualDenue = contextualDenuePois.length > 0;
+  const denueRecords: TechnicalAnnexRecord[] = [];
   const territorialSourceRecords = denueRecords;
   const analyticalUnit = denueDocument.status === "READY" ? denueDocument.unit : null;
-  const denueFacts = compactDenuePresentation ? [
+  const contextualSummary = context.denueContextualSummary;
+  const contextualUniverseCount = contextualSummary?.contextualUniverseCount ?? contextualDenuePois.length;
+  const contextualDisplayedCount = contextualSummary?.contextualDisplayedCount;
+  const contextualOmittedCount = typeof contextualDisplayedCount === "number"
+    ? Math.max(0, contextualUniverseCount - contextualDisplayedCount)
+    : undefined;
+  const denueFacts = hasContextualDenue ? [
     { label: "Fuente", value: "INEGI DENUE" },
-    { label: "Universo contextual", value: displayedNumber(analyticalUnit?.renderModel.contextualUniverseCount ?? allDenueRecords.length) },
-    { label: "Contextuales representados", value: displayedNumber(analyticalUnit?.renderModel.contextualDisplayedCount ?? 0) },
-    { label: "Política contextual", value: "Selección cartográfica gobernada B.4/B.5; sin inferencia criminal automática" },
-    { label: "Metodología", value: analyticalUnit?.renderModel.methodologyVersion || "NO DISPONIBLE EN EL EXPEDIENTE" },
-    { label: "Limitaciones", value: analyticalUnit?.renderModel.limitations.join("; ") || "DENUE_NOT_CRIMINAL_EVIDENCE" },
+    { label: "Universo contextual observado", value: displayedNumber(contextualUniverseCount) },
+    { label: "Representados en mapa contextual", value: displayedNumber(contextualDisplayedCount) },
+    { label: "No representados por legibilidad", value: displayedNumber(contextualOmittedCount) },
+    { label: "Política de selección cartográfica", value: contextualSummary?.selectionPolicy || "B.4/B.5" },
+    { label: "Naturaleza", value: "Contexto territorial descriptivo; sin inferencia criminal automática" },
+    { label: "Metodología", value: contextualSummary?.methodology || "B.4/B.5" },
+    { label: "Referencias de fuente", value: contextualSummary?.sourceReferences.join("; ") || "INEGI DENUE" },
+    { label: "Limitaciones", value: contextualSummary?.limitations.join("; ") || "DENUE_NOT_CRIMINAL_EVIDENCE" },
   ] : [];
   const analyticalFacts = analyticalUnit ? [
     { label: "Relaciones analíticas elegibles", value: displayedNumber(analyticalUnit.renderModel.analyticalEligibleCount) },
@@ -508,10 +517,12 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     section("street-view", "GOOGLE STREET VIEW", "TECHNICAL_SUPPORT",
       streetViewRecords.length ? [`Capturas gobernadas: ${streetViewRecords.length}`] : [], streetViewRecords),
     section("territorial-sources", "FUENTES TERRITORIALES", "TECHNICAL_SUPPORT",
-      territorialSourceRecords.length ? [`Fuentes territoriales registradas: ${territorialSourceRecords.length}`] : [], territorialSourceRecords),
+      hasContextualDenue ? [`INEGI DENUE: ${contextualUniverseCount} registros contextuales gobernados.`]
+        : territorialSourceRecords.length ? [`Fuentes territoriales registradas: ${territorialSourceRecords.length}`] : [],
+      territorialSourceRecords),
     section("scince", "CONTEXTO TERRITORIAL SCINCE", "TECHNICAL_SUPPORT", [], [], true, scinceFacts),
     section("denue", "ACTIVIDAD ECONÓMICA DENUE", "TECHNICAL_SUPPORT",
-      compactDenuePresentation
+      hasContextualDenue
         ? ["Presentación contextual compacta; el inventario fuente permanece preservado fuera de la expansión documental."]
         : denueRecords.length ? [`Establecimientos observados: ${denueRecords.length}`] : [],
       denueRecords, true, denueFacts),
@@ -548,7 +559,10 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     section("technical-traceability", "TRAZABILIDAD TÉCNICA", "AUDIT_TRACEABILITY", [
       `Expediente: ${numeroExpediente}`,
       `Registros con trazabilidad: ${allTechnicalRecords.filter((record) => record.traceabilityIds.length).length}`,
-      `Fuentes vinculadas: ${dedupe(allTechnicalRecords.map((record) => record.sourceType)).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,
+      `Fuentes vinculadas: ${dedupe([
+        ...allTechnicalRecords.map((record) => record.sourceType),
+        ...(hasContextualDenue ? ["INEGI_DENUE"] : []),
+      ]).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,
     ], [], true),
     section("sources-limitations", "FUENTES, EXCLUSIONES Y LIMITACIONES", "AUDIT_TRACEABILITY", [
       `Elementos excluidos por gobernanza: ${institutionalInput.exclusions.length}`,
@@ -564,10 +578,12 @@ export function buildExecutiveGeointTechnicalAnnexModel(
   }));
   const traceIds = dedupe([
     ...allTechnicalRecords.flatMap((record) => record.traceabilityIds),
+    ...(contextualSummary?.traceabilityIds || []),
     ...(analyticalUnit?.traceability.flatMap((entry) => [entry.relationId, entry.relationFingerprint]) || []),
   ]);
   const sourceItemIds = dedupe([
     ...allTechnicalRecords.flatMap((record) => lineageSourceIds({ ...record, ...record.technicalIds })),
+    ...(contextualSummary?.sourceReferences || []),
     ...(analyticalUnit?.traceability.flatMap((entry) => [entry.denueLayerId, entry.sourceEvidenceId]) || []),
   ]);
 
@@ -585,8 +601,8 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       evidenceCount: evidenceRecords.length,
       streetViewCount: streetViewRecords.length,
       osintCount: osintRecords.length,
-      territorialSourceCount: compactDenuePresentation
-        ? analyticalUnit?.renderModel.contextualUniverseCount ?? allDenueRecords.length
+      territorialSourceCount: hasContextualDenue
+        ? contextualUniverseCount
         : territorialSourceRecords.length,
       selectedVisualCount: visualComposition.secondaryVisuals.length + (visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL" ? 1 : 0),
     },

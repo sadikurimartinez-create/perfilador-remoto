@@ -220,9 +220,11 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(records.map((record) => record.recordId)).not.toContain("osint-untraced");
   });
 
-  test("9 DENUE estructurado aparece como fuente territorial", () => {
-    const records = annex().sections.find((s) => s.sectionId === "territorial-sources")?.records || [];
-    expect(records.some((record) => record.sourceType.includes("DENUE"))).toBe(true);
+  test("9 DENUE estructurado aparece como fuente territorial compacta", () => {
+    const section = annex().sections.find((s) => s.sectionId === "territorial-sources");
+    expect(section?.records).toHaveLength(0);
+    expect(section?.content.join(" ")).toContain("INEGI DENUE: 1 registros contextuales gobernados");
+    expect(annex().technicalInventory.territorialSourceCount).toBe(1);
   });
 
   test("10 Places Reviews sin adquisición observada no se promueven", () => {
@@ -380,10 +382,10 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
       ...input().denuePois,
       { ...input().denuePois[0], id: "ajeno", source: "GOOGLE", name: "No DENUE" },
     ] }));
-    const records = model.sections.find((s) => s.sectionId === "denue")?.records || [];
-    expect(records).toHaveLength(1);
-    expect(records[0].summary).toContain("Distancia: 120 m");
-    expect(records[0].title).toBe("Comercio observado");
+    const contextual = model.sections.find((s) => s.sectionId === "denue");
+    expect(contextual?.records).toHaveLength(0);
+    expect(contextual?.facts).toContainEqual({ label: "Universo contextual observado", value: "1" });
+    expect(JSON.stringify(contextual)).not.toContain("No DENUE");
   });
 
   test("29 CEFI solo promueve fuente observada adquirida y no sintesis", () => {

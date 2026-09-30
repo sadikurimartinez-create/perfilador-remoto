@@ -1,4 +1,5 @@
-import { Table } from "docx";
+import { Packer, Table } from "docx";
+import JSZip from "jszip";
 import { buildCanonicalProjectGeography, type CanonicalGeographyType, type CanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { canonicalizeDenuePoisForInstitutionalAnalysis } from "../src/utils/denueCanonicalPoi";
 import { adaptDenueObservationToGovernedMapLayer, type DenueGovernedMapLayer } from "../src/utils/denueGovernedMapAdapter";
@@ -192,6 +193,51 @@ function institutionalInput(integration: ReturnType<typeof integrateDenueAnalyti
   };
 }
 
+function contextualPois(count = 263): any[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `denue-${index + 1}`,
+    sourceEvidenceId: `denue-source-${index + 1}`,
+    traceabilityId: `denue-trace-${index + 1}`,
+    source: "DENUE",
+    provider: "INEGI_DENUE",
+    territorialStatus: "INSTITUTIONAL",
+    name: `Establecimiento ${index + 1}`,
+    activityCode: `ACT-${index + 1}`,
+    category: "Actividad económica",
+    epistemicIntegrity: {
+      acquisitionMode: "OBSERVED",
+      acquisitionStatus: "ACQUIRED",
+      isSimulated: false,
+      semanticRole: "SOURCE_FACT",
+    },
+  }));
+}
+
+const contextualSummary = {
+  contextualUniverseCount: 263,
+  contextualDisplayedCount: 40,
+  selectionPolicy: "B.4/B.5_SPATIAL_DISPERSION_FOR_LEGIBILITY",
+  methodology: "B.4/B.5 governed contextual cartography",
+  limitations: [
+    "DENUE_DISPLAY_SELECTION_FOR_CARTOGRAPHIC_LEGIBILITY",
+    "DENUE_DISPLAY_SELECTION_NOT_ANALYTICAL_RANKING",
+    "DENUE_NOT_CRIMINAL_EVIDENCE",
+  ],
+  sourceReferences: ["INEGI_DENUE"],
+  traceabilityIds: ["trace-b5-denue-context"],
+};
+
+function annexFor(integration: ReturnType<typeof integrateDenueAnalyticalDocument>, pois = contextualPois()) {
+  const input = institutionalInput(integration, [], pois);
+  const model = executiveModel(input.geography);
+  const composition = buildExecutiveVisualComposition(model, input);
+  const documentModel = buildExecutiveGeointReportDocumentModel(model, composition, input);
+  const annex = buildExecutiveGeointTechnicalAnnexModel(input, model, composition, documentModel, {
+    denueContextualSummary: contextualSummary,
+  });
+  return { input, annex };
+}
+
 describe("R3.2B.6G.2 DENUE analytical document integration", () => {
   test("READY produce visual estable, tabla y 12 labels mediante overlay bitmap", async () => {
     const integration = integrateDenueAnalyticalDocument(built("POLYGON", 12));
@@ -298,23 +344,73 @@ describe("R3.2B.6G.2 DENUE analytical document integration", () => {
     expect(rendered.children.some((child) => child instanceof Table)).toBe(true);
   });
 
-  test("263 DENUE se resumen sin 263 filas y conservan trazabilidad analítica", () => {
+  test("263 DENUE se resumen sin filas contextuales y conservan trazabilidad analítica READY", () => {
     const integration = integrateDenueAnalyticalDocument(built("POLYGON", 2));
     if (integration.status !== "READY") throw new Error("READY required");
-    const denuePois = Array.from({ length: 263 }, (_, index) => ({ id: `poi-${index}`, source: "DENUE", provider: "INEGI_DENUE" }));
-    const input = institutionalInput(integration, [], denuePois);
-    const model = executiveModel(input.geography);
-    const composition = buildExecutiveVisualComposition(model, input);
-    const documentModel = buildExecutiveGeointReportDocumentModel(model, composition, input);
-    const annex = buildExecutiveGeointTechnicalAnnexModel(input, model, composition, documentModel);
+    const { input, annex } = annexFor(integration);
     const contextual = annex.sections.find((section) => section.sectionId === "denue");
+    const territorial = annex.sections.find((section) => section.sectionId === "territorial-sources");
     const analytical = annex.sections.find((section) => section.sectionId === "denue-analytical");
     expect(contextual?.records).toHaveLength(0);
-    expect(contextual?.facts).toEqual(expect.arrayContaining([{ label: "Universo contextual", value: "263" }]));
+    expect(territorial?.records).toHaveLength(0);
+    expect(contextual?.facts).toEqual(expect.arrayContaining([
+      { label: "Universo contextual observado", value: "263" },
+      { label: "Representados en mapa contextual", value: "40" },
+      { label: "No representados por legibilidad", value: "223" },
+    ]));
     expect(analytical?.tables[0].rows).toHaveLength(2);
+    expect(annex.technicalInventory.territorialSourceCount).toBe(263);
     expect(annex.technicalMetadata.traceabilityIds).toEqual(expect.arrayContaining(integration.unit.traceability.map((entry) => entry.relationFingerprint)));
+    expect(annex.technicalMetadata.traceabilityIds).toContain("trace-b5-denue-context");
+    expect(input.denuePois).toHaveLength(263);
     const renderedAnnex = renderExecutiveGeointTechnicalAnnexWordDocument(annex);
     expect(renderedAnnex.children.some((child) => child instanceof Table)).toBe(true);
+  });
+
+  test("263 DENUE con fuente analítica ausente conservan 263/40 y cero filas individuales", async () => {
+    const integration = integrateDenueAnalyticalDocument(null);
+    const pois = contextualPois();
+    const snapshot = JSON.stringify(pois);
+    const { input, annex } = annexFor(integration, pois);
+    const territorial = annex.sections.find((section) => section.sectionId === "territorial-sources");
+    const contextual = annex.sections.find((section) => section.sectionId === "denue");
+    const analytical = annex.sections.find((section) => section.sectionId === "denue-analytical");
+    expect(integration).toMatchObject({ status: "EMPTY", sourcePresent: false });
+    expect(territorial?.records).toHaveLength(0);
+    expect(contextual?.records).toHaveLength(0);
+    expect(contextual?.facts).toEqual(expect.arrayContaining([
+      { label: "Universo contextual observado", value: "263" },
+      { label: "Representados en mapa contextual", value: "40" },
+    ]));
+    expect(analytical).toMatchObject({ status: "PARTIAL", records: [], tables: [], content: ["NO DISPONIBLE EN EL EXPEDIENTE"] });
+    expect(annex.technicalInventory.territorialSourceCount).toBe(263);
+    expect(input.visualProducts).toHaveLength(0);
+    expect(input.denuePois).toHaveLength(263);
+    expect(JSON.stringify(pois)).toBe(snapshot);
+
+    const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex);
+    const zip = await JSZip.loadAsync(await Packer.toBuffer(rendered.document));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    expect(xml).not.toContain("denue-1");
+    expect(xml).not.toContain("denue-263");
+  });
+
+  test("B.6E EMPTY explícito equivale a fuente ausente para compactación contextual", () => {
+    const integration = integrateDenueAnalyticalDocument({
+      status: "EMPTY",
+      product: null,
+      validation: { accepted: true, status: "ADMITTED", reasons: [] },
+      rejectedRelations: [],
+      duplicateRelationCount: 0,
+      reasons: [],
+    });
+    const { annex } = annexFor(integration);
+    expect(integration).toMatchObject({ status: "EMPTY", sourcePresent: true });
+    expect(annex.sections.find((section) => section.sectionId === "territorial-sources")?.records).toHaveLength(0);
+    expect(annex.sections.find((section) => section.sectionId === "denue")?.records).toHaveLength(0);
+    expect(annex.sections.find((section) => section.sectionId === "denue-analytical"))
+      .toMatchObject({ status: "PARTIAL", tables: [], content: ["NO DISPONIBLE EN EL EXPEDIENTE"] });
+    expect(annex.technicalInventory.territorialSourceCount).toBe(263);
   });
 
   test("la integración no introduce semántica de riesgo o ranking", () => {

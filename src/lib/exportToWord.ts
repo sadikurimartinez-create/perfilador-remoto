@@ -1007,6 +1007,20 @@ async function hydrateTechnicalAnnexVisualAssets(generationContext: any, annexMo
   return visualAssetsById;
 }
 
+function denueContextualAnnexSummary(generationContext: any) {
+  const audit = generationContext.principalTerritorialMapSpec?.denueRenderAudit;
+  if (!audit) return null;
+  return {
+    contextualUniverseCount: audit.denueAvailableCount,
+    contextualDisplayedCount: audit.denueRenderedCount,
+    selectionPolicy: audit.displayPolicy,
+    methodology: "B.4/B.5 governed contextual cartography",
+    limitations: audit.disclosures,
+    sourceReferences: audit.sourceReferences,
+    traceabilityIds: audit.traceabilityIds,
+  };
+}
+
 export async function exportToWord(
   payload: any,
   projectName: string,
@@ -1040,6 +1054,7 @@ export async function exportToWord(
           fecha: generationContext.generatedAt,
           personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
           clasificacion: payload.classification || payload.clasificacion,
+          denueContextualSummary: denueContextualAnnexSummary(generationContext),
         }
       );
       const renderedAnnex = renderExecutiveGeointTechnicalAnnexWordDocument(annexModel, {
@@ -1083,6 +1098,7 @@ export async function exportToWord(
           fecha: generationContext.generatedAt,
           personaPerfiladora: user?.name || user?.email || payload.personaPerfiladora,
           clasificacion: payload.classification || payload.clasificacion,
+          denueContextualSummary: denueContextualAnnexSummary(generationContext),
         }
       );
       const visualAssetsById = await hydrateTechnicalAnnexVisualAssets(generationContext, annexModel);
