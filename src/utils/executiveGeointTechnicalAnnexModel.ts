@@ -14,6 +14,7 @@ import {
   type InstitutionalContentRole,
 } from "@/utils/analyticalNarrativeGovernance";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
+import type { StructuredTableInput } from "@/utils/documentTableRenderer";
 
 export const EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION = "1.0.0";
 
@@ -26,6 +27,7 @@ export type TechnicalAnnexSectionId =
   | "territorial-sources"
   | "scince"
   | "denue"
+  | "denue-analytical"
   | "incidence"
   | "osint"
   | "gang-intelligence"
@@ -68,6 +70,7 @@ export interface ExecutiveGeointTechnicalAnnexSection {
   content: string[];
   records: TechnicalAnnexRecord[];
   facts: Array<{ label: string; value: string }>;
+  tables: StructuredTableInput[];
   status: "READY" | "PARTIAL" | "NO DISPONIBLE EN EL EXPEDIENTE";
   technicalSection: boolean;
 }
@@ -318,9 +321,10 @@ function section(
   content: string[],
   records: TechnicalAnnexRecord[] = [],
   technicalSection = false,
-  facts: Array<{ label: string; value: string }> = []
+  facts: Array<{ label: string; value: string }> = [],
+  tables: StructuredTableInput[] = []
 ): ExecutiveGeointTechnicalAnnexSection {
-  const hasData = content.some(Boolean) || records.length > 0 || facts.length > 0;
+  const hasData = content.some(Boolean) || records.length > 0 || facts.length > 0 || tables.length > 0;
   return {
     sectionId,
     title,
@@ -328,6 +332,7 @@ function section(
     content: hasData ? content.filter(Boolean) : ["NO DISPONIBLE EN EL EXPEDIENTE"],
     records,
     facts,
+    tables,
     status: hasData ? "READY" : "NO DISPONIBLE EN EL EXPEDIENTE",
     technicalSection,
   };
@@ -386,7 +391,14 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     { label: "Viviendas habitadas", value: displayedNumber(scince.demographics?.inhabitedPrivateHousing) },
     { label: "Viviendas deshabitadas", value: displayedNumber(scince.demographics?.uninhabitedPrivateHousing) },
   ] : [];
-  const denueRecords = asArray<any>(institutionalInput.denuePois)
+  const denueDocument = institutionalInput.denueAnalyticalDocument || {
+    status: "EMPTY" as const,
+    sourcePresent: false,
+    unit: null,
+    reasons: [] as [],
+  };
+  const compactDenuePresentation = denueDocument.sourcePresent;
+  const allDenueRecords = asArray<any>(institutionalInput.denuePois)
     .filter((item) => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
       item?.territorialStatus === "INSTITUTIONAL" && observedFact(item) &&
       (isTraceable(item) || Boolean(item?.sourceEvidenceId)))
@@ -401,7 +413,38 @@ export function buildExecutiveGeointTechnicalAnnexModel(
         `Ubicacion: ${firstText(item?.address, item?.locationName, "No disponible")}`,
       ].join("; "),
     }));
+  const denueRecords = compactDenuePresentation ? [] : allDenueRecords;
   const territorialSourceRecords = denueRecords;
+  const analyticalUnit = denueDocument.status === "READY" ? denueDocument.unit : null;
+  const denueFacts = compactDenuePresentation ? [
+    { label: "Fuente", value: "INEGI DENUE" },
+    { label: "Universo contextual", value: displayedNumber(analyticalUnit?.renderModel.contextualUniverseCount ?? allDenueRecords.length) },
+    { label: "Contextuales representados", value: displayedNumber(analyticalUnit?.renderModel.contextualDisplayedCount ?? 0) },
+    { label: "Política contextual", value: "Selección cartográfica gobernada B.4/B.5; sin inferencia criminal automática" },
+    { label: "Metodología", value: analyticalUnit?.renderModel.methodologyVersion || "NO DISPONIBLE EN EL EXPEDIENTE" },
+    { label: "Limitaciones", value: analyticalUnit?.renderModel.limitations.join("; ") || "DENUE_NOT_CRIMINAL_EVIDENCE" },
+  ] : [];
+  const analyticalFacts = analyticalUnit ? [
+    { label: "Relaciones analíticas elegibles", value: displayedNumber(analyticalUnit.renderModel.analyticalEligibleCount) },
+    { label: "Establecimientos analíticos representados", value: displayedNumber(analyticalUnit.renderModel.analyticalDisplayedCount) },
+    { label: "Elegibles no representados", value: displayedNumber(analyticalUnit.renderModel.eligibleButNotDisplayedRows.length) },
+    { label: "Motivo de omisión cartográfica", value: "CARTOGRAPHIC_LEGIBILITY_LIMIT" },
+    { label: "Metodología", value: analyticalUnit.renderModel.methodologyVersion },
+    { label: "Decisión de publicación", value: "ELIGIBLE" },
+  ] : [];
+  const analyticalTraceabilityTable: StructuredTableInput[] = analyticalUnit ? [{
+    headers: ["RELATION ID", "DENUE LAYER", "SOURCE EVIDENCE", "TIPOS", "PPC", "FECHA PPC", "FINGERPRINT", "ESTADO"],
+    rows: analyticalUnit.traceability.map((entry) => [
+      entry.relationId,
+      entry.denueLayerId,
+      entry.sourceEvidenceId,
+      entry.relationTypes.join("; "),
+      `${entry.ppcReviewer}: ${entry.ppcRationale}`,
+      entry.ppcTimestamp,
+      entry.relationFingerprint,
+      entry.displayStatus === "DISPLAYED" ? entry.publicationDecision : `${entry.publicationDecision} / ${entry.omissionReason}`,
+    ]),
+  }] : [];
   const incidence = institutionalInput.crimeIncidenceExportContract;
   const incidenceReady = incidence?.productClassification === "DESCRIPTIVE_ANALYTICAL_PRODUCT" &&
     incidence?.analyticalLevel === "DESCRIPTIVE" && incidence?.queryReference?.status === "EXECUTED" &&
@@ -468,7 +511,15 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       territorialSourceRecords.length ? [`Fuentes territoriales registradas: ${territorialSourceRecords.length}`] : [], territorialSourceRecords),
     section("scince", "CONTEXTO TERRITORIAL SCINCE", "TECHNICAL_SUPPORT", [], [], true, scinceFacts),
     section("denue", "ACTIVIDAD ECONÓMICA DENUE", "TECHNICAL_SUPPORT",
-      denueRecords.length ? [`Establecimientos observados: ${denueRecords.length}`] : [], denueRecords),
+      compactDenuePresentation
+        ? ["Presentación contextual compacta; el inventario fuente permanece preservado fuera de la expansión documental."]
+        : denueRecords.length ? [`Establecimientos observados: ${denueRecords.length}`] : [],
+      denueRecords, true, denueFacts),
+    section("denue-analytical", "RELACIONES ANALÍTICAS DENUE", "AUDIT_TRACEABILITY",
+      analyticalUnit ? [
+        "Sólo se documentan relaciones aceptadas por PPC y admitidas por publication gate.",
+        "DENUE no constituye por sí mismo evidencia criminal, riesgo, vulnerabilidad ni peligrosidad.",
+      ] : [], [], true, analyticalFacts, analyticalTraceabilityTable),
     section("incidence", "INCIDENCIA DELICTIVA", "TECHNICAL_SUPPORT", [], [], true, incidenceFacts),
     section("osint", "CEFI - FUENTES ABIERTAS", "TECHNICAL_SUPPORT",
       osintRecords.length ? [`Registros observados, adquiridos y trazables: ${osintRecords.length}`] : [], osintRecords),
@@ -511,8 +562,14 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     ...item,
     status: item.content.includes("NO DISPONIBLE EN EL EXPEDIENTE") && item.records.length === 0 ? "PARTIAL" as const : item.status,
   }));
-  const traceIds = dedupe(allTechnicalRecords.flatMap((record) => record.traceabilityIds));
-  const sourceItemIds = dedupe(allTechnicalRecords.flatMap((record) => lineageSourceIds({ ...record, ...record.technicalIds })));
+  const traceIds = dedupe([
+    ...allTechnicalRecords.flatMap((record) => record.traceabilityIds),
+    ...(analyticalUnit?.traceability.flatMap((entry) => [entry.relationId, entry.relationFingerprint]) || []),
+  ]);
+  const sourceItemIds = dedupe([
+    ...allTechnicalRecords.flatMap((record) => lineageSourceIds({ ...record, ...record.technicalIds })),
+    ...(analyticalUnit?.traceability.flatMap((entry) => [entry.denueLayerId, entry.sourceEvidenceId]) || []),
+  ]);
 
   return {
     identity: {
@@ -528,7 +585,9 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       evidenceCount: evidenceRecords.length,
       streetViewCount: streetViewRecords.length,
       osintCount: osintRecords.length,
-      territorialSourceCount: territorialSourceRecords.length,
+      territorialSourceCount: compactDenuePresentation
+        ? analyticalUnit?.renderModel.contextualUniverseCount ?? allDenueRecords.length
+        : territorialSourceRecords.length,
       selectedVisualCount: visualComposition.secondaryVisuals.length + (visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL" ? 1 : 0),
     },
     executiveReportReference: {

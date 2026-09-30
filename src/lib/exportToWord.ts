@@ -97,6 +97,7 @@ import {
 import { buildExecutiveGeointTechnicalAnnexModel } from "@/utils/executiveGeointTechnicalAnnexModel";
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executiveGeointTechnicalAnnexWordRenderer";
 import { institutionalReportPackageService } from "@/services/institutionalReportPackageService";
+import { renderDenueAnalyticalMapBitmap } from "@/utils/denueAnalyticalMapImageRenderer";
 
 const CARTOGRAPHIC_SCALE_BAR_HEIGHT_LOGICAL_PX = 6;
 const CARTOGRAPHIC_SCALE_LABEL_BASELINE_LOGICAL_PX = 19;
@@ -866,7 +867,8 @@ async function resolveInstitutionalVisualAssets(
   visualComposition: any,
   principalMapSpec: ExecutiveCanonicalTerritorialMapSpec | null,
   strictEvidence = false,
-  fingerprintScope = "GLOBAL"
+  fingerprintScope = "GLOBAL",
+  preResolvedAssets: Record<string, any> = {}
 ) {
   return buildExecutiveGeointWordVisualAssets(visualComposition, {
     principalMapSpec,
@@ -884,6 +886,7 @@ async function resolveInstitutionalVisualAssets(
       return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
     },
     resolveImage: async (reference, maxWidth, maxHeight, narrative, evidenceId) => {
+      if (preResolvedAssets[evidenceId]) return preResolvedAssets[evidenceId];
       const resolved = await getImageDimensionsAndBuffer(reference, maxWidth, maxHeight, narrative, evidenceId,
         strictEvidence ? { disableFallback: true, fingerprintScope, visualClass: "EVIDENCE" } : undefined);
       return resolved ? { data: resolved.data, width: resolved.width, height: resolved.height, type: resolved.type as any } : null;
@@ -951,12 +954,21 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
       ceipolId: payload.ceipolId,
     }
   );
+  const preResolvedAssets: Record<string, any> = {};
+  if (institutionalReportInput.denueAnalyticalDocument.status === "READY") {
+    const analyticalUnit = institutionalReportInput.denueAnalyticalDocument.unit;
+    const selected = visualComposition.secondaryVisuals.some((visual: any) => visual.visualId === analyticalUnit.visualId);
+    if (selected) {
+      preResolvedAssets[analyticalUnit.visualId] = await renderDenueAnalyticalMapBitmap(analyticalUnit.imagePlan);
+    }
+  }
   const fingerprintScope = `institutional-report:${++institutionalGenerationSequence}`;
   const visualAssetsById = await resolveInstitutionalVisualAssets(
     visualComposition,
     principalTerritorialMapSpec,
     true,
-    fingerprintScope
+    fingerprintScope,
+    preResolvedAssets
   );
   const [sspeLogo, ceipolLogo] = await Promise.all([
     fetchLocalImageBuffer("/logos/logo-ssp.png"),

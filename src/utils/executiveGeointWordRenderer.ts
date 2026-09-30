@@ -22,6 +22,7 @@ import {
 import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
 import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
+import { renderStructuredTable } from "@/utils/documentTableRenderer";
 
 export interface ExecutiveGeointWordVisualAsset {
   data: ArrayBuffer | Uint8Array;
@@ -160,7 +161,7 @@ function renderVisualPlacement(
   }
 
   audit.renderedVisualIds.push(placement.visualId);
-  return [
+  const rendered: any[] = [
     paragraph(placement.headline, { bold: true, size: 20, color: "0D2B52" }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -178,6 +179,14 @@ function renderVisualPlacement(
     }),
     paragraph(captionParts, { size: 16, color: "5B6573", align: AlignmentType.CENTER }),
   ];
+  if (placement.companionTable) {
+    rendered.push(renderStructuredTable(placement.companionTable, {
+      columnWidths: [6, 16, 13, 13, 9, 14, 15, 14],
+      repeatHeader: true,
+      preventRowSplit: true,
+    }));
+  }
+  return rendered;
 }
 
 function placementsForSection(documentModel: ExecutiveGeointReportDocumentModel, sectionId: ExecutiveDocumentSectionId) {

@@ -11,6 +11,7 @@ import {
   type InstitutionalReportInput,
 } from "@/utils/institutionalReportPublicationContract";
 import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
+import type { StructuredTableInput } from "@/utils/documentTableRenderer";
 
 export const EXECUTIVE_GEOINT_DOCUMENT_MODEL_VERSION = "1.0.0";
 export const EXECUTIVE_DOCUMENT_MAX_VISUALS = 5;
@@ -60,6 +61,9 @@ export interface ExecutiveVisualPlacement {
     legendLabel: string | null;
     scaleLabel: string | null;
     orientationLabel: string | null;
+  };
+  companionTable?: StructuredTableInput & {
+    rowBindings: Array<{ displayLabel: string; rowId: string; denueLayerId: string; relationIds: string[] }>;
   };
 }
 
@@ -485,11 +489,14 @@ function visualClass(visualType: string): ExecutiveVisualPlacement["visualClass"
 function placementSectionForVisual(visualType: string): ExecutiveDocumentSectionId {
   if (visualType === "EVIDENCE_IMAGE") return "key-evidence";
   if (visualType === "PROSPECTIVE_SCENARIO") return "prospective-analysis";
-  if (visualType === "MULTISOURCE_CONVERGENCE" || visualType === "STATISTICAL_CHART" || visualType === "TREND_VISUAL") return "multisource-analysis";
+  if (visualType === "SECONDARY_MAP" || visualType === "MULTISOURCE_CONVERGENCE" || visualType === "STATISTICAL_CHART" || visualType === "TREND_VISUAL") return "multisource-analysis";
   return "key-evidence";
 }
 
-function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): ExecutiveVisualPlacement[] {
+function buildVisualPlacements(
+  visualComposition: ExecutiveVisualComposition,
+  institutionalInput: InstitutionalReportInput
+): ExecutiveVisualPlacement[] {
   const placements: ExecutiveVisualPlacement[] = [{
     visualId: visualComposition.principalTerritorialMap.mapId,
     sectionId: "territorial-situation",
@@ -503,6 +510,11 @@ function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): E
   const seen = new Set(placements.map((item) => item.visualId));
   for (const visual of visualComposition.secondaryVisuals) {
     if (seen.has(visual.visualId) || placements.length >= EXECUTIVE_DOCUMENT_MAX_VISUALS) continue;
+    const denueAnalyticalDocument = institutionalInput.denueAnalyticalDocument;
+    const companionTable = denueAnalyticalDocument?.status === "READY" &&
+      denueAnalyticalDocument.unit.visualId === visual.visualId
+      ? denueAnalyticalDocument.unit.companionTable
+      : undefined;
     placements.push({
       visualId: visual.visualId,
       sectionId: placementSectionForVisual(visual.visualType),
@@ -511,6 +523,7 @@ function buildVisualPlacements(visualComposition: ExecutiveVisualComposition): E
       caption: visible(visual.caption, "Visual ejecutivo gobernado."),
       visualClass: visualClass(visual.visualType),
       visibleSourceLabel: visible(visual.presentation.visibleSourceLabel) || null,
+      companionTable,
     });
     seen.add(visual.visualId);
   }
@@ -555,7 +568,7 @@ export function buildExecutiveGeointReportDocumentModel(
 ): ExecutiveGeointReportDocumentModel {
   const numeroExpediente = resolveNumeroExpediente(executiveModel, options);
   const sections = buildSections(executiveModel, visualComposition, institutionalInput, numeroExpediente);
-  const visualPlacements = buildVisualPlacements(visualComposition);
+  const visualPlacements = buildVisualPlacements(visualComposition, institutionalInput);
   return {
     identity: {
       numeroExpediente,

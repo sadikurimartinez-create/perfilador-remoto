@@ -126,6 +126,13 @@ function renderFactTable(facts: ExecutiveGeointTechnicalAnnexSection["facts"]): 
   }, { columnWidths: [28, 72] })];
 }
 
+function renderGovernedTables(tables: ExecutiveGeointTechnicalAnnexSection["tables"]): any[] {
+  return (tables || []).map((table) => renderStructuredTable(table, {
+    repeatHeader: true,
+    preventRowSplit: true,
+  }));
+}
+
 function renderAsset(asset: ExecutiveGeointWordVisualAsset, caption: string, map = false): any[] {
   return [new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -149,6 +156,7 @@ function renderSection(
     para(section.title, { bold: true, size: 22, color: "0D2B52" }),
     ...section.content.map((item) => para(item)),
     ...renderFactTable(section.facts),
+    ...renderGovernedTables(section.tables),
     ...(section.sectionId === "field-photographs" || section.sectionId === "street-view"
       ? []
       : renderRecords(section.records)),

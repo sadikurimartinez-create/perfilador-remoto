@@ -151,6 +151,7 @@ interface Candidate {
   transformation?: string;
   chartKind?: string;
   publicationEligibility?: string;
+  governedAnalyticalMap?: boolean;
 }
 
 interface PrincipalMapCandidate {
@@ -249,6 +250,10 @@ function classifyVisualType(item: any): ExecutiveSecondaryVisualType | "MAP" {
     ...(asArray<string>(item?.sourceTypes)),
   ].map(clean).join(" ").toUpperCase();
   const title = clean(item?.title).toUpperCase();
+  if (
+    raw === "ANALYTICAL_DENUE_MAP" &&
+    clean(item?.documentIntegrationKind || item?.technicalMetadata?.documentIntegrationKind) === "DENUE_ANALYTICAL_B6G"
+  ) return "SECONDARY_MAP";
   if (raw.includes("MAP") || raw.includes("MAPA")) return "MAP";
   if (raw.includes("TEMPORAL")) return "TEMPORAL_COMPARISON";
   if (raw.includes("CONVERGENCE") || raw.includes("MULTISOURCE") || raw.includes("MULTIFUENTE")) return "MULTISOURCE_CONVERGENCE";
@@ -559,10 +564,15 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
     transformation: clean(item?.transformation),
     chartKind: clean(item?.kind),
     publicationEligibility: clean(item?.publicationEligibility),
+    governedAnalyticalMap:
+      clean(item?.visualType).toUpperCase() === "ANALYTICAL_DENUE_MAP" &&
+      clean(item?.documentIntegrationKind || item?.technicalMetadata?.documentIntegrationKind) === "DENUE_ANALYTICAL_B6G",
   };
 
   if (isGovernedDescriptiveStatisticalChart(candidate)) {
-    candidate.score = 80 - index;
+    candidate.score = 300 - index;
+  } else if (candidate.governedAnalyticalMap) {
+    candidate.score = 200;
   }
 
   return candidate;
@@ -600,6 +610,7 @@ function validateCandidate(
   if (!candidate.reference) return "NO_VISUAL_REFERENCE";
   if (duplicateKeys.has(duplicateKey(candidate))) return "DUPLICATE";
   if (candidate.visualType === "MAP") return "LOW_EXECUTIVE_VALUE";
+  if (candidate.visualType === "SECONDARY_MAP" && !candidate.governedAnalyticalMap) return "LOW_EXECUTIVE_VALUE";
   if (candidate.visualType === "PROSPECTIVE_SCENARIO" && !isProspectiveAllowed(candidate, model)) return "CONTEXT_ONLY";
   const priorityFindingIds = model.findings.map((finding) => finding.findingId);
   const referencedByKeyEvidence =
@@ -614,6 +625,7 @@ function validateCandidate(
     candidate.visualType === "TEMPORAL_COMPARISON" ||
     candidate.visualType === "TREND_VISUAL" ||
     candidate.visualType === "PROSPECTIVE_SCENARIO" ||
+    candidate.governedAnalyticalMap === true ||
     isGovernedDescriptiveStatisticalChart(candidate);
 
   if (!hasRelation) return "NO_EXECUTIVE_RELATION";

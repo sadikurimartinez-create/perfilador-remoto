@@ -19,6 +19,10 @@ import {
 } from "@/utils/institutionalPredictiveProductIntegration";
 import { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
 import { isAdditionalPhotoEvidence } from "@/utils/institutionalProductsUi";
+import {
+  integrateDenueAnalyticalDocument,
+  type DenueAnalyticalDocumentIntegrationResult,
+} from "@/utils/denueAnalyticalDocumentIntegration";
 
 export { isCertifiedGimAnalysisPayload } from "@/utils/certifiedGimAnalysisPayload";
 
@@ -83,6 +87,7 @@ export interface InstitutionalReportInput {
   osint: any[];
   scinceDemographics?: any;
   denuePois?: any[];
+  denueAnalyticalDocument: Exclude<DenueAnalyticalDocumentIntegrationResult, { status: "REJECTED" }>;
   crimeIncidenceExportContract?: any;
   streetView: any[];
   temporalComparisons: any[];
@@ -369,6 +374,18 @@ function collect(project: any, keys: string[]): any[] {
   return keys.flatMap((key) => asArray(project?.[key]));
 }
 
+function denueAnalyticalDocumentSource(project: any): unknown {
+  const source = project?.denueAnalyticalCartographicProductResult ??
+    project?.denueAnalyticalCartographicProduct ??
+    project?.denueAnalytical?.cartographicProductResult ??
+    project?.denueAnalytical?.cartographicProduct;
+  if (source !== undefined) return source;
+  if (project?.denueAnalyticalMapRenderModel || project?.denueAnalyticalRelations || project?.denueAnalytical?.relations) {
+    throw new Error("DENUE_ANALYTICAL_DOCUMENT_REJECTED:B6G_ADAPTER_SOURCE_REQUIRED");
+  }
+  return null;
+}
+
 function hasVisualAsset(item: any): boolean {
   return Boolean(
     item?.assetRef ||
@@ -436,6 +453,10 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   const specializedIntelligence: any[] = [];
   const predictiveAnalyticalProducts: any[] = [];
   const visualProducts: any[] = [];
+  const denueAnalyticalDocument = integrateDenueAnalyticalDocument(denueAnalyticalDocumentSource(project) as any);
+  if (denueAnalyticalDocument.status === "REJECTED") {
+    throw new Error(`DENUE_ANALYTICAL_DOCUMENT_REJECTED:${denueAnalyticalDocument.reasons.join(",")}`);
+  }
 
   const process = (items: any[], type: PublicationItemType, target: any[]) => {
     items.forEach((item) => {
@@ -497,6 +518,9 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     ...specializedIntelligence.filter(hasVisualAsset),
   ], { canonicalGeography: project?.canonicalGeography || null });
   visualProducts.push(...governedVisuals.visualProducts.filter((item) => item.publicationEligibility !== "INELIGIBLE"));
+  if (denueAnalyticalDocument.status === "READY") {
+    visualProducts.push(denueAnalyticalDocument.unit.visualProduct);
+  }
   exclusions.push(...governedVisuals.exclusions);
   disclosures.push(...governedVisuals.disclosures);
 
@@ -564,6 +588,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     ].filter((item) => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
       item?.territorialStatus === "INSTITUTIONAL" && item?.epistemicIntegrity?.acquisitionMode === "OBSERVED" &&
       item?.epistemicIntegrity?.acquisitionStatus === "ACQUIRED" && item?.epistemicIntegrity?.isSimulated === false),
+    denueAnalyticalDocument,
     crimeIncidenceExportContract: project?.crimeIncidenceExportContract,
     streetView: traceableStreetView,
     temporalComparisons,
