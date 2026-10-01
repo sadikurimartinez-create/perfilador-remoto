@@ -678,7 +678,7 @@ describe("ADR-020.33 F1 - Institutional report publication contract", () => {
     expect(assessReportItemEligibility({ acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false }, { itemType: "OSINT" }).eligibility).toBe("ELIGIBLE");
   });
 
-  test("TEST 20B el insumo conserva fuentes estructuradas tras serializar expediente", () => {
+  test("TEST 20B el insumo conserva DENUE e incidencia y no admite SCINCE legacy", () => {
     const scince = { status: "OBSERVED", provenance: { datasetId: "inegi-2020" },
       epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } };
     const denue = { id: "denue-1", source: "DENUE", provider: "INEGI_DENUE", territorialStatus: "INSTITUTIONAL",
@@ -688,7 +688,9 @@ describe("ADR-020.33 F1 - Institutional report publication contract", () => {
       crimeIncidenceExportContract: { productClassification: "DESCRIPTIVE_ANALYTICAL_PRODUCT", exportId: "inc-1" },
     })));
     const input = buildInstitutionalReportInput(project);
-    expect(input.scinceDemographics?.provenance.datasetId).toBe("inegi-2020");
+    expect(input.scinceDemographics).toBeUndefined();
+    expect(input.scinceContext).toMatchObject({ publicationStatus: "NOT_PUBLISHABLE_MISSING", snapshot: null });
+    expect(project.iaAnalysis.scinceDemographics).toEqual(scince);
     expect(input.denuePois).toHaveLength(1);
     expect(input.crimeIncidenceExportContract?.exportId).toBe("inc-1");
   });

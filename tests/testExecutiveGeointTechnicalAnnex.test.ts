@@ -366,13 +366,12 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     }).renderAudit.renderedVisualIds).toContain(mapId);
   });
 
-  test("27 SCINCE solo presenta datos observados y validos", () => {
+  test("27 SCINCE legacy no produce hechos demográficos canónicos", () => {
     const scince = { status: "OBSERVED", provenance: { datasetId: "inegi-cpv-2020", referenceYear: 2020 },
       geography: { ageb: { code: "001" } }, demographics: { populationTotal: 125, housingTotal: null },
       epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } };
     const facts = annex(input({ scinceDemographics: scince })).sections.find((s) => s.sectionId === "scince")?.facts || [];
-    expect(facts).toContainEqual({ label: "Población", value: "125" });
-    expect(facts).toContainEqual({ label: "Viviendas", value: "No disponible" });
+    expect(facts).toHaveLength(0);
     expect(annex(input({ scinceDemographics: { ...scince, status: "NO_DATA" } }))
       .sections.find((s) => s.sectionId === "scince")?.facts).toHaveLength(0);
   });

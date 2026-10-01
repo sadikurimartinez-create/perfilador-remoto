@@ -1,4 +1,5 @@
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
+import { excludedScinceDocumentContext, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
@@ -86,6 +87,7 @@ export interface InstitutionalReportInput {
   conclusions: any[];
   osint: any[];
   scinceDemographics?: any;
+  scinceContext?: ScinceDocumentContext;
   denuePois?: any[];
   denueAnalyticalDocument: Exclude<DenueAnalyticalDocumentIntegrationResult, { status: "REJECTED" }>;
   crimeIncidenceExportContract?: any;
@@ -580,7 +582,8 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     analyses: traceableAnalyses,
     conclusions,
     osint,
-    scinceDemographics: project?.iaAnalysis?.scinceDemographics || project?.scinceDemographics,
+    // Canonical SCINCE is admitted server-side at generation time. Never promote legacy or UI labels.
+    scinceContext: excludedScinceDocumentContext("MISSING", "SCINCE_DOCUMENT_NOT_ADMITTED"),
     denuePois: [
       ...asArray(project?.denuePois),
       ...asArray(project?.iaAnalysis?.denuePois),

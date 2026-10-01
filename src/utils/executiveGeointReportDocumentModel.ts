@@ -12,6 +12,7 @@ import {
 } from "@/utils/institutionalReportPublicationContract";
 import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import type { StructuredTableInput } from "@/utils/documentTableRenderer";
+import { scinceDocumentSummary } from "@/utils/scinceDocumentContext";
 
 export const EXECUTIVE_GEOINT_DOCUMENT_MODEL_VERSION = "1.0.0";
 export const EXECUTIVE_DOCUMENT_MAX_VISUALS = 5;
@@ -216,20 +217,6 @@ function observed(item: any): boolean {
     integrity?.isSimulated === false;
 }
 
-function scinceContext(input: InstitutionalReportInput): string {
-  const source = input.scinceDemographics;
-  if (source?.status !== "OBSERVED" || !observed(source) || !source?.provenance?.datasetId) {
-    return "Contexto demográfico INEGI: no disponible como dato observado gobernado.";
-  }
-  const geo = source.geography || {};
-  const demographic = source.demographics || {};
-  const value = (number: unknown) => typeof number === "number" && Number.isFinite(number) ? String(number) : "No disponible";
-  return `Contexto demográfico INEGI (Censo ${visible(String(source.provenance.referenceYear ?? ""), "corte no consignado")}): ` +
-    `AGEB ${visible(geo.ageb?.code, "no consignada")}; manzana ${visible(geo.manzana?.code, "no consignada")}; ` +
-    `población ${value(demographic.populationTotal)}; viviendas ${value(demographic.housingTotal)}; ` +
-    `habitadas ${value(demographic.inhabitedPrivateHousing)}; deshabitadas ${value(demographic.uninhabitedPrivateHousing)}.`;
-}
-
 function denueContext(input: InstitutionalReportInput): string {
   const pois = asArray(input.denuePois).filter((item) => item?.source === "DENUE" &&
     item?.provider === "INEGI_DENUE" && item?.territorialStatus === "INSTITUTIONAL" && observed(item));
@@ -394,7 +381,7 @@ function buildSections(
           : visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED"
             ? "Cartografía canónica disponible y representada mediante mapa territorial gobernado."
             : "Cartografía canónica disponible y representada mediante visual territorial gobernado.",
-        scinceContext(input),
+        ...scinceDocumentSummary(input.scinceContext),
         denueContext(input),
         incidenceContext(input),
       ],
@@ -618,11 +605,10 @@ export function buildExecutiveGeointReportDocumentModel(
         ...asArray<string>(institutionalInput.hypothesis?.contradictingEvidenceIds),
       ]),
       sourceProvenance: [
-        ...(institutionalInput.scinceDemographics?.status === "OBSERVED" && observed(institutionalInput.scinceDemographics) ? [{
-          source: "INEGI SCINCE", sourceUrl: institutionalInput.scinceDemographics.provenance?.censusSourceUrl,
-          observedAt: institutionalInput.scinceDemographics.epistemicIntegrity?.acquiredAt,
-          query: institutionalInput.scinceDemographics.epistemicIntegrity?.query,
-          traceabilityId: institutionalInput.scinceDemographics.provenance?.datasetId,
+        ...(institutionalInput.scinceContext?.publicationStatus === "PUBLISHABLE" ? [{
+          source: "INEGI SCINCE", sourceUrl: institutionalInput.scinceContext.snapshot.provenance?.censusSourceUrl,
+          observedAt: institutionalInput.scinceContext.snapshot.observedAt,
+          traceabilityId: institutionalInput.scinceContext.snapshot.dataset.datasetId,
         }] : []),
         ...asArray(institutionalInput.denuePois).filter((item) => item?.source === "DENUE" && observed(item)).map((item) => ({
           source: "INEGI DENUE", sourceUrl: item.epistemicIntegrity?.sourceUrl,

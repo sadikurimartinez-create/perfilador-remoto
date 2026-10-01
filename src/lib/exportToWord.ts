@@ -99,6 +99,8 @@ import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executi
 import { institutionalReportPackageService } from "@/services/institutionalReportPackageService";
 import { renderDenueAnalyticalMapBitmap } from "@/utils/denueAnalyticalMapImageRenderer";
 import { integrateDenueAnalyticalPublicationForReport } from "@/services/denueAnalyticalReportGenerationService";
+import { getScinceDocumentContext } from "@/lib/scinceDocumentActions";
+import { integrateScinceDocumentContextForReport } from "@/utils/scinceDocumentContext";
 
 const CARTOGRAPHIC_SCALE_BAR_HEIGHT_LOGICAL_PX = 6;
 const CARTOGRAPHIC_SCALE_LABEL_BASELINE_LOGICAL_PX = 19;
@@ -911,6 +913,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     } : undefined,
   };
   let institutionalReportInput = buildInstitutionalReportInput(basePayload);
+  institutionalReportInput = await integrateScinceDocumentContextForReport(institutionalReportInput, getScinceDocumentContext);
   const generatedAt = institutionalReportInput.generatedAt;
   const numeroExpediente = payload.numeroExpediente || reportNumber;
   const projectId = payload.projectId || institutionalReportInput.projectId;

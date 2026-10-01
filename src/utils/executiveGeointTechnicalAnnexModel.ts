@@ -15,6 +15,7 @@ import {
 } from "@/utils/analyticalNarrativeGovernance";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 import type { StructuredTableInput } from "@/utils/documentTableRenderer";
+import { scinceDocumentFacts, scinceDocumentLimitations } from "@/utils/scinceDocumentContext";
 
 export const EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION = "1.0.0";
 
@@ -390,18 +391,8 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       };
     });
 
-  const scince = institutionalInput.scinceDemographics;
-  const scinceReady = scince?.status === "OBSERVED" && observedFact(scince) && Boolean(scince?.provenance?.datasetId);
-  const scinceFacts = scinceReady ? [
-    { label: "Conjunto de datos", value: clean(scince.provenance.datasetId) },
-    { label: "Año de referencia", value: displayedNumber(scince.provenance.referenceYear) },
-    { label: "AGEB", value: firstText(scince.geography?.ageb?.code, "No disponible") },
-    { label: "Manzana", value: firstText(scince.geography?.manzana?.code, "No disponible") },
-    { label: "Población", value: displayedNumber(scince.demographics?.populationTotal) },
-    { label: "Viviendas", value: displayedNumber(scince.demographics?.housingTotal) },
-    { label: "Viviendas habitadas", value: displayedNumber(scince.demographics?.inhabitedPrivateHousing) },
-    { label: "Viviendas deshabitadas", value: displayedNumber(scince.demographics?.uninhabitedPrivateHousing) },
-  ] : [];
+  const scinceFacts = scinceDocumentFacts(institutionalInput.scinceContext);
+  const scinceLimitations = scinceDocumentLimitations(institutionalInput.scinceContext);
   const denueDocument = institutionalInput.denueAnalyticalDocument || {
     status: "EMPTY" as const,
     sourcePresent: false,
@@ -520,7 +511,8 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       hasContextualDenue ? [`INEGI DENUE: ${contextualUniverseCount} registros contextuales gobernados.`]
         : territorialSourceRecords.length ? [`Fuentes territoriales registradas: ${territorialSourceRecords.length}`] : [],
       territorialSourceRecords),
-    section("scince", "CONTEXTO TERRITORIAL SCINCE", "TECHNICAL_SUPPORT", [], [], true, scinceFacts),
+    section("scince", "CONTEXTO SOCIODEMOGRÁFICO OBSERVADO — SCINCE", "TECHNICAL_SUPPORT",
+      scinceLimitations, [], true, scinceFacts),
     section("denue", "ACTIVIDAD ECONÓMICA DENUE", "TECHNICAL_SUPPORT",
       hasContextualDenue
         ? ["Presentación contextual compacta; el inventario fuente permanece preservado fuera de la expansión documental."]

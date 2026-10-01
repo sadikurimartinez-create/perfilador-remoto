@@ -680,7 +680,7 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(xml).not.toContain("ppc-1");
   });
 
-  test("42 SCINCE muestra datos observados sin inventar ceros y conserva procedencia", () => {
+  test("42 SCINCE legacy no alimenta contexto ni procedencia canónicos", () => {
     const source = {
       status: "OBSERVED",
       geography: { ageb: { code: "001" }, manzana: { code: "002" } },
@@ -690,10 +690,9 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     };
     const model = documentModel({}, { scinceDemographics: source });
     const text = model.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ") || "";
-    expect(text).toContain("población 125");
-    expect(text).toContain("viviendas No disponible");
-    expect(text).toContain("Censo 2020");
-    expect(model.technicalMetadata.sourceProvenance).toContainEqual(expect.objectContaining({ traceabilityId: "inegi-cpv-2020" }));
+    expect(text).not.toContain("125");
+    expect(text).not.toContain("inegi-cpv-2020");
+    expect(model.technicalMetadata.sourceProvenance?.some((item) => item.source === "INEGI SCINCE")).toBe(false);
     const absent = documentModel({}, { scinceDemographics: { ...source, status: "NO_DATA" } });
     expect(absent.sections.find((item) => item.sectionId === "territorial-situation")?.content.join(" ")).not.toContain("población 125");
   });
