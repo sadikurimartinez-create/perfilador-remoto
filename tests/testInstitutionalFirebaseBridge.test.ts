@@ -1,11 +1,11 @@
 jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/lib/db", () => ({ getPool: jest.fn() }));
-jest.mock("@/lib/firebaseAdmin", () => ({ getInstitutionalAdminAuth: jest.fn(), getInstitutionalAdminDb: jest.fn() }));
+jest.mock("@/lib/firebaseAdmin", () => ({ getInstitutionalAdminAuth: jest.fn(), getInstitutionalAdminDb: jest.fn(), getFirebaseAdminRuntimeDiagnostic: jest.fn() }));
 jest.mock("@/utils/authCrypto", () => ({ verifySession: jest.fn() }));
 import { issueInstitutionalFirebaseToken } from "../src/services/institutionalFirebaseTokenService";
 import { institutionalFirebaseIdentity } from "../src/utils/institutionalFirebaseIdentity";
 import { getPool } from "../src/lib/db";
-import { getInstitutionalAdminDb } from "../src/lib/firebaseAdmin";
+import { getInstitutionalAdminDb, getInstitutionalAdminAuth, getFirebaseAdminRuntimeDiagnostic } from "../src/lib/firebaseAdmin";
 
 describe("institutional Firebase token authority", () => {
   const session = { id: 42, username: "fixture", role: "SUPER_ADMIN", createdAt: 1000 };
@@ -44,5 +44,20 @@ describe("institutional Firebase token authority", () => {
     const deps = dependencies();
     await expect(issueInstitutionalFirebaseToken("signed", { verify: deps.verify, now: deps.now, mint: deps.mint })).rejects.toThrow("database unavailable");
     expect(deps.mint).not.toHaveBeenCalled(); expect(getInstitutionalAdminDb).not.toHaveBeenCalled();
+  });
+  test("default mint emits exactly the permitted diagnostic before token creation", async () => {
+    const diagnostic = { adminProjectMatchesExpected: false, credentialProjectMatchesExpected: "unknown" as const, explicitCredentialsMode: false };
+    jest.mocked(getFirebaseAdminRuntimeDiagnostic).mockReturnValueOnce(diagnostic);
+    const mint = jest.fn(async () => "fixture-token-never-logged");
+    jest.mocked(getInstitutionalAdminAuth).mockReturnValueOnce({ createCustomToken: mint } as any);
+    const log = jest.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      const deps = dependencies();
+      await issueInstitutionalFirebaseToken("fixture-cookie-never-logged", { verify: deps.verify, resolve: deps.resolve, now: deps.now });
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith("[FIREBASE_AUTH_DIAGNOSTIC]", JSON.stringify(diagnostic));
+      expect(log.mock.invocationCallOrder[0]).toBeLessThan(mint.mock.invocationCallOrder[0]);
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/fixture-token|fixture-cookie|username|claims|user:42|@/);
+    } finally { log.mockRestore(); }
   });
 });

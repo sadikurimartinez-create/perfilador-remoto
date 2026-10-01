@@ -34,3 +34,24 @@ function adminApp() {
 
 export function getInstitutionalAdminAuth() { return getAuth(adminApp()); }
 export function getInstitutionalAdminDb() { return getFirestore(adminApp()); }
+
+/** Temporary server-only diagnostic. Return comparisons, never configuration values. */
+export function getFirebaseAdminRuntimeDiagnostic(): {
+  adminProjectMatchesExpected: boolean | "unknown";
+  credentialProjectMatchesExpected: boolean | "unknown";
+  explicitCredentialsMode: boolean;
+} {
+  const app = adminApp();
+  const projectId = app.options?.projectId;
+  // cert() exposes clientEmail on its credential; ADC may not expose signer identity.
+  // Use the retained credential rather than rereading potentially changed environment values.
+  const credential = app.options?.credential as { clientEmail?: unknown } | undefined;
+  const email = typeof credential?.clientEmail === "string" ? credential.clientEmail.trim() : "";
+  return {
+    adminProjectMatchesExpected: projectId ? projectId === "perfilador-remoto" : "unknown",
+    credentialProjectMatchesExpected: email
+      ? email.endsWith("@perfilador-remoto.iam.gserviceaccount.com") && email.length > "@perfilador-remoto.iam.gserviceaccount.com".length
+      : "unknown",
+    explicitCredentialsMode: typeof credential?.clientEmail === "string",
+  };
+}

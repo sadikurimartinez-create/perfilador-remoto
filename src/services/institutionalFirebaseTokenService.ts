@@ -1,7 +1,7 @@
 import "server-only";
 import { verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
-import { getInstitutionalAdminAuth } from "@/lib/firebaseAdmin";
+import { getInstitutionalAdminAuth, getFirebaseAdminRuntimeDiagnostic } from "@/lib/firebaseAdmin";
 import { institutionalFirebaseIdentity, type InstitutionalIdentity } from "@/utils/institutionalFirebaseIdentity";
 
 export class FirebaseBridgeError extends Error {
@@ -26,7 +26,11 @@ type Dependencies = {
 export async function issueInstitutionalFirebaseToken(cookie: string | undefined, overrides: Partial<Dependencies> = {}) {
   const deps: Dependencies = {
     verify: verifySession, resolve: resolveUser,
-    mint: (uid, claims) => getInstitutionalAdminAuth().createCustomToken(uid, claims),
+    mint: (uid, claims) => {
+      const auth = getInstitutionalAdminAuth();
+      console.info("[FIREBASE_AUTH_DIAGNOSTIC]", JSON.stringify(getFirebaseAdminRuntimeDiagnostic()));
+      return auth.createCustomToken(uid, claims);
+    },
     now: Date.now, ...overrides,
   };
   if (!cookie) throw new FirebaseBridgeError(401, "INVALID_SESSION");
