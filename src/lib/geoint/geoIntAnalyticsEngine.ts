@@ -643,7 +643,9 @@ ${fallbackText}
     markdown += `Este dictamen oficial compila el análisis geoespacial táctico integrado para las organizaciones delictivas: **${output.pandillas_analizadas.join(", ")}**. A partir de un total de **${context.domiciles.length} domicilios** y **${context.influenceZones.length} zonas de influencia** ingresadas, se procesó la correlación multifuente geoespacial arrojando un puntaje global de riesgo de alta severidad. Se identifican múltiples colisiones territoriales potenciales y vulnerabilidad en la conectividad del sector comercial.\n\n`;
 
     markdown += `### 2. Análisis Territorial\n`;
-    markdown += `La cuadrícula operativa del CEIPOL detecta que la presencia delictiva se asienta principalmente en los distritos oriente y centro de la capital del estado de Aguascalientes. El análisis de entornos sociodemográficos (INEGI SCINCE) denota una correlación entre áreas de alta marginación y la tasa de reclutamiento delictivo, mientras que la cercanía a giros comerciales (INEGI DENUE) amplifica las oportunidades de extorsión y vandalismo.\n\n`;
+    // This input contract contains no observed, traceable sociodemographic data.
+    // Describe the supplied territorial inventory without inferring SCINCE or DENUE findings.
+    markdown += `El inventario territorial recibido contiene ${context.domiciles.length} domicilios, ${context.influenceZones.length} zonas de influencia y ${context.manualDrawings.length} trazos manuales. No se aportaron datos sociodemográficos observados y trazables para este reporte.\n\n`;
 
     markdown += `### 3. Estructura Criminal\n`;
     markdown += `Mediante la georreferenciación de domicilios y roles, se identificó la concentración espacial de liderazgo. Se registra la presencia de integrantes jerárquicos (Líderes / Segundos al mando) con residencias adyacentes a las zonas de influencia directa. Los nodos de menor nivel (Miembros / Halcones) se asientan de manera periférica para establecer anillos concéntricos de alerta operacional.\n\n`;
