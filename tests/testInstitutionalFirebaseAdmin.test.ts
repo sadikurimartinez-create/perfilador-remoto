@@ -4,35 +4,42 @@ jest.mock("firebase-admin/auth", () => ({ getAuth: jest.fn(app => ({ app })) }))
 jest.mock("firebase-admin/firestore", () => ({ getFirestore: jest.fn(app => ({ app })) }));
 import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
 import { getInstitutionalAdminAuth, getFirebaseAdminRuntimeDiagnostic } from "../src/lib/firebaseAdmin";
+import { getAuth } from "firebase-admin/auth";
 import fs from "node:fs";
 import path from "node:path";
 
 // Synthetic configuration only: never inspect or copy real credential values.
-const complete = { GCP_PROJECT_ID: "fixture-project", GCP_CLIENT_EMAIL: "fixture@example.invalid", GCP_PRIVATE_KEY: "fixture-line-1\\nfixture-line-2\\n" };
+const complete = { FIREBASE_ADMIN_PROJECT_ID: "perfilador-remoto", FIREBASE_ADMIN_CLIENT_EMAIL: "fixture@perfilador-remoto.iam.gserviceaccount.com", FIREBASE_ADMIN_PRIVATE_KEY: "fixture-line-1\\nfixture-line-2\\n" };
 
 describe("server-only Admin initializer", () => {
   beforeEach(() => { jest.clearAllMocks(); jest.replaceProperty(process, "env", {}); });
   afterEach(() => jest.restoreAllMocks());
-  test("no explicit configuration uses ADC and known public project", () => {
-    getInstitutionalAdminAuth();
-    expect(applicationDefault).toHaveBeenCalledTimes(1); expect(cert).not.toHaveBeenCalled();
-    expect(initializeApp).toHaveBeenCalledWith({ credential: "mock-adc", projectId: "perfilador-remoto" }, "institutional-admin");
+  test.each([{}, { GCP_PROJECT_ID: "other-fixture", GCP_CLIENT_EMAIL: "fixture@other-fixture.iam.gserviceaccount.com", GCP_PRIVATE_KEY: "fixture-gcp-key" }])("missing Firebase credentials never use ADC or GCP fallback", gcp => {
+    Object.assign(process.env, gcp);
+    expect(getInstitutionalAdminAuth).toThrow("FIREBASE_ADMIN_EXPLICIT_CREDENTIALS_REQUIRED");
+    expect(applicationDefault).not.toHaveBeenCalled(); expect(cert).not.toHaveBeenCalled(); expect(initializeApp).not.toHaveBeenCalled();
   });
-  test("ADC honors Firebase Admin project override", () => {
-    process.env.FIREBASE_ADMIN_PROJECT_ID = "fixture-override";
-    getInstitutionalAdminAuth();
-    expect(initializeApp).toHaveBeenCalledWith({ credential: "mock-adc", projectId: "fixture-override" }, "institutional-admin");
+  test.each([
+    ["FIREBASE_ADMIN_PROJECT_ID", "other-fixture", "FIREBASE_ADMIN_PROJECT_MISMATCH"],
+    ["FIREBASE_ADMIN_PROJECT_ID", " perfilador-remoto ", "FIREBASE_ADMIN_PROJECT_MISMATCH"],
+    ["FIREBASE_ADMIN_CLIENT_EMAIL", "fixture@other-fixture.iam.gserviceaccount.com", "FIREBASE_ADMIN_CREDENTIAL_PROJECT_MISMATCH"],
+    ["FIREBASE_ADMIN_CLIENT_EMAIL", "@perfilador-remoto.iam.gserviceaccount.com", "FIREBASE_ADMIN_CREDENTIAL_PROJECT_MISMATCH"],
+    ["FIREBASE_ADMIN_CLIENT_EMAIL", "fixture@other@perfilador-remoto.iam.gserviceaccount.com", "FIREBASE_ADMIN_CREDENTIAL_PROJECT_MISMATCH"],
+  ])("wrong project or signer rejects before auth/token access", (name, value, message) => {
+    Object.assign(process.env, complete, { [name]: value });
+    expect(getInstitutionalAdminAuth).toThrow(message);
+    expect(getAuth).not.toHaveBeenCalled(); expect(cert).not.toHaveBeenCalled(); expect(initializeApp).not.toHaveBeenCalled();
   });
   test("complete explicit credentials use cert and normalize escaped newlines in memory", () => {
-    Object.assign(process.env, complete, { FIREBASE_ADMIN_PROJECT_ID: "ignored-override" });
+    Object.assign(process.env, complete, { GCP_PROJECT_ID: "other-fixture", GCP_CLIENT_EMAIL: "other@example.invalid", GCP_PRIVATE_KEY: "fixture-gcp-key" });
     getInstitutionalAdminAuth();
-    expect(cert).toHaveBeenCalledWith({ projectId: complete.GCP_PROJECT_ID, clientEmail: complete.GCP_CLIENT_EMAIL, privateKey: "fixture-line-1\nfixture-line-2\n" });
+    expect(cert).toHaveBeenCalledWith({ projectId: complete.FIREBASE_ADMIN_PROJECT_ID, clientEmail: complete.FIREBASE_ADMIN_CLIENT_EMAIL, privateKey: "fixture-line-1\nfixture-line-2\n" });
     expect(applicationDefault).not.toHaveBeenCalled();
-    expect(initializeApp).toHaveBeenCalledWith({ credential: "mock-cert", projectId: complete.GCP_PROJECT_ID }, "institutional-admin");
-    expect(process.env.GCP_PRIVATE_KEY).toBe(complete.GCP_PRIVATE_KEY);
+    expect(initializeApp).toHaveBeenCalledWith({ credential: "mock-cert", projectId: complete.FIREBASE_ADMIN_PROJECT_ID }, "institutional-admin");
+    expect(process.env.FIREBASE_ADMIN_PRIVATE_KEY).toBe(complete.FIREBASE_ADMIN_PRIVATE_KEY);
   });
   test("existing literal newlines are retained", () => {
-    Object.assign(process.env, complete, { GCP_PRIVATE_KEY: "fixture-first\nfixture-second" });
+    Object.assign(process.env, complete, { FIREBASE_ADMIN_PRIVATE_KEY: "fixture-first\nfixture-second" });
     getInstitutionalAdminAuth();
     expect(cert).toHaveBeenCalledWith(expect.objectContaining({ privateKey: "fixture-first\nfixture-second" }));
   });
@@ -42,22 +49,24 @@ describe("server-only Admin initializer", () => {
     expect(initializeApp).not.toHaveBeenCalled(); expect(cert).not.toHaveBeenCalled(); expect(applicationDefault).not.toHaveBeenCalled();
   });
   test("empty configured credential fails closed", () => {
-    Object.assign(process.env, complete, { GCP_PRIVATE_KEY: "  " });
+    Object.assign(process.env, complete, { FIREBASE_ADMIN_PRIVATE_KEY: "  " });
     expect(getInstitutionalAdminAuth).toThrow("FIREBASE_ADMIN_EXPLICIT_CREDENTIALS_INCOMPLETE");
   });
   test("reuses existing Admin app", () => {
-    jest.mocked(getApps).mockReturnValueOnce([{ name: "institutional-admin" }] as any);
+    Object.assign(process.env, complete);
+    jest.mocked(getApps).mockReturnValueOnce([{ name: "institutional-admin", options: { projectId: complete.FIREBASE_ADMIN_PROJECT_ID, credential: { clientEmail: complete.FIREBASE_ADMIN_CLIENT_EMAIL } } }] as any);
     getInstitutionalAdminAuth(); expect(initializeApp).not.toHaveBeenCalled(); expect(applicationDefault).not.toHaveBeenCalled();
   });
   test("credential errors do not expose values or log secrets", () => {
     Object.assign(process.env, complete);
     const log = jest.spyOn(console, "log").mockImplementation(() => undefined);
     const error = jest.spyOn(console, "error").mockImplementation(() => undefined);
-    jest.mocked(cert).mockImplementationOnce(() => { throw new Error(complete.GCP_PRIVATE_KEY); });
+    jest.mocked(cert).mockImplementationOnce(() => { throw new Error(complete.FIREBASE_ADMIN_PRIVATE_KEY); });
     expect(getInstitutionalAdminAuth).toThrow("FIREBASE_ADMIN_INITIALIZATION_FAILED");
     expect(log).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled(); expect(initializeApp).not.toHaveBeenCalled();
   });
   test("initialization errors are explicit and sanitized", () => {
+    Object.assign(process.env, complete);
     jest.mocked(initializeApp).mockImplementationOnce(() => { throw new Error("sensitive"); });
     expect(getInstitutionalAdminAuth).toThrow("FIREBASE_ADMIN_INITIALIZATION_FAILED");
   });
@@ -69,16 +78,24 @@ describe("server-only Admin initializer", () => {
     finally { delete (global as any).window; }
     expect(initializeApp).not.toHaveBeenCalled();
   });
-  test.each([
-    ["perfilador-remoto", "fixture@perfilador-remoto.iam.gserviceaccount.com", true, true],
-    ["different-fixture-project", "fixture@different-fixture-project.iam.gserviceaccount.com", false, false],
-    [undefined, undefined, "unknown", "unknown"],
-  ])("diagnostic returns only comparisons for match, mismatch or absence", (projectId, clientEmail, adminMatch, credentialMatch) => {
-    jest.mocked(getApps).mockReturnValueOnce([{ name: "institutional-admin", options: { projectId, credential: { clientEmail, privateKey: "fixture-private-material" } } }] as any);
+  test("complete credentials initialize and diagnostic contains only true comparisons", () => {
+    Object.assign(process.env, complete);
+    jest.mocked(cert).mockReturnValueOnce({ clientEmail: complete.FIREBASE_ADMIN_CLIENT_EMAIL } as any);
+    jest.mocked(initializeApp).mockImplementationOnce((options: any) => ({ name: "institutional-admin", options }) as any);
     const result = getFirebaseAdminRuntimeDiagnostic();
-    expect(result).toEqual({ adminProjectMatchesExpected: adminMatch, credentialProjectMatchesExpected: credentialMatch, explicitCredentialsMode: clientEmail !== undefined });
-    expect(Object.values(result).every(value => typeof value === "boolean" || value === "unknown")).toBe(true);
-    expect(JSON.stringify(result)).not.toMatch(/different-fixture-project|@|fixture-private-material|token|jwt/i);
+    expect(result).toEqual({ adminProjectMatchesExpected: true, credentialProjectMatchesExpected: true, explicitCredentialsMode: true });
+    expect(Object.values(result).every(value => typeof value === "boolean")).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/perfilador-remoto|@|fixture|token|jwt/i);
+  });
+  test.each([
+    ["other-fixture", complete.FIREBASE_ADMIN_CLIENT_EMAIL, "FIREBASE_ADMIN_PROJECT_MISMATCH"],
+    [complete.FIREBASE_ADMIN_PROJECT_ID, "fixture@other-fixture.iam.gserviceaccount.com", "FIREBASE_ADMIN_CREDENTIAL_PROJECT_MISMATCH"],
+    [complete.FIREBASE_ADMIN_PROJECT_ID, undefined, "FIREBASE_ADMIN_CREDENTIAL_PROJECT_MISMATCH"],
+  ])("retained incompatible app cannot bypass validation", (projectId, clientEmail, message) => {
+    Object.assign(process.env, complete);
+    jest.mocked(getApps).mockReturnValueOnce([{ name: "institutional-admin", options: { projectId, credential: { clientEmail } } }] as any);
+    expect(getInstitutionalAdminAuth).toThrow(message);
+    expect(getAuth).not.toHaveBeenCalled();
   });
   test("diagnostic reports retained app configuration, not later environment changes", () => {
     Object.assign(process.env, complete);
