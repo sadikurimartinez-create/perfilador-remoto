@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 
+import { deriveEffectiveApprovedFindingRefs } from "../src/utils/effectiveApprovedFindingRefs";
 import { compactFindingRef } from "../src/utils/projectRootReconciliation";
 
 describe("REPORT finding refs rehydration", () => {
@@ -54,39 +55,26 @@ describe("REPORT finding refs rehydration", () => {
     );
   });
 
-  test("expediente existente rehidrata refs desde hallazgos aprobados reales", () => {
-    expect(workspaceSource).toContain(
-      "const approvedRefs = loadedFindings.flatMap"
-    );
-
-    expect(workspaceSource).toContain(
-      "finding?.estado === GeointGovernanceStatus.APPROVED_EVIDENCE"
-    );
-
-    expect(workspaceSource).toContain(
-      'String(finding?.humanValidationStatus || "").toUpperCase() === "APPROVED"'
-    );
-
-    expect(workspaceSource).toContain(
-      "const compactRef = compactFindingRef(finding);"
-    );
-
-    expect(workspaceSource).toContain(
-      "[GEOINT FINDING REFS REHYDRATED]"
-    );
+  test("effective refs are deterministic, compact and do not mutate human decisions", () => {
+    const stored = [{ findingId: "old" }, { findingId: "new", status: "STALE" }];
+    const findings = [
+      { id: "new", estado: "APPROVED_EVIDENCE", sourceEvidenceId: "ev" },
+      { id: "pending", estado: "PENDING" },
+      { id: "rejected", humanValidationStatus: "REJECTED" },
+    ];
+    const before = JSON.stringify({ stored, findings });
+    const effective = deriveEffectiveApprovedFindingRefs(stored, findings);
+    expect(effective.map(ref => ref.findingId)).toEqual(["old", "new"]);
+    expect(effective[1]).toEqual(compactFindingRef(findings[0]));
+    expect(deriveEffectiveApprovedFindingRefs(effective, findings)).toEqual(effective);
+    expect(JSON.stringify({ stored, findings })).toBe(before);
   });
 
-  test("rehidratacion deduplica y evita escritura repetida sin cambios", () => {
-    expect(workspaceSource).toContain(
-      "const refsByFindingId = new Map<string, any>();"
-    );
-
-    expect(workspaceSource).toContain(
-      "refsByFindingId.set(refId, ref);"
-    );
-
-    expect(workspaceSource).toContain(
-      "if (beforeSignature !== afterSignature)"
-    );
+  test("ProjectContext exposes derived refs before readiness without persisting them", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/context/ProjectContext.tsx"), "utf8");
+    const projection = source.slice(source.indexOf("// Canonical findings enrich"), source.indexOf("      setAlbum(governedAlbumPhotos)"));
+    expect(projection).toContain("approvedFindingRefs: effectiveApprovedFindingRefs");
+    expect(projection).toContain("reportReadyAssessment: assessReportReadiness");
+    expect(projection).not.toMatch(/updateDoc|setDoc|updateProjectDetails|logAuditAction/);
   });
 });

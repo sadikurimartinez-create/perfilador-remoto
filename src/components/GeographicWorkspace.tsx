@@ -436,6 +436,8 @@ export function GeographicWorkspace({
 
   // Sincronizar hallazgos del expediente desde el backend al cargar
   useEffect(() => {
+    let cancelled = false;
+    setFindings([]);
     async function fetchFindings() {
       try {
         console.log(`[AUDIT ADR-019.5 v1.3] Cargando hallazgos para expediente ${expedienteId}...`);
@@ -444,57 +446,8 @@ export function GeographicWorkspace({
           const data = await res.json();
           const loadedFindings = Array.isArray(data) ? data : (data?.findings || []);
           console.log("[AUDIT ADR-019.5 v1.3] Hallazgos sincronizados desde backend:", loadedFindings.length);
-          setFindings(loadedFindings);
+          if (!cancelled) setFindings(loadedFindings);
 
-          const approvedRefs = loadedFindings.flatMap((finding: any) => {
-            const isApprovedFinding =
-              finding?.estado === GeointGovernanceStatus.APPROVED_EVIDENCE ||
-              String(finding?.humanValidationStatus || "").toUpperCase() === "APPROVED";
-
-            if (!isApprovedFinding) return [];
-
-            const compactRef = compactFindingRef(finding);
-            return compactRef ? [compactRef] : [];
-          });
-
-          if (approvedRefs.length > 0) {
-            const existingApprovedFindingRefs = Array.isArray(project?.approvedFindingRefs)
-              ? project.approvedFindingRefs
-              : [];
-
-            const refsByFindingId = new Map<string, any>();
-
-            [...existingApprovedFindingRefs, ...approvedRefs].forEach((ref: any) => {
-              const refId =
-                ref?.findingId ||
-                ref?.id ||
-                ref?.traceabilityId;
-
-              if (refId) {
-                refsByFindingId.set(refId, ref);
-              }
-            });
-
-            const reconciledApprovedFindingRefs =
-              [...refsByFindingId.values()];
-
-            const beforeSignature =
-              JSON.stringify(existingApprovedFindingRefs);
-
-            const afterSignature =
-              JSON.stringify(reconciledApprovedFindingRefs);
-
-            if (beforeSignature !== afterSignature) {
-              await updateProjectDetails({
-                approvedFindingRefs: reconciledApprovedFindingRefs,
-              });
-
-              console.info("[GEOINT FINDING REFS REHYDRATED]", {
-                projectId: project?.id || expedienteId,
-                approvedFindingRefsCount: reconciledApprovedFindingRefs.length,
-              });
-            }
-          }
         } else {
           console.warn("[AUDIT ADR-019.5 v1.3] Error HTTP al consultar hallazgos:", res.status);
         }
@@ -503,7 +456,8 @@ export function GeographicWorkspace({
       }
     }
     fetchFindings();
-  }, [expedienteId, project?.id, project?.approvedFindingRefs, updateProjectDetails]);
+    return () => { cancelled = true; };
+  }, [expedienteId]);
 
   const handlePoiSelect = (poi: any) => {
     setSelectedPoi(poi);

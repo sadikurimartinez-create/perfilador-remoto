@@ -78,6 +78,7 @@ import type {
   InstitutionalReportCertification,
   InstitutionalReportPublication,
 } from "@/utils/reportCertificationGate";
+import { deriveEffectiveApprovedFindingRefs } from "@/utils/effectiveApprovedFindingRefs";
 import { assessReportReadiness, type ReportReadyAssessment } from "@/utils/reportReadyGovernance";
 import { normalizeInstitutionalBaseEvidence } from "@/utils/institutionalBaseEvidenceNormalizer";
 import {
@@ -1264,12 +1265,27 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         console.error("[ProjectContext] DENUE analytical workflow unavailable:", workflowError);
       }
 
+      // Canonical findings enrich consumers in memory; opening a project never reconciles storage.
+      let effectiveApprovedFindingRefs = deriveEffectiveApprovedFindingRefs(projectData.approvedFindingRefs, []);
+      try {
+        const response = await fetch(`/api/expedientes/${projectId}/streetview/findings`);
+        if (!response.ok) throw new Error(`Findings HTTP ${response.status}`);
+        const payload = await response.json();
+        effectiveApprovedFindingRefs = deriveEffectiveApprovedFindingRefs(
+          projectData.approvedFindingRefs,
+          Array.isArray(payload) ? payload : payload?.findings,
+        );
+      } catch (findingsError) {
+        console.warn("[ProjectContext] Canonical finding refs unavailable; retaining stored refs:", findingsError);
+      }
+
       const loadedProject = {
         id: projectId,
         nombre: projectData.name,
         geometryType: projectData.geometryType,
         descripcion: projectData.descripcion || "",
         ...projectData,
+        approvedFindingRefs: effectiveApprovedFindingRefs,
         canonicalGeography,
         geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
         geographyValidationStatus: canonicalGeography?.validationStatus ?? projectData.geographyValidationStatus ?? "INVALID",
