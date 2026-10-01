@@ -3,7 +3,7 @@ jest.mock("firebase-admin/app", () => ({ getApps: jest.fn(() => []), cert: jest.
 jest.mock("firebase-admin/auth", () => ({ getAuth: jest.fn(app => ({ app })) }));
 jest.mock("firebase-admin/firestore", () => ({ getFirestore: jest.fn(app => ({ app })) }));
 import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
-import { getInstitutionalAdminAuth, getFirebaseAdminRuntimeDiagnostic } from "../src/lib/firebaseAdmin";
+import { getInstitutionalAdminAuth } from "../src/lib/firebaseAdmin";
 import { getAuth } from "firebase-admin/auth";
 import fs from "node:fs";
 import path from "node:path";
@@ -78,15 +78,6 @@ describe("server-only Admin initializer", () => {
     finally { delete (global as any).window; }
     expect(initializeApp).not.toHaveBeenCalled();
   });
-  test("complete credentials initialize and diagnostic contains only true comparisons", () => {
-    Object.assign(process.env, complete);
-    jest.mocked(cert).mockReturnValueOnce({ clientEmail: complete.FIREBASE_ADMIN_CLIENT_EMAIL } as any);
-    jest.mocked(initializeApp).mockImplementationOnce((options: any) => ({ name: "institutional-admin", options }) as any);
-    const result = getFirebaseAdminRuntimeDiagnostic();
-    expect(result).toEqual({ adminProjectMatchesExpected: true, credentialProjectMatchesExpected: true, explicitCredentialsMode: true });
-    expect(Object.values(result).every(value => typeof value === "boolean")).toBe(true);
-    expect(JSON.stringify(result)).not.toMatch(/perfilador-remoto|@|fixture|token|jwt/i);
-  });
   test.each([
     ["other-fixture", complete.FIREBASE_ADMIN_CLIENT_EMAIL, "FIREBASE_ADMIN_PROJECT_MISMATCH"],
     [complete.FIREBASE_ADMIN_PROJECT_ID, "fixture@other-fixture.iam.gserviceaccount.com", "FIREBASE_ADMIN_CREDENTIAL_PROJECT_MISMATCH"],
@@ -96,11 +87,5 @@ describe("server-only Admin initializer", () => {
     jest.mocked(getApps).mockReturnValueOnce([{ name: "institutional-admin", options: { projectId, credential: { clientEmail } } }] as any);
     expect(getInstitutionalAdminAuth).toThrow(message);
     expect(getAuth).not.toHaveBeenCalled();
-  });
-  test("diagnostic reports retained app configuration, not later environment changes", () => {
-    Object.assign(process.env, complete);
-    jest.mocked(getApps).mockReturnValueOnce([{ name: "institutional-admin", options: { projectId: "perfilador-remoto", credential: { clientEmail: "fixture@perfilador-remoto.iam.gserviceaccount.com" } } }] as any);
-    expect(getFirebaseAdminRuntimeDiagnostic()).toEqual({ adminProjectMatchesExpected: true, credentialProjectMatchesExpected: true, explicitCredentialsMode: true });
-    expect(cert).not.toHaveBeenCalled();
   });
 });

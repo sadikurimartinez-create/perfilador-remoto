@@ -1,7 +1,7 @@
 import "server-only";
 import { verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
-import { getInstitutionalAdminAuth, getFirebaseAdminRuntimeDiagnostic } from "@/lib/firebaseAdmin";
+import { getInstitutionalAdminAuth } from "@/lib/firebaseAdmin";
 import { institutionalFirebaseIdentity, type InstitutionalIdentity } from "@/utils/institutionalFirebaseIdentity";
 
 export class FirebaseBridgeError extends Error {
@@ -28,7 +28,6 @@ export async function issueInstitutionalFirebaseToken(cookie: string | undefined
     verify: verifySession, resolve: resolveUser,
     mint: (uid, claims) => {
       const auth = getInstitutionalAdminAuth();
-      console.info("[FIREBASE_AUTH_DIAGNOSTIC]", JSON.stringify(getFirebaseAdminRuntimeDiagnostic()));
       return auth.createCustomToken(uid, claims);
     },
     now: Date.now, ...overrides,

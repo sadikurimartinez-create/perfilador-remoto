@@ -49,24 +49,3 @@ function adminApp() {
 
 export function getInstitutionalAdminAuth() { return getAuth(adminApp()); }
 export function getInstitutionalAdminDb() { return getFirestore(adminApp()); }
-
-/** Temporary server-only diagnostic. Return comparisons, never configuration values. */
-export function getFirebaseAdminRuntimeDiagnostic(): {
-  adminProjectMatchesExpected: boolean | "unknown";
-  credentialProjectMatchesExpected: boolean | "unknown";
-  explicitCredentialsMode: boolean;
-} {
-  const app = adminApp();
-  const projectId = app.options?.projectId;
-  // cert() exposes clientEmail on its credential.
-  // Use the retained credential rather than rereading potentially changed environment values.
-  const credential = app.options?.credential as { clientEmail?: unknown } | undefined;
-  const email = typeof credential?.clientEmail === "string" ? credential.clientEmail.trim() : "";
-  return {
-    adminProjectMatchesExpected: projectId ? projectId === EXPECTED_PROJECT_ID : "unknown",
-    credentialProjectMatchesExpected: email
-      ? matchesCredentialProject(email)
-      : "unknown",
-    explicitCredentialsMode: typeof credential?.clientEmail === "string",
-  };
-}
