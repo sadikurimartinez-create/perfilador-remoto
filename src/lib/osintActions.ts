@@ -6,6 +6,8 @@ import type { AcquisitionMode, AcquisitionStatus, EpistemicIntegrityMetadata, Ep
 import { prepareDenueAcquisitionPois } from "@/utils/denueCanonicalPoi";
 import { searchDatosGobMx, type DatosGobMxResult } from "./datosGobMx";
 import { resolveInegiTerritory } from "./inegiTerritorialResolver";
+import { cookies } from "next/headers";
+import { resolveScinceCanonicalContext } from "@/services/scinceCanonicalContextService";
 import { classifyExternalFailure, classifyHttpFailure, invalidProviderResponse } from "@/utils/externalProviderError";
 
 export type DenueQueryStatus =
@@ -102,6 +104,10 @@ export async function getNgrokUrl() {
 
 export async function getScinceData(lat: number, lng: number) {
   return resolveInegiTerritory(Number(lat), Number(lng));
+}
+
+export async function getCanonicalScinceData(projectId: string) {
+  return resolveScinceCanonicalContext({ projectId }, cookies().get("ceipol_session")?.value);
 }
 
 export async function getDenueData(lat: number, lng: number, radio: number = 500) {
