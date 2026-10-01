@@ -379,6 +379,7 @@ export function buildCanonicalProjectGeography(params: {
   const type = typeof params.type === "string" ? normalizeCanonicalGeographyType(params.type) : params.type;
   const points = normalizePoints(params.points);
   const validationStatus = validatePointCount(type, points);
+  // Storage-compatible placeholder only: INVALID and its limitation must survive rehydration.
   const usablePoints = points.length > 0 ? points : [{ lat: 0, lng: 0 }];
   const createdAt = params.now ?? Date.now();
 
@@ -475,17 +476,26 @@ export function canonicalizeConfirmedDraftGeography(params: {
 export function rehydrateCanonicalProjectGeography(geography: CanonicalProjectGeography | null | undefined) {
   if (!geography) return null;
   const points = getCanonicalGeographyCoordinates(geography);
-  const validationStatus = validatePointCount(geography.type, points);
+  const structuralStatus = points.every(isValidLatLng) ? validatePointCount(geography.type, points) : "INVALID";
+  // Rehydration may downgrade, but cannot reconcile unresolved historical geography.
+  const validationStatus: CanonicalGeographyValidationStatus =
+    geography.validationStatus === "INVALID" ||
+    !["VALID", "PARTIAL"].includes(geography.validationStatus) ||
+    (structuralStatus === "VALID" && (geography.limitations || []).includes("INCOMPLETE_CANONICAL_GEOMETRY"))
+      ? "INVALID"
+      : geography.validationStatus === "PARTIAL" && structuralStatus === "VALID"
+        ? "PARTIAL"
+        : structuralStatus;
   const validationLimitations = deriveValidationLimitations(geography.type, points, validationStatus);
   return {
     ...geography,
     validationStatus,
     limitations: Array.from(new Set([...(geography.limitations || []), ...validationLimitations])),
-    derived: geography.derived || {
+    derived: geography.derived || (validationStatus !== "VALID" ? {} : {
       centroid: deriveCentroid(geography.type, points),
       bounds: deriveBounds(points),
       closedRing: geography.type === "POLYGON",
-    },
+    }),
   };
 }
 
@@ -584,6 +594,9 @@ export function buildImportedProjectCanonicalGeographyPatch(project: {
 }
 
 export function getCanonicalMapViewport(geography: CanonicalProjectGeography | null | undefined) {
+  if (rehydrateCanonicalProjectGeography(geography)?.validationStatus !== "VALID") {
+    return { center: undefined, bounds: undefined, fitMode: "CENTER" as const };
+  }
   const points = getCanonicalGeographyCoordinates(geography);
   const bounds = deriveBounds(points);
   const centroid = geography?.derived?.centroid || deriveCentroid(geography?.type || "INDIVIDUAL", points);
