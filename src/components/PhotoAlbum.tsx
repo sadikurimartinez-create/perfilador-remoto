@@ -8,10 +8,11 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject, AlbumPhoto } from "@/context/ProjectContext";
 import { EvidenceRelationship, EvidenceRelationshipEngine } from "@/utils/evidenceRelationshipEngine";
 import { TacticalCharts } from "./TacticalCharts";
+import { ScinceHumanContextPanel } from "./ScinceHumanContextPanel";
 import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
 import { exportToWord } from "@/lib/exportToWord";
-import { pingOsint, getScinceData, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
+import { pingOsint, getDenueData, getTelegramOsintData, getRnpdnoData, getRepuveData } from "@/lib/osintActions";
 import { buildExpedientIncidenceCanonicalSpatialQuery } from "@/lib/projectIncidenceCanonicalSpatialQuery";
 import {
   mergeCifaFindingObservations,
@@ -1121,7 +1122,6 @@ export function PhotoAlbum({
   }, []);
   const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [scinceDataConfirm, setScinceDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
   const [denueDataConfirm, setDenueDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
@@ -1710,7 +1710,6 @@ export function PhotoAlbum({
   const [rnpdnoContext, setRnpdnoContext] = useState("");
 
   // Estado para Consulta INEGI SCINCE
-  const [isCheckingScince, setIsCheckingScince] = useState(false);
 
   // Estado para Consulta INEGI DENUE
   const [isCheckingDenue, setIsCheckingDenue] = useState(false);
@@ -4315,80 +4314,15 @@ const hasMinimumPhotos =
 
 
       {/* MÓDULO DE DEMOGRAFÍA TERRITORIAL OFICIAL INEGI (Paso 5) */}
-      <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
-        <CEIPOLSectionHeader
-          icon="📊"
-          title="Demografía territorial — INEGI (Paso 5)"
-          subtitle="Resuelve el centro de las fotografías seleccionadas contra el Marco Geoestadístico y el Censo 2020 importados con geometría oficial."
-          className="mb-2"
-          actions={
-            <>
-              {statusScince === "checking" && <CEIPOLBadge status="processing">Verificando...</CEIPOLBadge>}
-              {statusScince === "online" && <CEIPOLBadge status="validated">ONLINE</CEIPOLBadge>}
-              {statusScince === "offline" && <CEIPOLBadge status="error">OFFLINE (404)</CEIPOLBadge>}
-            </>
-          }
-        />
-        {isCheckingScince ? (
-          <CEIPOLLoader message="Consultando dataset territorial oficial INEGI" />
-        ) : (
-          <div className="flex flex-col md:flex-row gap-3 w-full p-4 bg-slate-800/40 rounded-lg border border-slate-700 items-start md:items-center">
-            <p className="text-xs text-slate-300 flex-1">
-              {selectedIds.length > 0
-                ? `El barrido se calculará sobre el centroide de las ${selectedIds.length} fotos seleccionadas.`
-                : "⚠️ Seleccione al menos una fotografía en el álbum para establecer el punto GPS de búsqueda."}
-            </p>
-            <CEIPOLButton
-              variant="primary"
-              loading={isCheckingScince}
-              disabled={selectedIds.length === 0 || isReadOnly}
-              onClick={async (e: React.MouseEvent<HTMLButtonElement>) => {
-                setClickCoords({ x: e.clientX, y: e.clientY });
-                setIsCheckingScince(true);
-                setError(null);
-                try {
-                  const selectedPhotos = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && selectedIds.includes(p.id));
-                  if (selectedPhotos.length === 0) {
-                    setError("Las fotos seleccionadas no tienen coordenadas GPS válidas.");
-                    setIsCheckingScince(false);
-                    return;
-                  }
-                  const centerLat = selectedPhotos.reduce((acc, p) => acc + Number(p.lat), 0) / selectedPhotos.length;
-                  const centerLng = selectedPhotos.reduce((acc, p) => acc + Number(p.lng), 0) / selectedPhotos.length;
-
-                  const data = await getScinceData(centerLat, centerLng);
-                  if (data.exito) {
-                    const territorialLevel = data.geographicLevel || "No disponible";
-                    const demographicLevel = data.demographics?.geographicLevel || "No disponible";
-                    const territorialLabel = (kind: string, code?: string, name?: string) => code
-                      ? `${kind} ${code}${name ? ` (${name})` : ""}`
-                      : null;
-                    const codes = [
-                      territorialLabel("estado", data.geography?.estado?.code, data.geography?.estado?.name),
-                      territorialLabel("municipio", data.geography?.municipio?.code, data.geography?.municipio?.name),
-                      territorialLabel("localidad", data.geography?.localidad?.code, data.geography?.localidad?.name),
-                      territorialLabel("AGEB", data.geography?.ageb?.code),
-                      territorialLabel("manzana", data.geography?.manzana?.code),
-                    ].filter(Boolean).join(", ");
-                    const formatMetric = (value: string | undefined, unit: string) => value && value !== "No disponible" ? `${value} ${unit}` : "No disponible";
-                    const newContext = `[DEMOGRAFÍA TERRITORIAL OFICIAL - INEGI] Producto: ${data.provenance?.productName || "No disponible"}. Año: ${data.provenance?.referenceYear ?? "No disponible"}. Unidad territorial localizada: ${territorialLevel}. Nivel de datos demográficos: ${demographicLevel}. Claves: ${codes || "No disponibles"}. Coordenadas consultadas: ${data.coordenadas}. Población total: ${formatMetric(data.poblacionTotal, "personas")}. Viviendas totales: ${formatMetric(data.viviendasTotales, "viviendas")}. Viviendas particulares habitadas: ${formatMetric(data.viviendasHabitadas, "viviendas")}. Viviendas particulares deshabitadas: ${formatMetric(data.viviendasDeshabitadas, "viviendas")}. Marginación: no disponible en los productos INEGI importados. Dataset: ${data.provenance?.datasetId || "No disponible"}. Versión: ${data.provenance?.version || "No disponible"}. Importado: ${data.provenance?.importedAt || "No disponible"}. Fuente geográfica: ${data.provenance?.geographySourceUrl || "No disponible"}. SHA geografía: ${data.provenance?.geographySha256 || "No disponible"}. Fuente censal: ${data.provenance?.censusSourceUrl || "No disponible"}. SHA censo: ${data.provenance?.censusSha256 || "No disponible"}.`;
-                    const sourceItem = adaptDenueScinceSource({
-                      expedienteId: project?.id,
-                      integrity: data.epistemicIntegrity,
-                    });
-                    setScinceDataConfirm({ content: newContext, integrity: data.epistemicIntegrity, sourceItem, payload: data });
-                  } else {
-                    setError(data.error || "No hay datos territoriales oficiales INEGI disponibles para la coordenada.");
-                  }
-                } catch (err: any) { setError(err.message || "Error al consultar el dataset territorial INEGI."); }
-                finally { setIsCheckingScince(false); }
-              }}
-            >
-              📊 Consultar territorio y revisar
-            </CEIPOLButton>
-          </div>
-        )}
-      </div>
+      <ScinceHumanContextPanel
+        key={project?.id || "scince-no-project"}
+        projectId={project?.id || ""}
+        canonicalGeography={project?.canonicalGeography}
+        analysis={analysisResult as any}
+        isReadOnly={isReadOnly}
+        updateProjectDetails={updateProjectDetails as any}
+        setAnalysisResult={setAnalysisResult as any}
+      />
 
       {/* MÓDULO DE GIROS COMERCIALES Y NEGOCIOS (INEGI DENUE) (Paso 6) */}
       <div className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50">
@@ -6913,73 +6847,6 @@ const hasMinimumPhotos =
           )}
         </DynamicPopup>
       )}
-
-      {/* CONFIRMACIÓN DE DEMOGRAFÍA TERRITORIAL OFICIAL */}
-      <DynamicPopup
-        open={!!scinceDataConfirm}
-        anchorPosition={clickCoords}
-        onClose={() => setScinceDataConfirm(null)}
-        className="max-w-md w-full"
-      >
-        <h3 className="text-sm font-black text-cyan-400 flex items-center gap-2 mb-2 uppercase tracking-wider">
-          📊 Confirmación de fuente: INEGI territorial
-        </h3>
-        <p className="text-[11px] text-slate-400 font-medium leading-relaxed mb-3">
-          Revise el producto, año, nivel geográfico, claves e indicadores observados antes de incorporarlos al expediente:
-        </p>
-        <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl text-xs text-slate-300 leading-relaxed font-mono max-h-[160px] overflow-y-auto mb-4 select-all shadow-inner">
-          {scinceDataConfirm?.content}
-        </div>
-        {!canAdmitSourceToInstitutionalContext(scinceDataConfirm?.sourceItem) && (
-          <p className="mb-4 text-[11px] font-semibold leading-relaxed text-amber-300">
-            La fuente territorial no demostró dataset oficial, PostGIS y lineage completos; no puede incorporarse como dato factual.
-          </p>
-        )}
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-          <CEIPOLButton
-            variant="secondary"
-            size="sm"
-            onClick={() => setScinceDataConfirm(null)}
-          >
-            Cancelar
-          </CEIPOLButton>
-          <CEIPOLButton
-            variant="confirm"
-            size="sm"
-            disabled={!canAdmitSourceToInstitutionalContext(scinceDataConfirm?.sourceItem)}
-            onClick={async () => {
-              if (!scinceDataConfirm || !canAdmitSourceToInstitutionalContext(scinceDataConfirm.sourceItem)) return;
-              const nextAnalysisResult = {
-                ...(analysisResult || {}),
-                scinceDemographics: scinceDataConfirm.payload,
-              } as any;
-              try {
-                await registerSweep({
-                  engine: "Demografía territorial (INEGI)",
-                  source: "INEGI Censo 2020 / Marco Geoestadístico",
-                  type: "Directa",
-                  relevance: "Medio",
-                  data: scinceDataConfirm.content,
-                  context: JSON.stringify({
-                    provenance: scinceDataConfirm.payload?.provenance,
-                    geography: scinceDataConfirm.payload?.geography,
-                    queryCoordinates: scinceDataConfirm.payload?.coordenadas,
-                  }),
-                  createVisualEvidence: false,
-                } as any);
-                setAnalysisResult(nextAnalysisResult);
-                await updateProjectDetails({ iaAnalysis: nextAnalysisResult } as any);
-                setScinceDataConfirm(null);
-                setToast({ type: "success", message: "✓ Demografía territorial oficial incorporada al expediente" });
-              } catch (err: any) {
-                setError(err.message || "No fue posible persistir la demografía territorial.");
-              }
-            }}
-          >
-            Incorporar al expediente
-          </CEIPOLButton>
-        </div>
-      </DynamicPopup>
 
       {/* CONFIRMACIÓN DE HIPÓTESIS COMERCIAL (DENUE) */}
       <DynamicPopup
