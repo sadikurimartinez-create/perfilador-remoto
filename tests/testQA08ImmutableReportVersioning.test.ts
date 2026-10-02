@@ -1,5 +1,7 @@
+import { preP7Fixture } from "./helpers/preP7InstitutionalFixture";
 import fs from "fs";
 import path from "path";
+jest.mock("@/lib/institutionalReportSourceActions", () => ({ getAuthorizedInstitutionalReportSource: jest.fn() }));
 import {
   buildInstitutionalSnapshotHash,
   getReportPackageErrorDiagnostic,
@@ -95,26 +97,12 @@ class MemoryStorage implements InstitutionalReportPackageStorage {
   }
 }
 
+let prepared: Awaited<ReturnType<typeof preP7Fixture>>;
+beforeAll(async () => { prepared = await preP7Fixture(); }, 180000);
 function fixture(repository = new MemoryRepository(), storage = new MemoryStorage()) {
   let tick = 0;
-  const service = new InstitutionalReportPackageService(repository, storage, () => `2026-09-23T10:00:0${tick++}.000Z`);
-  const generationContext = {
-    generatedAt: "2026-09-23T09:00:00.000Z",
-    institutionalReportInput: { projectId: "project-3f", generatedAt: "2026-09-23T09:00:00.000Z", evidence: [{ id: "ev-1" }] },
-    executiveModel: { title: "Informe" },
-    visualComposition: { blocks: [{ id: "map-1" }] },
-    documentModel: { modelId: "document-model-1", reportSnapshotId: "snapshot-1" },
-    visualAssetsById: {},
-  };
-  const base = {
-    projectId: "project-3f",
-    numeroExpediente: "23092026-0001-ABC",
-    generatedAt: generationContext.generatedAt,
-    generatedBy: { id: "user-1", name: "Analista Uno", email: "analista@ceipol.example" },
-    generationContext,
-    reportBlob: new Blob(["report-bytes"]),
-    annexBlob: new Blob(["annex-bytes"]),
-  };
+  const service = new InstitutionalReportPackageService(repository, storage, () => `2026-09-23T10:00:0${tick++}.000Z`, async () => prepared.authorized);
+  const base = { ...prepared.base, generationContext: structuredClone(prepared.context), pdfArtifacts: structuredClone(prepared.base.pdfArtifacts) };
   return { service, repository, storage, base };
 }
 
@@ -217,7 +205,7 @@ describe("QA-08 FASE 3F - immutable report package versioning", () => {
   test("7 almacena ambos artefactos", async () => {
     const { service, storage, base } = fixture();
     await service.persistGeneratedPackage({ ...base, packageId: "pkg-store" });
-    expect(storage.objects.size).toBe(2);
+    expect(storage.objects.size).toBe(4);
   });
 
   test("8 GENERATED se asigna sólo después de ambos STORED", async () => {
@@ -258,8 +246,8 @@ describe("QA-08 FASE 3F - immutable report package versioning", () => {
     const { service, base } = fixture();
     const manifest = await service.persistGeneratedPackage({ ...base, packageId: "pkg-download" });
     const pair = await service.downloadPackage(base.projectId, manifest.packageId);
-    expect(await pair.executiveReport.text()).toBe("report-bytes");
-    expect(await pair.technicalAnnex.text()).toBe("annex-bytes");
+    expect(await pair.executiveReport.arrayBuffer()).toEqual(await base.reportBlob.arrayBuffer());
+    expect(await pair.technicalAnnex.arrayBuffer()).toEqual(await base.annexBlob.arrayBuffer());
   });
 
   test("14 historial institucional no reutiliza la colección legacy dossiers", () => {
@@ -274,15 +262,15 @@ describe("QA-08 FASE 3F - immutable report package versioning", () => {
   test("15 nombres visibles incluyen vN", async () => {
     const { service, base } = fixture();
     const manifest = await service.persistGeneratedPackage({ ...base, packageId: "pkg-name" });
-    expect(manifest.artifacts.executiveReport.filename).toBe("23092026-0001-ABC_INFORME_v1.docx");
-    expect(manifest.artifacts.technicalAnnex.filename).toBe("23092026-0001-ABC_ANEXO_TECNICO_v1.docx");
+    expect(manifest.artifacts.executiveReport.filename).toBe(`${base.numeroExpediente}_INFORME_v1.docx`);
+    expect(manifest.artifacts.technicalAnnex.filename).toBe(`${base.numeroExpediente}_ANEXO_TECNICO_v1.docx`);
   });
 
   test("16 una versión previa nunca reutiliza su ruta", async () => {
     const { service, storage, base } = fixture();
     await service.persistGeneratedPackage({ ...base, packageId: "pkg-old" });
     await service.persistGeneratedPackage({ ...base, packageId: "pkg-new" });
-    expect(new Set(storage.writes).size).toBe(4);
+    expect(new Set(storage.writes).size).toBe(8);
     expect(storage.writes.some((item) => item.includes("/pkg-old/v1/"))).toBe(true);
     expect(storage.writes.some((item) => item.includes("/pkg-new/v2/"))).toBe(true);
   });
@@ -441,25 +429,34 @@ describe("QA-08 FASE 3F - immutable report package versioning", () => {
     expect(first).not.toBe(changed);
   });
 
-  test("34 manifest nuevo persiste snapshot cartografico versionado y su hash", async () => {
-    const setup = fixture();
-    (setup.base.generationContext as any).principalTerritorialMapSpec = cartographicSpec(12);
-    const manifest = await setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-cartographic" });
-    expect(manifest.cartographicSnapshot).toMatchObject({
-      algorithmVersion: "CARTOGRAPHIC_SCALE_WEB_MERCATOR_V1",
-      geographyId: "geo-1",
-      zoom: 12,
-      logicalWidth: 640,
-      logicalHeight: 480,
-      staticMapScale: 2,
-    });
-    expect(manifest.cartographicSnapshot?.mapSpecHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+  test("34 rejects a substituted map even when the bitmap is unchanged", async () => {
+    const setup = fixture(); setup.base.generationContext.principalTerritorialMapSpec = cartographicSpec(12);
+    await expect(setup.service.persistGeneratedPackage(setup.base)).rejects.toThrow("P3_MAP");
+    expect(setup.storage.writes).toEqual([]);
+  });
+  test("35 legacy context cannot generate a new institutional package", async () => {
+    const setup = fixture(); delete setup.base.generationContext.documentModel.semanticIntegrity;
+    await expect(setup.service.persistGeneratedPackage(setup.base)).rejects.toThrow("P5_BLOCKED");
+    expect(setup.storage.writes).toEqual([]);
   });
 
-  test("35 package legacy sin map spec sigue generado sin campos nuevos", async () => {
+  test.each(["missing", "changed", "foreign"])("P2 %s source authority rejects before repository/storage writes", async kind => {
     const setup = fixture();
-    const manifest = await setup.service.persistGeneratedPackage({ ...setup.base, packageId: "pkg-legacy-no-scale" });
-    expect(manifest.state).toBe("GENERATED");
-    expect(manifest.cartographicSnapshot).toBeUndefined();
+    const context: any = { ...setup.base.generationContext };
+    context.sourceAuthority = kind === "missing" ? undefined : { ...context.sourceAuthority,
+      ...(kind === "changed" ? { sourceFingerprint: "sha256:changed" } : { projectId: "foreign" }) };
+    await expect(setup.service.persistGeneratedPackage({ ...setup.base, generationContext: context })).rejects.toThrow("SOURCE_AUTHORIZATION_REQUIRED");
+    expect(setup.repository.records.size).toBe(0); expect(setup.storage.writes).toEqual([]);
+  });
+  test("P2 client identity is ignored in generated manifest", async () => {
+    const setup = fixture();
+    const manifest = await setup.service.persistGeneratedPackage({ ...setup.base, generatedBy: { id: "attacker", role: "ADMIN", name: "attacker" } });
+    expect(manifest.generatedBy).toMatchObject({ uid: "user-1", displayName: "Analista Uno" });
+    expect(JSON.stringify(manifest.generatedBy)).not.toContain("attacker");
+  });
+  test("P2 changed expediente number rejects before writes", async () => {
+    const setup = fixture();
+    await expect(setup.service.persistGeneratedPackage({ ...setup.base, numeroExpediente: "FOREIGN" })).rejects.toThrow("IDENTITY_CONFLICT");
+    expect(setup.repository.records.size).toBe(0); expect(setup.storage.writes).toEqual([]);
   });
 });

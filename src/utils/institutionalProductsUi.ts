@@ -1,5 +1,6 @@
 import type { ReportReadyAssessment, ReportReadyReason, ReportReadyStatus } from "@/utils/reportReadyGovernance";
 import { buildEvidenceLineage, validateLineage } from "@/utils/evidenceLineage";
+import { projectPersistedInstitutionalInputs } from "@/utils/institutionalReportInputProjection";
 
 export const ADDITIONAL_PHOTO_EVIDENCE_TYPE = "ADDITIONAL_PHOTO" as const;
 export const NON_GEOMETRIC_PHOTO_ROLE = "NONE" as const;
@@ -159,6 +160,7 @@ export function buildInstitutionalProductExportPayload(
     analysisResult?: any;
   }
 ) {
+  project = projectPersistedInstitutionalInputs(project).project;
   const numeroExpediente = resolveInstitutionalNumeroExpediente(project);
   if (!numeroExpediente) throw new Error("INSTITUTIONAL_NUMERO_EXPEDIENTE_REQUIRED");
   const projectId = project?.projectId || project?.id || context.projectId;
@@ -186,7 +188,7 @@ export function buildInstitutionalProductExportPayload(
     classification: project?.classification || project?.clasificacion || "CONFIDENCIAL",
     personaPerfiladora: context.user?.username || context.user?.name || context.user?.email,
     analysisContent: context.editableProfile || context.aiProfile || project?.analysisContent || "",
-    iaAnalysis: { ...(project?.iaAnalysis || {}), ...(context.analysisResult || {}) },
+    iaAnalysis: { ...(project?.iaAnalysis || {}) },
     briefing: context.editableProfile || context.aiProfile || project?.analysisContent || "",
     reportSummary: context.reportSummary,
     reportReadyAssessment: context.reportReadyAssessment,
@@ -198,9 +200,9 @@ export function buildInstitutionalProductExportPayload(
     canonicalGeography: project?.canonicalGeography,
     canonicalHypothesis: project?.canonicalHypothesis,
     humanHypothesis: project?.humanHypothesis,
-    findings: project?.findings || context.analysisResult?.findings || [],
-    analysisOutputs: project?.analysisOutputs || context.analysisResult?.analysisOutputs || [],
-    conclusions: project?.conclusions || context.analysisResult?.conclusions || [],
+    findings: project?.findings || [],
+    analysisOutputs: project?.analysisOutputs || [],
+    conclusions: project?.conclusions || [],
     predictiveAnalyticalProducts: project?.predictiveAnalyticalProducts || [],
     traceabilityGate: project?.traceabilityGate,
   };

@@ -3,7 +3,7 @@ import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveG
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
 import { buildExecutiveVisualComposition, MAX_EXECUTIVE_VISUALS } from "../src/utils/executiveVisualComposition";
 import { buildReportChapter0Hypothesis, formulateHumanHypothesis, reviseHumanHypothesis } from "../src/utils/hypothesisGovernance";
-import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
+import { renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft } from "../src/utils/executiveGeointWordRenderer";
 import { Packer } from "docx";
 import JSZip from "jszip";
 
@@ -768,3 +768,6 @@ describe("Fase D - ExecutiveGeointReportDocumentModel", () => {
     expect(xml).not.toContain("IMPLICACIONES PARA LA DECISIÓN");
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

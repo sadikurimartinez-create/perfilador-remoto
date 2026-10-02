@@ -7,6 +7,7 @@ import { evaluatePredictiveProductAdmission } from "@/utils/institutionalPredict
 import { resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 import { classifyInstitutionalContentRole } from "@/utils/analyticalNarrativeGovernance";
+import { assembleInstitutionalMultisourceAnalysis } from "@/services/geoint/multisourceOrchestrationService";
 
 export const EXECUTIVE_GEOINT_REPORT_MODEL_VERSION = "1.0";
 
@@ -20,7 +21,8 @@ export const EXECUTIVE_GEOINT_LIMITS = {
 
 export type ExecutivePriority = "INMEDIATA" | "CORTO_PLAZO" | "SEGUIMIENTO";
 export type ExecutiveConfidenceLabel = "ALTO" | "MEDIO" | "BAJO" | "NO DISPONIBLE";
-export type ExecutiveSupportLevel = "ALTO" | "MEDIO" | "BAJO" | "INSUFICIENTE";
+export type ExecutiveSupportLevel = "ALTO" | "MEDIO" | "BAJO" | "INSUFICIENTE" |
+  "SOPORTADA" | "PARCIALMENTE SOPORTADA" | "CONTRADICHA";
 
 export interface ExecutiveGeointReportBuildContext {
   documentIdentity?: {
@@ -123,6 +125,8 @@ export interface ExecutiveMultisourceAnalysis {
   technicalMetadata: {
     sourceAnalysisIds: string[];
     sourceEvidenceIds: string[];
+    governedAnalysis?: import("@/types/multisourceOrchestration").InstitutionalMultisourceAnalysis;
+    sourceAnalyticalContent?: unknown[];
   };
 }
 
@@ -516,7 +520,9 @@ function buildFindings(input: InstitutionalReportInput): ExecutiveFinding[] {
       interpretation: visible(firstText(primary?.interpretation, primary?.analysis, primary?.analisis, "Interpretacion no disponible en el insumo institucional.")),
       implication: visible(firstText(primary?.implication, primary?.impacto, "Implicacion no disponible; requiere decision humana.")),
       ...(action ? { governedAction: visible(action) } : {}),
-      confidence: confidenceLabel(primary?.confidence ?? primary?.confidenceLevel ?? primary?.nivelConfianza),
+      confidence: /HARDCODED|SYNTHETIC|LEGACY/i.test(String(primary?.confidenceSource || primary?.acquisitionMode || "")) ||
+        (Number(primary?.confidence) === 85 && !primary?.confidenceSource)
+        ? "NO DISPONIBLE" : confidenceLabel(primary?.confidence ?? primary?.confidenceLevel ?? primary?.nivelConfianza),
       limitations: visibleList(limitations),
       traceabilityIds: dedupe([...items.flatMap(traceabilityIds), ...relatedEvidence.flatMap(traceabilityIds), ...relatedAnalyses.flatMap(traceabilityIds)]),
       technicalMetadata: {
@@ -612,50 +618,31 @@ function buildVisualCandidates(input: InstitutionalReportInput): ExecutiveVisual
 }
 
 function buildMultisourceAnalysis(input: InstitutionalReportInput): ExecutiveMultisourceAnalysis {
-  const analyses = input.analyses.filter(isAdmitted);
-  const convergences = dedupe([
-    ...analyses.flatMap((item) => asArray<string>(item?.convergences)),
-    ...analyses.flatMap((item) => asArray<string>(item?.supportingConvergences)),
-    ...asArray<any>((input as any).convergences).map((item) => firstText(item?.summary, item?.phenomenon, item?.convergenceId)),
-  ]);
-  const contradictions = dedupe([
-    ...analyses.flatMap((item) => asArray<string>(item?.contradictions)),
-    ...analyses.flatMap((item) => asArray<string>(item?.contradictingFactors)),
-    ...input.predictiveAnalyticalProducts.flatMap((item) => asArray<string>(item?.contradictingFactors)),
-  ]);
-  const dependencies = dedupe([
-    ...analyses.flatMap((item) => asArray<any>(item?.sourceDependencies).map((dep) => firstText(dep?.reason, dep?.independence))),
-    ...asArray<any>((input as any).convergences).flatMap((item) => asArray<any>(item?.sourceDependencies).map((dep) => firstText(dep?.reason, dep?.independence))),
-  ]);
-  const independent = dedupe([
-    ...analyses.flatMap((item) => asArray<string>(item?.independentSources)),
-    ...input.lineageSummary.sourceIds,
-  ]);
-  const gaps = dedupe([
-    ...analyses.flatMap((item) => asArray<string>(item?.informationGaps)),
-    ...analyses.flatMap((item) => asArray<string>(item?.limitations)),
-    ...input.disclosures.map((item) => item.message),
-  ]);
-  const support: ExecutiveSupportLevel =
-    input.lineageSummary.itemCount >= 6 && independent.length >= 3 ? "ALTO" :
-    input.lineageSummary.itemCount >= 3 ? "MEDIO" :
-    input.lineageSummary.itemCount > 0 ? "BAJO" : "INSUFICIENTE";
-
+  const result = input.multisourceAnalysis || assembleInstitutionalMultisourceAnalysis(input);
+  const technicalIds = dedupe([...result.inventory.map(item => item.id), ...result.independentSources,
+    ...result.sourceDependencies.flatMap(item => [item.leftItemId, item.rightItemId])]).sort((a, b) => b.length - a.length);
+  const editorial = (text: string) => technicalIds.reduce((value, id) => {
+    if (!id) return value;
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return value.replace(new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped}(?![\\p{L}\\p{N}_-])`, "gu"), "referencia documentada");
+  }, text);
   return {
-    convergencias: visibleList(convergences.length ? convergences : ["Convergencias no disponibles en el insumo institucional."]),
-    contradicciones: visibleList(contradictions),
-    fuentesIndependientes: visibleList(independent),
-    dependenciasParciales: visibleList(dependencies),
-    brechasInformacion: visibleList(gaps),
-    nivelSoporte: support,
-    traceabilityIds: dedupe([...analyses.flatMap(traceabilityIds), ...input.predictiveAnalyticalProducts.flatMap(traceabilityIds)]),
+    convergencias: visibleList(result.convergences.map(item => `Convergencia revisada: ${institutionalLabel(item.phenomenon)}.`)),
+    contradicciones: visibleList(result.contradictions.map(editorial)),
+    fuentesIndependientes: visibleList(result.independentSources.map((_id, index) => `Fuente con origen independiente documentado ${index + 1}`)),
+    dependenciasParciales: visibleList(result.sourceDependencies.filter(item => !item.countsAsIndependentCorroboration).map(item => `Relación entre referencias documentadas: ${institutionalLabel(item.dependencyType)}.`)),
+    brechasInformacion: visibleList(result.limitations.map(editorial)),
+    nivelSoporte: result.supportStatus === "SUPPORTED" ? "SOPORTADA" : result.supportStatus === "PARTIALLY_SUPPORTED"
+      ? "PARCIALMENTE SOPORTADA" : result.supportStatus === "CONTRADICTED" ? "CONTRADICHA" : "INSUFICIENTE",
+    traceabilityIds: dedupe(result.correlation.results.flatMap(item => item.supportingTraceabilityIds || [])),
     technicalMetadata: {
-      sourceAnalysisIds: dedupe(analyses.flatMap(analysisIds)),
+      sourceAnalysisIds: dedupe(input.analyses.flatMap(analysisIds)),
       sourceEvidenceIds: input.lineageSummary.evidenceIds,
+      governedAnalysis: result,
+      sourceAnalyticalContent: input.analyses,
     },
   };
 }
-
 function buildProspectiveAnalysis(input: InstitutionalReportInput, context: ExecutiveGeointReportBuildContext): ExecutiveProspectiveAnalysis {
   const excludedProducts: ExecutiveProspectiveAnalysis["excludedProducts"] = [];
   const admitted = input.predictiveAnalyticalProducts.filter((product) => {
@@ -744,18 +731,13 @@ function buildPanorama(
   multisource: ExecutiveMultisourceAnalysis,
   identity: ExecutiveDocumentIdentity
 ): ExecutivePanorama {
-  const governedSummary = firstText((input as any).governedExecutiveSummary?.text, (input as any).executiveSummary);
-  const hypothesisOpening = clean(input.hypothesis?.currentHypothesis).split(/\n\s*\n/)[0] || "";
-  const situation = governedSummary || hypothesisOpening || "Situación insuficiente o no disponible en el insumo institucional.";
-  const hasEvaluableMultisourceSupport = input.analyses.some(isAdmitted);
+  const situation = input.multisourceAnalysis!.institutionalNarrative;
   return {
     situacion: visible(completeSentenceExcerpt(situation, 420)),
     hallazgosClave: limited(findings.map((finding) => finding.summary), EXECUTIVE_GEOINT_LIMITS.hallazgosClave),
     escenario: prospective.escenario,
     decisionesSugeridas: limited(decisions.map((decision) => decision.accionSugerida), EXECUTIVE_GEOINT_LIMITS.decisionesSugeridas),
-    nivelConfianza: findings[0]?.confidence || (hasEvaluableMultisourceSupport
-      ? multisource.nivelSoporte === "ALTO" ? "ALTO" : multisource.nivelSoporte === "MEDIO" ? "MEDIO" : multisource.nivelSoporte === "BAJO" ? "BAJO" : "NO DISPONIBLE"
-      : "NO DISPONIBLE"),
+    nivelConfianza: "NO DISPONIBLE",
     incertidumbre: prospective.incertidumbre,
     vigencia: identity.vigenciaAnalisis,
   };
@@ -831,7 +813,7 @@ export function buildExecutiveGeointReportModel(
   institutionalInput: InstitutionalReportInput,
   context: ExecutiveGeointReportBuildContext = {}
 ): ExecutiveGeointReportModel {
-  const input = institutionalInput;
+  const input = { ...institutionalInput, multisourceAnalysis: assembleInstitutionalMultisourceAnalysis(institutionalInput) };
   const identity = buildIdentity(input, context);
   const findings = buildFindings(input);
   const keyEvidence = buildKeyEvidence(input, findings);

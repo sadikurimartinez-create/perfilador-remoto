@@ -442,3 +442,22 @@ export function renderGovernedExecutiveSummary(assertions: NarrativeAssertion[],
     renderedAssertions,
   };
 }
+
+/** Descriptive synthesis of admitted references, distinct from promotion of the pending analytical output. */
+export function renderInstitutionalMultisourceNarrative(
+  result: import("@/types/multisourceOrchestration").InstitutionalMultisourceAnalysis,
+  input: InstitutionalReportInput
+): string {
+  const opening = `La hipótesis humana de trabajo se conserva: ${input.hypothesis.currentHypothesis}.`;
+  const contrast = result.supportStatus === "SUPPORTED"
+    ? "El expediente contiene convergencias independientes revisadas que apoyan esta hipótesis, dentro de sus límites documentados."
+    : result.contradictingReferences.length
+      ? "El expediente contiene referencias admitidas vinculadas por revisión humana como contradictorias; no se resuelven automáticamente."
+      : result.supportingReferences.length
+        ? "El expediente contiene referencias de apoyo; la corroboración independiente disponible no permite un contraste concluyente."
+        : "No consta soporte integrado suficiente entre las referencias admitidas; la ausencia de información no refuta la hipótesis.";
+  const restrictions = result.contradictions.length
+    ? "Persisten afirmaciones incompatibles entre fuentes, sin resolución automática; requieren valoración PPC."
+    : "El contraste permanece limitado a las relaciones trazables documentadas.";
+  return `${opening} ${contrast} ${restrictions} La asociación y el contexto descriptivo no establecen causalidad, riesgo ni predicción.`;
+}

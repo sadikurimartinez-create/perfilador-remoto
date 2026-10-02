@@ -13,6 +13,13 @@ import {
 import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import type { StructuredTableInput } from "@/utils/documentTableRenderer";
 import { scinceDocumentSummary } from "@/utils/scinceDocumentContext";
+import { resolveCrimeIncidenceVisualSource } from "@/utils/crimeIncidenceInstitutionalVisualProducer";
+import { buildDocumentSemanticAudit, incidenceDocumentBasis, type DocumentSemanticAudit } from "./institutionalDocumentSemanticIntegrity";
+
+function incidenceSource(contract: any): string {
+  return resolveCrimeIncidenceVisualSource({ sourceQuery: contract?.queryReference,
+    datasetReference: contract?.datasetReference, lineage: contract?.lineage } as any);
+}
 
 export const EXECUTIVE_GEOINT_DOCUMENT_MODEL_VERSION = "1.0.0";
 export const EXECUTIVE_DOCUMENT_MAX_VISUALS = 5;
@@ -50,6 +57,8 @@ export interface ExecutiveDocumentSection {
 }
 
 export interface ExecutiveVisualPlacement {
+  provenance?: unknown;
+  assetState?: string;
   visualId: string;
   sectionId: ExecutiveDocumentSectionId;
   placementRole: "PRINCIPAL_TERRITORIAL_MAP" | "SUPPORTING_EVIDENCE" | "ANALYTICAL_SUPPORT";
@@ -69,6 +78,7 @@ export interface ExecutiveVisualPlacement {
 }
 
 export interface ExecutiveGeointReportDocumentModel {
+  semanticIntegrity?: DocumentSemanticAudit;
   identity: {
     numeroExpediente: string;
     clasificacion: string;
@@ -166,7 +176,7 @@ function describeFindingEvidence(finding: ExecutiveFinding, keyEvidence: Executi
 
 function findingContent(finding: ExecutiveFinding, keyEvidence: ExecutiveEvidenceItem[]): string {
   const evidence = describeFindingEvidence(finding, keyEvidence);
-  const contradictions = visibleList([...finding.contradictingFactors, ...finding.limitations], 3).join("; ") || "Sin contradicciones determinantes registradas.";
+  const contradictions = visibleList([...finding.contradictingFactors, ...finding.limitations], finding.contradictingFactors.length + finding.limitations.length).join("; ") || "Sin contradicciones determinantes registradas.";
   return [
     `Hallazgo: ${visible(finding.title || finding.summary, "Configuracion territorial relevante.")}`,
     `Evidencia que lo sustenta: ${evidence}`,
@@ -228,7 +238,7 @@ function denueContext(input: InstitutionalReportInput): string {
     `primeros en orden del insumo canónico: ${labels.join("; ")}.`;
 }
 
-function incidenceContext(input: InstitutionalReportInput): string {
+function incidenceContext(input: InstitutionalReportInput, strict = false): string {
   const contract = input.crimeIncidenceExportContract;
   const query = contract?.queryReference;
   if (contract?.productClassification !== "DESCRIPTIVE_ANALYTICAL_PRODUCT" ||
@@ -238,10 +248,15 @@ function incidenceContext(input: InstitutionalReportInput): string {
   }
   const total = contract?.projectionReference?.metrics?.frequency?.totalRecords;
   if (!Number.isFinite(total) || total < 0) return "Incidencia: no consta un conteo gobernado válido.";
-  const temporal = contract?.datasetReference?.coverage?.temporal;
-  const period = temporal?.start && temporal?.end ? `; cobertura ${temporal.start} a ${temporal.end}` : "";
+  const basis = strict ? incidenceDocumentBasis(input) : null;
+  const temporalReference = basis?.period as any || contract?.projectionReference?.temporalReference ||
+    query?.request?.temporalFilters || contract?.lineage?.timeRange;
+  const temporal = temporalReference?.query || temporalReference;
+  const start = temporal?.start || temporal?.startDate;
+  const end = temporal?.end || temporal?.endDate;
+  const period = start && end ? `; periodo de consulta ${start} a ${end}` : "";
   return `Incidencia (producto descriptivo, no evidencia): ${total} registro(s) en la consulta` +
-    `${period}; fuente C5i SSPE Aguascalientes.`;
+    `${period}; fuente ${incidenceSource(contract)}.`;
 }
 
 function osintContext(input: InstitutionalReportInput): string[] {
@@ -275,7 +290,8 @@ function buildSections(
   model: ExecutiveGeointReportModel,
   visualComposition: ExecutiveVisualComposition,
   input: InstitutionalReportInput,
-  numeroExpediente: string
+  numeroExpediente: string,
+  strict = false
 ): ExecutiveDocumentSection[] {
   const findings = limited(model.findings, EXECUTIVE_DOCUMENT_LIMITS.findings);
   const evidence = limited(model.keyEvidence, EXECUTIVE_DOCUMENT_LIMITS.keyEvidence);
@@ -340,7 +356,7 @@ function buildSections(
       content: [
         `Situación: ${visible(model.panorama.situacion, "Situación institucional sintetizada.")}`,
         ...visibleList(model.panorama.hallazgosClave, 2).map((item) => `Hallazgo prioritario: ${item}`),
-        ...(visible(model.panorama.escenario) ? [`Escenario: ${visible(model.panorama.escenario)}`] : []),
+        ...(hasGovernedProspective(model) && visible(model.panorama.escenario) ? [`Escenario: ${visible(model.panorama.escenario)}`] : []),
         `Nivel institucional de confianza: ${visible(model.panorama.nivelConfianza, "NO DETERMINADO")}`,
       ].slice(0, 5),
       densityPolicy: { targetPages: "1", maxItems: 5 },
@@ -383,7 +399,7 @@ function buildSections(
             : "Cartografía canónica disponible y representada mediante visual territorial gobernado.",
         ...scinceDocumentSummary(input.scinceContext),
         denueContext(input),
-        incidenceContext(input),
+        incidenceContext(input, strict),
       ],
       densityPolicy: { targetPages: "1-2", maxItems: 5 },
       status: visualComposition.principalTerritorialMap.status === "NO_CANONICAL_GEOGRAPHY" ? "INCOMPLETE" : "READY",
@@ -418,10 +434,11 @@ function buildSections(
         ...(observedOsint.length ? [] : ["Inteligencia de fuentes abiertas: no constan registros observados adquiridos y publicables."]),
         ...gangContext(input),
         ...visibleList(model.multisourceAnalysis.convergencias, 5).map((item) => `Convergencia: ${item}`),
-        ...visibleList(model.multisourceAnalysis.contradicciones, 5).map((item) => `Contradiccion: ${item}`),
+        ...visibleList(model.multisourceAnalysis.contradicciones, model.multisourceAnalysis.contradicciones.length).map((item) => `Contradiccion: ${item}`),
         ...visibleList(model.multisourceAnalysis.fuentesIndependientes, 5).map((item) => `Fuente independiente: ${item}`),
         ...visibleList(model.multisourceAnalysis.dependenciasParciales, 5).map((item) => `Dependencia parcial: ${item}`),
-        ...visibleList(model.multisourceAnalysis.brechasInformacion, 5).map((item) => `Brecha de informacion: ${item}`),
+        ...visibleList(model.multisourceAnalysis.brechasInformacion, model.multisourceAnalysis.brechasInformacion.length).map((item) => `Brecha de informacion: ${item}`),
+        ...(model.multisourceAnalysis.technicalMetadata.governedAnalysis?.limitations || []).map((item) => `Limitacion: ${visible(item)}`),
         `Nivel de soporte: ${visible(model.multisourceAnalysis.nivelSoporte, "NO DETERMINADO")}`,
       ],
       densityPolicy: { targetPages: "1", maxItems: 18 },
@@ -486,6 +503,8 @@ function buildVisualPlacements(
 ): ExecutiveVisualPlacement[] {
   const placements: ExecutiveVisualPlacement[] = [{
     visualId: visualComposition.principalTerritorialMap.mapId,
+    provenance: visualComposition.principalTerritorialMap.technicalMetadata,
+    assetState: visualComposition.assetStates?.[visualComposition.principalTerritorialMap.mapId],
     sectionId: "territorial-situation",
     placementRole: "PRINCIPAL_TERRITORIAL_MAP",
     headline: visible(visualComposition.principalTerritorialMap.executiveHeadline, "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA"),
@@ -504,6 +523,9 @@ function buildVisualPlacements(
       : undefined;
     placements.push({
       visualId: visual.visualId,
+      provenance: institutionalInput.visualProducts.find(item => item.visualId === visual.visualId)?.provenance ||
+        [...institutionalInput.evidence, ...institutionalInput.streetView].find(item => (item.evidenceId || item.id) === visual.technicalMetadata.sourceItemId) || visual.technicalMetadata,
+      assetState: visualComposition.assetStates?.[visual.visualId],
       sectionId: placementSectionForVisual(visual.visualType),
       placementRole: visual.visualType === "EVIDENCE_IMAGE" ? "SUPPORTING_EVIDENCE" : "ANALYTICAL_SUPPORT",
       headline: visible(visual.executiveHeadline, "CONFIGURACIÓN TERRITORIAL DEL ÁREA ANALIZADA"),
@@ -551,12 +573,14 @@ export function buildExecutiveGeointReportDocumentModel(
   executiveModel: ExecutiveGeointReportModel,
   visualComposition: ExecutiveVisualComposition,
   institutionalInput: InstitutionalReportInput,
-  options: { numeroExpediente?: string; ceipolId?: string } = {}
+  options: { numeroExpediente?: string; ceipolId?: string; enforceSemanticIntegrity?: boolean } = {}
 ): ExecutiveGeointReportDocumentModel {
   const numeroExpediente = resolveNumeroExpediente(executiveModel, options);
-  const sections = buildSections(executiveModel, visualComposition, institutionalInput, numeroExpediente);
+  const sections = buildSections(executiveModel, visualComposition, institutionalInput, numeroExpediente, options.enforceSemanticIntegrity);
   const visualPlacements = buildVisualPlacements(visualComposition, institutionalInput);
+  const semanticIntegrity = buildDocumentSemanticAudit(executiveModel, institutionalInput, visualComposition, sections, visualPlacements, options.enforceSemanticIntegrity);
   return {
+    semanticIntegrity,
     identity: {
       numeroExpediente,
       clasificacion: visible(executiveModel.identity.clasificacion, "CONFIDENCIAL - USO INSTITUCIONAL"),
@@ -626,7 +650,7 @@ export function buildExecutiveGeointReportDocumentModel(
         })),
         ...(institutionalInput.crimeIncidenceExportContract?.queryReference?.status === "EXECUTED" &&
           institutionalInput.crimeIncidenceExportContract?.queryReference?.admission?.accepted === true ? [{
-          source: "C5i SSPE Aguascalientes",
+          source: incidenceSource(institutionalInput.crimeIncidenceExportContract),
           traceabilityId: institutionalInput.crimeIncidenceExportContract.exportId || institutionalInput.crimeIncidenceExportContract.datasetReference?.datasetId,
         }] : []),
       ],

@@ -103,6 +103,21 @@ export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
   );
 
   if (!snapshot) return payload;
+  if (snapshot.productClassification !== "DESCRIPTIVE_ANALYTICAL_PRODUCT" || snapshot.analyticalLevel !== "DESCRIPTIVE" ||
+    snapshot.queryReference?.status !== "EXECUTED" || snapshot.queryReference?.admission?.accepted !== true) {
+    throw new Error("CRIME_INCIDENCE_VISUAL_SNAPSHOT_NOT_ADMITTED");
+  }
+  const queryGeographyId = snapshot.geographicReference?.expediente?.geographyId || snapshot.queryReference?.request?.queryGeometry?.geographyId;
+  if (queryGeographyId && payload.canonicalGeography?.geographyId && queryGeographyId !== payload.canonicalGeography.geographyId) {
+    throw new Error("CRIME_INCIDENCE_VISUAL_GEOGRAPHY_MISMATCH");
+  }
+  const canonicalGeometry = payload.canonicalGeography?.geometry;
+  for (const query of [snapshot.geographicReference?.geometry, snapshot.queryReference?.request?.queryGeometry]) {
+    if (query?.geometry && canonicalGeometry &&
+      (query.geometry.type !== canonicalGeometry.type || JSON.stringify(query.geometry.coordinates) !== JSON.stringify(canonicalGeometry.coordinates))) {
+      throw new Error("CRIME_INCIDENCE_VISUAL_GEOGRAPHY_MISMATCH");
+    }
+  }
 
   const payloadWithResolvedSnapshot =
     snapshot === payload?.crimeIncidenceExportContract
@@ -135,6 +150,8 @@ export async function enrichInstitutionalPayloadWithCrimeIncidenceVisuals(
     metrics,
     datasetReference: snapshot.datasetReference,
     sourceQuery: snapshot.queryReference,
+    geographicReference: snapshot.geographicReference,
+    temporalReference: snapshot.projectionReference?.temporalReference,
     limitations: asArray(snapshot.limitations),
     lineage: snapshot.lineage,
   } as unknown as CrimeIncidenceAnalyticalProjection;

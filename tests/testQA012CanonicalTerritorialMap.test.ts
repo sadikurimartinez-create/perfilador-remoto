@@ -1,4 +1,6 @@
 import { readFileSync } from "fs";
+jest.mock("../src/lib/institutionalReportSourceActions", () => ({}));
+jest.mock("../src/lib/scinceDocumentActions", () => ({}));
 import { join } from "path";
 import { Packer } from "docx";
 import {
@@ -10,7 +12,7 @@ import { buildExecutiveCanonicalTerritorialMapSpec } from "../src/utils/executiv
 import {
   assertExecutiveGeointPrincipalMapRendered,
   buildExecutiveGeointWordVisualAssets,
-  renderExecutiveGeointWordDocument,
+  renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft,
 } from "../src/utils/executiveGeointWordRenderer";
 import { EvidenceImageValidationEngine } from "../src/utils/evidenceImageValidationEngine";
 import { ImageFingerprintService } from "../src/utils/imageFingerprintService";
@@ -625,7 +627,9 @@ describe("QA-01.2 - Mapa territorial principal canonico", () => {
     const rendererSource = source("src/utils/executiveGeointWordRenderer.ts");
     const exportSource = source("src/lib/exportToWord.ts");
     expect(rendererSource).not.toContain("buildExecutiveCanonicalTerritorialMapSpec");
-    expect(exportSource.match(/buildExecutiveCanonicalTerritorialMapSpec\(/g)).toHaveLength(1);
+    const modelSource = source("src/utils/institutionalGenerationModels.ts");
+    expect(modelSource.match(/buildExecutiveCanonicalTerritorialMapSpec\(/g)).toHaveLength(1);
+    expect(exportSource).toContain("await buildInstitutionalGenerationModels");
     expect(exportSource).toContain("principalMapSpec");
   });
 });
@@ -726,3 +730,6 @@ describe("QA-01.2 - Frontera proxy-image del mapa institucional", () => {
     expect(logged).not.toContain("22,-102");
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

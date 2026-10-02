@@ -21,9 +21,9 @@ import {
 } from "../src/utils/denueAnalyticalMapImageRenderer";
 import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
-import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
+import { renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft } from "../src/utils/executiveGeointWordRenderer";
 import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
-import { renderExecutiveGeointTechnicalAnnexWordDocument } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
+import { renderExecutiveGeointTechnicalAnnexWordDocument as renderExecutiveGeointTechnicalAnnexWordDocumentDraft } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
 
 const EXPEDIENTE_ID = "exp-r32b6g2";
 const METHODOLOGY = "ADR-026:R3.2B.6G.2:v1";
@@ -299,7 +299,7 @@ describe("R3.2B.6G.2 DENUE analytical document integration", () => {
     expect(integrateDenueAnalyticalDocument(inconsistent).status).toBe("REJECTED");
   });
 
-  test("BAR y LINE preceden al mapa analítico sin exceder cinco visuales", () => {
+  test("BAR y LINE citados preceden al mapa analítico sin exceder cinco visuales", () => {
     const integration = integrateDenueAnalyticalDocument(built());
     if (integration.status !== "READY") throw new Error("READY required");
     const input = institutionalInput(integration, [chart("BAR"), chart("LINE")]);
@@ -308,9 +308,13 @@ describe("R3.2B.6G.2 DENUE analytical document integration", () => {
       evidenceId: `photo-${index}`, title: `Foto ${index}`, summary: "Fotografía gobernada", visualReference: `asset://photo-${index}`,
       evidenceReferences: [`photo-${index}`], sourceTypes: ["FIELD_PHOTO"], relatedFindingIds: ["finding-1"], selectionReason: "Trazabilidad", limitations: [], traceabilityIds: [`trace-photo-${index}`], technicalMetadata: { sourceItemId: `photo-${index}`, originalItemType: "EVIDENCE" },
     }));
-    const composition = buildExecutiveVisualComposition(model, input);
+    const composition = buildExecutiveVisualComposition(model, input, { citedVisualIds: ["adr022-bar", "adr022-line"] });
     expect(composition.visualBudget.used).toBe(5);
-    expect(composition.secondaryVisuals.slice(0, 3).map((item) => item.visualId)).toEqual(["adr022-bar", "adr022-line", integration.unit.visualId]);
+    expect(composition.secondaryVisuals.slice(0, 3).map(item => item.visualId)).toEqual(["adr022-bar", "adr022-line", integration.unit.visualId]);
+    const document = buildExecutiveGeointReportDocumentModel(model, composition, input);
+    const order = (id: string) => document.visualPlacements.findIndex(placement => placement.visualId === id);
+    expect(order("adr022-bar")).toBeLessThan(order(integration.unit.visualId));
+    expect(order("adr022-line")).toBeLessThan(order(integration.unit.visualId));
     expect(composition.secondaryVisuals.map((item) => item.visualType)).toContain("SECONDARY_MAP");
   });
 
@@ -391,8 +395,9 @@ describe("R3.2B.6G.2 DENUE analytical document integration", () => {
     const rendered = renderExecutiveGeointTechnicalAnnexWordDocument(annex);
     const zip = await JSZip.loadAsync(await Packer.toBuffer(rendered.document));
     const xml = await zip.file("word/document.xml")!.async("string");
-    expect(xml).not.toContain("denue-1");
-    expect(xml).not.toContain("denue-263");
+    // P6 keeps source IDs in traceability; compact contextual sections still have no establishment rows.
+    expect(xml).not.toContain(pois[0].name);
+    expect(xml).not.toContain(pois[262].name);
   });
 
   test("B.6E EMPTY explícito equivale a fuente ausente para compactación contextual", () => {
@@ -421,3 +426,7 @@ describe("R3.2B.6G.2 DENUE analytical document integration", () => {
     }
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });
+const renderExecutiveGeointTechnicalAnnexWordDocument = (model: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[1] = {}) => renderExecutiveGeointTechnicalAnnexWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

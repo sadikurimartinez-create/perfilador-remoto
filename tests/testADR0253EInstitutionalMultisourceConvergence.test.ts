@@ -1,3 +1,4 @@
+jest.mock("../src/lib/providers/orchestrator", () => ({ ApiOrchestrator: jest.fn() }));
 import { MultiSourceCorrelationEngine, type InstitutionalCorrelationItem } from "../src/lib/geoint/multiSourceCorrelationEngine";
 import { buildEvidenceLineage } from "../src/utils/evidenceLineage";
 import {

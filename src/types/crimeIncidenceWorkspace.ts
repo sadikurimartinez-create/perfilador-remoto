@@ -106,6 +106,11 @@ export interface CrimeIncidenceQueryEnvelope {
 }
 
 export interface CrimeIncidenceVisualProductMetadata {
+  filters?: unknown;
+  period?: unknown;
+  geography?: unknown;
+  sourceIdentity?: unknown;
+  total?: number;
   visualId: string;
   visualType: "MAP" | "CHART";
   title: string;

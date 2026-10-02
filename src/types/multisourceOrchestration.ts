@@ -39,6 +39,8 @@ export interface MultisourceSourceDescriptor {
   rawSourceReference?: string;
   captureId?: string;
   operationId?: string;
+  sourceEvidenceIds?: string[];
+  dependsOnSourceEvidenceIds?: string[];
   sweepId?: string;
   authorityClassification: SourceAuthorityClassification;
   integrityClassification: SourceIntegrityClassification;
@@ -73,4 +75,34 @@ export interface MultisourceOrchestrationEnvelope {
   totalItems: number;
   eligibleItems: number;
   independentEligibleSources: number;
+}
+
+/** Assembly of existing engines, never an automatically approved institutional analysis. */
+export interface InstitutionalMultisourceAnalysis {
+  generatedAt: string;
+  geographyId: string | null;
+  lineage: import("@/utils/evidenceLineage").CanonicalLineageNode[];
+  traceabilityIds: string[];
+  outputId: string;
+  projectId: string;
+  expedienteId: string;
+  summary: string;
+  text: string;
+  acquisitionMode: "DERIVED";
+  humanValidationStatus: "PENDING_REVIEW";
+  status: "INCONCLUSIVE" | "SUPPORTED" | "CONTRADICTED";
+  supportStatus: import("@/utils/hypothesisGovernance").HypothesisSupportStatus;
+  envelope: MultisourceOrchestrationEnvelope;
+  correlation: import("@/lib/geoint/institutionalEvidenceCorrelation").InstitutionalCorrelationReport;
+  convergences: import("@/utils/institutionalMultisourceConvergence").ConvergenceResult[];
+  candidateConvergences: import("@/utils/institutionalMultisourceConvergence").ConvergenceResult[];
+  contradictions: string[];
+  sourceDependencies: SourceDependencyRelation[];
+  independentSources: string[];
+  supportingReferences: string[];
+  contradictingReferences: string[];
+  limitations: string[];
+  inventory: Array<{ family: string; id: string; epistemicRole: string; provenance: unknown }>;
+  provenance: { sourceFingerprint: string; hypothesisId: string | null; sourceIds: string[]; engines: string[] };
+  institutionalNarrative: string;
 }

@@ -115,3 +115,5 @@ describe("QA-05.16 - Photo evidence boundary", () => {
     ).toBe(true);
   });
 });
+jest.mock("../src/lib/institutionalReportSourceActions", () => ({}));
+jest.mock("../src/lib/scinceDocumentActions", () => ({}));

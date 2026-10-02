@@ -1,0 +1,432 @@
+[
+  {
+    "case": "L1",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.003000 20.998000, -102.001000 20.999000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "DISJOINT",
+    "description": "Completamente fuera"
+  },
+  {
+    "case": "L2",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.002000 20.998000, -102.000000 21.000000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Sólo vértice"
+  },
+  {
+    "case": "L3",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.002000 21.005000, -102.000000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Sólo borde, sin tramo interior"
+  },
+  {
+    "case": "L4",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.990000 21.005000, -101.988000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Endpoint en borde, resto fuera"
+  },
+  {
+    "case": "L5",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.000000 21.005000, -101.995000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "UNIT_COVERS_ANALYSIS",
+    "description": "Endpoint en borde, resto dentro"
+  },
+  {
+    "case": "L6",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.998000 21.002000, -101.992000 21.008000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "UNIT_COVERS_ANALYSIS",
+    "description": "Completamente dentro"
+  },
+  {
+    "case": "L7",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.002000 21.005000, -101.988000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Entra y sale"
+  },
+  {
+    "case": "L9",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.002000 21.000000, -101.995000 21.000000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Coincidencia parcial con borde y resto fuera"
+  },
+  {
+    "case": "L10",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.998000 21.000000, -101.992000 21.000000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Coincide totalmente con segmento de borde"
+  },
+  {
+    "case": "L14",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.999000 21.001000, -101.991000 21.009000, -101.999000 21.009000, -101.991000 21.001000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Auto-intersección; válido GEOS pero no simple"
+  },
+  {
+    "case": "L15",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.998000 21.002000, -101.998000 21.002000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Degenerada, longitud cero"
+  },
+  {
+    "case": "L8-A",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.995000 21.005000, -101.985000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Dos unidades adyacentes: A"
+  },
+  {
+    "case": "L8-B",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.995000 21.005000, -101.985000 21.005000)",
+    "unitWkt": "POLYGON ((-101.990000 21.000000, -101.980000 21.000000, -101.980000 21.010000, -101.990000 21.010000, -101.990000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Dos unidades adyacentes: B"
+  },
+  {
+    "case": "L11",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.999000 21.005000, -101.991000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000), (-101.997000 21.003000, -101.997000 21.007000, -101.993000 21.007000, -101.993000 21.003000, -101.997000 21.003000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Atraviesa hueco y superficie fuera de hueco"
+  },
+  {
+    "case": "L12",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-101.996000 21.005000, -101.994000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000), (-101.997000 21.003000, -101.997000 21.007000, -101.993000 21.007000, -101.993000 21.003000, -101.997000 21.003000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "DISJOINT",
+    "description": "Completamente dentro del hueco"
+  },
+  {
+    "case": "L13",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.001000 21.002000, -101.987000 21.002000)",
+    "unitWkt": "MULTIPOLYGON (((-102.000000 21.000000, -101.996000 21.000000, -101.996000 21.004000, -102.000000 21.004000, -102.000000 21.000000)), ((-101.992000 21.000000, -101.988000 21.000000, -101.988000 21.004000, -101.992000 21.004000, -101.992000 21.000000)))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Cruza ambos componentes sin colapsarlos"
+  },
+  {
+    "case": "L9-IN",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102.000000 21.002000, -102.000000 21.005000, -101.995000 21.005000)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "UNIT_COVERS_ANALYSIS",
+    "description": "Borde parcial con tramo interior; no sólo contacto"
+  },
+  {
+    "case": "P1",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.988000 21.012000, -101.986000 21.012000, -101.986000 21.014000, -101.988000 21.014000, -101.988000 21.012000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "DISJOINT",
+    "description": "Fuera"
+  },
+  {
+    "case": "P2",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.990000 21.010000, -101.988000 21.010000, -101.988000 21.012000, -101.990000 21.012000, -101.990000 21.010000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Contacto en vértice"
+  },
+  {
+    "case": "P3",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.990000 21.002000, -101.988000 21.002000, -101.988000 21.008000, -101.990000 21.008000, -101.990000 21.002000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "TOUCHES_ONLY",
+    "description": "Contacto en borde"
+  },
+  {
+    "case": "P4",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.992000 21.002000, -101.988000 21.002000, -101.988000 21.008000, -101.992000 21.008000, -101.992000 21.002000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Intersección parcial"
+  },
+  {
+    "case": "P5",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.998000 21.002000, -101.992000 21.002000, -101.992000 21.008000, -101.998000 21.008000, -101.998000 21.002000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "UNIT_COVERS_ANALYSIS",
+    "description": "Análisis contenido"
+  },
+  {
+    "case": "P6",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.002000 20.998000, -101.988000 20.998000, -101.988000 21.012000, -102.002000 21.012000, -102.002000 20.998000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "ANALYSIS_COVERS_UNIT",
+    "description": "Unidad cubierta"
+  },
+  {
+    "case": "P7",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "EQUAL_FOOTPRINT",
+    "description": "Igualdad exacta"
+  },
+  {
+    "case": "P8",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.995000 21.005000, -101.985000 21.005000, -101.985000 21.015000, -101.995000 21.015000, -101.995000 21.005000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Dos polígonos parcialmente solapados"
+  },
+  {
+    "case": "P9",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000), (-101.997000 21.003000, -101.997000 21.007000, -101.993000 21.007000, -101.993000 21.003000, -101.997000 21.003000))",
+    "unitWkt": "POLYGON ((-101.996000 21.004000, -101.994000 21.004000, -101.994000 21.006000, -101.996000 21.006000, -101.996000 21.004000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "DISJOINT",
+    "description": "Hueco excluye unidad"
+  },
+  {
+    "case": "P10",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000), (-101.997000 21.003000, -101.997000 21.007000, -101.993000 21.007000, -101.993000 21.003000, -101.997000 21.003000))",
+    "unitWkt": "POLYGON ((-101.996500 21.003500, -101.993500 21.003500, -101.993500 21.006500, -101.996500 21.006500, -101.996500 21.003500))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "DISJOINT",
+    "description": "Unidad dentro del hueco"
+  },
+  {
+    "case": "P11",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000), (-101.997000 21.003000, -101.997000 21.007000, -101.993000 21.007000, -101.993000 21.003000, -101.997000 21.003000))",
+    "unitWkt": "POLYGON ((-101.998000 21.004000, -101.995000 21.004000, -101.995000 21.006000, -101.998000 21.006000, -101.998000 21.004000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INTERIOR_INTERSECTION",
+    "description": "Unidad cruza borde de hueco"
+  },
+  {
+    "case": "P12-A",
+    "mode": "POLYGON",
+    "analysisWkt": "MULTIPOLYGON (((-102.000000 21.000000, -101.996000 21.000000, -101.996000 21.004000, -102.000000 21.004000, -102.000000 21.000000)), ((-101.992000 21.000000, -101.988000 21.000000, -101.988000 21.004000, -101.992000 21.004000, -101.992000 21.000000)))",
+    "unitWkt": "POLYGON ((-101.999000 21.001000, -101.998000 21.001000, -101.998000 21.002000, -101.999000 21.002000, -101.999000 21.001000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "ANALYSIS_COVERS_UNIT",
+    "description": "Unidad componente A"
+  },
+  {
+    "case": "P12-B",
+    "mode": "POLYGON",
+    "analysisWkt": "MULTIPOLYGON (((-102.000000 21.000000, -101.996000 21.000000, -101.996000 21.004000, -102.000000 21.004000, -102.000000 21.000000)), ((-101.992000 21.000000, -101.988000 21.000000, -101.988000 21.004000, -101.992000 21.004000, -101.992000 21.000000)))",
+    "unitWkt": "POLYGON ((-101.991000 21.001000, -101.990000 21.001000, -101.990000 21.002000, -101.991000 21.002000, -101.991000 21.001000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "ANALYSIS_COVERS_UNIT",
+    "description": "Unidad componente B"
+  },
+  {
+    "case": "P13",
+    "mode": "POLYGON",
+    "analysisWkt": "MULTIPOLYGON (((-102.000000 21.000000, -101.996000 21.000000, -101.996000 21.004000, -102.000000 21.004000, -102.000000 21.000000)), ((-101.992000 21.000000, -101.988000 21.000000, -101.988000 21.004000, -101.992000 21.004000, -101.992000 21.000000)))",
+    "unitWkt": "POLYGON ((-101.995000 21.001000, -101.993000 21.001000, -101.993000 21.003000, -101.995000 21.003000, -101.995000 21.001000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "DISJOINT",
+    "description": "Unidad entre componentes, dentro del bbox"
+  },
+  {
+    "case": "P14",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.999000 21.001000, -101.991000 21.009000, -101.999000 21.009000, -101.991000 21.001000, -101.999000 21.001000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Bow-tie"
+  },
+  {
+    "case": "P15",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.999000 21.001000, -101.991000 21.001000, -101.991000 21.009000, -101.999000 21.009000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Anillo no cerrado"
+  },
+  {
+    "case": "P16",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.990000 21.010000, -101.990000 21.000000, -102.000000 21.000000, -102.000000 21.010000, -101.990000 21.010000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "EQUAL_FOOTPRINT",
+    "description": "Orden equivalente topológicamente"
+  },
+  {
+    "case": "I1",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102 21)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Una coordenada"
+  },
+  {
+    "case": "I2",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON EMPTY",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Polygon vacío"
+  },
+  {
+    "case": "I3",
+    "mode": "POLYGON",
+    "analysisWkt": "MULTIPOLYGON EMPTY",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "MultiPolygon vacío"
+  },
+  {
+    "case": "I4",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102 21, NaN 21.001)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "NaN"
+  },
+  {
+    "case": "I5",
+    "mode": "CORRIDOR",
+    "analysisWkt": "LINESTRING (-102 21, Infinity 21.001)",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Infinity"
+  },
+  {
+    "case": "I6",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-101.999000 21.001000, -101.998000 21.001000, -101.997000 21.001000, -101.999000 21.001000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Polígono collinear degenerado, y idéntica"
+  },
+  {
+    "case": "I7",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "unitWkt": "POLYGON EMPTY",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Unidad vacía"
+  },
+  {
+    "case": "I8",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "unitWkt": "POLYGON ((-101.999000 21.001000, -101.991000 21.009000, -101.999000 21.009000, -101.991000 21.001000, -101.999000 21.001000))",
+    "analysisSrid": 4326,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "Unidad inválida"
+  },
+  {
+    "case": "C1",
+    "mode": "POLYGON",
+    "analysisWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "unitWkt": "POLYGON ((-102.000000 21.000000, -101.990000 21.000000, -101.990000 21.010000, -102.000000 21.010000, -102.000000 21.000000))",
+    "analysisSrid": 3857,
+    "unitSrid": 4326,
+    "expected": "INVALID",
+    "description": "CRS distinto; no transformación oculta"
+  }
+]

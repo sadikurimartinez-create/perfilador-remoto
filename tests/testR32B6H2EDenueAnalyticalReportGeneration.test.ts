@@ -23,7 +23,7 @@ import {
 import { integrateDenueAnalyticalDocument } from "@/utils/denueAnalyticalDocumentIntegration";
 import { buildExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportDocumentModel } from "@/utils/executiveGeointReportDocumentModel";
-import { renderExecutiveGeointWordDocument } from "@/utils/executiveGeointWordRenderer";
+import { renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft } from "@/utils/executiveGeointWordRenderer";
 
 const PROJECT_ID = "exp-r32b6h2e";
 const GEOGRAPHY_ID = "geo-r32b6h2e";
@@ -289,9 +289,9 @@ describe("R3.2B.6H.2E DENUE analytical report generation", () => {
     expect(word.composition.visualBudget.used).toBeLessThanOrEqual(5);
     expect(word.composition.principalTerritorialMap.mapId).toBe("principal-territorial-map");
     expect(word.composition.secondaryVisuals.slice(0, 3).map((item) => item.visualId)).toEqual([
+      unit.visualId,
       "adr022-bar",
       "adr022-line",
-      unit.visualId,
     ]);
     expect(word.model.visualPlacements.find((item) => item.visualId === unit.visualId)).toMatchObject({
       sectionId: "multisource-analysis",
@@ -333,17 +333,14 @@ describe("R3.2B.6H.2E DENUE analytical report generation", () => {
     expect(second).toEqual(first);
   });
 
-  test("exportToWord invoca H.2D sólo dentro de la generación institucional y antes del modelo", () => {
-    const source = readFileSync(join(process.cwd(), "src/lib/exportToWord.ts"), "utf8");
-    const contextStart = source.indexOf("async function buildInstitutionalGenerationContext");
-    const exportStart = source.indexOf("export async function exportToWord");
-    const integration = source.indexOf("await integrateDenueAnalyticalPublicationForReport", contextStart);
-    const executiveModel = source.indexOf("buildExecutiveGeointReportModel", contextStart);
-    expect(contextStart).toBeGreaterThan(-1);
-    expect(integration).toBeGreaterThan(contextStart);
-    expect(integration).toBeLessThan(executiveModel);
-    expect(integration).toBeLessThan(exportStart);
+  test("exportToWord delegates to the single governed DENUE integration before document construction", () => {
+    const source = readFileSync(join(process.cwd(), "src/utils/institutionalGenerationModels.ts"), "utf8");
+    const exporter = readFileSync(join(process.cwd(), "src/lib/exportToWord.ts"), "utf8");
+    const integration = source.indexOf("await integrateDenueAnalyticalPublicationForReport");
+    const executive = source.indexOf("const executiveModel =");
+    expect(integration).toBeGreaterThan(-1); expect(integration).toBeLessThan(executive);
     expect(source.match(/await integrateDenueAnalyticalPublicationForReport/g)).toHaveLength(1);
+    expect(exporter).toContain("await buildInstitutionalGenerationModels(payload, projectName, reportNumber, user)");
   });
 
   test("la salida no incorpora campos de riesgo o ranking", async () => {
@@ -357,3 +354,6 @@ describe("R3.2B.6H.2E DENUE analytical report generation", () => {
     expect(JSON.stringify(result)).not.toMatch(/riskScore|riskLevel|vulnerabilityScore|dangerLevel|priorityRank|criminogenicity/);
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

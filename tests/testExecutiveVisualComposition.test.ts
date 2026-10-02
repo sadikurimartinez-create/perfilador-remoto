@@ -142,6 +142,7 @@ function institutionalInput(overrides: any = {}) {
   return {
     projectId: "project-technical-id",
     generatedAt,
+    hypothesis: { currentHypothesis: "Hipótesis humana de QA", versions: [] },
     geography: geo,
     evidence: [],
     findings: [],
@@ -247,7 +248,7 @@ describe("H.2F.1R.1 - principal B.5 y secundario B.6G", () => {
     const input = institutionalInput({ geography: geo, visualProducts: [...charts, analytical] });
     const composition = buildExecutiveVisualComposition(model, input);
     expect(composition.principalTerritorialMap.visualReference).toBe(territorial.reference);
-    expect(composition.secondaryVisuals.map((item) => item.visualId)).toEqual(["BAR", "LINE", analytical.visualId, "ev-1"]);
+    expect(composition.secondaryVisuals.map((item) => item.visualId)).toEqual([analytical.visualId, "BAR", "LINE", "ev-1"]);
     expect(composition.visualBudget.used).toBe(5);
     model.keyEvidence.push(keyEvidence({ evidenceId: "extra", title: "Visual complementario", sourceTypes: [], visualReference: "asset://extra", traceabilityIds: ["trace-extra"] }));
     const overflow = buildExecutiveVisualComposition(model, input);
@@ -259,6 +260,22 @@ describe("H.2F.1R.1 - principal B.5 y secundario B.6G", () => {
 });
 
 describe("Fase C - ExecutiveVisualComposition", () => {
+  test("P3 institutional principal always requires current canonical rendering", () => {
+    const result = buildExecutiveVisualComposition(executiveModel(), institutionalInput(), { canonicalPrincipalOnly: true });
+    expect(result.principalTerritorialMap.status).toBe("MAP_RENDER_REQUIRED");
+    expect(result.principalTerritorialMap.visualReference).toBeNull();
+  });
+  test("P3 an authorized Street View citation can reserve a slot", () => {
+    const sv = { id: "sv-cited", evidenceId: "sv-cited", sourceType: "STREET_VIEW", title: "Panorama revisado", imageUrl: "https://example.test/sv", traceabilityId: "trace-sv-cited" };
+    const result = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [], visualCandidates: [] }), institutionalInput({ streetView: [sv] }), { citedVisualIds: ["sv-cited"] });
+    expect(result.secondaryVisuals.some(item => item.visualId === "sv-cited")).toBe(true);
+    expect(result.visualBudget.used).toBeLessThanOrEqual(5);
+  });
+  test("P3 same asset cannot occupy incompatible photograph and Street View slots", () => {
+    const result = buildExecutiveVisualComposition(executiveModel({ keyEvidence: [keyEvidence(), keyEvidence({ evidenceId: "sv-copy", sourceTypes: ["STREET_VIEW"] })], visualCandidates: [] }), institutionalInput());
+    expect(result.secondaryVisuals).toHaveLength(1);
+    expect(result.selectionAudit.reasonCodes).toContain("DUPLICATE");
+  });
   test("1 mapa principal siempre existe como candidato o render instruction", () => {
     expect(buildExecutiveVisualComposition(executiveModel(), institutionalInput()).principalTerritorialMap.status).toBe("READY_FROM_GOVERNED_VISUAL");
     const noMap = executiveModel({ visualCandidates: [], territorialSituation: { ...executiveModel().territorialSituation, principalMapCandidate: null } });

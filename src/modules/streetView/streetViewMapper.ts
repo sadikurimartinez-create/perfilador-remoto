@@ -29,6 +29,18 @@ export interface StreetViewCapturePayload {
   geographyId?: string | null;
 }
 
+/** Validated live view snapshot; the POI is never substituted for the panorama position. */
+export function buildStreetViewCaptureSnapshot(view: { lat: number; lng: number; panoId: string; heading: number; pitch: number; zoom: number }) {
+  if (!Number.isFinite(view.lat) || !Number.isFinite(view.lng) || Math.abs(view.lat) > 90 || Math.abs(view.lng) > 180 ||
+    !view.panoId?.trim() || !Number.isFinite(view.heading) || !Number.isFinite(view.pitch) || Math.abs(view.pitch) > 90 ||
+    !Number.isFinite(view.zoom)) throw new Error("STREET_VIEW_CAPTURE_CURRENT_PANORAMA_REQUIRED");
+  const heading = ((view.heading % 360) + 360) % 360;
+  const fov = Math.max(10, Math.min(100, 180 / 2 ** view.zoom));
+  const params = new URLSearchParams({ lat: String(view.lat), lng: String(view.lng), pano: view.panoId,
+    heading: String(heading), pitch: String(view.pitch), fov: String(fov), size: "800x600" });
+  return { ...view, heading, fov, proxyUrl: `/api/proxy-image?${params}` };
+}
+
 /**
  * SSPE-CEIPOL - STREET VIEW MAPPER v2.1 (CONTRATO MODERNO DE BARRIDO)
  * Mapea una captura congelada de visor panorámico a la estructura fuertemente tipada de AlbumPhoto.
@@ -46,9 +58,9 @@ export function mapStreetViewToAlbumPhoto(
   const metadata: StreetViewMetadata = {
     panoramaLat: payload.panoramaLat,
     panoramaLng: payload.panoramaLng,
-    heading: Math.round(payload.heading),
-    pitch: Math.round(payload.pitch),
-    fov: Math.round(payload.fov),
+    heading: payload.heading,
+    pitch: payload.pitch,
+    fov: payload.fov,
     panoId: payload.panoId,
     captureDate: payload.captureDate || "N/D",
     provider: "Google Maps Street View Panorama v3",

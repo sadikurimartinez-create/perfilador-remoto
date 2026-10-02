@@ -4,7 +4,7 @@ import { Packer } from "docx";
 import JSZip from "jszip";
 import {
   buildExecutiveGeointWordVisualAssets,
-  renderExecutiveGeointWordDocument,
+  renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft,
   sanitizeExecutiveGeointWordText,
 } from "../src/utils/executiveGeointWordRenderer";
 import type { ExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
@@ -654,3 +654,6 @@ describe("Fase E - ExecutiveGeointWordRenderer", () => {
     expect(model.identity.fechaEmision).toBe("2026-09-24T02:54:17.387Z");
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

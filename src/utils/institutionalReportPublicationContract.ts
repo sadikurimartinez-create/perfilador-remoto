@@ -1,4 +1,12 @@
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
+import { distinctInstitutionalInputs, projectPersistedInstitutionalInputs, type ReportInputArrayField, type ReportInputProjectionState } from "@/utils/institutionalReportInputProjection";
+import type { ConvergenceResult } from "@/utils/institutionalMultisourceConvergence";
+import { convergenceToInstitutionalCorrelationItem } from "@/utils/institutionalMultisourceConvergence";
+import { buildMultisourceOrchestrationEnvelope } from "@/services/geoint/multisourceOrchestrationService";
+import type { MultisourceOrchestrationEnvelope, MultisourceOrchestrationItem } from "@/types/multisourceOrchestration";
+import { adaptOsintSource } from "@/services/geoint/osintCanonicalOrchestrationAdapter";
+import { adaptDenueScinceSource } from "@/services/geoint/denueScinceOrchestrationAdapter";
+import { deriveInSituPhotoOrchestrationItem, isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
 import { excludedScinceDocumentContext, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
 import type { AiAnalyticalOutput } from "@/utils/aiAnalysisGovernance";
@@ -75,6 +83,10 @@ export interface ReportItemEligibilityAssessment {
 }
 
 export interface InstitutionalReportInput {
+  multisourceAnalysis?: import("@/types/multisourceOrchestration").InstitutionalMultisourceAnalysis;
+  convergences?: ConvergenceResult[];
+  sourceOrchestration?: MultisourceOrchestrationEnvelope;
+  inputStates?: Partial<Record<ReportInputArrayField, ReportInputProjectionState>>;
   projectId: string;
   reportReadyAssessment: ReportReadyAssessment;
   generatedAt: string;
@@ -298,6 +310,9 @@ export function assessReportItemEligibility(item: any, context: {
   }
 
   if (type === "ANALYSIS") {
+    if (["LEGACY", "LEGACY_UNCLASSIFIED", "MOCK", "SIMULATED", "TEST", "CONNECTIVITY_ONLY"].includes(String(item?.acquisitionMode || source).toUpperCase()) || source === "LEGACY_UNCLASSIFIED") {
+      return withDecision(item, type, "INELIGIBLE", "ANALYSIS", [exclusion(item, type, "NON_PRODUCTIVE_ANALYSIS", "Legacy or synthetic analysis is not an institutional analysis input.")], disclosures);
+    }
     if (!isSupported(item) || !isHumanApproved(item)) {
       return withDecision(item, type, "INELIGIBLE", "ANALYSIS", [exclusion(item, type, "ANALYSIS_NOT_HUMAN_VALIDATED", "Institutional analysis requires supported lineage and human validation.")], disclosures);
     }
@@ -316,6 +331,9 @@ export function assessReportItemEligibility(item: any, context: {
 
   if (type === "OSINT") {
     const integrity = item?.epistemicIntegrity || item;
+    if (item?.cacheOnly === true || ["DEXIE", "LOCAL_CACHE"].includes(item?.persistenceScope)) {
+      return withDecision(item, type, "INELIGIBLE", "CONTEXTUAL", [exclusion(item, type, "OSINT_NOT_INSTITUTIONALLY_PERSISTED", "Local cache is not an institutional source.")], disclosures);
+    }
     if (source === "SIMULATED" || source === "MOCK" || isAiGenerated(item) ||
       integrity?.acquisitionMode !== "OBSERVED" || integrity?.acquisitionStatus !== "ACQUIRED" ||
       integrity?.isSimulated === true || item?.isSimulated === true) {
@@ -373,7 +391,7 @@ export function assessReportItemEligibility(item: any, context: {
 }
 
 function collect(project: any, keys: string[]): any[] {
-  return keys.flatMap((key) => asArray(project?.[key]));
+  return distinctInstitutionalInputs(keys.flatMap((key) => asArray(project?.[key])), keys.join("/"));
 }
 
 function denueAnalyticalDocumentSource(project: any): unknown {
@@ -436,7 +454,10 @@ function summarizeLineage(assessments: ReportItemEligibilityAssessment[]): Insti
 }
 
 export function buildInstitutionalReportInput(project: any, options: { generatedAt?: string } = {}): InstitutionalReportInput {
-  const reportReadyAssessment = assessReportReadiness(project);
+  const generatedAt = options.generatedAt || new Date().toISOString();
+  const projection = projectPersistedInstitutionalInputs(project);
+  project = projection.project;
+  const reportReadyAssessment = assessReportReadiness(project, { assessedAt: generatedAt });
   if (!reportReadyAssessment.readyForInstitutionalReport) {
     throw new Error(`INSTITUTIONAL_REPORT_INPUT_REJECTED:${reportReadyAssessment.status}`);
   }
@@ -455,6 +476,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   const specializedIntelligence: any[] = [];
   const predictiveAnalyticalProducts: any[] = [];
   const visualProducts: any[] = [];
+  const convergences: ConvergenceResult[] = [];
   const denueAnalyticalDocument = integrateDenueAnalyticalDocument(denueAnalyticalDocumentSource(project) as any);
   if (denueAnalyticalDocument.status === "REJECTED") {
     throw new Error(`DENUE_ANALYTICAL_DOCUMENT_REJECTED:${denueAnalyticalDocument.reasons.join(",")}`);
@@ -467,6 +489,28 @@ export function buildInstitutionalReportInput(project: any, options: { generated
       addEligible(target, assessment, item, exclusions, disclosures);
     });
   };
+
+  for (const candidate of asArray<ConvergenceResult>(project.convergences)) {
+    let admitted = false;
+    try {
+      admitted = candidate.expedienteId === reportReadyAssessment.projectId &&
+        candidate.geographyId === project.canonicalGeography?.geographyId &&
+        convergenceToInstitutionalCorrelationItem(candidate).item !== null;
+    } catch { /* Malformed stored convergence is excluded, never reconstructed. */ }
+    if (admitted) convergences.push(candidate);
+    else exclusions.push(exclusion(candidate, "INFERENCE", "CONVERGENCE_NOT_ADMITTED", "Stored convergence requires supported lineage and human approval."));
+  }
+  const orchestrationItems = distinctInstitutionalInputs([
+    ...asArray<MultisourceOrchestrationItem>(project.sourceOrchestrationItems),
+    ...asArray<MultisourceOrchestrationItem>(project.sourceOrchestration?.items),
+  ], "sourceOrchestrationItems").filter(item => {
+    const source = item?.source;
+    const valid = Boolean(source?.descriptorId && source.sourceType &&
+      ["AUTHORITATIVE", "NON_AUTHORITATIVE", "SIMULATED", "LEGACY_UNCLASSIFIED", "UNKNOWN"].includes(source.authorityClassification) &&
+      ["VERIFIED", "READY_WITH_LIMITATIONS", "NOT_READY", "SIMULATED", "LEGACY_UNCLASSIFIED", "UNKNOWN"].includes(source.integrityClassification));
+    if (!valid) exclusions.push(exclusion(item, "INFERENCE", "ORCHESTRATION_DESCRIPTOR_INVALID", "Stored source descriptor is invalid."));
+    return valid;
+  });
 
   process(collect(project, ["evidence", "evidences", "photoEvidence"]), "EVIDENCE", evidence);
   process(collect(project, ["findings", "approvedFindings"]), "FINDING", findings);
@@ -565,15 +609,49 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   const traceableAnalyses = analyses.filter((item) => keepTraceable(item, "ANALYSIS"));
   const traceableStreetView = streetView.filter((item) => keepTraceable(item, "STREET_VIEW"));
   const traceablePredictiveAnalyticalProducts = predictiveAnalyticalProducts.filter((item) => keepTraceable(item, "PREDICTIVE_ANALYTICAL_PRODUCT"));
+  const denuePois = collect(project, ["denuePois", "pois"]).filter(item => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
+    item?.territorialStatus === "INSTITUTIONAL" && item?.epistemicIntegrity?.acquisitionMode === "OBSERVED" &&
+    item?.epistemicIntegrity?.acquisitionStatus === "ACQUIRED" && item?.epistemicIntegrity?.isSimulated === false);
+  // Reuse canonical adapters only on admitted persisted records; never consult local cache or legacy SCINCE.
+  const adaptedSources = [
+    ...osint.map(item => adaptOsintSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity })),
+    ...denuePois.map(item => adaptDenueScinceSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity })),
+    ...traceableEvidence.filter(isExplicitInSituPhoto).map(item => deriveInSituPhotoOrchestrationItem({
+      expedienteId: reportReadyAssessment.projectId, photoId: item.id || item.evidenceId,
+      evidenceId: item.evidenceId, sourceEvidenceId: item.sourceEvidenceId, geographyId: item.geographyId,
+      gpsSource: item.gpsSource, validado: item.validado, legacy: item.legacy })),
+  ].filter((item): item is MultisourceOrchestrationItem => item !== null);
+  const sourceOrchestration = buildMultisourceOrchestrationEnvelope(reportReadyAssessment.projectId,
+    distinctInstitutionalInputs([...orchestrationItems, ...adaptedSources], "sourceOrchestrationItems"));
   const traceableAssessments = assessments.filter((assessment) =>
     assessment.eligibility !== "INELIGIBLE" &&
     !excludedItemKeys.has(`${assessment.itemType}:${assessment.itemId}`)
   );
 
+  const inputStates = { ...projection.states };
+  const admittedByField: Partial<Record<ReportInputArrayField, any[]>> = {
+    evidence: traceableEvidence, evidences: traceableEvidence, photoEvidence: traceableEvidence,
+    findings: traceableFindings, approvedFindings: traceableFindings,
+    analysisOutputs: traceableAnalyses, aiAnalyticalOutputs: traceableAnalyses, analyses: traceableAnalyses,
+    osint, osintFindings: osint, convergences,
+    inferences, conclusions, streetView: traceableStreetView, streetViewAnalysis: traceableStreetView,
+    temporalComparisons, visualProducts, maps: visualProducts, charts: visualProducts,
+    predictiveAnalyticalProducts: traceablePredictiveAnalyticalProducts,
+    sourceOrchestrationItems: orchestrationItems,
+    denuePois, pois: denuePois,
+  };
+  for (const field of Object.keys(admittedByField) as ReportInputArrayField[]) {
+    if (inputStates[field]?.state === "AVAILABLE" && admittedByField[field]?.length === 0) {
+      inputStates[field] = { ...inputStates[field]!, state: "EXCLUDED" };
+    }
+  }
   return {
+    convergences,
+    sourceOrchestration,
+    inputStates,
     projectId: reportReadyAssessment.projectId,
     reportReadyAssessment,
-    generatedAt: options.generatedAt || new Date().toISOString(),
+    generatedAt,
     geography: project?.canonicalGeography || null,
     hypothesis: buildReportChapter0Hypothesis(project),
     evidence: traceableEvidence,
@@ -584,13 +662,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     osint,
     // Canonical SCINCE is admitted server-side at generation time. Never promote legacy or UI labels.
     scinceContext: excludedScinceDocumentContext("MISSING", "SCINCE_DOCUMENT_NOT_ADMITTED"),
-    denuePois: [
-      ...asArray(project?.denuePois),
-      ...asArray(project?.iaAnalysis?.denuePois),
-      ...asArray(project?.iaAnalysis?.pois),
-    ].filter((item) => item?.source === "DENUE" && item?.provider === "INEGI_DENUE" &&
-      item?.territorialStatus === "INSTITUTIONAL" && item?.epistemicIntegrity?.acquisitionMode === "OBSERVED" &&
-      item?.epistemicIntegrity?.acquisitionStatus === "ACQUIRED" && item?.epistemicIntegrity?.isSimulated === false),
+    denuePois,
     denueAnalyticalDocument,
     crimeIncidenceExportContract: project?.crimeIncidenceExportContract,
     streetView: traceableStreetView,

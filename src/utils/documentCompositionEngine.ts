@@ -245,11 +245,13 @@ export class FlowControlManager {
     const options = { ...paragraphOptions };
 
     if (blockType === "TITLE" || blockType === "SUBTITLE") {
+      options.keepNext = true;
       options.keepWithNext = true;
       this.lastWasTitle = true;
     } else {
       // Si el elemento previo fue un título, forzamos keepWithNext en el primer párrafo de contenido
       if (this.lastWasTitle) {
+        options.keepNext = true;
         options.keepWithNext = true;
       }
       this.lastWasTitle = false;

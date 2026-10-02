@@ -21,6 +21,7 @@ import {
 } from "@/utils/documentCompositionEngine";
 import { buildNumeroExpedienteFilename, resolveVisibleNumeroExpediente } from "@/utils/documentIdentity";
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
+import { reconcileDocumentSemanticAudit, assertReconciledDocumentSemanticAudit } from "./institutionalDocumentSemanticIntegrity";
 import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import { renderStructuredTable } from "@/utils/documentTableRenderer";
 
@@ -59,6 +60,7 @@ export interface ExecutiveGeointWordRenderResult {
 }
 
 interface RenderOptions {
+  exportMode?: "INSTITUTIONAL" | "DRAFT";
   projectName?: string;
   ceipolId?: string;
   visualAssetsById?: Record<string, ExecutiveGeointWordVisualAsset | null | undefined>;
@@ -66,6 +68,7 @@ interface RenderOptions {
 }
 
 interface VisualAssetBuildOptions {
+  onAssetState?: (visualId: string, state: "ASSET_RENDERED" | "ASSET_MISSING" | "ASSET_UNAVAILABLE" | "ASSET_INVALID" | "ASSET_EXCLUDED") => void;
   resolveImage?: ExecutiveGeointWordImageResolver;
   resolvePrincipalMapImage?: ExecutiveGeointWordImageResolver;
   strictPrincipalMapAssets?: boolean;
@@ -126,9 +129,7 @@ function renderCover(documentModel: ExecutiveGeointReportDocumentModel, visibleN
 
 function renderSectionContent(section: ExecutiveDocumentSection): any[] {
   if (section.status === "OPTIONAL_SUPPRESSED") return [];
-  const items = section.status === "INCOMPLETE"
-    ? section.content.slice(0, Math.max(1, section.densityPolicy.maxItems ?? section.content.length))
-    : section.content.slice(0, section.densityPolicy.maxItems ?? section.content.length);
+  const items = section.content;
   return [
     sectionTitle(section),
     ...items.map((item, index) => paragraph(item, {
@@ -152,12 +153,9 @@ function renderVisualPlacement(
     placement.cartographicMetadata?.orientationLabel ? `Orientación: ${placement.cartographicMetadata.orientationLabel}.` : "",
   ].filter(Boolean).join(" ");
   const asset = visualAssetsById?.[placement.visualId];
-  if (!asset?.data) {
+  if (!asset?.data?.byteLength) {
     audit.missingVisualAssetIds.push(placement.visualId);
-    return [
-      paragraph(placement.headline, { bold: true, size: 20, color: "0D2B52" }),
-      paragraph(captionParts),
-    ];
+    return [];
   }
 
   audit.renderedVisualIds.push(placement.visualId);
@@ -166,8 +164,10 @@ function renderVisualPlacement(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 100 },
+      keepNext: true,
       children: [
         new ImageRun({
+          altText: { title: placement.visualId, name: placement.visualId, description: placement.caption },
           data: asset.data,
           type: asset.type || "png",
           transformation: {
@@ -222,6 +222,11 @@ function visualAssetFromDataUrl(
   if (!match) return null;
   const [, type, base64] = match;
   const buffer = Buffer.from(base64, "base64");
+  const format = type.toLowerCase();
+  const validSignature = format === "png" ? buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) :
+    format === "jpg" || format === "jpeg" ? buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255 :
+    format === "gif" ? /^GIF8[79]a$/.test(buffer.toString("ascii", 0, 6)) : buffer.toString("ascii", 0, 2) === "BM";
+  if (!validSignature) return null;
   const pngWidth = buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG" ? buffer.readUInt32BE(16) : undefined;
   const pngHeight = buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG" ? buffer.readUInt32BE(20) : undefined;
   const fitted = fitImageWithin(pngWidth, pngHeight, maxWidth, maxHeight);
@@ -245,10 +250,16 @@ async function resolveGovernedVisualReference(
   narrative: string,
   evidenceId: string
 ): Promise<ExecutiveGeointWordVisualAsset | null> {
-  const dataUrlAsset = visualAssetFromDataUrl(reference, maxWidth, maxHeight);
-  if (dataUrlAsset) return dataUrlAsset;
-  if (!isResolvableExternalReference(reference) || !options.resolveImage) return null;
-  return options.resolveImage(reference, maxWidth, maxHeight, narrative, evidenceId);
+  try {
+    const dataUrlAsset = visualAssetFromDataUrl(reference, maxWidth, maxHeight);
+    if (dataUrlAsset) { options.onAssetState?.(evidenceId, "ASSET_RENDERED"); return dataUrlAsset; }
+    if (!reference) { options.onAssetState?.(evidenceId, "ASSET_MISSING"); return null; }
+    if (!isResolvableExternalReference(reference)) { options.onAssetState?.(evidenceId, "ASSET_INVALID"); return null; }
+    if (!options.resolveImage) { options.onAssetState?.(evidenceId, "ASSET_UNAVAILABLE"); return null; }
+    const asset = await options.resolveImage(reference, maxWidth, maxHeight, narrative, evidenceId);
+    options.onAssetState?.(evidenceId, asset?.data?.byteLength ? "ASSET_RENDERED" : "ASSET_MISSING");
+    return asset?.data?.byteLength ? asset : null;
+  } catch { options.onAssetState?.(evidenceId, "ASSET_UNAVAILABLE"); return null; }
 }
 
 function principalMapAssetLooksReal(asset: ExecutiveGeointWordVisualAsset | null): asset is ExecutiveGeointWordVisualAsset {
@@ -272,7 +283,8 @@ async function resolvePrincipalTerritorialMapReference(
   };
   const asset = await resolveGovernedVisualReference(reference, resolverOptions, 500, 280, narrative, evidenceId);
   if (!options.strictPrincipalMapAssets) return asset;
-  return principalMapAssetLooksReal(asset) ? asset : null;
+  if (!principalMapAssetLooksReal(asset)) { options.onAssetState?.(evidenceId, "ASSET_INVALID"); return null; }
+  return asset;
 }
 
 export async function buildExecutiveGeointWordVisualAssets(
@@ -280,6 +292,14 @@ export async function buildExecutiveGeointWordVisualAssets(
   options: VisualAssetBuildOptions = {}
 ): Promise<Record<string, ExecutiveGeointWordVisualAsset>> {
   const assets: Record<string, ExecutiveGeointWordVisualAsset> = {};
+  visualComposition.selectionAudit.excludedItems.forEach(item => options.onAssetState?.(item.itemId, "ASSET_EXCLUDED"));
+  if (visualComposition.principalTerritorialMap.status === "NO_CANONICAL_GEOGRAPHY" ||
+    (visualComposition.principalTerritorialMap.status === "MAP_RENDER_REQUIRED" && !options.principalMapSpec)) {
+    options.onAssetState?.(visualComposition.principalTerritorialMap.mapId, "ASSET_MISSING");
+  }
+  if (options.principalMapSpec && options.principalMapSpec.technicalMetadata.geographyId !== visualComposition.principalTerritorialMap.technicalMetadata.geographyId) {
+    throw new Error("EXECUTIVE_GEOINT_BLOCKED:MAP_ASSET_GEOGRAPHY_MISMATCH");
+  }
   if (visualComposition.principalTerritorialMap.status === "READY_FROM_GOVERNED_VISUAL") {
     const principalAsset = await resolvePrincipalTerritorialMapReference(
       visualComposition.principalTerritorialMap.visualReference,
@@ -326,6 +346,7 @@ export function renderExecutiveGeointWordDocument(
   documentModel: ExecutiveGeointReportDocumentModel,
   options: RenderOptions = {}
 ): ExecutiveGeointWordRenderResult {
+  if (options.exportMode !== "DRAFT") assertReconciledDocumentSemanticAudit(documentModel.semanticIntegrity);
   const snapshot = JSON.stringify(documentModel);
   const visibleNumeroExpediente = resolveVisibleNumeroExpediente({
     numeroExpediente: documentModel.identity.numeroExpediente,
@@ -345,7 +366,7 @@ export function renderExecutiveGeointWordDocument(
   };
   FlowControlManager.reset();
 
-  const children: any[] = [];
+  const children: any[] = options.exportMode === "DRAFT" ? [new Paragraph("BORRADOR — NO ES PAQUETE INSTITUCIONAL")] : [];
   const orderedSections = [...documentModel.sections].sort((a, b) => a.order - b.order);
   for (const section of orderedSections) {
     audit.sectionOrder.push(section.sectionId);
@@ -365,6 +386,9 @@ export function renderExecutiveGeointWordDocument(
     }
   }
 
+  if (documentModel.semanticIntegrity?.enforced) {
+    reconcileDocumentSemanticAudit(documentModel.semanticIntegrity, audit, documentModel.sections, documentModel.visualPlacements);
+  }
   audit.documentModelMutated = JSON.stringify(documentModel) !== snapshot;
   const watermarkBuffer = InstitutionalBrandManager.generateWatermarkBuffer();
   const document = new Document({

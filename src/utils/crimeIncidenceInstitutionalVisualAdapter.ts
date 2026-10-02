@@ -36,6 +36,7 @@ export interface CrimeIncidenceInstitutionalVisualCandidate {
   relationKind: null;
 
   crimeIncidenceVisualMetadata: {
+    provenance?: CrimeIncidenceInstitutionalChartAsset["metadata"];
     adapterVersion: typeof CRIME_INCIDENCE_VISUAL_ADAPTER_VERSION;
     chartKind: CrimeIncidenceInstitutionalChartAsset["kind"];
     method?: string;
@@ -131,6 +132,7 @@ export function buildCrimeIncidenceInstitutionalVisualCandidate(
     relationKind: null,
 
     crimeIncidenceVisualMetadata: {
+      provenance: asset.metadata,
       adapterVersion: CRIME_INCIDENCE_VISUAL_ADAPTER_VERSION,
       chartKind: asset.kind,
       ...(clean(asset.metadata.method)

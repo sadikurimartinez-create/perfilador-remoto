@@ -22,6 +22,7 @@ import type { ExecutiveGeointWordVisualAsset } from "@/utils/executiveGeointWord
 import { sanitizeVisibleDocumentText } from "@/utils/visibleDocumentSanitizer";
 import { TECHNICAL_ANNEX_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import { renderStructuredTable } from "@/utils/documentTableRenderer";
+import { assertReconciledDocumentSemanticAudit, canonicalSemanticValue } from "./institutionalDocumentSemanticIntegrity";
 
 export interface TechnicalAnnexWordRenderResult {
   document: Document;
@@ -62,12 +63,8 @@ function para(text: string, options: { bold?: boolean; size?: number; color?: st
   );
 }
 
-function compactCell(value: unknown, maxLength = 160): string {
-  const text = clean(value);
-  if (text.length <= maxLength) return text;
-  const candidate = text.slice(0, maxLength - 1);
-  const lastSpace = candidate.lastIndexOf(" ");
-  return `${candidate.slice(0, lastSpace > maxLength * 0.65 ? lastSpace : candidate.length).trim()}…`;
+function compactCell(value: unknown): string {
+  return clean(value);
 }
 
 function visibleRecordLabel(value: string): string {
@@ -103,6 +100,7 @@ function renderEvidenceDossier(record: TechnicalAnnexRecord): any[] {
     para(`Fecha: ${record.capturedAt ? formatInstitutionalDate(record.capturedAt) : "NO CONSIGNADA"}. Trazabilidad: ${record.traceabilityStatus || "NO CONSIGNADO"}.`),
   ];
   if (record.locationLabel) children.push(para(`Ubicación: ${record.locationLabel}.`));
+  if (record.panoramaId) children.push(para(`Panorama: ${record.panoramaId}. Orientación: ${record.heading ?? "NO CONSIGNADA"}°. Inclinación: ${record.pitch ?? "NO CONSIGNADA"}°. FOV: ${record.fov ?? "NO CONSIGNADO"}°.`));
   if (record.contextOriginal) children.push(para(`Contexto original: ${record.contextOriginal}`));
   if (record.instructionOriginal) {
     children.push(para(`Instrucción original de análisis: ${record.instructionOriginal}`));
@@ -133,11 +131,13 @@ function renderGovernedTables(tables: ExecutiveGeointTechnicalAnnexSection["tabl
   }));
 }
 
-function renderAsset(asset: ExecutiveGeointWordVisualAsset, caption: string, map = false): any[] {
+function renderAsset(asset: ExecutiveGeointWordVisualAsset, caption: string, map = false, visualId = ""): any[] {
   return [new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 80 },
+    keepNext: true,
     children: [new ImageRun({
+      altText: { title: visualId, name: visualId, description: caption },
       data: asset.data,
       type: asset.type || "png",
       transformation: { width: asset.width ?? (map ? 500 : 360), height: asset.height ?? (map ? 280 : 220) },
@@ -163,12 +163,12 @@ function renderSection(
   ];
   if (section.sectionId === "canonical-geography") {
     const id = annexModel.executiveReportReference.principalMapId;
-    if (assets[id]?.data) {
+    if (assets[id]?.data?.byteLength) {
       const scaleLabel = annexModel.executiveReportReference.principalMapScaleLabel;
       const caption = scaleLabel
         ? `Mapa territorial principal del expediente. Escala: ${scaleLabel}.`
         : "Mapa territorial principal del expediente.";
-      children.push(...renderAsset(assets[id]!, caption, true));
+      children.push(...renderAsset(assets[id]!, caption, true, id));
       renderedVisualIds.push(id);
     } else {
       children.push(para("Activo cartografico no resuelto para este anexo."));
@@ -177,13 +177,17 @@ function renderSection(
   }
   if (section.sectionId === "field-photographs" || section.sectionId === "street-view") {
     for (const record of section.records) {
-      children.push(...renderEvidenceDossier(record));
       const asset = assets[record.recordId];
-      if (!asset?.data) {
+      if (!asset?.data?.byteLength) {
+        children.push(...renderEvidenceDossier(annexModel.technicalMetadata.semanticIntegrity?.enforced
+          ? { ...record, title: "Registro visual", contextOriginal: "", instructionOriginal: record.instructionOriginal, validatedAnalysis: "" }
+          : record));
+        children.push(para("Activo visual no disponible para publicación; la ficha conserva únicamente su contexto y trazabilidad."));
         if (record.visualReference) missingVisualAssetIds.push(record.recordId);
         continue;
       }
-      children.push(...renderAsset(asset, `${visibleRecordLabel(record.title)}. Fuente: ${visibleRecordLabel(record.sourceType)}. Referencia: ${record.referenceLabel || record.recordId}.`));
+      children.push(...renderEvidenceDossier(record));
+      children.push(...renderAsset(asset, `${visibleRecordLabel(record.title)}. Fuente: ${visibleRecordLabel(record.sourceType)}. Referencia: ${record.referenceLabel || record.recordId}.`, false, record.recordId));
       renderedVisualIds.push(record.recordId);
     }
   }
@@ -193,17 +197,23 @@ function renderSection(
 export function renderExecutiveGeointTechnicalAnnexWordDocument(
   annexModel: ExecutiveGeointTechnicalAnnexModel,
   options: {
+    exportMode?: "INSTITUTIONAL" | "DRAFT";
     projectName?: string;
     visualAssetsById?: Record<string, ExecutiveGeointWordVisualAsset | null | undefined>;
     institutionalLogos?: { sspe?: ArrayBuffer | Uint8Array | null; ceipol?: ArrayBuffer | Uint8Array | null };
   } = {}
 ): TechnicalAnnexWordRenderResult {
+  if (options.exportMode !== "DRAFT") {
+    assertReconciledDocumentSemanticAudit(annexModel.technicalMetadata.semanticIntegrity);
+    if (annexModel.technicalMetadata.reservedSections !== canonicalSemanticValue(annexModel.sections)) throw new Error("P5_BLOCKED:ANNEX_CONTENT_CHANGED");
+  }
   const snapshot = JSON.stringify(annexModel);
   FlowControlManager.reset();
   const renderedVisualIds: string[] = [];
   const missingVisualAssetIds: string[] = [];
   const bodySections = annexModel.sections.filter((section) => section.sectionId !== "identity");
   const children = [
+    ...(options.exportMode === "DRAFT" ? [para("BORRADOR — NO ES PAQUETE INSTITUCIONAL")] : []),
     ...InstitutionalBrandManager.createCoverIdentity(TECHNICAL_ANNEX_OFFICIAL_TITLE, options.institutionalLogos),
     para(`Número de expediente: ${annexModel.identity.numeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
     para(`Nombre del expediente: ${annexModel.identity.nombreExpediente}`, { align: AlignmentType.CENTER }),
@@ -214,6 +224,13 @@ export function renderExecutiveGeointTechnicalAnnexWordDocument(
     ...bodySections.flatMap((section) => renderSection(section, annexModel, options.visualAssetsById || {}, renderedVisualIds, missingVisualAssetIds)),
   ];
   const watermarkBuffer = InstitutionalBrandManager.generateWatermarkBuffer();
+  if (options.exportMode !== "DRAFT") {
+    const required = annexModel.technicalMetadata.semanticIntegrity!.requiredVisualIds;
+    const nativeIds = annexModel.sections.filter(section => ["field-photographs", "street-view"].includes(section.sectionId)).flatMap(section => section.records.map(record => record.recordId));
+    for (const id of [annexModel.executiveReportReference.principalMapId, ...nativeIds.filter(id => required.includes(id))]) {
+      if (!renderedVisualIds.includes(id) || missingVisualAssetIds.includes(id)) throw new Error(`P5_BLOCKED:REQUIRED_VISUAL_NOT_RENDERED:${id}`);
+    }
+  }
   const document = new Document({
     sections: [
       {

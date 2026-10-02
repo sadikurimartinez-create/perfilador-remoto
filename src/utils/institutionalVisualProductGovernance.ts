@@ -25,6 +25,7 @@ export type VisualIntegrityStatus =
   | "UNAVAILABLE";
 
 export interface InstitutionalVisualProduct {
+  provenance?: unknown;
   id: string;
   visualId: string;
   visualType: InstitutionalVisualType;
@@ -284,6 +285,7 @@ export function buildInstitutionalVisualProduct(item: any, options: {
 
   return {
     id: assessment.visualId,
+    provenance: item?.provenance || item?.crimeIncidenceVisualMetadata?.provenance,
     visualId: assessment.visualId,
     visualType,
     kind: item?.kind || item?.type || null,

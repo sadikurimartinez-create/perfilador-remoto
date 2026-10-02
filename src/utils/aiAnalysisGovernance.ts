@@ -1,6 +1,7 @@
 import type { AcquisitionMode, EpistemicValidationStatus } from "@/types/epistemicIntegrity";
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 import { validateLineage, type CanonicalLineageNode, type LineageStatus } from "@/utils/evidenceLineage";
+import { distinctInstitutionalInputs } from "@/utils/institutionalReportInputProjection";
 
 export type AiAnalyticalOutputType =
   | "INFERENCE"
@@ -14,7 +15,37 @@ export type AiAnalyticalOutputType =
 export type AiEpistemicClass = "AI_GENERATED" | "LEGACY_UNCLASSIFIED";
 export type AiConfidenceValue = number | "UNKNOWN" | "UNAVAILABLE";
 
-export interface AiAnalyticalOutput {
+export interface GovernedAnalysisContent {
+  projectId?: string;
+  expedienteId?: string;
+  traceabilityId?: string;
+  summary?: string;
+  text?: string;
+  convergences?: Array<string | import("@/utils/institutionalMultisourceConvergence").ConvergenceResult>;
+  contradictions?: string[];
+  sourceDependencies?: Array<import("@/utils/institutionalMultisourceConvergence").SourceDependencyRelation | import("@/types/multisourceOrchestration").SourceDependencyRelation>;
+  independentSources?: string[];
+  supportingEvidenceIds?: string[];
+  contradictingEvidenceIds?: string[];
+  contradictingFindingIds?: string[];
+  supportingConvergences?: string[];
+  informationGaps?: string[];
+  provenance?: Record<string, unknown>;
+  supportingReferences?: string[];
+  contradictingReferences?: string[];
+}
+
+function governedContent(input: GovernedAnalysisContent): GovernedAnalysisContent {
+  return { projectId: input.projectId, expedienteId: input.expedienteId, traceabilityId: input.traceabilityId,
+    supportingReferences: input.supportingReferences, contradictingReferences: input.contradictingReferences,
+    summary: input.summary, text: input.text, convergences: input.convergences,
+    contradictions: input.contradictions, sourceDependencies: input.sourceDependencies,
+    independentSources: input.independentSources, supportingEvidenceIds: input.supportingEvidenceIds,
+    contradictingEvidenceIds: input.contradictingEvidenceIds, contradictingFindingIds: input.contradictingFindingIds,
+    supportingConvergences: input.supportingConvergences, informationGaps: input.informationGaps, provenance: input.provenance };
+}
+
+export interface AiAnalyticalOutput extends GovernedAnalysisContent {
   outputId: string;
   outputType: AiAnalyticalOutputType;
   acquisitionMode: AcquisitionMode;
@@ -116,7 +147,7 @@ export function createAiAnalyticalOutput(input: {
   validationStatus?: EpistemicValidationStatus;
   generatedAt?: string;
   limitations?: string[];
-}): AiAnalyticalOutput {
+} & GovernedAnalysisContent): AiAnalyticalOutput {
   const sourceReferences = uniq(input.sourceReferences || []);
   const evidenceIds = uniq(input.evidenceIds || []);
   const findingIds = uniq(input.findingIds || []);
@@ -149,6 +180,7 @@ export function createAiAnalyticalOutput(input: {
   });
 
   return {
+    ...governedContent(input),
     outputId,
     outputType: input.outputType,
     acquisitionMode: "AI_GENERATED",
@@ -193,7 +225,7 @@ export function createGenerateProfileAiAnalyticalOutput(input: {
   validationStatus?: EpistemicValidationStatus;
   generatedAt?: string;
   limitations?: string[];
-}): AiAnalyticalOutput {
+} & GovernedAnalysisContent): AiAnalyticalOutput {
   const evidenceIds = uniq(input.evidenceIds || []);
   const findingIds = uniq(input.findingIds || []);
   const inferenceIds = uniq(input.inferenceIds || []);
@@ -206,6 +238,7 @@ export function createGenerateProfileAiAnalyticalOutput(input: {
     inputIds.length > 0;
 
   return createAiAnalyticalOutput({
+    ...governedContent(input),
     outputType: input.outputType || "ANALYSIS",
     provider: input.provider,
     model: input.model,
@@ -239,7 +272,7 @@ export function createInstitutionalReviewedAnalysisOutput(input: {
   validatedAt?: string | null;
   generatedAt?: string | null;
   limitations?: string[];
-}): InstitutionalReviewedAnalysisOutput {
+} & GovernedAnalysisContent): InstitutionalReviewedAnalysisOutput {
   const evidenceIds = uniq(input.evidenceIds);
   const findingIds = uniq(input.findingIds);
   if (evidenceIds.length === 0) throw new Error("INSTITUTIONAL_ANALYSIS_EVIDENCE_REQUIRED");
@@ -287,6 +320,7 @@ export function createInstitutionalReviewedAnalysisOutput(input: {
   ];
 
   return {
+    ...governedContent(input),
     outputId,
     outputType: "ANALYSIS",
     acquisitionMode: "DERIVED",
@@ -366,11 +400,13 @@ export function compactReportAnalysisOutput(output: any): any {
 
   return omitUndefined({
     outputId,
+    projectId: output?.projectId,
+    expedienteId: output?.expedienteId,
     analysisId: output?.analysisId,
     id: output?.id,
     outputType: output?.outputType || "ANALYSIS",
-    acquisitionMode: output?.acquisitionMode || "DERIVED",
-    epistemicClass: output?.epistemicClass || "HUMAN_GOVERNED_ANALYSIS",
+    acquisitionMode: output?.acquisitionMode || "LEGACY",
+    epistemicClass: output?.epistemicClass || "LEGACY_UNCLASSIFIED",
     promptHash: output?.promptHash ?? null,
     promptVersion: output?.promptVersion ?? null,
     promptId: output?.promptId ?? null,
@@ -396,18 +432,27 @@ export function compactReportAnalysisOutput(output: any): any {
     generatedAt: output?.generatedAt || new Date().toISOString(),
     generatedBy: output?.generatedBy || "UNAVAILABLE",
     limitations: Array.isArray(output?.limitations) ? output.limitations : [],
+    summary: typeof output?.summary === "string" ? output.summary : undefined,
+    text: typeof output?.text === "string" ? output.text : undefined,
+    convergences: Array.isArray(output?.convergences) ? output.convergences.filter((v: any) => typeof v === "string" ||
+      (v && typeof v === "object" && typeof v.convergenceId === "string")) : undefined,
+    contradictions: Array.isArray(output?.contradictions) ? output.contradictions.filter((v: unknown) => typeof v === "string") : undefined,
+    sourceDependencies: Array.isArray(output?.sourceDependencies) ? output.sourceDependencies : undefined,
+    independentSources: Array.isArray(output?.independentSources) ? output.independentSources : undefined,
+    supportingEvidenceIds: Array.isArray(output?.supportingEvidenceIds) ? output.supportingEvidenceIds : undefined,
+    contradictingEvidenceIds: Array.isArray(output?.contradictingEvidenceIds) ? output.contradictingEvidenceIds : undefined,
+    contradictingFindingIds: Array.isArray(output?.contradictingFindingIds) ? output.contradictingFindingIds : undefined,
+    supportingConvergences: Array.isArray(output?.supportingConvergences) ? output.supportingConvergences : undefined,
+    informationGaps: Array.isArray(output?.informationGaps) ? output.informationGaps : undefined,
+    provenance: output?.provenance && typeof output.provenance === "object" ? output.provenance : undefined,
+    supportingReferences: Array.isArray(output?.supportingReferences) ? output.supportingReferences : undefined,
+    contradictingReferences: Array.isArray(output?.contradictingReferences) ? output.contradictingReferences : undefined,
     usedInReport: output?.usedInReport !== false,
   });
 }
 
 export function compactReportAnalysisOutputs(outputs: any[]): any[] {
-  const byId = new Map<string, any>();
-  for (const output of outputs) {
-    if (!output) continue;
-    const compact = compactReportAnalysisOutput(output);
-    byId.set(compact.outputId, compact);
-  }
-  return [...byId.values()];
+  return distinctInstitutionalInputs(outputs.filter(Boolean).map(compactReportAnalysisOutput), "analysisOutputs");
 }
 
 export function approveReportAnalysisOutput(output: any, validation: { validatedBy?: any | null; validatedAt?: string | null }) {

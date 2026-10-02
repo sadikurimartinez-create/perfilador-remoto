@@ -316,7 +316,7 @@ describe("ADR-020.30 - AI analysis governance", () => {
     expect(approved.validatedBy).toEqual({ id: "u-1" });
   });
 
-  test("TEST 32 P4-T compact outputs dedupe by outputId without iaAnalysis copy", () => {
+  test("TEST 32 P2 compact outputs reject conflicting revisions and dedupe identical copies", () => {
     const first = compactReportAnalysisOutput({
       outputId: "analysis-1",
       outputType: "ANALYSIS",
@@ -336,7 +336,8 @@ describe("ADR-020.30 - AI analysis governance", () => {
       validatedAt: "2026-09-10T00:00:01.000Z",
       validatedBy: { id: "u-1" },
     });
-    const compactOutputs = compactReportAnalysisOutputs([first, second]);
+    expect(() => compactReportAnalysisOutputs([first, second])).toThrow("REPORT_INPUT_CONFLICT");
+    const compactOutputs = compactReportAnalysisOutputs([second, second]);
 
     expect(compactOutputs).toHaveLength(1);
     expect(compactOutputs[0].outputId).toBe("analysis-1");

@@ -16,6 +16,7 @@ import {
 import { evaluateHumanValidation } from "@/utils/humanValidationPolicy";
 import type { StructuredTableInput } from "@/utils/documentTableRenderer";
 import { scinceDocumentFacts, scinceDocumentLimitations } from "@/utils/scinceDocumentContext";
+import { incidenceDocumentBasis, canonicalSemanticValue, type DocumentSemanticAudit } from "./institutionalDocumentSemanticIntegrity";
 
 export const EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION = "1.0.0";
 
@@ -50,6 +51,9 @@ export interface TechnicalAnnexRecord {
   capturedAt?: string;
   heading?: unknown;
   pitch?: unknown;
+  fov?: unknown;
+  panoramaId?: string;
+  provenance?: unknown;
   traceabilityIds: string[];
   technicalIds: Record<string, unknown>;
   limitations: string[];
@@ -109,12 +113,16 @@ export interface ExecutiveGeointTechnicalAnnexModel {
     inputMutated: boolean;
   };
   technicalMetadata: {
+    reservedSections?: string;
+    semanticIntegrity?: DocumentSemanticAudit;
     modelName: "ExecutiveGeointTechnicalAnnexModel";
     modelVersion: typeof EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION;
     source: "InstitutionalReportInput+ExecutiveGeointReportModel+ExecutiveVisualComposition+ExecutiveGeointReportDocumentModel";
     sourceProjectId: string;
     traceabilityIds: string[];
     sourceItemIds: string[];
+    governedInputs?: Pick<InstitutionalReportInput, "analyses" | "convergences" | "sourceOrchestration" | "inputStates" | "hypothesis">;
+    multisourceAnalysis?: import("@/types/multisourceOrchestration").InstitutionalMultisourceAnalysis;
   };
 }
 
@@ -285,8 +293,12 @@ function evidenceRecord(item: any, source: string, selectedIds: Set<string>, fal
     visualReference: visualReference(item),
     coordinates: item?.coordinates || item?.coords || item?.location || item?.latLng || item?.multimodalEvidence?.coordinates,
     capturedAt: firstText(item?.capturedAt, item?.date, item?.fecha, item?.timestamp),
-    heading: item?.heading || item?.pov?.heading,
-    pitch: item?.pitch || item?.pov?.pitch,
+    heading: item?.heading ?? item?.pov?.heading ?? item?.streetViewMetadata?.heading,
+    pitch: item?.pitch ?? item?.pov?.pitch ?? item?.streetViewMetadata?.pitch,
+    fov: item?.fov ?? item?.streetViewMetadata?.fov,
+    panoramaId: item?.panoramaId || item?.streetViewMetadata?.panoId,
+    provenance: { lineage: item?.lineage, source: item?.sourceProvider || item?.sourceType, metadata: item?.streetViewMetadata,
+      geographyId: item?.geographyId, projectId: item?.projectId || item?.expedienteId, humanValidationStatus: item?.humanValidationStatus },
     traceabilityIds: traceabilityIds(item),
     technicalIds: technicalIds(item),
     limitations: asArray<string>(item?.limitations || item?.limitaciones),
@@ -458,6 +470,18 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     { label: "Periodo inicial", value: firstText(incidence.datasetReference.coverage?.temporal?.start, "No disponible") },
     { label: "Periodo final", value: firstText(incidence.datasetReference.coverage?.temporal?.end, "No disponible") },
   ] : [];
+  const incidenceBasis = documentModel.semanticIntegrity?.enforced ? incidenceDocumentBasis(institutionalInput) : null;
+  if (incidenceBasis) {
+    const periodReference = incidenceBasis.period as any;
+    const period = periodReference?.query || periodReference;
+    incidenceFacts.splice(3, 2,
+      { label: "Periodo inicial", value: firstText(period?.start, period?.startDate, "No disponible") },
+      { label: "Periodo final", value: firstText(period?.end, period?.endDate, "No disponible") });
+    incidenceFacts.push({ label: "Fuente", value: incidenceBasis.source },
+      { label: "Identidad del producto", value: incidenceBasis.snapshotReference },
+      { label: "Filtros de consulta", value: JSON.stringify(incidenceBasis.filters || {}) },
+      { label: "Geografía de consulta", value: JSON.stringify(incidenceBasis.geography || {}) });
+  }
   const gim = institutionalInput.specializedIntelligence.find(isCertifiedGimAnalysisPayload);
   const findingRecords = executiveModel.findings.map((item, index) => {
     const record = evidenceRecord(item, "HALLAZGO_GOBERNADO", selectedIds, `hallazgo-${index + 1}`);
@@ -533,6 +557,17 @@ export function buildExecutiveGeointTechnicalAnnexModel(
     section("findings-matrix", "MATRIZ DE HALLAZGOS Y EVIDENCIA", "TECHNICAL_SUPPORT",
       findingRecords.length ? [`Hallazgos gobernados: ${findingRecords.length}`] : [], findingRecords),
     section("multisource-correlation", "CORRELACIÓN MULTIFUENTE", "TECHNICAL_SUPPORT", [
+      ...(() => {
+        const result = executiveModel.multisourceAnalysis.technicalMetadata.governedAnalysis;
+        if (!result) return [];
+        return [result.summary, `Salida derivada pendiente de revisión PPC: ${result.humanValidationStatus}.`,
+          `Referencias de apoyo: ${result.supportingReferences.join(", ") || "sin referencias admitidas"}.`,
+          `Referencias de contraste: ${result.contradictingReferences.join(", ") || "sin referencias admitidas"}.`,
+          `Orígenes independientes: ${result.independentSources.join(", ") || "no establecidos"}.`,
+          ...result.candidateConvergences.map(item => `Propuesta ${item.convergenceId}: ${item.humanReviewStatus}; ${item.sourceEvidenceIds.join(", ")}.`),
+          ...result.sourceDependencies.map(item => `Fuentes ${item.leftItemId} / ${item.rightItemId}: ${item.dependencyType}.`),
+          `Provenance del ensamblaje: ${result.provenance.sourceFingerprint}.`];
+      })(),
       ...availableNarrative(executiveModel.multisourceAnalysis.convergencias).map((item) => `Convergencia aceptada: ${item}`),
       ...availableNarrative(executiveModel.multisourceAnalysis.contradicciones).map((item) => `Contradicción: ${item}`),
       ...availableNarrative(executiveModel.multisourceAnalysis.dependenciasParciales).map((item) => `Dependencia: ${item}`),
@@ -545,8 +580,9 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       ...executiveModel.prospectiveAnalysis.limitaciones.map((item) => `Limitacion: ${item}`),
     ] : [] , [], true),
     section("hypothesis-history", "HIPÓTESIS E HISTORIAL", "TECHNICAL_SUPPORT", [
-      firstText((institutionalInput.hypothesis as any)?.currentHypothesis, (institutionalInput as any)?.initialHypothesis, "NO DISPONIBLE EN EL EXPEDIENTE"),
-      ...asArray<any>((institutionalInput as any)?.hypothesisHistory).map((item) => firstText(item?.summary, item?.text, item?.status)),
+      firstText(institutionalInput.hypothesis.initialHypothesis, "NO DISPONIBLE EN EL EXPEDIENTE"),
+      firstText(institutionalInput.hypothesis.currentHypothesis, "NO DISPONIBLE EN EL EXPEDIENTE"),
+      ...(institutionalInput.hypothesis.versions || []).map(item => firstText(item.text, item.status)),
     ], [], true),
     section("technical-traceability", "TRAZABILIDAD TÉCNICA", "AUDIT_TRACEABILITY", [
       `Expediente: ${numeroExpediente}`,
@@ -555,7 +591,15 @@ export function buildExecutiveGeointTechnicalAnnexModel(
         ...allTechnicalRecords.map((record) => record.sourceType),
         ...(hasContextualDenue ? ["INEGI_DENUE"] : []),
       ]).join(", ") || "NO DISPONIBLE EN EL EXPEDIENTE"}`,
-    ], [], true),
+    ], [], true, [], documentModel.semanticIntegrity ? [{
+      headers: ["AFIRMACIÓN", "ESTADO", "FUENTES / EVIDENCIA", "VISUALES", "VALIDACIÓN"],
+      rows: documentModel.semanticIntegrity.narrativeClaims.map(claim => [
+        claim.claimId, claim.state, [...claim.sourceIds, ...claim.evidenceIds, ...claim.findingIds, ...claim.analysisIds].join("; "),
+        claim.visualIds.join("; "), (claim.validation as any[]).map(entry => entry.reviewedRelations?.length
+          ? entry.reviewedRelations.map((relation: any) => `${relation.humanReviewStatus}; ${relation.reviewedBy || "revisor no consignado"}; ${relation.reviewedAt || "fecha no consignada"}`).join("; ")
+          : typeof entry.status === "string" ? entry.status : entry.status?.eligibility || "No consignada").join("; "),
+      ]),
+    }] : []),
     section("sources-limitations", "FUENTES, EXCLUSIONES Y LIMITACIONES", "AUDIT_TRACEABILITY", [
       `Elementos excluidos por gobernanza: ${institutionalInput.exclusions.length}`,
       `Declaraciones de límite: ${institutionalInput.disclosures.length}`,
@@ -613,13 +657,19 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       secondReportEngine: false,
       inputMutated: JSON.stringify(institutionalInput) !== snapshot,
     },
-    technicalMetadata: {
+      technicalMetadata: {
+        reservedSections: canonicalSemanticValue(partialSections),
       modelName: "ExecutiveGeointTechnicalAnnexModel",
+      semanticIntegrity: documentModel.semanticIntegrity,
       modelVersion: EXECUTIVE_GEOINT_TECHNICAL_ANNEX_MODEL_VERSION,
       source: "InstitutionalReportInput+ExecutiveGeointReportModel+ExecutiveVisualComposition+ExecutiveGeointReportDocumentModel",
       sourceProjectId: institutionalInput.projectId,
+      multisourceAnalysis: executiveModel.multisourceAnalysis.technicalMetadata.governedAnalysis,
       traceabilityIds: traceIds,
       sourceItemIds,
+      governedInputs: { analyses: institutionalInput.analyses, convergences: institutionalInput.convergences,
+        sourceOrchestration: institutionalInput.sourceOrchestration, inputStates: institutionalInput.inputStates,
+        hypothesis: institutionalInput.hypothesis },
     },
   };
 }

@@ -109,7 +109,13 @@ function buildStreetViewUpstream(searchParams: URLSearchParams): URL {
   parseCoordinate(`${lat},${lng}`, "STREET_VIEW_COORDINATE");
   const upstream = new URL(`https://${GOOGLE_MAPS_HOST}${STREET_VIEW_PATH}`);
   upstream.searchParams.set("size", validateSize(searchParams.get("size") || "640x480"));
-  upstream.searchParams.set("location", `${lat},${lng}`);
+    upstream.searchParams.set("location", `${lat},${lng}`);
+    const panoramaId = searchParams.get("pano");
+    if (panoramaId) {
+      if (!/^[A-Za-z0-9_~-]{1,512}$/.test(panoramaId)) throw new ProxyRequestError("STREET_VIEW_PANORAMA_INVALID");
+      upstream.searchParams.delete("location");
+      upstream.searchParams.set("pano", panoramaId);
+    }
   const numericParams: Record<string, [number, number, string]> = {
     heading: [0, 360, "0"], pitch: [-90, 90, "0"], fov: [10, 120, "90"],
   };

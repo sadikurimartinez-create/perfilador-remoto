@@ -4,11 +4,11 @@ import { Packer } from "docx";
 import JSZip from "jszip";
 import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeography";
 import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
-import { renderExecutiveGeointTechnicalAnnexWordDocument } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
+import { renderExecutiveGeointTechnicalAnnexWordDocument as renderExecutiveGeointTechnicalAnnexWordDocumentDraft } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
 import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
-import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
+import { renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft } from "../src/utils/executiveGeointWordRenderer";
 import { buildExecutiveCanonicalTerritorialMapSpec } from "../src/utils/executiveCanonicalTerritorialMap";
 
 const root = process.cwd();
@@ -46,7 +46,8 @@ function input(overrides: any = {}) {
     generatedAt,
     geography: geo,
     reportReadyAssessment: {} as any,
-    hypothesis: { currentHypothesis: "Hipotesis inicial gobernada" } as any,
+    hypothesis: { initialHypothesis: "Hipotesis inicial gobernada", currentHypothesis: "Hipotesis inicial gobernada",
+      versions: [{ text: "Revision humana de hipotesis", status: "FORMULATED", authorType: "HUMAN" }] } as any,
     evidence: [
       { evidenceId: "ev-1", title: "Foto in situ", sourceType: "FIELD_PHOTO", imageUrl: "asset://photo-1", traceabilityIds: ["trace-ev-1"], sourceItemId: "source-ev-1", fingerprint: "fp-1" },
       { evidenceId: "ev-dup", title: "Foto duplicada", sourceType: "FIELD_PHOTO", imageUrl: "asset://photo-1", traceabilityIds: ["trace-ev-dup"], sourceItemId: "source-ev-dup", fingerprint: "fp-1" },
@@ -81,7 +82,6 @@ function input(overrides: any = {}) {
     draft: false,
     certified: false,
     published: false,
-    hypothesisHistory: [{ summary: "Revision humana de hipotesis", status: "VALIDADO", traceabilityIds: ["trace-hyp-1"] }],
     ...overrides,
   };
 }
@@ -564,9 +564,11 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
       instructionOriginal: instruction,
       narrativeSegmentationStatus: "INSTRUCTION_ONLY",
     }));
-    for (const sectionId of ["scince", "denue", "incidence", "osint", "multisource-correlation"] as const) {
+    for (const sectionId of ["scince", "denue", "incidence", "osint"] as const) {
       expect(model.sections.find((section) => section.sectionId === sectionId)?.content).toContain("NO DISPONIBLE EN EL EXPEDIENTE");
     }
+    expect(model.sections.find(section => section.sectionId === "multisource-correlation")?.content.join(" ")).toContain("insuficientes");
+    expect(model.technicalMetadata.multisourceAnalysis?.status).toBe("INCONCLUSIVE");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==", "base64");
     const assets = Object.fromEntries([
       [composition.principalTerritorialMap.mapId, { data: png, type: "png" as const, width: 500, height: 280 }],
@@ -673,3 +675,7 @@ describe("Fase F - ExecutiveGeointTechnicalAnnex", () => {
     expect(xml).toContain("Clasificación narrativa no separable automáticamente.");
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });
+const renderExecutiveGeointTechnicalAnnexWordDocument = (model: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[1] = {}) => renderExecutiveGeointTechnicalAnnexWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

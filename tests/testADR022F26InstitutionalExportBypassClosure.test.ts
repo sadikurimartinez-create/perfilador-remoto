@@ -1,8 +1,11 @@
 import fs from "fs";
 import path from "path";
+jest.mock("@/lib/institutionalReportSourceActions", () => ({ getAuthorizedInstitutionalReportSource: jest.fn() }));
+jest.mock("@/lib/scinceDocumentActions", () => ({ getScinceDocumentContext: jest.fn() }));
 import {
   assertInstitutionalExportAuthorization,
   assertInstitutionalPdfAuthorization,
+  generatePdfProgrammatic,
 } from "../src/lib/reportEngine";
 
 const root = process.cwd();
@@ -67,14 +70,20 @@ describe("ADR-022 FASE 2.6 - Institutional export bypass closure", () => {
     ).not.toThrow();
   });
 
-  test("valid institutional authorization approves PDF export", () => {
+  test("client eligibility cannot authorize institutional programmatic PDF", () => {
     expect(() =>
       assertInstitutionalPdfAuthorization({
         exportMode: "INSTITUTIONAL",
         institutionalReportInput: validInstitutionalReportInput(),
         certificationGateResult: { blockingReasons: [] },
       })
-    ).not.toThrow();
+    ).toThrow("PDF_INSTITUTIONAL_EXPORT_BLOCKED:AUTHORIZED_CANONICAL_PDF_PATH_REQUIRED");
+  });
+
+  test("institutional PDF generation rejects before consuming client briefing", async () => {
+    await expect(generatePdfProgrammatic({ title: "client briefing" } as any, {
+      exportMode: "INSTITUTIONAL", institutionalReportInput: validInstitutionalReportInput(),
+    })).rejects.toThrow("AUTHORIZED_CANONICAL_PDF_PATH_REQUIRED");
   });
 
   test("ReportEngine and productive incidence route keep institutional mode explicit", () => {
@@ -86,4 +95,3 @@ describe("ADR-022 FASE 2.6 - Institutional export bypass closure", () => {
     expect(incidenceWorkspace).toContain('{ exportMode: "INSTITUTIONAL" }');
   });
 });
-

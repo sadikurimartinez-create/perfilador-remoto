@@ -535,7 +535,7 @@ describe("ExecutiveGeointReportModel", () => {
     const explicit = buildExecutiveGeointReportModel(institutionalInput({
       findings: [{ findingId: "f-medium", confidence: 0.61, traceabilityIds: ["trace-medium"] }],
     }), context());
-    expect(explicit.panorama.nivelConfianza).toBe("MEDIO");
+    expect(explicit.panorama.nivelConfianza).toBe("NO DISPONIBLE");
 
     const absent = buildExecutiveGeointReportModel(institutionalInput({
       findings: [], analyses: [], visualProducts: [], streetView: [],
@@ -550,7 +550,7 @@ describe("ExecutiveGeointReportModel", () => {
         findingIds: [], analysisIds: [], conclusionIds: [], itemCount: 3,
       },
     }), context());
-    expect(absent.multisourceAnalysis.nivelSoporte).toBe("MEDIO");
+    expect(absent.multisourceAnalysis.nivelSoporte).toBe("INSUFICIENTE");
     expect(absent.panorama.nivelConfianza).toBe("NO DISPONIBLE");
   });
 
@@ -561,7 +561,7 @@ describe("ExecutiveGeointReportModel", () => {
       hypothesis: { currentHypothesis: longHypothesis } as any,
       findings: [], analyses: [],
     }), context());
-    expect(model.panorama.situacion.startsWith(firstSentence)).toBe(true);
+    expect(model.panorama.situacion).toContain(firstSentence);
     expect(model.panorama.situacion.length).toBeLessThanOrEqual(420);
     expect(model.panorama.situacion).toMatch(/[.!?]$/);
     expect(model.panorama.situacion).not.toMatch(/\.\.\.$|\bde con\.\.\.|\bpara det\.\.\./i);

@@ -85,6 +85,10 @@ export function assertInstitutionalExportAuthorization(
 
 export function assertInstitutionalPdfAuthorization(options: InstitutionalExportAuthorizationOptions = {}) {
   assertInstitutionalExportAuthorization(options, "PDF");
+  // The programmatic PDF consumes a client briefing and has no canonical server-bound renderer.
+  if (options.exportMode === "INSTITUTIONAL") {
+    throw new Error("PDF_INSTITUTIONAL_EXPORT_BLOCKED:AUTHORIZED_CANONICAL_PDF_PATH_REQUIRED");
+  }
 }
 
 export interface ReportLineageBoundaryResult {
@@ -198,7 +202,7 @@ export async function generatePdfProgrammatic(
     doc.setTextColor('#ffffff');
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text('SSPE-CEIPOL | Intelligence Briefing', PAGE.margin, 8.5);
+    doc.text('BORRADOR CONTEXTUAL | NO PRODUCTO INSTITUCIONAL', PAGE.margin, 8.5);
     doc.text(title, PAGE.width - PAGE.margin, 8.5, { align: 'right' });
     doc.setTextColor(COLORS.text);
   };
@@ -503,7 +507,7 @@ export async function generatePdfProgrammatic(
     .find((page) => page.mode === "cover")
     ?.bullets?.find((bullet) => bullet.startsWith("Expediente:"))
     ?.replace(/^Expediente:\s*/i, "");
-  doc.save(buildNumeroExpedienteFilename({
+  doc.save("BORRADOR_" + buildNumeroExpedienteFilename({
     numeroExpediente: briefing.fileNumber,
     projectName: coverExpediente || briefing.title,
     extension: "pdf",
@@ -1056,7 +1060,7 @@ export class ReportEngineKernelClass {
         this.notify();
 
         try {
-          if (format === "WORD" || format === "ALL") {
+          if (format === "WORD" || format === "ALL" || exportMode === "INSTITUTIONAL") {
             if (this.context.editorialPayload) {
               this.context.editorialPayload.includeOsintAppendix = this.context.includeOsintAppendix;
             }
@@ -1119,7 +1123,7 @@ export class ReportEngineKernelClass {
                 documentPackage.projectName,
                 documentNumber,
                 documentPackage.user,
-                { exportMode: "INSTITUTIONAL", reportKind }
+                { exportMode: "INSTITUTIONAL", reportKind, downloadFormat: format }
               );
             } else {
               await exportToWord(
@@ -1140,7 +1144,7 @@ export class ReportEngineKernelClass {
               );
             }
           }
-          if (format === "PDF" || format === "ALL") {
+          if (exportMode !== "INSTITUTIONAL" && (format === "PDF" || format === "ALL")) {
             await generatePdfProgrammatic(this.context.briefing, {
               exportMode,
               institutionalReportInput: this.context.editorialPayload?.institutionalReportInput || null,

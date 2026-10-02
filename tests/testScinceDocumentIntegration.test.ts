@@ -18,8 +18,8 @@ import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointRep
 import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
 import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
-import { renderExecutiveGeointWordDocument } from "../src/utils/executiveGeointWordRenderer";
-import { renderExecutiveGeointTechnicalAnnexWordDocument } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
+import { renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft } from "../src/utils/executiveGeointWordRenderer";
+import { renderExecutiveGeointTechnicalAnnexWordDocument as renderExecutiveGeointTechnicalAnnexWordDocumentDraft } from "../src/utils/executiveGeointTechnicalAnnexWordRenderer";
 import { formulateHumanHypothesis } from "../src/utils/hypothesisGovernance";
 import { buildEvidenceLineage } from "../src/utils/evidenceLineage";
 import { createComputedFileIntegrity } from "../src/utils/forensicFileIntegrity";
@@ -227,7 +227,8 @@ test("DOCX admission happens before both document models and is recorded in the 
   const source = readFileSync(resolve(__dirname, "../src/lib/exportToWord.ts"), "utf8");
   const start = source.indexOf("async function buildInstitutionalGenerationContext");
   const end = source.indexOf("async function hydrateTechnicalAnnexVisualAssets", start);
-  const generation = source.slice(start, end);
+  const generation = readFileSync(resolve(__dirname, "../src/utils/institutionalGenerationModels.ts"), "utf8");
+  expect(source.slice(start, end)).toContain("await buildInstitutionalGenerationModels");
   expect(generation).toContain("await integrateScinceDocumentContextForReport(institutionalReportInput, getScinceDocumentContext)");
   expect(generation.indexOf("await integrateScinceDocumentContextForReport")).toBeLessThan(generation.indexOf("const documentModel ="));
   const service = readFileSync(resolve(__dirname, "../src/services/scinceDocumentPublicationService.ts"), "utf8");
@@ -236,3 +237,7 @@ test("DOCX admission happens before both document models and is recorded in the 
     .map(name => readFileSync(resolve(__dirname, `../src/utils/${name}.ts`), "utf8"));
   modelSources.forEach(text => expect(text).not.toContain("scinceDemographics"));
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });
+const renderExecutiveGeointTechnicalAnnexWordDocument = (model: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[1] = {}) => renderExecutiveGeointTechnicalAnnexWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });

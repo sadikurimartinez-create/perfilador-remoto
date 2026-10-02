@@ -113,6 +113,7 @@ export interface ExecutiveVisualSelectionAudit {
 }
 
 export interface ExecutiveVisualComposition {
+  assetStates?: Record<string, "ASSET_RENDERED" | "ASSET_MISSING" | "ASSET_UNAVAILABLE" | "ASSET_INVALID" | "ASSET_EXCLUDED">;
   principalTerritorialMap: ExecutiveTerritorialMap;
   secondaryVisuals: ExecutiveSecondaryVisual[];
   visualBudget: {
@@ -152,6 +153,7 @@ interface Candidate {
   transformation?: string;
   chartKind?: string;
   publicationEligibility?: string;
+  authorizedCitation?: boolean;
   governedAnalyticalMap?: boolean;
 }
 
@@ -300,7 +302,7 @@ function duplicateKey(candidate: Candidate): string {
     return `${candidate.visualType}:${clean(candidate.chartKind)}:${candidate.id}`;
   }
 
-  return `${candidate.visualType}:${candidate.reference || candidate.sourceItemId || candidate.id}`;
+  return candidate.reference || candidate.sourceItemId || candidate.id;
 }
 
 function geometryType(geography: CanonicalProjectGeography | null): CanonicalProjectGeography["type"] | "MULTIPOLYGON" | null {
@@ -395,7 +397,8 @@ function buildPrincipalMap(
   model: ExecutiveGeointReportModel,
   institutionalInput: InstitutionalReportInput,
   excludedItems: ExecutiveVisualSelectionAudit["excludedItems"],
-  principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null
+  principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null,
+  canonicalPrincipalOnly = false
 ): ExecutiveTerritorialMap {
   const geography = model.territorialSituation.canonicalGeography || institutionalInput.geography || null;
   if (!geography) {
@@ -430,7 +433,7 @@ function buildPrincipalMap(
   }
 
   const viewport = getCanonicalMapViewport(geography);
-  const mapCandidate = selectCompatiblePrincipalMapCandidate(model, institutionalInput, geography, excludedItems);
+  const mapCandidate = canonicalPrincipalOnly ? null : selectCompatiblePrincipalMapCandidate(model, institutionalInput, geography, excludedItems);
   const relatedFindingIds = dedupe([
     ...(mapCandidate?.relatedFindingIds || []),
   ]);
@@ -579,7 +582,7 @@ function candidateFromInputVisual(item: any, index: number): Candidate {
   if (isGovernedDescriptiveStatisticalChart(candidate)) {
     candidate.score = 300 - index;
   } else if (candidate.governedAnalyticalMap) {
-    candidate.score = 200;
+    candidate.score = 400;
   }
 
   return candidate;
@@ -615,7 +618,7 @@ function validateCandidate(
 ): ExecutiveVisualExclusionReasonCode | null {
   if (!candidate.traceabilityIds.length) return "NO_TRACEABILITY";
   if (!candidate.reference) return "NO_VISUAL_REFERENCE";
-  if (duplicateKeys.has(duplicateKey(candidate))) return "DUPLICATE";
+  if (duplicateKeys.has(duplicateKey(candidate)) || selected.some(item => item.id === candidate.id)) return "DUPLICATE";
   if (candidate.visualType === "MAP") return "LOW_EXECUTIVE_VALUE";
   if (candidate.visualType === "SECONDARY_MAP" && !candidate.governedAnalyticalMap) return "LOW_EXECUTIVE_VALUE";
   if (candidate.visualType === "PROSPECTIVE_SCENARIO" && !isProspectiveAllowed(candidate, model)) return "CONTEXT_ONLY";
@@ -626,6 +629,7 @@ function validateCandidate(
       model.keyEvidence.some((item) => item.evidenceReferences.includes(id) || item.evidenceId === id)
     );
   const hasRelation =
+    candidate.authorizedCitation === true ||
     candidate.relatedFindingIds.some((id) => priorityFindingIds.includes(id)) ||
     referencedByKeyEvidence ||
     candidate.visualType === "MULTISOURCE_CONVERGENCE" ||
@@ -722,11 +726,11 @@ function toSecondaryVisual(candidate: Candidate, model: ExecutiveGeointReportMod
 export function buildExecutiveVisualComposition(
   executiveModel: ExecutiveGeointReportModel,
   institutionalInput: InstitutionalReportInput,
-  options: { maxVisuals?: number; principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null } = {}
+  options: { maxVisuals?: number; principalMapSpec?: ExecutiveCanonicalTerritorialMapSpec | null; canonicalPrincipalOnly?: boolean; citedVisualIds?: string[] } = {}
 ): ExecutiveVisualComposition {
   const maxVisuals = Math.min(Math.max(1, options.maxVisuals ?? MAX_EXECUTIVE_VISUALS), MAX_EXECUTIVE_VISUALS);
   const excludedItems: ExecutiveVisualSelectionAudit["excludedItems"] = [];
-  const principalTerritorialMap = buildPrincipalMap(executiveModel, institutionalInput, excludedItems, options.principalMapSpec);
+  const principalTerritorialMap = buildPrincipalMap(executiveModel, institutionalInput, excludedItems, options.principalMapSpec, options.canonicalPrincipalOnly);
   const secondaryBudget = Math.max(0, maxVisuals - 1);
   const priorityFindingIds = executiveModel.findings.map((finding) => finding.findingId);
   const decisionLabels = executiveModel.decisionImplications.map((decision) => decision.hallazgoRelacionado);
@@ -741,6 +745,10 @@ export function buildExecutiveVisualComposition(
       .filter(Boolean)
   );
   const candidates = [
+    ...[...institutionalInput.evidence, ...institutionalInput.streetView].filter(item =>
+      options.citedVisualIds?.includes(itemId(item, "")) && item.publicationEligibility?.eligibility !== "INELIGIBLE")
+      .map((item, index) => candidateFromInputVisual({ ...item,
+        visualType: /STREET.?VIEW/i.test(String(item.sourceType || item.tipo || item.sourceProvider || "")) ? "STREET_VIEW_CAPTURE" : "FIELD_PHOTOGRAPH" }, index)),
     ...executiveModel.keyEvidence.map(candidateFromKeyEvidence),
     ...executiveModel.visualCandidates
       .filter((item) => {
@@ -756,7 +764,8 @@ export function buildExecutiveVisualComposition(
     ...institutionalInput.visualProducts.map(candidateFromInputVisual),
   ].map((candidate) => ({
     ...candidate,
-    score: candidate.score + relationScore(candidate, priorityFindingIds, decisionLabels),
+    authorizedCitation: options.citedVisualIds?.includes(candidate.id) === true,
+    score: candidate.score + relationScore(candidate, priorityFindingIds, decisionLabels) + (options.citedVisualIds?.includes(candidate.id) ? 500 : 0),
   })).sort((a, b) => b.score - a.score || a.originalIndex - b.originalIndex || a.id.localeCompare(b.id));
 
   const selected: Candidate[] = [];

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { buildStreetViewUrl } from "@/lib/legacy/googleStreetView";
+import { buildStreetViewCaptureSnapshot } from "./streetViewMapper";
 import { StreetViewCapturePayload } from "./streetViewMapper";
 
 interface StreetViewPanoramaPickerProps {
@@ -132,46 +132,32 @@ export function StreetViewPanoramaPicker({
   const handleFreezeCapture = useCallback(async () => {
     setIsCapturing(true);
     try {
-      // Generar URL congelada estática de alta resolución con los metadatos exactos de POV seleccionados por el analista
-      const staticUrl = buildStreetViewUrl(panoLat || lat, panoLng || lng, {
-        size: "800x600",
-        heading,
-        pitch,
-        fov,
+      const panorama = panoramaRef.current;
+      const position = panorama?.getPosition();
+      if (!panorama || !position) throw new Error("No hay una posición panorámica disponible para capturar.");
+      const pov = panorama.getPov();
+      const snapshot = buildStreetViewCaptureSnapshot({ lat: position.lat(), lng: position.lng(),
+        panoId: panorama.getPano(), heading: pov.heading, pitch: pov.pitch, zoom: panorama.getZoom() });
+      const res = await fetch(snapshot.proxyUrl);
+      if (!res.ok) throw new Error("No se pudo adquirir el activo del panorama seleccionado.");
+      const blob = await res.blob();
+      if (!blob.size || !blob.type.startsWith("image/")) throw new Error("El panorama no devolvió una imagen válida.");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("No se pudo leer el activo panorámico."));
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
       });
-
-      if (!staticUrl) {
-        throw new Error("No se pudo generar la clave de API para la captura estática de Street View.");
-      }
-
-      // Descargar congelado estático para almacenamiento permanente usando el Proxy Seguro del Backend
-      const proxyUrl = `/api/proxy-image?lat=${panoLat || lat}&lng=${panoLng || lng}&heading=${heading}&pitch=${pitch}&fov=${fov}&size=800x600`;
-      let dataUrl = staticUrl;
-
-      try {
-        const res = await fetch(proxyUrl);
-        if (res.ok) {
-          const blob = await res.blob();
-          dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
-          });
-        }
-      } catch (e) {
-        console.warn("[StreetViewPanoramaPicker] Fallback a URL estática por directo:", e);
-      }
-
       const payload: StreetViewCapturePayload = {
         dataUrl,
         poiLat: lat,
         poiLng: lng,
-        panoramaLat: panoLat || lat,
-        panoramaLng: panoLng || lng,
-        heading,
-        pitch,
-        fov,
-        panoId,
+        panoramaLat: snapshot.lat,
+        panoramaLng: snapshot.lng,
+        heading: snapshot.heading,
+        pitch: snapshot.pitch,
+        fov: snapshot.fov,
+        panoId: snapshot.panoId,
         captureDate: captureDate !== "N/D" ? captureDate : undefined,
         category,
         comentario: comentario.trim() || undefined,
@@ -245,7 +231,7 @@ export function StreetViewPanoramaPicker({
             <div className="absolute top-3 left-3 z-10 bg-slate-950/85 backdrop-blur-md border border-slate-800 p-2.5 rounded-xl shadow-xl flex gap-3 text-[10px] font-mono text-slate-300">
               <div><span className="text-slate-500 font-bold">HDG:</span> <span className="text-cyan-400 font-bold">{heading}°</span></div>
               <div><span className="text-slate-500 font-bold">PITCH:</span> <span className="text-cyan-400 font-bold">{pitch}°</span></div>
-              <div><span className="text-slate-500 font-bold">FOV:</span> <span className="text-cyan-400 font-bold">{zoom > 1 ? zoom : "N/D"}</span></div>
+              <div><span className="text-slate-500 font-bold">FOV:</span> <span className="text-cyan-400 font-bold">{fov}°</span></div>
               <div><span className="text-slate-500 font-bold">COBER:</span> <span className="text-emerald-400 font-bold">{captureDate || "N/D"}</span></div>
             </div>
 

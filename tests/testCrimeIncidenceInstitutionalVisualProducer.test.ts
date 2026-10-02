@@ -113,7 +113,7 @@ describe("crimeIncidenceInstitutionalVisualProducer", () => {
 
     for (const chart of result.charts) {
       expect(chart.metadata.lineage).toBe(projection.lineage);
-      expect(chart.metadata.sourceReference).toBe("dataset-incidencia-001");
+      expect(chart.metadata.sourceReference).toBe("fuente-administrativa-001");
       expect(chart.metadata.limitations).toEqual([
         "Cobertura limitada al dataset consultado.",
       ]);
@@ -125,6 +125,7 @@ describe("crimeIncidenceInstitutionalVisualProducer", () => {
     const projection = projectionFixture();
 
     projection.metrics.frequency.totalRecords = 0;
+    projection.metrics.percentage.basis = 0;
     projection.metrics.frequency.byIncidentType = [];
     projection.metrics.percentage.byIncidentType = [];
     projection.metrics.distribution.byOccurredDate = [];

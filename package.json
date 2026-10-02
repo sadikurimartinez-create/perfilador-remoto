@@ -34,6 +34,7 @@
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
     "jspdf": "^4.2.1",
+    "jszip": "3.10.1",
     "leaflet": "^1.9.4",
     "next": "^14.2.35",
     "papaparse": "^5.5.3",
@@ -46,7 +47,8 @@
     "rss-parser": "^3.13.0",
     "supercluster": "^8.0.1",
     "twitter-api-v2": "^1.29.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xml-js": "1.6.11"
   },
   "overrides": {
     "jwks-rsa": {

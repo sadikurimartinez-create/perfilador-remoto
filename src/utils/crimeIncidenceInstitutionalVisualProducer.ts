@@ -54,12 +54,13 @@ function resolveDatasetReference(
   return normalizeText(projection.datasetReference?.datasetId) || "DATASET_NO_IDENTIFICADO";
 }
 
-function resolveSourceReference(
+export function resolveCrimeIncidenceVisualSource(
   projection: CrimeIncidenceAnalyticalProjection
 ): string {
   return (
-    normalizeText(projection.lineage?.dataset) ||
     normalizeText(projection.sourceQuery?.request?.requestProvenance?.sourceReference) ||
+    normalizeText(projection.datasetReference?.sourceReference) ||
+    normalizeText(projection.lineage?.dataset) ||
     resolveDatasetReference(projection)
   );
 }
@@ -104,7 +105,7 @@ function buildIncidentTypeChart(
       ...item,
       percentage: Number.isFinite(percentages.get(item.label))
         ? percentages.get(item.label)
-        : undefined,
+        : Number((item.value * 100 / projection.metrics.frequency.totalRecords).toFixed(2)),
     }))
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
 
@@ -117,8 +118,13 @@ function buildIncidentTypeChart(
     transformation:
       "Agrupación descriptiva de registros admitidos por tipo de incidente; conteo absoluto y porcentaje respecto del universo admitido.",
     analyticLevel: "DESCRIPTIVE",
-    sourceReference: resolveSourceReference(projection),
+    sourceReference: resolveCrimeIncidenceVisualSource(projection),
     lineage: projection.lineage,
+    filters: projection.sourceQuery?.request?.crimeFilters || projection.lineage.filters,
+    period: projection.temporalReference || projection.sourceQuery?.request?.temporalFilters || projection.lineage.timeRange,
+    geography: projection.geographicReference || projection.sourceQuery?.request?.queryGeometry || projection.lineage.geographicFilter,
+    sourceIdentity: projection.sourceQuery?.request?.datasetIdentity || projection.datasetReference,
+    total: projection.metrics.frequency.totalRecords,
     watermark: CRIME_INCIDENCE_INSTITUTIONAL_BRANDING.watermark,
     method: "FREQUENCY_AND_PERCENTAGE_BY_INCIDENT_TYPE",
     limitations: [...projection.limitations],
@@ -156,8 +162,13 @@ function buildTemporalEvolutionChart(
     transformation:
       "Agrupación descriptiva de registros admitidos por fecha de ocurrencia; conteo absoluto por fecha sin inferencia predictiva.",
     analyticLevel: "DESCRIPTIVE",
-    sourceReference: resolveSourceReference(projection),
+    sourceReference: resolveCrimeIncidenceVisualSource(projection),
     lineage: projection.lineage,
+    filters: projection.sourceQuery?.request?.crimeFilters || projection.lineage.filters,
+    period: projection.temporalReference || projection.sourceQuery?.request?.temporalFilters || projection.lineage.timeRange,
+    geography: projection.geographicReference || projection.sourceQuery?.request?.queryGeometry || projection.lineage.geographicFilter,
+    sourceIdentity: projection.sourceQuery?.request?.datasetIdentity || projection.datasetReference,
+    total: projection.metrics.frequency.totalRecords,
     watermark: CRIME_INCIDENCE_INSTITUTIONAL_BRANDING.watermark,
     method: "FREQUENCY_BY_OCCURRED_DATE",
     limitations: [...projection.limitations],
@@ -180,6 +191,34 @@ function buildTemporalEvolutionChart(
 export function buildCrimeIncidenceInstitutionalVisualSpecifications(
   projection: CrimeIncidenceAnalyticalProjection
 ): CrimeIncidenceInstitutionalVisualSet {
+  if (projection.sourceQuery?.status !== "EXECUTED" || projection.sourceQuery?.admission?.accepted !== true ||
+    !normalizeText(projection.datasetReference?.datasetId) || !projection.lineage ||
+    /MOCK|SIMULAT|SYNTHETIC/i.test(JSON.stringify(projection.sourceQuery?.request?.datasetIdentity || {}))) {
+    throw new Error("CRIME_INCIDENCE_VISUAL_SNAPSHOT_NOT_ADMITTED");
+  }
+  const total = projection.metrics.frequency.totalRecords;
+  if (!Number.isInteger(total) || total < 0) throw new Error("CRIME_INCIDENCE_VISUAL_TOTAL_INVALID");
+  const typeBuckets = projection.metrics.frequency.byIncidentType;
+  if (Array.isArray(typeBuckets) && typeBuckets.length) {
+    if (typeBuckets.some(bucket => !normalizeText(bucket.value) || !Number.isInteger(bucket.count) || bucket.count < 0) ||
+      typeBuckets.reduce((sum, bucket) => sum + bucket.count, 0) !== total ||
+      new Set(typeBuckets.map(bucket => normalizeText(bucket.value))).size !== typeBuckets.length) throw new Error("CRIME_INCIDENCE_VISUAL_COUNTS_INCONSISTENT");
+    for (const bucket of projection.metrics.percentage?.byIncidentType || []) {
+      const frequency = typeBuckets.find(item => item.value === bucket.value);
+      if (!frequency || bucket.count !== frequency.count || !Number.isFinite(bucket.percentage) ||
+        Math.abs(bucket.percentage - (total ? bucket.count * 100 / total : 0)) > 0.011) throw new Error("CRIME_INCIDENCE_VISUAL_PERCENTAGES_INCONSISTENT");
+    }
+  }
+  const dates = projection.metrics.distribution?.byOccurredDate || [];
+  if (projection.metrics.percentage?.basis !== undefined && projection.metrics.percentage.basis !== total) throw new Error("CRIME_INCIDENCE_VISUAL_PERCENTAGES_INCONSISTENT");
+  const temporal = projection.sourceQuery?.request?.temporalFilters;
+  const start = (temporal as any)?.start || (temporal as any)?.startDate;
+  const end = (temporal as any)?.end || (temporal as any)?.endDate;
+  if (dates.some(bucket => bucket.value && ((start && bucket.value < start.slice(0, 10)) || (end && bucket.value > end.slice(0, 10))))) throw new Error("CRIME_INCIDENCE_VISUAL_PERIOD_MISMATCH");
+  if (dates.some(bucket => !bucket.value || !/^\d{4}-\d{2}-\d{2}$/.test(bucket.value) || !Number.isFinite(Date.parse(bucket.value)) ||
+      new Date(bucket.value).toISOString().slice(0, 10) !== bucket.value || !Number.isInteger(bucket.count) || bucket.count < 0) ||
+    new Set(dates.map(bucket => bucket.value)).size !== dates.length ||
+    dates.reduce((sum, bucket) => sum + bucket.count, 0) > total) throw new Error("CRIME_INCIDENCE_VISUAL_TEMPORAL_COUNTS_INVALID");
   const charts: CrimeIncidenceInstitutionalChartSpecification[] = [];
   const exclusions: CrimeIncidenceInstitutionalVisualSet["exclusions"] = [];
 

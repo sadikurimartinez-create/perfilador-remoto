@@ -539,3 +539,9 @@ describe(
     );
   }
 );
+test("P3 blocks chart snapshot with geometry different from the principal map", async () => {
+  const contract = snapshot() as any;
+  contract.geographicReference = { geometry: { mode: "POINT_RADIUS", geometry: { type: "Point", coordinates: [0, 0] }, radiusMeters: 500 } };
+  await expect(enrichInstitutionalPayloadWithCrimeIncidenceVisuals({ crimeIncidenceExportContract: contract,
+    canonicalGeography: { geographyId: "geo", geometry: { type: "Point", coordinates: [-102, 22] } } })).rejects.toThrow("GEOGRAPHY_MISMATCH");
+});

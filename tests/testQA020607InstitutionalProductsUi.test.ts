@@ -230,11 +230,11 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     expect(payload.numeroExpediente).toBe("06092026-0007-JMG");
   });
 
-  test("27A el exportador recibe el análisis estructurado activo sin alterar el expediente", () => {
+  test("27A el exportador conserva el análisis persistido sin sustituirlo por estado UI", () => {
     const project = { id: "project-id", numeroExpediente: "06092026-0007-JMG", iaAnalysis: { scinceDemographics: { status: "NO_DATA" } } };
     const active = { scinceDemographics: { status: "OBSERVED" } };
     const payload = buildInstitutionalProductExportPayload(project, { reportReadyAssessment: readyAssessment(), analysisResult: active });
-    expect(payload.iaAnalysis).toEqual(active);
+    expect(payload.iaAnalysis).toEqual(project.iaAnalysis);
     expect(project.iaAnalysis.scinceDemographics.status).toBe("NO_DATA");
   });
 

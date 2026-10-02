@@ -13,6 +13,8 @@ import { buildCanonicalProjectGeography } from "../src/utils/canonicalProjectGeo
 import { buildEvidenceLineage } from "../src/utils/evidenceLineage";
 import { createComputedFileIntegrity, createHashUnavailableIntegrity } from "../src/utils/forensicFileIntegrity";
 import { formulateHumanHypothesis } from "../src/utils/hypothesisGovernance";
+import { compactReportAnalysisOutput } from "../src/utils/aiAnalysisGovernance";
+import { approveConvergenceResult, buildInstitutionalConvergence, type ConvergenceSourceEntry } from "../src/utils/institutionalMultisourceConvergence";
 import { buildInstitutionalProductExportPayload } from "../src/utils/institutionalProductsUi";
 import { assessReportReadiness } from "../src/utils/reportReadyGovernance";
 import {
@@ -29,9 +31,10 @@ import { enrichInstitutionalPayloadWithCrimeIncidenceVisuals } from "../src/util
 import { buildExecutiveVisualComposition } from "../src/utils/executiveVisualComposition";
 import { buildExecutiveGeointReportModel } from "../src/utils/executiveGeointReportModel";
 import { buildExecutiveGeointReportDocumentModel } from "../src/utils/executiveGeointReportDocumentModel";
+import { buildExecutiveGeointTechnicalAnnexModel } from "../src/utils/executiveGeointTechnicalAnnexModel";
 import {
   buildExecutiveGeointWordVisualAssets,
-  renderExecutiveGeointWordDocument,
+  renderExecutiveGeointWordDocument as renderExecutiveGeointWordDocumentDraft,
 } from "../src/utils/executiveGeointWordRenderer";
 import {
   assessReportItemEligibility,
@@ -145,6 +148,66 @@ function reopenedInstitutionalPayload(fields: Record<string, unknown>) {
     reportReadyAssessment: assessReportReadiness(reopened),
   });
 }
+
+describe("P2 complete governed input route", () => {
+  const traceablePhoto = () => evidence({ sourceEvidenceId: "ev-1", traceabilityId: "trace-ev-1", expedienteId: "project-1",
+    coordinates: { lat: 21.885, lng: -102.285 }, lineageStatus: "SUPPORTED" });
+  const traceableFinding = () => finding({ traceabilityId: "trace-find-1", expedienteId: "project-1", geographyId: geography.geographyId });
+  test("analytical content and validation reach institutional contract and executive narrative", () => {
+    const governed = compactReportAnalysisOutput({ ...analysis(), expedienteId: "project-1", traceabilityId: "trace-analysis-1", summary: "Resumen gobernado", text: "Texto gobernado",
+      convergences: ["Coincidencia gobernada"], contradictions: ["Contradicción gobernada"],
+      sourceDependencies: [{ sourceA: "s1", sourceB: "s2", independence: "DERIVED", reason: "Mismo origen" }],
+      independentSources: ["s3"], provenance: { originalSource: "s1" }, limitations: ["Límite explícito"] });
+    const input = buildInstitutionalReportInput(reopenedInstitutionalPayload({ evidence: [traceablePhoto()], findings: [traceableFinding()], analysisOutputs: [], iaAnalysis: { analysisOutputs: [governed] } }));
+    expect(input.analyses[0]).toMatchObject({ summary: governed.summary, text: governed.text, provenance: governed.provenance,
+      validationStatus: "APPROVED", evidenceIds: governed.evidenceIds, findingIds: governed.findingIds });
+    const model = buildExecutiveGeointReportModel(input, {} as any);
+    const serialized = JSON.stringify(model);
+    for (const text of ["Coincidencia gobernada", "Contradicción gobernada", "Mismo origen", "s3"]) expect(serialized).toContain(text);
+    const visuals = buildExecutiveVisualComposition(model, input);
+    const document = buildExecutiveGeointReportDocumentModel(model, visuals, input, { numeroExpediente: "CEIPOL-1" });
+    const annex = buildExecutiveGeointTechnicalAnnexModel(input, model, visuals, document);
+    expect(annex.technicalMetadata.governedInputs?.analyses[0]).toMatchObject({ summary: governed.summary, text: governed.text,
+      sourceDependencies: governed.sourceDependencies, independentSources: governed.independentSources, provenance: governed.provenance });
+  });
+  test("persisted supported convergence reaches typed contract after human approval", () => {
+    const source: ConvergenceSourceEntry = { sourceKind: "FIELD_OBSERVATION", sourceId: "source-1", sourceEvidenceId: "ev-1",
+      traceabilityId: "trace-1", expedienteId: "project-1", geographyId: geography.geographyId,
+      coordinates: { lat: 21.885, lng: -102.285 }, epistemicRole: "HUMAN_OBSERVATION", validationStatus: "APPROVED",
+      lineage, sourceReferences: ["field:1"], phenomenonTags: ["access"], assertion: "PRESENT", acquisitionMode: "OBSERVED" };
+    const result = approveConvergenceResult(buildInstitutionalConvergence({ expedienteId: "project-1", geographyId: geography.geographyId,
+      phenomenon: "ACCESS_FEATURE_CORROBORATION", sources: [source, { ...source, sourceId: "source-2", sourceEvidenceId: "ev-2", traceabilityId: "trace-2", sourceReferences: ["field:2"] }] }), { reviewedBy: "human-1" });
+    const input = buildInstitutionalReportInput(readyProject({ convergences: [result] }));
+    expect(input.convergences).toEqual([result]);
+    expect(input.convergences?.[0].humanReviewStatus).toBe("APPROVED");
+    expect(buildInstitutionalReportInput(readyProject({ convergences: [{ ...result, humanReviewStatus: "PENDING_REVIEW" }] })).convergences).toEqual([]);
+  });
+  test("existing orchestration envelope enters documentary contract without a new correlation engine", () => {
+    const item = { itemId: "item-1", source: { descriptorId: "descriptor-1", sourceType: "FIELD", sourceId: "field-1",
+      authorityClassification: "AUTHORITATIVE", integrityClassification: "VERIFIED" }, eligibility: "ELIGIBLE" };
+    const input = buildInstitutionalReportInput(readyProject({ sourceOrchestrationItems: [item] }));
+    expect(input.sourceOrchestration?.items).toEqual([item]);
+    expect(input.sourceOrchestration?.eligibleItems).toBe(1);
+  });
+  test.each([{ cacheOnly: true }, { persistenceScope: "DEXIE" }, { persistenceScope: "LOCAL_CACHE" }])("local OSINT cache cannot be admitted %#", cache => {
+    const result = buildInstitutionalReportInput(readyProject({ osint: [{ id: "local-1", ...cache,
+      epistemicIntegrity: { acquisitionMode: "OBSERVED", acquisitionStatus: "ACQUIRED", isSimulated: false } }] }));
+    expect(result.osint).toEqual([]); expect(result.inputStates?.osint?.state).toBe("EXCLUDED");
+  });
+  test("missing, real empty and excluded OSINT remain different in documentary contract", () => {
+    expect(buildInstitutionalReportInput(readyProject()).inputStates?.osint?.state).toBe("MISSING");
+    expect(buildInstitutionalReportInput(readyProject({ osint: [] })).inputStates?.osint?.state).toBe("EMPTY_VALID");
+    const input = buildInstitutionalReportInput(readyProject({ osint: [{ id: "mock-1", sourceStatus: "MOCK" }] }));
+    expect(input.inputStates?.osint?.state).toBe("EXCLUDED");
+    const model = buildExecutiveGeointReportModel(input, {} as any);
+    expect(JSON.stringify(model)).not.toContain("inputStates");
+  });
+  test("evidence provenance and finding lineage survive the whole projection", () => {
+    const input = buildInstitutionalReportInput(reopenedInstitutionalPayload({ evidence: [{ ...traceablePhoto(), provenance: { sourceId: "origin" } }], findings: [traceableFinding()], approvedFindings: [traceableFinding()] }));
+    expect(input.evidence[0].provenance).toEqual({ sourceId: "origin" });
+    expect(input.findings).toHaveLength(1); expect(input.findings[0].lineage).toEqual(lineage);
+  });
+});
 
 describe("QA-08 phase 2B structured persistence round-trip", () => {
   const acquiredAt = "2026-09-22T12:00:00.000Z";
@@ -743,3 +806,6 @@ describe("ADR-020.33 F1 - Institutional report publication contract", () => {
     expect(input.published).toBe(false);
   });
 });
+
+// Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
+const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });
