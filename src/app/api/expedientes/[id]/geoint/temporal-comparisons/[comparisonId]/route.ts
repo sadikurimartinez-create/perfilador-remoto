@@ -1,63 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TemporalComparisonPersistenceService } from "@/services/geoint/temporalComparisonPersistenceService";
-import {
-  GeointGovernanceStatusValue,
-  normalizeGeointGovernanceStatus,
-} from "@/types/geointGovernance";
-
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string; comparisonId: string } }
-) {
-  try {
-    const expedienteId = params.id;
-    const comparisonId = params.comparisonId;
-    const body = await req.json();
-    const status = normalizeGeointGovernanceStatus(body.status) as GeointGovernanceStatusValue;
-    const comments = String(body.comments || body.validationComment || "").trim();
-    const reviewerId = String(body.reviewerId || body.validatedBy || "").trim();
-    const syntheticReviewerIds = new Set([
-      "ANALISTA",
-      "ANALISTA CEIPOL",
-      "US-CEIPOL-ANALISTA",
-      "UNAVAILABLE",
-    ]);
-
-    if (!expedienteId || !comparisonId) {
-      return NextResponse.json(
-        { error: "id y comparisonId son obligatorios" },
-        { status: 400 }
-      );
-    }
-
-    if (!reviewerId || syntheticReviewerIds.has(reviewerId.toUpperCase())) {
-      return NextResponse.json(
-        { error: "La identidad real de la persona revisora es obligatoria para registrar una validaci?n humana." },
-        { status: 400 }
-      );
-    }
-
-    const comparison = await TemporalComparisonPersistenceService.updateTemporalComparisonStatus(
-      expedienteId,
-      comparisonId,
-      status,
-      comments,
-      reviewerId
-    );
-
-    if (!comparison) {
-      return NextResponse.json(
-        { error: "Comparacion temporal no encontrada" },
-        { status: 404 }
-      );
-    }
-
+import { cookies } from "next/headers";
+import { executeInstitutionalTemporal } from "@/services/geoint/institutionalTemporalBoundary";
+export async function PATCH(req: NextRequest, { params }: { params: { id: string; comparisonId: string } }) {
+  if (req.headers.get('origin') !== new URL(req.url).origin || req.headers.get('sec-fetch-site') === 'cross-site') return NextResponse.json({ error: 'INVALID_ORIGIN' }, { status: 403 });
+  try { const body = await req.json();
+    const comparison = await executeInstitutionalTemporal({ session: cookies().get('ceipol_session')?.value, projectId: params.id, operation: 'REVIEW', comparisonId: params.comparisonId, status: body.status, comments: body.comments || body.validationComment });
+    if (!comparison) return NextResponse.json({ error: 'TEMPORAL_COMPARISON_NOT_FOUND' }, { status: 404 });
     return NextResponse.json({ comparison });
-  } catch (error: any) {
-    console.error("[API temporal-comparisons PATCH] Error:", error);
-    return NextResponse.json(
-      { error: "Error al actualizar comparacion temporal", details: error?.message },
-      { status: 500 }
-    );
-  }
+  } catch { return NextResponse.json({ error: 'TEMPORAL_BOUNDARY_DENIED' }, { status: 403 }); }
 }

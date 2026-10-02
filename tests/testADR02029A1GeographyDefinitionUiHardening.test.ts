@@ -146,8 +146,8 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
 
   test("TEST 18 project list enforces manually confirmed geography instead of photo minimums", () => {
     const source = readSource("src/components/ProjectList.tsx");
-    expect(source).toContain("if (!geometryConfirmed || !creationPreview.canConfirm)");
-    expect(source).toContain("const confirmedDraftGeography = draftGeography");
+    expect(source).toContain("if (!effectiveGeometryConfirmed || !creationPreview.canConfirm)");
+    expect(source).toContain("const confirmedDraftGeography = effectiveDraftGeography");
     expect(source).not.toContain("minimumRectorPhotoCount");
     expect(source).not.toContain("validRectorPhotoCount");
   });

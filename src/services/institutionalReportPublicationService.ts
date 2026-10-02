@@ -8,6 +8,7 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
 import { GeointEventOutboxService, type GeointOutboxEventPayload } from "@/services/geoint/geointEventOutboxService";
 import type { InstitutionalDocumentModel } from "@/utils/institutionalDocumentAssembly";
 import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
@@ -146,6 +147,7 @@ export class InstitutionalReportPublicationService {
     requestedAt?: string | null;
     publicationChannelOrType: string;
   }): Promise<InstitutionalReportPublication> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalPublicationRepository) return invokeInstitutionalReportBoundary("REQUEST_PUBLICATION", input);
     const currentCertification = await this.resolveCurrentCertification(input);
     const request = ReportCertificationGate.requestInstitutionalPublication({
       ...input,
@@ -167,6 +169,7 @@ export class InstitutionalReportPublicationService {
     publishedAt?: string | null;
     publicationChannelOrType: string;
   }): Promise<InstitutionalReportPublication> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalPublicationRepository) return invokeInstitutionalReportBoundary("PUBLISH", input);
     if (!isRealCertificationActorIdentity(input.publisherIdentity)) {
       throw new Error("INSTITUTIONAL_PUBLICATION_BLOCKED:PUBLISHER_IDENTITY_UNAVAILABLE");
     }
@@ -196,6 +199,7 @@ export class InstitutionalReportPublicationService {
     failureReason: string;
     failureAt?: string | null;
   }): Promise<InstitutionalReportPublication> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalPublicationRepository) return invokeInstitutionalReportBoundary("FAIL_PUBLICATION", input);
     const failed = ReportCertificationGate.failInstitutionalPublication(input);
     return this.repository.save(
       failed,
@@ -212,6 +216,7 @@ export class InstitutionalReportPublicationService {
     revocationReason: string;
     revokedAt?: string | null;
   }): Promise<InstitutionalReportPublication> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalPublicationRepository) return invokeInstitutionalReportBoundary("REVOKE_PUBLICATION", input);
     const publication = await this.repository.get(input.projectId, input.publicationId);
     if (!publication) throw new Error("PUBLICATION_REVOCATION_BLOCKED:PUBLICATION_NOT_FOUND");
     const revoked = ReportCertificationGate.revokeInstitutionalPublication({

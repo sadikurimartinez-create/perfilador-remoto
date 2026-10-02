@@ -78,8 +78,9 @@ describe("QA-06.03E territorial vertex reconciliation", () => {
 
   test("geographic entity service stores and updates vertex ids without real test writes", () => {
     expect(service).toContain("export async function saveGeographicEntity");
-    expect(service).toContain("const docRef = doc(colRef, entityId)");
-    expect(service).toContain("await setDoc(docRef");
+    expect(service).toContain("persistInstitutionalGeointEntity");
+    expect(service).toContain("kind:'GEOGRAPHIC',operation:'SAVE'");
+    expect(service).not.toContain("Fallback local");
     expect(service).toContain("export async function updateGeographicEntityMetadata");
     expect(service).toContain("export async function deleteGeographicEntity");
   });

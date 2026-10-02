@@ -1,0 +1,50 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function identity() {
+      return request.auth != null && request.auth.token.institutionalUserId is string
+        && request.auth.token.institutionalUserId.size() > 0
+        && request.auth.token.institutionalUserId.size() <= 123
+        && request.auth.uid == 'user:' + request.auth.token.institutionalUserId
+        && request.auth.token.role in ['USER', 'ADMIN', 'SUPER_ADMIN'];
+    }
+    function access(projectId, action) {
+      let g = firestore.get(/databases/(default)/documents/projectAccess/$(projectId)/members/$(request.auth.token.institutionalUserId)).data;
+      let p = firestore.get(/databases/(default)/documents/projects/$(projectId)).data;
+      return identity() && g.projectId == projectId && g.institutionalUserId == request.auth.token.institutionalUserId
+        && g.relation == 'ASSIGNED' && g.source == 'POSTGRESQL'
+        && g.policyVersion == 'EXPLICIT_ACTION_GRANT_V1' && g.revoked == false && g.revokedAt == null
+        && g.allowedActions is list && g.allowedActions.size() > 0
+        && g.allowedActions.hasOnly(['READ', 'WRITE', 'ANALYZE_SCINCE', 'GENERATE_REPORT'])
+        && action in g.allowedActions && g.synchronizedAt is int && g.expiresAt is int
+        && g.synchronizedAt <= request.time.toMillis() && g.expiresAt > request.time.toMillis()
+        && g.expiresAt - g.synchronizedAt <= 300000
+        && (!('deleted' in p) || p.deleted == false)
+        && (!('estado' in p) || p.estado != 'ARCHIVADO') && (!('status' in p) || p.status != 'ARCHIVADO');
+    }
+    function safeName(name) { return name != '.' && name != '..' && !name.matches('.*[\\\\].*'); }
+    match /projects/{projectId}/{photoId} {
+      allow read: if identity() && safeName(photoId) && photoId.matches('.*[.]jpg') && access(projectId, 'READ');
+      allow create: if resource == null && identity() && safeName(photoId) && photoId.matches('.*[.]jpg')
+        && access(projectId, 'WRITE') && request.resource.size > 0 && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+      // Existing evidence bytes are immutable to clients; deletion requires server saga/audit.
+      allow update, delete: if false;
+    }
+    match /projects/{projectId}/documents/{filename} {
+      allow read: if identity() && safeName(filename) && access(projectId, 'READ');
+      allow create: if resource == null && identity() && safeName(filename) && access(projectId, 'WRITE')
+        && request.resource.size > 0 && request.resource.size <= 50 * 1024 * 1024
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png', 'text/plain',
+          'text/csv', 'audio/mpeg', 'audio/wav', 'audio/ogg',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+      allow update, delete: if false;
+    }
+    match /projects/{projectId}/reports/{packageId}/{version}/{filename} {
+      allow read: if identity() && access(projectId, 'READ');
+      allow write: if false;
+    }
+    match /{path=**} { allow read, write: if false; }
+  }
+}

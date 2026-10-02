@@ -1,0 +1,28 @@
+jest.mock('@/services/institutionalVisualAuthorityService',()=>({verifyAuthorizedVisualBytes:jest.fn(async()=>({})),materializeAuthorizedVisualSnapshot:jest.fn(async()=>({}))}));
+jest.mock('server-only', () => ({}), { virtual: true });
+jest.mock('next/server', () => ({ NextResponse: { json: (body: any, init?: any) => ({ status: init?.status || 200, json: async () => body }) } }));
+jest.mock('next/headers', () => ({ cookies: () => ({ get: () => ({ value: 'offline-session' }) }) }));
+const mockAuthorize = jest.fn(); const mockPersist = jest.fn(); const mockDecision = jest.fn(); const mockRepository = jest.fn();
+jest.mock('@/services/institutionalReportSourceService', () => ({ resolveAuthorizedInstitutionalReportSource: (...args: any[]) => mockAuthorize(...args) }));
+jest.mock('@/services/institutionalReportPackageService', () => ({ InstitutionalReportPackageService: jest.fn(function () { return { persistGeneratedPackage: mockPersist }; }) }));
+jest.mock('@/services/institutionalReportAdminRepository', () => ({ AdminInstitutionalReportPackageRepository: jest.fn(function () { mockRepository(); }), AdminInstitutionalReportPackageStorage: jest.fn() }));
+jest.mock('@/services/institutionalReportDecisionBoundary', () => ({ executeInstitutionalReportDecision: (...args: any[]) => mockDecision(...args) }));
+jest.mock('@/services/institutionalSessionIdentityService', () => ({ resolveInstitutionalSessionIdentity: jest.fn(async () => ({ institutionalUserId: '1', username: 'fixture', role: 'USER' })) }));
+import { POST } from '../src/app/api/institutional/reports/route';
+import { encodeReportBoundaryValue, decodeReportBoundaryValue } from '../src/utils/institutionalReportBoundaryTransport';
+function request(operation = 'GENERATE', input: any = { projectId: 'A', generationContext: {} }, origin = 'https://offline.test') {
+ return new Request('https://offline.test/api/institutional/reports', { method: 'POST', headers: { origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ operation, input }) });
+}
+beforeEach(() => { jest.clearAllMocks(); mockAuthorize.mockReset(); mockAuthorize.mockResolvedValue({ projectId: 'A', sourceFingerprint: 'offline-authoritative-source' }); mockPersist.mockResolvedValue({ state: 'GENERATED' }); mockDecision.mockResolvedValue({ state: 'REQUESTED' }); });
+test('cross-origin report generation never reaches authority or persistence', async () => { expect((await POST(request('GENERATE', {}, 'https://foreign.test'))).status).toBe(403); expect(mockAuthorize).not.toHaveBeenCalled(); expect(mockPersist).not.toHaveBeenCalled(); });
+test.each(['MISSING_GRANT', 'REVOKED_GRANT', 'PG_UNAVAILABLE', 'ARCHIVED_PROJECT'])('denied authority %s prevents Admin persistence', async reason => { mockAuthorize.mockRejectedValue(new Error(reason)); expect((await POST(request())).status).toBe(403); expect(mockRepository).not.toHaveBeenCalled(); expect(mockPersist).not.toHaveBeenCalled(); expect(mockDecision).not.toHaveBeenCalled(); });
+test('malformed project path is denied before authority', async () => { expect((await POST(request('GENERATE', { projectId: 'A/other' }))).status).toBe(403); expect(mockAuthorize).not.toHaveBeenCalled(); });
+test('unknown operation is denied before authority', async () => { expect((await POST(request('WRITE_GRANTS'))).status).toBe(403); expect(mockAuthorize).not.toHaveBeenCalled(); });
+test('generation resolves its source before constructing persistence', async () => { expect((await POST(request())).status).toBe(200); expect(mockAuthorize).toHaveBeenCalledWith({ projectId: 'A', sessionToken: 'offline-session' }); expect(mockAuthorize.mock.invocationCallOrder[0]).toBeLessThan(mockRepository.mock.invocationCallOrder[0]); expect(mockPersist).toHaveBeenCalledTimes(1); });
+test('human decision receives the fresh server identity, not client role', async () => { const input = { projectId: 'A', certifierIdentity: { id: 'evil', role: 'SUPER_ADMIN' } }; expect((await POST(request('CERTIFY', input))).status).toBe(200); expect(mockDecision).toHaveBeenCalledWith('CERTIFY', input, { institutionalUserId: '1', username: 'fixture', role: 'USER' }, 'A', 'offline-authoritative-source'); });
+test('persistence rejection returns denial without successful state', async () => { mockPersist.mockRejectedValueOnce(new Error('LINEAGE_MISMATCH')); const response = await POST(request()); expect(response.status).toBe(403); expect(await response.json()).toEqual({ error: 'REPORT_BOUNDARY_DENIED' }); });
+test('nested binary report transport preserves bytes and MIME', async () => { const value = { blob: new Blob([Uint8Array.from([0, 5, 255])], { type: 'application/pdf' }), bytes: Uint8Array.from([1, 2]) }; const decoded = decodeReportBoundaryValue(await encodeReportBoundaryValue(value)); expect(Array.from(new Uint8Array(await decoded.blob.arrayBuffer()))).toEqual([0, 5, 255]); expect(decoded.blob.type).toBe('application/pdf'); expect(Array.from(decoded.bytes)).toEqual([1, 2]); });
+test.each([[-1], [256], [1.5], ['1'], null])('malformed binary payload %j is rejected', bytes => { expect(() => decodeReportBoundaryValue({ $binary: bytes })).toThrow('BINARY_INVALID'); });
+
+test.each(['invalid!','A===','AAAA=','AB=='])('malformed base64 %s is rejected',data=>{expect(()=>decodeReportBoundaryValue({$binaryBase64:data})).toThrow('BINARY_INVALID');});
+test('compact transport preserves a large fixture without recursive-regex overflow',async()=>{const bytes=new Uint8Array(2*1024*1024);bytes[bytes.length-1]=255;const encoded=await encodeReportBoundaryValue(bytes);expect(JSON.stringify(encoded).length).toBeLessThan(3*1024*1024);expect(decodeReportBoundaryValue(encoded)).toEqual(bytes);});

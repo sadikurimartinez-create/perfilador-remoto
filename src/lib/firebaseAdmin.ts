@@ -2,6 +2,7 @@ import "server-only";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 const APP_NAME = "institutional-admin";
 const EXPECTED_PROJECT_ID = "perfilador-remoto";
@@ -49,3 +50,8 @@ function adminApp() {
 
 export function getInstitutionalAdminAuth() { return getAuth(adminApp()); }
 export function getInstitutionalAdminDb() { return getFirestore(adminApp()); }
+export function getInstitutionalAdminBucket() {
+  const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "perfilador-remoto.firebasestorage.app";
+  if (!["perfilador-remoto.firebasestorage.app", "perfilador-remoto.appspot.com"].includes(bucket)) throw new Error("FIREBASE_ADMIN_BUCKET_MISMATCH");
+  return getStorage(adminApp()).bucket(bucket);
+}

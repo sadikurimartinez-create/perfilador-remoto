@@ -1,0 +1,9 @@
+jest.mock('server-only',()=>({}),{virtual:true});
+jest.mock('@/services/institutionalProjectAccessService',()=>({authorizeInstitutionalProjectAccess:jest.fn()}));
+jest.mock('@/lib/firebaseAdmin',()=>({getInstitutionalAdminDb:jest.fn()}));
+import { resolveAuthorizedInstitutionalReportSource } from '../src/services/institutionalReportSourceService';
+const authorize:any=async()=>({allowed:true,projectId:'A',actor:{institutionalUserId:'1',username:'Server',role:'USER'}});
+const dependencies=(project:any)=>({authorize,readProject:async()=>({id:'A',...project})});
+test('missing canonical territorial vertex requires explicit reconfirmation',async()=>{await expect(resolveAuthorizedInstitutionalReportSource({projectId:'A',sessionToken:'fixture'},dependencies({institutionalGeographicEntityIds:['v1'],canonicalGeography:{sourceRefs:[{type:'TERRITORIAL_VERTEX',id:'v2'}]}}))).rejects.toThrow('GEOGRAPHY_RECONFIRMATION_REQUIRED');});
+test('geographic source revision invalidates previous package fingerprint',async()=>{const a=await resolveAuthorizedInstitutionalReportSource({projectId:'A',sessionToken:'fixture'},dependencies({institutionalSourceRevision:1,institutionalGeographicEntityIds:['v1']}));const b=await resolveAuthorizedInstitutionalReportSource({projectId:'A',sessionToken:'fixture'},dependencies({institutionalSourceRevision:2,institutionalGeographicEntityIds:[]}));expect(a.sourceFingerprint).not.toBe(b.sourceFingerprint);});
+test('deleted root evidence cannot be readmitted to current report source',async()=>{const result=await resolveAuthorizedInstitutionalReportSource({projectId:'A',sessionToken:'fixture'},dependencies({deletedEvidenceIds:['p1'],photoEvidence:[{id:'p1',url:'fixture',summary:'deleted photo'}]}));expect(result.project.photoEvidence.some((item:any)=>item.id==='p1')).toBe(false);});

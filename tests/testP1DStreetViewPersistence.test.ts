@@ -1,3 +1,6 @@
+jest.mock('server-only',()=>({}),{virtual:true});
+jest.mock('firebase-admin/firestore',()=>({FieldValue:{serverTimestamp:()=> 'SERVER_TIME'}}));
+import { adminFixture } from './helpers/p8InstitutionalAdminFixture';
 import { GeointGovernanceStatus } from "../src/types/geointGovernance";
 import {
   classifyHistoricalStreetViewFinding,
@@ -15,6 +18,8 @@ const setDocMock = jest.fn(async (ref: { path: string }, data: any, options?: { 
 });
 const mockCookiesGet = jest.fn();
 const mockVerifySession = jest.fn();
+jest.mock('@/services/institutionalProjectAccessService',()=>({authorizeInstitutionalProjectAccess:jest.fn(async(input:any)=>mockVerifySession(input.sessionToken)?{allowed:true,projectId:input.projectId,actor:{institutionalUserId:'user-real-1',username:'perfilador.real',role:'ADMIN'}}:{allowed:false})}));
+jest.mock('@/lib/firebaseAdmin',()=>({getInstitutionalAdminDb:()=>{const store=adminFixture({'projects/exp-p1d':{deleted:false,estado:'ABIERTO'},...Object.fromEntries(firestoreDocs)});const run=store.db.runTransaction;store.db.runTransaction=async(work:any)=>{const result=await run(work);for(const [path,data]of store.entries())firestoreDocs.set(path,data);return result;};return store.db;}}));
 
 jest.mock("firebase/firestore", () => ({
   collection: jest.fn((...parts: string[]) => ({ path: parts.slice(1).join("/") })),
@@ -72,6 +77,7 @@ const completeFinding = (overrides: Partial<StreetViewFinding> = {}): StreetView
 
 const requestWithBody = (body: any) =>
   ({
+    url:"https://offline.test/api/streetview/findings", headers:new Headers({origin:"https://offline.test"}),
     json: async () => body,
   }) as any;
 
@@ -133,14 +139,14 @@ describe("P1-D - Street View persistence", () => {
     expect(setDocMock).not.toHaveBeenCalled();
   });
 
-  test("T4 sesion invalida devuelve 401", async () => {
+  test("T4 identidad institucional invalida devuelve 403", async () => {
     mockVerifySession.mockReturnValue(null);
 
     const response = await POST(requestWithBody(completeFinding()));
     const body = await responseJson(response);
 
-    expect(response.status).toBe(401);
-    expect(body.error).toBe("INVALID_SESSION");
+    expect(response.status).toBe(403);
+    expect(body.error).toBe("GEOINT_ENTITY_ACCESS_DENIED");
     expect(setDocMock).not.toHaveBeenCalled();
   });
 
@@ -261,17 +267,15 @@ describe("P1-D - Street View persistence", () => {
     expect(source).not.toContain("selectedCapture.geometry?.lng || 0");
   });
 
-  test("T12 idempotencia mantiene contrato actual con id deterministico y merge", async () => {
-    await POST(requestWithBody(completeFinding()));
-    await POST(requestWithBody(completeFinding({ descripcion: "segunda escritura" })));
-
-    expect(firestoreDocs.size).toBe(2);
-    expect(firestoreDocs.get(subcollectionPath("exp-p1d", "sv-p1d-1")).descripcion).toBe("segunda escritura");
-    expect(setDocMock).toHaveBeenCalledWith(
-      { path: subcollectionPath("exp-p1d", "sv-p1d-1") },
-      expect.objectContaining({ id: "sv-p1d-1" }),
-      { merge: true }
-    );
+  test("T12 idempotencia conserva entidad, mirror, outbox y auditoria sin duplicados", async () => {
+    const payload=completeFinding({descripcion:"escritura deterministica"});
+    const first=await POST(requestWithBody(payload));expect(first.status).toBe(201);
+    const before=[...firestoreDocs.entries()];const second=await POST(requestWithBody(payload));expect(second.status).toBe(201);
+    expect([...firestoreDocs.entries()]).toEqual(before);
+    expect([...firestoreDocs.keys()].filter(path=>path.includes("streetview_findings/"))).toHaveLength(2);
+    expect(firestoreDocs.get(subcollectionPath("exp-p1d","sv-p1d-1")).descripcion).toBe("escritura deterministica");
+    expect(setDocMock).not.toHaveBeenCalled();
+    expect([...firestoreDocs.keys()].filter(path=>path.startsWith("audit_logs/"))).toHaveLength(1);
   });
 
   test("T13 P4-C UI envia traceabilityId canonico antes de APPROVED_EVIDENCE", () => {
@@ -383,9 +387,12 @@ describe("P1-D - Street View persistence", () => {
     expect(approveBlock).toContain("if (lat === null || lng === null)");
     expect(approveBlock).not.toContain("|| 21.885");
     expect(approveBlock).not.toContain("|| -102.291");
-    expect(route).toContain("resolveStreetViewSessionIdentity");
-    expect(route).toContain("usuarioRevision: identity.username");
-    expect(route).toContain("validatedBy: streetViewValidatedBy(identity)");
+    expect(route).toContain("executeInstitutionalGeointEntity");
+    expect(route).not.toContain("resolveStreetViewSessionIdentity");
+    const boundary=fs.readFileSync(path.join(process.cwd(),"src/services/institutionalGeointEntityBoundary.ts"),"utf8");
+    expect(boundary).toContain("authorizeInstitutionalProjectAccess");
+    expect(boundary).toContain("usuarioRevision:access.actor.username");
+    expect(boundary).toContain("id:access.actor.institutionalUserId");
   });
 
   test("T19 P4-C report/export conserva traceabilityId real de Street View", () => {

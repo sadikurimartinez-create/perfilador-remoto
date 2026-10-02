@@ -1,5 +1,4 @@
-import { getDb } from "@/lib/firebase";
-import { collection, deleteDoc, doc, getDocs, query, orderBy, setDoc, updateDoc } from "firebase/firestore";
+import { persistInstitutionalGeointEntity } from "@/lib/institutionalGeointEntityActions";
 
 export interface GeographicEntity {
   id?: string;
@@ -28,49 +27,8 @@ export interface GeographicEntity {
  * SIN interactuar con Firebase Storage ni requerir subida de archivos binarios.
  */
 export async function saveGeographicEntity(entity: GeographicEntity): Promise<string> {
-  const entityId = entity.id || `geo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  try {
-    const firestore = getDb();
-    const colRef = collection(firestore, "projects", entity.projectId, "geographicEntities");
-    const docRef = doc(colRef, entityId);
-    await setDoc(docRef, {
-      ...entity,
-      id: entityId,
-      createdAt: entity.createdAt || Date.now(),
-    });
-    return entityId;
-  } catch (err) {
-    console.warn("[GeographicEntityService] Fallback local ante almacenamiento offline/cuota:", err);
-    return entityId;
-  }
+ const result=await persistInstitutionalGeointEntity({projectId:entity.projectId,kind:'GEOGRAPHIC',operation:'SAVE',id:entity.id,data:entity});return result.id;
 }
-
-/**
- * Recupera las entidades geográficas puras asociadas a un proyecto de Firestore.
- */
-export async function getGeographicEntities(projectId: string): Promise<GeographicEntity[]> {
-  try {
-    const firestore = getDb();
-    const colRef = collection(firestore, "projects", projectId, "geographicEntities");
-    const q = query(colRef, orderBy("createdAt", "asc"));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ ...d.data(), id: d.id } as GeographicEntity));
-  } catch (err) {
-    console.warn("[GeographicEntityService] Error al cargar entidades geográficas:", err);
-    return [];
-  }
-}
-
-export async function updateGeographicEntityMetadata(
-  projectId: string,
-  entityId: string,
-  metadata: GeographicEntity["metadata"]
-): Promise<void> {
-  const firestore = getDb();
-  await updateDoc(doc(firestore, "projects", projectId, "geographicEntities", entityId), { metadata });
-}
-
-export async function deleteGeographicEntity(projectId: string, entityId: string): Promise<void> {
-  const firestore = getDb();
-  await deleteDoc(doc(firestore, "projects", projectId, "geographicEntities", entityId));
-}
+export async function getGeographicEntities(projectId:string):Promise<GeographicEntity[]> {return await persistInstitutionalGeointEntity({projectId,kind:'GEOGRAPHIC',operation:'LIST'}) as GeographicEntity[];}
+export async function updateGeographicEntityMetadata(projectId:string,entityId:string,metadata:GeographicEntity['metadata']):Promise<void>{await persistInstitutionalGeointEntity({projectId,kind:'GEOGRAPHIC',operation:'UPDATE',id:entityId,data:{metadata}});}
+export async function deleteGeographicEntity(projectId:string,entityId:string):Promise<void>{await persistInstitutionalGeointEntity({projectId,kind:'GEOGRAPHIC',operation:'DELETE',id:entityId});}

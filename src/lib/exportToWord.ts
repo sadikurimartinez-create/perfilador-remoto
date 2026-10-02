@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
 import { buildInstitutionalGenerationModels } from "@/utils/institutionalGenerationModels";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 
@@ -907,6 +908,16 @@ async function resolveInstitutionalVisualAssets(
 
 async function buildInstitutionalGenerationContext(payload: any, projectName: string, reportNumber?: string, user?: any) {
   const { institutionalReportInput, generatedAt, numeroExpediente, projectId, executiveModel, visualComposition, principalTerritorialMapSpec, documentModel, denueAnalyticalPublication } = await buildInstitutionalGenerationModels(payload, projectName, reportNumber, user);
+  if (typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)) {
+    const visualAuthority = await invokeInstitutionalReportBoundary("MATERIALIZE_VISUALS", { projectId, generatedAt });
+    documentModel.visualPlacements = documentModel.visualPlacements.map(placement => ({ ...placement,
+      assetState: visualAuthority.visualAssetsById[placement.visualId]?.data ? "ASSET_RENDERED" : "ASSET_MISSING" }));
+    return { lineage: undefined as Awaited<ReturnType<typeof buildInstitutionalPackageLineage>> | undefined,
+      annexModel: undefined as ReturnType<typeof buildExecutiveGeointTechnicalAnnexModel> | undefined,
+      sourceAuthority: payload.sourceAuthority, institutionalReportInput, generatedAt, numeroExpediente, projectId,
+      visualComposition, executiveModel, documentModel, principalTerritorialMapSpec,
+      fingerprintScope: `institutional-report:${++institutionalGenerationSequence}`, denueAnalyticalPublication, ...visualAuthority };
+  }
   const preResolvedAssets: Record<string, any> = {};
   if (institutionalReportInput.denueAnalyticalDocument.status === "READY") {
     const analyticalUnit = institutionalReportInput.denueAnalyticalDocument.unit;
@@ -952,6 +963,7 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
 
 async function hydrateTechnicalAnnexVisualAssets(generationContext: any, annexModel: any) {
   const visualAssetsById = generationContext.visualAssetsById;
+  if (generationContext.visualAuthority) return visualAssetsById;
   for (const section of annexModel.sections.filter((item: any) => item.sectionId === "field-photographs" || item.sectionId === "street-view")) {
     for (const record of section.records) {
       if (!record.visualReference || visualAssetsById[record.recordId]) {

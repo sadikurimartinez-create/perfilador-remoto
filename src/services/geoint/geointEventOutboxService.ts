@@ -46,14 +46,14 @@ export interface PreparedGeointOutboxEvent {
   payload: GeointOutboxEventPayload;
 }
 
-const RETRYABLE_OUTBOX_STATUSES: GeointEventOutboxEntry["status"][] = ["CREATED", "QUEUED"];
-const TERMINAL_OUTBOX_STATUSES: GeointEventOutboxEntry["status"][] = ["COMPLETED", "FAILED", "REJECTED"];
+export const RETRYABLE_OUTBOX_STATUSES: GeointEventOutboxEntry["status"][] = ["CREATED", "QUEUED"];
+export const TERMINAL_OUTBOX_STATUSES: GeointEventOutboxEntry["status"][] = ["COMPLETED", "FAILED", "REJECTED"];
 
 function buildDeterministicEventId(fingerprint: string): string {
   return `evt-${fingerprint.substring(0, 16)}`;
 }
 
-function normalizeOutboxEntry(entry: GeointEventOutboxEntry): GeointEventOutboxEntry {
+export function normalizeOutboxEntry(entry: GeointEventOutboxEntry): GeointEventOutboxEntry {
   const failures = typeof entry.retryCount === "number" ? entry.retryCount : 0;
   return {
     ...entry,
@@ -91,7 +91,8 @@ export class GeointEventOutboxService {
       get: (ref: any) => Promise<{ exists: () => boolean; data: () => any }>;
     },
     db: any,
-    payload: GeointOutboxEventPayload
+    payload: GeointOutboxEventPayload,
+    documentFactory: (db: any, ...segments: string[]) => any = doc
   ): Promise<PreparedGeointOutboxEvent> {
     const fingerprint = GeointEventFingerprintService.generateEventFingerprint({
       expedienteId: payload.expedienteId,
@@ -100,14 +101,14 @@ export class GeointEventOutboxService {
       entityId: payload.entityId,
     });
 
-    const fingerprintRef = doc(db, "geoint_event_fingerprints", fingerprint);
+    const fingerprintRef = documentFactory(db, "geoint_event_fingerprints", fingerprint);
     const fpSnap = await transaction.get(fingerprintRef);
     const existingFingerprint = fpSnap.exists()
       ? (fpSnap.data() as EventFingerprintRecord)
       : null;
     const eventId = existingFingerprint?.eventId || buildDeterministicEventId(fingerprint);
     const outboxId = `outbox-${eventId}`;
-    const outboxDocRef = doc(db, "geoint_event_outbox", outboxId);
+    const outboxDocRef = documentFactory(db, "geoint_event_outbox", outboxId);
     const outboxSnap = await transaction.get(outboxDocRef);
 
     if (outboxSnap.exists()) {
@@ -165,13 +166,14 @@ export class GeointEventOutboxService {
     transaction: {
       set: (ref: any, data: any, options?: any) => void;
     },
-    prepared: PreparedGeointOutboxEvent
+    prepared: PreparedGeointOutboxEvent,
+    timestampFactory: () => any = serverTimestamp
   ): GeointEventOutboxEntry {
     if (prepared.exists) return prepared.entry;
 
     transaction.set(prepared.outboxDocRef, {
       ...prepared.entry,
-      createdAt: serverTimestamp(),
+      createdAt: timestampFactory(),
     });
 
     transaction.set(prepared.fingerprintRef, {
@@ -182,7 +184,7 @@ export class GeointEventOutboxService {
       eventType: prepared.payload.eventType,
       entityId: prepared.payload.entityId,
       status: prepared.payload.status,
-      createdAt: serverTimestamp(),
+      createdAt: timestampFactory(),
     });
 
     return prepared.entry;

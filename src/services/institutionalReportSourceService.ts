@@ -24,8 +24,8 @@ const defaults: Dependencies = {
     const reference = getInstitutionalAdminDb().collection("projects").doc(id);
     const snapshot = await reference.get();
     if (!snapshot.exists) return null;
-    const [photos, documents] = await Promise.all([reference.collection("photos").get(), reference.collection("documents").get()]);
-    return { ...snapshot.data(), id: snapshot.id,
+    const [photos, documents, geographicEntities] = await Promise.all([reference.collection("photos").get(), reference.collection("documents").get(), reference.collection("geographicEntities").get()]);
+    return { ...snapshot.data(), id: snapshot.id, institutionalGeographicEntityIds: geographicEntities.docs.map(doc => doc.id).sort(),
       album: photos.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter((item: Record<string, unknown>) => item.deleted !== true),
       documents: documents.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter((item: Record<string, unknown>) => item.deleted !== true) };
   },
@@ -44,6 +44,7 @@ export async function resolveAuthorizedInstitutionalReportSource(input: { projec
   const stored = await deps.readProject(access.projectId);
   if (!stored || stored.id !== access.projectId || (stored.deleted !== undefined && stored.deleted !== false) ||
     stored.status === "ARCHIVADO" || stored.estado === "ARCHIVADO") throw new Error("INSTITUTIONAL_REPORT_SOURCE_UNAVAILABLE");
+  if(Array.isArray(stored.institutionalGeographicEntityIds) && stored.canonicalGeography?.sourceRefs?.some((reference:any)=>!stored.institutionalGeographicEntityIds.includes(reference.id)))throw new Error('INSTITUTIONAL_GEOGRAPHY_RECONFIRMATION_REQUIRED');
   const project = projectPersistedInstitutionalInputs(stored).project;
   if (project.canonicalGeography) project.canonicalGeography = deserializeCanonicalGeographyFromFirestore(project.canonicalGeography);
   const album = (project.album || []).map((photo: any) => {
@@ -56,6 +57,8 @@ export async function resolveAuthorizedInstitutionalReportSource(input: { projec
     return { ...photo, ...normalized.fields, previewUrl: photo.previewUrl || photo.url || "",
       evidenceClass: normalized.evidenceClass };
   });
+  const removed=new Set(Array.isArray(stored.deletedEvidenceIds)?stored.deletedEvidenceIds:[]);
+  project.photoEvidence=(project.photoEvidence || []).filter((photo:any)=>![photo.id,photo.evidenceId,photo.sourceEvidenceId].some(id=>removed.has(id)));
   project.photoEvidence = mergeAdditionalPhotoEvidence([...project.photoEvidence || [], ...album], project.documents || [], {
     projectId: access.projectId, geographyId: project.canonicalGeography?.geographyId,
     geographyType: project.canonicalGeography?.type });

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { StreetViewFindingService } from "@/services/streetViewFindingService";
+import { executeInstitutionalGeointEntity } from "@/services/institutionalGeointEntityBoundary";
 import {
   isSyntheticStreetViewReviewer,
-  resolveStreetViewSessionIdentity,
-  streetViewValidatedBy,
 } from "@/utils/streetViewApiAuth";
 
 function streetViewPostStatus(message: string): number {
+  if (message.startsWith("GEOINT_ENTITY_ACCESS_DENIED")) return 403;
   if (message.startsWith("STREETVIEW_FINDING_GEO_REQUIRED")) return 400;
   if (message.startsWith("STREETVIEW_FINDING_TRACEABILITY_INCOMPLETE")) return 400;
   return 500;
@@ -15,6 +14,7 @@ function streetViewPostStatus(message: string): number {
 
 export async function POST(req: NextRequest) {
   try {
+    if(req.headers.get("origin")!==new URL(req.url).origin || req.headers.get("sec-fetch-site")==="cross-site")return NextResponse.json({error:"INVALID_ORIGIN"},{status:403});
     const body = await req.json();
     const expedienteId = body.expedienteId || body.projectId;
     const reviewerFromClient = body.usuarioRevision || body.validatedBy || body.createdBy;
@@ -33,22 +33,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const identity = resolveStreetViewSessionIdentity(cookies().get("ceipol_session")?.value);
-    if (!identity) {
-      return NextResponse.json(
-        { error: "INVALID_SESSION" },
-        { status: 401 }
-      );
-    }
-
-    const finding = await StreetViewFindingService.createStreetViewFinding({
-      ...body,
-      expedienteId,
-      estado: body.estado || "PENDIENTE_REVISION",
-      createdBy: identity.username,
-      usuarioRevision: identity.username,
-      validatedBy: streetViewValidatedBy(identity),
-    });
+    const finding = await executeInstitutionalGeointEntity(cookies().get("ceipol_session")?.value,
+      {projectId:expedienteId,kind:'STREETVIEW',operation:'SAVE',id:body.id||body.captureId,data:body});
 
     return NextResponse.json(
       {

@@ -19,7 +19,9 @@ const evidence: any[] = [];
 const clone = <T>(x: T): T => structuredClone(x);
 const artifactRoot = process.env.P7_ARTIFACT_ROOT || "artifacts/P7-offline";
 const writeFixture = (mode: P7Mode) => process.env.P7_WRITE_FIXTURES === "1" && (!process.env.P7_WRITE_MODE || process.env.P7_WRITE_MODE === mode);
-beforeAll(async () => { if (process.env.P7_WRITE_FIXTURES === "1") mkdirSync(resolve(artifactRoot), { recursive: true }); for (const mode of modes) fixtures.push(await p7Fixture(mode)); });
+// Three complete DOCX/PDF fixture builds run sequentially on Windows/OneDrive.
+// Keep individual assertion timeouts unchanged; budget the aggregate setup.
+beforeAll(async () => { if (process.env.P7_WRITE_FIXTURES === "1") mkdirSync(resolve(artifactRoot), { recursive: true }); for (const mode of modes) fixtures.push(await p7Fixture(mode)); }, 600000);
 afterAll(() => {
   if (process.env.P7_WRITE_FIXTURES === "1") writeFileSync(resolve(artifactRoot, "e2e-evidence.json"), JSON.stringify(evidence, null, 2));
 });

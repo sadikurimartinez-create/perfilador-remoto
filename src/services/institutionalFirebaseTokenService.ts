@@ -3,6 +3,8 @@ import { verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
 import { getInstitutionalAdminAuth } from "@/lib/firebaseAdmin";
 import { institutionalFirebaseIdentity, type InstitutionalIdentity } from "@/utils/institutionalFirebaseIdentity";
+import { refreshInstitutionalAuthorization } from "@/services/institutionalAuthorizationProjectionRepository";
+import type { InstitutionalActor } from "@/types/institutionalProjectAccess";
 
 export class FirebaseBridgeError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -21,6 +23,7 @@ type Dependencies = {
   resolve: (username: string) => Promise<InstitutionalIdentity | null>;
   mint: (uid: string, claims: { role: string; institutionalUserId: string }) => Promise<string>;
   now: () => number;
+  synchronize: (actor: InstitutionalActor) => Promise<unknown>;
 };
 
 export async function issueInstitutionalFirebaseToken(cookie: string | undefined, overrides: Partial<Dependencies> = {}) {
@@ -30,7 +33,7 @@ export async function issueInstitutionalFirebaseToken(cookie: string | undefined
       const auth = getInstitutionalAdminAuth();
       return auth.createCustomToken(uid, claims);
     },
-    now: Date.now, ...overrides,
+    now: Date.now, synchronize: refreshInstitutionalAuthorization, ...overrides,
   };
   if (!cookie) throw new FirebaseBridgeError(401, "INVALID_SESSION");
   const session = deps.verify(cookie);
@@ -45,5 +48,7 @@ export async function issueInstitutionalFirebaseToken(cookie: string | undefined
   let identity;
   try { identity = institutionalFirebaseIdentity(user); }
   catch { throw new FirebaseBridgeError(403, "INSTITUTIONAL_IDENTITY_INVALID"); }
+  await deps.synchronize({ institutionalUserId: identity.claims.institutionalUserId,
+    username: user.username, role: identity.claims.role as InstitutionalActor["role"] });
   return deps.mint(identity.uid, identity.claims);
 }

@@ -21,12 +21,30 @@ function getFirestoreInstance() {
   return typeof window === "undefined" ? getFirebaseServerDb() : getDb();
 }
 
+export interface TemporalPersistencePort {
+  db: any;
+  document(db: any, ...segments: string[]): any;
+  transaction(db: any, work: (transaction: any) => Promise<void>): Promise<void>;
+  enqueue(transaction: any, db: any, payload: any): Promise<any>;
+}
+function persistencePort(override?: TemporalPersistencePort): TemporalPersistencePort {
+  return override || { db: getFirestoreInstance(), document: doc,
+    transaction: runTransaction as any, enqueue: GeointEventOutboxService.enqueueEventInTransaction.bind(GeointEventOutboxService) };
+}
+async function temporalRequest(projectId: string, method: string, body?: unknown, comparisonId?: string) {
+  const path = `/api/expedientes/${encodeURIComponent(projectId)}/geoint/temporal-comparisons${comparisonId ? '/'+encodeURIComponent(comparisonId) : ''}`;
+  const response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  if (!response.ok) throw new Error('TEMPORAL_BOUNDARY_DENIED');
+  return response.json();
+}
+
 export class TemporalComparisonPersistenceService {
   static async saveTemporalComparison(
     expedienteId: string,
-    record: TemporalComparisonRecord
+    record: TemporalComparisonRecord, port?: TemporalPersistencePort
   ): Promise<TemporalComparisonRecord> {
-    const db = getFirestoreInstance();
+    if (typeof window !== "undefined" && !port) return (await temporalRequest(expedienteId, "POST", record)).comparison;
+    const persistence = persistencePort(port); const db = persistence.db;
     const normalizedRecord: TemporalComparisonRecord = {
       ...record,
       expedienteId,
@@ -37,11 +55,11 @@ export class TemporalComparisonPersistenceService {
       updatedAt: new Date().toISOString(),
     };
 
-    const subcolRef = doc(db, "projects", expedienteId, "geoint_temporal_comparisons", normalizedRecord.id);
-    const rootRef = doc(db, "geoint_temporal_comparisons", normalizedRecord.id);
+    const subcolRef = persistence.document(db, "projects", expedienteId, "geoint_temporal_comparisons", normalizedRecord.id);
+    const rootRef = persistence.document(db, "geoint_temporal_comparisons", normalizedRecord.id);
 
-    await runTransaction(db, async (transaction) => {
-      await GeointEventOutboxService.enqueueEventInTransaction(transaction, db, {
+    await persistence.transaction(db, async (transaction) => {
+      await persistence.enqueue(transaction, db, {
         eventType: "TEMPORAL_COMPARISON_CREATED",
         expedienteId,
         traceabilityId: normalizedRecord.traceabilityId,
@@ -69,17 +87,18 @@ export class TemporalComparisonPersistenceService {
     comparisonId: string,
     status: GeointGovernanceStatusValue,
     comments: string,
-    reviewerId: string
+    reviewerId: string, port?: TemporalPersistencePort
   ): Promise<TemporalComparisonRecord | null> {
-    const db = getFirestoreInstance();
+    if (typeof window !== "undefined" && !port) return (await temporalRequest(expedienteId, "PATCH", { status, comments }, comparisonId)).comparison;
+    const persistence = persistencePort(port); const db = persistence.db;
     const now = new Date().toISOString();
     const normalizedStatus = normalizeGeointGovernanceStatus(status);
-    const subcolRef = doc(db, "projects", expedienteId, "geoint_temporal_comparisons", comparisonId);
-    const rootRef = doc(db, "geoint_temporal_comparisons", comparisonId);
+    const subcolRef = persistence.document(db, "projects", expedienteId, "geoint_temporal_comparisons", comparisonId);
+    const rootRef = persistence.document(db, "geoint_temporal_comparisons", comparisonId);
     const eventType = normalizedStatus === GeointGovernanceStatus.APPROVED_EVIDENCE ? "HUMAN_APPROVED" : "HUMAN_REJECTED";
     let updated: TemporalComparisonRecord | null = null;
 
-    await runTransaction(db, async (transaction) => {
+    await persistence.transaction(db, async (transaction) => {
       const existingSnap = await transaction.get(subcolRef);
       const existing = existingSnap.exists()
         ? (existingSnap.data() as TemporalComparisonRecord)
@@ -102,7 +121,7 @@ export class TemporalComparisonPersistenceService {
         updatedAt: now,
       };
 
-      await GeointEventOutboxService.enqueueEventInTransaction(transaction, db, {
+      await persistence.enqueue(transaction, db, {
         eventType,
         expedienteId,
         traceabilityId: existing.traceabilityId,
@@ -129,6 +148,10 @@ export class TemporalComparisonPersistenceService {
     expedienteId: string,
     status?: GeointGovernanceStatusValue
   ): Promise<TemporalComparisonRecord[]> {
+    if (typeof window !== "undefined") {
+      const records = (await temporalRequest(expedienteId, 'GET')).comparisons as TemporalComparisonRecord[];
+      return status ? records.filter(record => normalizeGeointGovernanceStatus(record.analystValidation?.status) === normalizeGeointGovernanceStatus(status)) : records;
+    }
     const db = getFirestoreInstance();
     const records: TemporalComparisonRecord[] = [];
     const seen = new Set<string>();

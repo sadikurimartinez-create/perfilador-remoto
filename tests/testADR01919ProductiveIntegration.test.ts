@@ -1,3 +1,4 @@
+jest.mock("server-only", () => ({}), { virtual: true });
 import fs from "fs";
 import path from "path";
 import { logGeointEvent } from "../src/services/geoint/logGeointEvent";
@@ -83,6 +84,7 @@ jest.mock("@/lib/firebaseServer", () => ({
 
 jest.mock("@/lib/firebase", () => ({
   getDb: jest.fn(() => ({})),
+  getStorageInstance: jest.fn(() => ({})),
 }));
 
 jest.mock("file-saver", () => ({

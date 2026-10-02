@@ -1,5 +1,10 @@
 "use client";
+import { persistInstitutionalSweep } from "@/lib/institutionalSweepActions";
+import { mutateInstitutionalLifecycle, restoreInstitutionalTrash } from "@/lib/institutionalLifecycleActions";
+import { canWriteInstitutionalProject, readInstitutionalCollection } from "@/lib/institutionalCollectionActions";
+import { appendInstitutionalOperationalAudit } from "@/lib/institutionalAuditActions";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { reserveInstitutionalProjectCreation, completeInstitutionalProjectCreation } from "@/lib/institutionalProjectCreationActions";
 import type { DatosGobMxResult } from "@/lib/datosGobMx";
 import { ImageDeletionGovernanceService } from "@/utils/imageDeletionGovernanceService";
 import { EvidenceRelationship } from "@/utils/evidenceRelationshipEngine";
@@ -10,6 +15,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from "react";
@@ -38,7 +44,7 @@ import {
 } from "@/utils/geointSweepLifecycle";
 import imageCompression from "browser-image-compression";
 import { useAuth } from "@/context/AuthContext";
-import { saveGeographicEntity, getGeographicEntities } from "@/services/geographicEntityService";
+import { saveGeographicEntity, getGeographicEntities, deleteGeographicEntity } from "@/services/geographicEntityService";
 import type { CanonicalLineageNode, LineageStatus } from "@/utils/evidenceLineage";
 import {
   adaptLegacyProjectGeography,
@@ -611,6 +617,8 @@ function sanitizeFirestorePayload(value: any): any {
   return value;
 }
 export function ProjectProvider({ children }: { children: ReactNode }) {
+  const pendingCreation = useRef<{ projectId: string; expiresAt: number } | null>(null);
+  const pendingRecoveryCreation = useRef<{ projectId: string; expiresAt: number } | null>(null);
   const { user } = useAuth();
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
@@ -633,31 +641,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     details: string;
   }) => {
     try {
-      const firestore = getDb();
-      const ip = await getClientIp();
-      const now = new Date();
-      const dateStr = now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
-      const timeStr = now.toLocaleTimeString("es-MX", { hour12: false });
-      
-      const auditCol = collection(firestore, "audit_logs");
-      await addDoc(auditCol, {
-        user: user?.username || "Usuario Local",
-        userName: user?.name || "Usuario Local",
-        userRole: user?.role || "USER",
-        action: params.action,
-        module: params.module,
-        projectId: params.projectId || "",
-        projectName: params.projectName || "",
-        numeroExpediente: params.numeroExpediente || "",
-        ceipolId: params.ceipolId || "",
-        perfiladorIniciales: params.perfiladorIniciales || "",
-        ip,
-        timestamp: Date.now(),
-        date: dateStr,
-        time: timeStr,
-        result: params.result || "ÉXITO",
-        details: params.details
-      });
+      await appendInstitutionalOperationalAudit({ ...params, projectId: params.projectId || "" });
     } catch (err) {
       console.error("Error writing audit log:", err);
     }
@@ -678,9 +662,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }) => {
     try {
       const firestore = getDb();
-      const counterRef = doc(firestore, "counters", "projects");
-      const projectCol = collection(firestore, "projects");
-      const projectDocRef = doc(projectCol);
+      if (!pendingCreation.current || pendingCreation.current.expiresAt <= Date.now()) {
+        pendingCreation.current = await reserveInstitutionalProjectCreation();
+      }
+      const projectDocRef = { id: pendingCreation.current.projectId };
       if (canonicalGeography && canonicalGeography.validationStatus !== "VALID") {
         throw new Error("La geografía canónica del expediente está incompleta o es inválida.");
       }
@@ -719,43 +704,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             geographyValidationStatus: "INVALID" as const,
           };
       
-      await runTransaction(firestore, async (transaction) => {
-        const counterSnap = await transaction.get(counterRef);
-        let currentCount = 0;
-        if (counterSnap.exists()) {
-          currentCount = counterSnap.data().count || 0;
+      let savedCreation: Record<string, any>;
+      try {
+        savedCreation = await completeInstitutionalProjectCreation(projectDocRef.id, {
+          name: nombre.trim() || "Sin nombre", geometryType, descripcion: descripcion || "", canonicalGeography: serializedCanonicalGeography,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("PROVISIONING_REQUIRED")) {
+          throw new Error(`El ID ${projectDocRef.id} está reservado. Requiere el aprovisionamiento institucional explícito antes de crear el expediente. Puede reintentar con este mismo ID después de la autorización.`);
         }
-        const nextCount = currentCount + 1;
-        
-        const now = new Date();
-        const day = now.getDate().toString().padStart(2, "0");
-        const month = (now.getMonth() + 1).toString().padStart(2, "0");
-        const year = now.getFullYear();
-        ceipolId = `CEIPOL/${nextCount.toString().padStart(6, "0")}/${day}/${month}/${year}`;
-        numeroExpedienteFields = buildNumeroExpedienteFields({
-          createdAt: now,
-          sequence: nextCount,
-          perfiladorIniciales,
-        });
-
-        transaction.set(counterRef, { count: nextCount });
-
-        transaction.set(projectDocRef, {
-          ceipolId,
-          ...numeroExpedienteFields,
-          name: nombre.trim() || "Sin nombre",
-          geometryType,
-          descripcion: descripcion || "",
-          createdAt: Date.now(),
-          createdBy: user?.username || "Usuario Local",
-          lockedBy: null,
-          photoCount: 0,
-          estado: "ABIERTO",
-          canonicalHypothesis: null,
-          hypothesisRequirementSatisfied: false,
-          ...geographyPersistence,
-        });
-      });
+        throw error;
+      }
+      ceipolId = savedCreation.ceipolId;
+      numeroExpedienteFields = {
+        numeroExpediente: savedCreation.numeroExpediente,
+        numeroExpedienteAsignadoAt: savedCreation.numeroExpedienteAsignadoAt,
+        numeroExpedienteSequence: savedCreation.numeroExpedienteSequence,
+        perfiladorIniciales: savedCreation.perfiladorIniciales,
+        numeroExpedienteVersion: savedCreation.numeroExpedienteVersion,
+      };
+      pendingCreation.current = null;
 
       const newProjectState = {
         id: projectDocRef.id,
@@ -833,9 +801,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     try {
       const firestore = getDb();
-      const counterRef = doc(firestore, "counters", "projects");
-      const projectCol = collection(firestore, "projects");
-      const projectDocRef = doc(projectCol);
+      if (!pendingRecoveryCreation.current || pendingRecoveryCreation.current.expiresAt <= Date.now()) {
+        pendingRecoveryCreation.current = await reserveInstitutionalProjectCreation();
+      }
+      const projectDocRef = { id: pendingRecoveryCreation.current.projectId };
       const perfiladorIniciales = resolvePerfiladorIniciales(user);
       let ceipolId = "";
       let numeroExpedienteFields!: ReturnType<typeof buildNumeroExpedienteFields>;
@@ -854,44 +823,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         },
       };
 
-      await runTransaction(firestore, async (transaction) => {
-        const counterSnap = await transaction.get(counterRef);
-        const currentCount = counterSnap.exists() ? counterSnap.data().count || 0 : 0;
-        const nextCount = currentCount + 1;
-
-        const now = new Date(recoveredAt);
-        const day = now.getDate().toString().padStart(2, "0");
-        const month = (now.getMonth() + 1).toString().padStart(2, "0");
-        const year = now.getFullYear();
-        ceipolId = `CEIPOL/${nextCount.toString().padStart(6, "0")}/${day}/${month}/${year}`;
-        numeroExpedienteFields = buildNumeroExpedienteFields({
-          createdAt: now,
-          sequence: nextCount,
-          perfiladorIniciales,
-          assignedAt: recoveredAt,
+      let savedCreation: Record<string, any>;
+      try {
+        savedCreation = await completeInstitutionalProjectCreation(projectDocRef.id, {
+          name: nombre.trim() || "Sin nombre", geometryType, descripcion: descripcion || "", historicalProjectRecoveryOrigin,
         });
-
-        transaction.set(counterRef, { count: nextCount });
-        transaction.set(projectDocRef, {
-          ceipolId,
-          ...numeroExpedienteFields,
-          name: nombre.trim() || "Recuperación histórica",
-          geometryType,
-          descripcion: descripcion || "",
-          createdAt: recoveredAt,
-          createdBy: user?.username || "Usuario Local",
-          lockedBy: null,
-          photoCount: 0,
-          estado: "ABIERTO",
-          canonicalHypothesis: null,
-          hypothesisRequirementSatisfied: false,
-          canonicalGeography: null,
-          geographyId: null,
-          geographyValidationStatus: "INVALID",
-          historicalGeographyReconciliation: null,
-          historicalProjectRecoveryOrigin,
-        });
-      });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("PROVISIONING_REQUIRED")) {
+          throw new Error(`El ID ${projectDocRef.id} está reservado. Requiere el aprovisionamiento institucional explícito antes de crear el expediente. Puede reintentar con este mismo ID después de la autorización.`);
+        }
+        throw error;
+      }
+      ceipolId = savedCreation.ceipolId;
+      numeroExpedienteFields = {
+        numeroExpediente: savedCreation.numeroExpediente,
+        numeroExpedienteAsignadoAt: savedCreation.numeroExpedienteAsignadoAt,
+        numeroExpedienteSequence: savedCreation.numeroExpedienteSequence,
+        perfiladorIniciales: savedCreation.perfiladorIniciales,
+        numeroExpedienteVersion: savedCreation.numeroExpedienteVersion,
+      };
+      pendingRecoveryCreation.current = null;
 
       const newProjectState = {
         id: projectDocRef.id,
@@ -954,13 +905,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const sourceId = sourceProjectId.trim();
     if (!sourceId) return [];
 
-    const firestore = getDb();
-    const projectsRef = collection(firestore, "projects");
-    const recoveryQuery = query(
-      projectsRef,
-      where("historicalProjectRecoveryOrigin.sourceProjectId", "==", sourceId)
-    );
-    const snap = await getDocs(recoveryQuery);
+    const records = (await readInstitutionalCollection("projects")).filter(data => data.historicalProjectRecoveryOrigin?.sourceProjectId === sourceId);
+    const snap = { docs: records.map(data => ({ id: data.id, data: () => data })) };
 
     return snap.docs
       .map((projectDoc) => {
@@ -1061,12 +1007,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const storedCanonicalGeography = deserializeCanonicalGeographyFromFirestore(projectData.canonicalGeography ?? null);
       const creator = projectData.createdBy;
 
-      // REGLAS DE ACCESO DE ROLES Y TEMPORALIDAD (FASE 3)
-      if (user?.role === "USER" && creator !== user?.username) {
-        throw new Error("Acceso denegado: El expediente pertenece a otro analista y su rol no permite visualización de terceros.");
-      }
-
-      let canModify = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || creator === user?.username;
+      let canModify = await canWriteInstitutionalProject(projectId);
       let isLockedByTime = false;
 
       // Lógica de 24 horas: Inmutabilidad para analistas operativos tras su impresión
@@ -1736,8 +1677,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const removeDocument = useCallback(async (id: string) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura.");
     if (!project) return;
-    const firestore = getDb();
-    await deleteDoc(doc(firestore, "projects", project.id, "documents", id));
+    await mutateInstitutionalLifecycle({ projectId: project.id, entityId: id, kind: "DOCUMENT", operation: "DELETE", operationId: `delete-document:${project.id}:${id}`, reason: "Eliminación institucional de documento" });
     setDocuments(prev => prev.filter(d => d.id !== id));
     setAlbum(prev => prev.filter(photo => photo.sourceDocumentId !== id && photo.id !== id));
     setSelectedIds(prev => prev.filter(photoId => photoId !== id));
@@ -1760,44 +1700,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         project.geometryType || "polígono"
       );
 
-      // 1. Eliminar referencia de Firestore y Storage
-      const photoRef = doc(firestore, "projects", project.id, "photos", id);
-      await deleteDoc(photoRef);
-
-      // Decrementar contador
-      const projectRef = doc(firestore, "projects", project.id);
-      await updateDoc(projectRef, { photoCount: increment(-1) });
-
-      // Guardar la bitácora de trazabilidad única en Firestore en una colección dedicada
-      const deletionCol = collection(firestore, "image_deletion_logs");
-      await addDoc(deletionCol, auditLog);
-
-      // Registrar acción en la bitácora general de auditoría
-      await logAuditAction({
-        action: "IMAGE_DELETED",
-        module: "PHOTO_ALBUM",
-        projectId: project.id,
-        projectName: project.ceipolId || project.nombre,
-        result: "ÉXITO",
-        details: `Imagen ${id} (${auditLog.source}) eliminada definitivamente del expediente por solicitud del usuario.`
-      });
+      if (photoToId.evidenceType === "GEOGRAPHIC_VECTOR") await deleteGeographicEntity(project.id, id);
+      else await mutateInstitutionalLifecycle({ projectId: project.id, entityId: id, kind: "PHOTO", operation: "DELETE", operationId: `delete-photo:${project.id}:${id}`, reason: "Eliminación institucional de imagen" });
 
       // Actualizar estado reactivo
-      setAlbum(updatedAlbum);
+      setAlbum(prev => prev.filter(photo => photo.id !== id));
       setSelectedIds((prev) => prev.filter((x) => x !== id));
     } catch (err) {
       console.error("[ProjectContext] Error al eliminar foto:", err);
+      throw err;
     }
   }, [project, isReadOnly, album, user, logAuditAction]);
 
   const removeAllPhotosFromAlbum = useCallback(async (projectId: string) => {
-    if (isReadOnly) throw new Error("Expediente en modo lectura.");
-    // This needs to be re-implemented to delete all photos from the subcollection in Firestore and Storage.
-    // It's a more complex operation (batch delete). For now, I'll just clear the local state.
-    console.warn("removeAllPhotosFromAlbum no está completamente implementado para Firebase.");
-    setAlbum([]);
-    setSelectedIds([]);
-  }, [isReadOnly]);
+    if (isReadOnly || !project || project.id !== projectId) throw new Error("Eliminación de álbum fuera del expediente autorizado.");
+    // Each successful resource is reflected immediately; failures stop the batch.
+    for (const photo of album) await removePhotoFromAlbum(photo.id);
+  }, [isReadOnly, project, album, removePhotoFromAlbum]);
 
   const updatePhotoMeta = useCallback((id: string, meta: { tipo: string; comentario: string }) => {
     if (isReadOnly) return;
@@ -1955,7 +1874,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const projectRef = doc(col, proj.id); // Use existing ID
 
       const snap = await getDoc(projectRef);
-      if (snap.exists() && snap.data().createdBy !== user?.username && user?.role !== "SUPER_ADMIN") {
+      if (!snap.exists() || !(await canWriteInstitutionalProject(proj.id))) {
          throw new Error("No puedes sobrescribir un expediente de auditoría que pertenece a otro usuario.");
       }
 
@@ -1971,16 +1890,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         name: proj.name,
         geometryType: proj.geometryType || "individual",
         descripcion: proj.descripcion || "",
-        createdAt: proj.createdAt || Date.now(),
-        createdBy: username,
         lockedBy: null,
         photoCount: payload.photos.length,
-        ...(proj.ceipolId ? { ceipolId: proj.ceipolId } : {}),
-        ...(proj.numeroExpediente ? { numeroExpediente: proj.numeroExpediente } : {}),
-        ...(proj.numeroExpedienteAsignadoAt ? { numeroExpedienteAsignadoAt: proj.numeroExpedienteAsignadoAt } : {}),
-        ...(proj.numeroExpedienteSequence ? { numeroExpedienteSequence: proj.numeroExpedienteSequence } : {}),
-        ...(proj.perfiladorIniciales ? { perfiladorIniciales: proj.perfiladorIniciales } : {}),
-        ...(proj.numeroExpedienteVersion ? { numeroExpedienteVersion: proj.numeroExpedienteVersion } : {}),
         ...importedGeographyPatch,
       }, { merge: true });
 
@@ -2008,8 +1919,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const data = snap.data();
     const oldName = data.name;
 
-    const isOwner = data.createdBy === user?.username;
-    const isAuthorized = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN" || isOwner;
+    const isAuthorized = await canWriteInstitutionalProject(projectId);
     if (!isAuthorized) {
       throw new Error("No tiene permisos para renombrar este expediente.");
     }
@@ -2381,75 +2291,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     reason: string;
   }) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura.");
-    const firestore = getDb();
-    const deletedBy = user?.username || "Usuario Local";
-    const deletedAt = Date.now();
-    const expiresAt = deletedAt + 7 * 24 * 60 * 60 * 1000;
-
-    let originalPath = "";
-    let name = "";
-    let originalData: any = null;
-    let projCeipolId = "";
-    const activeProjId = params.projectId || project?.id;
-
-    if (params.type === "Proyecto") {
-      originalPath = `projects/${params.id}`;
-      const projectRef = doc(firestore, "projects", params.id);
-      const snap = await getDoc(projectRef);
-      if (snap.exists()) {
-        originalData = snap.data();
-        name = originalData.name;
-        projCeipolId = originalData.ceipolId || "";
-      }
-    } else if (params.type === "Fotografía") {
-      if (!activeProjId) throw new Error("Proyecto no especificado.");
-      originalPath = `projects/${activeProjId}/photos/${params.id}`;
-      const photoRef = doc(firestore, originalPath);
-      const snap = await getDoc(photoRef);
-      if (snap.exists()) {
-        originalData = snap.data();
-        name = originalData.tipo || "Fotografía";
-        if (originalData.comentario) {
-          name += ` (${originalData.comentario.slice(0, 30)}...)`;
-        }
-      }
-    } else if (params.type === "Documento") {
-      if (!activeProjId) throw new Error("Proyecto no especificado.");
-      originalPath = `projects/${activeProjId}/documents/${params.id}`;
-      const docRef = doc(firestore, originalPath);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        originalData = snap.data();
-        name = originalData.name;
-      }
-    }
-
-    if (!originalData) throw new Error("No se encontró el elemento original.");
-
-    const trashCol = collection(firestore, "trash");
-    await addDoc(trashCol, {
-      originalId: params.id,
-      originalPath,
-      type: params.type,
-      name,
-      deletedBy,
-      deletedAt,
-      expiresAt,
-      deletionReason: params.reason,
-      originalData,
-      projectId: activeProjId || "",
-      projectCeipolId: projCeipolId || project?.ceipolId || ""
-    });
-
-    const itemRef = doc(firestore, originalPath);
-    await updateDoc(itemRef, {
-      deleted: true,
-      deletedBy,
-      deletedAt,
-      deletionReason: params.reason,
-      expiresAt
-    });
-
+    const activeProjId = params.type === "Proyecto" ? params.id : params.projectId || project?.id;
+    if (!activeProjId) throw new Error("Proyecto no especificado.");
+    await mutateInstitutionalLifecycle({ projectId: activeProjId, entityId: params.id, kind: params.type === "Proyecto" ? "PROJECT" : params.type === "Fotografía" ? "PHOTO" : "DOCUMENT",
+      operation: "SOFT_DELETE", operationId: crypto.randomUUID(), reason: params.reason });
     if (params.type === "Proyecto") {
       if (project?.id === params.id) {
         closeProject();
@@ -2461,47 +2306,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setDocuments((prev) => prev.filter((d) => d.id !== params.id));
     }
 
-    await logAuditAction({
-      action: "ELIMINAR",
-      module: params.type === "Proyecto" ? "Expedientes" : params.type === "Fotografía" ? "Album Fotografico" : "Documentos",
-      projectId: activeProjId || params.id,
-      projectName: projCeipolId || project?.ceipolId || name,
-      details: `Eliminación lógica de ${params.type} "${name}". Motivo: "${params.reason}".`
-    });
   }, [project, isReadOnly, user, closeProject, logAuditAction]);
 
   const restoreDoc = useCallback(async (trashId: string) => {
     if (isReadOnly) throw new Error("Expediente en modo lectura.");
-    const firestore = getDb();
-    const trashRef = doc(firestore, "trash", trashId);
-    const trashSnap = await getDoc(trashRef);
-    if (!trashSnap.exists()) throw new Error("El elemento no existe en la papelera.");
-
-    const trashData = trashSnap.data();
-    const { originalPath, originalId, type, name, projectId, projectCeipolId } = trashData;
-
-    const itemRef = doc(firestore, originalPath);
-    const itemSnap = await getDoc(itemRef);
-
-    if (itemSnap.exists()) {
-      await updateDoc(itemRef, {
-        deleted: false,
-        deletedBy: null,
-        deletedAt: null,
-        deletionReason: null,
-        expiresAt: null
-      });
-    } else {
-      await setDoc(itemRef, {
-        ...trashData.originalData,
-        deleted: false,
-        deletedBy: null,
-        deletedAt: null,
-        deletionReason: null,
-        expiresAt: null
-      });
-    }
-
+    const restored = await restoreInstitutionalTrash(trashId, `restore:${trashId}`);
+    const projectId = restored.projectId, originalId = restored.entityId;
+    const type = restored.kind === "PHOTO" ? "Fotografía" : restored.kind === "DOCUMENT" ? "Documento" : "Proyecto";
+    const trashData = { originalData: restored.restoredData };
     if (project?.id === projectId) {
       if (type === "Fotografía") {
         const p = trashData.originalData;
@@ -2526,75 +2338,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    await deleteDoc(trashRef);
-
-    await logAuditAction({
-      action: "RESTAURAR",
-      module: "Papelera",
-      projectId: projectId || originalId,
-      projectName: projectCeipolId || name,
-      details: `Restaurado elemento "${name}" (${type}) a su ubicación original.`
-    });
   }, [project, isReadOnly, logAuditAction]);
 
   const archiveProject = useCallback(async (projectId: string, reason: string) => {
-    const firestore = getDb();
-    const projectRef = doc(firestore, "projects", projectId);
-    const snap = await getDoc(projectRef);
-    if (!snap.exists()) throw new Error("El expediente no existe.");
-
-    const data = snap.data();
-    const isAuthorized = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
-    if (!isAuthorized) throw new Error("Solo los administradores pueden archivar expedientes.");
-
-    await updateDoc(projectRef, {
-      estado: "ARCHIVADO",
-      archiveReason: reason,
-      archivedAt: Date.now(),
-      archivedBy: user?.username || "Usuario Local"
-    });
-
+    await mutateInstitutionalLifecycle({ projectId, entityId: projectId, kind: "PROJECT", operation: "ARCHIVE", operationId: crypto.randomUUID(), reason });
     if (project?.id === projectId) {
       setProject((prev) => prev ? { ...prev, estado: "ARCHIVADO" } : prev);
     }
 
-    await logAuditAction({
-      action: "ARCHIVAR",
-      module: "Expedientes",
-      projectId,
-      projectName: data.ceipolId || data.name,
-      details: `Expediente archivado. Motivo: "${reason}".`
-    });
   }, [project, user, logAuditAction]);
 
   const reactivateProject = useCallback(async (projectId: string, reason: string) => {
-    const firestore = getDb();
-    const projectRef = doc(firestore, "projects", projectId);
-    const snap = await getDoc(projectRef);
-    if (!snap.exists()) throw new Error("El expediente no existe.");
-
-    const data = snap.data();
-    const isAuthorized = user?.role === "SUPER_ADMIN" || user?.role === "ADMIN";
-    if (!isAuthorized) throw new Error("Solo los administradores pueden reactivar expedientes.");
-
-    await updateDoc(projectRef, {
-      estado: "ABIERTO",
-      reactivateReason: reason,
-      reactivatedAt: Date.now(),
-      reactivatedBy: user?.username || "Usuario Local"
-    });
-
+    await mutateInstitutionalLifecycle({ projectId, entityId: projectId, kind: "PROJECT", operation: "REACTIVATE", operationId: crypto.randomUUID(), reason });
     if (project?.id === projectId) {
       setProject((prev) => prev ? { ...prev, estado: "ABIERTO" } : prev);
     }
 
-    await logAuditAction({
-      action: "REACTIVAR",
-      module: "Expedientes",
-      projectId,
-      projectName: data.ceipolId || data.name,
-      details: `Expediente reactivado (vuelto a estado ABIERTO). Motivo: "${reason}".`
-    });
   }, [project, user, logAuditAction]);
 
   const savePhotoContextualization = useCallback(async (photoId: string) => {
@@ -2703,7 +2462,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       geographyType: params.geographyType ?? project.canonicalGeography?.type ?? null,
     };
 
-    const updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];
+    let updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];
 
       try {
       const firestore = getDb();
@@ -2713,14 +2472,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         sweeps: updatedSweeps
       };
 
-      await runTransaction(firestore, async (transaction) => {
-        const preparedLifecycleEvents = await prepareSweepLifecycleEventsInTransaction(transaction, firestore, lifecycle, {
-          actor: buildGeointSweepEventActor(user),
-          source: "ProjectContext.registerSweep",
-        });
-        transaction.update(projectRef, updateData);
-        commitPreparedSweepLifecycleEventsInTransaction(transaction, preparedLifecycleEvents);
-      });
+      updatedSweeps = await persistInstitutionalSweep(project.id, 'REGISTER', newSweep) as SweepIntegrationItem[];
 
       // Toda evidencia generada por barridos crea automáticamente un elemento geográfico
       let latVal: number | null = null;
@@ -2751,7 +2503,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           const photosColRef = collection(firestore, "projects", project.id, "photos");
           const photoDocData = {
             url: previewUrl,
-            storagePath: `sweeps/${photoId}.jpg`,
+            storagePath: null, // Remote map reference; no Storage object was uploaded.
             lat: latVal,
             lng: lngVal,
             projectId: project.id,
@@ -2880,31 +2632,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const firestore = getDb();
       const projectRef = doc(firestore, "projects", project.id);
 
-      await runTransaction(firestore, async (transaction) => {
-        const projectSnap = await transaction.get(projectRef);
-        const serverProject = projectSnap.data() as Project | undefined;
-        const serverSweeps = Array.isArray(serverProject?.sweeps) ? serverProject.sweeps : currentSweeps;
-        const serverSweep = serverSweeps.find((s) => s.id === sweepId);
-        if (!serverSweep) throw new Error("Barrido no encontrado en persistencia.");
-
-        const localVersion = sweepToUpdate.lifecycleVersion ?? sweepToUpdate.lifecycle?.version ?? 0;
-        const serverVersion = serverSweep.lifecycleVersion ?? serverSweep.lifecycle?.version ?? 0;
-        if (serverVersion > localVersion) {
-          throw new Error(`GEOINT_SWEEP_VERSION_CONFLICT:${serverVersion}:LOCAL_${localVersion}`);
-        }
-
-        updatedSweeps = makeFirestoreSafe(serverSweeps.map(s => s.id === sweepId ? { ...serverSweep, ...updatedSweep } : s)) as SweepIntegrationItem[];
-        const preparedLifecycleEvents = updatedSweep.lifecycle
-          ? await prepareSweepLifecycleEventsInTransaction(transaction, firestore, updatedSweep.lifecycle, {
-              actor: buildGeointSweepEventActor(user),
-              source: "ProjectContext.updateSweep",
-            })
-          : [];
-        transaction.update(projectRef, {
-          sweeps: updatedSweeps
-        });
-        commitPreparedSweepLifecycleEventsInTransaction(transaction, preparedLifecycleEvents);
-      });
+      updatedSweeps = await persistInstitutionalSweep(project.id, 'UPDATE', { ...updatedSweep,
+        expectedVersion: sweepToUpdate.lifecycleVersion ?? sweepToUpdate.lifecycle?.version ?? 0 }) as SweepIntegrationItem[];
 
       setProject(prev => prev ? { ...prev, sweeps: updatedSweeps } : prev);
 

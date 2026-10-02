@@ -18,8 +18,12 @@ export class GeointOutboxDispatcher {
   /**
    * Escanea y procesa entradas pendientes con control de concurrencia simple.
    */
-  static async dispatchPending(): Promise<GeointOutboxDispatchResult> {
-    const pending = await GeointEventOutboxService.getPendingEntries(50);
+  static async dispatchPending(overrides: Partial<{
+    outbox: Pick<typeof GeointEventOutboxService, "getPendingEntries" | "claimEntry" | "ledgerEventExists" | "markCompleted" | "markFailure">;
+    ledger: Pick<typeof GeointEventLogService, "persistGeointEvent">;
+  }> = {}): Promise<GeointOutboxDispatchResult> {
+    const deps = { outbox: GeointEventOutboxService, ledger: GeointEventLogService, ...overrides };
+    const pending = await deps.outbox.getPendingEntries(50);
     let processedCount = 0;
     let successCount = 0;
     let failedCount = 0;
@@ -28,7 +32,7 @@ export class GeointOutboxDispatcher {
     let skippedCount = 0;
 
     for (const entry of pending) {
-      const claim = await GeointEventOutboxService.claimEntry(
+      const claim = await deps.outbox.claimEntry(
         entry.outboxId,
         this.MAX_RETRIES
       );
@@ -46,9 +50,9 @@ export class GeointOutboxDispatcher {
           throw new Error("PROV_ERROR: Proveedor externo falló intencionalmente.");
         }
 
-        const ledgerExists = await GeointEventOutboxService.ledgerEventExists(claimedEntry.eventId);
+        const ledgerExists = await deps.outbox.ledgerEventExists(claimedEntry.eventId);
         if (!ledgerExists) {
-          await GeointEventLogService.persistGeointEvent({
+          await deps.ledger.persistGeointEvent({
             eventId: claimedEntry.eventId,
             eventType: claimedEntry.payload.eventType as any,
             timestamp: new Date().toISOString(),
@@ -65,11 +69,11 @@ export class GeointOutboxDispatcher {
           });
         }
 
-        await GeointEventOutboxService.markCompleted(claimedEntry.outboxId);
+        await deps.outbox.markCompleted(claimedEntry.outboxId);
 
         successCount++;
       } catch (err: any) {
-        const failureStatus = await GeointEventOutboxService.markFailure(claimedEntry, err, this.MAX_RETRIES);
+        const failureStatus = await deps.outbox.markFailure(claimedEntry, err, this.MAX_RETRIES);
         if (failureStatus === "FAILED") {
           failedTerminalCount++;
         } else {

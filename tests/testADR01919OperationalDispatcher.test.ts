@@ -1,3 +1,9 @@
+jest.mock('server-only', () => ({}), { virtual: true });
+jest.mock('@/services/institutionalSessionIdentityService', () => ({ resolveInstitutionalSessionIdentity: jest.fn(async () => ({ institutionalUserId: '1', ...mockSessionPayload })) }));
+jest.mock('@/services/institutionalProjectAccessService', () => ({ authorizeInstitutionalProjectAccess: jest.fn(async (input: any) => ({ allowed: true, projectId: input.projectId })) }));
+jest.mock('@/lib/db', () => ({ getPool: () => ({ query: async () => ({ rows: [{ project_id: 'EXP-OPERATIONAL' }] }) }) }));
+jest.mock('@/services/geoint/institutionalGeointAdminAdapter', () => ({ InstitutionalGeointAdminAdapter: jest.fn(function () { return { getPendingEntries: (...args: any[]) => (GeointEventOutboxService.getPendingEntries as any)(...args), claimEntry: (...args: any[]) => (GeointEventOutboxService.claimEntry as any)(...args), ledgerEventExists: (...args: any[]) => (GeointEventOutboxService.ledgerEventExists as any)(...args), markCompleted: (...args: any[]) => (GeointEventOutboxService.markCompleted as any)(...args), markFailure: (...args: any[]) => (GeointEventOutboxService.markFailure as any)(...args), persistGeointEvent: (...args: any[]) => (GeointEventLogService.persistGeointEvent as any)(...args) }; }) }));
+function dispatchRequest() { return new Request('https://offline.test/api/geoint/events/outbox/dispatch', { method: 'POST', headers: { origin: 'https://offline.test' } }); }
 import fs from "fs";
 import path from "path";
 import { GeointEventOutboxService } from "../src/services/geoint/geointEventOutboxService";
@@ -141,7 +147,7 @@ describe("ADR-019.19 FASE 2C: Dispatcher operacional y recuperacion", () => {
   test("TEST 1 - EJECUCION OPERACIONAL: endpoint protegido procesa Outbox pendiente", async () => {
     await enqueueOperationalEvent("OPERATIONAL");
 
-    const response = await dispatchOutbox();
+    const response = await dispatchOutbox(dispatchRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -160,7 +166,7 @@ describe("ADR-019.19 FASE 2C: Dispatcher operacional y recuperacion", () => {
     await enqueueOperationalEvent("CONCURRENT");
     const persistSpy = jest.spyOn(GeointEventLogService, "persistGeointEvent");
 
-    await Promise.all([dispatchOutbox(), dispatchOutbox()]);
+    await Promise.all([dispatchOutbox(dispatchRequest()), dispatchOutbox(dispatchRequest())]);
 
     expect(mockDb.geoint_event_logs.size).toBe(1);
     expect(persistSpy).toHaveBeenCalledTimes(1);
@@ -216,7 +222,7 @@ describe("ADR-019.19 FASE 2C: Dispatcher operacional y recuperacion", () => {
   });
 
   test("TEST 6 - SIN PENDIENTES: ejecucion vacia es segura y observable", async () => {
-    const response = await dispatchOutbox();
+    const response = await dispatchOutbox(dispatchRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -252,7 +258,7 @@ describe("ADR-019.19 FASE 2C: Dispatcher operacional y recuperacion", () => {
     mockSessionPayload = { username: "analyst", role: "USER" };
 
     await enqueueOperationalEvent("SECURITY");
-    const response = await dispatchOutbox();
+    const response = await dispatchOutbox(dispatchRequest());
 
     expect(response.status).toBe(403);
     expect(getOnlyOutboxEntry().status).toBe("CREATED");

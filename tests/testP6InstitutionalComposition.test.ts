@@ -30,7 +30,9 @@ beforeAll(async () => {
       writeFileSync(resolve(dir, "parity.json"), JSON.stringify({ fixture: type, executive: pdf.parity, annex: annexPdf.parity, input: f.data, document: f.document, technicalAnnex: f.annex }, null, 2));
     }
   }
-}, 120000);
+// Six real DOCX/PDF conversions share this aggregate setup on the Windows host.
+// Keep the composition/parity assertions unchanged and give setup a bounded budget.
+}, 600000);
 
 describe("P6 governed DOCX/PDF composition offline", () => {
   test.each(types)("%s renders executive and annex from actual institutional OOXML", type => {

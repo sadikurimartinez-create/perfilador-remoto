@@ -1,3 +1,6 @@
+jest.mock('server-only',()=>({}),{virtual:true});
+jest.mock('next/headers',()=>({cookies:()=>({get:()=>({value:'offline'})})}));
+jest.mock('@/services/institutionalProjectAccessService',()=>({authorizeInstitutionalProjectAccess:jest.fn(async()=>({allowed:true,projectId:'fixture-project'}))}));
 import { POST } from "../src/app/api/pandillas/route";
 import { POST as POST_GIS } from "../src/app/api/pandillas/analyze-gis/route";
 import { fuseGangsAndBuildGraph, matchPandillasDatasetRows } from "../src/modules/pandillas/pandillas.fusion";
@@ -337,8 +340,8 @@ describe("ADR-020.29 Pandillas authoritative pipeline", () => {
     } as any));
 
     const response = await POST(new Request("http://localhost/api/pandillas", {
-      method: "POST",
-      body: JSON.stringify({ nombre: "Sin Match", zonaInfluencia: "No Existe", integrantes: [] })
+      method: "POST", headers: { origin: "http://localhost" },
+      body: JSON.stringify({ projectId: "fixture-project", nombre: "Sin Match", zonaInfluencia: "No Existe", integrantes: [] })
     }));
     const body = await response.json();
     global.fetch = originalFetch;

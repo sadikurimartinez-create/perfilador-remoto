@@ -1,4 +1,6 @@
-﻿"use client";
+"use client";
+import { purgeInstitutionalTrash } from "@/lib/institutionalLifecycleActions";
+import { subscribeInstitutionalCollection } from "@/services/institutionalCollectionClient";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, FormEvent, useEffect } from "react";
@@ -79,24 +81,24 @@ export default function AdminPage() {
     if (!user || (user.role !== "SUPER_ADMIN" && user.role !== "ADMIN")) return;
     const db = getDb();
     
-    const unsubProjects = onSnapshot(collection(db, "projects"), (snap) => {
+    const unsubProjects = subscribeInstitutionalCollection("projects", (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setProjects(list.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0)));
     });
 
-    const unsubTrash = onSnapshot(collection(db, "trash"), (snap) => {
+    const unsubTrash = subscribeInstitutionalCollection("trash", (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setTrashItems(list.sort((a: any, b: any) => (b.deletedAt || 0) - (a.deletedAt || 0)));
     });
 
-    const unsubAudit = onSnapshot(collection(db, "audit_logs"), (snap) => {
+    const unsubAudit = subscribeInstitutionalCollection("audit_logs", (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setAuditLogs(list.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0)));
     });
 
     let unsubUsers = () => {};
     if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") {
-      unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      unsubUsers = subscribeInstitutionalCollection("users", (snap) => {
       const list: UserDoc[] = snap.docs
         .map((d) => {
           const data = d.data() as any;
@@ -158,14 +160,8 @@ export default function AdminPage() {
     }
 
     try {
-      const db = getDb();
-      await addDoc(collection(db, "users"), {
-        username: username.trim(),
-        passwordHash: password,
-        role: role,
-        name: name.trim(),
-        createdAt: Date.now(),
-      });
+      const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: username.trim(), password, role, name: name.trim() }) });
+      if (!response.ok) throw new Error("No se pudo registrar al usuario mediante el procedimiento institucional.");
       setUsername("");
       setPassword("");
       setName("");
@@ -183,8 +179,8 @@ export default function AdminPage() {
       return;
     }
     try {
-      const db = getDb();
-      await deleteDoc(doc(db, "users", id));
+      const response = await fetch("/api/admin/users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      if (!response.ok) throw new Error("La eliminación institucional fue rechazada.");
       setMessage({ type: "ok", text: "Usuario eliminado." });
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || "No se pudo eliminar." });
@@ -196,18 +192,8 @@ export default function AdminPage() {
     if (!currentPwd || !newPwd) return;
     setPwdMessage(null);
     try {
-      const db = getDb();
-      const userRef = doc(db, "users", String(user.id));
-      const snap = await getDoc(userRef);
-      if (!snap.exists()) {
-         throw new Error("Usuario no encontrado en la base de datos.");
-      }
-      if (snap.data().passwordHash !== currentPwd) {
-         throw new Error("La contraseña actual es incorrecta.");
-      }
-      await updateDoc(userRef, {
-         passwordHash: newPwd
-      });
+      const response = await fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }) });
+      if (!response.ok) throw new Error("No se pudo actualizar la contraseña institucional.");
       setCurrentPwd("");
       setNewPwd("");
       setPwdMessage({ type: "ok", text: "Contraseña actualizada exitosamente." });
@@ -228,20 +214,7 @@ export default function AdminPage() {
   const handleDefinitiveDelete = async (item: any) => {
     if (!confirm("¿Está seguro de eliminar DEFINITIVAMENTE este registro? Esta acción es totalmente irreversible y quedará registrada en auditoría.")) return;
     try {
-      const db = getDb();
-      // 1. Borrar de la colección de la papelera
-      await deleteDoc(doc(db, "trash", item.id));
-      // 2. Borrar permanentemente el documento original
-      await deleteDoc(doc(db, item.originalPath));
-
-      await logAuditAction({
-        action: "ELIMINACION_DEFINITIVA",
-        module: "Papelera",
-        projectId: item.projectId || item.originalId,
-        projectName: item.projectCeipolId || item.name,
-        result: "ÉXITO",
-        details: `Eliminación definitiva de ${item.type} "${item.name}" tras vencimiento de papelera.`
-      });
+      await purgeInstitutionalTrash(item.id, `purge:${item.id}`);
       alert("Elemento eliminado definitivamente.");
     } catch (err: any) {
       alert("Error en eliminación definitiva: " + err.message);
@@ -357,12 +330,8 @@ export default function AdminPage() {
     }
     setEvaluationMsg(null);
     try {
-      const db = getDb();
-      await updateDoc(doc(db, "projects", selectedProject.id), {
-        estado: "CERRADO",
-        evaluadoPor: user.name,
-        fechaEvaluacion: Date.now(),
-      });
+      const { mutateInstitutionalLifecycle } = await import("@/lib/institutionalLifecycleActions");
+      await mutateInstitutionalLifecycle({ projectId:selectedProject.id,entityId:selectedProject.id,kind:"PROJECT",operation:"REVIEW_CLOSE",operationId:crypto.randomUUID(),reason:"Cierre administrativo tras checklist institucional" });
       setEvaluationMsg({ type: "ok", text: "Expediente VALIDADO y CERRADO exitosamente." });
       setTimeout(() => setSelectedProject(null), 1500);
     } catch (err: any) {
@@ -377,16 +346,8 @@ export default function AdminPage() {
     }
     setEvaluationMsg(null);
     try {
-      const db = getDb();
-      await updateDoc(doc(db, "projects", selectedProject.id), {
-        estado: "DEVUELTO",
-        comentariosAuditoria: feedback,
-        comentariosSupervisor: feedback,
-        fechaDevolucion: Date.now(),
-        deadlineAt: Date.now() + (plazoDevolucion * 60 * 60 * 1000),
-        devueltoPor: user.name || user.username,
-        fechaEvaluacion: Date.now(),
-      });
+      const { mutateInstitutionalLifecycle } = await import("@/lib/institutionalLifecycleActions");
+      await mutateInstitutionalLifecycle({ projectId:selectedProject.id,entityId:selectedProject.id,kind:"PROJECT",operation:"REVIEW_RETURN",operationId:crypto.randomUUID(),reason:feedback.trim(),returnDeadlineHours:plazoDevolucion });
       setEvaluationMsg({ type: "ok", text: "Expediente DEVUELTO al analista con observaciones." });
       setTimeout(() => setSelectedProject(null), 1500);
     } catch (err: any) {

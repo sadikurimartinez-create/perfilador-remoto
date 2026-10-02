@@ -281,6 +281,7 @@ export class StreetViewFindingService {
   static async createStreetViewFinding(
     data: Partial<StreetViewFinding> & { expedienteId: string }
   ): Promise<StreetViewFinding> {
+    if(typeof window!=='undefined' && /^https?:$/.test(window.location.protocol))return import('@/lib/institutionalGeointEntityActions').then(module=>module.persistInstitutionalGeointEntity({projectId:data.expedienteId,kind:'STREETVIEW',operation:'SAVE',id:data.id||data.captureId,data}));
     const db = getFirestoreInstance();
     const finding = normalizeStreetViewFindingForPersistence(data);
 
@@ -299,6 +300,7 @@ export class StreetViewFindingService {
    * Obtiene todos los hallazgos de StreetView vinculados a un expediente.
    */
   static async getStreetViewFindingsByProject(expedienteId: string): Promise<StreetViewFinding[]> {
+    if(typeof window!=='undefined' && /^https?:$/.test(window.location.protocol))return import('@/lib/institutionalGeointEntityActions').then(module=>module.persistInstitutionalGeointEntity({projectId:expedienteId,kind:'STREETVIEW',operation:'LIST'}));
     const db = getFirestoreInstance();
     const findings: StreetViewFinding[] = [];
 
@@ -342,6 +344,7 @@ export class StreetViewFindingService {
     findingId: string,
     updateData: Partial<StreetViewFinding>
   ): Promise<boolean> {
+    if(typeof window!=='undefined' && /^https?:$/.test(window.location.protocol)){await import('@/lib/institutionalGeointEntityActions').then(module=>module.persistInstitutionalGeointEntity({projectId:expedienteId,kind:'STREETVIEW',operation:'UPDATE',id:findingId,data:updateData}));return true;}
     const db = getFirestoreInstance();
     const payload: Partial<StreetViewFinding> & { updatedAt: string } = {
       ...updateData,

@@ -1971,22 +1971,9 @@ const hasMinimumPhotos =
       return false;
     }
     try {
-      const { getDb } = await import("@/lib/firebase");
-      const db = getDb();
-      const { getDocs, query, where, collection } = await import("firebase/firestore");
-      const q = query(
-        collection(db, "users"),
-        where("username", "==", user.username.trim())
-      );
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        alert("No se encontró el registro del usuario actual.");
-        return false;
-      }
-      const docSnap = snap.docs[0];
-      const data = docSnap.data() as { passwordHash?: string };
-      if (data.passwordHash !== passwordEntered) {
-        alert("Contraseña incorrecta. Autorización denegada.");
+      const { verifyInstitutionalPassword } = await import("@/lib/institutionalProfileActions");
+      if (!(await verifyInstitutionalPassword(passwordEntered))) {
+        alert("Contraseña incorrecta o identidad institucional no disponible.");
         return false;
       }
       return true;
@@ -2008,18 +1995,9 @@ const hasMinimumPhotos =
     if (!confirm2) return;
 
     try {
-      const { getDb } = await import("@/lib/firebase");
-      const db = getDb();
-      const { deleteDoc, doc } = await import("firebase/firestore");
-      await deleteDoc(doc(db, "dossiers", dossierId));
-      
-      await logAuditAction({
-        action: "ELIMINAR_DICTAMEN_HISTORIAL",
-        module: "Expedientes",
-        projectId: project?.id || "EXP",
-        projectName: project?.nombre || "EXP",
-        details: `Eliminado dictamen guardado ID ${dossierId} por el analista ${user?.username}.`
-      });
+      if (!project?.id) throw new Error("Proyecto no especificado.");
+      const { mutateInstitutionalLifecycle } = await import("@/lib/institutionalLifecycleActions");
+      await mutateInstitutionalLifecycle({ projectId: project.id, entityId: dossierId, kind: "DOSSIER", operation: "DELETE", operationId: `delete-dossier:${project.id}:${dossierId}`, reason: "Eliminación de dictamen tras confirmación institucional" });
 
       alert("El dictamen oficial ha sido eliminado correctamente.");
       setHistoryDossiers(prev => prev.filter(h => h.id !== dossierId));
@@ -2359,9 +2337,9 @@ const hasMinimumPhotos =
           {!isReadOnly && (
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 if (window.confirm("¿Seguro que desea borrar TODAS las fotografías de este proyecto?")) {
-                  if (project) void removeAllPhotosFromAlbum(project.id);
+                  try { if (project) await removeAllPhotosFromAlbum(project.id); } catch { window.alert("El borrado se detuvo. Revise los recursos pendientes antes de reintentar."); }
                 }
               }}
               className="text-xs px-2 py-1 rounded border border-red-900/50 text-red-400 hover:bg-red-900/30"

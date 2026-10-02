@@ -1,0 +1,17 @@
+jest.mock('server-only',()=>({}),{virtual:true});
+jest.mock('next/headers',()=>({cookies:()=>({get:()=>({value:'fixture-session'})})}));
+jest.mock('@/services/institutionalSessionIdentityService',()=>({resolveInstitutionalSessionIdentity:jest.fn()}));
+jest.mock('@/lib/db',()=>({getPool:jest.fn()}));
+jest.mock('@/utils/authCrypto',()=>({verifyPassword:jest.fn()}));
+import { verifyInstitutionalPassword } from '../src/lib/institutionalProfileActions';
+import { resolveInstitutionalSessionIdentity } from '../src/services/institutionalSessionIdentityService';
+import { getPool } from '../src/lib/db';
+import { verifyPassword } from '../src/utils/authCrypto';
+const query=jest.fn();
+beforeEach(()=>{jest.clearAllMocks();(resolveInstitutionalSessionIdentity as jest.Mock).mockResolvedValue({institutionalUserId:'server-actor'});(getPool as jest.Mock).mockReturnValue({query});query.mockResolvedValue({rows:[{password_hash:'fixture-hash'}]});(verifyPassword as jest.Mock).mockResolvedValue(true);});
+test('password verification selects by fresh institutional ID only',async()=>{expect(await verifyInstitutionalPassword('fixture')).toBe(true);expect(query).toHaveBeenCalledWith('SELECT password_hash FROM users WHERE id::text = $1 LIMIT 2',['server-actor']);expect(verifyPassword).toHaveBeenCalledWith('fixture','fixture-hash');});
+test('actor failure denies without PG lookup',async()=>{(resolveInstitutionalSessionIdentity as jest.Mock).mockRejectedValue(new Error('REVOKED'));expect(await verifyInstitutionalPassword('fixture')).toBe(false);expect(query).not.toHaveBeenCalled();});
+test.each([{rows:[]},{rows:[{password_hash:'one'},{password_hash:'two'}]}])('missing or ambiguous actor denies',async ({rows})=>{query.mockResolvedValue({rows});expect(await verifyInstitutionalPassword('fixture')).toBe(false);expect(verifyPassword).not.toHaveBeenCalled();});
+test('PG unavailable fails closed',async()=>{query.mockRejectedValue(new Error('PG_UNAVAILABLE'));expect(await verifyInstitutionalPassword('fixture')).toBe(false);});
+test('incorrect password denies',async()=>{(verifyPassword as jest.Mock).mockResolvedValue(false);expect(await verifyInstitutionalPassword('fixture')).toBe(false);});
+test.each(['','x'.repeat(1025)])('bounded input denies before identity lookup',async password=>{expect(await verifyInstitutionalPassword(password)).toBe(false);expect(resolveInstitutionalSessionIdentity).not.toHaveBeenCalled();});

@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function identity() {
+      return request.auth != null && request.auth.token.institutionalUserId is string
+        && request.auth.token.institutionalUserId.size() > 0
+        && request.auth.token.institutionalUserId.size() <= 123
+        && request.auth.uid == 'user:' + request.auth.token.institutionalUserId
+        && request.auth.token.role in ['USER', 'ADMIN', 'SUPER_ADMIN'];
+    }
+    function grant(projectId, action) {
+      let g = get(/databases/$(database)/documents/projectAccess/$(projectId)/members/$(request.auth.token.institutionalUserId)).data;
+      return identity() && g.projectId == projectId
+        && g.institutionalUserId == request.auth.token.institutionalUserId
+        && g.relation == 'ASSIGNED' && g.source == 'POSTGRESQL'
+        && g.policyVersion == 'EXPLICIT_ACTION_GRANT_V1'
+        && g.revoked == false && g.revokedAt == null
+        && g.allowedActions is list && g.allowedActions.size() > 0
+        && g.allowedActions.hasOnly(['READ', 'WRITE', 'ANALYZE_SCINCE', 'GENERATE_REPORT'])
+        && action in g.allowedActions
+        && g.synchronizedAt is int && g.expiresAt is int
+        && g.synchronizedAt <= request.time.toMillis()
+        && g.expiresAt > request.time.toMillis()
+        && g.expiresAt - g.synchronizedAt <= 300000;
+    }
+    function accessible(data) {
+      return (!('deleted' in data) || data.deleted == false)
+        && (!('estado' in data) || data.estado != 'ARCHIVADO')
+        && (!('status' in data) || data.status != 'ARCHIVADO');
+    }
+    function projectAccess(projectId, action) {
+      return identity() && grant(projectId, action)
+        && accessible(get(/databases/$(database)/documents/projects/$(projectId)).data);
+    }
+    match /projects/{projectId} {
+      allow read: if identity() && grant(projectId, 'READ') && accessible(resource.data);
+      // Creation and folio allocation go through the governed server boundary.
+      allow create, delete: if false;
+      allow update: if identity() && grant(projectId, 'WRITE') && accessible(resource.data)
+        && accessible(request.resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'createdBy', 'createdAt', 'ceipolId', 'numeroExpediente', 'numeroExpedienteSequence', 'perfiladorIniciales',
+          'numeroExpedienteAsignadoAt', 'numeroExpedienteVersion',
+          'certification', 'publication', 'reportPackage', 'institutionalUserId', 'role',
+          'creationReservationId', 'createdByInstitutionalUserId', 'deleted', 'deletedAt', 'deletedBy', 'expiresAt',
+          'estado', 'status', 'archiveReason', 'archivedAt', 'archivedBy', 'reactivateReason', 'reactivatedAt', 'reactivatedBy',
+          'lifecycleDeletionPending', 'sweeps'
+        ]);
+      match /{child}/{documentId} {
+        allow read: if child in ['photos', 'documents', 'streetview_findings', 'geographicEntities',
+          'denueAnalyticalRelations', 'denueAnalyticalReviewEvents', 'geoint_temporal_comparisons',
+          'reportPackages', 'reportCertifications', 'reportPublications'] && projectAccess(projectId, 'READ');
+        allow create: if child in ['photos', 'documents'] && projectAccess(projectId, 'WRITE');
+        allow update: if child in ['photos', 'documents'] && projectAccess(projectId, 'WRITE')
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['deleted', 'deletedBy', 'deletedAt', 'expiresAt', 'lifecycleDeletionPending']);
+        // Critical GEOINT entity writes/deletes require atomic server outbox/audit.
+        // DENUE base relations and human review events commit with server-bound identity/audit.
+      }
+    }
+    match /users/{userId} {
+      allow read: if identity() && userId == request.auth.token.institutionalUserId;
+      allow update: if identity() && userId == request.auth.token.institutionalUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatar', 'telefono'])
+        && (!('displayName' in request.resource.data) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 120))
+        && (!('avatar' in request.resource.data) || (request.resource.data.avatar is string && request.resource.data.avatar.size() <= 2048))
+        && (!('telefono' in request.resource.data) || (request.resource.data.telefono is string && request.resource.data.telefono.size() <= 30));
+      allow create, delete: if false;
+    }
+    match /{root}/{documentId} {
+      allow read: if root in ['analyses', 'dossiers', 'trash', 'audit_logs', 'image_deletion_logs']
+        && resource.data.projectId is string && projectAccess(resource.data.projectId, 'READ');
+      allow read: if root in ['streetview_findings', 'geoint_temporal_comparisons', 'geoint_event_logs',
+        'geoint_event_fingerprints']
+        && resource.data.expedienteId is string && projectAccess(resource.data.expedienteId, 'READ');
+      allow read: if root == 'geoint_event_outbox' && resource.data.payload.expedienteId is string
+        && projectAccess(resource.data.payload.expedienteId, 'READ');
+      allow create: if root in ['dossiers', 'analyses'] && request.resource.data.projectId is string
+        && projectAccess(request.resource.data.projectId, 'WRITE');
+
+    }
+      // Root deletion binds the stored project, since deletes have no request.resource.
+    // Projection, counters, report states, global sources, ledger transport and
+    // unclassified paths are server-only. No role or username fallback.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

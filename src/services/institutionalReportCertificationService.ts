@@ -8,6 +8,7 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
+import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
 import type { InstitutionalDocumentModel } from "@/utils/institutionalDocumentAssembly";
 import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
 import {
@@ -135,6 +136,7 @@ export class InstitutionalReportCertificationService {
     requestedBy?: CertificationActorIdentity | null;
     requestedAt?: string | null;
   }): Promise<InstitutionalReportCertification> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalCertificationRepository) return invokeInstitutionalReportBoundary("REQUEST_CERTIFICATION", input);
     const request = ReportCertificationGate.requestInstitutionalCertification(input);
     return this.repository.create(
       request,
@@ -150,6 +152,7 @@ export class InstitutionalReportCertificationService {
     certifierIdentity: CertificationActorIdentity | null | undefined;
     certifiedAt?: string | null;
   }): Promise<InstitutionalReportCertification> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalCertificationRepository) return invokeInstitutionalReportBoundary("CERTIFY", input);
     if (!isRealCertificationActorIdentity(input.certifierIdentity)) {
       throw new Error("INSTITUTIONAL_CERTIFICATION_BLOCKED:CERTIFIER_IDENTITY_UNAVAILABLE");
     }
@@ -184,6 +187,7 @@ export class InstitutionalReportCertificationService {
     rejectedAt?: string | null;
     rejectionReason: string;
   }): Promise<InstitutionalReportCertification> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalCertificationRepository) return invokeInstitutionalReportBoundary("REJECT_CERTIFICATION", input);
     const rejected = ReportCertificationGate.rejectInstitutionalCertification({
       certification: input.certification,
       rejectedBy: input.rejectedBy as CertificationActorIdentity,
@@ -205,6 +209,7 @@ export class InstitutionalReportCertificationService {
     revokedAt?: string | null;
     revocationReason: string;
   }): Promise<InstitutionalReportCertification> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalCertificationRepository) return invokeInstitutionalReportBoundary("REVOKE_CERTIFICATION", input);
     const certification = await this.repository.get(input.projectId, input.certificationId);
     if (!certification) {
       throw new Error("CERTIFICATION_REVOCATION_BLOCKED:CERTIFICATION_NOT_FOUND");

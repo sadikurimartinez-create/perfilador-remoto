@@ -1,220 +1,48 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifySession } from "@/utils/authCrypto";
 import { getPool } from "@/lib/db";
-import { getFirebaseServerDb } from "@/lib/firebaseServer";
-import { collection, getDocs, query, updateDoc, where } from "firebase/firestore";
-
+import { resolveInstitutionalSessionIdentity } from "@/services/institutionalSessionIdentityService";
 export const dynamic = "force-dynamic";
-
-// GET: Recuperar el perfil del usuario autenticado
+const headers = { "Cache-Control": "no-store" };
+const editable = ["nombre", "apellidoPaterno", "apellidoMaterno", "grado", "id_empleado", "adscripcionAnterior", "aniosSspe", "bachillerato", "licenciatura", "licenciaturaCual", "maestria", "maestriaCual", "fotografia"];
+async function identity() { return resolveInstitutionalSessionIdentity(cookies().get("ceipol_session")?.value); }
+function sameOrigin(req: Request) { return req.headers.get("origin") === new URL(req.url).origin && req.headers.get("sec-fetch-site") !== "cross-site"; }
 export async function GET() {
   try {
-    const cookieStore = cookies();
-    const sessionCookie = cookieStore.get("ceipol_session");
-    
-    if (!sessionCookie || !sessionCookie.value) {
-      return NextResponse.json({ error: "No autenticado." }, { status: 401 });
-    }
-    
-    const payload = verifySession(sessionCookie.value);
-    if (!payload || !payload.username) {
-      return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
-    }
-    
-    const pool = getPool();
-    const { rows } = await pool.query(
-      `
-      SELECT profile
-      FROM users
-      WHERE username = $1
-      LIMIT 1
-    `,
-      [payload.username]
-    );
-    
-    const user = rows[0];
-    if (!user) {
-      return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
-    }
-    
-    return NextResponse.json({ profile: user.profile || {} });
-  } catch (err) {
-    console.error("[api/auth/profile] Error en GET profile:", err);
-    return NextResponse.json({ error: "Error al recuperar el perfil." }, { status: 500 });
-  }
+    const actor = await identity();
+    const result = await getPool().query("SELECT profile FROM users WHERE id::text = $1 LIMIT 2", [actor.institutionalUserId]);
+    if (result.rows.length !== 1) throw new Error("IDENTITY_UNAVAILABLE");
+    return NextResponse.json({ profile: result.rows[0].profile || {} }, { headers });
+  } catch { return NextResponse.json({ error: "Perfil institucional no disponible." }, { status: 401, headers }); }
 }
-
-// POST: Actualizar o guardar el perfil del usuario en PostgreSQL
 export async function POST(req: Request) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   try {
-    const cookieStore = cookies();
-    const sessionCookie = cookieStore.get("ceipol_session");
-    
-    if (!sessionCookie || !sessionCookie.value) {
-      return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+    const actor = await identity(); const body = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body) || JSON.stringify(body).length > 2000000) return NextResponse.json({ error: "PROFILE_INVALID" }, { status: 400 });
+    const profile = Object.fromEntries(editable.filter(key => body[key] !== undefined).map(key => [key, body[key]]));
+    for (const [key, value] of Object.entries(profile)) {
+      if ((typeof value !== "string" && typeof value !== "boolean" && typeof value !== "number") || (typeof value === "string" && value.length > (key === "fotografia" ? 1800000 : 2000)))
+        return NextResponse.json({ error: "PROFILE_INVALID" }, { status: 400 });
     }
-    
-    const payload = verifySession(sessionCookie.value);
-    if (!payload || !payload.username) {
-      return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
-    }
-    
-    const profileData = await req.json();
-    
-    // Concatenar el nombre completo para actualizar la columna name de la tabla users
-    const firstName = profileData.nombre || "";
-    const paternal = profileData.apellidoPaterno || "";
-    const maternal = profileData.apellidoMaterno || "";
-    const fullName = [firstName, paternal, maternal].filter(Boolean).join(" ") || payload.name;
-    
-    // Marcar el perfil como completo en el objeto profile
-    const updatedProfile = {
-      ...profileData,
-      perfilCompleto: true,
-      updatedAt: Date.now()
-    };
-    
-    const pool = getPool();
-    await pool.query(
-      `
-      UPDATE users
-      SET name = $1, profile = $2
-      WHERE username = $3
-    `,
-      [fullName, JSON.stringify(updatedProfile), payload.username]
-    );
-    
-    return NextResponse.json({
-      success: true,
-      message: "Perfil actualizado correctamente en el repositorio único PostgreSQL.",
-      profile: updatedProfile,
-      name: fullName
-    });
-  } catch (err) {
-    console.error("[api/auth/profile] Error en POST profile:", err);
-    return NextResponse.json({ error: "No se pudo actualizar el perfil." }, { status: 500 });
-  }
+    const name = [body.nombre, body.apellidoPaterno, body.apellidoMaterno].filter(value => typeof value === "string" && value.trim()).join(" ");
+    const result = await getPool().query(`UPDATE users SET name = $1, profile = COALESCE(profile, '{}'::jsonb) || $2::jsonb
+      WHERE id::text = $3 AND COALESCE(profile->>'perfilCompleto', 'false') != 'true' RETURNING profile, name`,
+      [name, JSON.stringify({ ...profile, perfilCompleto: true, updatedAt: Date.now() }), actor.institutionalUserId]);
+    if (result.rows.length !== 1) return NextResponse.json({ error: "PROFILE_COMPLETED_OR_UNAVAILABLE" }, { status: 409 });
+    return NextResponse.json({ success: true, ...result.rows[0] }, { headers });
+  } catch { return NextResponse.json({ error: "Perfil institucional no disponible." }, { status: 503, headers }); }
 }
-
-const PERFILADOR_INICIALES_PATTERN = /^[A-ZÑ]{2,5}$/;
-
-async function registerPerfiladorInicialesInFirebase(username: string, initials: string) {
-  const db = getFirebaseServerDb();
-  const usersRef = collection(db, "users");
-  const q = query(usersRef, where("username", "==", username.trim()));
-  const snap = await getDocs(q);
-
-  if (snap.empty) {
-    return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
-  }
-
-  const docSnap = snap.docs[0];
-  const firebaseUser = docSnap.data() as { profile?: Record<string, unknown>; [key: string]: any };
-  const hasNestedProfile =
-    firebaseUser.profile &&
-    typeof firebaseUser.profile === "object" &&
-    !Array.isArray(firebaseUser.profile);
-  const existingProfile = hasNestedProfile ? firebaseUser.profile || {} : firebaseUser;
-
-  if (String(existingProfile.perfiladorIniciales || "").trim()) {
-    return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
-  }
-
-  const updatedProfile = {
-    ...existingProfile,
-    perfiladorIniciales: initials,
-    updatedAt: Date.now(),
-  };
-
-  if (hasNestedProfile) {
-    await updateDoc(docSnap.ref, { profile: updatedProfile });
-  } else {
-    await updateDoc(docSnap.ref, {
-      perfiladorIniciales: initials,
-      updatedAt: updatedProfile.updatedAt,
-    });
-  }
-
-  return NextResponse.json({
-    success: true,
-    profile: updatedProfile,
-    storage: "FIREBASE_FALLBACK",
-  });
-}
-
-// PATCH: Registrar únicamente iniciales institucionales PPC sin desbloquear el perfil.
 export async function PATCH(req: Request) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   try {
-    const cookieStore = cookies();
-    const sessionCookie = cookieStore.get("ceipol_session");
-
-    if (!sessionCookie || !sessionCookie.value) {
-      return NextResponse.json({ error: "No autenticado." }, { status: 401 });
-    }
-
-    const payload = verifySession(sessionCookie.value);
-    if (!payload || !payload.username) {
-      return NextResponse.json({ error: "Sesión inválida o expirada." }, { status: 401 });
-    }
-
-    const body = await req.json();
-    const initials = String(body?.perfiladorIniciales || "").trim().toLocaleUpperCase("es-MX");
-    if (!initials) {
-      return NextResponse.json({ error: "PERFILADOR_INICIALES_REQUERIDAS" }, { status: 400 });
-    }
-    if (!PERFILADOR_INICIALES_PATTERN.test(initials)) {
-      return NextResponse.json({ error: "PERFILADOR_INICIALES_INVALIDAS" }, { status: 400 });
-    }
-
-    try {
-      const pool = getPool();
-      const { rows } = await pool.query(
-        `
-        SELECT profile
-        FROM users
-        WHERE username = $1
-        LIMIT 1
-      `,
-        [payload.username]
-      );
-
-      const user = rows[0];
-      if (!user) {
-        return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
-      }
-
-      const existingProfile = user.profile || {};
-      if (String(existingProfile.perfiladorIniciales || "").trim()) {
-        return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
-      }
-
-      const updatedProfile = {
-        ...existingProfile,
-        perfiladorIniciales: initials,
-        updatedAt: Date.now(),
-      };
-
-      await pool.query(
-        `
-        UPDATE users
-        SET profile = $1
-        WHERE username = $2
-      `,
-        [JSON.stringify(updatedProfile), payload.username]
-      );
-
-      return NextResponse.json({
-        success: true,
-        profile: updatedProfile,
-        storage: "POSTGRESQL",
-      });
-    } catch (pgErr) {
-      console.warn("[api/auth/profile] PostgreSQL PATCH failed. Falling back to Firebase...", pgErr);
-      return await registerPerfiladorInicialesInFirebase(payload.username, initials);
-    }
-  } catch (err) {
-    console.error("[api/auth/profile] Error en PATCH profile:", err);
-    return NextResponse.json({ error: "No se pudo registrar las iniciales institucionales." }, { status: 500 });
-  }
+    const actor = await identity(); const body = await req.json();
+    const initials = typeof body?.perfiladorIniciales === "string" ? body.perfiladorIniciales.trim().toLocaleUpperCase("es-MX") : "";
+    if (!/^[A-ZÑ]{2,5}$/.test(initials)) return NextResponse.json({ error: "PERFILADOR_INICIALES_INVALIDAS" }, { status: 400 });
+    const result = await getPool().query(`UPDATE users SET profile = COALESCE(profile, '{}'::jsonb) || $1::jsonb
+      WHERE id::text = $2 AND COALESCE(TRIM(profile->>'perfiladorIniciales'), '') = '' RETURNING profile`,
+      [JSON.stringify({ perfiladorIniciales: initials, updatedAt: Date.now() }), actor.institutionalUserId]);
+    if (result.rows.length !== 1) return NextResponse.json({ error: "PERFILADOR_INICIALES_YA_REGISTRADAS" }, { status: 409 });
+    return NextResponse.json({ success: true, profile: result.rows[0].profile, storage: "POSTGRESQL" }, { headers });
+  } catch { return NextResponse.json({ error: "Registro institucional no disponible." }, { status: 503, headers }); }
 }

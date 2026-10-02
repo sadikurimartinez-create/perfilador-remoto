@@ -918,7 +918,7 @@ export function PandillasUI({ projectId, onSaveAnalysisToCloud, project }: Pandi
 
       const data: GangEntity = {
         id: selectedGangId || undefined,
-        projectId: projectId || undefined,
+        projectId: projectId || activeProject?.id || undefined,
         nombre,
         aliasConocidos,
         ...(estatus ? { estatus } : {}),

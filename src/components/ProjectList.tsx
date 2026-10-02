@@ -1,4 +1,5 @@
 "use client";
+import { subscribeInstitutionalCollection } from "@/services/institutionalCollectionClient";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useState, useRef } from "react";
@@ -257,8 +258,7 @@ export function ProjectList() {
   useEffect(() => {
     if (loading || !user) return;
     const db = getDb();
-    const q = query(collection(db, "projects"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = subscribeInstitutionalCollection("projects", (snap) => {
       const list: ProjectWithCount[] = snap.docs
         .map((d) => {
           const data = d.data() as any;
@@ -294,8 +294,7 @@ export function ProjectList() {
   useEffect(() => {
     if (loading || !user) return;
     const db = getDb();
-    const q = query(collection(db, "analyses"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = subscribeInstitutionalCollection("analyses", (snap) => {
       const list = snap.docs.map((d) => {
         const data = d.data() as any;
         return {

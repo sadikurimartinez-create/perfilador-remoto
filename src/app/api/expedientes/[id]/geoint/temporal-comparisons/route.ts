@@ -1,63 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TemporalComparisonPersistenceService } from "@/services/geoint/temporalComparisonPersistenceService";
-import { TemporalComparisonRecord } from "@/types/geointTemporalComparison";
-import {
-  GeointGovernanceStatusValue,
-  normalizeGeointGovernanceStatus,
-} from "@/types/geointGovernance";
-
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const expedienteId = params.id;
-    const body = (await req.json()) as TemporalComparisonRecord;
-
-    if (!expedienteId || !body?.id || !body.traceabilityId || !body.sourceEvidenceId) {
-      return NextResponse.json(
-        { error: "expedienteId, id, traceabilityId y sourceEvidenceId son obligatorios" },
-        { status: 400 }
-      );
-    }
-
-    const comparison = await TemporalComparisonPersistenceService.saveTemporalComparison(
-      expedienteId,
-      body
-    );
-
+import { cookies } from "next/headers";
+import { executeInstitutionalTemporal } from "@/services/geoint/institutionalTemporalBoundary";
+export const dynamic = "force-dynamic";
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (req.headers.get('origin') !== new URL(req.url).origin || req.headers.get('sec-fetch-site') === 'cross-site') return NextResponse.json({ error: 'INVALID_ORIGIN' }, { status: 403 });
+  try { const comparison = await executeInstitutionalTemporal({ session: cookies().get('ceipol_session')?.value, projectId: params.id, operation: 'SAVE', record: await req.json() });
     return NextResponse.json({ comparison }, { status: 201 });
-  } catch (error: any) {
-    console.error("[API temporal-comparisons POST] Error:", error);
-    return NextResponse.json(
-      { error: "Error al persistir comparacion temporal", details: error?.message },
-      { status: 500 }
-    );
-  }
+  } catch { return NextResponse.json({ error: 'TEMPORAL_BOUNDARY_DENIED' }, { status: 403 }); }
 }
-
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const expedienteId = params.id;
-    const rawStatus = req.nextUrl.searchParams.get("status");
-    const status = rawStatus
-      ? normalizeGeointGovernanceStatus(rawStatus) as GeointGovernanceStatusValue
-      : undefined;
-
-    const comparisons = await TemporalComparisonPersistenceService.getTemporalComparisonsByProject(
-      expedienteId,
-      status
-    );
-
-    return NextResponse.json({ expedienteId, comparisons });
-  } catch (error: any) {
-    console.error("[API temporal-comparisons GET] Error:", error);
-    return NextResponse.json(
-      { error: "Error al consultar comparaciones temporales", details: error?.message },
-      { status: 500 }
-    );
-  }
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  try { const comparisons = await executeInstitutionalTemporal({ session: cookies().get('ceipol_session')?.value, projectId: params.id, operation: 'LIST', status: req.nextUrl.searchParams.get('status') || undefined });
+    return NextResponse.json({ expedienteId: params.id, comparisons }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch { return NextResponse.json({ error: 'TEMPORAL_BOUNDARY_DENIED' }, { status: 403 }); }
 }

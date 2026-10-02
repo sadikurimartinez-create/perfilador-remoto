@@ -1,4 +1,5 @@
 "use client";
+import { subscribeInstitutionalCollection } from "@/services/institutionalCollectionClient";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useState, useEffect } from "react";
@@ -20,12 +21,12 @@ export default function PerfilPage() {
     if (!user) return;
     const db = getDb();
     
-    const unsubProjects = onSnapshot(collection(db, "projects"), (snap) => {
+    const unsubProjects = subscribeInstitutionalCollection("projects", (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setProjects(list);
     });
 
-    const unsubAudit = onSnapshot(collection(db, "audit_logs"), (snap) => {
+    const unsubAudit = subscribeInstitutionalCollection("audit_logs", (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setAuditLogs(list);
     });

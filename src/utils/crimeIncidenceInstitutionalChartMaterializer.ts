@@ -27,6 +27,7 @@ export interface CrimeIncidenceInstitutionalChartAsset {
   metadata: CrimeIncidenceInstitutionalChartSpecification["metadata"];
 }
 
+function scopedChartBuilder(document: Pick<Document, 'createElementNS'>) {
 function svgElement<K extends keyof SVGElementTagNameMap>(
   tag: K,
   attributes: Record<string, string | number> = {}
@@ -311,7 +312,7 @@ function renderLineChart(
   return svg;
 }
 
-export function buildCrimeIncidenceInstitutionalChartSvg(
+function buildCrimeIncidenceInstitutionalChartSvg(
   specification: CrimeIncidenceInstitutionalChartSpecification
 ): SVGSVGElement {
   if (typeof document === "undefined") {
@@ -327,9 +328,21 @@ export function buildCrimeIncidenceInstitutionalChartSvg(
     : renderLineChart(specification);
 }
 
+return buildCrimeIncidenceInstitutionalChartSvg;
+}
+export function buildCrimeIncidenceInstitutionalChartSvg(specification: CrimeIncidenceInstitutionalChartSpecification, documentOverride?: Pick<Document, 'createElementNS'>): SVGSVGElement {
+ const dom = documentOverride || (typeof document !== 'undefined' ? document : null);
+ if (!dom) throw new Error('CRIME_INCIDENCE_CHART_REQUIRES_DOCUMENT_PORT');
+ return scopedChartBuilder(dom)(specification);
+}
+
 export async function materializeCrimeIncidenceInstitutionalChart(
   specification: CrimeIncidenceInstitutionalChartSpecification
 ): Promise<CrimeIncidenceInstitutionalChartAsset> {
+  if (typeof document === 'undefined' || typeof window !== 'undefined' && ['http:', 'https:'].includes(window.location?.protocol)) {
+    const { materializeInstitutionalChartsServer } = await import('@/lib/institutionalChartActions');
+    return (await materializeInstitutionalChartsServer([specification]))[0];
+  }
   const svg = buildCrimeIncidenceInstitutionalChartSvg(specification);
 
   const host = document.createElement("div");

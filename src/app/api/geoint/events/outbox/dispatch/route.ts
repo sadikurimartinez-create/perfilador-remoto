@@ -1,54 +1,31 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifySession } from "@/utils/authCrypto";
+import { getPool } from "@/lib/db";
+import { resolveInstitutionalSessionIdentity } from "@/services/institutionalSessionIdentityService";
+import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
 import { GeointOutboxDispatcher } from "@/services/geoint/geointOutboxDispatcher";
+import { InstitutionalGeointAdminAdapter } from "@/services/geoint/institutionalGeointAdminAdapter";
 
 export const dynamic = "force-dynamic";
-
-function resolveOperationalActor() {
-  const sessionCookie = cookies().get("ceipol_session");
-  const payload = sessionCookie?.value ? verifySession(sessionCookie.value) : null;
-
-  if (!payload?.username) {
-    return { ok: false as const, status: 401, error: "No autenticado." };
-  }
-
-  if (payload.role !== "SUPER_ADMIN" && payload.role !== "ADMIN") {
-    return { ok: false as const, status: 403, error: "Operación restringida a administradores." };
-  }
-
-  return {
-    ok: true as const,
-    actor: {
-      username: payload.username,
-      role: payload.role,
-    },
-  };
-}
-
-export async function POST() {
-  const auth = resolveOperationalActor();
-
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
-
+export async function POST(request: Request) {
+  if (request.headers.get("origin") !== new URL(request.url).origin || request.headers.get("sec-fetch-site") === "cross-site") return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   try {
-    const result = await GeointOutboxDispatcher.dispatchPending();
-    return NextResponse.json({
-      status: "DISPATCH_COMPLETED",
-      actor: auth.actor,
-      result,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json(
-      {
-        status: "DISPATCH_FAILED",
-        actor: auth.actor,
-        error: message,
-      },
-      { status: 500 }
-    );
-  }
+    const sessionToken = cookies().get("ceipol_session")?.value;
+    const actor = await resolveInstitutionalSessionIdentity(sessionToken);
+    if (!["ADMIN", "SUPER_ADMIN"].includes(actor.role)) return NextResponse.json({ error: "ADMINISTRATIVE_OPERATION_REQUIRED" }, { status: 403 });
+    const grants = await getPool().query("SELECT project_id FROM public.institutional_project_access WHERE institutional_user_id = $1 AND revoked_at IS NULL AND relation = 'ASSIGNED' AND 'WRITE' = ANY(allowed_actions)", [actor.institutionalUserId]);
+    if (!grants.rows.length || grants.rows.length > 200) return NextResponse.json({ error: "EXPLICIT_WRITE_GRANT_REQUIRED" }, { status: 403 });
+    const result = { candidates: 0, processed: 0, completed: 0, retryable: 0, failedTerminal: 0, skipped: 0, success: 0, failed: 0 };
+    let authorizedProjects = 0;
+    for (const row of grants.rows) {
+      const access = await authorizeInstitutionalProjectAccess({ projectId: row.project_id, action: "WRITE", sessionToken });
+      if (!access.allowed) continue;
+      authorizedProjects++;
+      const adapter = new InstitutionalGeointAdminAdapter(access.projectId);
+      const current = await GeointOutboxDispatcher.dispatchPending({ outbox: adapter, ledger: adapter });
+      for (const key of Object.keys(result) as (keyof typeof result)[]) result[key] += current[key];
+    }
+    if (!authorizedProjects) return NextResponse.json({ error: "ACTIVE_PROJECT_GRANT_REQUIRED" }, { status: 403 });
+    return NextResponse.json({ status: "DISPATCH_COMPLETED", actor: { username: actor.username, role: actor.role }, result });
+  } catch { return NextResponse.json({ error: "GEOINT_DISPATCH_UNAVAILABLE" }, { status: 503 }); }
 }

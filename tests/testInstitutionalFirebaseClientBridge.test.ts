@@ -6,7 +6,23 @@ import { connectInstitutionalFirebase, disconnectInstitutionalFirebase } from ".
 describe("Firebase client session lifecycle", () => {
   const originalFetch = global.fetch;
   beforeEach(() => { jest.clearAllMocks(); global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ customToken: "mock-token" }) })) as any; });
-  afterEach(() => { global.fetch = originalFetch; });
+  afterEach(async () => { await disconnectInstitutionalFirebase(); jest.useRealTimers(); global.fetch = originalFetch; });
+  test("refreshes the authoritative mirror before the five-minute lease expires", async () => {
+    jest.useFakeTimers();
+    await connectInstitutionalFirebase();
+    await jest.advanceTimersByTimeAsync(120000);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(signInWithCustomToken).toHaveBeenCalledTimes(2);
+  });
+  test("refresh failure clears Firebase identity and stops further refreshes", async () => {
+    jest.useFakeTimers();
+    await connectInstitutionalFirebase();
+    jest.mocked(global.fetch).mockResolvedValueOnce({ ok: false } as any);
+    await jest.advanceTimersByTimeAsync(120000);
+    expect(signOut).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(120000);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
   test("signs in using only the server custom token with in-memory persistence", async () => {
     await connectInstitutionalFirebase();
     expect(setPersistence).toHaveBeenCalledWith(expect.anything(), "memory");

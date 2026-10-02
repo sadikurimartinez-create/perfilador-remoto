@@ -2,39 +2,27 @@ type StoreDoc = Record<string, any>;
 
 const store = new Map<string, StoreDoc>();
 
-jest.mock("firebase/firestore", () => ({
-  doc: jest.fn((_firestore: unknown, ...segments: string[]) => ({ path: segments.join("/") })),
-  runTransaction: jest.fn(async (_firestore: unknown, updateFunction: any) => {
-    const transaction = {
-      get: jest.fn(async (ref: { path: string }) => ({
-        exists: () => store.has(ref.path),
-        data: () => store.get(ref.path),
-      })),
-      set: jest.fn((ref: { path: string }, value: StoreDoc) => {
-        store.set(ref.path, { ...value });
-      }),
-      update: jest.fn((ref: { path: string }, value: StoreDoc) => {
-        store.set(ref.path, { ...(store.get(ref.path) || {}), ...value });
-      }),
-    };
-    return updateFunction(transaction);
+jest.mock("server-only", () => ({}), { virtual: true });
+jest.mock("next/headers", () => ({ cookies: () => ({ get: () => ({ value: "fixture-session" }) }) }));
+jest.mock("@/services/institutionalProjectAccessService", () => ({ authorizeInstitutionalProjectAccess: jest.fn(async ({ projectId }: any) => ({ allowed: true, projectId, actor: { institutionalUserId: "1", username: "fixture", role: "USER" }, policyVersion: "EXPLICIT_ACTION_GRANT_V1" })) }));
+jest.mock("@/lib/db", () => ({ getPool: () => ({ query: async () => ({ rows: [{ profile: { perfiladorIniciales: "QA" } }] }) }) }));
+jest.mock("@/lib/firebaseAdmin", () => ({
+  getInstitutionalAdminDb: () => ({
+    collection: (name: string) => ({ doc: (id = "audit-fixture") => ({ path: `${name}/${id}` }) }),
+    runTransaction: async (work: any) => {
+      const pending = new Map(store);
+      const transaction = {
+        get: async (ref: { path: string }) => ({ exists: pending.has(ref.path), data: () => pending.get(ref.path) }),
+        set: (ref: { path: string }, value: StoreDoc) => pending.set(ref.path, { ...value }),
+        update: (ref: { path: string }, value: StoreDoc) => pending.set(ref.path, { ...pending.get(ref.path), ...value }),
+        create: (ref: { path: string }, value: StoreDoc) => pending.set(ref.path, { ...value }),
+      };
+      const result = await work(transaction);
+      store.clear(); pending.forEach((value, key) => store.set(key, value));
+      return result;
+    },
   }),
-  getDoc: jest.fn(),
-  setDoc: jest.fn(),
-  collection: jest.fn(),
-  addDoc: jest.fn(),
-  updateDoc: jest.fn(),
-  increment: jest.fn(),
-  query: jest.fn(),
-  orderBy: jest.fn(),
-  getDocs: jest.fn(),
-  deleteDoc: jest.fn(),
 }));
-
-jest.mock("../src/lib/firebase", () => ({
-  getDb: jest.fn(() => ({ kind: "mock-firestore" })),
-}));
-
 import { assignNumeroExpedienteToExistingProject } from "../src/services/historicalNumeroExpedienteAssignmentService";
 
 const user = { perfiladorIniciales: "qa" };

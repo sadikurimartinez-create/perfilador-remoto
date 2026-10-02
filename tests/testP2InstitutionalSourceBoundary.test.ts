@@ -46,7 +46,7 @@ describe("P2 GENERATE_REPORT server source boundary", () => {
       get: async () => ({ exists: true, id: "p1", data: () => ({ numeroExpediente: "N1" }) }), collection: collections,
     }) }) });
     const result = await resolveAuthorizedInstitutionalReportSource({ projectId: "p1", sessionToken: "cookie" }, { authorize: deps().authorize });
-    expect(collections.mock.calls.map(call => call[0])).toEqual(["photos", "documents"]);
+    expect(collections.mock.calls.map(call => call[0])).toEqual(["photos", "documents", "geographicEntities"]);
     expect(result.project.photoEvidence).toHaveLength(1);
     expect(result.project.photoEvidence[0]).toMatchObject({ id: "photo1", previewUrl: "persisted-url", humanValidationStatus: "PENDING_REVIEW" });
     expect(result.project.documents[0].id).toBe("doc1");

@@ -26,6 +26,7 @@ import { renderExecutiveGeointWordDocument } from "@/utils/executiveGeointWordRe
 import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executiveGeointTechnicalAnnexWordRenderer";
 import { assertInstitutionalDocxPhysicalParity, renderInstitutionalPdfFromDocx, institutionalAnnexRequiredVisualIds } from "@/utils/institutionalPdfRenderer";
 import { Packer } from "docx";
+import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
 
 export type InstitutionalReportPackageState = "GENERATING" | "GENERATED" | "FAILED" | "CERTIFIED" | "PUBLISHED";
 export type InstitutionalReportArtifactState = "PENDING" | "STORED" | "FAILED";
@@ -514,6 +515,9 @@ export class InstitutionalReportPackageService {
     annexBlob: Blob;
     pdfArtifacts?: { executive: Blob | null; annex: Blob | null; parity: { status: "PASS" | "FAILED"; sourceDocxHashes: string[]; reason?: string } };
   }): Promise<InstitutionalReportPackageManifest> {
+    if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalReportPackageRepository && this.storage instanceof FirebaseInstitutionalReportPackageStorage) {
+      return invokeInstitutionalReportBoundary("GENERATE", input);
+    }
     const packageId = input.packageId || createInstitutionalReportPackageId();
     const actor = await runReportPackageStage("RESOLVE_ACTOR", async () => {
       const authorized = await this.authorizeGeneration(input.projectId);

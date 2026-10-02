@@ -110,22 +110,9 @@ export default function ProjectWorkspacePage() {
       return false;
     }
     try {
-      const { getDb } = await import("@/lib/firebase");
-      const db = getDb();
-      const { getDocs, query, where, collection } = await import("firebase/firestore");
-      const q = query(
-        collection(db, "users"),
-        where("username", "==", user.username.trim())
-      );
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        setToast({ type: "error", message: "No se encontró el registro del usuario actual." });
-        return false;
-      }
-      const docSnap = snap.docs[0];
-      const data = docSnap.data() as { passwordHash?: string };
-      if (data.passwordHash !== passwordEntered) {
-        setToast({ type: "error", message: "Contraseña incorrecta. Autorización denegada." });
+      const { verifyInstitutionalPassword } = await import("@/lib/institutionalProfileActions");
+      if (!(await verifyInstitutionalPassword(passwordEntered))) {
+        setToast({ type: "error", message: "Contraseña incorrecta o identidad institucional no disponible." });
         return false;
       }
       return true;
@@ -163,8 +150,9 @@ export default function ProjectWorkspacePage() {
   const confirmDeleteAnalysisFinal = async () => {
     if (!pendingDeleteAnalysisId) return;
     try {
-      const db = getDb();
-      await deleteDoc(doc(db, "analyses", pendingDeleteAnalysisId));
+      if (!project?.id) throw new Error("Proyecto no especificado.");
+      const { mutateInstitutionalLifecycle } = await import("@/lib/institutionalLifecycleActions");
+      await mutateInstitutionalLifecycle({ projectId: project.id, entityId: pendingDeleteAnalysisId, kind: "ANALYSIS", operation: "DELETE", operationId: `delete-analysis:${project.id}:${pendingDeleteAnalysisId}`, reason: "Eliminación de análisis tras confirmación institucional" });
       setPendingDeleteAnalysisId(null);
       setDeletePasswordInput("");
       setDeleteAnalysisStep("password");

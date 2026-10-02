@@ -1,6 +1,8 @@
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+import { cookies } from "next/headers";
+import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -104,7 +106,10 @@ function overwriteAiSpatialOutputWithSourceCoordinates(parsedResult: any, seedAd
 
 export async function POST(req: Request) {
   try {
+    if (req.headers.get('origin') !== new URL(req.url).origin || req.headers.get('sec-fetch-site') === 'cross-site') return NextResponse.json({error:'PANDILLAS_ACCESS_DENIED'},{status:403});
     const body = await req.json();
+    const access = await authorizeInstitutionalProjectAccess({sessionToken:cookies().get('ceipol_session')?.value,projectId:body.projectId,action:'WRITE'});
+    if (!access.allowed) return NextResponse.json({error:'PANDILLAS_ACCESS_DENIED'},{status:403});
     const {
       nombre = "",
       zonaInfluencia = "",

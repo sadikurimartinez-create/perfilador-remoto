@@ -14,6 +14,7 @@ describe("institutional Firebase token authority", () => {
       verify: jest.fn(() => session), now: () => 2000,
       resolve: jest.fn(async () => ({ id: 42, username: "fixture", role: "USER" })),
       mint: jest.fn(async () => "mock-custom-token"),
+      synchronize: jest.fn(async () => []),
     };
   }
   test("valid session mints server-derived claims, ignoring stale session role", async () => {
@@ -49,7 +50,13 @@ describe("institutional Firebase token authority", () => {
     const mint = jest.fn(async () => "fixture-custom-token");
     jest.mocked(getInstitutionalAdminAuth).mockReturnValueOnce({ createCustomToken: mint } as any);
     const deps = dependencies();
-    await expect(issueInstitutionalFirebaseToken("signed", { verify: deps.verify, resolve: deps.resolve, now: deps.now })).resolves.toBe("fixture-custom-token");
+    await expect(issueInstitutionalFirebaseToken("signed", { verify: deps.verify, resolve: deps.resolve, now: deps.now, synchronize: deps.synchronize })).resolves.toBe("fixture-custom-token");
     expect(mint).toHaveBeenCalledWith("user:42", { role: "USER", institutionalUserId: "42" });
+  });
+  test("projection failure prevents custom token issuance", async () => {
+    const deps = dependencies();
+    deps.synchronize.mockRejectedValueOnce(new Error("PROJECTION_UNAVAILABLE"));
+    await expect(issueInstitutionalFirebaseToken("signed", deps)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    expect(deps.mint).not.toHaveBeenCalled();
   });
 });

@@ -16,7 +16,9 @@ const content = {
 const protectedFiles: Array<[string, string]> = [
   [
     "src/components/PhotoAlbum.tsx",
-    "765F8EBF44A314E607727C1FD4DD35920E3C2BACC74D6B00B46AEA0DC217B46C"
+    // P8J minimal boundary remediation: fresh PG password, server dossier deletion,
+      // and clear-all waits for each authorized deletion. Remaining album behavior is protected.
+      "E57D051D228E7F473024A53B438AB0BD158D7FD0F7AEFEB2B3AD76999A2E0599"
   ],
   [
     "docs/H2F2E13-SCINCE-TERRITORIAL-COVERAGE-CONTRACT.md",

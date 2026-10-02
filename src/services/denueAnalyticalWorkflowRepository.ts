@@ -190,23 +190,24 @@ function reviewEventRef(db: Firestore, projectId: string, eventId: string) {
   return doc(db, "projects", projectId, REVIEW_EVENTS_COLLECTION, eventId);
 }
 
+export interface DenueWorkflowPersistencePort { document:(db:any,...segments:string[])=>any; read:(db:any,...segments:string[])=>Promise<any>; transaction:(db:any,work:(transaction:any)=>Promise<void>)=>Promise<void>; }
 export class FirestoreDenueAnalyticalWorkflowRepository implements DenueAnalyticalWorkflowRepository {
-  constructor(private readonly db: Firestore = getDb()) {}
+  constructor(private readonly db: Firestore = getDb(), private readonly port?: DenueWorkflowPersistencePort) {}
 
   async load(projectId: string): Promise<DenueAnalyticalWorkflowSnapshot> {
     assertProjectId(projectId);
     const [relationSnapshot, eventSnapshot] = await Promise.all([
-      getDocs(relationCollection(this.db, projectId)),
-      getDocs(reviewEventCollection(this.db, projectId)),
+      this.port ? this.port.read(this.db,'projects',projectId,RELATIONS_COLLECTION) : getDocs(relationCollection(this.db, projectId)),
+      this.port ? this.port.read(this.db,'projects',projectId,REVIEW_EVENTS_COLLECTION) : getDocs(reviewEventCollection(this.db, projectId)),
     ]);
-    const relations = relationSnapshot.docs.map((snapshot) => {
+    const relations = relationSnapshot.docs.map((snapshot:any) => {
       const document = decodeRelationDocument(snapshot.data());
       if (snapshot.id !== document.relation.relationId) {
         throw new Error("DENUE_ANALYTICAL_RELATION_DOCUMENT_ID_MISMATCH");
       }
       return document.relation;
     });
-    const events = eventSnapshot.docs.map((snapshot) => {
+    const events = eventSnapshot.docs.map((snapshot:any) => {
       const event = snapshot.data() as DenueAnalyticalReviewEvent;
       if (snapshot.id !== event.eventId) {
         throw new Error("DENUE_ANALYTICAL_REVIEW_EVENT_DOCUMENT_ID_MISMATCH");
@@ -221,10 +222,10 @@ export class FirestoreDenueAnalyticalWorkflowRepository implements DenueAnalytic
     relations: readonly DenueAnalyticalRelation[]
   ): Promise<DenueAnalyticalWorkflowSnapshot> {
     const canonical = canonicalRelationsForProject(projectId, relations);
-    await runTransaction(this.db, async (transaction) => {
-      const refs = canonical.map((relation) => relationRef(this.db, projectId, relation.relationId));
+    await (this.port?.transaction || runTransaction)(this.db, async (transaction:any) => {
+      const refs = canonical.map((relation) => this.port ? this.port.document(this.db,'projects',projectId,RELATIONS_COLLECTION,relation.relationId) : relationRef(this.db, projectId, relation.relationId));
       const snapshots = await Promise.all(refs.map((reference) => transaction.get(reference)));
-      snapshots.forEach((snapshot, index) => {
+      snapshots.forEach((snapshot:any, index:number) => {
         const next = relationDocument(canonical[index]);
         if (snapshot.exists()) {
           const existing = decodeRelationDocument(snapshot.data());
@@ -247,10 +248,10 @@ export class FirestoreDenueAnalyticalWorkflowRepository implements DenueAnalytic
     if (event.expedienteId !== projectId) {
       throw new Error("DENUE_ANALYTICAL_REVIEW_EVENT_PROJECT_MISMATCH");
     }
-    const baseRef = relationRef(this.db, projectId, event.relationId);
-    const eventRef = reviewEventRef(this.db, projectId, event.eventId);
+    const baseRef = this.port ? this.port.document(this.db,'projects',projectId,RELATIONS_COLLECTION,event.relationId) : relationRef(this.db, projectId, event.relationId);
+    const eventRef = this.port ? this.port.document(this.db,'projects',projectId,REVIEW_EVENTS_COLLECTION,event.eventId) : reviewEventRef(this.db, projectId, event.eventId);
 
-    await runTransaction(this.db, async (transaction) => {
+    await (this.port?.transaction || runTransaction)(this.db, async (transaction:any) => {
       const [baseSnapshot, existingEventSnapshot] = await Promise.all([
         transaction.get(baseRef),
         transaction.get(eventRef),
@@ -364,9 +365,11 @@ export function loadDenueAnalyticalWorkflow(projectId: string) {
 }
 
 export function saveDenueAnalyticalRelations(projectId: string, relations: readonly DenueAnalyticalRelation[]) {
+  if(typeof window!=='undefined' && /^https?:$/.test(window.location.protocol))return import('@/lib/institutionalDenueActions').then(module=>module.persistInstitutionalDenue(projectId,'SAVE',relations));
   return repository().saveRelations(projectId, relations);
 }
 
 export function appendDenueAnalyticalReviewEvent(projectId: string, event: DenueAnalyticalReviewEvent) {
+  if(typeof window!=='undefined' && /^https?:$/.test(window.location.protocol))return import('@/lib/institutionalDenueActions').then(module=>module.persistInstitutionalDenue(projectId,'REVIEW',event));
   return repository().appendReviewEvent(projectId, event);
 }
