@@ -26,7 +26,7 @@ export interface InstitutionalPdfRenderResult {
   parity: { status: "PASS"; sourceDocxSha256: string; pdfSha256: string; textBlocks: string[]; imageHashes: string[]; visualIds: string[]; pageCount: number; format: "LETTER"; orientation: "PORTRAIT" };
 }
 export function institutionalAnnexRequiredVisualIds(annex: { executiveReportReference: { principalMapId: string }; sections: Array<{ sectionId: string; records: Array<{ recordId: string }> }> }, executiveRequiredIds: string[]): string[] {
-  const records = annex.sections.filter(section => ["field-photographs", "street-view"].includes(section.sectionId)).flatMap(section => section.records);
+  const records = annex.sections.filter(section => ["field-photographs", "street-view", "incidence"].includes(section.sectionId)).flatMap(section => section.records);
   return [...new Set([annex.executiveReportReference.principalMapId, ...records.filter(record => executiveRequiredIds.includes(record.recordId)).map(record => record.recordId)])];
 }
 const children = (node: Element | undefined, name?: string): Element[] => (node?.elements || []).filter(item => !name || item.name === name);
@@ -277,7 +277,7 @@ export async function renderInstitutionalPdfFromDocx(bytes: Uint8Array, trace: I
   if (JSON.stringify(written) !== JSON.stringify(expectedText) || JSON.stringify(drawn) !== JSON.stringify(images.map(item => item.sha256))) throw new Error("INSTITUTIONAL_PDF_BLOCKED:CONTENT_PARITY_FAILED");
   const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   pdf.setProperties({ title: trace.kind === "EXECUTIVE_REPORT" ? "INFORME EJECUTIVO GEOINT" : "ANEXO TÉCNICO GEOINT", author: "SSPE-CEIPOL", subject: `GENERATED | ${trace.numeroExpediente}` });
-  pdf.addMetadata(`<institutionalTrace>${escape(JSON.stringify(trace))}</institutionalTrace>`);
+  pdf.addMetadata(`<institutionalTrace>${escape(canonicalSemanticValue(trace))}</institutionalTrace>`);
   const data = new Uint8Array(pdf.output("arraybuffer"));
   return { blob: new Blob([data], { type: "application/pdf" }), trace,
     parity: { status: "PASS", sourceDocxSha256: await hash(bytes), pdfSha256: await hash(data), textBlocks: expectedText,

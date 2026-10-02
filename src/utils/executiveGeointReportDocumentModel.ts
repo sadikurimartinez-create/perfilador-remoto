@@ -5,6 +5,7 @@ import type {
   ExecutiveGeointReportModel,
   TechnicalAnnexReference,
 } from "@/utils/executiveGeointReportModel";
+import { translateSourceFactTerminology } from "@/utils/executiveGeointReportModel";
 import type { ExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
 import {
   isCertifiedGimAnalysisPayload,
@@ -12,7 +13,7 @@ import {
 } from "@/utils/institutionalReportPublicationContract";
 import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import type { StructuredTableInput } from "@/utils/documentTableRenderer";
-import { scinceDocumentSummary } from "@/utils/scinceDocumentContext";
+import { scinceDocumentSummary, scinceDocumentLimitations } from "@/utils/scinceDocumentContext";
 import { resolveCrimeIncidenceVisualSource } from "@/utils/crimeIncidenceInstitutionalVisualProducer";
 import { buildDocumentSemanticAudit, incidenceDocumentBasis, type DocumentSemanticAudit } from "./institutionalDocumentSemanticIntegrity";
 
@@ -142,7 +143,7 @@ function dedupe(values: string[]): string[] {
 
 function visible(value: unknown, fallback = ""): string {
   const text = clean(value) || fallback;
-  return text
+  return translateSourceFactTerminology(text)
     .replace(/\b(projectId|sourceItemId|traceabilityId|geographyId|lineage|publicationEligibility|reasonCode|modelVersion|payload)\b/gi, "")
     .replace(/\b(?:ev|evidence|finding|trace|sourceItem|geo)-[A-Za-z0-9_-]+\b/gi, "")
     .replace(/\b(Confidence|Score|Trend|Scenario|Finding|Review|Reviewer|SOURCE_FACT|ANALYTICAL_PROJECTION|PENDING|APPROVED|STALE|Gate|ADR)\b/g, "")
@@ -398,6 +399,7 @@ function buildSections(
             ? "Cartografía canónica disponible y representada mediante mapa territorial gobernado."
             : "Cartografía canónica disponible y representada mediante visual territorial gobernado.",
         ...scinceDocumentSummary(input.scinceContext),
+        ...(input.scinceContext?.publicationStatus !== "PUBLISHABLE" ? scinceDocumentLimitations(input.scinceContext) : []),
         denueContext(input),
         incidenceContext(input, strict),
       ],

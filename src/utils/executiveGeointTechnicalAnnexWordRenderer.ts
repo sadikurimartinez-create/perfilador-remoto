@@ -157,7 +157,7 @@ function renderSection(
     ...section.content.map((item) => para(item)),
     ...renderFactTable(section.facts),
     ...renderGovernedTables(section.tables),
-    ...(section.sectionId === "field-photographs" || section.sectionId === "street-view"
+    ...(["field-photographs", "street-view", "incidence"].includes(section.sectionId)
       ? []
       : renderRecords(section.records)),
   ];
@@ -175,7 +175,7 @@ function renderSection(
       missingVisualAssetIds.push(id);
     }
   }
-  if (section.sectionId === "field-photographs" || section.sectionId === "street-view") {
+  if (["field-photographs", "street-view", "incidence"].includes(section.sectionId)) {
     for (const record of section.records) {
       const asset = assets[record.recordId];
       if (!asset?.data?.byteLength) {
@@ -186,7 +186,7 @@ function renderSection(
         if (record.visualReference) missingVisualAssetIds.push(record.recordId);
         continue;
       }
-      children.push(...renderEvidenceDossier(record));
+      children.push(...(section.sectionId === "incidence" ? [para("Producto descriptivo del snapshot admitido; no constituye evidencia criminal ni inferencia causal.")] : renderEvidenceDossier(record)));
       children.push(...renderAsset(asset, `${visibleRecordLabel(record.title)}. Fuente: ${visibleRecordLabel(record.sourceType)}. Referencia: ${record.referenceLabel || record.recordId}.`, false, record.recordId));
       renderedVisualIds.push(record.recordId);
     }
@@ -226,7 +226,7 @@ export function renderExecutiveGeointTechnicalAnnexWordDocument(
   const watermarkBuffer = InstitutionalBrandManager.generateWatermarkBuffer();
   if (options.exportMode !== "DRAFT") {
     const required = annexModel.technicalMetadata.semanticIntegrity!.requiredVisualIds;
-    const nativeIds = annexModel.sections.filter(section => ["field-photographs", "street-view"].includes(section.sectionId)).flatMap(section => section.records.map(record => record.recordId));
+    const nativeIds = annexModel.sections.filter(section => ["field-photographs", "street-view", "incidence"].includes(section.sectionId)).flatMap(section => section.records.map(record => record.recordId));
     for (const id of [annexModel.executiveReportReference.principalMapId, ...nativeIds.filter(id => required.includes(id))]) {
       if (!renderedVisualIds.includes(id) || missingVisualAssetIds.includes(id)) throw new Error(`P5_BLOCKED:REQUIRED_VISUAL_NOT_RENDERED:${id}`);
     }

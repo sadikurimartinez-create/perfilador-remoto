@@ -71,6 +71,7 @@ import type { MultisourceOrchestrationItem } from "@/types/multisourceOrchestrat
 import {
   getReportPackageErrorDiagnostic,
   institutionalReportPackageService,
+  isCompleteInstitutionalReportPackage,
   type InstitutionalReportPackageManifest,
 } from "@/services/institutionalReportPackageService";
 
@@ -1557,8 +1558,11 @@ export function PhotoAlbum({
         project?.nombre || "Expediente",
         institutionalProducts.numeroExpediente,
         user,
-        buildInstitutionalProductExportOptions(reportKind)
+        { ...buildInstitutionalProductExportOptions(reportKind), downloadFormat: "ALL" }
       );
+      if (!generatedPackage || !isCompleteInstitutionalReportPackage(generatedPackage)) {
+        throw new Error("REPORT_PACKAGE_COMPLETE_PRODUCT_REQUIRED");
+      }
       if (generatedPackage?.packageId) {
         setInstitutionalReportPackages((current) => [
           generatedPackage,
@@ -1600,10 +1604,16 @@ export function PhotoAlbum({
   const handleDownloadInstitutionalPackage = useCallback(async (item: InstitutionalReportPackageManifest) => {
     setIsLoadingInstitutionalReportHistory(true);
     try {
+      if (!isCompleteInstitutionalReportPackage(item)) throw new Error("REPORT_PACKAGE_COMPLETE_PRODUCT_REQUIRED");
       const pair = await institutionalReportPackageService.downloadPackage(item.projectId, item.packageId);
+      if (!isCompleteInstitutionalReportPackage(pair.manifest) || !pair.executivePdf || !pair.technicalAnnexPdf || !pair.manifest.artifacts.executivePdf || !pair.manifest.artifacts.technicalAnnexPdf) {
+        throw new Error("REPORT_PACKAGE_COMPLETE_PRODUCT_REQUIRED");
+      }
       const { saveAs: saveFile } = await import("file-saver");
       saveFile(pair.executiveReport, pair.manifest.artifacts.executiveReport.filename);
       saveFile(pair.technicalAnnex, pair.manifest.artifacts.technicalAnnex.filename);
+      saveFile(pair.executivePdf, pair.manifest.artifacts.executivePdf.filename);
+      saveFile(pair.technicalAnnexPdf, pair.manifest.artifacts.technicalAnnexPdf.filename);
     } catch (err: any) {
       setError(err?.message || "No fue posible descargar el paquete institucional.");
     } finally {
@@ -1833,71 +1843,6 @@ const hasMinimumPhotos =
     }
   };
 
-  const handleGenerateFinalReport = async () => {
-    if (selectedIds.length === 0) {
-      setError("Seleccione al menos una fotografía.");
-      return;
-    }
-
-    if (!hasMinimumPhotos) {
-      setError(
-        `La geometría ${project?.geometryType?.toUpperCase() || "INDIVIDUAL"} requiere mínimo ${requiredPhotos} fotografía(s) georreferenciada(s).`
-      );
-      return;
-    }
-
-    // FASE 1: Validación estricta de Contextualización en Fotografías
-    const selectedPhotos = album.filter((p) => selectedIds.includes(p.id));
-    const isMissingContext = selectedPhotos.some((p) => !p.tipo || !p.comentario?.trim());
-    if (isMissingContext) {
-      setError("Todas las fotografías seleccionadas deben estar contextualizadas (Tipo y Comentario son obligatorios).");
-      return;
-    }
-
-    setIsValidatingPhotos(true);
-    setError(null);
-    try {
-      const photosContext = selectedPhotos.map(p => `[${p.tipo}] ${p.comentario}`).join(" | ");
-      const instructionPhotos = `\n\n(INSTRUCCIÓN DEL SISTEMA: Eres un Arquitecto de Datos e IA evaluando la evidencia de campo. Endurece tu criterio: busca indicaciones técnicas. Si el comentario describe bien el entorno y qué buscar, otorga score >= 80; si es vago, score < 80. OBLIGATORIO: Sin importar el score, SIEMPRE incluye en tus 'suggestions' 3 recomendaciones técnicas usando estos Power-Ups: 1. IMÁGENES: Sugiere "Ejecuta OCR Avanzado y Extracción de Atributos Visuales". 2. GEOESPACIAL: Sugiere "Consulta de Proximidad ST_DWithin y Grounding Dinámico". 3. TEXTO: Sugiere "Activa Extracción de Entidades Salientes". Explica por qué esto afina a la IA. DEVUELVE UN JSON VÁLIDO con 'score' y 'suggestions'.)`;
-      const minimalPhotos = selectedPhotos.map((p) => ({
-        id: p.id,
-        evidenceId: p.evidenceId || p.id,
-        lat: p.lat,
-        lng: p.lng,
-        tipo: p.tipo || "",
-        comentario: p.comentario || ""
-      }));
-      const res = await fetch("/api/refine-context", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: photosContext + instructionPhotos, originalHumanText: photosContext, photos: minimalPhotos, mode: "validate-photos", projectId, geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null, geometryType: project?.geometryType || "individual", projectDescription: project?.descripcion || "" })
-      });
-      const textRes = await res.text();
-      let data;
-      try {
-        data = JSON.parse(textRes);
-      } catch (e) {
-        throw new Error(`La ruta /api/refine-context devolvió HTML (Status: ${res.status}).`);
-      }
-      if ((data.score ?? 0) < 80) {
-        setError(`⚠️ RECHAZADO (Lógica ${data.score ?? 0}%): ${data.suggestions || "Mejora el rigor técnico de la evidencia."}`);
-        setIsValidatingPhotos(false);
-        return;
-      }
-    } catch (err: any) {
-      console.error("Error al validar fotos:", err);
-      setError(err.message || "Error de comunicación al validar evidencia. Intente de nuevo.");
-      setIsValidatingPhotos(false);
-      return;
-    }
-    setIsValidatingPhotos(false);
-
-    // If validation passes, proceed directly to generation
-    await confirmAndGenerateProfile();
-  };
-
-;
-
   const [isRetrievingAnalysisData, setIsRetrievingAnalysisData] = useState(false);
 
   const loadAnalysisData = async () => {
@@ -1963,602 +1908,6 @@ const hasMinimumPhotos =
     }
   };
 
-  const confirmAndGenerateProfile = async (hypothesisOverride?: any) => {
-    console.info("[REPORT PRODUCT] LEGACY_DICTAMEN");
-    const hypothesisGate = canProceedWithInstitutionalAnalysis(
-      hypothesisOverride ? { canonicalHypothesis: hypothesisOverride } : project
-    );
-    const effectiveCanonicalHypothesis =
-      hypothesisOverride ?? project?.canonicalHypothesis ?? null;
-    if (!hypothesisGate.allowed) {
-      setError("HIPÓTESIS NO FORMULADA: formule una hipótesis humana antes de continuar con el análisis institucional formal.");
-      setShowConfigModal(false);
-      return;
-    }
-    let selected = album.filter((p) => selectedIds.includes(p.id));
-    if (selected.length === 0) {
-      selected = album;
-    }
-    const withCoords = selected.filter(
-      (p) =>
-        p.lat != null &&
-        p.lng != null &&
-        Number.isFinite(Number(p.lat)) &&
-        Number.isFinite(Number(p.lng))
-    );
-    if (withCoords.length === 0) {
-      setError(
-        "Ninguna de las fotos seleccionadas tiene coordenadas GPS. Use fotos con ubicación (cámara o EXIF)."
-      );
-      setShowConfigModal(false);
-      return;
-    }
-    try {
-      if (refreshUser) {
-        await refreshUser();
-      }
-      await assertGenerateProfileServerSession();
-    } catch (err: any) {
-      console.warn("[confirmAndGenerateProfile] Sesión no válida para generar informe:", err);
-      setError(err?.message || GENERATE_PROFILE_SESSION_EXPIRED_MESSAGE);
-      setShowConfigModal(false);
-      return;
-    }
-    setShowConfigModal(false);
-    setError(null);
-    setIsGeneratingAI(true);
-    const addLog = (msg: string) => {
-      setGenerationLogs((prev) => [...prev, `[${new Date().toLocaleTimeString("es-MX")}] ${msg}`]);
-    };
-    setGenerationLogs([]);
-    setGenerationChapter(0);
-    addLog("Iniciando procesamiento del Dictamen Técnico de Inteligencia...");
-    let hasError = false;
-    try {
-      const generatedAnalysisOutputs: any[] = [];
-      const photosPayload = await Promise.all(
-        selected.map(async (p) => {
-          let imageBase64: string | null = null;
-          if (p.file) {
-            try {
-              imageBase64 = await resizeImageToBase64(p.file, 640, 0.5);
-            } catch {
-              const sizeMb = p.file.size / (1024 * 1024);
-              if (sizeMb <= 2) imageBase64 = await readFileAsBase64(p.file);
-            }
-          }
-          return {
-            id: p.id,
-            lat: p.lat,
-            lng: p.lng,
-            tipo: p.tipo,
-            comentario: p.comentario,
-            imageBase64: imageBase64 ?? undefined,
-          };
-        })
-      );
-
-      // Usar sólo georreferencias reales disponibles; no fabricar centroide por default.
-      const projLat = Number(project?.latitude);
-      const projLng = Number(project?.longitude);
-      const polyLat = (analysisPolygon && analysisPolygon.length > 0) ? (analysisPolygon.reduce((acc, p) => acc + p.lat, 0) / analysisPolygon.length) : NaN;
-      const polyLng = (analysisPolygon && analysisPolygon.length > 0) ? (analysisPolygon.reduce((acc, p) => acc + p.lng, 0) / analysisPolygon.length) : NaN;
-      const centerLat = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lat), 0) / withCoords.length) : NaN;
-      const centerLng = withCoords.length > 0 ? (withCoords.reduce((acc, p) => acc + Number(p.lng), 0) / withCoords.length) : NaN;
-      const lat = (!isNaN(projLat) && projLat !== 0) ? projLat : (!isNaN(polyLat) ? polyLat : (!isNaN(centerLat) ? centerLat : null));
-      const lng = (!isNaN(projLng) && projLng !== 0) ? projLng : (!isNaN(polyLng) ? polyLng : (!isNaN(centerLng) ? centerLng : null));
-      // Helper local de fetch con timeout
-      const fetchWithTimeout = async (url: string, options: any, timeoutMs = 15000): Promise<Response> => {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const response = await fetch(url, {
-            ...options,
-            signal: controller.signal
-          });
-          clearTimeout(id);
-          return response;
-        } catch (err) {
-          clearTimeout(id);
-          throw err;
-        }
-      };
-
-      addLog("Llamando APIs de georreferenciación táctica y análisis territorial...");
-      console.log("[confirmAndGenerateProfile] 1. Inicializando análisis y llamando APIs concurrentes...");
-      setAiProfile("Inicializando análisis y consultando bases cartográficas...");
-
-      // EJECUCION PARALELA: analisis territorial e incidencia. Profile generation does not initiate OSINT.
-      const mapResPromise = fetchWithTimeout("/api/analyze-selection", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          photos: photosPayload, 
-          analysisRadius,
-          analysisPolygon,
-          manualPois
-        }),
-      }, 15000).catch(e => {
-        console.warn("[PhotoAlbum] Error /api/analyze-selection (se continúa con datos por defecto):", e);
-        return null;
-      });
-
-      const incidenciaResPromise = lat !== null && lng !== null
-        ? fetchWithTimeout("/api/incidencia", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ lat, lng, radius: analysisRadius }),
-          }, 12000).catch(e => {
-            console.warn("[PhotoAlbum] Error /api/incidencia (se continúa sin incidencia local):", e);
-            return null;
-          })
-        : Promise.resolve(null);
-
-      // ADR-020.34 C4:
-      // Profile generation MUST NOT initiate OSINT acquisition.
-      // Productive OSINT requires an explicit human-triggered sweep.
-      const automaticOsintData = null;
-
-      const [mapRes, incidenciaRes] = await Promise.all([
-        mapResPromise,
-        incidenciaResPromise
-      ]);
-
-      addLog("APIs iniciales completaron transporte. La generacion del perfil no inicio un barrido OSINT.");
-      console.log("[confirmAndGenerateProfile] 2. APIs iniciales completaron transporte.");
-
-      let currentAnalysisResult = analysisResult;
-      let svData: any[] = [];
-      if (mapRes && mapRes.ok) {
-        try {
-          const mapText = await mapRes.text();
-          if (mapText) {
-            const mapData = JSON.parse(mapText);
-            currentAnalysisResult = mapData;
-            setAnalysisResult(mapData);
-            if (mapData.tacticalStreetViews) svData = mapData.tacticalStreetViews;
-          }
-        } catch (err) {
-          console.warn("JSON Parse Error en mapRes:", err);
-        }
-      }
-
-      let incidenciaLocal: any[] = [];
-      let incidenciaCompleta: any[] = [];
-      let bibliografiaLocal = "";
-      if (incidenciaRes) {
-        try {
-          const incText = await incidenciaRes.text();
-          if (incText) {
-            const incidenciaJson = JSON.parse(incText) as any;
-            const incidenciaStatus = incidenciaJson.resultStatus || (incidenciaRes.ok ? "SUCCESS" : "ERROR");
-            addLog(`Incidencia: ${incidenciaStatus}`);
-            if (incidenciaRes.ok && incidenciaJson.success !== false && (incidenciaStatus === "SUCCESS_WITH_DATA" || incidenciaStatus === "SUCCESS_EMPTY" || incidenciaStatus === "SUCCESS")) {
-              incidenciaLocal = (incidenciaJson.data ?? []).slice(0, 30);
-              incidenciaCompleta = incidenciaJson.data ?? [];
-              bibliografiaLocal = incidenciaJson.bibliografia ?? "";
-              setDebugData((prev: any) => ({
-                ...(prev ?? {}),
-                incidencia: incidenciaLocal,
-                bibliografia: bibliografiaLocal,
-                incidenciaStatus,
-              }));
-            } else {
-              console.warn("[confirmAndGenerateProfile] Incidencia no disponible como resultado de negocio:", incidenciaStatus, incidenciaJson.error || incidenciaRes.statusText);
-              setDebugData((prev: any) => ({
-                ...(prev ?? {}),
-                incidencia: [],
-                incidenciaStatus,
-                incidenciaError: incidenciaJson.error || incidenciaRes.statusText,
-              }));
-            }
-          }
-        } catch (err) {
-          console.warn("JSON Parse Error en incidenciaRes:", err);
-          addLog("Incidencia: BUSINESS_ERROR");
-        }
-      }
-
-      // Empaquetar las instrucciones de la Evidencia Multimodal para la IA
-      const multimodalContext = documents.map(d => `[Archivo Adjunto al Expediente: ${d.name} | Tipo: ${d.type}]\nInstrucción Táctica del Analista: ${d.context}`).join("\n\n");
-
-      // Forzar a la IA a describir detalladamente las evidencias de StreetView o del barrido físico
-      const svInstruction = svData && svData.length > 0
-        ? `\n\n[INSTRUCCIÓN TÁCTICA OBLIGATORIA - BARRIDO DE ACECHO]\nSe obtuvieron ${svData.length} evidencias fotográficas automatizadas de lugares de acecho (StreetView): ${svData.map((s: any) => s.name).join(', ')}. ES TOTALMENTE OBLIGATORIO que dediques un apartado en tu dictamen para enumerar y explicar detalladamente CADA UNO de estos lugares, justificando con claridad por qué representan un riesgo físico o refugio criminal.`
-        : `\n\n[INSTRUCCIÓN TÁCTICA OBLIGATORIA - BARRIDO DE ACECHO]\nPROHIBIDO mencionar la frase "no se dispone de un barrido de StreetView". El barrido de lugares de acecho se garantizó a través de la exploración in-situ del analista. Usa estrictamente las fotografías adjuntas por el investigador para extraer, enumerar y explicar con total claridad las evidencias de riesgo y vulnerabilidad física encontradas en terreno.`;
-
-      try {
-        let finalMarkdown = "";
-        let data: any = null;
-        const totalChapters = 11;
-
-        addLog("Iniciando bucle de generación de 11 capítulos con la IA...");
-        for (let ch = 1; ch <= totalChapters; ch++) {
-          setGenerationChapter(ch);
-          addLog(`Solicitando a la IA: ${getChapterLabel(ch)} (Sección ${ch} de 11)...`);
-          setAiProfile(`Generando informe de geointeligencia... Capítulo ${ch} de ${totalChapters}`);
-
-          let res: Response | null = null;
-          let retries = 3;
-          let delayMs = 2000;
-
-          for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-              res = await fetchWithTimeout("/api/generate-profile", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  projectName: project?.nombre || "",
-                  projectId: project?.id || "",
-                  canonicalHypothesis: effectiveCanonicalHypothesis,
-                  photos: photosPayload.map(({ imageBase64, ...rest }) => rest), // Quitar base64 masivo para evitar Timeout 504
-                  analysisContext: (analysisContext || "") + svInstruction,
-                  analysisRadius,
-                  focusAreas,
-                  incidenciaLocal,
-                  incidenciaCompleta,
-                  lat,
-                  lng,
-                  bibliografiaLocal,
-                  multimodalContext,
-                  // ADR-020.34: preserve missing geography type as UNKNOWN.
-                  geometryType: project?.geometryType || null,
-                  canonicalGeography: project?.canonicalGeography || null,
-                  projectDescription: project?.descripcion || "",
-                  osintEngineData: automaticOsintData,
-                  streetViews: svData,
-                  datosGobMxData: datosGobMxResult,
-                  linkedGangReport: project?.linkedGangReport,
-                  sweeps: dedupeSweeps((project as any)?.sweeps || []),
-                  sweepsComments: sweepsComments,
-                  chapter: ch
-                }),
-              }, 120000);
-
-              if (res.ok) {
-                break;
-              }
-
-              addLog(`⚠️ Intento ${attempt} fallido con status ${res.status}.`);
-              console.warn(`[confirmAndGenerateProfile] Intento ${attempt} fallido con status ${res.status}.`);
-              if (!shouldRetryGenerateProfileRequest(res.status, attempt, retries)) {
-                break;
-              }
-            } catch (err) {
-              addLog(`⚠️ Intento ${attempt} fallido por error de red/fetch.`);
-              console.warn(`[confirmAndGenerateProfile] Intento ${attempt} arrojó error de red/fetch:`, err);
-              if (attempt === retries) {
-                throw err;
-              }
-            }
-            await new Promise(r => setTimeout(r, delayMs));
-            delayMs *= 1.5;
-          }
-
-          if (!res || !res.ok) {
-            const text = res ? await res.text().catch(() => "") : "";
-            let msg = `Error al generar el capítulo ${ch} de la IA tras varios reintentos`;
-            try {
-              const json = JSON.parse(text) as { error?: string; details?: string };
-              if (json && json.error) {
-                msg = json.error + (json.details ? ` | Detalles técnicos: ${json.details}` : "");
-              }
-            } catch {}
-            throw new Error(msg);
-          }
-
-          const reader = res.body?.getReader();
-          if (!reader) {
-            throw new Error("No se pudo iniciar el lector de flujo del servidor.");
-          }
-
-          const decoder = new TextDecoder("utf-8");
-          let accumulatedResponse = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            accumulatedResponse += chunk;
-
-            try {
-              const markdownMatch = accumulatedResponse.match(/"markdown"\s*:\s*"(.*)/);
-              if (markdownMatch) {
-                let currentMarkdown = markdownMatch[1];
-                if (currentMarkdown.endsWith('"}')) {
-                  currentMarkdown = currentMarkdown.slice(0, -2);
-                }
-                try {
-                  // Unescape JSON string fragment
-                  currentMarkdown = JSON.parse(`"${currentMarkdown}"`);
-                } catch {
-                  // Fallback unescape
-                  currentMarkdown = currentMarkdown
-                    .replace(/\\n/g, "\n")
-                    .replace(/\\"/g, '"')
-                    .replace(/\\\\/g, "\\");
-                }
-                setAiProfile(finalMarkdown + currentMarkdown);
-                setEditableProfile(finalMarkdown + currentMarkdown);
-              }
-            } catch (streamErr) {
-              console.warn("[confirmAndGenerateProfile] Stream chunk parse warning:", streamErr);
-            }
-          }
-
-          let chapterData: any;
-          try {
-            chapterData = JSON.parse(accumulatedResponse);
-          } catch (err) {
-            throw new Error(`El servidor devolvió una respuesta vacía o incompleta en el capítulo ${ch}.`);
-          }
-
-          let acceptedMarkdown = "";
-          try {
-            acceptedMarkdown = assertGenerateProfileChapterAccepted(chapterData);
-          } catch (chapterErr) {
-            const safeMarkdown = finalMarkdown.trim();
-            setAiProfile(safeMarkdown);
-            setEditableProfile(safeMarkdown);
-            throw chapterErr;
-          }
-
-          if (!data) {
-            data = { meta: {} };
-          }
-          if (chapterData.meta) {
-            data.meta = {
-              ...data.meta,
-              ...chapterData.meta
-            };
-          }
-          if (chapterData.aiAnalyticalOutput && typeof chapterData.aiAnalyticalOutput === "object") {
-            generatedAnalysisOutputs.push(chapterData.aiAnalyticalOutput);
-          }
-          data.markdown = acceptedMarkdown;
-          let chunkMarkdown = acceptedMarkdown;
-          if (chunkMarkdown.startsWith("```markdown")) {
-            chunkMarkdown = chunkMarkdown.replace(/^```markdown\s*/i, "").replace(/\s*```$/g, "").trim();
-          } else if (chunkMarkdown.startsWith("```")) {
-            chunkMarkdown = chunkMarkdown.replace(/^```\s*/, "").replace(/\s*```$/g, "").trim();
-          }
-
-          addLog(`✓ ${getChapterLabel(ch)} generado con éxito.`);
-          finalMarkdown += chunkMarkdown + "\n\n";
-        }
-
-        addLog("Generación de capítulos completada con éxito.");
-        addLog("Procesando carátula e integraciones documentales...");
-        console.log("[confirmAndGenerateProfile] 4. Generación con IA finalizada. Procesando carátula e integraciones...");
-        finalMarkdown = finalMarkdown.trim();
-
-        // ADR-020.34 C4:
-        // No automatic OSINT/Street View analysis is appended during
-        // profile generation. Only previously governed evidence may
-        // reach the report through its authorized lineage.
-
-        setAiProfile(finalMarkdown);
-        setEditableProfile(finalMarkdown);
-
-        setProfileRiskLevel(data.meta?.riskLevel ?? null);
-
-
-
-        // Generar resumen automático para la carátula
-        let summaryText = "";
-        try {
-          const sumRes = await fetch("/api/refine-context", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              context: "Resume el siguiente dictamen en un solo párrafo de máximo 40 palabras para usarlo en la carátula oficial. Dictamen:\n" + finalMarkdown.substring(0, 2000) + "\n\n(INSTRUCCIÓN: DEVUELVE ÚNICA Y EXCLUSIVAMENTE UN OBJETO JSON VÁLIDO con las claves 'score' (número 100) y 'suggestions' (string con el resumen). NO agregues markdown ni comillas invertidas.)",
-              originalHumanText: finalMarkdown.substring(0, 2000),
-              photos: [],
-              mode: "suggest",
-              projectId,
-              geographyId: project?.geographyId || project?.canonicalGeography?.geographyId || null,
-              geometryType: project?.geometryType || "individual",
-              projectDescription: project?.descripcion || "",
-            })
-          });
-          if (sumRes.ok) {
-            const sumText = await sumRes.text();
-            let sumData;
-            try { sumData = JSON.parse(sumText); } catch(e) {}
-            if (sumData) {
-              let sVal = sumData.suggestions || "";
-              if (sVal.includes("```")) {
-                const match = sVal.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                if (match && match[1]) {
-                  try {
-                    const parsed = JSON.parse(match[1]);
-                    if (parsed.suggestions) sVal = parsed.suggestions;
-                  } catch(e) {}
-                }
-              } else if (sVal.trim().startsWith("{")) {
-                try { const parsed = JSON.parse(sVal); if (parsed.suggestions) sVal = parsed.suggestions; } catch(e) {}
-              }
-              summaryText = sVal.trim();
-            }
-          }
-        } catch (err) {
-          console.warn("Fallo al generar resumen con IA, aplicando fallback:", err);
-        }
-
-        if (!summaryText) {
-          summaryText = "No existe un resumen analítico validado disponible para este expediente.";
-        }
-        setReportSummary(summaryText);
-
-        // Integrar datos para asegurar que las gráficas y el mapa (Dashboard) se pinten
-        const combinedCrimes = [
-          ...(data.meta?.incidenciaDetalles || []).map((c: any) => ({
-            lat: c.lat,
-            lng: c.lng,
-            // ADR-020.34 C14B.1:
-            // Preserve missing upstream incident attributes as missing.
-            fecha: c.fecha ?? c.FECHA ?? c.Fecha ?? c.fechaStr ?? c.fecha_hecho ?? c.FECHA_HECHO ?? null,
-            tipoDelito: c.incidente ?? c.tipoDelito ?? null,
-            rangoHorario: c.rango_horario ?? c.rangoHorario ?? null,
-            colonia: c.colonia ?? c.COLONIA ?? null,
-            arma: c.arma ?? c.ARMA ?? null
-          })),
-          ...incidenciaLocal.map((c: any) => ({
-            lat: c.lat,
-            lng: c.lng,
-            // ADR-020.34 C14B:
-            // Preserve legacy missing incident attributes as missing.
-            // Never reconstruct historical facts from runtime defaults.
-            fecha: c.fecha ?? c.FECHA ?? c.Fecha ?? c.fechaStr ?? c.fecha_hecho ?? c.FECHA_HECHO ?? null,
-            tipoDelito: c.tipo ?? c.incidente ?? c.tipoDelito ?? null,
-            rangoHorario: c.rangoHorario ?? c.rango_horario ?? null,
-            colonia: c.colonia ?? c.COLONIA ?? null,
-            arma: c.arma ?? c.ARMA ?? null
-          })),
-        ];
-
-        setAnalysisResult({
-          ...(currentAnalysisResult || {}),
-          analysisOutputs: [
-            ...(((currentAnalysisResult as any)?.analysisOutputs || []) as any[]),
-            ...generatedAnalysisOutputs,
-          ],
-          historicalCrimes: combinedCrimes,
-          pois: data.meta?.pois || currentAnalysisResult?.pois || [],
-          inegiDemographics: data.meta?.inegiDemographics || currentAnalysisResult?.inegiDemographics,
-          tacticalStreetViews: data.meta?.tacticalStreetViews || (currentAnalysisResult as any)?.tacticalStreetViews,
-          scinceDemographics: data.meta?.scinceDemographics || (currentAnalysisResult as any)?.scinceDemographics,
-          riskLevel: data.meta?.riskLevel || (currentAnalysisResult as any)?.riskLevel,
-          mlFeatures: data.meta?.mlFeatures || (currentAnalysisResult as any)?.mlFeatures,
-          sieData: data.meta?.sieData || (currentAnalysisResult as any)?.sieData,
-          tceData: data.meta?.tceData || (currentAnalysisResult as any)?.tceData,
-          hieData: data.meta?.hieData || (currentAnalysisResult as any)?.hieData,
-          aceReport: data.meta?.aceReport ?? (currentAnalysisResult as any)?.aceReport ?? null,
-        } as any);
-
-        // Integrar automáticamente los lugares de acecho (StreetView) al Álbum
-        if (data.meta?.tacticalStreetViews && data.meta.tacticalStreetViews.length > 0) {
-          for (const sv of data.meta.tacticalStreetViews) {
-            let svLat = sv.lat;
-            let svLng = sv.lng;
-
-            if (typeof svLat !== "number" || typeof svLng !== "number") {
-              try {
-                if (sv.streetViewUrl) {
-                  const urlObj = new URL(sv.streetViewUrl);
-                  const loc = urlObj.searchParams.get("location");
-                  if (loc) {
-                    const [latStr, lngStr] = loc.split(",");
-                    svLat = parseFloat(latStr);
-                    svLng = parseFloat(lngStr);
-                  }
-                }
-              } catch (e) {
-                console.error("[PhotoAlbum] No se pudieron extraer coordenadas de StreetView URL:", e);
-              }
-            }
-
-            if (typeof svLat !== "number" || typeof svLng !== "number" || isNaN(svLat) || typeof svLng !== "number" || isNaN(svLng)) {
-              console.warn("[PhotoAlbum] Ignorando StreetView sin coordenadas válidas:", sv);
-              continue;
-            }
-
-            const exists = album.some(p => 
-              Math.abs((p.lat || 0) - svLat) < 0.0001 && 
-              Math.abs((p.lng || 0) - svLng) < 0.0001
-            );
-            
-            if (!exists && uploadAndAddPhoto) {
-              try {
-                const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(sv.streetViewUrl)}`;
-                const svRes = await fetch(proxyUrl);
-                if (svRes.ok) {
-                  const blob = await svRes.blob();
-                  const file = new File([blob], `StreetView_${sv.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, { type: "image/jpeg" });
-                  const category = sv.streetViewCategory || "hideout";
-                  await uploadAndAddPhoto(file, svLat, svLng, {
-                    tipo: "STREET_VIEW",
-                    gpsSource: "STREET_VIEW",
-                    streetViewCategory: category,
-                    streetViewSource: "Google Street View",
-                    analysisType: "STREET_VIEW",
-                    comentario: `EVIDENCIA VIRTUAL STREET VIEW [Categoría: ${category}]: ${sv.name}. ${sv.observed || "Punto de observación de entorno vial."}`,
-                    validado: true
-                  } as any);
-
-                  if (project?.id) {
-                    try {
-                      const { collection, query, where, getDocs, updateDoc } = await import("firebase/firestore");
-                      const { getDb } = await import("@/lib/firebase");
-                      const db = getDb();
-                      const photosCol = collection(db, "projects", project.id, "photos");
-                      const q = query(
-                        photosCol,
-                        where("lat", "==", svLat),
-                        where("lng", "==", svLng)
-                      );
-                      const qSnap = await getDocs(q);
-                      if (!qSnap.empty) {
-                        for (const docDom of qSnap.docs) {
-                          await updateDoc(docDom.ref, {
-                            streetViewCategory: category,
-                            streetViewSource: "Google Street View",
-                            analysisType: "STREET_VIEW"
-                          });
-                        }
-                        console.log(`[PhotoAlbum] Metadata de StreetView persistida en Firestore para lat=${svLat}, lng=${svLng}`);
-                      }
-                    } catch (fsErr) {
-                      console.warn("[PhotoAlbum] No se pudo escribir extra metadata en Firestore (pero el archivo ya se subió):", fsErr);
-                    }
-                  }
-                } else {
-                    console.error("[PhotoAlbum] Falló la descarga del proxy de StreetView:", svRes.statusText);
-                }
-              } catch (err) {
-                console.error("[PhotoAlbum] Error anexando StreetView al álbum:", err);
-              }
-            }
-          }
-        }
-
-        const now = new Date();
-        setReportGenerationMeta({
-          date: now.toLocaleDateString("es-MX"),
-          time: now.toLocaleTimeString("es-MX"),
-          user: user ? `${user.username} (${(user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Administrador" : "Analista"})` : "Usuario"
-        });
-        addLog("Dictamen generado y archivado de forma exitosa.");
-        setShowReportModal(true);
-      } catch (err) {
-        hasError = true;
-        console.error("ERROR REAL PERFILADOR:", err);
-      
-        const rawMessage =
-          err instanceof Error ? err.message : "Error al generar el perfil criminológico con IA.";
-        const lower = rawMessage.toLowerCase();
-        const isQuotaError =
-          lower.includes("429") ||
-          lower.includes("too many requests") ||
-          lower.includes("quota");
-
-        const finalErrMsg = isQuotaError
-          ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
-          : `Error de Cuartel General: ${rawMessage}`;
-
-        setError(finalErrMsg);
-        addLog(`🚨 ERROR CRÍTICO: ${finalErrMsg}`);
-      } finally {
-        if (!hasError) {
-          setIsGeneratingAI(false);
-        }
-      }
-    } catch (outerErr: any) {
-      console.error("Outer generation error:", outerErr);
-      setError(outerErr.message || "Error al inicializar la generación.");
-      setIsGeneratingAI(false);
-    }
-  };
 
   const autoCaptureSnapshots = async (): Promise<{ title: string; dataUrl: string }[]> => {
     // Ya no se requiere captura en pantalla del DOM (html2canvas) ya que
@@ -4064,8 +3413,7 @@ const hasMinimumPhotos =
                           setIsHypothesisValidatedInWorkspace(true);
                           void loadAnalysisData();
 
-                          window.alert("¡Aceptación manual confirmada! Generando el dictamen oficial...");
-                          await confirmAndGenerateProfile(savedHypothesis);
+                          window.alert("¡Aceptación manual confirmada! La hipótesis humana quedó registrada. Utilice GENERAR INFORME para iniciar la emisión institucional.");
                         } catch (err: any) {
                           console.error(err);
                           alert("Error al procesar la aceptación: " + err.message);
@@ -5750,16 +5098,16 @@ const hasMinimumPhotos =
                           <span className="mx-2 text-slate-600">|</span>
                           <span>{new Date(item.generatedAt).toLocaleString("es-MX")}</span>
                           <span className="mx-2 text-slate-600">|</span>
-                          <span className={item.state === "GENERATED" ? "text-emerald-300" : "text-amber-300"}>{item.state}</span>
+                          <span className={isCompleteInstitutionalReportPackage(item) ? "text-emerald-300" : "text-amber-300"}>{item.formatContract !== "DOCX_PDF" ? "LEGACY · 2 DOCX" : item.state === "GENERATED" && !isCompleteInstitutionalReportPackage(item) ? "INCOMPLETO" : item.state}</span>
                         </div>
-                        {(item.state === "GENERATED" || item.state === "CERTIFIED" || item.state === "PUBLISHED") && (
+                        {isCompleteInstitutionalReportPackage(item) && (
                           <button
                             type="button"
                             onClick={() => void handleDownloadInstitutionalPackage(item)}
                             disabled={isLoadingInstitutionalReportHistory}
                             className="text-cyan-200 hover:text-cyan-100 font-bold disabled:opacity-50"
                           >
-                            Descargar Informe + Anexo
+                            Descargar paquete · 4 artefactos
                           </button>
                         )}
                       </div>

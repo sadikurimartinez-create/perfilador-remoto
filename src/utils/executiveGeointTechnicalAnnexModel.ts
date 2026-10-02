@@ -405,6 +405,11 @@ export function buildExecutiveGeointTechnicalAnnexModel(
 
   const scinceFacts = scinceDocumentFacts(institutionalInput.scinceContext);
   const scinceLimitations = scinceDocumentLimitations(institutionalInput.scinceContext);
+  const incidenceVisualRecords = institutionalInput.visualProducts
+    .filter(item => ["INCIDENT_TYPE_DISTRIBUTION", "TEMPORAL_EVOLUTION"].includes(item.kind) && selectedIds.has(item.visualId))
+    .map((item, index) => ({ ...evidenceRecord(item, "PRODUCTO_DESCRIPTIVO_INCIDENCIA", selectedIds, `incidence-chart-${index + 1}`),
+      sourceType: "Producto descriptivo de incidencia", provenance: item.provenance,
+      traceabilityIds: [...(item.datasetSourceRefs || item.sourceItemIds || [])] }));
   const denueDocument = institutionalInput.denueAnalyticalDocument || {
     status: "EMPTY" as const,
     sourcePresent: false,
@@ -547,7 +552,7 @@ export function buildExecutiveGeointTechnicalAnnexModel(
         "Sólo se documentan relaciones aceptadas por PPC y admitidas por publication gate.",
         "DENUE no constituye por sí mismo evidencia criminal, riesgo, vulnerabilidad ni peligrosidad.",
       ] : [], [], true, analyticalFacts, analyticalTraceabilityTable),
-    section("incidence", "INCIDENCIA DELICTIVA", "TECHNICAL_SUPPORT", [], [], true, incidenceFacts),
+    section("incidence", "INCIDENCIA DELICTIVA", "TECHNICAL_SUPPORT", [], incidenceVisualRecords, true, incidenceFacts),
     section("osint", "CEFI - FUENTES ABIERTAS", "TECHNICAL_SUPPORT",
       osintRecords.length ? [`Registros observados, adquiridos y trazables: ${osintRecords.length}`] : [], osintRecords),
     ...(gim ? [section("gang-intelligence", "PANDILLAS / GIM", "TECHNICAL_SUPPORT",

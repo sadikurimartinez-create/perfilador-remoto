@@ -657,9 +657,16 @@ describe("QA-02 / QA-06 / QA-07 - UI productos institucionales", () => {
     );
 
     expect(executiveStart).toBeGreaterThanOrEqual(0);
-    expect(technicalAnnexStart).toBeGreaterThan(executiveStart);
+    // P6/PRE-P7 rejects isolated institutional annexes before acquisition.
+    expect(technicalAnnexStart).toBeGreaterThanOrEqual(0);
+    expect(technicalAnnexStart).toBeLessThan(executiveStart);
+    expect(exportToWord.slice(technicalAnnexStart, executiveStart)).toContain(
+      "EXECUTIVE_GEOINT_TECHNICAL_ANNEX_BLOCKED:COMPLETE_PACKAGE_REQUIRED_USE_DRAFT_FOR_ISOLATED_EXPORT"
+    );
+    const legacyStart = exportToWord.indexOf("\n  if (isInstitutionalExport) {", executiveStart);
+    expect(legacyStart).toBeGreaterThan(executiveStart);
 
-    const executiveBranch = exportToWord.slice(executiveStart, technicalAnnexStart);
+    const executiveBranch = exportToWord.slice(executiveStart, legacyStart);
 
     expect(executiveBranch).toContain("persistGeneratedPackage");
     expect(executiveBranch).toContain("return reportPackage");

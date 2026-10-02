@@ -68,5 +68,6 @@ export function scinceDocumentFacts(context?: ScinceDocumentContext): Array<{ la
 }
 
 export function scinceDocumentLimitations(context?: ScinceDocumentContext): string[] {
-  return context?.publicationStatus === "PUBLISHABLE" ? [...context.snapshot.limitations] : [];
+  if (context?.publicationStatus === "PUBLISHABLE") return [...context.snapshot.limitations];
+  return context ? [`Limitación: SCINCE no publicable (${context.territorialFreshness}): ${context.reason}`] : [];
 }

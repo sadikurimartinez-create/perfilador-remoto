@@ -403,9 +403,12 @@ function visibleSummary(item: any, fallback: string): string {
   );
 }
 
+export function translateSourceFactTerminology(value: string): string {
+  return value.replace(/\bSOURCE_FACT\b/g, "hecho fuente");
+}
+
 function sanitizeVisibleText(value: string): string {
-  return value
-    .replace(/\bSOURCE_FACT\b/g, "hecho fuente")
+  return translateSourceFactTerminology(value)
     .replace(/\bPENDING_REVIEW\b/g, "pendiente de revision")
     .replace(/\bAPPROVED\b/g, "aprobado")
     .replace(/\bSTALE\b/g, "vigencia vencida")

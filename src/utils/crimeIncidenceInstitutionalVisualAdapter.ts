@@ -23,6 +23,7 @@ export interface CrimeIncidenceInstitutionalVisualCandidate {
   datasetSourceRefs: string[];
   sourceReference: string;
   sourceType: string;
+  geographyId: string | null;
 
   variables: string[];
   transformation: string;
@@ -89,6 +90,8 @@ export function buildCrimeIncidenceInstitutionalVisualCandidate(
   }
 
   const transformation = clean(asset.metadata.transformation);
+  const geographicReference = asset.metadata.geography as { geographyId?: unknown; expediente?: { geographyId?: unknown } } | null;
+  const geographyId = clean(geographicReference?.expediente?.geographyId || geographicReference?.geographyId) || null;
 
   if (!transformation) {
     throw new Error(
@@ -115,6 +118,7 @@ export function buildCrimeIncidenceInstitutionalVisualCandidate(
     ]),
     sourceReference,
     sourceType: sourceReference,
+    geographyId,
 
     variables: [...asset.metadata.variables],
     transformation,
@@ -151,6 +155,9 @@ export function buildCrimeIncidenceInstitutionalVisualProduct(
 ): InstitutionalVisualProduct {
   const candidate =
     buildCrimeIncidenceInstitutionalVisualCandidate(asset);
+  if (candidate.geographyId && options.canonicalGeography?.geographyId && candidate.geographyId !== options.canonicalGeography.geographyId) {
+    throw new Error("CRIME_INCIDENCE_VISUAL_GEOGRAPHY_MISMATCH");
+  }
 
   return buildInstitutionalVisualProduct(candidate, {
     canonicalGeography: options.canonicalGeography || null,
