@@ -1,4 +1,6 @@
-import React, { ReactNode, useRef, useEffect, useState } from 'react';
+import React, { ReactNode, useRef } from "react";
+import { createPortal } from "react-dom";
+import { useOperationalModalFocus } from "./useOperationalModalFocus";
 
 export interface DynamicPopupProps {
   open: boolean;
@@ -70,64 +72,16 @@ export const DynamicPopup: React.FC<DynamicPopupProps> = ({
   onClose,
   className = ""
 }) => {
-  const [coords, setCoords] = useState({ x: 0, y: 0 });
   const popupRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open || !anchorPosition) return;
-
-    const handlePositioning = () => {
-      const winWidth = window.innerWidth;
-      const winHeight = window.innerHeight;
-      const popup = popupRef.current;
-
-      const w = popup ? popup.offsetWidth : 320;
-      const h = popup ? popup.offsetHeight : 240;
-
-      const pos = PopupPositionManager.calculate(
-        anchorPosition.x,
-        anchorPosition.y,
-        w,
-        h,
-        winWidth,
-        winHeight,
-        preferredPlacement
-      );
-
-      setCoords({ x: pos.x, y: pos.y });
-    };
-
-    // Run immediately and after a brief microtask to allow rendering layout dimensions
-    handlePositioning();
-    const timer = setTimeout(handlePositioning, 20);
-
-    window.addEventListener('resize', handlePositioning);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', handlePositioning);
-    };
-  }, [open, anchorPosition, preferredPlacement]);
-
-  if (!open || !anchorPosition) return null;
-
-  return (
-    <>
-      {/* Backdrop for click outside */}
-      <div 
-        className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[1px] transition-opacity duration-200" 
-        onClick={onClose}
-      />
-      <div
-        ref={popupRef}
-        style={{
-          position: 'fixed',
-          top: `${coords.y}px`,
-          left: `${coords.x}px`,
-        }}
-        className={`z-50 bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-2xl p-5 text-slate-100 max-w-sm sm:max-w-md w-80 sm:w-96 transition-all duration-150 ${className}`}
-      >
+  useOperationalModalFocus(open, popupRef, onClose);
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
+    <div data-operational-modal="true" className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/60"
+      onClick={event => { if (event.target === event.currentTarget) onClose?.(); }}>
+      <div ref={popupRef} role="dialog" aria-modal="true" aria-label="Actuación operativa" tabIndex={-1}
+        className={`relative bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-5 text-slate-100 w-96 max-w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto ${className}`}>
+        {onClose && <button type="button" aria-label="Cerrar actuación" onClick={onClose} className="absolute top-2 right-2">✕</button>}
         {children}
       </div>
-    </>
-  );
+    </div>, document.body);
 };

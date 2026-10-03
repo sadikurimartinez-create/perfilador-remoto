@@ -90,7 +90,8 @@ function averagePhotoCoordinate(album: any[], axis: "lat" | "lng"): number | nul
 
 import { PowerUpsModule } from "./powerups/PowerUpsModule";
 import { VentanaResultadosPuente } from "./powerups/VentanaResultadosPuente";
-import { DynamicPopup, PopupPositionManager } from "./DynamicPopup";
+import { geographicEvidenceRole, geographicRoleLabels, sortGeographicEvidence, photoResourceCollection } from "@/utils/geographicEvidencePresentation";
+import { DynamicPopup } from "./DynamicPopup";
 
 import { CEIPOLSectionHeader } from "./ui/CEIPOLSectionHeader";
 import { CEIPOLBadge } from "./ui/CEIPOLBadge";
@@ -814,7 +815,7 @@ export function PhotoAlbum({
   }, [rawAlbum, streetViewValidation]);
 
   // Sobrescribir "album" local para que todo el componente herede las reglas gobernadas
-  const album: AlbumPhoto[] = normalizedAlbum;
+  const album: AlbumPhoto[] = useMemo(() => sortGeographicEvidence(normalizedAlbum, project?.canonicalGeography), [normalizedAlbum, project?.canonicalGeography]);
   const additionalPhotoEvidence = useMemo(
     () => album.filter(isAdditionalPhotoEvidence),
     [album]
@@ -1127,18 +1128,9 @@ export function PhotoAlbum({
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [denueDataConfirm, setDenueDataConfirm] = useState<ProductiveSourceConfirmation | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
-  const getDynamicModalStyle = (estimatedW = 950, estimatedH = 600) => {
-    if (!clickCoords) return {};
-    const winWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
-    const winHeight = typeof window !== "undefined" ? window.innerHeight : 800;
-    const pos = PopupPositionManager.calculate(clickCoords.x, clickCoords.y, estimatedW, estimatedH, winWidth, winHeight);
-    return {
-      position: "fixed" as const,
-      top: `${pos.y}px`,
-      left: `${pos.x}px`,
-      margin: 0
-    };
-  };
+  const getDynamicModalStyle = (_estimatedW = 950, _estimatedH = 600) => ({
+    position: "fixed" as const, top: "50%", left: "50%", transform: "translate(-50%, -50%)", margin: 0
+  });
   const handleAddMapPoint = async (lat: number, lng: number, details: { name: string; isIndependentPoi: boolean; isVertex: boolean }) => {
     if (isReadOnly) return;
     try {
@@ -2322,7 +2314,7 @@ const hasMinimumPhotos =
                   const firestore = getDb();
                   const batch = writeBatch(firestore);
                   album.forEach(p => {
-                    batch.update(doc(firestore, "projects", projectId, "photos", p.id), { tipo: p.tipo || "", comentario: p.comentario || "" });
+                    batch.update(doc(firestore, "projects", projectId, photoResourceCollection(p), p.sourceDocumentId || p.id), { tipo: p.tipo || "", geometryRole: geographicEvidenceRole(p), territorialRef: p.territorialRef || null, comentario: p.comentario || "", ...(p.sourceDocumentId ? { context: p.comentario || "" } : {}) });
                   });
                   await batch.commit();
                   window.alert("Contextualizaciones guardadas correctamente.");
@@ -2433,81 +2425,31 @@ const hasMinimumPhotos =
       </div>
 
       <PhotoPpcReviewPanel />
-      {additionalPhotoEvidence.length > 0 && (
-        <section className="mb-6 border-t border-slate-800 pt-5" aria-labelledby="additional-photo-evidence-title">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h4 id="additional-photo-evidence-title" className="text-sm font-semibold text-fuchsia-300">
-                Evidencias Fotográficas Adicionales
-              </h4>
-              <p className="mt-1 text-xs text-slate-400">
-                Evidencia visual vinculada al expediente sin función de nodo, vértice o punto canónico.
-              </p>
-            </div>
-            <span className="rounded border border-fuchsia-700/60 bg-fuchsia-950/30 px-2 py-1 text-[10px] font-semibold text-fuchsia-200">
-              {additionalPhotoEvidence.length} registrada{additionalPhotoEvidence.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {additionalPhotoEvidence.map((photo: any) => (
-              <article key={photo.evidenceId || photo.id} className="overflow-hidden rounded-lg border border-fuchsia-800/50 bg-slate-900/70">
-                <div className="aspect-video bg-black">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.previewUrl || photo.url || "/no-image.png"} alt="Evidencia fotográfica adicional" className="h-full w-full object-contain" />
-                </div>
-                <div className="space-y-2 p-3 text-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-fuchsia-200">Sin rol geométrico</span>
-                    <span className="text-[10px] text-slate-400">{photo.humanValidationStatus || "PENDING_REVIEW"}</span>
-                  </div>
-                  <p className="text-slate-300">{photo.comentario || "Pendiente de contextualización."}</p>
-                  <div className="text-[10px] text-slate-500">
-                    Evidencia: {photo.evidenceId || photo.id} · Origen: {photo.fuente || "Carga adicional"}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-
       {(() => {
-        let groups: { title: string; photos: typeof album }[] = [];
-        if (project?.geometryType === "lineal") {
-          groups = [
-            { title: "Nodo Inicial", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Nodo Inicial") },
-            { title: "Corredor", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Corredor") },
-            { title: "Nodo Final", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Nodo Final") },
-            { title: "Sin Clasificar / Otros", photos: geometricPhotoEvidence.filter((p) => !["Nodo Inicial", "Corredor", "Nodo Final"].includes(p.tipo)) },
-          ];
-        } else if (project?.geometryType === "poligono") {
-          groups = [
-            { title: "Perímetro", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Perímetro") },
-            { title: "Interior", photos: geometricPhotoEvidence.filter((p) => p.tipo === "Interior") },
-            { title: "Sin Clasificar / Otros", photos: geometricPhotoEvidence.filter((p) => !["Perímetro", "Interior"].includes(p.tipo)) },
-          ];
-        } else {
-          groups = [
-            { title: "Nodo y Entorno", photos: geometricPhotoEvidence }
-          ];
-        }
+        let groups = [
+          { title: "Evidencia territorial", photos: geometricPhotoEvidence },
+          { title: "Evidencias Fotográficas Adicionales · Sin función geométrica", photos: additionalPhotoEvidence },
+        ];
         groups = groups.filter((g) => g.photos.length > 0);
 
         return groups.map((group, gIdx) => (
           <div key={gIdx} className="mb-4">
-            {project?.geometryType !== "individual" && (
+            {(
               <h4 className="text-sm font-semibold text-sky-300 mb-2 border-b border-slate-700 pb-1">{group.title}</h4>
             )}
             <div className="flex flex-col gap-6 w-full">
               {group.photos.map((p) => (
           <div
             key={p.id}
+            data-resource-id={p.sourceDocumentId || p.id}
+            data-geographic-role={geographicEvidenceRole(p)}
             className={`rounded-lg border overflow-hidden bg-slate-900/80 ${
               selectedIds.includes(p.id) ? "border-sky-500 ring-1 ring-sky-500/50" : "border-slate-700"
             }`}
           >
             <div className="flex flex-col">
               <div className="flex flex-col items-center gap-4 p-4 w-full">
+                <p className="text-xs text-sky-200">{geographicRoleLabels[geographicEvidenceRole(p)][0]} · {geographicRoleLabels[geographicEvidenceRole(p)][1]} · Recurso: {p.sourceDocumentId || p.id}</p>
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(p.id)}
@@ -2774,21 +2716,23 @@ const hasMinimumPhotos =
                     </span>
                   )}
                   <select
-                    value={p.tipo || ""}
+                    value={isAdditionalPhotoEvidence(p) ? "Evidencia Fotográfica Adicional" : p.tipo || ""}
                     onChange={(e) =>
                       updatePhotoMeta(p.id, {
                         tipo: e.target.value,
                         comentario: p.comentario,
                       })
                     }
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || isAdditionalPhotoEvidence(p)}
                     className={`w-full mt-2 bg-gray-800 text-gray-200 border rounded-md p-1 text-sm outline-none focus:border-blue-500 hidden md:block disabled:opacity-50 ${!p.tipo ? 'border-amber-500/70 bg-amber-900/10' : 'border-gray-600'}`}
                   >
-                    {project?.geometryType === "lineal" ? (
+                    {p.tipo && <option value={p.tipo}>Rol persistido: {p.tipo}</option>}
+                    {isAdditionalPhotoEvidence(p) ? <option value="Evidencia Fotográfica Adicional">Evidencia Adicional</option> : project?.geometryType === "lineal" ? (
                       <>
                         <option value="">Selecciona rol...</option>
                         <option value="Nodo Inicial">Nodo Inicial</option>
-                        <option value="Corredor">Corredor</option>
+                        <option value="Nodo Intermedio">Nodo Intermedio</option>
+                        <option value="Corredor">Corredor (Nodo Intermedio legacy)</option>
                         <option value="Nodo Final">Nodo Final</option>
                         <option value="Otro">Otro</option>
                       </>
@@ -3501,7 +3445,7 @@ const hasMinimumPhotos =
                 album={album}
                 geometryType={project.geometryType || "individual"}
                 canonicalGeography={project.canonicalGeography}
-                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
+                coordinates={album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && geographicEvidenceRole(p) !== "NONE" && !p.isIndependentPoi && p.tipo !== "POI").map((photo) => ({
                   lat: Number(photo.lat),
                   lng: Number(photo.lng),
                 }))}
@@ -3511,7 +3455,7 @@ const hasMinimumPhotos =
                 onCandidateCapture={handleCandidateCapture}
                 onUpdateCoordinates={(newCoords) => {
                   newCoords.forEach((coord, idx) => {
-                    const photo = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && !p.isIndependentPoi && p.tipo !== "POI")[idx];
+                    const photo = album.filter(p => p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && geographicEvidenceRole(p) !== "NONE" && !p.isIndependentPoi && p.tipo !== "POI")[idx];
                     if (photo && (photo.lat !== coord.lat || photo.lng !== coord.lng)) {
                       void updatePhotoCoordinates(photo.id, coord.lat, coord.lng);
                     }

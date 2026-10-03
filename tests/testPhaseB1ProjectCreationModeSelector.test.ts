@@ -43,7 +43,7 @@ describe("Phase B1 - Project creation mode selector", () => {
   test("GABINETE remains isolated from creation, geography draft, and photos", () => {
     const cabinetHandlers = sourceBetween(
       "const handleSelectCabinet = () => {",
-      "const handleNuevoProyecto = () => {"
+      "const handleCabinetCompletion = ("
     );
 
     expect(cabinetHandlers).not.toContain("createProject");

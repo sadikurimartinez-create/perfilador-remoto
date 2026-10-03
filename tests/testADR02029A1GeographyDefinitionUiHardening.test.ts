@@ -165,7 +165,7 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     const capture = readSource("src/components/CaptureAndAddPhoto.tsx");
     const bridgeUpload = capture.slice(
       capture.indexOf("uploadAndAddPhoto(item.file, item.lat as number, item.lng as number"),
-      capture.indexOf("if (legacyFiles.length > 0)")
+      capture.indexOf("if (legacyFiles.length > 0 || withoutGps.length > 0)")
     );
 
     expect(projectList).toContain("(window as any).pendingProjectPhotos = photosToCreate.map(p => ({ ...p }))");
@@ -203,6 +203,6 @@ describe("ADR-020.29A.1 - Geography definition / preview / confirmation UI harde
     const capture = readSource("src/components/CaptureAndAddPhoto.tsx");
     expect(capture).toContain("function isLegacyFile");
     expect(capture).toContain("legacyFiles");
-    expect(capture).toContain("processFiles(legacyFiles, false)");
+    expect(capture).toContain("processFiles([...legacyFiles, ...withoutGps.map(item => item.file)], false)");
   });
 });

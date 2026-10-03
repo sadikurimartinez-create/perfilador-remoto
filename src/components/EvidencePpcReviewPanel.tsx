@@ -14,7 +14,7 @@ export function PhotoPpcReviewPanel() {
     <p className="text-xs text-slate-400">Contextualizar y seleccionar para publicación no implica aprobación humana.</p>
     {album.filter(item => !item.deleted && !hasStreetViewProvenance(item)).map(item =>
       <EvidencePpcReviewCard key={`${project.id}:${item.id}`} projectId={project.id}
-        item={{ ...item, reviewTarget: { source: "PHOTO", id: item.id } }} readOnly={isReadOnly} />)}
+        item={{ ...item, reviewTarget: { source: item.sourceDocumentId ? "DOCUMENT_PHOTO" : "PHOTO", id: item.sourceDocumentId || item.id } }} readOnly={isReadOnly} />)}
   </section>;
 }
 
@@ -43,7 +43,7 @@ export function EvidencePpcReviewCard({ projectId, item, readOnly, onConfirmed, 
     finally { setSaving(false); }
   }
   return <article className="rounded-lg border border-slate-700 p-3 space-y-2 text-sm text-slate-200">
-    <p>{hasStreetViewProvenance(current) || current.reviewTarget?.source !== "PHOTO" ? "Street View" : "Fotografía"} · {current.reviewTarget?.id}</p>
+    <p>{hasStreetViewProvenance(current) || ["TACTICAL_STREET_VIEW", "STREETVIEW_FINDING"].includes(current.reviewTarget?.source) ? "Street View" : "Fotografía"} · {current.reviewTarget?.id}</p>
     <p role="status">Estado PPC: {reviewStateLabels[status]}</p>
     <p className="text-xs text-slate-400">Fuente: {current.sourceProvider || current.fuente || current.gpsSource || "No acreditada"} · Fecha: {String(current.streetViewMetadata?.captureDate || current.createdAt || current.fechaCreacion || "No acreditada")}</p>
     {current.validatedAt && <p className="text-xs">Revisión: {current.validatedBy?.name || "Identidad institucional"} · {current.validatedAt}</p>}

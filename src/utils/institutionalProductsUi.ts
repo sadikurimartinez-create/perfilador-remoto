@@ -1,3 +1,4 @@
+import { geographicEvidenceCoordinates } from "./geographicEvidencePresentation";
 import type { ReportReadyAssessment, ReportReadyReason, ReportReadyStatus } from "@/utils/reportReadyGovernance";
 import { buildEvidenceLineage, validateLineage } from "@/utils/evidenceLineage";
 import { projectPersistedInstitutionalInputs } from "@/utils/institutionalReportInputProjection";
@@ -10,10 +11,10 @@ export function isImageEvidenceMimeType(value: unknown): boolean {
 }
 
 export function isAdditionalPhotoEvidence(item: any): boolean {
+  const mime = item?.mimeType || item?.type || item?.multimodalEvidence?.mimeType;
   return item?.evidenceType === ADDITIONAL_PHOTO_EVIDENCE_TYPE
-    || (item?.geometryRole === NON_GEOMETRIC_PHOTO_ROLE && isImageEvidenceMimeType(
-      item?.mimeType || item?.type || item?.multimodalEvidence?.mimeType
-    ));
+    || (item?.geometryRole === NON_GEOMETRIC_PHOTO_ROLE && (isImageEvidenceMimeType(mime)
+      || (!mime && (typeof item?.previewUrl === "string" || item?.evidenceType === "ANALYST_PHOTO"))));
 }
 
 export function adaptDocumentToAdditionalPhotoEvidence(
@@ -43,11 +44,11 @@ export function adaptDocumentToAdditionalPhotoEvidence(
     id: document.id,
     sourceDocumentId: document.id,
     previewUrl: document.url || "",
-    lat: null,
-    lng: null,
-    coordinates: null,
+    lat: geographicEvidenceCoordinates(document)?.lat ?? null,
+    lng: geographicEvidenceCoordinates(document)?.lng ?? null,
+    coordinates: geographicEvidenceCoordinates(document),
     tipo: "Evidencia Fotográfica Adicional",
-    comentario: document.context || "",
+    comentario: document.comentario || document.context || "",
     evidenceType: ADDITIONAL_PHOTO_EVIDENCE_TYPE,
     geometryRole: NON_GEOMETRIC_PHOTO_ROLE,
     isGeometry: false,
@@ -63,6 +64,10 @@ export function adaptDocumentToAdditionalPhotoEvidence(
     storagePath: document?.storagePath || multimodal?.storageReference || null,
     mimeType,
     humanValidationStatus: document?.humanValidationStatus || multimodal?.humanValidationStatus || "PENDING_REVIEW",
+    validatedBy: document?.validatedBy ?? multimodal?.validatedBy ?? null,
+    validatedAt: document?.validatedAt ?? multimodal?.validatedAt ?? null,
+    validationDate: document?.validationDate ?? multimodal?.validationDate ?? null,
+    validationComment: document?.validationComment ?? multimodal?.validationComment ?? null,
     validationSource: document?.validationSource || multimodal?.validationSource || null,
     forensicIntegrity: document?.forensicIntegrity || multimodal?.forensicIntegrity || null,
     fuente: "Carga de Evidencia Adicional",
@@ -95,7 +100,8 @@ export function mergeAdditionalPhotoEvidence(
     const existingIndex = keys.map((key) => identityToIndex.get(key)).find((index) => index !== undefined);
     if (existingIndex !== undefined) {
       if (preferDocumentProjection && isAdditionalPhotoEvidence(result[existingIndex])) {
-        result[existingIndex] = { ...result[existingIndex], ...item };
+        const coordinates = geographicEvidenceCoordinates(item) || geographicEvidenceCoordinates(result[existingIndex]);
+        result[existingIndex] = { ...result[existingIndex], ...item, coordinates, lat: coordinates?.lat ?? null, lng: coordinates?.lng ?? null };
         photographicIdentityKeys(result[existingIndex]).forEach((key) => identityToIndex.set(key, existingIndex));
       }
       return;

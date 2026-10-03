@@ -121,6 +121,9 @@ interface ManualQueueItem {
 }
 
 interface PendingProjectPhotoBridgeItem {
+  tipo?: string;
+  geometryRole?: string;
+  territorialRef?: import("@/utils/territorialEvidenceReference").TerritorialEvidenceReference | null;
   file: File;
   captureSource?: "CAMERA_IN_SITU" | "GALLERY_IMPORT";
   lat?: number | null;
@@ -138,11 +141,7 @@ function isPendingProjectPhotoBridgeItem(value: unknown): value is PendingProjec
   if (!value || typeof value !== "object") return false;
   const item = value as PendingProjectPhotoBridgeItem;
   return (
-    isLegacyFile(item.file) &&
-    typeof item.lat === "number" &&
-    typeof item.lng === "number" &&
-    Number.isFinite(item.lat) &&
-    Number.isFinite(item.lng)
+    isLegacyFile(item.file)
   );
 }
 
@@ -171,6 +170,7 @@ export function CaptureAndAddPhoto() {
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const pendingProcessed = useRef(false);
+  const pendingRoleMetadata = useRef(new Map<File, PendingProjectPhotoBridgeItem>());
   const cabinetProcessing = useRef(false);
   const [cabinetRetryNonce, setCabinetRetryNonce] = useState(0);
   
@@ -330,6 +330,7 @@ export function CaptureAndAddPhoto() {
       if (finalLat !== null && finalLng !== null) {
         try {
           await uploadAndAddPhoto(selected, finalLat, finalLng, {
+            ...pendingRoleMetadata.current.get(selected),
             gpsAccuracy: deviceLoc?.accuracy ?? null,
             gpsTimestamp: deviceLoc?.timestamp ?? null,
             gpsSource,
@@ -553,8 +554,12 @@ export function CaptureAndAddPhoto() {
         const enrichedItems = pendingItems.filter(isPendingProjectPhotoBridgeItem);
         const legacyFiles = pendingItems.filter(isLegacyFile);
 
-        void Promise.all(enrichedItems.map((item) =>
+        enrichedItems.forEach(item => pendingRoleMetadata.current.set(item.file, item));
+        const withGps = enrichedItems.filter(item => typeof item.lat === "number" && typeof item.lng === "number" && Number.isFinite(item.lat) && Number.isFinite(item.lng));
+        const withoutGps = enrichedItems.filter(item => !withGps.includes(item));
+        void Promise.all(withGps.map((item) =>
           uploadAndAddPhoto(item.file, item.lat as number, item.lng as number, {
+            tipo: item.tipo, geometryRole: item.geometryRole, territorialRef: item.territorialRef,
             gpsAccuracy: item.gpsAccuracy ?? null,
             gpsTimestamp: item.gpsTimestamp ?? null,
             gpsSource: item.gpsSource || "PENDING_PROJECT_GPS",
@@ -567,8 +572,8 @@ export function CaptureAndAddPhoto() {
           setError(err instanceof Error ? err.message : "Error al subir fotografía pendiente.");
         });
 
-        if (legacyFiles.length > 0) {
-          processFiles(legacyFiles, false);
+        if (legacyFiles.length > 0 || withoutGps.length > 0) {
+          processFiles([...legacyFiles, ...withoutGps.map(item => item.file)], false);
         }
       }, 500);
     }
@@ -591,6 +596,7 @@ export function CaptureAndAddPhoto() {
 
     try {
       await uploadAndAddPhoto(currentItem.file, latNum, lngNum, {
+        ...pendingRoleMetadata.current.get(currentItem.file),
         gpsAccuracy: currentItem.gpsAccuracy,
         gpsTimestamp: currentItem.gpsTimestamp,
         gpsSource: "MANUAL",

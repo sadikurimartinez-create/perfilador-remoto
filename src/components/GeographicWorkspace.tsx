@@ -1,5 +1,6 @@
 "use client";
 
+import { geographicEvidenceCoordinates, geographicEvidenceRole } from "@/utils/geographicEvidencePresentation";
 import * as React from "react";
 import { useState, useEffect } from "react";
 import { ProfessionalGeoMap } from "./maps/ProfessionalGeoMap";
@@ -171,7 +172,7 @@ export function GeographicWorkspace({
   // Extraer fotografías de campo in situ según el contrato canónico existente.
   const inSituGeoreferencedPhotos = React.useMemo(() => {
     if (album && Array.isArray(album) && album.length > 0) {
-      const filtered = album.filter(isWorkspaceInSituPhoto);
+      const filtered = album.filter(photo => geographicEvidenceRole(photo) !== "NONE" && isWorkspaceInSituPhoto(photo));
       if (filtered.length > 0) return filtered;
     }
     return [];
@@ -675,7 +676,7 @@ export function GeographicWorkspace({
           <ProfessionalGeoMap
             geografiaRectora={activeGeografiaRectora}
             pois={[]}
-            photographs={inSituGeoreferencedPhotos}
+            photographs={[...inSituGeoreferencedPhotos.filter(photo => geographicEvidenceRole(photo) !== "NONE"), ...album.filter(photo => !photo.deleted && geographicEvidenceRole(photo) === "NONE" && geographicEvidenceCoordinates(photo))]}
             streetViewManual={[]}
             streetViewAutomatic={captures}
             findings={findings}

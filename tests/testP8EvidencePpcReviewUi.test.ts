@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import ts from "typescript";
+import { geographicEvidenceCoordinates, geographicEvidenceRole, photoResourceCollection } from "../src/utils/geographicEvidencePresentation";
 import * as review from "../src/utils/institutionalEvidenceReview";
 import * as human from "../src/utils/humanValidationPolicy";
 import * as collector from "../src/utils/visualEvidenceEngine/streetViewCollector";
@@ -119,17 +120,21 @@ test("the mounted Street View console hydrates persisted captures, deduplicates 
   expect(list).toHaveBeenCalledWith({ projectId: "A", kind: "STREETVIEW", operation: "LIST" });
 });
 
-test("real contextualization callback does not mutate canonical human review", async () => {
+test.each([false, true])("real contextualization callback routes document=%s without changing human review", async documentPhoto => {
   const source = readFileSync(resolve(__dirname, "../src/context/ProjectContext.tsx"), "utf8");
   const start = source.indexOf("  const savePhotoContextualization = useCallback");
   const end = source.indexOf("}, [project, album, isReadOnly, user, logAuditAction]);", start) + "}, [project, album, isReadOnly, user, logAuditAction]);".length;
   const output = ts.transpileModule(source.slice(start, end) + "\nreturn savePhotoContextualization;", { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
   const update = jest.fn().mockResolvedValue(undefined); const audit = jest.fn().mockResolvedValue(undefined);
-  const approved = { id: "photo", tipo: "FIELD", comentario: "Contexto", lat: 21, lng: -102, humanValidationStatus: "APPROVED" };
-  const execute = new Function("useCallback", "isReadOnly", "project", "album", "user", "getDb", "doc", "updateDoc", "setAlbum", "logAuditAction", output);
-  const callback = execute((fn: any) => fn, false, { id: "A" }, [approved], { username: "PPC" }, () => ({}), () => "photoRef", update, () => {}, audit);
+  const approved = { id: "photo", ...(documentPhoto ? { sourceDocumentId: "original-document", geometryRole: "NONE" } : {}), tipo: "FIELD", comentario: "Contexto", lat: 21, lng: -102, humanValidationStatus: "APPROVED" };
+  const execute = new Function("useCallback", "isReadOnly", "project", "album", "user", "getDb", "doc", "updateDoc", "setAlbum", "logAuditAction", "photoResourceCollection", "geographicEvidenceRole", "geographicEvidenceCoordinates", "setDocuments", output);
+  const locator = jest.fn((...parts: any[]) => parts.slice(1).join("/"));
+  const documents = jest.fn();
+  const callback = execute((fn: any) => fn, false, { id: "A" }, [approved], { username: "PPC" }, () => ({}), locator, update, () => {}, audit, photoResourceCollection, geographicEvidenceRole, geographicEvidenceCoordinates, documents);
   await callback("photo");
   expect(update).toHaveBeenCalledTimes(1);
+  expect(update.mock.calls[0][0]).toBe(documentPhoto ? "projects/A/documents/original-document" : "projects/A/photos/photo");
+  if (documentPhoto) expect(documents).toHaveBeenCalled();
   expect(update.mock.calls[0][1]).not.toHaveProperty("humanValidationStatus");
   expect(update.mock.calls[0][1]).not.toHaveProperty("validationSource");
   expect(approved.humanValidationStatus).toBe("APPROVED");

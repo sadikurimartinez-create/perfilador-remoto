@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useProject, SweepIntegrationItem } from "@/context/ProjectContext";
+import { createPortal } from "react-dom";
+import { useOperationalModalFocus } from "./useOperationalModalFocus";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 
 export function SweepIntegrationModal() {
@@ -11,8 +13,9 @@ export function SweepIntegrationModal() {
   const [justificationInput, setJustificationInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [coords, setCoords] = useState({ x: 200, y: 200 });
-  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({});
+  const modalRef = useRef<HTMLDivElement>(null);
+  const close = React.useCallback(() => { if (!isSubmitting) setActiveSweepForModal(null); }, [isSubmitting, setActiveSweepForModal]);
+  useOperationalModalFocus(Boolean(activeSweepForModal), modalRef, isSubmitting ? undefined : close);
 
   // Sync inputs when active sweep changes
   useEffect(() => {
@@ -23,37 +26,6 @@ export function SweepIntegrationModal() {
       setErrorMsg("");
     }
   }, [activeSweepForModal]);
-
-  // Track cursor position globally when modal is closed
-  useEffect(() => {
-    const updateCoords = (e: MouseEvent) => {
-      if (!activeSweepForModal) {
-        setCoords({ x: e.clientX, y: e.clientY });
-      }
-    };
-    window.addEventListener("mousemove", updateCoords);
-    return () => window.removeEventListener("mousemove", updateCoords);
-  }, [activeSweepForModal]);
-
-  // Calculate coordinates to keep the modal fully inside the viewport near the cursor
-  useEffect(() => {
-    if (activeSweepForModal) {
-      const modalWidth = 480;
-      const modalHeight = 460;
-      
-      const left = Math.max(15, Math.min(coords.x + 10, window.innerWidth - modalWidth - 15));
-      const top = Math.max(15, Math.min(coords.y + 10, window.innerHeight - modalHeight - 15));
-
-      setPositionStyle({
-        position: "fixed",
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${modalWidth}px`,
-        maxHeight: "90vh",
-        overflowY: "auto"
-      });
-    }
-  }, [activeSweepForModal, coords]);
 
   if (!activeSweepForModal) return null;
 
@@ -114,14 +86,17 @@ export function SweepIntegrationModal() {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[300] bg-slate-950/20 backdrop-blur-[1px] pointer-events-auto">
+  return createPortal(
+    <div data-operational-modal="true" className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
       <div 
         role="dialog" 
         aria-modal="true" 
-        style={positionStyle}
-        className="bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-2xl p-5 relative overflow-hidden flex flex-col gap-5 text-slate-100 animate-fadeIn"
+        ref={modalRef}
+        tabIndex={-1}
+        aria-label="Revisión de barrido"
+        className="w-[480px] max-w-full max-h-[90vh] overflow-y-auto bg-slate-950/95 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-2xl p-5 relative flex flex-col gap-5 text-slate-100 animate-fadeIn"
       >
+        <button type="button" aria-label="Cerrar barrido" disabled={isSubmitting} onClick={close} className="absolute top-2 right-2 z-20">✕</button>
         {/* Decorative glowing gradient arches */}
         <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-[60px] pointer-events-none" />
@@ -305,6 +280,6 @@ export function SweepIntegrationModal() {
           </div>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

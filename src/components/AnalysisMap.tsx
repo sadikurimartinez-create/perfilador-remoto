@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, Marker, Polygon, Polyline, OverlayView, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
+import { PhotoEvidenceLayer } from "./maps/layers/PhotoEvidenceLayer";
 import { useProject } from "@/context/ProjectContext";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
@@ -933,21 +934,7 @@ export function AnalysisMap({
           )}
 
           {/* Marcadores de Evidencia Fotográfica con coordenadas reales */}
-          {showPhotos && photosWithCoords.map((photo) => (
-            <Marker
-              key={`photo-${photo.id}`}
-              position={{ lat: photo.lat, lng: photo.lng }}
-              title={`${photo.tipo}: ${photo.comentario}`}
-              icon={{
-                path: 0,
-                scale: 7,
-                fillColor: getMarkerColor(photo.tipo),
-                fillOpacity: 1,
-                strokeColor: "#ffffff",
-                strokeWeight: 2,
-              }}
-            />
-          ))}
+          <PhotoEvidenceLayer visible={showPhotos} photographs={album} />
 
           {/* Atractores Urbanos TOP 5 */}
           {showGeoint && activeLayers.atractores && top5Pois.map((poi, idx) => {

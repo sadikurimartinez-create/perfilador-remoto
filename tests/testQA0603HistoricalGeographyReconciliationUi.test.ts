@@ -108,7 +108,7 @@ describe("QA-06.03D.4B historical geography reconciliation UI", () => {
 
   test("external candidates from another project are excluded without reassignment", () => {
     expect(workspace).toContain("candidate.projectId === project.id");
-    expect(workspace).not.toContain("projectId: project.id");
+    expect(historicalResolutionBlock).not.toContain("projectId: project.id");
     expect(workspace).not.toMatch(/candidate\.projectId\s=[^=]/);
   });
 

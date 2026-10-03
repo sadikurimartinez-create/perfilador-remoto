@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
 import { useAuth } from "@/context/AuthContext";
 import { CaptureAndAddPhoto } from "./CaptureAndAddPhoto";
+import { photoResourceCollection, geographicEvidenceRole, geographicRoleLabels, bindPhotoToTerritorialNode } from "@/utils/geographicEvidencePresentation";
 import { PhotoAlbum } from "./PhotoAlbum";
 import { ProjectMap } from "./ProjectMap";
 import { doc, updateDoc } from "firebase/firestore";
@@ -42,18 +43,22 @@ export function ProjectManager() {
   const [draftFeedback, setDraftFeedback] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [pendingPhotos, setPendingPhotos] = useState<{file: File, url: string}[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<({file: File, url: string} & Partial<ReturnType<typeof bindPhotoToTerritorialNode>>)[]>([]);
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const validPhotos = album.filter(
   (photo) =>
+    geographicEvidenceRole(photo) !== "NONE" &&
     photo.lat != null &&
     photo.lng != null &&
     Number.isFinite(Number(photo.lat)) &&
     Number.isFinite(Number(photo.lng))
 );
 
+  useEffect(() => {
+    setPendingPhotos(photos => photos.map(photo => ({ ...photo, geometryRole: undefined, tipo: undefined, territorialRef: null })));
+  }, [draftGeography]);
   const requiredPhotos = project?.geometryType === 'poligono' ? 3 : project?.geometryType === 'lineal' ? 2 : 1;
   const hasMinimumPhotos = album.length >= requiredPhotos;
   const draftPreview = buildDraftGeographyPreview(draftGeography);
@@ -234,8 +239,10 @@ export function ProjectManager() {
           setDraftFeedback("Debe definir, validar y confirmar la geografía antes de crear el expediente.");
           return;
         }
+        if (pendingPhotos.some(photo => !photo.geometryRole)) throw new Error("Asigne el rol de cada fotografía antes de crear.");
+        if (geometryType === "lineal" && pendingPhotos.length && (!pendingPhotos.some(photo => photo.geometryRole === "START") || !pendingPhotos.some(photo => photo.geometryRole === "END"))) throw new Error("La evidencia lineal requiere Nodo Inicial y Nodo Final.");
         if (pendingPhotos.length > 0) {
-          (window as any).pendingProjectPhotos = pendingPhotos.map(p => p.file);
+          (window as any).pendingProjectPhotos = pendingPhotos.map(p => ({ ...p }));
         }
         await createProject({
           nombre,
@@ -384,9 +391,12 @@ export function ProjectManager() {
 
         // 2. Guardar TODAS las contextualizaciones fotográficas del álbum
         album.forEach((photo) => {
-          const photoRef = doc(firestore, "projects", project.id, "photos", photo.id);
+          const photoRef = doc(firestore, "projects", project.id, photoResourceCollection(photo), photo.sourceDocumentId || photo.id);
           batch.update(photoRef, {
             tipo: photo.tipo || "",
+            geometryRole: geographicEvidenceRole(photo),
+            territorialRef: photo.territorialRef || null,
+            ...(photo.sourceDocumentId ? { context: photo.comentario || "" } : {}),
             comentario: photo.comentario || ""
           });
         });
@@ -632,6 +642,16 @@ export function ProjectManager() {
                             alt="Preview" 
                             className="object-cover w-full h-full"
                           />
+                          <select aria-label={`Rol geográfico de fotografía ${idx + 1}`} value={item.territorialRef ? String(item.territorialRef.order - 1) : item.geometryRole || ""}
+                            className="absolute bottom-0 left-0 w-full bg-slate-950 text-xs text-white"
+                            onChange={event => {
+                              const assignment = bindPhotoToTerritorialNode(draftGeography, event.target.value === "NONE" ? null : Number(event.target.value));
+                              setPendingPhotos(photos => photos.map((photo, i) => i === idx ? { ...photo, ...assignment } : photo));
+                            }}>
+                            <option value="" disabled>Asignar rol / nodo</option>
+                            {draftGeography.points.map((_, index) => <option key={index} value={index}>{bindPhotoToTerritorialNode(draftGeography, index).tipo} {index + 1}</option>)}
+                            <option value="NONE">Evidencia Adicional</option>
+                          </select>
                           <button
                             type="button"
                             onClick={() => removePendingPhoto(idx)}
@@ -881,7 +901,7 @@ export function ProjectManager() {
       {album.length > 0 && (
         <ProjectMap
           project={project}
-          album={validPhotos}
+          album={album.filter(photo => !photo.deleted)}
           geometryType={project.geometryType}
           canonicalGeography={project.canonicalGeography}
           coordinates={validPhotos.map((photo) => ({

@@ -22,9 +22,12 @@ body {
   @apply flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-700 rounded-xl cursor-pointer hover:border-sky-500 transition-colors;
 }
 
-/* Modal panels are placed by CursorAnchoredDialogs next to the last pointer action. */
+/* Compatibility panels are centered; pin InfoWindows retain map anchoring. */
 .cursor-anchored-dialog {
   position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
   margin: 0 !important;
   width: min(100%, calc(100vw - 2rem)) !important;
   max-height: calc(100vh - 2rem) !important;

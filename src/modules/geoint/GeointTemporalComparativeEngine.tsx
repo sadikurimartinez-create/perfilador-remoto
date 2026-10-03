@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+import { useOperationalModalFocus } from "@/components/useOperationalModalFocus";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { GeoEvidence, GeoEvidenceSource } from "../../types/geointEvidence";
 import {
@@ -69,6 +71,8 @@ export function GeointTemporalComparativeEngine({
 
   const [comparisonType, setComparisonType] = useState<ComparisonType>("TEMPORAL_VISUAL_DELTA");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  useOperationalModalFocus(isOpen, modalRef, isAnalyzing ? undefined : onClose);
   const [analysisStatusMsg, setAnalysisStatusMsg] = useState<string>("");
   const [activeComparison, setActiveComparison] = useState<UniversalEvidenceComparison | null>(null);
   const [validationComment, setValidationComment] = useState<string>("");
@@ -231,9 +235,9 @@ export function GeointTemporalComparativeEngine({
   if (!isOpen) return null;
 
   if (!projectId || !evA || !evB) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
-        <div className="w-full max-w-2xl rounded-xl border border-amber-500/40 bg-slate-950 p-6 text-slate-100 shadow-2xl">
+    return createPortal(
+      <div data-operational-modal="true" className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+        <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Comparación temporal" tabIndex={-1} className="w-full max-w-2xl rounded-xl border border-amber-500/40 bg-slate-950 p-6 text-slate-100 shadow-2xl">
           <h2 className="text-lg font-bold text-amber-400">
             Comparación temporal no disponible
           </h2>
@@ -258,13 +262,13 @@ export function GeointTemporalComparativeEngine({
             </button>
           </div>
         </div>
-      </div>
+      </div>, document.body
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
-      <div className="flex max-h-[95vh] w-full max-w-[95vw] flex-col rounded-xl border border-amber-500/30 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden">
+  return createPortal(
+    <div data-operational-modal="true" className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Comparación temporal" tabIndex={-1} className="flex max-h-[95vh] w-full max-w-[95vw] flex-col rounded-xl border border-amber-500/30 bg-slate-900 text-slate-100 shadow-2xl overflow-hidden">
         {/* Encabezado Gobernado Universal */}
         <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-6 py-4">
           <div className="flex items-center space-x-3">
@@ -503,6 +507,6 @@ export function GeointTemporalComparativeEngine({
           </div>
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }

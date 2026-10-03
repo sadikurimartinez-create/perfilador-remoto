@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+import { useOperationalModalFocus } from "@/components/useOperationalModalFocus";
 import React, { useState, useCallback } from "react";
 import { buildStreetViewUrl } from "@/lib/googleStreetView";
 import {
@@ -89,6 +91,8 @@ export function GeointControlledSweepEngine({
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
   const [sweepProgressMsg, setSweepMsg] = useState<string>("");
   const sweepExecutionLockedRef = React.useRef(false);
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  useOperationalModalFocus(isOpen, modalRef, isSweeping ? undefined : onClose);
 
   const handleToggleCategory = (cat: GeoIntSweepCategory) => {
     setSelectedCategories((prev) =>
@@ -325,9 +329,9 @@ export function GeointControlledSweepEngine({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative text-slate-100 space-y-5">
+  return createPortal(
+    <div data-operational-modal="true" className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Barrido GEOINT" tabIndex={-1} className="max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative text-slate-100 space-y-5">
         
         {/* Encabezado del Motor */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -473,7 +477,7 @@ export function GeointControlledSweepEngine({
         </div>
 
       </div>
-    </div>
+    </div>, document.body
   );
 }
 

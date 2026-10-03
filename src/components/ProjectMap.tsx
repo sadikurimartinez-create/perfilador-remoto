@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { geographicEvidenceRole, geographicRoleLabels, geographicEvidenceCoordinates } from "@/utils/geographicEvidencePresentation";
 import { GoogleMap, Marker, Polyline, Polygon, Circle, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
 import { extractSweepCoordinates } from "@/utils/sweepCoordinatesExtractor";
 import {
@@ -139,7 +140,6 @@ export function ProjectMap({
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
-  const [hoveredPhoto, setHoveredPhoto] = useState<any | null>(null);
   const [activePhoto, setActivePhoto] = useState<any | null>(null);
   const [subMode, setSubMode] = useState<"vertex" | "poi">("poi");
 
@@ -284,7 +284,7 @@ export function ProjectMap({
 
   // Filter georeferenced evidence items
   const georeferencedPhotos = useMemo(() => {
-    return album.filter((p) => {
+    return album.filter((p) => !p.deleted && geographicEvidenceCoordinates(p)).map(p => ({ ...p, ...geographicEvidenceCoordinates(p)! })).filter((p) => {
       if (p.lat == null || p.lng == null) return false;
       // Filtrar pines por defecto automáticos de Aguascalientes para evitar distorsionar el mapa
       const isDefaultFallback = Math.abs(Number(p.lat) - 21.8853) < 0.0001 && Math.abs(Number(p.lng) - (-102.2916)) < 0.0001;
@@ -760,20 +760,10 @@ export function ProjectMap({
               key={photo.id}
               position={{ lat: Number(photo.lat), lng: Number(photo.lng) }}
               zIndex={isPoi ? 100 : 200}
-              title={`Evidencia ${photo.id}`}
-              onClick={() => {
-                setActivePhoto(photo);
-                setHoveredPhoto(null);
-              }}
-              onMouseOver={() => {
-                if (activePhoto?.id !== photo.id) {
-                  setHoveredPhoto(photo);
-                }
-              }}
-              onMouseOut={() => {
-                setHoveredPhoto(null);
-              }}
-              draggable={true}
+              label={{ text: geographicRoleLabels[geographicEvidenceRole(photo)][0], color: "#ffffff", fontSize: "12px", fontWeight: "700" }}
+              title={`${geographicRoleLabels[geographicEvidenceRole(photo)][1]} · ${photo.id}`}
+              onClick={() => setActivePhoto(photo)}
+              draggable={geographicEvidenceRole(photo) !== "NONE"}
               onDragEnd={async (e) => {
                 if (e.latLng && onMoveMarker) {
                   const lat = e.latLng.lat();
@@ -815,7 +805,7 @@ export function ProjectMap({
                 fillOpacity: 1,
                 strokeWeight: 3,
                 strokeColor: "#ffffff",
-                scale: isPoi ? 10 : 10,
+                scale: 16,
               }}
             />
           );
@@ -960,50 +950,20 @@ export function ProjectMap({
           </InfoWindow>
         )}
 
-        {/* Hover info window containing the preview and limited metadata of the georeferenced evidence */}
-        {hoveredPhoto && hoveredPhoto.lat != null && hoveredPhoto.lng != null && (
-          <InfoWindow
-            position={{ lat: Number(hoveredPhoto.lat), lng: Number(hoveredPhoto.lng) }}
-            options={{
-              pixelOffset: new window.google.maps.Size(0, -35),
-            }}
-            onCloseClick={() => setHoveredPhoto(null)}
-          >
-            <div className="bg-slate-950/95 text-slate-200 p-3 rounded-xl border border-slate-800 shadow-2xl flex flex-col gap-2 w-64 pointer-events-none font-sans text-xs">
-              <img
-                src={hoveredPhoto.previewUrl || "/no-image.png"}
-                alt={hoveredPhoto.tipo || "Evidencia"}
-                className="w-full h-28 object-cover rounded-lg border border-slate-800 bg-slate-900"
-              />
-              <div className="w-full space-y-1">
-                <div className="flex justify-between items-center border-b border-slate-800 pb-1">
-                  <span className="font-black text-cyan-400 uppercase tracking-wide">
-                    {hoveredPhoto.evidenceId || `EVI-${hoveredPhoto.id.slice(0, 6).toUpperCase()}`}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-1 gap-y-0.5 text-[9px] text-slate-400">
-                  <div><span className="text-slate-500 font-bold">Tipo:</span> {hoveredPhoto.tipo || "Fotografía"}</div>
-                  <div><span className="text-slate-500 font-bold">Fecha:</span> {hoveredPhoto.contextualizedAt ? new Date(hoveredPhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
-                  <div><span className="text-slate-500 font-bold">Coordenadas:</span> {Number(hoveredPhoto.lat).toFixed(3)}, {Number(hoveredPhoto.lng).toFixed(3)}</div>
-                </div>
-              </div>
-            </div>
-          </InfoWindow>
-        )}
-
         {/* Action-oriented selection InfoWindow for depth analysis and street view activation */}
         {activePhoto && activePhoto.lat != null && activePhoto.lng != null && (
           <InfoWindow
             position={{ lat: Number(activePhoto.lat), lng: Number(activePhoto.lng) }}
             options={{
               pixelOffset: new window.google.maps.Size(0, -35),
+              disableAutoPan: false,
+              maxWidth: 360,
             }}
             onCloseClick={() => setActivePhoto(null)}
           >
-            <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2.5 w-80 font-sans text-xs">
+            <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 shadow-2xl flex flex-col gap-2.5 w-80 max-w-[70vw] font-sans text-xs">
               <img
-                src={activePhoto.previewUrl || "/no-image.png"}
+                src={activePhoto.previewUrl || activePhoto.url}
                 alt={activePhoto.tipo || "Evidencia"}
                 className="w-full h-36 object-cover rounded-lg border border-slate-700 bg-slate-950"
               />
@@ -1018,7 +978,7 @@ export function ProjectMap({
                 </div>
                 
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-300 font-sans">
-                  <div><span className="text-slate-500 font-bold">Tipo:</span> {activePhoto.tipo || "Fotografía"}</div>
+                  <div><span className="text-slate-500 font-bold">Tipo:</span> {geographicRoleLabels[geographicEvidenceRole(activePhoto)][1]}</div>
                   <div><span className="text-slate-500 font-bold">Fuente:</span> {activePhoto.gpsSource || "Analista"}</div>
                   <div><span className="text-slate-500 font-bold">Fecha:</span> {activePhoto.contextualizedAt ? new Date(activePhoto.contextualizedAt).toLocaleDateString("es-MX") : "N/D"}</div>
                   <div><span className="text-slate-500 font-bold">Usuario:</span> {activePhoto.contextualizedBy || "Analista CEIPOL"}</div>
@@ -1033,6 +993,7 @@ export function ProjectMap({
                   </p>
                 )}
 
+                <button type="button" onClick={() => setActivePhoto(null)}>Cerrar evidencia</button>
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-800">
                   <button
                     onClick={() => {

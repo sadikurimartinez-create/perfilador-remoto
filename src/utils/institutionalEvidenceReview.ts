@@ -3,7 +3,7 @@ import { GeointGovernanceStatus } from "@/types/geointGovernance";
 import { hasStreetViewProvenance } from "./visualEvidenceEngine/streetViewCollector";
 
 // Locators identify existing storage, not a second evidence/review contract.
-export type EvidenceReviewSource = "PHOTO" | "TACTICAL_STREET_VIEW" | "STREETVIEW_FINDING";
+export type EvidenceReviewSource = "PHOTO" | "DOCUMENT_PHOTO" | "TACTICAL_STREET_VIEW" | "STREETVIEW_FINDING";
 export interface EvidenceReviewTarget { source: EvidenceReviewSource; id: string }
 export interface EvidenceReviewRequest extends EvidenceReviewTarget {
   projectId: string; action: HumanValidationAction; comment: string;
@@ -19,8 +19,10 @@ export function ppcReviewDisplayStatus(item: any) {
   return decision.isLegacyCompatibleApproval ? "PENDING_REVIEW" : decision.status;
 }
 export function reviewVersion(item: any): string {
-  return JSON.stringify([evaluateHumanValidation(item).status, item.validatedAt ?? item.validationDate ?? null,
-    item.validationComment ?? null]);
+  const nested = item?.multimodalEvidence || {};
+  const record = { ...nested, ...item, humanValidationStatus: item?.humanValidationStatus ?? nested.humanValidationStatus };
+  return JSON.stringify([evaluateHumanValidation(record).status, record.validatedAt ?? record.validationDate ?? null,
+    record.validationComment ?? null]);
 }
 export function institutionalReviewState(action: HumanValidationAction): GeointGovernanceStatus {
   return action === "APPROVE" ? GeointGovernanceStatus.APPROVED_EVIDENCE :

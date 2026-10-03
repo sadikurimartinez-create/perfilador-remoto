@@ -1,4 +1,5 @@
 "use client";
+import { geographicEvidenceRole, geographicRoleLabels, sortGeographicEvidence, photoResourceCollection, geographicEvidenceCoordinates } from "@/utils/geographicEvidencePresentation";
 import { persistInstitutionalSweep } from "@/lib/institutionalSweepActions";
 import { mutateInstitutionalLifecycle, restoreInstitutionalTrash } from "@/lib/institutionalLifecycleActions";
 import { canWriteInstitutionalProject, readInstitutionalCollection } from "@/lib/institutionalCollectionActions";
@@ -425,6 +426,7 @@ type ProjectContextValue = {
       gpsLng?: number | null;
       diagnosticLogs?: string;
       validado?: boolean;
+      geometryRole?: string;
       tipo?: string;
       comentario?: string;
       isIndependentPoi?: boolean;
@@ -1100,7 +1102,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             previewUrl: rawUrl,
             lat: data.lat ?? data.gpsLat ?? null,
             lng: data.lng ?? data.gpsLng ?? null,
-            tipo: data.tipo,
+            tipo: data.geometryRole && geographicEvidenceRole(data) !== "LEGACY_UNCLASSIFIED" || data.territorialRef?.role ? geographicRoleLabels[geographicEvidenceRole(data)][1] : data.tipo || "",
+            geometryRole: data.geometryRole ?? geographicEvidenceRole(data),
+            isGeometry: data.isGeometry ?? false,
+            projectId,
+            createdAt: data.createdAt,
             comentario: data.comentario,
             deleted: data.deleted === true,
             evidenceId: data.evidenceId || normalizedBaseEvidence.fields.evidenceId || null,
@@ -1199,11 +1205,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           ...doc.data()
         } as any))
         .filter((d: any) => !d.deleted);
-      const governedAlbumPhotos = mergeAdditionalPhotoEvidence(albumPhotos, projectDocs, {
+      const governedAlbumPhotos = sortGeographicEvidence(mergeAdditionalPhotoEvidence(albumPhotos, projectDocs, {
         projectId,
         geographyId: canonicalGeography?.geographyId ?? projectData.geographyId ?? null,
         geographyType: canonicalGeography?.type ?? null,
-      }) as AlbumPhoto[];
+      }), canonicalGeography) as AlbumPhoto[];
 
       let denueAnalyticalWorkflow: {
         relations: DenueAnalyticalRelation[];
@@ -1315,6 +1321,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       gpsLng?: number | null;
       diagnosticLogs?: string;
       validado?: boolean;
+      geometryRole?: string;
       tipo?: string;
       comentario?: string;
       isIndependentPoi?: boolean;
@@ -1351,11 +1358,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const snapshot = await uploadBytes(storageRef, compressedFile);
     const downloadURL = await getDownloadURL(snapshot.ref);
 
-    let defaultTipo = metadata?.tipo || "Nodo Principal";
-    if (!metadata?.tipo) {
-      if (project.geometryType === "lineal") defaultTipo = "Corredor";
-      else if (project.geometryType === "poligono") defaultTipo = "Interior";
-    }
+    const defaultTipo = metadata?.tipo || "LEGACY_UNCLASSIFIED";
 
     let photoDocId = photoId;
 
@@ -1397,10 +1400,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         coordinates: normalizedBaseEvidence.fields.coordinates,
         evidenceClass: normalizedBaseEvidence.evidenceClass,
         createdAt: Date.now(),
+        geometryRole: metadata?.geometryRole || geographicEvidenceRole({ tipo: resolvedTipo, territorialRef: metadata?.territorialRef }),
         tipo: resolvedTipo,
         fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
-        evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : (metadata?.evidenceType || "ANALYST_PHOTO"),
+        evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : (metadata?.geometryRole === "NONE" ? "ADDITIONAL_PHOTO" : metadata?.evidenceType || "ANALYST_PHOTO"),
         comentario: metadata?.comentario || "",
+        isGeometry: Boolean(metadata?.territorialRef) && metadata?.geometryRole !== "NONE",
         isIndependentPoi: metadata?.isIndependentPoi || false,
         territorialRef: metadata?.territorialRef ?? null,
         gpsAccuracy: metadata?.gpsAccuracy ?? null,
@@ -1457,9 +1462,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       previewUrl: downloadURL,
       lat,
       lng,
+      geometryRole: photoDocData.geometryRole,
+      isGeometry: photoDocData.isGeometry,
+      projectId: project.id,
       tipo: resolvedTipo,
       fuente: isStreetView ? "Google Street View" : ((metadata as any)?.fuente || "Inspección de Campo"),
-      evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : (metadata?.evidenceType || "ANALYST_PHOTO"),
+      evidenceType: isStreetView ? "VIRTUAL_STREET_VIEW" : (metadata?.geometryRole === "NONE" ? "ADDITIONAL_PHOTO" : metadata?.evidenceType || "ANALYST_PHOTO"),
       comentario: metadata?.comentario || "",
       isIndependentPoi: metadata?.isIndependentPoi || false,
       territorialRef: metadata?.territorialRef ?? null,
@@ -1601,9 +1609,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const docsColRef = collection(firestore, "projects", project.id, "documents");
     const storagePath = snapshot.ref.fullPath;
     const isAdditionalPhoto = isImageEvidenceMimeType(file.type);
+    let additionalCoordinates: { lat: number; lng: number } | null = null;
+    if (isAdditionalPhoto) {
+      try {
+        const exifr = await import("exifr");
+        const gps = await exifr.gps(file);
+        additionalCoordinates = geographicEvidenceCoordinates({ latitude: gps?.latitude, longitude: gps?.longitude });
+      } catch { /* No EXIF is a valid absence, never use device/project coordinates. */ }
+    }
     const normalizedAdditionalPhoto = isAdditionalPhoto
       ? normalizeInstitutionalBaseEvidence({
           id: docId,
+          lat: additionalCoordinates?.lat ?? null,
+          lng: additionalCoordinates?.lng ?? null,
           evidenceId: docId,
           sourceEvidenceId: docId,
           expedienteId: project.id,
@@ -1633,7 +1651,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         lineage: normalizedAdditionalPhoto.fields.lineage,
         lineageStatus: "SUPPORTED" as const,
         evidenceClass: "INSTITUTIONAL_EVIDENCE" as const,
-        coordinates: null,
+        coordinates: additionalCoordinates,
+        lat: additionalCoordinates?.lat ?? null,
+        lng: additionalCoordinates?.lng ?? null,
+        gpsSource: additionalCoordinates ? "EXIF_GPS" : "SIN_GEOLOCALIZACION",
       } : {}),
       multimodalEvidence: createStoredRawMultimodalEvidence({
         evidenceId: docId,
@@ -1709,11 +1730,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         project.geometryType || "polígono"
       );
 
-      if (photoToId.evidenceType === "GEOGRAPHIC_VECTOR") await deleteGeographicEntity(project.id, id);
+      if (photoToId.sourceDocumentId) await mutateInstitutionalLifecycle({ projectId: project.id, entityId: photoToId.sourceDocumentId, kind: "DOCUMENT", operation: "DELETE", operationId: `delete-document:${project.id}:${photoToId.sourceDocumentId}`, reason: "Eliminación institucional de evidencia adicional" });
+      else if (photoToId.evidenceType === "GEOGRAPHIC_VECTOR") await deleteGeographicEntity(project.id, id);
       else await mutateInstitutionalLifecycle({ projectId: project.id, entityId: id, kind: "PHOTO", operation: "DELETE", operationId: `delete-photo:${project.id}:${id}`, reason: "Eliminación institucional de imagen" });
 
       // Actualizar estado reactivo
       setAlbum(prev => prev.filter(photo => photo.id !== id));
+      if (photoToId.sourceDocumentId) setDocuments(prev => prev.filter(item => item.id !== photoToId.sourceDocumentId));
       setSelectedIds((prev) => prev.filter((x) => x !== id));
     } catch (err) {
       console.error("[ProjectContext] Error al eliminar foto:", err);
@@ -1730,7 +1753,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const updatePhotoMeta = useCallback((id: string, meta: { tipo: string; comentario: string }) => {
     if (isReadOnly) return;
     setAlbum((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...meta } : p))
+      prev.map((p) => (p.id === id ? { ...p, ...meta,
+        geometryRole: isAdditionalPhotoEvidence(p) ? "NONE" : geographicEvidenceRole({ tipo: meta.tipo }),
+        territorialRef: geographicEvidenceRole({ tipo: meta.tipo }) === geographicEvidenceRole(p) ? p.territorialRef : null } : p))
     );
   }, [isReadOnly]);
 
@@ -1739,10 +1764,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!project) return;
     try {
       const firestore = getDb();
-      const photoRef = doc(firestore, "projects", project.id, "photos", id);
+      const target = album.find(p => p.id === id);
+      if (!target) throw new Error("PHOTO_RESOURCE_NOT_FOUND");
+      const photoRef = doc(firestore, "projects", project.id, photoResourceCollection(target), target.sourceDocumentId || id);
       await updateDoc(photoRef, {
         evidenceRelationship: relationship
       });
+      if (target.sourceDocumentId) setDocuments(items => items.map(item => item.id === target.sourceDocumentId ? { ...item, evidenceRelationship: relationship } : item));
 
       setAlbum((prev) =>
         prev.map((p) => (p.id === id ? { ...p, evidenceRelationship: relationship } : p))
@@ -1750,7 +1778,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("[ProjectContext] Error updating photo relationship:", err);
     }
-  }, [isReadOnly, project]);
+  }, [isReadOnly, project, album]);
 
   const updatePhotoCoordinates = useCallback(async (id: string, lat: number, lng: number) => {
     if (isReadOnly) return;
@@ -1782,7 +1810,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         updateData.previewUrl = newMapUrl;
       }
 
-      await updateDoc(doc(firestore, "projects", project.id, "photos", id), updateData);
+      if (!currentPhoto) throw new Error("PHOTO_RESOURCE_NOT_FOUND");
+      await updateDoc(doc(firestore, "projects", project.id, photoResourceCollection(currentPhoto), currentPhoto.sourceDocumentId || id), updateData);
+      if (currentPhoto.sourceDocumentId) setDocuments(items => items.map(item => item.id === currentPhoto.sourceDocumentId ? { ...item, ...updateData } : item));
       setAlbum((prev) =>
         prev.map((p) => (p.id === id ? { ...p, lat, lng, ...(newMapUrl ? { previewUrl: newMapUrl } : {}) } : p))
       );
@@ -2377,17 +2407,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const contextualizedAt = Date.now();
     const contextualizedBy = user?.username || "Usuario Local";
 
-    const photoRef = doc(firestore, "projects", project.id, "photos", photoId);
-    await updateDoc(photoRef, {
+    const photoRef = doc(firestore, "projects", project.id, photoResourceCollection(photo), photo.sourceDocumentId || photoId);
+    const contextualizationPatch = {
       evidenceId,
+      geometryRole: photo.geometryRole || geographicEvidenceRole(photo),
+      territorialRef: photo.territorialRef || null,
+      ...(photo.sourceDocumentId ? { context: photo.comentario || "" } : {}),
       tipo: photo.tipo || "",
       comentario: photo.comentario || "",
       contextualizedAt,
       contextualizedBy,
       isContextualized: true,
       isIndependentPoi: photo.isIndependentPoi || false,
-      savedCoordinates: photo.lat && photo.lng ? { lat: photo.lat, lng: photo.lng } : null
-    });
+      savedCoordinates: geographicEvidenceCoordinates(photo)
+    };
+    await updateDoc(photoRef, contextualizationPatch);
+    if (photo.sourceDocumentId) setDocuments(items => items.map(item => item.id === photo.sourceDocumentId ? { ...item, ...contextualizationPatch, geometryRole: "NONE" as const } : item));
 
     setAlbum((prev) =>
       prev.map((p) =>

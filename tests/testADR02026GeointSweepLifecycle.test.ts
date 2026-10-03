@@ -374,11 +374,14 @@ describe("ADR-020.26 - GEOINT Sweep lifecycle integration", () => {
     );
 
     expect(projectContext).toContain('import { makeFirestoreSafe } from "@/utils/firestoreSafe";');
-    expect(registerSweepBlock).toContain("const updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];");
-    expect(registerSweepBlock).toContain("transaction.update(projectRef, updateData);");
+    expect(registerSweepBlock).toContain("let updatedSweeps = makeFirestoreSafe([...currentSweeps, newSweep]) as SweepIntegrationItem[];");
+    expect(registerSweepBlock).toContain("await persistInstitutionalSweep(project.id, 'REGISTER', newSweep)");
+    expect(registerSweepBlock).not.toContain("transaction.update");
     expect(updateSweepBlock).toContain("const firestoreSafeUpdates = makeFirestoreSafe(updates) as Partial<SweepIntegrationItem>;");
-    expect(updateSweepBlock).toContain("updatedSweeps = makeFirestoreSafe(serverSweeps.map");
-    expect(updateSweepBlock).toContain("transaction.update(projectRef, {");
+    expect(updateSweepBlock).toContain("updatedSweeps = makeFirestoreSafe(currentSweeps.map");
+    expect(updateSweepBlock).toContain("await persistInstitutionalSweep(project.id, 'UPDATE', { ...updatedSweep,");
+    expect(updateSweepBlock).toContain("expectedVersion: sweepToUpdate.lifecycleVersion");
+    expect(updateSweepBlock).not.toContain("transaction.update");
     expect(updateSweepBlock).toContain("sweeps: updatedSweeps");
   });
 });

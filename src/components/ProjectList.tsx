@@ -3,6 +3,8 @@ import { subscribeInstitutionalCollection } from "@/services/institutionalCollec
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useState, useRef } from "react";
+import type { TerritorialEvidenceReference } from "@/utils/territorialEvidenceReference";
+import { geographicRoleLabels, bindPhotoToTerritorialNode } from "@/utils/geographicEvidencePresentation";
 import { useRouter } from "next/navigation";
 import exifr from "exifr";
 import { useAuth } from "@/context/AuthContext";
@@ -61,6 +63,9 @@ type ProjectWithCount = {
 };
 
 type PendingProjectPhoto = {
+  tipo?: string;
+  geometryRole?: string;
+  territorialRef?: TerritorialEvidenceReference | null;
   file: File;
   url: string;
   captureSource: "CAMERA_IN_SITU" | "GALLERY_IMPORT";
@@ -473,8 +478,13 @@ export function ProjectList() {
     setShowPrompt(true);
   };
 
+  const invalidatePhotoRoles = () => {
+    const next = pendingPhotosRef.current.map(photo => ({ ...photo, geometryRole: undefined, tipo: undefined, territorialRef: null }));
+    pendingPhotosRef.current = next; setPendingPhotos(next);
+  };
   const handleGeometryTypeChange = (nextType: "individual" | "lineal" | "poligono") => {
     setGeometryType(nextType);
+    invalidatePhotoRoles();
     setDraftGeography(resetDraftProjectGeography(nextType));
     setDraftWasConfirmed(false);
     setDraftLatInput("");
@@ -506,6 +516,7 @@ export function ProjectList() {
   const handleAddDraftPoint = () => {
     const point = parseDraftPoint();
     if (!point) return;
+    invalidatePhotoRoles();
     const requiresReconfirmation = draftGeography.confirmed || draftWasConfirmed;
 
     const nextPoints =
@@ -530,6 +541,7 @@ export function ProjectList() {
   };
 
   const handleRemoveDraftPoint = (index: number) => {
+    invalidatePhotoRoles();
     const requiresReconfirmation = draftGeography.confirmed || draftWasConfirmed;
     setDraftGeography(
       updateDraftProjectGeography(
@@ -546,6 +558,7 @@ export function ProjectList() {
   };
 
   const handleResetDraftGeometry = () => {
+    invalidatePhotoRoles();
     setDraftGeography(resetDraftProjectGeography(geometryType));
     setDraftWasConfirmed(false);
     setDraftLatInput("");
@@ -594,6 +607,14 @@ export function ProjectList() {
         isCreatingProjectRef.current = false;
         setIsCreatingProject(false);
         return;
+      }
+      if (photosToCreate.some(photo => !photo.geometryRole || (photo.territorialRef && (photo.territorialRef.geometryType !== effectiveGeometryType || !effectiveDraftGeography.points[photo.territorialRef.order - 1])))) {
+        setDraftFeedback("Asigne y confirme el rol de cada fotografía antes de crear.");
+        isCreatingProjectRef.current = false; setIsCreatingProject(false); return;
+      }
+      if (effectiveGeometryType === "lineal" && photosToCreate.length > 0 && (!photosToCreate.some(photo => photo.geometryRole === "START") || !photosToCreate.some(photo => photo.geometryRole === "END"))) {
+        setDraftFeedback("La evidencia lineal requiere al menos un Nodo Inicial y un Nodo Final.");
+        isCreatingProjectRef.current = false; setIsCreatingProject(false); return;
       }
       const confirmedDraftGeography = effectiveDraftGeography;
       if (photosToCreate.length > 0) {
@@ -1601,6 +1622,21 @@ export function ProjectList() {
                           alt="Preview" 
                           className="object-cover w-full h-full"
                         />
+                        <select aria-label={`Rol geográfico de fotografía ${idx + 1}`} value={item.territorialRef ? String(item.territorialRef.order - 1) : item.geometryRole || ""}
+                          className="absolute bottom-0 left-0 w-full bg-slate-950 text-xs text-white"
+                          onChange={event => {
+                            const value = event.target.value;
+                            const assignment = bindPhotoToTerritorialNode(draftGeography, value === "NONE" ? null : Number(value));
+                            const next = pendingPhotos.map((photo, i) => i === idx ? { ...photo, ...assignment } : photo);
+                            pendingPhotosRef.current = next; setPendingPhotos(next);
+                          }}>
+                          <option value="" disabled>Asignar rol / nodo</option>
+                          {draftGeography.points.map((_, index) => {
+                            const role = geometryType === "lineal" ? corridorVertexRole(index, draftGeography.points.length) : geometryType === "poligono" ? "VERTEX" : "POINT";
+                            return <option key={index} value={index}>{geographicRoleLabels[role][1]} {index + 1}</option>;
+                          })}
+                          <option value="NONE">Evidencia Adicional</option>
+                        </select>
                         <button
                           type="button"
                           onClick={() => removePendingPhoto(idx)}

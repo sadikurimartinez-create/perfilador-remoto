@@ -14,7 +14,7 @@ export async function commitInstitutionalEvidenceReview(db: Firestore, actor: an
     const parent = (await tx.get(parentRef)).data();
     if (!parent || parent.deleted || parent.estado === "ARCHIVADO" || parent.status === "ARCHIVADO") throw new Error("EVIDENCE_REVIEW_PROJECT_INACCESSIBLE");
     const tactical = Array.isArray(parent.tacticalStreetViews) ? parent.tacticalStreetViews : [];
-    const childRef = input.source === "TACTICAL_STREET_VIEW" ? null : db.doc(`projects/${input.projectId}/${input.source === "PHOTO" ? "photos" : "streetview_findings"}/${input.id}`);
+    const childRef = input.source === "TACTICAL_STREET_VIEW" ? null : db.doc(`projects/${input.projectId}/${input.source === "PHOTO" ? "photos" : input.source === "DOCUMENT_PHOTO" ? "documents" : "streetview_findings"}/${input.id}`);
     const child = childRef ? await tx.get(childRef) : null;
     const rootRef = input.source === "STREETVIEW_FINDING" ? db.doc(`streetview_findings/${input.id}`) : null;
     const root = rootRef ? await tx.get(rootRef) : null;
@@ -26,12 +26,13 @@ export async function commitInstitutionalEvidenceReview(db: Firestore, actor: an
     for (const record of [prior, root?.data()].filter(Boolean)) {
       if (record.expedienteId && record.expedienteId !== input.projectId || record.projectId && record.projectId !== input.projectId) throw new Error("EVIDENCE_REVIEW_CROSS_PROJECT");
     }
+    if (input.source === "DOCUMENT_PHOTO" && !/^image\//i.test(prior.type || prior.mimeType || prior.multimodalEvidence?.mimeType || "")) throw new Error("EVIDENCE_REVIEW_NOT_PHOTOGRAPHIC");
     if (reviewVersion(prior) !== input.expectedReview) throw new Error("EVIDENCE_REVIEW_STALE_RELOAD_REQUIRED");
     const now = new Date().toISOString();
     const identity = { id: actor.institutionalUserId, uid: `user:${actor.institutionalUserId}`, name: actor.username, role: actor.role };
     const patch = { ...applyHumanValidationAction({ action: input.action, validatorIdentity: identity, validatedAt: now }),
       validationDate: now, validationComment: input.comment.trim() };
-    const isStreetView = input.source !== "PHOTO" || prior.isStreetView || prior.streetViewMetadata || prior.sourceProvider === "GOOGLE_STREET_VIEW" || /STREET_?VIEW/i.test(prior.tipo || prior.evidenceType || "");
+    const isStreetView = (input.source === "TACTICAL_STREET_VIEW" || input.source === "STREETVIEW_FINDING") || prior.isStreetView || prior.streetViewMetadata || prior.sourceProvider === "GOOGLE_STREET_VIEW" || /STREET_?VIEW/i.test(prior.tipo || prior.evidenceType || "");
     const reviewPatch = isStreetView ? { ...patch, estado: institutionalReviewState(input.action), estado_revision: institutionalReviewState(input.action), status: institutionalReviewState(input.action) } : patch;
     let result = { ...prior, ...reviewPatch, id: prior.id || input.id };
     if (input.source === "STREETVIEW_FINDING") {
@@ -40,6 +41,7 @@ export async function commitInstitutionalEvidenceReview(db: Firestore, actor: an
       const normalized = normalizeStreetViewFindingForPersistence(input.action === "APPROVE" ? recoverHistoricalStreetViewFindingForApproval(candidate) : candidate);
       result = { ...candidate, ...normalized };
     }
+    if (input.source === "DOCUMENT_PHOTO" && prior.multimodalEvidence) result = { ...result, multimodalEvidence: { ...prior.multimodalEvidence, ...patch } };
     result = makeFirestoreSafe(result);
     const aliases = new Set(evidenceAliases({ ...prior, id: prior.id || input.id }));
     const updatedTactical = tactical.map((item: any) => isStreetView && evidenceAliases(item).some(alias => aliases.has(alias)) ? { ...item, ...reviewPatch } : item);

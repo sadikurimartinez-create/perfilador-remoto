@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
+import { useOperationalModalFocus } from "../useOperationalModalFocus";
 import { PowerUpConfig } from "./powerups.types";
 import { PowerUpTooltip } from "./PowerUpTooltip";
-import { PopupPositionManager } from "../DynamicPopup";
+
 
 interface PowerUpPreviewModalProps {
   config: PowerUpConfig;
@@ -17,45 +19,23 @@ export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm, coords
   const theme = config.colorTheme;
   const preview = config.preview;
 
-  const [styleCoords, setStyleCoords] = React.useState<{ top: string; left: string } | null>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  useOperationalModalFocus(isOpen, modalRef, onClose);
+  if (!isOpen || typeof document === "undefined") return null;
 
-  React.useEffect(() => {
-    if (!isOpen || !coords) return;
-    const updatePosition = () => {
-      const winWidth = window.innerWidth;
-      const winHeight = window.innerHeight;
-      const w = containerRef.current ? containerRef.current.offsetWidth : 450;
-      const h = containerRef.current ? containerRef.current.offsetHeight : 400;
-      const pos = PopupPositionManager.calculate(coords.x, coords.y, w, h, winWidth, winHeight);
-      setStyleCoords({
-        top: `${pos.y}px`,
-        left: `${pos.x}px`
-      });
-    };
-    updatePosition();
-    const timer = setTimeout(updatePosition, 30);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [isOpen, coords]);
-
-  if (!isOpen) return null;
-
-  return (
+  return createPortal(
     <div 
-      className="fixed inset-0 bg-black/5 backdrop-blur-[1px] z-[250] animate-fadeIn"
+      data-operational-modal="true"
+      className="fixed inset-0 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[1px] z-[250] animate-fadeIn"
       onClick={onClose}
     >
       <div 
-        ref={containerRef}
+        ref={modalRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        style={styleCoords ? { position: "fixed", top: styleCoords.top, left: styleCoords.left } : undefined}
-        className="cursor-anchored-dialog bg-slate-950 border border-slate-800/80 rounded-xl w-full max-w-lg p-5 shadow-2xl relative overflow-hidden flex flex-col gap-4"
+        className="bg-slate-950 border border-slate-800/80 rounded-xl w-full max-w-lg p-5 shadow-2xl relative overflow-hidden flex flex-col gap-4"
       >
         {/* Top visual accent bar */}
         <div className={`absolute top-0 left-0 right-0 h-1.5 ${theme.accentBg}`} />
@@ -152,6 +132,6 @@ export function PowerUpPreviewModal({ config, isOpen, onClose, onConfirm, coords
           </button>
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }
