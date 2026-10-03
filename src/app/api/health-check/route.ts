@@ -13,6 +13,19 @@ type ServiceStatus = {
   status: "ok" | "error";
   latencyMs: number | null;
   errorMessage?: string;
+  runtimeAuthority?: RuntimeAuthority;
+};
+
+type RuntimeAuthority = {
+  isCeipolApp: boolean;
+  isSuperuser: boolean;
+  canCreateDb: boolean;
+  canCreateRole: boolean;
+  bypassRls: boolean;
+  canCreatePublic: boolean;
+  canCreateTablePublic: boolean;
+  ownsDatabase: boolean;
+  publicCanCreatePublic: boolean;
 };
 
 export async function GET() {
@@ -249,14 +262,51 @@ export async function GET() {
   // PostgreSQL / PostGIS
   {
     const started = Date.now();
+    let runtimeAuthority: RuntimeAuthority | undefined;
     try {
-      const dbHealth = await getPool().query(
+      const pool = getPool();
+      // Independent of PostGIS and the authority table; never select identifiers.
+      const roleHealth = await pool.query(
+        `SELECT
+           current_user = 'ceipol_app' AS "isCeipolApp",
+           r.rolsuper AS "isSuperuser",
+           r.rolcreatedb AS "canCreateDb",
+           r.rolcreaterole AS "canCreateRole",
+           r.rolbypassrls AS "bypassRls",
+           has_schema_privilege(current_user, 'public', 'CREATE') AS "canCreatePublic",
+           has_schema_privilege(current_user, 'public', 'CREATE') AS "canCreateTablePublic",
+           r.oid = d.datdba AS "ownsDatabase",
+           EXISTS (
+             SELECT 1 FROM pg_namespace n,
+             LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) acl
+             WHERE n.nspname = 'public' AND acl.grantee = 0
+               AND acl.privilege_type = 'CREATE'
+           ) AS "publicCanCreatePublic"
+         FROM pg_roles r JOIN pg_database d ON d.datname = current_database()
+         WHERE r.rolname = current_user`
+      );
+      const role = roleHealth.rows[0];
+      const fields = ["isCeipolApp", "isSuperuser", "canCreateDb", "canCreateRole",
+        "bypassRls", "canCreatePublic", "canCreateTablePublic", "ownsDatabase",
+        "publicCanCreatePublic"] as const;
+      if (roleHealth.rows.length !== 1 || fields.some(field => typeof role?.[field] !== "boolean")) {
+        throw new Error("POSTGRES_RUNTIME_AUTHORITY_UNAVAILABLE");
+      }
+      // Explicit allowlist: never spread driver rows or expose incidental columns.
+      runtimeAuthority = {
+        isCeipolApp: role.isCeipolApp, isSuperuser: role.isSuperuser,
+        canCreateDb: role.canCreateDb, canCreateRole: role.canCreateRole,
+        bypassRls: role.bypassRls, canCreatePublic: role.canCreatePublic,
+        canCreateTablePublic: role.canCreateTablePublic, ownsDatabase: role.ownsDatabase,
+        publicCanCreatePublic: role.publicCanCreatePublic,
+      };
+      const dbHealth = await pool.query(
         `SELECT
            ST_AsText(ST_MakePoint(0, 0)) AS postgis_probe,
            to_regclass('public.institutional_project_access') IS NOT NULL AS authority_table_exists,
            has_table_privilege(
              current_user,
-             'public.institutional_project_access',
+             to_regclass('public.institutional_project_access'),
              'SELECT'
            ) AS authority_select`
       );
@@ -272,6 +322,7 @@ export async function GET() {
         name: "PostgreSQL / PostGIS",
         status: "ok",
         latencyMs: Date.now() - started,
+        runtimeAuthority,
       });
     } catch (error) {
       services.push({
@@ -280,9 +331,10 @@ export async function GET() {
         status: "error",
         latencyMs: Date.now() - started,
         errorMessage:
-          error instanceof Error
-            ? error.message
-            : "Error desconocido en PostgreSQL/PostGIS",
+          error instanceof Error && error.message === "INSTITUTIONAL_AUTHORITY_NOT_READY"
+            ? "INSTITUTIONAL_AUTHORITY_NOT_READY"
+            : "POSTGRES_HEALTH_CHECK_FAILED",
+        ...(runtimeAuthority ? { runtimeAuthority } : {}),
       });
     }
   }
