@@ -1,3 +1,6 @@
+// This offline suite exercises lineage; never execute publication authority/IO.
+jest.mock("server-only", () => ({}), { virtual: true });
+jest.mock("@/lib/scinceDocumentActions", () => ({ getScinceDocumentContext: jest.fn(() => { throw new Error("PUBLICATION_IO_FORBIDDEN_IN_LINEAGE_TEST"); }) }));
 import {
   buildEvidenceLineage,
   buildStreetViewFindingLineage,

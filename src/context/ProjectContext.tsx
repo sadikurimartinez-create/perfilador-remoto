@@ -171,6 +171,10 @@ export type AlbumPhoto = {
   diagnosticLogs?: string;
   validado?: boolean;
   humanValidationStatus?: "UNREVIEWED" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "RETURNED_FOR_REANALYSIS" | "LEGACY_UNCLASSIFIED";
+  validatedBy?: any;
+  validatedAt?: string | null;
+  validationDate?: string | null;
+  validationComment?: string | null;
   validationSource?: "ADR_020_24_HUMAN_ACTION" | "CANONICAL_FIELD" | "LEGACY_COMPATIBILITY" | "TECHNICAL_BOOLEAN" | "AI_READY" | "ABSENT";
   lineage?: CanonicalLineageNode[];
   lineageStatus?: LineageStatus;
@@ -283,6 +287,7 @@ export type Project = {
   approvedFindings?: any[];
   approvedFindingRefs?: any[];
   streetViewFindingRefs?: any[];
+  tacticalStreetViews?: any[];
   latitude?: number;
   longitude?: number;
   analysisRadius?: number;
@@ -1126,6 +1131,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             fuente: data.fuente || "Inspección de Campo",
             validado: data.validado === true,
             humanValidationStatus: data.humanValidationStatus || null,
+            validatedBy: data.validatedBy || null,
+            validatedAt: data.validatedAt || null,
+            validationDate: data.validationDate || null,
+            validationComment: data.validationComment || null,
             validationSource: data.validationSource || null,
             lineage: data.lineage || normalizedBaseEvidence.fields.lineage,
             lineageStatus: data.lineageStatus || normalizedBaseEvidence.fields.lineageStatus,

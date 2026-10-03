@@ -183,22 +183,12 @@ describe("P1-D - Street View persistence", () => {
     });
   });
 
-  test("T7 POST fallido en UI impide PATCH y no invoca onFindingCreated", () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
-      "utf8"
-    );
-    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
-
-    expect(approveBlock).toContain("const postPayload = await readApiResponse(postResponse");
-    expect(approveBlock.indexOf("const postPayload = await readApiResponse(postResponse")).toBeLessThan(
-      approveBlock.indexOf("const patchResponse = await fetch")
-    );
-    expect(approveBlock.indexOf("await readApiResponse(patchResponse")).toBeLessThan(
-      approveBlock.indexOf("onFindingCreated(postPayload?.finding || approvedEvidence)")
-    );
-    expect(approveBlock).not.toContain("Muted fetch error");
-    expect(approveBlock).not.toContain("Muted patch error");
+  test("T7 UI usa la actuación canónica única y no crea otro hallazgo", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"), "utf8");
+    expect(source).toContain("<EvidencePpcReviewCard");
+    expect(source).not.toContain('fetch("/api/streetview/findings"');
+    expect(source).not.toContain('method: "PATCH"');
+    expect(source).not.toContain("onFindingCreated(");
   });
 
   test("T8 POST exitoso + PATCH exitoso mantiene finding/evidence consistentes", async () => {
@@ -224,30 +214,18 @@ describe("P1-D - Street View persistence", () => {
     });
   });
 
-  test("T9 UI no invoca onFindingCreated antes de validar persistencias", () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
-      "utf8"
-    );
-    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
-
-    expect(approveBlock.indexOf("await readApiResponse(patchResponse")).toBeLessThan(
-      approveBlock.indexOf("onFindingCreated(postPayload?.finding || approvedEvidence)")
-    );
+  test("T9 callback recibe la confirmación final del circuito compartido", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"), "utf8");
+    expect(source).toContain("onConfirmed={record =>");
+    expect(source).toContain("record.estado, record");
+    expect(source).not.toContain("postPayload");
   });
 
-  test("T10 loading se resetea por finally y no queda activo en geo invalida", () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
-      "utf8"
-    );
-    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
-
-    expect(approveBlock.indexOf("if (lat === null || lng === null)")).toBeLessThan(
-      approveBlock.indexOf("setIsSubmitting(true)")
-    );
-    expect(approveBlock).toContain("finally");
-    expect(approveBlock).toContain("setIsSubmitting(false)");
+  test("T10 UI compartida libera saving y conserva error server", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/EvidencePpcReviewPanel.tsx"), "utf8");
+    expect(source).toContain("finally { setSaving(false); }");
+    expect(source).toContain("catch { setError(true); }");
+    expect(source).toContain("submission.current.isPending()");
   });
 
   test("T11 no se introducen coordenadas default para lat/lng", async () => {
@@ -262,7 +240,7 @@ describe("P1-D - Street View persistence", () => {
       path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
       "utf8"
     );
-    expect(source).toContain("resolveFiniteNumber(selectedCapture.latitude");
+    expect(source).toContain("EvidencePpcReviewCard");
     expect(source).not.toContain("selectedCapture.geometry?.lat || 0");
     expect(source).not.toContain("selectedCapture.geometry?.lng || 0");
   });
@@ -278,31 +256,18 @@ describe("P1-D - Street View persistence", () => {
     expect([...firestoreDocs.keys()].filter(path=>path.startsWith("audit_logs/"))).toHaveLength(1);
   });
 
-  test("T13 P4-C UI envia traceabilityId canonico antes de APPROVED_EVIDENCE", () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
-      "utf8"
-    );
-    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
-
-    expect(approveBlock).toContain("const traceabilityId = resolvePresentString(selectedCapture.traceabilityId) || buildGeointTraceabilityId");
-    expect(approveBlock).toContain("traceabilityId,");
-    expect(approveBlock.indexOf("const traceabilityId = resolvePresentString")).toBeLessThan(
-      approveBlock.indexOf("estado: GeointGovernanceStatus.APPROVED_EVIDENCE")
-    );
+  test("T13 convalidación verifica la trazabilidad persistida en servidor", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/institutionalEvidenceReviewBoundary.ts"), "utf8");
+    expect(source).toContain("normalizeStreetViewFindingForPersistence");
+    expect(source).toContain("recoverHistoricalStreetViewFindingForApproval(candidate)");
   });
 
-  test("T14 P4-C UI exige sourceEvidenceId real y no lo deriva de un fallback temporal", () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), "src/components/streetview/StreetViewFindingsPanel.tsx"),
-      "utf8"
-    );
-    const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
-
-    expect(approveBlock).toContain("const sourceEvidenceId = resolvePresentString(selectedCapture.sourceEvidenceId, selectedCapture.evidenceId, selectedCapture.evidenciaId, selectedCapture.captureId);");
-    expect(approveBlock).toContain("El hallazgo Street View no contiene evidencia fuente real");
-    expect(approveBlock).not.toContain("|| captureId");
-    expect(approveBlock).not.toContain("`find-${Date.now()}`");
+  test("T14 revisión identifica recurso existente y no envía evidencia inventada", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/EvidencePpcReviewPanel.tsx"), "utf8");
+    expect(source).toContain("...current.reviewTarget");
+    expect(source).toContain("expectedReview: reviewVersion(current)");
+    expect(source).not.toContain("buildGeointTraceabilityId");
+    expect(source).not.toContain("sourceEvidenceId:");
   });
 
   test("T15 P4-C historical recoverable se adapta conservadoramente durante PATCH", async () => {
@@ -384,7 +349,7 @@ describe("P1-D - Street View persistence", () => {
     const route = fs.readFileSync(path.join(process.cwd(), "src/app/api/streetview/findings/route.ts"), "utf8");
     const approveBlock = source.slice(source.indexOf("const handleApprove = async"), source.indexOf("const handleReject = async"));
 
-    expect(approveBlock).toContain("if (lat === null || lng === null)");
+    expect(source).toContain("EvidencePpcReviewCard");
     expect(approveBlock).not.toContain("|| 21.885");
     expect(approveBlock).not.toContain("|| -102.291");
     expect(route).toContain("executeInstitutionalGeointEntity");

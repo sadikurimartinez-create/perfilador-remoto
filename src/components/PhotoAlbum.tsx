@@ -10,6 +10,7 @@ import { EvidenceRelationship, EvidenceRelationshipEngine } from "@/utils/eviden
 import { TacticalCharts } from "./TacticalCharts";
 import { ScinceHumanContextPanel } from "./ScinceHumanContextPanel";
 import { HumanHypothesisEditor } from "./HumanHypothesisEditor";
+import { PhotoPpcReviewPanel } from "./EvidencePpcReviewPanel";
 import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
 import { exportToWord } from "@/lib/exportToWord";
@@ -2431,6 +2432,7 @@ const hasMinimumPhotos =
         </div>
       </div>
 
+      <PhotoPpcReviewPanel />
       {additionalPhotoEvidence.length > 0 && (
         <section className="mb-6 border-t border-slate-800 pt-5" aria-labelledby="additional-photo-evidence-title">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

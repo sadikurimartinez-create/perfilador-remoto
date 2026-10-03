@@ -30,6 +30,7 @@ import {
 } from "@/utils/canonicalProjectGeography";
 import { isExplicitInSituPhoto } from "@/services/geoint/inSituPhotoCanonicalAdapter";
 import type { HistoricalGeographyCandidate } from "@/utils/historicalGeographyReconciliation";
+import { reconcileStreetViewReviewItems } from "@/utils/institutionalEvidenceReview";
 import { compactFindingRef } from "@/utils/projectRootReconciliation";
 import { DenueAnalyticalReviewPanel } from "./DenueAnalyticalReviewPanel";
 
@@ -477,12 +478,12 @@ export function GeographicWorkspace({
     setSelectedSv(null);
   };
 
-  const handleCaptureStatusChange = (captureId: string, status: GeointGovernanceStatusValue) => {
+  const handleCaptureStatusChange = (captureId: string, status: GeointGovernanceStatusValue, record?: any) => {
     setCaptures((prev) =>
       prev.map((c) => {
         const cId = c.id || c.findingId || c.originalFindingId || c.hash_md5 || c.filename;
         if (cId === captureId) {
-          return { ...c, estado_revision: status, status };
+          return { ...c, ...record, estado_revision: status, status };
         }
         return c;
       })
@@ -761,7 +762,7 @@ export function GeographicWorkspace({
             )}
             <StreetViewFindingsPanel
               expedienteId={expedienteId}
-              captures={captures}
+              captures={reconcileStreetViewReviewItems(album, project?.tacticalStreetViews || [], captures)}
               onCaptureStatusChange={handleCaptureStatusChange}
               onFindingCreated={reconcileFindingIntoProject}
               onTriggerTemporalComparison={handleTriggerTemporalComparison}
