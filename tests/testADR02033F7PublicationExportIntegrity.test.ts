@@ -468,7 +468,10 @@ describe("ADR-020.33 F7 - Publication export integrity", () => {
   });
 
   test("TEST 34 dispatcher remains ledger writer if applicable", () => {
-    expect(source("src/services/geoint/geointOutboxDispatcher.ts")).toContain("GeointEventLogService.persistGeointEvent");
+    // Dependency injection predates this intervention; the dispatcher still owns the ledger writer.
+    const dispatcher = source("src/services/geoint/geointOutboxDispatcher.ts");
+    expect(dispatcher).toContain("ledger: GeointEventLogService");
+    expect(dispatcher).toContain("await deps.ledger.persistGeointEvent");
     expect(source("src/services/institutionalReportPublicationService.ts")).not.toContain("GeointEventLogService");
   });
 

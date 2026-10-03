@@ -1039,7 +1039,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const albumPhotos: AlbumPhoto[] = photosSnap.docs
         .map((photoDoc) => {
           const data = photoDoc.data();
-          let rawUrl = data.url || "";
+          let rawUrl = data.previewUrl || data.url || "";
           const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
           // NORMALIZAR OPENSTREETMAP ALEMANIA EN CALIENTE PARA LA VISTA CLIENTE

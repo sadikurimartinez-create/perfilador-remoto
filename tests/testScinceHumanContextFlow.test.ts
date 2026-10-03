@@ -132,7 +132,7 @@ test("snapshot and legacy fields coexist; query does not replace, incorporation 
 test.each([
   ["SCINCE_CANONICAL_ACCESS_DENIED", "ACCESO_DENEGADO"],
   ["SCINCE_CANONICAL_GEOMETRY_UNSUPPORTED", "GEOMETRIA_NO_COMPATIBLE"],
-  ["SCINCE_CANONICAL_GEOGRAPHY_INVALID", "NO_DISPONIBLE"],
+  ["SCINCE_CANONICAL_GEOGRAPHY_INVALID", "GEOMETRIA_NO_COMPATIBLE"],
   ["SCINCE_CANONICAL_DATA_UNAVAILABLE", "NO_DISPONIBLE"],
 ] as const)("query %s displays safe %s without persistence", async (code, status) => {
   jest.mocked(getCanonicalScinceData).mockResolvedValue({ success: false, code });
@@ -150,11 +150,11 @@ test("reviewed result displays dataset, year, version, distinct levels, row, var
     "Los niveles difieren", "row", "Población total", "10", observed().limitations[0]].forEach(value => expect(html).toContain(value));
   expect(html).not.toMatch(/riesgo|vulnerabilidad|perfil criminal|predicción/i);
 });
-test("unsupported local modality displays neutral unavailable message with disabled query and no fallback", () => {
+test("invalid local geometry displays geometry rejection with disabled query and no fallback", () => {
   const html = renderToStaticMarkup(React.createElement(ScinceHumanContextPanel, { projectId: "P1",
     canonicalGeography: { ...geography, type: "POLYGON", geometry: { type: "Polygon", coordinates: [] } },
     analysis: null, isReadOnly: false, updateProjectDetails: jest.fn(), setAnalysisResult: jest.fn() }));
-  expect(html).toContain("SCINCE productivo admite únicamente expedientes INDIVIDUAL con Point validado. LINEAL y POLYGON tienen contrato de contexto; la consulta territorial multiunidad aún no está habilitada.");
+  expect(html).toContain("Se requiere geometría canónica válida para consultar SCINCE.");
   expect(html).toContain("disabled"); expect(getCanonicalScinceData).not.toHaveBeenCalled();
 });
 test("preparation invokes the existing builder, WRITE authorization, trusted cookie and canonical query without writers", async () => {
@@ -288,14 +288,26 @@ test("PhotoAlbum wires only the canonical SCINCE panel; DENUE and report flows r
 
 
 test.each([
-  ['POLYGON', {type:'Polygon',coordinates:[[[-102,21],[-102,22],[-103,22],[-102,21]]]},true],
-  ['CORRIDOR', {type:'LineString',coordinates:[[-102,21],[-103,22]]},true],
+  ['POLYGON', {type:'Polygon',coordinates:[[[-102,21],[-102,22],[-103,22],[-102,21]]]},false],
+  ['CORRIDOR', {type:'LineString',coordinates:[[-102,21],[-103,22]]},false],
   ['INDIVIDUAL', {type:'Point',coordinates:[-102,21]},false],
 ])('actual %s query gate matches the productive contract', (type, geometry, blocked)=>{
   const current:any={...geography,type,geometry};const original=JSON.stringify(current);
-  const html=renderToStaticMarkup(React.createElement(ScinceHumanContextPanel,{projectId:'P1',canonicalGeography:current,analysis:null,isReadOnly:false,updateProjectDetails:jest.fn(),setAnalysisResult:jest.fn()}));
+  const html=renderToStaticMarkup(React.createElement(ScinceHumanContextPanel,{projectId:'P1',canAnalyzeScince:true,canonicalGeography:current,analysis:null,isReadOnly:false,updateProjectDetails:jest.fn(),setAnalysisResult:jest.fn()}));
   const button=(html.match(/<button[\s\S]*?<\/button>/g) || []).find(value=>value.includes('CONSULTAR SCINCE'));
   expect(button).toBeDefined();expect(/\sdisabled(?:=|\s|>)/.test(button!)).toBe(blocked);
-  if(blocked) expect(html).toContain('la consulta territorial multiunidad aún no está habilitada');
+  if(blocked) expect(html).toContain('Se requiere geometría canónica válida');
   expect(JSON.stringify(current)).toBe(original);expect(getCanonicalScinceData).not.toHaveBeenCalled();
+});
+
+
+test.each([
+  ['authorization missing',false,'VALID',true],
+  ['invalid geography',true,'INVALID',true],
+  ['valid geography and explicit capability',true,'VALID',false],
+])('query UI gate: %s', (_name,canAnalyzeScince,validationStatus,blocked)=>{
+  const html=renderToStaticMarkup(React.createElement(ScinceHumanContextPanel,{projectId:'P1',canAnalyzeScince:canAnalyzeScince as boolean,
+    canonicalGeography:{...geography,validationStatus:validationStatus as any},analysis:null,isReadOnly:false,updateProjectDetails:jest.fn(),setAnalysisResult:jest.fn()}));
+  const button=(html.match(/<button[\s\S]*?<\/button>/g)||[]).find(value=>value.includes('CONSULTAR SCINCE'))!;
+  expect(/\sdisabled(?:=|\s|>)/.test(button)).toBe(blocked);expect(getCanonicalScinceData).not.toHaveBeenCalled();
 });

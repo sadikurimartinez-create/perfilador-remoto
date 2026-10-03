@@ -1,4 +1,6 @@
 import "server-only";
+import { resolveInegiMultiunit } from "@/lib/inegiMultiunitResolver";
+import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
 import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
 import { resolveInegiTerritory } from "@/lib/inegiTerritorialResolver";
 import { deserializeCanonicalGeographyFromFirestore, type CanonicalProjectGeography,
@@ -9,6 +11,7 @@ import type { ScinceCanonicalCode, ScinceCanonicalContextResult } from "@/types/
 type Dependencies = {
   authorize: typeof authorizeInstitutionalProjectAccess;
   resolve: typeof resolveInegiTerritory;
+  resolveMultiunit: typeof resolveInegiMultiunit;
 };
 const reject = (code: ScinceCanonicalCode): ScinceCanonicalContextResult => ({ success: false, code });
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -16,7 +19,7 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 // sessionToken is internal: the server action retrieves it from the signed-session cookie.
 export async function resolveScinceCanonicalContext(input: { projectId: unknown }, sessionToken: unknown,
   overrides: Partial<Dependencies> = {}): Promise<ScinceCanonicalContextResult> {
-  const deps = { authorize: authorizeInstitutionalProjectAccess, resolve: resolveInegiTerritory, ...overrides };
+  const deps = { authorize: authorizeInstitutionalProjectAccess, resolve: resolveInegiTerritory, resolveMultiunit: resolveInegiMultiunit, ...overrides };
   let access;
   try { access = await deps.authorize({ projectId: input.projectId, sessionToken, action: "ANALYZE_SCINCE" }); }
   catch { return reject("SCINCE_CANONICAL_ACCESS_DENIED"); }
@@ -26,9 +29,21 @@ export async function resolveScinceCanonicalContext(input: { projectId: unknown 
   if (!record(raw) || raw.validationStatus !== "VALID" || typeof raw.geographyId !== "string" || !raw.geographyId.trim()) {
     return reject("SCINCE_CANONICAL_GEOGRAPHY_INVALID");
   }
-  if (raw.type !== "INDIVIDUAL" || !record(raw.geometry) || raw.geometry.type !== "Point") {
-    return reject("SCINCE_CANONICAL_GEOMETRY_UNSUPPORTED");
+  if (raw.type === "CORRIDOR" || raw.type === "POLYGON" || raw.type === "INDIVIDUAL" && !overrides.resolve) {
+    const canonical = readScinceCanonicalGeography(raw);
+    if (!canonical) return reject("SCINCE_CANONICAL_GEOGRAPHY_INVALID");
+    let resolved;
+    try { resolved = await deps.resolveMultiunit(access.projectId, canonical); } catch { return reject("SCINCE_CANONICAL_DATA_UNAVAILABLE"); }
+    if (!resolved.success) return reject(resolved.code);
+    const m = resolved.observation;
+    return {success:true,projectId:access.projectId,geographyId:canonical.geographyId,
+      geographyType:canonical.type,geographyFingerprint:m.geographyBinding.geographyFingerprint,
+      spatialMode:canonical.type === "INDIVIDUAL" ? "CANONICAL_POINT" : canonical.type === "CORRIDOR" ? "CANONICAL_LINE" : "CANONICAL_AREA", queryCoordinate:null,
+      datasetId:m.dataset.datasetId,datasetYear:m.dataset.year,datasetVersion:m.dataset.version,
+      geographicLevel:null,demographicGeographicLevel:null,sourceRowKey:null,demographics:null,provenance:null,
+      limitations:m.limitations,multiunit:m};
   }
+  if (raw.type !== "INDIVIDUAL" || !record(raw.geometry) || raw.geometry.type !== "Point") return reject("SCINCE_CANONICAL_GEOMETRY_UNSUPPORTED");
   // Guard the persisted numeric input before the existing deserializer can coerce it.
   const geometry = raw.geometry;
   const coordinates = Array.isArray(geometry.coordinates) ? geometry.coordinates :
@@ -43,7 +58,7 @@ export async function resolveScinceCanonicalContext(input: { projectId: unknown 
   const [lng, lat] = canonical.geometry.coordinates;
   try {
     const geographyFingerprint = fingerprintScinceCanonicalPoint(canonical);
-    const result = await deps.resolve(lat, lng);
+    const result = await deps.resolve(lat, lng, undefined, { projectId: access.projectId, geographyId: canonical.geographyId, geographyFingerprint });
     if (!result.exito || result.status !== "OBSERVED") return reject("SCINCE_CANONICAL_DATA_UNAVAILABLE");
     return { success: true, projectId: access.projectId, geographyId: canonical.geographyId, geographyType: "INDIVIDUAL",
       geographyFingerprint, spatialMode: "CANONICAL_POINT", queryCoordinate: { lat, lng },

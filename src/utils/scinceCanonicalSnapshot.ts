@@ -1,4 +1,7 @@
 import "server-only";
+import { isValidScinceMultiunit } from "./scinceMultiunitValidation";
+import { fingerprintScinceCoverageGeography, SCINCE_COVERAGE_FINGERPRINT_VERSION } from "./scinceCanonicalCoverage";
+import { readScinceCanonicalGeography } from "./scinceQueryGeometry";
 import { SCINCE_CANONICAL_SNAPSHOT_VERSION, type ScinceCanonicalSnapshot,
   type ScinceCanonicalSuccess, type ScinceSnapshotFreshnessInput,
   type ScinceSnapshotFreshnessResult } from "@/types/scinceCanonicalSnapshot";
@@ -22,8 +25,19 @@ function pointBinding(geographyId: string, coordinate: { lat: number; lng: numbe
 
 /** Validate untrusted persisted values, including internal coordinate and lineage consistency. */
 export function isValidScinceCanonicalSnapshot(value: unknown): value is ScinceCanonicalSnapshot {
+  if (record(value) && value.schemaVersion === "SCINCE_CANONICAL_SNAPSHOT_V2") {
+    if (!isValidScinceMultiunit(value.multiunit)) return false;
+    const m=value.multiunit, b=value.geographyBinding, d=value.dataset, r=value.territorialResolution;
+    return record(b) && record(d) && record(r) && value.projectId===m.projectId && value.observedAt===null &&
+      value.demographics===null && value.provenance===null && r.geographicLevel===null && r.demographicGeographicLevel===null && r.sourceRowKey===null &&
+      b.geographyId===m.geographyBinding.geographyId && b.geographyType===m.geographyBinding.geographyType &&
+      b.geographyFingerprint===m.geographyBinding.geographyFingerprint && b.fingerprintVersion===(b.geographyType==="INDIVIDUAL"?CANONICAL_GEOGRAPHY_FINGERPRINT_VERSION:SCINCE_COVERAGE_FINGERPRINT_VERSION) &&
+      b.spatialMode===(b.geographyType==="INDIVIDUAL" ? "CANONICAL_POINT" : b.geographyType==="CORRIDOR" ? "CANONICAL_LINE" : "CANONICAL_AREA") && b.queryCoordinate===null &&
+      d.datasetId===m.dataset.datasetId && d.year===m.dataset.year && d.version===m.dataset.version &&
+      JSON.stringify(value.limitations)===JSON.stringify(m.limitations);
+  }
   if (!record(value) || value.schemaVersion !== SCINCE_CANONICAL_SNAPSHOT_VERSION || !text(value.projectId) ||
-      value.observedAt !== null || !Array.isArray(value.limitations) || !value.limitations.every(v => typeof v === "string")) return false;
+      value.observedAt !== null || value.multiunit !== undefined || !Array.isArray(value.limitations) || !value.limitations.every(v => typeof v === "string")) return false;
   const b = value.geographyBinding, d = value.dataset, r = value.territorialResolution;
   if (!record(b) || !text(b.geographyId) || b.geographyType !== "INDIVIDUAL" || b.spatialMode !== "CANONICAL_POINT" ||
       b.fingerprintVersion !== CANONICAL_GEOGRAPHY_FINGERPRINT_VERSION || !text(b.geographyFingerprint) ||
@@ -56,9 +70,10 @@ export function isValidScinceCanonicalSnapshot(value: unknown): value is ScinceC
 export function buildScinceCanonicalSnapshot(result: ScinceCanonicalSuccess): ScinceCanonicalSnapshot {
   if (!result || result.success !== true) throw new Error("SCINCE_CANONICAL_SUCCESS_REQUIRED");
   const snapshot: ScinceCanonicalSnapshot = {
-    schemaVersion: SCINCE_CANONICAL_SNAPSHOT_VERSION, projectId: result.projectId,
+    schemaVersion: result.geographyType === "INDIVIDUAL" && !result.multiunit ? SCINCE_CANONICAL_SNAPSHOT_VERSION : "SCINCE_CANONICAL_SNAPSHOT_V2", projectId: result.projectId,
+    ...(result.multiunit ? {multiunit: structuredClone(result.multiunit)} : {}),
     geographyBinding: { geographyId: result.geographyId, geographyType: result.geographyType,
-      geographyFingerprint: result.geographyFingerprint, fingerprintVersion: CANONICAL_GEOGRAPHY_FINGERPRINT_VERSION,
+      geographyFingerprint: result.geographyFingerprint, fingerprintVersion: result.geographyType === "INDIVIDUAL" ? CANONICAL_GEOGRAPHY_FINGERPRINT_VERSION : SCINCE_COVERAGE_FINGERPRINT_VERSION,
       spatialMode: result.spatialMode, queryCoordinate: result.queryCoordinate },
     dataset: { datasetId: result.datasetId, year: result.datasetYear, version: result.datasetVersion },
     territorialResolution: { geographicLevel: result.geographicLevel,
@@ -78,6 +93,14 @@ export function evaluateScinceSnapshotFreshness(input: ScinceSnapshotFreshnessIn
     ({ territorialFreshness, datasetIdentity: { ...snapshot.dataset }, reason });
   if (!text(expectedProjectId) || snapshot.projectId !== expectedProjectId) return result("INVALID", "PROJECT_BINDING_MISMATCH");
   if (!current || current.validationStatus !== "VALID") return result("STALE", "CANONICAL_GEOGRAPHY_NOT_VALID");
+  if (snapshot.schemaVersion === "SCINCE_CANONICAL_SNAPSHOT_V2") {
+    try {
+      const canonical=readScinceCanonicalGeography(current);
+      if (!canonical || canonical.type!==snapshot.geographyBinding.geographyType || canonical.geographyId!==snapshot.geographyBinding.geographyId ||
+        (canonical.type==="INDIVIDUAL"?fingerprintScinceCanonicalPoint(canonical):fingerprintScinceCoverageGeography(canonical))!==snapshot.geographyBinding.geographyFingerprint) return result("STALE","TERRITORIAL_BINDING_CHANGED");
+      return result("CURRENT","TERRITORIAL_BINDING_MATCHES");
+    } catch { return result("STALE","CANONICAL_GEOGRAPHY_INVALID"); }
+  }
   if (current.type !== "INDIVIDUAL" || current.geometry?.type !== "Point") return result("STALE", "CANONICAL_MODALITY_CHANGED");
   try {
     const fingerprint = fingerprintScinceCanonicalPoint(current);

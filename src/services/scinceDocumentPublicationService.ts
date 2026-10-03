@@ -1,4 +1,6 @@
 import "server-only";
+import {scinceRadiusConfigurationMatches} from "../lib/scinceRadiusConfiguration";
+import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
 import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
 import { getInstitutionalAdminDb } from "@/lib/firebaseAdmin";
 import { deserializeCanonicalGeographyFromFirestore, type CanonicalProjectGeography,
@@ -13,7 +15,7 @@ export interface ScincePersistedDocumentSource {
   status?: unknown;
   estado?: unknown;
   canonicalGeography?: unknown;
-  iaAnalysis?: { scinceCanonicalSnapshot?: unknown; scinceDemographics?: unknown };
+  iaAnalysis?: { scinceCanonicalSnapshot?: unknown; scinceDemographics?: unknown; scinceCanonicalIncorporation?: { decision?: unknown; incorporatedBy?: {institutionalUserId?: unknown; username?: unknown}; incorporatedAt?: unknown } };
 }
 type Dependencies = {
   authorize: typeof authorizeInstitutionalProjectAccess;
@@ -35,7 +37,7 @@ function canonical(raw: unknown): CanonicalProjectGeography | null {
     const c = Array.isArray(g.geometry.coordinates) ? g.geometry.coordinates : [g.geometry.point?.lng, g.geometry.point?.lat];
     if (c.length !== 2 || !c.every(v => typeof v === "number" && Number.isFinite(v)) || Math.abs(c[0]) > 180 || Math.abs(c[1]) > 90) return null;
   }
-  return deserializeCanonicalGeographyFromFirestore(raw as CanonicalProjectGeography | FirestoreSafeCanonicalProjectGeography);
+  return readScinceCanonicalGeography(raw);
 }
 
 /** Single admission point. Read-only, authorized, and recomputed for each document generation. */
@@ -52,6 +54,14 @@ export async function resolveScinceDocumentPublication(input: {
       project.status === "ARCHIVADO" || project.estado === "ARCHIVADO")
       return excludedScinceDocumentContext("INVALID", "SCINCE_DOCUMENT_PROJECT_UNAVAILABLE");
     const snapshot = project.iaAnalysis?.scinceCanonicalSnapshot;
+    if (snapshot && typeof snapshot === "object" && (snapshot as any).schemaVersion === "SCINCE_CANONICAL_SNAPSHOT_V2") {
+      const review=project.iaAnalysis?.scinceCanonicalIncorporation;
+      if ((snapshot as any).multiunit?.humanReviewStatus!=="INCORPORATED" || review?.decision!=="INCORPORATED" ||
+        typeof review.incorporatedBy?.institutionalUserId!=="string" || !review.incorporatedBy.institutionalUserId.trim() ||
+        typeof review.incorporatedAt!=="string" || !Number.isFinite(Date.parse(review.incorporatedAt))) return excludedScinceDocumentContext("INVALID","SCINCE_DOCUMENT_HUMAN_REVIEW_REQUIRED");
+    }
+    if ((snapshot as any)?.multiunit?.scinceAnalysisArea && !scinceRadiusConfigurationMatches((snapshot as any).multiunit.scinceAnalysisArea.configuration))
+      return excludedScinceDocumentContext('STALE','SCINCE_RADIUS_CONFIGURATION_CHANGED');
     const current = canonical(project.canonicalGeography);
     const binding = { snapshot, expectedProjectId: access.projectId, currentCanonicalGeography: current };
     const freshness = evaluateScinceSnapshotFreshness(binding);

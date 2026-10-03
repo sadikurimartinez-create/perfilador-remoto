@@ -136,6 +136,8 @@ test.each([0, 1, 2, null])('actual upload callback and actual hydration preserve
   const reopened = reopen({id:'persisted-id',data:()=>stored[0]});
   expect(reopened).toMatchObject(assignment);expect(reopened.evidenceId).toBe(local[0].evidenceId);
   expect(reopened.isStreetView).toBe(false);
+  const previewOnly = reopen({id:'persisted-id',data:()=>({...stored[0],url:'',previewUrl:'https://fixture.test/saved-preview'})});
+  expect(previewOnly.previewUrl).toBe('https://fixture.test/saved-preview');
   if (index === null) expect(reopened).toMatchObject({geometryRole:'NONE',isGeometry:false,evidenceType:'ADDITIONAL_PHOTO'});
 });
 
@@ -219,4 +221,12 @@ test('barrido while submitting disables X and withholds ESC callback',()=>{
       '@/components/ui/CEIPOLButton':{CEIPOLButton:()=>null},'./useOperationalModalFocus':{useOperationalModalFocus:focus}});
     const tree=module.SweepIntegrationModal();const x=nodes(tree,'button').find(node=>node.props['aria-label']==='Cerrar barrido');expect(x.props.disabled).toBe(true);x.props.onClick();expect(close).not.toHaveBeenCalled();expect(focus.mock.calls[0][2]).toBeUndefined();
   } finally {(globalThis as any).document=prior;}
+});
+
+
+test('cartographic image error falls back to the same resource URL then explicit missing-preview state',()=>{
+  const h=photoLayer();(h.photo as any).url='https://fixture.test/original-image';nodes(h.render(),h.Marker)[0].props.onClick();
+  let image=nodes(h.render(),'img')[0];expect(image.props.src).toBe(h.photo.previewUrl);image.props.onError();
+  image=nodes(h.render(),'img')[0];expect(image.props.src).toBe((h.photo as any).url);image.props.onError();
+  const tree=h.render();expect(nodes(tree,'img')).toHaveLength(0);expect(nodes(tree,'p').some(node=>node.props.children==='SIN VISTA PREVIA')).toBe(true);
 });

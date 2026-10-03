@@ -2,13 +2,16 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getCanonicalScinceData } from "@/lib/osintActions";
-import { getScinceContextFreshness, prepareScinceContextIncorporation } from "@/lib/scinceHumanContextActions";
+import { getScinceQueryCapability, getScinceContextFreshness, prepareScinceContextIncorporation } from "@/lib/scinceHumanContextActions";
 import { createScinceHumanContextFlow, type ScinceHumanState } from "@/utils/scinceHumanContextFlow";
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 import type { ScinceCanonicalSuccess, ScinceSnapshotFreshness } from "@/types/scinceCanonicalSnapshot";
 import { CEIPOLButton } from "@/components/ui/CEIPOLButton";
 
+import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
+
 type Props = {
+  canAnalyzeScince?: boolean;
   projectId: string;
   canonicalGeography: CanonicalProjectGeography | null | undefined;
   analysis: Record<string, unknown> | null;
@@ -16,6 +19,8 @@ type Props = {
   updateProjectDetails: (details: { iaAnalysis: Record<string, unknown> }) => Promise<void>;
   setAnalysisResult: (analysis: Record<string, unknown>) => void;
 };
+const unitRelationLabels = {FULL_UNIT:"Unidad completa cubierta",PARTIAL_UNIT:"Unidad parcialmente relacionada",TOUCHED_UNIT:"Sólo contacto de borde"};
+const indicatorLabels: Record<string,string> = {populationTotal:"Población",housingTotal:"Viviendas",inhabitedPrivateHousing:"Viviendas habitadas",uninhabitedPrivateHousing:"Viviendas deshabitadas"};
 const display = (value: unknown) => value == null ? "No disponible" : String(value);
 const freshnessLabels: Record<ScinceSnapshotFreshness, string> = {
   CURRENT: "VIGENTE", STALE: "OBSOLETO", INVALID: "INVÁLIDO", MISSING: "NO DISPONIBLE",
@@ -30,6 +35,33 @@ export function ScinceFreshnessStatus({ freshness }: { freshness: ScinceSnapshot
 }
 
 export function ScinceObservedResult({ result }: { result: ScinceCanonicalSuccess }) {
+  if (result.multiunit) return <div className="space-y-3 text-xs" data-testid="scince-multiunit-result">
+    <p>REQUIERE REVISIÓN PPC · {result.geographyType === "INDIVIDUAL" ? "Entorno de un punto" : result.geographyType === "CORRIDOR" ? "Consulta sobre corredor" : "Consulta sobre área"}</p>
+    <p>Dataset: {result.multiunit.dataset.datasetId} · {result.multiunit.dataset.year} · {result.multiunit.dataset.version}</p>
+    <p>Unidades: {result.multiunit.territorialUnits.length} · Filas censales: {result.multiunit.sourceRows.length}</p>
+    {result.multiunit.scinceAnalysisArea && <details><summary>Metodología del entorno territorial</summary><dl className="grid grid-cols-2 gap-2">
+      <dt>Centro de análisis</dt><dd>{result.multiunit.scinceAnalysisArea.center.lat}, {result.multiunit.scinceAnalysisArea.center.lng}</dd>
+      <dt>Radio de cobertura</dt><dd>{result.multiunit.scinceAnalysisArea.coverageRadiusMeters.toFixed(2)} m</dd>
+      <dt>Expansión contextual</dt><dd>{result.multiunit.scinceAnalysisArea.contextExpansionMeters} m</dd>
+      <dt>Radio total</dt><dd>{result.multiunit.scinceAnalysisArea.analysisRadiusMeters.toFixed(2)} m</dd>
+      <dt>Área aproximada analizada</dt><dd>{result.multiunit.scinceAnalysisArea.approximateAreaSquareMeters.toFixed(2)} m²</dd>
+      <dt>Unidades INEGI / año censal</dt><dd>{result.multiunit.territorialUnits.length} / {result.multiunit.dataset.year}</dd>
+    </dl><p>El área analítica contiene la geometría original completa. Las cifras corresponden a unidades censales completas, sin prorrateo.</p></details>}
+    {result.multiunit.derivedSociodemographicProfile && <div aria-label="Perfil sociodemográfico">
+      <p>Perfil oficial {result.multiunit.derivedSociodemographicProfile.referenceYear}</p>
+      {Object.entries(result.multiunit.derivedSociodemographicProfile.dimensions).map(([key,dimension])=><details key={key}><summary>{key==='population'?'Población':'Vivienda'}</summary>
+        {dimension.rawIndicators.map((i,index)=><p key={index}>{indicatorLabels[i.name] || i.name}: {display(i.value)} · Unidad fuente: {i.observationId}</p>)}
+      </details>)}<p>Las demás dimensiones no están disponibles en el producto normalizado. Sin estimación al año actual.</p>
+    </div>}
+    <div className="max-h-80 overflow-y-auto"><table className="w-full"><thead><tr><th>Unidad INEGI</th><th>Relación</th><th>Porción espacial</th><th>Cifras completas de la unidad</th></tr></thead><tbody>
+      {result.multiunit.unitDetails.map(unit => <tr key={`${unit.unitType}:${unit.inegiCode}`}><td>{unit.unitType} {unit.inegiCode} {unit.name}</td>
+        <td>{unitRelationLabels[unit.intersectionType]}</td><td>{unit.coverageMetric.intersection} {unit.coverageMetric.measure === "METRES" ? "m" : "m²"}</td>
+        <td>{result.multiunit!.sourceRows.filter(row=>row.geographicCode===unit.inegiCode && row.demographicGeographicLevel===unit.unitType && row.usage!=="ENUMERATION_ONLY").map(row=>
+          <p key={row.observationId}>Población: {display(row.demographics.populationTotal)}; viviendas: {display(row.demographics.housingTotal)} · Fuente: {row.sourceRowKey}</p>)}</td></tr>)}
+    </tbody></table></div>
+    {result.multiunit.aggregates.map(a=><p key={a.name}>{indicatorLabels[a.name] || a.name}: {display(a.value)} · {a.method === "NOT_AGGREGATED" ? "Sin agregado metodológicamente admisible" : "Suma de unidades completas seleccionadas"}</p>)}
+    <ul>{result.multiunit.methodologicalWarnings.map(w=><li key={w}>{w}</li>)}</ul>
+  </div>;
   const d = result.demographics;
   return <div className="space-y-2 text-xs text-slate-300" data-testid="scince-observed-result">
     <p>Contexto sociodemográfico observado</p>
@@ -54,13 +86,23 @@ export function ScinceObservedResult({ result }: { result: ScinceCanonicalSucces
 }
 
 export function ScinceHumanContextPanel(props: Props) {
-  const latest = useRef(props);
-  latest.current = props;
+  const [canAnalyze, setCanAnalyze] = useState(props.canAnalyzeScince === true);
+  useEffect(() => { let active=true;setCanAnalyze(props.canAnalyzeScince === true);
+    if (props.canAnalyzeScince === undefined) getScinceQueryCapability(props.projectId).then(allowed=>{if(active)setCanAnalyze(allowed);}).catch(()=>{if(active)setCanAnalyze(false);});
+    return ()=>{active=false;};
+  },[props.projectId,props.canAnalyzeScince]);
+  const latest = useRef({...props, canAnalyze});
+  latest.current = {...props, canAnalyze};
   // A change while consulting/incorporating cancels the pending decision, including local map edits.
   const territoryRevision = JSON.stringify(props.canonicalGeography ?? null);
   const [state, setState] = useState<ScinceHumanState>({ status: "IDLE", result: null, message: null });
   const [freshness, setFreshness] = useState<ScinceSnapshotFreshness | "CHECKING" | "UNAVAILABLE">("CHECKING");
   const [freshnessMessage, setFreshnessMessage] = useState<string | null>(null);
+  useEffect(()=>{
+    const publish=(area:unknown)=>window.dispatchEvent(new CustomEvent('ceipol:scince-area-preview', {detail:{projectId:props.projectId,source:props.canonicalGeography,area}}));
+    publish(state.result?.multiunit?.scinceAnalysisArea ?? null);
+    return ()=>{publish(null);};
+  },[props.projectId,props.canonicalGeography,state.result]);
   const snapshot = props.analysis?.scinceCanonicalSnapshot;
   const hasLegacy = props.analysis?.scinceDemographics != null;
   const freshnessScope = useMemo(() => ({ projectId: props.projectId, territoryRevision, snapshot }),
@@ -68,7 +110,7 @@ export function ScinceHumanContextPanel(props: Props) {
   const [evaluatedScope, setEvaluatedScope] = useState<typeof freshnessScope | null>(null);
   const flow = useMemo(() => createScinceHumanContextFlow({
     context: () => ({ projectId: latest.current.projectId, readOnly: latest.current.isReadOnly,
-      analysis: latest.current.analysis, territoryRevision: JSON.stringify(latest.current.canonicalGeography ?? null) }),
+      canQuery: latest.current.canAnalyze, analysis: latest.current.analysis, territoryRevision: JSON.stringify(latest.current.canonicalGeography ?? null) }),
     query: getCanonicalScinceData, prepare: prepareScinceContextIncorporation,
     updateProjectDetails: details => latest.current.updateProjectDetails(details),
     setAnalysisResult: analysis => latest.current.setAnalysisResult(analysis), changed: setState,
@@ -98,18 +140,17 @@ export function ScinceHumanContextPanel(props: Props) {
   // Never display a previous CURRENT result during the render preceding the refresh effect.
   const visibleFreshness = snapshot == null ? "MISSING" : evaluatedScope === freshnessScope ? freshness : "CHECKING";
   const busy = state.status === "CONSULTANDO" || state.status === "INCORPORANDO";
-  const incompatible = !!props.canonicalGeography &&
-    (props.canonicalGeography.type !== "INDIVIDUAL" || props.canonicalGeography.geometry.type !== "Point");
+  const incompatible = !readScinceCanonicalGeography(props.canonicalGeography);
   return <section className="flex flex-col space-y-4 bg-slate-900/40 p-5 rounded-xl border border-slate-700/50" aria-label="SCINCE canónico">
     <h3 className="font-bold text-cyan-300">Demografía territorial — INEGI (Paso 5)</h3>
-    <p className="text-xs text-slate-300">La consulta utiliza la geometría canónica del expediente. Revise el resultado antes de decidir su incorporación.</p>
+    <p className="text-xs text-slate-300">La consulta caracteriza el entorno territorial mediante un radio institucional y conserva la geometría canónica del expediente. Revise el resultado antes de decidir su incorporación.</p>
     <ScinceFreshnessStatus freshness={visibleFreshness} />
     {evaluatedScope === freshnessScope && freshnessMessage && <p className="text-xs text-amber-300">{freshnessMessage}</p>}
     {hasLegacy && <p className="text-xs text-slate-400">Contexto SCINCE legacy conservado; no acredita un snapshot canónico vigente.</p>}
-    {incompatible && <p className="text-xs text-amber-300">SCINCE productivo admite únicamente expedientes INDIVIDUAL con Point validado. LINEAL y POLYGON tienen contrato de contexto; la consulta territorial multiunidad aún no está habilitada.</p>}
-    <CEIPOLButton disabled={!props.projectId || props.isReadOnly || busy || incompatible}
+    {incompatible && <p className="text-xs text-amber-300">Se requiere geometría canónica válida para consultar SCINCE.</p>}
+    <CEIPOLButton disabled={!props.projectId || !canAnalyze || busy || incompatible}
       loading={state.status === "CONSULTANDO"} onClick={() => void flow.consult()}>CONSULTAR SCINCE</CEIPOLButton>
-    <p className="text-xs text-slate-400" role="status">{state.status}</p>
+    <p className="text-xs text-slate-400" role="status">{state.status === "IDLE" && !canAnalyze ? "CONSULTA NO AUTORIZADA" : state.status === "IDLE" && incompatible ? "GEOMETRÍA INVÁLIDA" : ({IDLE:"LISTO PARA CONSULTAR",CONSULTANDO:"CONSULTANDO",RESULTADO_DISPONIBLE:"RESULTADO DISPONIBLE — REQUIERE REVISIÓN PPC",INCORPORANDO:"INCORPORANDO",INCORPORADO:"INCORPORADO",ERROR:"ERROR",NO_DISPONIBLE:"NO DISPONIBLE POR FUENTE",GEOMETRIA_NO_COMPATIBLE:"GEOMETRÍA INVÁLIDA",ACCESO_DENEGADO:"ACCESO DENEGADO"})[state.status]}</p>
     {state.message && <p className="text-xs text-amber-300" role="status">{state.message}</p>}
     {state.result && <div className="space-y-3 border border-slate-700 rounded-lg p-4" aria-label="Revisión humana SCINCE">
       <ScinceObservedResult result={state.result} />

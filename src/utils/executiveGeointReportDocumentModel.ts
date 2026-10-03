@@ -632,7 +632,7 @@ export function buildExecutiveGeointReportDocumentModel(
       ]),
       sourceProvenance: [
         ...(institutionalInput.scinceContext?.publicationStatus === "PUBLISHABLE" ? [{
-          source: "INEGI SCINCE", sourceUrl: institutionalInput.scinceContext.snapshot.provenance?.censusSourceUrl,
+          source: "INEGI SCINCE", sourceUrl: institutionalInput.scinceContext.snapshot.multiunit?.dataset.provenance.censusSourceUrl ?? institutionalInput.scinceContext.snapshot.provenance?.censusSourceUrl,
           observedAt: institutionalInput.scinceContext.snapshot.observedAt,
           traceabilityId: institutionalInput.scinceContext.snapshot.dataset.datasetId,
         }] : []),

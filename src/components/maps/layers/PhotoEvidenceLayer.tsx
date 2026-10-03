@@ -6,12 +6,13 @@ import { geographicEvidenceCoordinates, geographicEvidenceTrace, geographicRoleL
 interface PhotoEvidenceLayerProps { visible: boolean; photographs?: any[] }
 export const PhotoEvidenceLayer: React.FC<PhotoEvidenceLayerProps> = ({ visible, photographs = [] }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [failedSources, setFailedSources] = useState<string[]>([]);
   if (!visible) return null;
   return <>{photographs.filter(photo => !photo.deleted).map(photo => {
     const position = geographicEvidenceCoordinates(photo);
     if (!position || !photo.id) return null;
     const trace = geographicEvidenceTrace(photo);
-    const image = photo.previewUrl || photo.url;
+    const image = [photo.previewUrl, photo.url].find(url => typeof url === "string" && url.length > 0 && !failedSources.includes(`${photo.id}:${url}`));
     return <React.Fragment key={photo.id}>
       <Marker position={position} title={`${trace.label} · ${trace.resourceId}`}
         label={{ text: trace.label, color: "#ffffff", fontSize: "12px", fontWeight: "700" }}
@@ -20,7 +21,7 @@ export const PhotoEvidenceLayer: React.FC<PhotoEvidenceLayerProps> = ({ visible,
       {activeId === photo.id && <InfoWindow position={position} options={{ disableAutoPan: false, maxWidth: 340 }} onCloseClick={() => setActiveId(null)}>
         <article className="text-slate-900 w-72 max-w-[70vw] p-2 space-y-2" data-resource-id={trace.resourceId}>
           <h4 className="font-bold">{trace.label} · {geographicRoleLabels[trace.role][1]}</h4>
-          {image ? <a href={image} target="_blank" rel="noopener noreferrer"><img src={image} alt={geographicRoleLabels[trace.role][1]} className="w-full h-44 object-contain" /></a> : <p>SIN VISTA PREVIA</p>}
+          {image ? <a href={image} target="_blank" rel="noopener noreferrer"><img src={image} alt={geographicRoleLabels[trace.role][1]} className="w-full h-44 object-contain" onError={() => setFailedSources([...failedSources, `${photo.id}:${image}`])} /></a> : <p>SIN VISTA PREVIA</p>}
           <p className="text-xs break-all">Recurso: {trace.resourceId} · Expediente: {trace.projectId || "No acreditado"}</p>
           <p className="text-xs">{position.lat}, {position.lng} · Secuencia: {trace.order ?? "No acreditada"}</p>
           <p className="text-xs">{photo.fuente || photo.sourceProvider || "Origen no acreditado"}</p>

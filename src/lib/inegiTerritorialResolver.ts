@@ -65,6 +65,7 @@ export interface InegiTerritorialResult {
 }
 
 type Queryable = Pick<Pool, "query">;
+const pointObservationCache = new Map<string, { expires: number; result: InegiTerritorialResult }>();
 
 interface DatasetRow {
   dataset_id: string;
@@ -117,7 +118,7 @@ function configurationError(error: unknown): boolean {
   return code === "42P01" || code === "42704" || code === "42883" || /postgis|inegi_territorial_/i.test(message);
 }
 
-async function latestReadyDataset(db: Queryable): Promise<DatasetRow | null> {
+export async function latestReadyDataset(db: Queryable): Promise<DatasetRow | null> {
   const result = await db.query<DatasetRow>(`
     SELECT dataset_id, product_name, reference_year, version, imported_at, completed_at,
            geography_source_url, geography_sha256, census_source_url, census_sha256,
@@ -263,7 +264,8 @@ function unavailableResult(
 export async function resolveInegiTerritory(
   lat: number,
   lng: number,
-  injected?: Queryable
+  injected?: Queryable,
+  scope?: { projectId: string; geographyId: string; geographyFingerprint: string }
 ): Promise<InegiTerritorialResult> {
   const acquiredAt = new Date().toISOString();
   if (!validCoordinate(lat, lng)) {
@@ -287,6 +289,10 @@ export async function resolveInegiTerritory(
         acquiredAt
       );
     }
+
+    const cacheKey = JSON.stringify([scope ?? null, lat, lng, dataset.dataset_id, dataset.reference_year, dataset.version, dataset.geography_sha256, dataset.census_sha256]);
+    const cached = !injected && scope ? pointObservationCache.get(cacheKey) : null;
+    if (cached && cached.expires > Date.now()) return structuredClone(cached.result);
 
     const geographyResult = await db.query<GeographyRow>(`
       WITH point AS (
@@ -364,7 +370,7 @@ export async function resolveInegiTerritory(
         }
       : undefined;
 
-    return {
+    const result: InegiTerritorialResult = {
       status: "OBSERVED",
       exito: true,
       coordenadas: query,
@@ -401,6 +407,12 @@ export async function resolveInegiTerritory(
       gradoMarginacion: "No disponible",
       epistemicIntegrity: integrity({ status: "OBSERVED", query, dataset, resultCount: 1, acquiredAt }),
     };
+    if (!injected && scope) {
+      for (const [key,value] of pointObservationCache) if (value.expires <= Date.now()) pointObservationCache.delete(key);
+      if (pointObservationCache.size >= 100) pointObservationCache.delete(pointObservationCache.keys().next().value!);
+      pointObservationCache.set(cacheKey, {expires:Date.now()+60000,result:structuredClone(result)});
+    }
+    return result;
   } catch (error) {
     const isConfiguration = configurationError(error);
     return unavailableResult(

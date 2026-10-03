@@ -1,5 +1,8 @@
 "use server";
 
+import {scinceRadiusConfigurationMatches} from './scinceRadiusConfiguration';
+import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
+import { scinceReviewedContent } from "@/utils/scinceMultiunitValidation";
 import { cookies } from "next/headers";
 import { isDeepStrictEqual } from "util";
 import { getCanonicalScinceData } from "@/lib/osintActions";
@@ -31,7 +34,7 @@ function canonical(raw: unknown): CanonicalProjectGeography | null {
     if (coordinates.length !== 2 || !coordinates.every(v => typeof v === "number" && Number.isFinite(v)) ||
       Math.abs(coordinates[0]) > 180 || Math.abs(coordinates[1]) > 90) return null;
   }
-  return deserializeCanonicalGeographyFromFirestore(raw as CanonicalProjectGeography | FirestoreSafeCanonicalProjectGeography | null);
+  return readScinceCanonicalGeography(raw);
 }
 
 /** Read-only preparation. The caller persists only after the explicit human action.
@@ -47,9 +50,10 @@ export async function prepareScinceContextIncorporation(projectId: string, revie
     if (!fresh.success) return { success: false, code: fresh.code === "SCINCE_CANONICAL_ACCESS_DENIED" ? "ACCESS_DENIED" : "UNAVAILABLE" };
     const snapshot = buildScinceCanonicalSnapshot(fresh);
     const reviewedSnapshot = buildScinceCanonicalSnapshot(reviewed);
-    if (!isDeepStrictEqual(snapshot, reviewedSnapshot)) return { success: false, code: "REVIEW_CHANGED" };
+    if (!isDeepStrictEqual(scinceReviewedContent(snapshot), scinceReviewedContent(reviewedSnapshot))) return { success: false, code: "REVIEW_CHANGED" };
     const input = { snapshot, expectedProjectId: access.projectId, currentCanonicalGeography: canonical(access.project.canonicalGeography) };
     if (!isScinceSnapshotPublishable(input)) return { success: false, code: "NOT_CURRENT" };
+    if (snapshot.multiunit) snapshot.multiunit.humanReviewStatus = "INCORPORATED";
     return { success: true, snapshot, incorporation: { decision: "INCORPORATED",
       incorporatedBy: { institutionalUserId: access.actor.institutionalUserId, username: access.actor.username },
       incorporatedAt: new Date().toISOString() } };
@@ -67,6 +71,9 @@ export async function getScinceContextFreshness(projectId: string, snapshot: unk
     if (!access.allowed) return { success: false, code: "ACCESS_DENIED" };
     const freshness = evaluateScinceSnapshotFreshness({ snapshot,
       expectedProjectId: access.projectId, currentCanonicalGeography: canonical(access.project.canonicalGeography) });
+    if (freshness.territorialFreshness==='CURRENT' && (snapshot as any)?.multiunit?.scinceAnalysisArea &&
+      !scinceRadiusConfigurationMatches((snapshot as any).multiunit.scinceAnalysisArea.configuration))
+      return {success:true,freshness:{...freshness,territorialFreshness:'STALE',reason:'SCINCE_RADIUS_CONFIGURATION_CHANGED'}};
     // A pending local map edit can only lower freshness; it cannot override the persisted geography gate.
     if (freshness.territorialFreshness === "CURRENT" && localCanonicalGeography !== undefined) {
       return { success: true, freshness: evaluateScinceSnapshotFreshness({ snapshot,
@@ -76,4 +83,10 @@ export async function getScinceContextFreshness(projectId: string, snapshot: unk
   } catch {
     return { success: false, code: "UNAVAILABLE" };
   }
+}
+
+/** Capability is advisory UI state; every query still reacquires the explicit server grant. */
+export async function getScinceQueryCapability(projectId: string): Promise<boolean> {
+  try { return (await authorizeInstitutionalProjectAccess({projectId,action:"ANALYZE_SCINCE",sessionToken:cookies().get("ceipol_session")?.value})).allowed; }
+  catch { return false; }
 }

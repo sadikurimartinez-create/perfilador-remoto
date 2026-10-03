@@ -5,15 +5,16 @@ export const SCINCE_CANONICAL_SNAPSHOT_VERSION = "SCINCE_CANONICAL_SNAPSHOT_V1";
 export type ScinceCanonicalSuccess = Extract<ScinceCanonicalContextResult, { success: true }>;
 
 export interface ScinceCanonicalSnapshot {
-  schemaVersion: typeof SCINCE_CANONICAL_SNAPSHOT_VERSION;
+  schemaVersion: typeof SCINCE_CANONICAL_SNAPSHOT_VERSION | "SCINCE_CANONICAL_SNAPSHOT_V2";
+  multiunit?: import("./scinceMultiunit").ScinceMultiunitObservation;
   projectId: string;
   geographyBinding: {
     geographyId: string;
-    geographyType: "INDIVIDUAL";
+    geographyType: "INDIVIDUAL" | "CORRIDOR" | "POLYGON";
     geographyFingerprint: string;
     fingerprintVersion: string;
-    spatialMode: "CANONICAL_POINT";
-    queryCoordinate: { lat: number; lng: number };
+    spatialMode: "CANONICAL_POINT" | "CANONICAL_LINE" | "CANONICAL_AREA";
+    queryCoordinate: { lat: number; lng: number } | null;
   };
   dataset: { datasetId: string | null; year: number | null; version: string | null };
   territorialResolution: Pick<ScinceCanonicalSuccess,

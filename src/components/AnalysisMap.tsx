@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, Marker, Polygon, Polyline, OverlayView, useJsApiLoader, InfoWindow } from "@react-google-maps/api";
+import {ScinceAnalysisAreaLayer} from "./maps/layers/ScinceAnalysisAreaLayer";
 import { PhotoEvidenceLayer } from "./maps/layers/PhotoEvidenceLayer";
 import { useProject } from "@/context/ProjectContext";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
@@ -934,6 +935,7 @@ export function AnalysisMap({
           )}
 
           {/* Marcadores de Evidencia Fotográfica con coordenadas reales */}
+          <ScinceAnalysisAreaLayer projectId={project?.id ?? ""} canonicalGeography={canonicalGeography} />
           <PhotoEvidenceLayer visible={showPhotos} photographs={album} />
 
           {/* Atractores Urbanos TOP 5 */}

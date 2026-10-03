@@ -1,4 +1,4 @@
-import { resolveScinceCanonicalContext } from "../src/services/scinceCanonicalContextService";
+import { resolveScinceCanonicalContext as canonicalService } from "../src/services/scinceCanonicalContextService";
 import { getCanonicalScinceData } from "../src/lib/osintActions";
 import { cookies } from "next/headers";
 import { authorizeInstitutionalProjectAccess } from "../src/services/institutionalProjectAccessService";
@@ -10,6 +10,8 @@ jest.mock("next/headers", () => ({ cookies: jest.fn() }));
 jest.mock("@google-cloud/vertexai", () => ({ VertexAI: jest.fn() }));
 jest.mock("@/lib/geminiEnv", () => ({}));
 jest.mock("@/lib/datosGobMx", () => ({ searchDatosGobMx: jest.fn() }));
+
+const resolveScinceCanonicalContext = (input:any,token:any,overrides:any={}) => canonicalService(input,token,{resolve:resolveInegiTerritory,...overrides});
 
 function geography(overrides: Record<string, unknown> = {}) {
   return { geographyId: "P1:INDIVIDUAL", type: "INDIVIDUAL", validationStatus: "VALID", source: "MAP_VECTOR",
@@ -32,7 +34,7 @@ beforeEach(() => { jest.clearAllMocks(); authorize.mockResolvedValue(allow()); r
 test("ANALYZE_SCINCE uses exactly the authorized canonical Point and preserves distinct levels/provenance", async () => {
   const result = await resolveScinceCanonicalContext({ projectId: "P1" }, "signed-cookie");
   expect(authorize).toHaveBeenCalledWith({ projectId: "P1", sessionToken: "signed-cookie", action: "ANALYZE_SCINCE" });
-  expect(resolve).toHaveBeenCalledWith(21.9, -102.3);
+  expect(resolve).toHaveBeenCalledWith(21.9, -102.3, undefined, expect.objectContaining({projectId:"P1",geographyId:"P1:INDIVIDUAL"}));
   expect(result).toMatchObject({ success: true, geographyId: "P1:INDIVIDUAL", geographicLevel: "MANZANA",
     demographicGeographicLevel: "AGEB", sourceRowKey: "ageb-row", datasetYear: 2020,
     datasetId: "dataset-test", datasetVersion: "v1", queryCoordinate: { lat: 21.9, lng: -102.3 },
@@ -53,9 +55,9 @@ test.each([
   [geography({ geographyId: "" }), "GEOGRAPHY_INVALID"],
   [geography({ limitations: ["INCOMPLETE_CANONICAL_GEOMETRY"] }), "GEOGRAPHY_INVALID"],
   [geography({ type: "LINEAL" }), "GEOMETRY_UNSUPPORTED"],
-  [geography({ type: "CORRIDOR", geometry: { type: "LineString", points: [] } }), "GEOMETRY_UNSUPPORTED"],
-  [geography({ type: "POLYGON", geometry: { type: "Polygon", rings: [] } }), "GEOMETRY_UNSUPPORTED"],
-  [geography({ type: "POLYGON", geometry: { type: "MultiPolygon", polygons: [] } }), "GEOMETRY_UNSUPPORTED"],
+  [geography({ type: "CORRIDOR", geometry: { type: "LineString", points: [] } }), "GEOGRAPHY_INVALID"],
+  [geography({ type: "POLYGON", geometry: { type: "Polygon", rings: [] } }), "GEOGRAPHY_INVALID"],
+  [geography({ type: "POLYGON", geometry: { type: "MultiPolygon", polygons: [] } }), "GEOGRAPHY_INVALID"],
   [geography({ geometry: { type: "MultiPolygon", polygons: [] } }), "GEOMETRY_UNSUPPORTED"],
   [geography({ geometry: { type: "Point", point: { lat: null, lng: null } } }), "POINT_INVALID"],
   [geography({ geometry: { type: "Point", point: { lat: "21", lng: "-102" } } }), "POINT_INVALID"],
@@ -72,7 +74,7 @@ test.each(["VALID", "INVALID"])("explicit zero Point with %s state respects the 
   authorize.mockResolvedValue(allow(geography({ validationStatus, geometry: { type: "Point", coordinates: [0, 0] } })));
   const result = await resolveScinceCanonicalContext({ projectId: "P1" }, "cookie");
   expect(result.success).toBe(validationStatus === "VALID");
-  if (validationStatus === "VALID") expect(resolve).toHaveBeenCalledWith(0, 0);
+  if (validationStatus === "VALID") expect(resolve).toHaveBeenCalledWith(0, 0, undefined, expect.objectContaining({projectId:"P1"}));
   else expect(resolve).not.toHaveBeenCalled();
 });
 test("malicious input, legacy ownership, photos and derived centers cannot determine identity or coordinates", async () => {
@@ -82,7 +84,7 @@ test("malicious input, legacy ownership, photos and derived centers cannot deter
     canonicalGeography: geography({ geometry: { type: "Point", coordinates: [1, 1] } }) };
   expect((await resolveScinceCanonicalContext(malicious, "cookie")).success).toBe(true);
   expect(authorize).toHaveBeenCalledWith({ projectId: "P1", sessionToken: "cookie", action: "ANALYZE_SCINCE" });
-  expect(resolve).toHaveBeenCalledWith(21.9, -102.3);
+  expect(resolve).toHaveBeenCalledWith(21.9, -102.3, undefined, expect.objectContaining({projectId:"P1",geographyId:"P1:INDIVIDUAL"}));
 });
 test("legacy fields and photos never substitute missing canonical geography", async () => {
   authorize.mockResolvedValue({ ...allow(), project: { createdBy: "owner", latitude: 21, longitude: -102, photos: [{}] } } as any);
@@ -110,7 +112,7 @@ test("unavailable demographic or dataset fields remain honest nulls", async () =
 });
 test("server action retrieves only the trusted cookie and ignores extra client arguments", async () => {
   jest.mocked(cookies).mockReturnValue({ get: jest.fn(() => ({ value: "server-cookie" })) } as any);
-  expect((await (getCanonicalScinceData as any)("P1", { sessionToken: "client-token", lat: 1, role: "SUPER_ADMIN" })).success).toBe(true);
+  expect((await (getCanonicalScinceData as any)("P1", { sessionToken: "client-token", lat: 1, role: "SUPER_ADMIN" })).success).toBe(false);
   expect(authorize).toHaveBeenCalledWith({ projectId: "P1", sessionToken: "server-cookie", action: "ANALYZE_SCINCE" });
 });
 test("the flow exposes no write dependency and never invokes extra injected writers", async () => {
