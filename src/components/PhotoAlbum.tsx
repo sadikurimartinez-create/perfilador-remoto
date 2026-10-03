@@ -9,6 +9,7 @@ import { useProject, AlbumPhoto } from "@/context/ProjectContext";
 import { EvidenceRelationship, EvidenceRelationshipEngine } from "@/utils/evidenceRelationshipEngine";
 import { TacticalCharts } from "./TacticalCharts";
 import { ScinceHumanContextPanel } from "./ScinceHumanContextPanel";
+import { HumanHypothesisEditor } from "./HumanHypothesisEditor";
 import { TacticalMaps } from "./TacticalMaps";
 import { ReportEngine, ReportEngineKernel, KernelGuard, generatePdfProgrammatic } from "@/lib/reportEngine";
 import { exportToWord } from "@/lib/exportToWord";
@@ -3000,6 +3001,7 @@ const hasMinimumPhotos =
 
       {/* Formulario de Hipótesis y Precisiones de Barridos en la página principal */}
       <div id="report-readiness-hypothesis" className="pt-8 mt-6 border-t border-slate-800 w-full print:hidden">
+        <HumanHypothesisEditor />
         {reportReadinessGuidanceActive && !reportReadyAssessment.hypothesisReady && (
           <div className="max-w-4xl mx-auto mb-4 rounded-xl border border-red-500/60 bg-red-950/40 px-4 py-3 text-left shadow-lg">
             <p className="text-[10px] font-black uppercase tracking-wider text-red-300">

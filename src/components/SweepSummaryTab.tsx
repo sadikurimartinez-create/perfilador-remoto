@@ -4,20 +4,12 @@ import React, { useState } from "react";
 import { useProject, SweepIntegrationItem } from "@/context/ProjectContext";
 import { CEIPOLToast } from "./ui/CEIPOLToast";
 import { CEIPOLButton } from "./ui/CEIPOLButton";
+import { HumanHypothesisEditor } from "./HumanHypothesisEditor";
 import { CEIPOLCard } from "./ui/CEIPOLCard";
 
 export function SweepSummaryTab() {
-  const { project, saveHumanHypothesis, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
-  const [isSavingHypothesis, setIsSavingHypothesis] = useState(false);
-  const [hypothesisText, setHypothesisText] = useState(project?.hipotesis || "");
+  const { project, updateSweep, setActiveSweepForModal, isReadOnly } = useProject();
   const [toast, setToast] = useState<{ type: "success" | "warning" | "error" | "info"; message: string } | null>(null);
-
-  // Sync hypothesis text with context if changed externally
-  React.useEffect(() => {
-    if (project) {
-      setHypothesisText(project.hipotesis || "");
-    }
-  }, [project]);
 
   const sweeps = project?.sweeps || [];
   const totalSweeps = sweeps.length;
@@ -28,19 +20,6 @@ export function SweepSummaryTab() {
   const completenessPercentage = totalSweeps > 0 
     ? Math.round((completedSweeps / totalSweeps) * 100) 
     : 100;
-
-  const handleSaveHypothesis = async () => {
-    if (!project || isReadOnly) return;
-    setIsSavingHypothesis(true);
-    try {
-      await saveHumanHypothesis(hypothesisText);
-      setToast({ type: "success", message: "✅ Hipótesis consolidada guardada exitosamente." });
-    } catch (err: any) {
-      setToast({ type: "error", message: "❌ Error al guardar la hipótesis: " + err.message });
-    } finally {
-      setIsSavingHypothesis(false);
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -167,39 +146,7 @@ export function SweepSummaryTab() {
         </CEIPOLCard>
       </div>
 
-      {/* Hypothesis Viewer & Editor */}
-      <CEIPOLCard variant="glass" className="p-6 space-y-4 shadow-xl">
-        <header className="flex justify-between items-center border-b border-slate-800 pb-3">
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-black text-slate-200 uppercase tracking-wider">
-              Hipótesis Central Consolidada del Expediente
-            </h3>
-            <p className="text-[10px] text-slate-400">
-              Vista integrada que almacena la narrativa del analista cruzada con los bloques técnicos de barridos.
-            </p>
-          </div>
-          {!isReadOnly && (
-            <CEIPOLButton
-              variant="confirm"
-              onClick={handleSaveHypothesis}
-              loading={isSavingHypothesis}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-black"
-            >
-              💾 Guardar Hipótesis
-            </CEIPOLButton>
-          )}
-        </header>
-
-        <textarea
-          spellCheck={true}
-          value={hypothesisText}
-          onChange={e => setHypothesisText(e.target.value)}
-          disabled={isReadOnly}
-          rows={10}
-          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed outline-none focus:border-sky-500/50 transition-all resize-y select-all shadow-inner"
-          placeholder="Escriba o consolide la hipótesis del expediente..."
-        />
-      </CEIPOLCard>
+      <HumanHypothesisEditor />
 
       {/* Sweeps List */}
       <CEIPOLCard variant="glass" className="p-6 space-y-4 shadow-xl">
