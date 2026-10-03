@@ -12,7 +12,9 @@ export class AdminAuthorizationProjectionAdapter implements AuthorizationProject
     const auditId = createHash("sha256").update(JSON.stringify({ actor, projections, timestamp })).digest("hex");
     const auditRef = db.collection("authorizationAudit").doc(auditId);
     await db.runTransaction(async transaction => {
-      if ((await transaction.get(auditRef)).exists) return;
+      // A prior receipt does not establish that the derived mirrors still exist.
+      // Reapply the authoritative snapshot; keep the audit receipt immutable.
+      const audited = (await transaction.get(auditRef)).exists;
       const previous = await transaction.get(index);
       const oldIds: unknown = previous.data()?.projectIds ?? [];
       if (!Array.isArray(oldIds) || oldIds.some(id => typeof id !== "string") || oldIds.length + projections.length > 200) {
@@ -31,7 +33,7 @@ export class AdminAuthorizationProjectionAdapter implements AuthorizationProject
       }
       transaction.set(index, { projectIds: ids, synchronizedAt: timestamp });
       // Same transaction as the mirror: an audit failure cannot return success.
-      transaction.create(auditRef, {
+      if (!audited) transaction.create(auditRef, {
         institutionalUserId: actor.institutionalUserId, action: "PROJECTION_SYNCHRONIZED",
         source: "POSTGRESQL", policyVersion: AUTHORIZATION_POLICY, timestamp,
         projectedCount: projections.length, tombstoneCount: ids.length - projections.length,
