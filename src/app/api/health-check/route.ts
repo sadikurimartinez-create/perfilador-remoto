@@ -250,7 +250,23 @@ export async function GET() {
   {
     const started = Date.now();
     try {
-      await getPool().query("SELECT ST_AsText(ST_MakePoint(0, 0))");
+      const dbHealth = await getPool().query(
+        `SELECT
+           ST_AsText(ST_MakePoint(0, 0)) AS postgis_probe,
+           to_regclass('public.institutional_project_access') IS NOT NULL AS authority_table_exists,
+           has_table_privilege(
+             current_user,
+             'public.institutional_project_access',
+             'SELECT'
+           ) AS authority_select`
+      );
+      const authority = dbHealth.rows[0];
+      if (
+        authority?.authority_table_exists !== true ||
+        authority?.authority_select !== true
+      ) {
+        throw new Error("INSTITUTIONAL_AUTHORITY_NOT_READY");
+      }
       services.push({
         id: "postgres",
         name: "PostgreSQL / PostGIS",
