@@ -170,3 +170,53 @@ test.each([[[{}]], [[{geometryRole:'START'}]]])('actual creation gate rejects in
   const execute=new Function('scope','with(scope){'+output+'}')(scope);await execute();
   expect(create).not.toHaveBeenCalled();expect(ref.current).toBe(false);expect(creating).toHaveBeenLastCalledWith(false);expect(scope.setDraftFeedback).toHaveBeenCalled();
 });
+
+
+function roleHarness() {
+  const h=hooks();
+  const module=load('src/components/PhotoRolePresentation.tsx',{react:h.react,'@/utils/geographicEvidencePresentation':geography});
+  return { render:(photo:any)=>{h.reset();return module.PhotoRolePresentation({photo,children:React.createElement('select',{onChange:jest.fn()})});} };
+}
+test.each(['Perímetro','Interior','Otro'])('persisted classification %s renders readonly without selector', tipo=>{
+  const tree=roleHarness().render({id:'photo',tipo,geometryRole:'VERTEX',territorialRef:{role:'VERTEX',order:1}});
+  expect(nodes(tree,'select')).toHaveLength(0);expect(nodes(tree,'p')[0].props.children).toEqual(['Rol: ',tipo]);
+});
+test('legacy unclassified retains explicit classification control without inventing geometry',()=>{
+  const photo={id:'legacy',tipo:'',geometryRole:'LEGACY_UNCLASSIFIED'};const before=JSON.stringify(photo);
+  expect(nodes(roleHarness().render(photo),'select')).toHaveLength(1);expect(JSON.stringify(photo)).toBe(before);
+});
+test('local draft remains editable until existing contextualization save confirms persistence',()=>{
+  const h=roleHarness();h.render({id:'legacy',tipo:'',geometryRole:'LEGACY_UNCLASSIFIED'});
+  expect(nodes(h.render({id:'legacy',tipo:'Interior',geometryRole:'LEGACY_UNCLASSIFIED'}),'select')).toHaveLength(1);
+  expect(nodes(h.render({id:'legacy',tipo:'Interior',geometryRole:'LEGACY_UNCLASSIFIED',isContextualized:true}),'select')).toHaveLength(0);
+});
+test('reopening stored role never calls classification callback or modifies territorial association',()=>{
+  const photo={id:'photo',tipo:'Interior',geometryRole:'VERTEX',territorialRef:{role:'VERTEX',order:4}};
+  const before=JSON.stringify(photo);for(let i=0;i<2;i++) expect(nodes(roleHarness().render(photo),'select')).toHaveLength(0);
+  expect(JSON.stringify(photo)).toBe(before);
+});
+test('real metadata callback preserves geometry and territorialRef when classification/comment changes',()=>{
+  const source=readFileSync(resolve(process.cwd(),'src/context/ProjectContext.tsx'),'utf8');
+  const begin=source.indexOf('  const updatePhotoMeta = useCallback(');const end=source.indexOf('  const updatePhotoRelationship',begin);
+  const block=source.slice(begin,end);const photo={id:'p',tipo:'Interior',geometryRole:'VERTEX',territorialRef:{nodeId:'v4',order:4}};
+  let album:any[]=[photo];const update=new Function('useCallback','isReadOnly','setAlbum',ts.transpileModule(block+'return updatePhotoMeta;', {compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText)((fn:any)=>fn,false,(fn:any)=>{album=fn(album);});
+  update('p',{tipo:'Interior',comentario:'Contexto humano'});expect(album[0].geometryRole).toBe('VERTEX');expect(album[0].territorialRef).toBe(photo.territorialRef);
+});
+test('protected modal operation cannot close through ESC',()=>{
+  let setup!:()=>any;const prior=(globalThis as any).document;const listeners:any={};const close=jest.fn();
+  const panel={focus:jest.fn(),querySelectorAll:()=>[],addEventListener:(key:string,handler:any)=>listeners[key]=handler,removeEventListener:jest.fn()};
+  (globalThis as any).document={activeElement:null};
+  try {const module=load('src/components/useOperationalModalFocus.ts',{react:{useRef:(value:any)=>({current:value}),useEffect:(effect:any)=>{setup=effect;}}});
+    module.useOperationalModalFocus(true,{current:panel},undefined);setup();listeners.keydown({key:'Escape',preventDefault:jest.fn(),stopPropagation:jest.fn()});expect(close).not.toHaveBeenCalled();
+  } finally {(globalThis as any).document=prior;}
+});
+
+test('barrido while submitting disables X and withholds ESC callback',()=>{
+  let cursor=0;const close=jest.fn(),focus=jest.fn();const prior=(globalThis as any).document;(globalThis as any).document={body:{}};
+  try {const react={...React,useEffect:jest.fn(),useState:(initial:any)=>[cursor++===4 ? true : initial,jest.fn()],useRef:(initial:any)=>({current:initial}),useCallback:(fn:any)=>fn};
+    const module=load('src/components/SweepIntegrationModal.tsx',{react,'react-dom':{createPortal:(tree:any)=>tree},
+      '@/context/ProjectContext':{useProject:()=>({activeSweepForModal:{id:'s',engine:'GEOINT',source:'OSINT',type:'Directa',status:'Pendiente',relevance:'Medio',data:'fixture'},updateSweep:jest.fn(),setActiveSweepForModal:close})},
+      '@/components/ui/CEIPOLButton':{CEIPOLButton:()=>null},'./useOperationalModalFocus':{useOperationalModalFocus:focus}});
+    const tree=module.SweepIntegrationModal();const x=nodes(tree,'button').find(node=>node.props['aria-label']==='Cerrar barrido');expect(x.props.disabled).toBe(true);x.props.onClick();expect(close).not.toHaveBeenCalled();expect(focus.mock.calls[0][2]).toBeUndefined();
+  } finally {(globalThis as any).document=prior;}
+});

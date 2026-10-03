@@ -1,5 +1,5 @@
 "use client";
-import { geographicEvidenceRole, geographicRoleLabels, sortGeographicEvidence, photoResourceCollection, geographicEvidenceCoordinates } from "@/utils/geographicEvidencePresentation";
+import { geographicEvidenceRole, sortGeographicEvidence, photoResourceCollection, geographicEvidenceCoordinates } from "@/utils/geographicEvidencePresentation";
 import { persistInstitutionalSweep } from "@/lib/institutionalSweepActions";
 import { mutateInstitutionalLifecycle, restoreInstitutionalTrash } from "@/lib/institutionalLifecycleActions";
 import { canWriteInstitutionalProject, readInstitutionalCollection } from "@/lib/institutionalCollectionActions";
@@ -1102,7 +1102,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             previewUrl: rawUrl,
             lat: data.lat ?? data.gpsLat ?? null,
             lng: data.lng ?? data.gpsLng ?? null,
-            tipo: data.geometryRole && geographicEvidenceRole(data) !== "LEGACY_UNCLASSIFIED" || data.territorialRef?.role ? geographicRoleLabels[geographicEvidenceRole(data)][1] : data.tipo || "",
+            tipo: data.tipo || "",
             geometryRole: data.geometryRole ?? geographicEvidenceRole(data),
             isGeometry: data.isGeometry ?? false,
             projectId,
@@ -1754,8 +1754,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (isReadOnly) return;
     setAlbum((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...meta,
-        geometryRole: isAdditionalPhotoEvidence(p) ? "NONE" : geographicEvidenceRole({ tipo: meta.tipo }),
-        territorialRef: geographicEvidenceRole({ tipo: meta.tipo }) === geographicEvidenceRole(p) ? p.territorialRef : null } : p))
+        geometryRole: p.geometryRole,
+        territorialRef: p.territorialRef } : p))
     );
   }, [isReadOnly]);
 

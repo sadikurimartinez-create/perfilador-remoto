@@ -106,7 +106,7 @@ export function ScinceHumanContextPanel(props: Props) {
     <ScinceFreshnessStatus freshness={visibleFreshness} />
     {evaluatedScope === freshnessScope && freshnessMessage && <p className="text-xs text-amber-300">{freshnessMessage}</p>}
     {hasLegacy && <p className="text-xs text-slate-400">Contexto SCINCE legacy conservado; no acredita un snapshot canónico vigente.</p>}
-    {incompatible && <p className="text-xs text-amber-300">SCINCE canónico no disponible todavía para esta modalidad territorial.</p>}
+    {incompatible && <p className="text-xs text-amber-300">SCINCE productivo admite únicamente expedientes INDIVIDUAL con Point validado. LINEAL y POLYGON tienen contrato de contexto; la consulta territorial multiunidad aún no está habilitada.</p>}
     <CEIPOLButton disabled={!props.projectId || props.isReadOnly || busy || incompatible}
       loading={state.status === "CONSULTANDO"} onClick={() => void flow.consult()}>CONSULTAR SCINCE</CEIPOLButton>
     <p className="text-xs text-slate-400" role="status">{state.status}</p>

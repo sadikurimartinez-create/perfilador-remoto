@@ -56,7 +56,7 @@ export function createScinceHumanContextFlow(deps: Dependencies) {
         } else if (result.code === "SCINCE_CANONICAL_ACCESS_DENIED") {
           emit({ status: "ACCESO_DENEGADO", result: null, message: "No tiene autorización institucional para consultar SCINCE en este expediente." });
         } else if (result.code === "SCINCE_CANONICAL_GEOMETRY_UNSUPPORTED") {
-          emit({ status: "GEOMETRIA_NO_COMPATIBLE", result: null, message: "SCINCE canónico no disponible todavía para esta modalidad territorial." });
+          emit({ status: "GEOMETRIA_NO_COMPATIBLE", result: null, message: "SCINCE productivo admite únicamente expedientes INDIVIDUAL con Point validado. LINEAL y POLYGON tienen contrato de contexto; la consulta territorial multiunidad aún no está habilitada." });
         } else {
           emit({ status: "NO_DISPONIBLE", result: null, message: "No hay contexto SCINCE canónico disponible para la geografía vigente." });
         }

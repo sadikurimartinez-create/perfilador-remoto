@@ -284,11 +284,14 @@ describe("SCINCE productivo end-to-end / INEGI territorial", () => {
     const ui = fs.readFileSync(path.join(process.cwd(), "src/components/PhotoAlbum.tsx"), "utf8");
     const report = fs.readFileSync(path.join(process.cwd(), "src/lib/reportEngine.ts"), "utf8");
 
-    expect(ui).toContain("Demografía territorial — INEGI");
-    expect(ui).toContain("scinceDemographics: scinceDataConfirm.payload");
-    expect(ui).toContain("provenance: scinceDataConfirm.payload?.provenance");
-    expect(ui).toContain("queryCoordinates: scinceDataConfirm.payload?.coordenadas");
-    expect(ui).not.toContain("SCINCE disponible actualmente corresponde a una simulación diagnóstica");
+    // Canonical human flow replaced the retired scinceDataConfirm UI before P8.
+    const panel = fs.readFileSync(path.join(process.cwd(), "src/components/ScinceHumanContextPanel.tsx"), "utf8");
+    const flow = fs.readFileSync(path.join(process.cwd(), "src/utils/scinceHumanContextFlow.ts"), "utf8");
+    expect(ui).toContain("<ScinceHumanContextPanel");
+    expect(panel).toContain("result.datasetId");
+    expect(panel).toContain("result.sourceRowKey");
+    expect(flow).toContain("scinceCanonicalSnapshot: prepared.snapshot");
+    expect(flow).toContain("await deps.updateProjectDetails");
     expect(report).toContain("editorialPayload as any).scinceDemographics = this.context.scinceDemographics");
   });
 

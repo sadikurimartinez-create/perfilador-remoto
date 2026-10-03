@@ -154,7 +154,7 @@ test("unsupported local modality displays neutral unavailable message with disab
   const html = renderToStaticMarkup(React.createElement(ScinceHumanContextPanel, { projectId: "P1",
     canonicalGeography: { ...geography, type: "POLYGON", geometry: { type: "Polygon", coordinates: [] } },
     analysis: null, isReadOnly: false, updateProjectDetails: jest.fn(), setAnalysisResult: jest.fn() }));
-  expect(html).toContain("SCINCE canónico no disponible todavía para esta modalidad territorial.");
+  expect(html).toContain("SCINCE productivo admite únicamente expedientes INDIVIDUAL con Point validado. LINEAL y POLYGON tienen contrato de contexto; la consulta territorial multiunidad aún no está habilitada.");
   expect(html).toContain("disabled"); expect(getCanonicalScinceData).not.toHaveBeenCalled();
 });
 test("preparation invokes the existing builder, WRITE authorization, trusted cookie and canonical query without writers", async () => {
@@ -284,4 +284,18 @@ test("PhotoAlbum wires only the canonical SCINCE panel; DENUE and report flows r
   expect(panel).toContain("query: getCanonicalScinceData"); expect(panel).toContain("onClick={() => void flow.incorporate()}");
   ["VIGENTE", "OBSOLETO", "INVÁLIDO", "NO DISPONIBLE"].forEach(label => expect(panel).toContain(label));
   expect(panel).not.toMatch(/getScinceData|registerSweep|setDoc|updateDoc|reportEngine|exportToWord/);
+});
+
+
+test.each([
+  ['POLYGON', {type:'Polygon',coordinates:[[[-102,21],[-102,22],[-103,22],[-102,21]]]},true],
+  ['CORRIDOR', {type:'LineString',coordinates:[[-102,21],[-103,22]]},true],
+  ['INDIVIDUAL', {type:'Point',coordinates:[-102,21]},false],
+])('actual %s query gate matches the productive contract', (type, geometry, blocked)=>{
+  const current:any={...geography,type,geometry};const original=JSON.stringify(current);
+  const html=renderToStaticMarkup(React.createElement(ScinceHumanContextPanel,{projectId:'P1',canonicalGeography:current,analysis:null,isReadOnly:false,updateProjectDetails:jest.fn(),setAnalysisResult:jest.fn()}));
+  const button=(html.match(/<button[\s\S]*?<\/button>/g) || []).find(value=>value.includes('CONSULTAR SCINCE'));
+  expect(button).toBeDefined();expect(/\sdisabled(?:=|\s|>)/.test(button!)).toBe(blocked);
+  if(blocked) expect(html).toContain('la consulta territorial multiunidad aún no está habilitada');
+  expect(JSON.stringify(current)).toBe(original);expect(getCanonicalScinceData).not.toHaveBeenCalled();
 });

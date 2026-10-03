@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useProject, AlbumPhoto } from "@/context/ProjectContext";
 import { EvidenceRelationship, EvidenceRelationshipEngine } from "@/utils/evidenceRelationshipEngine";
 import { TacticalCharts } from "./TacticalCharts";
+import { PhotoRolePresentation } from "./PhotoRolePresentation";
 import { ScinceHumanContextPanel } from "./ScinceHumanContextPanel";
 import { HumanHypothesisEditor } from "./HumanHypothesisEditor";
 import { PhotoPpcReviewPanel } from "./EvidencePpcReviewPanel";
@@ -2715,6 +2716,7 @@ const hasMinimumPhotos =
                       👤 Rostros: {visionData[p.id].faces.count}
                     </span>
                   )}
+                  <PhotoRolePresentation photo={p}>
                   <select
                     value={isAdditionalPhotoEvidence(p) ? "Evidencia Fotográfica Adicional" : p.tipo || ""}
                     onChange={(e) =>
@@ -2755,6 +2757,7 @@ const hasMinimumPhotos =
                       </>
                     )}
                   </select>
+                  </PhotoRolePresentation>
 
                   {/* NUEVA SECCIÓN: RELACIÓN ANALÍTICA (FASE 7.12.4) */}
                   <div className="mt-3 p-3 bg-slate-950/40 rounded-xl border border-slate-800/80 space-y-3">
