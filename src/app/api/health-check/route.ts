@@ -14,6 +14,16 @@ type ServiceStatus = {
   latencyMs: number | null;
   errorMessage?: string;
   runtimeAuthority?: RuntimeAuthority;
+  postgresProviderFingerprint?: PostgresProviderFingerprint;
+};
+
+type PostgresProviderFingerprint = {
+  awsRdsLike: boolean;
+  googleCloudSqlLike: boolean;
+  azurePostgresLike: boolean;
+  supabaseLike: boolean;
+  neonLike: boolean;
+  unknown: boolean;
 };
 
 type RuntimeAuthority = {
@@ -263,6 +273,7 @@ export async function GET() {
   {
     const started = Date.now();
     let runtimeAuthority: RuntimeAuthority | undefined;
+    let postgresProviderFingerprint: PostgresProviderFingerprint | undefined;
     try {
       const pool = getPool();
       // Independent of PostGIS and the authority table; never select identifiers.
@@ -281,7 +292,18 @@ export async function GET() {
              LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) acl
              WHERE n.nspname = 'public' AND acl.grantee = 0
                AND acl.privilege_type = 'CREATE'
-           ) AS "publicCanCreatePublic"
+           ) AS "publicCanCreatePublic",
+           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rdsadmin')
+             AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rds_superuser') AS "awsRdsLike",
+           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cloudsqladmin')
+             AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cloudsqlsuperuser') AS "googleCloudSqlLike",
+           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'azuresu')
+             AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'azure_pg_admin') AS "azurePostgresLike",
+           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_admin')
+             AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_auth_admin')
+             AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_storage_admin') AS "supabaseLike",
+           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'neon_superuser')
+             AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'neon') AS "neonLike"
          FROM pg_roles r JOIN pg_database d ON d.datname = current_database()
          WHERE r.rolname = current_user`
       );
@@ -299,6 +321,17 @@ export async function GET() {
         bypassRls: role.bypassRls, canCreatePublic: role.canCreatePublic,
         canCreateTablePublic: role.canCreateTablePublic, ownsDatabase: role.ownsDatabase,
         publicCanCreatePublic: role.publicCanCreatePublic,
+      };
+      const providerFields = ["awsRdsLike", "googleCloudSqlLike", "azurePostgresLike",
+        "supabaseLike", "neonLike"] as const;
+      if (providerFields.some(field => typeof role[field] !== "boolean")) {
+        throw new Error("POSTGRES_PROVIDER_FINGERPRINT_UNAVAILABLE");
+      }
+      // Like signals are not proof of hosting/provider identity; never pick a winner.
+      postgresProviderFingerprint = {
+        awsRdsLike: role.awsRdsLike, googleCloudSqlLike: role.googleCloudSqlLike,
+        azurePostgresLike: role.azurePostgresLike, supabaseLike: role.supabaseLike,
+        neonLike: role.neonLike, unknown: providerFields.every(field => role[field] === false),
       };
       const dbHealth = await pool.query(
         `SELECT
@@ -323,6 +356,7 @@ export async function GET() {
         status: "ok",
         latencyMs: Date.now() - started,
         runtimeAuthority,
+        postgresProviderFingerprint,
       });
     } catch (error) {
       services.push({
@@ -335,6 +369,7 @@ export async function GET() {
             ? "INSTITUTIONAL_AUTHORITY_NOT_READY"
             : "POSTGRES_HEALTH_CHECK_FAILED",
         ...(runtimeAuthority ? { runtimeAuthority } : {}),
+        ...(postgresProviderFingerprint ? { postgresProviderFingerprint } : {}),
       });
     }
   }

@@ -6,8 +6,9 @@ const block = source.slice(source.indexOf('  // PostgreSQL / PostGIS'), source.i
 const emitted = ts.transpileModule(`async function probe(getPool: any) { const services: any[] = []; ${block} return services[0]; }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
 const probe: (getPool: any) => Promise<any> = new Function(`${emitted}; return probe;`)();
 const capabilities = { isCeipolApp: true, isSuperuser: false, canCreateDb: false, canCreateRole: false, bypassRls: false, canCreatePublic: false, canCreateTablePublic: false, ownsDatabase: false, publicCanCreatePublic: false };
+const providerSignals = { awsRdsLike: false, googleCloudSqlLike: false, azurePostgresLike: false, supabaseLike: false, neonLike: false };
 function fixture(readiness: any = { authority_table_exists: true, authority_select: true }, role: any = capabilities) {
-  const query = jest.fn().mockResolvedValueOnce({ rows: [role] }).mockResolvedValueOnce({ rows: [readiness] });
+  const query = jest.fn().mockResolvedValueOnce({ rows: [role === null ? null : { ...providerSignals, ...role }] }).mockResolvedValueOnce({ rows: [readiness] });
   return { query, getPool: jest.fn(() => ({ query })) };
 }
 test('actual PostgreSQL health block uses only two SELECTs through getPool; no secret/env access', async () => {
@@ -34,7 +35,7 @@ test.each([{ authority_table_exists: false, authority_select: null }, { authorit
   expect(result).toMatchObject({ status: 'error', errorMessage: 'INSTITUTIONAL_AUTHORITY_NOT_READY', runtimeAuthority: capabilities });
 });
 test('readiness SQL error cannot leak secrets and does not erase already obtained metadata', async () => {
-  const f = fixture(); f.query.mockReset().mockResolvedValueOnce({ rows: [capabilities] }).mockRejectedValueOnce(new Error('PRIVATE_HOST port 5432 database PRIVATE_DB password PRIVATE_PASSWORD DATABASE_URL=PRIVATE_URL'));
+  const f = fixture(); f.query.mockReset().mockResolvedValueOnce({ rows: [{ ...providerSignals, ...capabilities }] }).mockRejectedValueOnce(new Error('PRIVATE_HOST port 5432 database PRIVATE_DB password PRIVATE_PASSWORD DATABASE_URL=PRIVATE_URL'));
   const result = await probe(f.getPool);
   expect(result).toMatchObject({ status: 'error', errorMessage: 'POSTGRES_HEALTH_CHECK_FAILED', runtimeAuthority: capabilities });
   expect(JSON.stringify(result)).not.toMatch(/PRIVATE_|DATABASE_URL|password|5432/);
