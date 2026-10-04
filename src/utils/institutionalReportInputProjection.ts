@@ -60,20 +60,93 @@ export function reportInputConflictDiagnosticCode(error: unknown): string | null
   } catch { return null; }
 }
 
+export const ROOT_INPUT_SOURCES = {
+  evidence: "ROOT_EVIDENCE",
+  evidences: "ROOT_EVIDENCES",
+  photoEvidence: "ROOT_PHOTO_EVIDENCE",
+  findings: "ROOT_FINDINGS",
+  approvedFindings: "ROOT_APPROVED_FINDINGS",
+  inferences: "ROOT_INFERENCES",
+  analysisOutputs: "ROOT_ANALYSIS_OUTPUTS",
+  aiAnalyticalOutputs: "ROOT_AI_ANALYTICAL_OUTPUTS",
+  analyses: "ROOT_ANALYSES",
+  conclusions: "ROOT_CONCLUSIONS",
+  osint: "ROOT_OSINT",
+  osintFindings: "ROOT_OSINT_FINDINGS",
+  streetViewAnalysis: "ROOT_STREET_VIEW_ANALYSIS",
+  streetView: "ROOT_STREET_VIEW",
+  temporalComparisons: "ROOT_TEMPORAL_COMPARISONS",
+  convergences: "ROOT_CONVERGENCES",
+  sourceOrchestrationItems: "ROOT_SOURCE_ORCHESTRATION_ITEMS",
+  denuePois: "ROOT_DENUE_POIS",
+  pois: "ROOT_POIS",
+  maps: "ROOT_MAPS",
+  charts: "ROOT_CHARTS",
+  visualProducts: "ROOT_VISUAL_PRODUCTS",
+  predictiveAnalyticalProducts: "ROOT_PREDICTIVE_ANALYTICAL_PRODUCTS",
+} as const;
+const IA_INPUT_SOURCES = {
+  evidence: "IA_ANALYSIS_EVIDENCE",
+  evidences: "IA_ANALYSIS_EVIDENCES",
+  photoEvidence: "IA_ANALYSIS_PHOTO_EVIDENCE",
+  findings: "IA_ANALYSIS_FINDINGS",
+  approvedFindings: "IA_ANALYSIS_APPROVED_FINDINGS",
+  inferences: "IA_ANALYSIS_INFERENCES",
+  analysisOutputs: "IA_ANALYSIS_ANALYSIS_OUTPUTS",
+  aiAnalyticalOutputs: "IA_ANALYSIS_AI_ANALYTICAL_OUTPUTS",
+  analyses: "IA_ANALYSIS_ANALYSES",
+  conclusions: "IA_ANALYSIS_CONCLUSIONS",
+  osint: "IA_ANALYSIS_OSINT",
+  osintFindings: "IA_ANALYSIS_OSINT_FINDINGS",
+  streetViewAnalysis: "IA_ANALYSIS_STREET_VIEW_ANALYSIS",
+  streetView: "IA_ANALYSIS_STREET_VIEW",
+  temporalComparisons: "IA_ANALYSIS_TEMPORAL_COMPARISONS",
+  convergences: "IA_ANALYSIS_CONVERGENCES",
+  sourceOrchestrationItems: "IA_ANALYSIS_SOURCE_ORCHESTRATION_ITEMS",
+  denuePois: "IA_ANALYSIS_DENUE_POIS",
+  pois: "IA_ANALYSIS_POIS",
+  maps: "IA_ANALYSIS_MAPS",
+  charts: "IA_ANALYSIS_CHARTS",
+  visualProducts: "IA_ANALYSIS_VISUAL_PRODUCTS",
+  predictiveAnalyticalProducts: "IA_ANALYSIS_PREDICTIVE_ANALYTICAL_PRODUCTS",
+} as const;
+export const REPORT_INPUT_SOURCE_LABELS = [
+  ...Object.values(ROOT_INPUT_SOURCES), ...Object.values(IA_INPUT_SOURCES),
+  "ROOT_SOURCE_ORCHESTRATION_ITEMS_NESTED", "ORCHESTRATION_ORIGINAL",
+  "ORCHESTRATION_ADAPTED_OSINT", "ORCHESTRATION_ADAPTED_DENUE", "ORCHESTRATION_ADAPTED_IN_SITU_PHOTO",
+] as const;
+export function safeReportInputSource(value: unknown): string {
+  return REPORT_INPUT_SOURCE_LABELS.find(label => label === value) ?? "UNKNOWN_SOURCE";
+}
+export class ReportInputDuplicateIdentityConflict extends Error {
+  readonly code = "REPORT_INPUT_CONFLICT_DUPLICATE_IDENTITY";
+  readonly leftSource: string;
+  readonly rightSource: string;
+  constructor(leftSource: unknown, rightSource: unknown) {
+    super("REPORT_INPUT_CONFLICT_DUPLICATE_IDENTITY");
+    this.leftSource = safeReportInputSource(leftSource);
+    this.rightSource = safeReportInputSource(rightSource);
+  }
+}
+
 function canonical(value: any): string {
   return JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 }
 
-export function distinctInstitutionalInputs(items: any[], field: string): any[] {
+export function distinctInstitutionalInputs(items: any[], field: string, sources: readonly unknown[] = []): any[] {
   const records = new Map<string, any>();
+  const recordSources = new Map<string, string>();
+  let sourceIndex = 0;
   for (const item of items) {
+    const source = safeReportInputSource(sources[sourceIndex++]);
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`REPORT_INPUT_INVALID:${field}`);
     const identity = item.outputId || item.analysisId || item.findingId || item.evidenceId || item.convergenceId || item.itemId || item.id;
     const key = identity ? String(identity) : canonical(item);
     const previous = records.get(key);
-    if (previous && canonical(previous) !== canonical(item)) throw new Error("REPORT_INPUT_CONFLICT_DUPLICATE_IDENTITY");
+    if (previous && canonical(previous) !== canonical(item)) throw new ReportInputDuplicateIdentityConflict(recordSources.get(key), source);
     records.set(key, item);
+    recordSources.set(key, source);
   }
   return [...records.values()];
 }
@@ -88,7 +161,7 @@ export function projectPersistedInstitutionalInputs(project: any): {
     if ((top != null && !Array.isArray(top)) || (nested != null && !Array.isArray(nested))) {
       throw new Error(`REPORT_INPUT_INVALID:${field}`);
     }
-    const a = distinctInstitutionalInputs(top || [], field), b = distinctInstitutionalInputs(nested || [], field);
+    const a = distinctInstitutionalInputs(top || [], field, (top || []).map(() => ROOT_INPUT_SOURCES[field])), b = distinctInstitutionalInputs(nested || [], field, (nested || []).map(() => IA_INPUT_SOURCES[field]));
     if (a.length && b.length && canonical(a.map(canonical).sort()) !== canonical(b.map(canonical).sort())) {
       throw new Error(ARRAY_CONFLICT_CODES[field]);
     }

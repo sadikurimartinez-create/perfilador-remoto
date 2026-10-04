@@ -1,5 +1,5 @@
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
-import { distinctInstitutionalInputs, projectPersistedInstitutionalInputs, type ReportInputArrayField, type ReportInputProjectionState } from "@/utils/institutionalReportInputProjection";
+import { ROOT_INPUT_SOURCES, distinctInstitutionalInputs, projectPersistedInstitutionalInputs, type ReportInputArrayField, type ReportInputProjectionState } from "@/utils/institutionalReportInputProjection";
 import type { ConvergenceResult } from "@/utils/institutionalMultisourceConvergence";
 import { convergenceToInstitutionalCorrelationItem } from "@/utils/institutionalMultisourceConvergence";
 import { buildMultisourceOrchestrationEnvelope } from "@/services/geoint/multisourceOrchestrationService";
@@ -391,7 +391,8 @@ export function assessReportItemEligibility(item: any, context: {
 }
 
 function collect(project: any, keys: string[]): any[] {
-  return distinctInstitutionalInputs(keys.flatMap((key) => asArray(project?.[key])), keys.join("/"));
+  return distinctInstitutionalInputs(keys.flatMap((key) => asArray(project?.[key])), keys.join("/"),
+    keys.flatMap(key => asArray(project?.[key]).map(() => ROOT_INPUT_SOURCES[key as ReportInputArrayField])));
 }
 
 function denueAnalyticalDocumentSource(project: any): unknown {
@@ -503,7 +504,10 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   const orchestrationItems = distinctInstitutionalInputs([
     ...asArray<MultisourceOrchestrationItem>(project.sourceOrchestrationItems),
     ...asArray<MultisourceOrchestrationItem>(project.sourceOrchestration?.items),
-  ], "sourceOrchestrationItems").filter(item => {
+  ], "sourceOrchestrationItems", [
+    ...asArray(project.sourceOrchestrationItems).map(() => "ROOT_SOURCE_ORCHESTRATION_ITEMS"),
+    ...asArray(project.sourceOrchestration?.items).map(() => "ROOT_SOURCE_ORCHESTRATION_ITEMS_NESTED"),
+  ]).filter(item => {
     const source = item?.source;
     const valid = Boolean(source?.descriptorId && source.sourceType &&
       ["AUTHORITATIVE", "NON_AUTHORITATIVE", "SIMULATED", "LEGACY_UNCLASSIFIED", "UNKNOWN"].includes(source.authorityClassification) &&
@@ -613,16 +617,22 @@ export function buildInstitutionalReportInput(project: any, options: { generated
     item?.territorialStatus === "INSTITUTIONAL" && item?.epistemicIntegrity?.acquisitionMode === "OBSERVED" &&
     item?.epistemicIntegrity?.acquisitionStatus === "ACQUIRED" && item?.epistemicIntegrity?.isSimulated === false);
   // Reuse canonical adapters only on admitted persisted records; never consult local cache or legacy SCINCE.
+  const adaptedSourceLabels: string[] = [];
+  const labelAdaptedSource = (item: MultisourceOrchestrationItem | null, label: string) => {
+    if (item !== null) adaptedSourceLabels.push(label);
+    return item;
+  };
   const adaptedSources = [
-    ...osint.map(item => adaptOsintSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity })),
-    ...denuePois.map(item => adaptDenueScinceSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity })),
-    ...traceableEvidence.filter(isExplicitInSituPhoto).map(item => deriveInSituPhotoOrchestrationItem({
+    ...osint.map(item => labelAdaptedSource(adaptOsintSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity }), "ORCHESTRATION_ADAPTED_OSINT")),
+    ...denuePois.map(item => labelAdaptedSource(adaptDenueScinceSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity }), "ORCHESTRATION_ADAPTED_DENUE")),
+    ...traceableEvidence.filter(isExplicitInSituPhoto).map(item => labelAdaptedSource(deriveInSituPhotoOrchestrationItem({
       expedienteId: reportReadyAssessment.projectId, photoId: item.id || item.evidenceId,
       evidenceId: item.evidenceId, sourceEvidenceId: item.sourceEvidenceId, geographyId: item.geographyId,
-      gpsSource: item.gpsSource, validado: item.validado, legacy: item.legacy })),
+      gpsSource: item.gpsSource, validado: item.validado, legacy: item.legacy }), "ORCHESTRATION_ADAPTED_IN_SITU_PHOTO")),
   ].filter((item): item is MultisourceOrchestrationItem => item !== null);
   const sourceOrchestration = buildMultisourceOrchestrationEnvelope(reportReadyAssessment.projectId,
-    distinctInstitutionalInputs([...orchestrationItems, ...adaptedSources], "sourceOrchestrationItems"));
+    distinctInstitutionalInputs([...orchestrationItems, ...adaptedSources], "sourceOrchestrationItems",
+      [...orchestrationItems.map(() => "ORCHESTRATION_ORIGINAL"), ...adaptedSourceLabels]));
   const traceableAssessments = assessments.filter((assessment) =>
     assessment.eligibility !== "INELIGIBLE" &&
     !excludedItemKeys.has(`${assessment.itemType}:${assessment.itemId}`)

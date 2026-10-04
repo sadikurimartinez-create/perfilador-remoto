@@ -11,7 +11,7 @@ import { resolveInstitutionalSessionIdentity } from "@/services/institutionalSes
 import {resolveScinceDocumentPublication} from '@/services/scinceDocumentPublicationService';
 import {randomUUID} from 'crypto';
 import {logReportDiagnostic,safeReportDiagnosticCode,REPORT_DIAGNOSTIC_BOUNDARY_CODES,type ReportDiagnosticStage} from '@/services/scinceContextMaterializationService';
-import { reportInputConflictDiagnosticCode } from '@/utils/institutionalReportInputProjection';
+import { ReportInputDuplicateIdentityConflict, safeReportInputSource, reportInputConflictDiagnosticCode } from '@/utils/institutionalReportInputProjection';
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
@@ -81,7 +81,8 @@ export async function POST(request: Request) {
     if(inputConflictCode) {
       try {
         if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(correlationId))
-          console.error(`[REPORT DIAGNOSTIC] correlationId=${correlationId} stage=${stage} code=${inputConflictCode}`);
+          console.error(`[REPORT DIAGNOSTIC] correlationId=${correlationId} stage=${stage} code=${inputConflictCode}${error instanceof ReportInputDuplicateIdentityConflict
+            ? ` leftSource=${safeReportInputSource(error.leftSource)} rightSource=${safeReportInputSource(error.rightSource)}` : ""}`);
       } catch { /* Diagnostic transport must not affect the public response. */ }
     } else logReportDiagnostic(correlationId,stage,code);
     return NextResponse.json({ error: "REPORT_BOUNDARY_DENIED" }, { status: 403, headers });
