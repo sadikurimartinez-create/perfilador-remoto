@@ -1,11 +1,12 @@
 import "server-only";
+import {getCurrentScinceRelease} from '../lib/scinceObservationRepository';
 import {scinceRadiusConfigurationMatches} from "../lib/scinceRadiusConfiguration";
 import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
 import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
 import { getInstitutionalAdminDb } from "@/lib/firebaseAdmin";
 import { deserializeCanonicalGeographyFromFirestore, type CanonicalProjectGeography,
   type FirestoreSafeCanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
-import { evaluateScinceSnapshotFreshness, isScinceSnapshotPublishable } from "@/utils/scinceCanonicalSnapshot";
+import { isValidScinceCanonicalSnapshot, evaluateScinceSnapshotFreshness, isScinceSnapshotPublishable } from "@/utils/scinceCanonicalSnapshot";
 import type { ScinceCanonicalSnapshot } from "@/types/scinceCanonicalSnapshot";
 import { excludedScinceDocumentContext, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
 
@@ -19,10 +20,12 @@ export interface ScincePersistedDocumentSource {
 }
 type Dependencies = {
   authorize: typeof authorizeInstitutionalProjectAccess;
+  readRelease: typeof getCurrentScinceRelease;
   readProject: (projectId: string) => Promise<ScincePersistedDocumentSource | null>;
 };
 const defaults: Dependencies = {
   authorize: authorizeInstitutionalProjectAccess,
+  readRelease:getCurrentScinceRelease,
   async readProject(projectId) {
     const document = await getInstitutionalAdminDb().collection("projects").doc(projectId).get();
     return document.exists ? { ...document.data(), id: document.id } : null;
@@ -63,7 +66,9 @@ export async function resolveScinceDocumentPublication(input: {
     if ((snapshot as any)?.multiunit?.scinceAnalysisArea && !scinceRadiusConfigurationMatches((snapshot as any).multiunit.scinceAnalysisArea.configuration))
       return excludedScinceDocumentContext('STALE','SCINCE_RADIUS_CONFIGURATION_CHANGED');
     const current = canonical(project.canonicalGeography);
-    const binding = { snapshot, expectedProjectId: access.projectId, currentCanonicalGeography: current };
+    const datasetId=isValidScinceCanonicalSnapshot(snapshot) ? snapshot.dataset.datasetId : null;
+    const release=datasetId ? await deps.readRelease(datasetId) : undefined;
+    const binding = { snapshot, currentNormalizationRelease:release, expectedProjectId: access.projectId, currentCanonicalGeography: current };
     const freshness = evaluateScinceSnapshotFreshness(binding);
     if (!isScinceSnapshotPublishable(binding)) {
       return excludedScinceDocumentContext(freshness.territorialFreshness === "CURRENT" ? "INVALID" : freshness.territorialFreshness,

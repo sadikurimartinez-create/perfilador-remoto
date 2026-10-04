@@ -1,5 +1,6 @@
 "use server";
 
+import {getCurrentScinceRelease} from './scinceObservationRepository';
 import {scinceRadiusConfigurationMatches} from './scinceRadiusConfiguration';
 import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
 import { scinceReviewedContent } from "@/utils/scinceMultiunitValidation";
@@ -9,7 +10,7 @@ import { getCanonicalScinceData } from "@/lib/osintActions";
 import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
 import { deserializeCanonicalGeographyFromFirestore, type CanonicalProjectGeography,
   type FirestoreSafeCanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
-import { buildScinceCanonicalSnapshot, evaluateScinceSnapshotFreshness,
+import { buildScinceCanonicalSnapshot, isValidScinceCanonicalSnapshot, evaluateScinceSnapshotFreshness,
   isScinceSnapshotPublishable } from "@/utils/scinceCanonicalSnapshot";
 import type { ScinceCanonicalSuccess, ScinceCanonicalSnapshot, ScinceSnapshotFreshnessResult } from "@/types/scinceCanonicalSnapshot";
 
@@ -69,7 +70,9 @@ export async function getScinceContextFreshness(projectId: string, snapshot: unk
     const access = await authorizeInstitutionalProjectAccess({ projectId, action: "READ",
       sessionToken: cookies().get("ceipol_session")?.value });
     if (!access.allowed) return { success: false, code: "ACCESS_DENIED" };
-    const freshness = evaluateScinceSnapshotFreshness({ snapshot,
+    const datasetId=isValidScinceCanonicalSnapshot(snapshot) ? snapshot.dataset.datasetId : null;
+    const release=datasetId ? await getCurrentScinceRelease(datasetId) : undefined;
+    const freshness = evaluateScinceSnapshotFreshness({ snapshot, currentNormalizationRelease:release,
       expectedProjectId: access.projectId, currentCanonicalGeography: canonical(access.project.canonicalGeography) });
     if (freshness.territorialFreshness==='CURRENT' && (snapshot as any)?.multiunit?.scinceAnalysisArea &&
       !scinceRadiusConfigurationMatches((snapshot as any).multiunit.scinceAnalysisArea.configuration))
@@ -77,7 +80,7 @@ export async function getScinceContextFreshness(projectId: string, snapshot: unk
     // A pending local map edit can only lower freshness; it cannot override the persisted geography gate.
     if (freshness.territorialFreshness === "CURRENT" && localCanonicalGeography !== undefined) {
       return { success: true, freshness: evaluateScinceSnapshotFreshness({ snapshot,
-        expectedProjectId: access.projectId, currentCanonicalGeography: localCanonicalGeography }) };
+        expectedProjectId: access.projectId, currentNormalizationRelease:release, currentCanonicalGeography: localCanonicalGeography }) };
     }
     return { success: true, freshness };
   } catch {

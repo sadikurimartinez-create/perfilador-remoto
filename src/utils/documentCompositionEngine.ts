@@ -114,15 +114,16 @@ export class InstitutionalBrandManager {
 
   public static createCoverIdentity(
     documentTitle: string,
-    logos: { sspe?: ArrayBuffer | Uint8Array | null; ceipol?: ArrayBuffer | Uint8Array | null } = {}
+    logos: { sspe?: ArrayBuffer | Uint8Array | null; ceipol?: ArrayBuffer | Uint8Array | null } = {},
+    compact = false
   ): Paragraph[] {
     const logoRuns: any[] = [];
     if (logos.sspe) {
-      logoRuns.push(new ImageRun({ data: logos.sspe, type: "png", transformation: { width: 76, height: 76 } } as any));
+      logoRuns.push(new ImageRun({ data: logos.sspe, type: "png", transformation: { width: compact ? 48 : 76, height: compact ? 48 : 76 } } as any));
     }
     if (logos.sspe && logos.ceipol) logoRuns.push(new TextRun({ text: "                 " }));
     if (logos.ceipol) {
-      logoRuns.push(new ImageRun({ data: logos.ceipol, type: "png", transformation: { width: 76, height: 76 } } as any));
+      logoRuns.push(new ImageRun({ data: logos.ceipol, type: "png", transformation: { width: compact ? 48 : 76, height: compact ? 48 : 76 } } as any));
     }
 
     return [
@@ -134,13 +135,13 @@ export class InstitutionalBrandManager {
       }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 260 },
+        spacing: { after: compact ? 80 : 260 },
         children: [new TextRun({ text: INSTITUTIONAL_UNIT, bold: true, size: 18, color: "5B6573", font: "Calibri" })],
       }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 260 },
-        children: [new TextRun({ text: documentTitle, bold: true, size: 32, color: "0D2B52", font: "Calibri" })],
+        spacing: { after: compact ? 80 : 260 },
+        children: [new TextRun({ text: documentTitle, bold: true, size: compact ? 28 : 32, color: "0D2B52", font: "Calibri" })],
       }),
     ];
   }

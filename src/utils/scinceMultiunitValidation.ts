@@ -1,4 +1,5 @@
 import 'server-only';
+import {catalogIndicators,isValidOfficialBaseProfile2020} from './scinceOfficialProfile';
 import {fingerprintScinceCanonicalPoint} from './scinceGeographyBinding';
 import {fingerprintScinceCoverageGeography} from './scinceCanonicalCoverage';
 import {deriveScinceSociodemographicProfile} from './scinceSociodemographicProfile';
@@ -69,7 +70,8 @@ export function isValidScinceMultiunit(value: unknown): value is ScinceMultiunit
         observationId:row.observationId,universe:`${m.partitionEvidence.datasetIdentity}:${row.demographicGeographicLevel}:${name}`})));
     const identity=JSON.stringify([m.dataset.datasetId,m.dataset.year,m.dataset.version,m.dataset.provenance.geographySha256,m.dataset.provenance.censusSha256]);
     if (m.partitionEvidence.datasetIdentity!==identity || m.partitionEvidence.sameLevel!==true || typeof m.partitionEvidence.disjointInteriors!=='boolean' ||
-      !equal(expected,m.indicators)) return false;
+      !equal(m.officialBaseProfile2020 ? catalogIndicators(m.officialBaseProfile2020.rawIndicators) : expected,m.indicators)) return false;
+    if(m.officialBaseProfile2020 && !isValidOfficialBaseProfile2020(m))return false;
     const level=m.sourceRows.some(row=>row.demographicGeographicLevel==='MANZANA' && row.usage!=='ENUMERATION_ONLY')?'MANZANA':'AGEB';
     const selected=m.sourceRows.filter(row=>row.demographicGeographicLevel===level && row.usage!=='ENUMERATION_ONLY');
     const refs=selected.map(row=>row.observationId);

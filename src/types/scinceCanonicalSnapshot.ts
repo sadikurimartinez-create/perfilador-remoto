@@ -29,6 +29,7 @@ export interface ScinceCanonicalSnapshot {
 export type ScinceSnapshotFreshness = "CURRENT" | "STALE" | "INVALID" | "MISSING";
 export interface ScinceSnapshotFreshnessInput {
   snapshot: unknown;
+  currentNormalizationRelease?: import('./scinceCatalog').ScinceNormalizationRelease | null;
   expectedProjectId: string;
   currentCanonicalGeography: CanonicalProjectGeography | null | undefined;
 }

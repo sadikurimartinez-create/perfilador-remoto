@@ -38,6 +38,8 @@ Opciones:
   --expected-geography-sha256 <hash>  Debe coincidir con el hash aprobado en el codigo.
   --expected-census-sha256 <hash>     Debe coincidir con el hash aprobado en el codigo.
   --dataset-id <id>                   ID opcional; por defecto se deriva de ambos hashes.
+  --partial-reimport                 Enriquece demografia de un dataset READY; requiere --dataset-id, --census-zip y --census-csv.
+  --enrich-catalog                    Tras una importacion nueva READY, crea release tipada.
   --retry-failed                      Reintenta explicitamente un dataset con estado FAILED.
   --database-url <url>                Alternativa a DATABASE_URL; evite usarla en procesos compartidos.
 `;
@@ -225,9 +227,8 @@ async function inspectAdministrativeDatabase(client, datasetId, geographyHash, c
 }
 
 function integerOrNull(value) {
-  if (value == null || value === "" || value === "*" || value === "N/A" || value === "N/D") return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  return require("../../src/lib/scinceCatalogCore.cjs").parseTypedValue(value,
+    require("../../src/lib/scinceCatalogCore.cjs").catalog.variables.find(v => v.variableCode === "POBTOT"), "MANZANA").typedValue;
 }
 
 async function importShape(gdal, shapefile, table) {
@@ -300,6 +301,16 @@ async function main() {
   delete process.env.PGPASSWORD;
   const databaseUrl = String(options.get("database-url") || process.env.DATABASE_URL || "").trim();
   if (!databaseUrl) throw new Error("NOT_CONFIGURED: DATABASE_URL es obligatorio.");
+  if(options.get("partial-reimport")===true) {
+    if(options.get("preflight-only")===true || options.get("download")===true)throw new Error("PARTIAL_REIMPORT requiere artefactos locales verificados y procedimiento administrativo separado.");
+    const datasetId=options.get("dataset-id"),csvPath=options.get("census-csv"),censusZipPath=options.get("census-zip");
+    if(!datasetId||!csvPath||!censusZipPath)throw new Error("PARTIAL_REIMPORT requiere dataset-id, census-csv y census-zip.");
+    const pool=new Pool({connectionString:databaseUrl,max:1});const client=await pool.connect();
+    try {const result=await require("./demographicEnrichment.cjs").partialReimport(client,{datasetId,csvPath,censusZipPath,geographySha256:APPROVED_GEOGRAPHY_SHA256});
+      process.stdout.write(JSON.stringify({mode:"PARTIAL_REIMPORT",...result})+"\n");
+    }finally{client.release();await pool.end();}
+    return;
+  }
   await preflight();
 
   const workDirectory = resolve(String(options.get("work-dir") || join(tmpdir(), "perfilador-inegi-ags-2020")));
@@ -426,6 +437,7 @@ async function main() {
     [registeredDatasetId, report.geography_count, report.demographic_count, JSON.stringify({ validation: report })]);
     await client.query("COMMIT");
     transactionOpen = false;
+    if(options.get("enrich-catalog")===true) await require("./demographicEnrichment.cjs").partialReimport(client,{datasetId:registeredDatasetId,csvPath:censusCsv,censusZipPath:censusZip,geographySha256:geographyHash});
     process.stdout.write(`${JSON.stringify({ status: "READY", datasetId: registeredDatasetId, geographySha256: geographyHash, censusSha256: censusHash, ...report }, null, 2)}\n`);
   } catch (error) {
     if (transactionOpen) await client.query("ROLLBACK");

@@ -12,6 +12,8 @@ import { buildExecutiveGeointWordVisualAssets } from '@/utils/executiveGeointWor
 import { renderDenueAnalyticalMapBitmap } from '@/utils/denueAnalyticalMapImageRenderer';
 import { canonicalSemanticValue } from '@/utils/institutionalDocumentSemanticIntegrity';
 import type { AuthorizedInstitutionalReportSource } from './institutionalReportSourceService';
+import { materializeScinceCoverMap } from '@/utils/scinceCoverMapMaterializer';
+import { SCINCE_COVER_MAP_ID } from '@/utils/scinceReportCover';
 export const VISUAL_AUTHORITY_VERSION = 'SERVER_VISUAL_BYTES_V1';
 const hash = (bytes: Uint8Array|string) => 'sha256:'+createHash('sha256').update(bytes).digest('hex');
 export interface VisualSnapshot { projectId: string; snapshotId: string; sourceFingerprint: string; generatedAt: string; version: typeof VISUAL_AUTHORITY_VERSION;
@@ -61,7 +63,7 @@ export async function materializeAuthorizedVisualSnapshot(source: AuthorizedInst
  if(source.action!=='GENERATE_REPORT' || typeof generatedAt!=='string' || !Number.isFinite(Date.parse(generatedAt)))throw new Error('VISUAL_AUTHORITY_INVALID');
  const models=await deps.models(source,generatedAt);
  if(models.projectId!==source.projectId)throw new Error('VISUAL_WRONG_PROJECT');
- const snapshotId=createHash('sha256').update(canonicalSemanticValue({projectId:source.projectId,sourceFingerprint:source.sourceFingerprint,generatedAt,version:VISUAL_AUTHORITY_VERSION,map:models.principalTerritorialMapSpec,composition:models.visualComposition})).digest('hex');
+ const snapshotId=createHash('sha256').update(canonicalSemanticValue({projectId:source.projectId,sourceFingerprint:source.sourceFingerprint,generatedAt,version:VISUAL_AUTHORITY_VERSION,map:models.principalTerritorialMapSpec,composition:models.visualComposition,cover:models.documentModel.scinceCover})).digest('hex');
  const existing=await deps.readSnapshot(source.projectId,snapshotId);
  if(existing){return hydrateSnapshot(existing,source,generatedAt,deps);}
  const references=new Map<string,string>();
@@ -76,6 +78,14 @@ export async function materializeAuthorizedVisualSnapshot(source: AuthorizedInst
   special[unit.unit.visualId]=await renderDenueAnalyticalMapBitmap(plan,{loadBaseMap:async(reference:string)=>{const bytes=await deps.sourceBytes(reference,source.projectId);assertAuthorizedRasterBytes(bytes);const image=await loadImage(Buffer.from(bytes));return{source:image,width:image.width,height:image.height};},createCanvas(width:number,height:number){const canvas=createCanvas(width,height);return{context:canvas.getContext('2d') as any,toPngArrayBuffer:async()=>{const bytes=await canvas.encode('png');return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer;}};}});
  }
  const assets=await buildExecutiveGeointWordVisualAssets(models.visualComposition,{principalMapSpec:models.principalTerritorialMapSpec,strictPrincipalMapAssets:true,resolvePrincipalMapImage:resolver,resolveImage:async(reference,w,h,n,id)=>special[id || ''] || resolver(reference,w,h,n,id)});
+ if (models.documentModel.scinceCover?.status === 'READY') {
+  const plan = models.documentModel.scinceCover.map;
+  references.set(SCINCE_COVER_MAP_ID, canonicalSemanticValue(plan));
+  assets[SCINCE_COVER_MAP_ID] = await materializeScinceCoverMap(plan, () => {
+    const canvas = createCanvas(1280, 960);
+    return { context: canvas.getContext('2d') as any, png: async () => new Uint8Array(await canvas.encode('png')) };
+  });
+ }
  if(models.visualComposition.principalTerritorialMap.status!=='NO_CANONICAL_GEOGRAPHY' && !assets[models.visualComposition.principalTerritorialMap.mapId])throw new Error('VISUAL_REQUIRED_MAP_UNAVAILABLE');
  const annex=buildExecutiveGeointTechnicalAnnexModel(models.institutionalReportInput,models.executiveModel,models.visualComposition,models.documentModel);
  for(const section of annex.sections.filter((section:any)=>['field-photographs','street-view'].includes(section.sectionId)))for(const record of section.records){if(record.visualReference && !assets[record.recordId])assets[record.recordId]=await resolver(record.visualReference,360,220,record.title,record.recordId);}

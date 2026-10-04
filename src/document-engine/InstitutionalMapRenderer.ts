@@ -4,6 +4,10 @@
  * rosa de los vientos (Norte Geográfico), escala, leyenda de capas (OSINT, POIs DENUE, Street View POVs) y simbología de alta fidelidad.
  */
 
+import type { ScinceCoverMapPlan } from '../utils/scinceReportCover';
+import { deserializeCanonicalGeographyFromFirestore } from '../utils/canonicalProjectGeography';
+import { projectWebMercator, wrappedWorldDeltaX } from '../utils/governedCartographicScale';
+
 export interface MapRendererOptions {
   lat: number;
   lng: number;
@@ -17,6 +21,43 @@ export interface MapRendererOptions {
 }
 
 export class InstitutionalMapRenderer {
+  /** Geographic graticule only: this entry point accepts no evidence or tactical layers. */
+  public static drawScinceCover(context: CanvasRenderingContext2D, plan: ScinceCoverMapPlan): void {
+    const ctx = context, { viewport, cartographicScale: scale } = plan.cartography;
+    ctx.save(); ctx.scale(2, 2);
+    ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, 0, 640, 480);
+    ctx.strokeStyle = '#d7e0e8'; ctx.lineWidth = 1;
+    for (let x = 40; x < 640; x += 80) { ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, 425); ctx.stroke(); }
+    for (let y = 25; y < 430; y += 80) { ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(620, y); ctx.stroke(); }
+    const center = projectWebMercator(viewport.center), factor = 2 ** viewport.zoom;
+    ctx.fillStyle = '#64748b'; ctx.font = '16px Arial';
+    for (const x of [40, 280, 520]) { const lng = (center.x + (x - 320) / factor) / 256 * 360 - 180; ctx.fillText(`${lng.toFixed(3)}°`, x + 3, 40); }
+    for (const y of [105, 265, 425]) { const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (center.y + (y - 240) / factor) / 256))) * 180 / Math.PI; ctx.fillText(`${lat.toFixed(3)}°`, 24, y - 3); }
+    const xy = (p: [number, number]) => { const q = projectWebMercator({ lng: p[0], lat: p[1] }); return [320 + wrappedWorldDeltaX(q.x, center.x) * factor, 240 + (q.y - center.y) * factor]; };
+    const path = (rings: [number, number][][], fill: string, stroke: string) => {
+      ctx.beginPath(); for (const ring of rings) { ring.forEach((p, i) => { const [x, y] = xy(p); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.closePath(); }
+      ctx.fillStyle = fill; ctx.fill('evenodd'); ctx.strokeStyle = stroke; ctx.lineWidth = 2.5; ctx.stroke();
+    };
+    const area = deserializeCanonicalGeographyFromFirestore(plan.analysisArea.geometry);
+    if (!area || area.geometry.type !== 'Polygon') throw new Error('SCINCE_COVER_AREA_REQUIRED');
+    ctx.setLineDash([7, 5]); path(area.geometry.coordinates, '#3b82f626', '#3975ac'); ctx.setLineDash([]);
+    const geometry = plan.geography.geometry;
+    if (geometry.type === 'Point') { const [x, y] = xy(geometry.coordinates); ctx.fillStyle = '#b45309'; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); }
+    else if (geometry.type === 'LineString') { ctx.beginPath(); geometry.coordinates.forEach((p, i) => { const [x, y] = xy(p); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.strokeStyle = '#b45309'; ctx.lineWidth = 4; ctx.stroke(); }
+    else for (const rings of geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates) path(rings, '#b4530926', '#b45309');
+    const [cx, cy] = xy([plan.analysisArea.center.lng, plan.analysisArea.center.lat]);
+    ctx.strokeStyle = '#0d2b52'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - 5, cy); ctx.lineTo(cx + 5, cy); ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5); ctx.stroke();
+    ctx.fillStyle = '#0d2b52'; ctx.font = 'bold 16px Arial'; ctx.fillText('N', 600, 34);
+    ctx.beginPath(); ctx.moveTo(606, 41); ctx.lineTo(600, 58); ctx.lineTo(612, 58); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 430, 640, 50);
+    ctx.strokeStyle = '#0d2b52'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(24, 446); ctx.lineTo(24 + scale.logicalPixels, 446); ctx.stroke();
+    ctx.fillStyle = '#0d2b52'; ctx.font = '16px Arial'; ctx.fillText(scale.label, 24, 465);
+    ctx.fillStyle = '#b45309'; ctx.fillText('Geografía canónica', 215, 448);
+    ctx.fillStyle = '#0d2b52'; ctx.font = '16px Arial'; ctx.fillText('+ Centro analítico', 430, 448); ctx.font = '16px Arial';
+    ctx.fillStyle = '#3975ac'; ctx.fillText('Área SCINCE (trazo discontinuo)', 215, 468);
+    ctx.fillStyle = '#475569'; ctx.font = '16px Arial'; ctx.fillText('Base: retícula geográfica · norte geográfico', 18, 20);
+    ctx.restore();
+  }
   /**
    * Genera un Canvas con mapa institucional de alta resolución (1600x1200 px mínimo)
    * que incorpora Rosa de los Vientos, Escala Táctica, Leyenda de Capas y Simbología Oficial.

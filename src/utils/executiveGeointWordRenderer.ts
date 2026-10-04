@@ -115,16 +115,37 @@ function sectionTitle(section: ExecutiveDocumentSection) {
   return paragraph(section.title.toUpperCase(), { bold: true, size: 24, color: "0D2B52", spacingAfter: 90 });
 }
 
-function renderCover(documentModel: ExecutiveGeointReportDocumentModel, visibleNumeroExpediente: string, options: RenderOptions): any[] {
-  return [
+function renderCover(documentModel: ExecutiveGeointReportDocumentModel, visibleNumeroExpediente: string, options: RenderOptions, audit: ExecutiveGeointWordRenderResult['renderAudit']): any[] {
+  const cover = documentModel.scinceCover;
+  const children: any[] = [
     ...InstitutionalBrandManager.createCoverIdentity(
       documentModel.presentation.documentTitle || EXECUTIVE_GEOINT_OFFICIAL_TITLE,
-      options.institutionalLogos
+      options.institutionalLogos,
+      !!cover
     ),
-    paragraph(`Número de expediente: ${visibleNumeroExpediente}`, { bold: true, align: AlignmentType.CENTER }),
-    paragraph(`Clasificación: ${documentModel.identity.clasificacion}`, { align: AlignmentType.CENTER }),
-    paragraph(`Fecha de emisión: ${formatInstitutionalDate(documentModel.identity.fechaEmision)}`, { align: AlignmentType.CENTER }),
+    paragraph(`Número de expediente: ${visibleNumeroExpediente}`, { bold: true, align: AlignmentType.CENTER, spacingAfter: cover ? 40 : 120 }),
+    paragraph(`Clasificación: ${documentModel.identity.clasificacion}`, { align: AlignmentType.CENTER, spacingAfter: cover ? 40 : 120 }),
+    paragraph(`Fecha de emisión: ${formatInstitutionalDate(documentModel.identity.fechaEmision)}`, { align: AlignmentType.CENTER, spacingAfter: cover ? 40 : 120 }),
   ];
+  if (!cover) return children; // Previously generated immutable models keep their original cover.
+  if (cover.status !== 'READY') return [...children, paragraph('CONTEXTUALIZACIÓN SCINCE INCOMPLETA', { bold: true, color: '0D2B52' }),
+    paragraph(cover.limitations.join(' ')), paragraph(`Estado documental: ${cover.reason}`, { preserveText: true })];
+  const mapId = 'scince-cover-territorial-map';
+  const asset = options.visualAssetsById?.[mapId];
+  if (!asset?.data?.byteLength) throw new Error('SCINCE_COVER_REQUIRED_MAP_MISSING');
+  audit.renderedVisualIds.push(mapId);
+  children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 },
+    children: [new ImageRun({ data: asset.data, type: asset.type, transformation: { width: 480, height: 360 },
+      altText: { title: mapId, name: mapId, description: 'Geografía canónica y área SCINCE; sin evidencias.' } } as any)] }));
+  children.push(paragraph('PERFIL SOCIODEMOGRÁFICO DE LA GEOGRAFÍA ANALIZADA', { bold: true, size: 20, color: '0D2B52', spacingAfter: 60 }));
+  const rows: string[][] = [];
+  for (let i = 0; i < cover.indicators.length; i += 2) {
+    const left = cover.indicators[i], right = cover.indicators[i + 1];
+    rows.push([left.label, left.displayValue, right?.label || '—', right?.displayValue || '—']);
+  }
+  children.push(renderStructuredTable({ headers: ['Indicador', 'Valor 2020', 'Indicador', 'Valor 2020'], rows }, { columnWidths: [30, 20, 30, 20], repeatHeader: false }));
+  children.push(...cover.methodology.map(text => paragraph(text, { size: 18, spacingAfter: 35, preserveText: true })));
+  return children;
 }
 
 function renderSectionContent(section: ExecutiveDocumentSection): any[] {
@@ -376,12 +397,12 @@ export function renderExecutiveGeointWordDocument(
     }
     if (section.status === "INCOMPLETE") audit.incompleteSections.push(section.sectionId);
     if (section.sectionId === "cover") {
-      children.push(...renderCover(documentModel, visibleNumeroExpediente, options));
+      children.push(...renderCover(documentModel, visibleNumeroExpediente, options, audit));
       children.push(new Paragraph({ children: [new PageBreak()] }));
     } else {
       children.push(...renderSectionContent(section));
     }
-    for (const placement of placementsForSection(documentModel, section.sectionId)) {
+    for (const placement of placementsForSection(documentModel, section.sectionId).filter(p => p.visualId !== 'scince-cover-territorial-map')) {
       children.push(...renderVisualPlacement(placement, options.visualAssetsById, audit));
     }
   }

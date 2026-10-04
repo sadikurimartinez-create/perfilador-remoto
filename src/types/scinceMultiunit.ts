@@ -1,7 +1,7 @@
 import type { ScinceCanonicalCoverage, ScinceCoverageTopologyEvidence, ScinceCoverageRelation } from './scinceCanonicalCoverage';
 import type { FirestoreSafeCanonicalProjectGeography } from '../utils/canonicalProjectGeography';
 
-export type ScinceIndicatorKind = 'COUNT' | 'RATE' | 'PERCENTAGE' | 'AVERAGE' | 'INDEX' | 'CATEGORICAL' | 'UNKNOWN';
+export type ScinceIndicatorKind = 'COUNT' | 'RATE' | 'PERCENTAGE' | 'AVERAGE' | 'INDEX' | 'CATEGORICAL' | 'IDENTIFIER' | 'UNKNOWN';
 export interface ScinceIndicator {
   name: string; kind: ScinceIndicatorKind; value: number | string | null;
   sourceReference: string; universe: string;
@@ -24,6 +24,7 @@ export interface ScinceUnitDetail {
 export interface ScinceMultiunitObservation extends Omit<ScinceCanonicalCoverage, 'schemaVersion' | 'support' | 'aggregation' | 'geographyBinding'> {
   geographyBinding: {geographyId:string; geographyType:'INDIVIDUAL'|'CORRIDOR'|'POLYGON'; geographyFingerprint:string};
   scinceAnalysisArea?: import('./scinceAnalysisArea').ScinceAnalysisArea;
+  officialBaseProfile2020?: import('./scinceCatalog').OfficialBaseProfile2020;
   rawScinceIndicators?: ScinceMultiunitObservation['indicators'];
   derivedSociodemographicProfile?: import('./scinceAnalysisArea').ScinceSociodemographicProfile;
   officialBaseProfile?: import('./scinceAnalysisArea').ScinceSociodemographicProfile;

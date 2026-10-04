@@ -1,3 +1,4 @@
+jest.mock('@/lib/scinceObservationRepository',()=>({...jest.requireActual('@/lib/scinceObservationRepository'),getCurrentScinceRelease:jest.fn(async()=>null)}));
 import {execFileSync} from 'child_process';
 import {join,resolve} from 'path';
 import {getPool} from '../src/lib/db';
@@ -48,6 +49,7 @@ function offline(name:string,options:{count?:number;containment?:boolean;timeout
     source_row_key:'01:001:0001:0017:001',pobtot:10,vivtot:5,vivpar_hab:4,vivpar_deshab:1};
   const query=jest.fn(async(sql:string,values?:any[])=>{
     if(sql.startsWith('BEGIN')||sql.startsWith('SET')||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};
+    if(sql.includes('FROM public.inegi_scince_normalization_release'))return {rows:[]};
     if(sql.includes('FROM public.inegi_territorial_dataset'))return {rows:[dataset]};
     if(sql===SCINCE_ANALYSIS_AREA_SQL){if(options.timeout)throw Object.assign(new Error('private SQL'),{code:'57014'});
       return {rows:[{...f.row,...(options.containment===false?{contains_source:false}:{})}]};}

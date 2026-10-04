@@ -1,0 +1,11 @@
+import type {ScinceCatalogVariable,ScinceTypedValue,ScinceTypedObservation} from '../types/scinceCatalog';
+export const catalog:{catalogVersion:string; sourceZipSha256:string; sourceCsvSha256:string; dictionarySha256:string; descriptorSha256:string; sourceUrl:string; descriptorUrl:string; methodologicalWarnings:string[]; variables:ScinceCatalogVariable[]};
+export const NORMALIZATION_VERSION:string;
+export const catalogFingerprint:string;
+export const legacyCodes:Record<string,string>;
+export function fingerprint(value:unknown):string;
+export function available(variable:ScinceCatalogVariable,level:string):boolean;
+export function parseTypedValue(raw:unknown,variable:ScinceCatalogVariable,level:string):ScinceTypedValue;
+export function normalizeRow(row:Record<string,unknown>,level:'AGEB'|'MANZANA',sourceRowKey:string,variables?:ScinceCatalogVariable[]):Array<Omit<ScinceTypedObservation,'sourceReference'>>;
+export function validateHeader(header:string[]):string[];
+export function legacyCounts(row:Record<string,unknown>,level:string):Record<string,number|null>;

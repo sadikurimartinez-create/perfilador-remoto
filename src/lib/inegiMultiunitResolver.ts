@@ -1,4 +1,6 @@
 import 'server-only';
+import {readScinceRelease,readScinceObservations} from './scinceObservationRepository';
+import {catalogIndicators,buildOfficialBaseProfile2020,isValidOfficialBaseProfile2020} from '../utils/scinceOfficialProfile';
 import {readScinceRadiusConfiguration,isValidScinceRadiusConfiguration} from './scinceRadiusConfiguration';
 import {calculateScinceAnalysisArea} from './scinceAnalysisArea';
 import {fingerprintScinceCanonicalPoint} from '../utils/scinceGeographyBinding';
@@ -70,7 +72,8 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
         geographySha256:dataset.geography_sha256,censusSha256:dataset.census_sha256,
         importedAt:new Date(dataset.imported_at).toISOString(),completedAt:new Date(dataset.completed_at).toISOString()} };
     const identity = JSON.stringify([d.datasetId,d.year,d.version,d.provenance.geographySha256,d.provenance.censusSha256]);
-    const key = JSON.stringify([projectId,fingerprint,identity,radiusConfig ?? null]);
+    const normalizationRelease=await readScinceRelease(client,d.datasetId);
+    const key = JSON.stringify([projectId,fingerprint,identity,radiusConfig ?? null,normalizationRelease]);
     const hit = !injected ? cache.get(key) : null;
     if (hit && hit.expires > Date.now()) { await client.query('COMMIT'); return {success:true,observation:structuredClone(hit.observation)}; }
     const scinceAnalysisArea = radiusConfig ? await calculateScinceAnalysisArea(client,canonical,fingerprint,radiusConfig) : undefined;
@@ -160,6 +163,19 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
       observation.estimatedCurrentProfile=null;
       observation.limitations.push('Perfil del entorno territorial definido por área analítica; censo oficial sin actualización temporal ni atribución individual.');
     }
+    if(normalizationRelease) {
+      const observations=await readScinceObservations(client,normalizationRelease,context.sourceRows);
+      observation.officialBaseProfile2020=buildOfficialBaseProfile2020(observation,normalizationRelease,observations);
+      observation.indicators=catalogIndicators(observations);
+      observation.aggregates=observation.officialBaseProfile2020.admissibleAggregates;
+      if(scinceAnalysisArea) {
+        observation.rawScinceIndicators=structuredClone(observation.indicators);
+        observation.derivedSociodemographicProfile=deriveScinceSociodemographicProfile(observation.indicators,observation.aggregates,d.year,identity);
+        observation.officialBaseProfile=structuredClone(observation.derivedSociodemographicProfile);
+      }
+      if(!isValidOfficialBaseProfile2020(observation))throw new Error('SCINCE_PROFILE_INVALID');
+      if(Buffer.byteLength(JSON.stringify(observation),'utf8')>800000)throw new Error('SCINCE_SNAPSHOT_PAYLOAD_LIMIT');
+    } else {observation.limitations.push('Dataset histórico: catálogo y observaciones tipadas todavía no enriquecidos.');}
     await client.query('COMMIT');
     if (!injected) { for (const [k,v] of cache) if(v.expires<=Date.now())cache.delete(k);if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{expires:Date.now()+60000,observation:structuredClone(observation)}); }
     return {success:true,observation};

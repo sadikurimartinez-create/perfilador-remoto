@@ -168,12 +168,19 @@ export function buildGovernedCartographicDecision(input: {
   center: LatLngPoint;
   points: LatLngPoint[];
   fitMode: "CENTER" | "BOUNDS";
+  reservedBottomLogicalPx?: number;
 }): GovernedCartographicDecision {
   assertCoordinate(input.center);
   input.points.forEach(assertCoordinate);
-  const zoom = input.fitMode === "CENTER"
+  let zoom = input.fitMode === "CENTER"
     ? CARTOGRAPHIC_INDIVIDUAL_ZOOM
     : calculateGovernedZoom(input.center, input.points);
+  if (input.reservedBottomLogicalPx !== undefined) {
+    const reserve = input.reservedBottomLogicalPx;
+    if (!Number.isFinite(reserve) || reserve < 0 || reserve >= 200) throw new Error('CARTOGRAPHIC_RESERVED_SPACE_INVALID');
+    const { maxDy } = projectedExtents(input.center, input.points);
+    while (zoom > CARTOGRAPHIC_MIN_ZOOM && maxDy * 2 ** zoom > CARTOGRAPHIC_LOGICAL_HEIGHT / 2 - CARTOGRAPHIC_PADDING_LOGICAL_PX - reserve) zoom--;
+  }
   if (!coordinatesFitGovernedViewport(input.center, input.points, zoom)) {
     throw new Error("CARTOGRAPHIC_SCALE_VIEWPORT_VALIDATION_FAILED");
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import officialCatalog from "@/data/scince/inegi-cpv2020-catalog.json";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getCanonicalScinceData } from "@/lib/osintActions";
 import { getScinceQueryCapability, getScinceContextFreshness, prepareScinceContextIncorporation } from "@/lib/scinceHumanContextActions";
@@ -21,6 +22,9 @@ type Props = {
 };
 const unitRelationLabels = {FULL_UNIT:"Unidad completa cubierta",PARTIAL_UNIT:"Unidad parcialmente relacionada",TOUCHED_UNIT:"Sólo contacto de borde"};
 const indicatorLabels: Record<string,string> = {populationTotal:"Población",housingTotal:"Viviendas",inhabitedPrivateHousing:"Viviendas habitadas",uninhabitedPrivateHousing:"Viviendas deshabitadas"};
+const dimensionLabels:Record<string,string>={POPULATION:"Población",SEX:"Sexo",AGE:"Edad",FERTILITY:"Fecundidad",MIGRATION:"Migración",INDIGENOUS_ETHNICITY:"Etnicidad e indígenas",DISABILITY:"Discapacidad",EDUCATION:"Educación",ECONOMIC_ACTIVITY:"Actividad económica",HEALTH:"Salud",MARITAL_STATUS:"Situación conyugal",RELIGION:"Religión",HOUSEHOLDS:"Hogares",HOUSING:"Vivienda",BASIC_SERVICES:"Servicios básicos",OVERCROWDING:"Cuartos y ocupación",ICT:"Bienes y TIC",OTHER:"Otras variables"};
+const statusLabels:Record<string,string>={SUPPRESSED:"Reservado por confidencialidad",NOT_AVAILABLE:"No disponible",NOT_APPLICABLE:"No aplica",INVALID_SOURCE_VALUE:"Valor fuente inválido",MISSING:"Sin dato"};
+const officialNames=new Map(officialCatalog.variables.map(v=>[v.variableCode,v.officialName]));
 const display = (value: unknown) => value == null ? "No disponible" : String(value);
 const freshnessLabels: Record<ScinceSnapshotFreshness, string> = {
   CURRENT: "VIGENTE", STALE: "OBSOLETO", INVALID: "INVÁLIDO", MISSING: "NO DISPONIBLE",
@@ -47,7 +51,17 @@ export function ScinceObservedResult({ result }: { result: ScinceCanonicalSucces
       <dt>Área aproximada analizada</dt><dd>{result.multiunit.scinceAnalysisArea.approximateAreaSquareMeters.toFixed(2)} m²</dd>
       <dt>Unidades INEGI / año censal</dt><dd>{result.multiunit.territorialUnits.length} / {result.multiunit.dataset.year}</dd>
     </dl><p>El área analítica contiene la geometría original completa. Las cifras corresponden a unidades censales completas, sin prorrateo.</p></details>}
-    {result.multiunit.derivedSociodemographicProfile && <div aria-label="Perfil sociodemográfico">
+    {result.multiunit.officialBaseProfile2020 && <div aria-label="Perfil oficial INEGI 2020">
+      <p>Dato oficial INEGI 2020 · Sin estimación al año actual</p>
+      {Object.entries(result.multiunit.officialBaseProfile2020.profileDimensions).map(([dimension,codes])=><details key={dimension}><summary>{dimensionLabels[dimension] || dimension}</summary>
+        {result.multiunit!.officialBaseProfile2020!.rawIndicators.filter(i=>codes?.includes(i.variableCode)).map(i=><p key={`${i.sourceReference}:${i.variableCode}`}>
+          {officialNames.get(i.variableCode) || i.variableCode}: {i.typedValue===null?statusLabels[i.valueStatus]:display(i.typedValue)} · {i.geographicLevel} {i.sourceRowKey}
+        </p>)}
+      </details>)}
+      <details><summary>Derivaciones reproducibles</summary>{result.multiunit.officialBaseProfile2020.derivedIndicators.map(i=><p key={i.name}>{i.name}: {i.value} · {i.formula}</p>)}</details>
+      <details><summary>Limitaciones metodológicas</summary>{result.multiunit.officialBaseProfile2020.methodologicalWarnings.map(w=><p key={w}>{w}</p>)}</details>
+    </div>}
+    {!result.multiunit.officialBaseProfile2020 && result.multiunit.derivedSociodemographicProfile && <div aria-label="Perfil sociodemográfico">
       <p>Perfil oficial {result.multiunit.derivedSociodemographicProfile.referenceYear}</p>
       {Object.entries(result.multiunit.derivedSociodemographicProfile.dimensions).map(([key,dimension])=><details key={key}><summary>{key==='population'?'Población':'Vivienda'}</summary>
         {dimension.rawIndicators.map((i,index)=><p key={index}>{indicatorLabels[i.name] || i.name}: {display(i.value)} · Unidad fuente: {i.observationId}</p>)}

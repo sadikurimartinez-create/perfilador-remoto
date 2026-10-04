@@ -1,3 +1,4 @@
+jest.mock('@/lib/scinceObservationRepository',()=>({...jest.requireActual('@/lib/scinceObservationRepository'),getCurrentScinceRelease:jest.fn(async()=>null)}));
 import { Packer } from "docx";
 import JSZip from "jszip";
 import { readFileSync } from "fs";

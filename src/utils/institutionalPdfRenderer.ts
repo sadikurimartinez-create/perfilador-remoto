@@ -119,8 +119,10 @@ export async function readDocx(bytes: Uint8Array) {
       if (node.name === "w:tbl") {
         const firstCells = children(children(node,"w:tr")[0],"w:tc");
         const percentageWidths = firstCells.map(cell => children(children(cell,"w:tcPr")[0],"w:tcW")[0]);
-        const widths = percentageWidths.every(item => attr(item,"w:type") === "pct" && Number(attr(item,"w:w")) > 0)
-          ? percentageWidths.map(item => Number(attr(item,"w:w")))
+        // docx emits both OOXML fiftieths of a percent and literal percentages.
+        const percent = (item: Element) => { const value = attr(item, 'w:w').trim(); return value.endsWith('%') ? Number(value.slice(0, -1)) : Number(value) / 50; };
+        const widths = percentageWidths.every(item => attr(item,"w:type") === "pct" && Number.isFinite(percent(item)) && percent(item) > 0)
+          ? percentageWidths.map(percent)
           : descendants(children(node,"w:tblGrid")[0],"w:gridCol").map(item => Number(attr(item,"w:w")));
         return [{ kind: "TABLE", widths,
         rows: await Promise.all(children(node, "w:tr").map(async row => ({ header: descendants(row, "w:tblHeader").length > 0,
@@ -172,9 +174,14 @@ export async function renderInstitutionalPdfFromDocx(bytes: Uint8Array, trace: I
   const width = 612, height = 792;
   const available = width - source.left - source.right;
   let y = source.top, pageHasBody = false;
+  let coverBoundarySeen = false;
+  const governedCover = trace.kind === 'EXECUTIVE_REPORT' && !!(trace.documentModel as any)?.scinceCover;
   const written: string[] = [];
   const drawn: string[] = [];
-  const nextPage = () => { pdf.addPage("letter", "portrait"); y = source.top; pageHasBody = false; };
+  const nextPage = () => {
+    if (governedCover && !coverBoundarySeen) throw new Error('INSTITUTIONAL_PDF_BLOCKED:SCINCE_COVER_OVERFLOW');
+    pdf.addPage("letter", "portrait"); y = source.top; pageHasBody = false;
+  };
   const ensure = (needed: number) => { if (y + needed > height - source.bottom && pageHasBody) nextPage(); };
   function style(block: ParagraphBlock) { pdf.setFont("helvetica", block.bold ? "bold" : "normal"); pdf.setFontSize(block.size); pdf.setTextColor(`#${/^[0-9a-f]{6}$/i.test(block.color) ? block.color : "222222"}`); }
   function lines(block: ParagraphBlock, cellWidth = available): string[] { style(block); return pdf.splitTextToSize(block.text, cellWidth) as string[]; }
@@ -262,7 +269,7 @@ export async function renderInstitutionalPdfFromDocx(bytes: Uint8Array, trace: I
       }
     }
     else if (block.kind === "TABLE") table(block);
-    else if (pageHasBody) nextPage();
+    else if (pageHasBody) { coverBoundarySeen = true; nextPage(); }
   });
   if (!pageHasBody && pdf.getNumberOfPages() > 1) pdf.deletePage(pdf.getNumberOfPages());
   const pages = pdf.getNumberOfPages();

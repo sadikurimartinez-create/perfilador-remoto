@@ -79,6 +79,8 @@ import {
 import { buildExecutiveGeointReportModel } from "@/utils/executiveGeointReportModel";
 import { buildExecutiveVisualComposition } from "@/utils/executiveVisualComposition";
 import { collectDocumentCitedVisualIds, reconcileDocumentSemanticAudit, reconcileMaterializedDocument } from "@/utils/institutionalDocumentSemanticIntegrity";
+import { materializeScinceCoverMap } from '@/utils/scinceCoverMapMaterializer';
+import { SCINCE_COVER_MAP_ID } from '@/utils/scinceReportCover';
 import { renderInstitutionalPdfFromDocx, institutionalAnnexRequiredVisualIds } from "@/utils/institutionalPdfRenderer";
 import {
   buildExecutiveCanonicalTerritorialMapSpec,
@@ -939,6 +941,10 @@ async function buildInstitutionalGenerationContext(payload: any, projectName: st
     fetchLocalImageBuffer("/logos/logo-ssp.png"),
     fetchLocalImageBuffer("/logos/logo-ceipol.png"),
   ]);
+  if (documentModel.scinceCover?.status === 'READY' && documentModel.scinceCover.map) {
+    visualAssetsById[SCINCE_COVER_MAP_ID] = await materializeScinceCoverMap(documentModel.scinceCover.map);
+    visualComposition.assetStates[SCINCE_COVER_MAP_ID] = 'ASSET_RENDERED';
+  }
   documentModel.visualPlacements = documentModel.visualPlacements.map(placement => ({
     ...placement, assetState: visualComposition.assetStates?.[placement.visualId] || "ASSET_MISSING",
   }));

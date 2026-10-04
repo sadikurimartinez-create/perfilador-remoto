@@ -1,3 +1,4 @@
+jest.mock('@/lib/scinceObservationRepository',()=>({...jest.requireActual('@/lib/scinceObservationRepository'),getCurrentScinceRelease:jest.fn(async()=>null)}));
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "fs";

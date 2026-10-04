@@ -31,7 +31,8 @@ export function scinceDocumentSummary(context?: ScinceDocumentContext): string[]
     `dataset ${s.multiunit.dataset.datasetId}, año ${s.multiunit.dataset.year}, versión ${s.multiunit.dataset.version}. ` +
     (s.multiunit.scinceAnalysisArea ? `El perfil corresponde al entorno territorial definido por un radio de ${s.multiunit.scinceAnalysisArea.analysisRadiusMeters} metros, calculado para contener completamente ${s.geographyBinding.geographyType==='INDIVIDUAL'?'el punto':s.geographyBinding.geographyType==='CORRIDOR'?'el corredor':'el área poligonal'}. ` : '') +
     `${s.multiunit.territorialUnits.length} unidades territoriales relacionadas. Las cifras son de cada unidad fuente completa; ` +
-    'no estiman población de intersecciones parciales. Unidades, indicadores, método y provenance en el Anexo Técnico.'];
+    'no estiman población de intersecciones parciales. Unidades, indicadores, método y provenance en el Anexo Técnico.' +
+    (s.multiunit.officialBaseProfile2020 ? ` Perfil oficial INEGI 2020: dimensiones acreditadas ${Object.keys(s.multiunit.officialBaseProfile2020.profileDimensions).join(', ')}. Las derivaciones reproducibles se identifican por separado; no hay estimación actualizada. La información contextual no atribuye causalidad criminal a características de la población. ${s.multiunit.officialBaseProfile2020.methodologicalWarnings.join(' ')}` : '')];
   return [`Contexto sociodemográfico observado — INEGI SCINCE. Dataset: ${value(s.dataset.datasetId)}; ` +
     `año: ${value(s.dataset.year)}; versión: ${value(s.dataset.version)}. ` +
     `La unidad territorial consultada fue localizada a nivel ${value(s.territorialResolution.geographicLevel)}. ` +
@@ -55,7 +56,13 @@ export function scinceDocumentFacts(context?: ScinceDocumentContext): Array<{ la
         {label:'Perfil sociodemográfico oficial reproducible',value:JSON.stringify(m.officialBaseProfile)},
         {label:'Estimación temporal',value:'No implementada; datos oficiales conservan su año censal'},
       ] : []),
-      {label:'Proveedor / normalizador',value:`${m.source} / ${m.normalizer}`},
+      ...(m.officialBaseProfile2020 ? [
+        {label:'Dato oficial INEGI 2020',value:`Año 2020; catálogo ${m.officialBaseProfile2020.catalogVersion}; release ${m.officialBaseProfile2020.releaseId}; normalización ${m.officialBaseProfile2020.normalizationVersion}; fingerprint ${m.officialBaseProfile2020.observationSetFingerprint}`},
+        ...m.officialBaseProfile2020.rawIndicators.filter(i=>!['ENTIDAD','NOM_ENT','MUN','NOM_MUN','LOC','NOM_LOC','AGEB','MZA'].includes(i.variableCode)).map(i=>({label:`Oficial 2020: ${i.variableCode} · ${i.geographicLevel} ${i.sourceRowKey}`,value:`${i.typedValue===null?i.valueStatus:String(i.typedValue)}; estado ${i.valueStatus}; motivo ${i.nullReason ?? 'ninguno'}; fuente ${i.sourceReference}`})),
+        ...m.officialBaseProfile2020.derivedIndicators.map(i=>({label:`Derivación reproducible: ${i.name}`,value:JSON.stringify(i)})),
+        {label:'Metodología del perfil 2020',value:m.officialBaseProfile2020.methodologicalWarnings.join(' ')},
+      ] : []),
+      {label:'Proveedor / normalizador' ,value:`${m.source} / ${m.normalizer}`},
       {label:'Fecha de adquisición (no observación censal)',value:m.queryTimestamp},
       {label:'Método de agregación',value:m.aggregationMethod},
       {label:'Fuente geográfica / SHA-256',value:`${m.dataset.provenance.geographySourceUrl} / ${m.dataset.provenance.geographySha256}`},

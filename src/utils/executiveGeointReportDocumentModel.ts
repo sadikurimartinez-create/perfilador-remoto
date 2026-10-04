@@ -11,11 +11,12 @@ import {
   isCertifiedGimAnalysisPayload,
   type InstitutionalReportInput,
 } from "@/utils/institutionalReportPublicationContract";
-import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
+import { EXECUTIVE_GEOINT_OFFICIAL_TITLE, SCINCE_REPORT_OFFICIAL_TITLE, formatInstitutionalDate } from "@/utils/institutionalDocumentIdentity";
 import type { StructuredTableInput } from "@/utils/documentTableRenderer";
 import { scinceDocumentSummary, scinceDocumentLimitations } from "@/utils/scinceDocumentContext";
 import { resolveCrimeIncidenceVisualSource } from "@/utils/crimeIncidenceInstitutionalVisualProducer";
 import { buildDocumentSemanticAudit, incidenceDocumentBasis, type DocumentSemanticAudit } from "./institutionalDocumentSemanticIntegrity";
+import { buildScinceReportCover, SCINCE_COVER_MAP_ID, type ScinceReportCover } from './scinceReportCover';
 
 function incidenceSource(contract: any): string {
   return resolveCrimeIncidenceVisualSource({ sourceQuery: contract?.queryReference,
@@ -79,6 +80,7 @@ export interface ExecutiveVisualPlacement {
 }
 
 export interface ExecutiveGeointReportDocumentModel {
+  scinceCover?: ScinceReportCover;
   semanticIntegrity?: DocumentSemanticAudit;
   identity: {
     numeroExpediente: string;
@@ -580,8 +582,29 @@ export function buildExecutiveGeointReportDocumentModel(
   const numeroExpediente = resolveNumeroExpediente(executiveModel, options);
   const sections = buildSections(executiveModel, visualComposition, institutionalInput, numeroExpediente, options.enforceSemanticIntegrity);
   const visualPlacements = buildVisualPlacements(visualComposition, institutionalInput);
+  const scinceCover = buildScinceReportCover(institutionalInput);
+  if (scinceCover.status === 'READY') {
+    const coverSection = sections.find(section => section.sectionId === 'cover')!;
+    coverSection.content[0] = SCINCE_REPORT_OFFICIAL_TITLE;
+    coverSection.content.push('PERFIL SOCIODEMOGRÁFICO DE LA GEOGRAFÍA ANALIZADA',
+      ...scinceCover.indicators.map(indicator => `${indicator.label}: ${indicator.displayValue}`), ...scinceCover.methodology);
+  }
   const semanticIntegrity = buildDocumentSemanticAudit(executiveModel, institutionalInput, visualComposition, sections, visualPlacements, options.enforceSemanticIntegrity);
+  if (scinceCover.status === 'READY') {
+    const placement: ExecutiveVisualPlacement = {
+      visualId: SCINCE_COVER_MAP_ID, sectionId: 'cover', placementRole: 'PRINCIPAL_TERRITORIAL_MAP',
+      visualClass: 'MAPA_CARTOGRAFICO', headline: 'Contextualización territorial SCINCE',
+      caption: 'Geografía canónica y área SCINCE. Base: retícula geográfica.', visibleSourceLabel: 'Geografía canónica / INEGI 2020',
+      cartographicMetadata: { geometryLabel: scinceCover.map!.geography.geometry.type,
+        legendLabel: 'Geografía canónica / área SCINCE', scaleLabel: scinceCover.map!.cartography.cartographicScale.label,
+        orientationLabel: 'Norte geográfico' },
+      assetState: 'ASSET_MISSING', provenance: structuredClone(scinceCover.map) };
+    visualPlacements.push(placement);
+    semanticIntegrity.requiredVisualIds.push(SCINCE_COVER_MAP_ID);
+    semanticIntegrity.visualDescriptions.push({ visualId: placement.visualId, headline: placement.headline, caption: placement.caption });
+  }
   return {
+    scinceCover,
     semanticIntegrity,
     identity: {
       numeroExpediente,
@@ -608,7 +631,7 @@ export function buildExecutiveGeointReportDocumentModel(
       note: "Politica editorial de densidad; no mide paginas fisicas.",
     },
     presentation: {
-      documentTitle: EXECUTIVE_GEOINT_OFFICIAL_TITLE,
+      documentTitle: scinceCover.status === 'READY' ? SCINCE_REPORT_OFFICIAL_TITLE : EXECUTIVE_GEOINT_OFFICIAL_TITLE,
       visibleText: flattenVisibleText(sections, visualPlacements),
       headerFooterPolicy: {
         preserveExistingInstitutionalHeaderFooter: true,

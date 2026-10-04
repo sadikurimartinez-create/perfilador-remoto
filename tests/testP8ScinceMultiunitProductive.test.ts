@@ -1,3 +1,4 @@
+jest.mock('@/lib/scinceObservationRepository',()=>({...jest.requireActual('@/lib/scinceObservationRepository'),getCurrentScinceRelease:jest.fn(async()=>null)}));
 import {execFileSync} from 'child_process';
 import {resolve,join} from 'path';
 import {resolveInegiTerritory} from '../src/lib/inegiTerritorialResolver';
@@ -54,6 +55,7 @@ function offline(id:string,related:string[]=[id],options:{disjoint?:boolean;rows
   const rows=options.rows ?? related.filter(k=>measured(k).classification!=='DISJOINT').map(sqlRow);
   const query=jest.fn(async(sql:string,values?:any[])=>{
     if(sql.startsWith('BEGIN') || sql.startsWith('SET') || sql==='COMMIT' || sql==='ROLLBACK')return {rows:[]};
+    if(sql.includes('FROM public.inegi_scince_normalization_release'))return {rows:[]};
     if(sql.includes('FROM public.inegi_territorial_dataset'))return {rows:[options.dataset ?? dataset]};
     if(sql.includes('postgis_geos_version'))return {rows:[{is_valid:c.analysisFlags.valid,is_simple:c.analysisFlags.simple,is_empty:c.analysisFlags.empty,area:c.analysisFlags.area,srid:4326,engine_version:geos.version}]};
     if(sql===SCINCE_MULTIUNIT_SQL){if(options.timeout)throw Object.assign(new Error('private SQL details'),{code:'57014'});return {rows};}
@@ -246,6 +248,7 @@ test('weighted denominator overflow never fabricates zero',()=>{
 
 test('Point keeps ST_Covers semantics and uses a project/geometry/dataset cache with fresh dataset checks',async()=>{
   let current=dataset;const query=jest.fn(async(sql:string)=>{
+    if(sql.includes('FROM public.inegi_scince_normalization_release'))return {rows:[]};
     if(sql.includes('FROM public.inegi_territorial_dataset'))return {rows:[current]};
     if(sql.includes('WITH point AS'))return {rows:[{geographic_level:'MANZANA',cve_ent:'01',cve_mun:'001',cve_loc:'0001',cve_ageb:'0017',cve_mza:'001',geographic_name:'Synthetic unit',geometry:JSON.stringify(measured('P6').unitGeometry)}]};
     if(sql.includes('FROM public.inegi_territorial_demographics'))return {rows:[{geographic_level:'MANZANA',pobtot:10,vivtot:5,vivpar_hab:4,vivpar_deshab:1,source_row_key:'01:001:0001:0017:001'}]};

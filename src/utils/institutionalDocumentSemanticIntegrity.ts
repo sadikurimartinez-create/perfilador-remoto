@@ -143,7 +143,17 @@ export function collectDocumentCitedVisualIds(model: ExecutiveGeointReportModel,
 function sourcesForParagraph(section: string, index: number, text: string, model: ExecutiveGeointReportModel, input: InstitutionalReportInput): any[] {
   const result = model.multisourceAnalysis.technicalMetadata.governedAnalysis;
   const findings = (finding: any) => finding ? input.findings.filter(item => finding.technicalMetadata.sourceFindingIds.includes(id(item))) : [];
-  if (section === "cover") return [{ id: input.projectId, provenance: { projectId: input.projectId, generatedAt: input.generatedAt } }];
+  if (section === "cover") {
+    const admitted = input.scinceContext?.publicationStatus === 'PUBLISHABLE' ? input.scinceContext.snapshot : null;
+    const profile = admitted?.multiunit?.officialBaseProfile2020;
+    // Full observations live in the protected input/annex and indicator bindings.
+    // Repeating all 222 variables in every cover claim would inflate the package.
+    return [{ id: input.projectId, provenance: { projectId: input.projectId, generatedAt: input.generatedAt } },
+      ...(profile && admitted ? [{ id: profile.datasetId, snapshot: { dataset: admitted.dataset,
+        geographyBinding: admitted.geographyBinding, release: { releaseId: profile.releaseId,
+          catalogVersion: profile.catalogVersion, normalizationVersion: profile.normalizationVersion,
+          observationSetFingerprint: profile.observationSetFingerprint, catalogFingerprint: profile.catalogFingerprint } } }] : [])];
+  }
   if (section === "priority-findings") return findings(model.findings[index]);
   if (section === "key-evidence") return [...input.evidence, ...input.streetView, ...input.visualProducts].filter(item => id(item) === model.keyEvidence[index]?.technicalMetadata.sourceItemId);
   if (section === "decision-implications") return findings(model.findings.find(item => item.findingId === model.decisionImplications[index]?.technicalMetadata.sourceFindingId));
@@ -219,7 +229,7 @@ export function buildDocumentSemanticAudit(model: ExecutiveGeointReportModel, in
       const statedTotal = text.match(/(\d+)\s+registro/i);
       if (statedTotal && Number(statedTotal[1]) !== incidence.total) errors.push(`INCIDENCE_TEXT_TOTAL_MISMATCH:${section.sectionId}:${index}`);
     }
-    const state: DocumentClaimState = limitation ? "LIMITATION" : section.sectionId === "initial-hypothesis" && index < 2 ? "HYPOTHESIS" :
+    const state: DocumentClaimState = limitation ? "LIMITATION" : section.sectionId === 'cover' && /· derivado/.test(text) ? 'DERIVED' : section.sectionId === "initial-hypothesis" && index < 2 ? "HYPOTHESIS" :
       section.sectionId === "prospective-analysis" || /^Escenario:/.test(text) ? "PROSPECTIVE" :
       (/^Convergencia:/.test(text) && result?.convergences.some(item => item.humanReviewStatus === "APPROVED")) ||
         nativeAssertions.some(item => item.allowedNarrativeStrength === "VALIDATED_CONCLUSION") ? "HUMAN_VALIDATED_RELATION" :

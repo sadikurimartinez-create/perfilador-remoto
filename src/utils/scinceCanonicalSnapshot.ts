@@ -92,6 +92,12 @@ export function evaluateScinceSnapshotFreshness(input: ScinceSnapshotFreshnessIn
   const result = (territorialFreshness: "CURRENT" | "STALE" | "INVALID", reason: string): ScinceSnapshotFreshnessResult =>
     ({ territorialFreshness, datasetIdentity: { ...snapshot.dataset }, reason });
   if (!text(expectedProjectId) || snapshot.projectId !== expectedProjectId) return result("INVALID", "PROJECT_BINDING_MISMATCH");
+  if(input.currentNormalizationRelease!==undefined) {
+    const saved=snapshot.multiunit?.officialBaseProfile2020,currentRelease=input.currentNormalizationRelease;
+    if((saved || currentRelease) && (!saved || !currentRelease ||
+      ['releaseId','datasetId','catalogVersion','catalogFingerprint','normalizationVersion','observationSetFingerprint'].some(k=>(saved as any)[k]!==(currentRelease as any)[k])))
+      return result('STALE','SCINCE_NORMALIZATION_RELEASE_CHANGED');
+  }
   if (!current || current.validationStatus !== "VALID") return result("STALE", "CANONICAL_GEOGRAPHY_NOT_VALID");
   if (snapshot.schemaVersion === "SCINCE_CANONICAL_SNAPSHOT_V2") {
     try {
