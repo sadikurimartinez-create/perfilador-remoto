@@ -624,7 +624,7 @@ export function buildInstitutionalReportInput(project: any, options: { generated
   };
   const adaptedSources = [
     ...osint.map(item => labelAdaptedSource(adaptOsintSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity }), "ORCHESTRATION_ADAPTED_OSINT")),
-    ...denuePois.map(item => labelAdaptedSource(adaptDenueScinceSource({ expedienteId: reportReadyAssessment.projectId, integrity: item.epistemicIntegrity }), "ORCHESTRATION_ADAPTED_DENUE")),
+    ...denuePois.map(item => labelAdaptedSource(adaptDenueScinceSource({ expedienteId: reportReadyAssessment.projectId, observationReference: item.sourceEvidenceId, integrity: item.epistemicIntegrity }), "ORCHESTRATION_ADAPTED_DENUE")),
     ...traceableEvidence.filter(isExplicitInSituPhoto).map(item => labelAdaptedSource(deriveInSituPhotoOrchestrationItem({
       expedienteId: reportReadyAssessment.projectId, photoId: item.id || item.evidenceId,
       evidenceId: item.evidenceId, sourceEvidenceId: item.sourceEvidenceId, geographyId: item.geographyId,

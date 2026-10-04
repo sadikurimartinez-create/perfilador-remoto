@@ -5,7 +5,7 @@ import {
 
 describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   test("observed acquired DENUE is authoritative and eligible", () => {
-    const item = adaptDenueScinceSource({
+    const item = adaptDenueScinceSource({ observationReference: "denue:fixture",
       expedienteId: "EXP-1",
       integrity: {
         sourceId: "inegi-denue-api",
@@ -30,7 +30,7 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   });
 
   test("DENUE NO_DATA is an observed query result, not confirmed absence", () => {
-    const item = adaptDenueScinceSource({
+    const item = adaptDenueScinceSource({ observationReference: "denue:fixture",
       integrity: {
         sourceId: "inegi-denue-api",
         providerId: "INEGI_DENUE",
@@ -48,7 +48,7 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   });
 
   test("DENUE not configured cannot become institutionally eligible", () => {
-    const item = adaptDenueScinceSource({
+    const item = adaptDenueScinceSource({ observationReference: "denue:fixture",
       integrity: {
         sourceId: "inegi-denue-api",
         providerId: "INEGI_DENUE",
@@ -65,7 +65,7 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   });
 
   test("SCINCE local simulator is always simulated and ineligible", () => {
-    const item = adaptDenueScinceSource({
+    const item = adaptDenueScinceSource({ observationReference: "denue:fixture",
       integrity: {
         sourceId: "SCINCE_LOCAL_SIMULATOR",
         providerId: "SCINCE_LOCAL_SIMULATOR",
@@ -87,7 +87,7 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   });
 
   test("SCINCE cannot escape simulator firewall by changing acquisition status", () => {
-    const item = adaptDenueScinceSource({
+    const item = adaptDenueScinceSource({ observationReference: "denue:fixture",
       integrity: {
         sourceId: "SCINCE_LOCAL_SIMULATOR",
         providerId: "SCINCE_LOCAL_SIMULATOR",
@@ -102,8 +102,8 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   });
 
   test("unknown or unsupported source is not promoted", () => {
-    expect(adaptDenueScinceSource({ integrity: null })).toBeNull();
-    expect(adaptDenueScinceSource({
+    expect(adaptDenueScinceSource({ observationReference: "denue:fixture", integrity: null })).toBeNull();
+    expect(adaptDenueScinceSource({ observationReference: "denue:fixture",
       integrity: {
         sourceId: "unknown-source",
         sourceType: "OTHER",
@@ -112,7 +112,7 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
   });
 
   test("adapter creates source item, never evidence or finding", () => {
-    const item = adaptDenueScinceSource({
+    const item = adaptDenueScinceSource({ observationReference: "denue:fixture",
       integrity: {
         sourceId: "inegi-denue-api",
         providerId: "INEGI_DENUE",
@@ -129,6 +129,7 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
 
   test("technical descriptor id is deterministic and contains no timestamp/randomness", () => {
     const input = {
+      observationReference: "denue:fixture",
       integrity: {
         sourceId: "inegi-denue-api",
         providerId: "INEGI_DENUE",
@@ -143,6 +144,54 @@ describe("ADR-021.4D-2B DENUE / SCINCE orchestration adapter", () => {
     const right = adaptDenueScinceSource(input);
 
     expect(left?.itemId).toBe(right?.itemId);
-    expect(left?.itemId).toContain("ADR021:SOURCE:DENUE");
+    expect(left?.source.descriptorId).toContain("ADR021:SOURCE:DENUE");
+    expect(left?.itemId).toContain("ADR021:DENUE_OBSERVATION:");
+  });
+});
+
+import { distinctInstitutionalInputs } from '../src/utils/institutionalReportInputProjection';
+
+describe('P8 DENUE observation identity', () => {
+  const integrity = { sourceId: 'inegi-denue-api', providerId: 'INEGI_DENUE', sourceType: 'DENUE',
+    acquisitionMode: 'OBSERVED', acquisitionStatus: 'ACQUIRED', query: 'synthetic-query',
+    sourceReference: 'canonical-denue-source', rawSourceReference: 'canonical-raw-reference' };
+  const adapt = (reference: string, changes: Partial<typeof integrity> = {}) =>
+    adaptDenueScinceSource({ observationReference: reference, integrity: { ...integrity, ...changes } })!;
+  test('same descriptor, distinct observations survive the certified duplicate pattern', () => {
+    const a = adapt('denue:unit-a', { rawSourceReference: 'raw-a' });
+    const b = adapt('denue:unit-b', { rawSourceReference: 'raw-b' });
+    expect(a.source.descriptorId).toBe(b.source.descriptorId);
+    expect(a.itemId).not.toBe(b.itemId);
+    expect(distinctInstitutionalInputs([a,b], 'sourceOrchestrationItems',
+      ['ORCHESTRATION_ADAPTED_DENUE','ORCHESTRATION_ADAPTED_DENUE'])).toHaveLength(2);
+  });
+  test('equivalent observation rebuilds retain identity and deduplicate', () => {
+    const a = adapt('denue:unit-a'), b = adapt('denue:unit-a');
+    expect(a).toEqual(b);
+    expect(distinctInstitutionalInputs([a,b], 'sourceOrchestrationItems')).toHaveLength(1);
+  });
+  test('same observation with divergent content remains fail-closed', () => {
+    expect(() => distinctInstitutionalInputs([adapt('denue:unit-a'),
+      adapt('denue:unit-a', { rawSourceReference: 'divergent-reference' })], 'sourceOrchestrationItems'))
+      .toThrow('REPORT_INPUT_CONFLICT_DUPLICATE_IDENTITY');
+  });
+  test('different query keeps observation identity and changes only the query descriptor', () => {
+    const a = adapt('denue:unit-a'), b = adapt('denue:unit-a', { query: 'another-query' });
+    expect(a.itemId).toBe(b.itemId);
+    expect(a.source.descriptorId).not.toBe(b.source.descriptorId);
+    expect(() => distinctInstitutionalInputs([a,b], 'sourceOrchestrationItems'))
+      .toThrow('REPORT_INPUT_CONFLICT_DUPLICATE_IDENTITY');
+  });
+  test.each([undefined, null, '', 'query-only', 'denue:invalid:unit'])('missing or invalid canonical identity rejects', reference => {
+    expect(() => adaptDenueScinceSource({ observationReference: reference, integrity }))
+      .toThrow('DENUE_OBSERVATION_IDENTITY_UNAVAILABLE');
+  });
+  test('source and raw references and classification remain intact', () => {
+    const item = adapt('denue:unit-a');
+    expect(item.source.sourceReference).toBe(integrity.sourceReference);
+    expect(item.source.rawSourceReference).toBe(integrity.rawSourceReference);
+    expect(item.source.authorityClassification).toBe('AUTHORITATIVE');
+    expect(item.source.integrityClassification).toBe('VERIFIED');
+    expect(item.eligibility).toBe('ELIGIBLE');
   });
 });

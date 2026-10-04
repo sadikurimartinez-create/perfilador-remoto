@@ -28,6 +28,8 @@ export interface ProductiveSourceIntegrityInput {
 }
 
 export interface DenueScinceOrchestrationInput {
+  /** Existing canonical DENUE sourceEvidenceId, never a query or record-content hash. */
+  observationReference?: string | null;
   expedienteId?: string | null;
   integrity?: ProductiveSourceIntegrityInput | null;
 }
@@ -147,8 +149,17 @@ export function adaptDenueScinceSource(
     integrityClassification,
   };
 
+  // Query status descriptors retain their identity; acquired observations do not.
+  let itemId = descriptorId;
+  if (sourceType === "DENUE" && present(integrity.acquisitionStatus)?.toUpperCase() === "ACQUIRED") {
+    const observationReference = present(input.observationReference);
+    if (!observationReference || !/^denue:(?!invalid:)[a-zA-Z0-9_.:-]+$/.test(observationReference))
+      throw new Error("DENUE_OBSERVATION_IDENTITY_UNAVAILABLE");
+    itemId = ['ADR021', 'DENUE_OBSERVATION', cleanToken(sourceId), cleanToken(observationReference)].join(':');
+  }
+
   return {
-    itemId: descriptorId,
+    itemId,
     source,
     eligibility: evaluateSourceEligibility(source),
   };
