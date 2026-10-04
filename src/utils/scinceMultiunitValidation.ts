@@ -1,4 +1,6 @@
 import 'server-only';
+import {isScinceCompactSnapshotV2} from './scinceCompactSnapshot';
+import type {ScinceCompactSnapshotV2} from '../types/scinceCompactSnapshot';
 import {catalogIndicators,isValidOfficialBaseProfile2020} from './scinceOfficialProfile';
 import {fingerprintScinceCanonicalPoint} from './scinceGeographyBinding';
 import {fingerprintScinceCoverageGeography} from './scinceCanonicalCoverage';
@@ -11,6 +13,13 @@ import { aggregateScinceIndicators } from './scinceIndicatorAggregation';
 import type { ScinceMultiunitObservation } from '../types/scinceMultiunit';
 
 const equal = (a: unknown, b: unknown) => isDeepStrictEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
+
+/** Discriminated resolver boundary. Invalid compact content never falls back to legacy. */
+export function isValidScinceResolvedObservation(value:unknown):value is ScinceMultiunitObservation | ScinceCompactSnapshotV2 {
+  if(!value || typeof value!=='object' || !('schemaVersion' in value))return false;
+  if(value.schemaVersion==='SCINCE_COMPACT_SNAPSHOT_V2')return isScinceCompactSnapshotV2(value);
+  return value.schemaVersion==='SCINCE_PRODUCTIVE_COVERAGE_V2' && isValidScinceMultiunit(value);
+}
 
 /** Persisted shape/identity checks are not live topological certification. */
 export function isValidScinceMultiunit(value: unknown): value is ScinceMultiunitObservation {

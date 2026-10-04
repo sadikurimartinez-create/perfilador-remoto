@@ -95,7 +95,9 @@ export function createScinceHumanContextFlow(deps: Dependencies) {
         // Use the latest analysis, preserving legacy SCINCE and all unrelated fields.
         const analysis = { ...(deps.context().analysis ?? {}), scinceCanonicalSnapshot: prepared.snapshot,
           scinceCanonicalIncorporation: prepared.incorporation };
-        await deps.updateProjectDetails({ iaAnalysis: analysis });
+        if(reviewed.compactSnapshot) {
+          if(!('persisted' in prepared) || prepared.persisted!==true || prepared.snapshot.schemaVersion!=='SCINCE_COMPACT_SNAPSHOT_V2')throw new Error('SCINCE_COMPACT_SERVER_PERSISTENCE_REQUIRED');
+        } else await deps.updateProjectDetails({ iaAnalysis: analysis });
         if (!sameContext(context)) return;
         deps.setAnalysisResult(analysis);
         emit({ status: "INCORPORADO", result: null, message: "Contexto sociodemográfico observado incorporado." });

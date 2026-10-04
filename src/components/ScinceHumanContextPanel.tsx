@@ -39,6 +39,30 @@ export function ScinceFreshnessStatus({ freshness }: { freshness: ScinceSnapshot
 }
 
 export function ScinceObservedResult({ result }: { result: ScinceCanonicalSuccess }) {
+  if(result.compactSnapshot) {
+    const s=result.compactSnapshot,v=result.reviewView;
+    if(!v || v.snapshotFingerprint!==s.audit.contentFingerprint)return <p className="text-xs text-amber-300">Vista SCINCE inválida. Consulte nuevamente.</p>;
+    return <div className="space-y-3 text-xs" data-testid="scince-compact-result">
+      <p>REQUIERE REVISIÓN PPC · Dato oficial INEGI 2020 · Sin estimación al año actual</p>
+      <p>Dataset: {v.dataset.datasetId} · {v.dataset.referenceYear} · {v.dataset.version}</p>
+      <p>Geografía: {v.geography.geographyType} · {v.geography.geographyId} · Vigencia: {freshnessLabels[v.freshness]}</p>
+      <p>Unidades: {v.unitCount} · Completas: {v.coverageSummary.FULL_UNIT} · Parciales: {v.coverageSummary.PARTIAL_UNIT} · Sólo borde: {v.coverageSummary.TOUCHED_UNIT}</p>
+      <details><summary>Metodología del entorno territorial</summary><dl className="grid grid-cols-2 gap-2">
+        <dt>Centro de análisis</dt><dd>{v.analysisArea.center.lat}, {v.analysisArea.center.lng}</dd>
+        <dt>Radio de cobertura</dt><dd>{v.analysisArea.coverageRadiusMeters.toFixed(2)} m</dd>
+        <dt>Expansión contextual</dt><dd>{v.analysisArea.contextExpansionMeters} m</dd>
+        <dt>Radio total</dt><dd>{v.analysisArea.analysisRadiusMeters.toFixed(2)} m</dd>
+        <dt>Área aproximada analizada</dt><dd>{v.analysisArea.approximateAreaSquareMeters.toFixed(2)} m²</dd>
+      </dl><p>Cifras de unidades fuente completas; sin prorrateo de población por área.</p></details>
+      <div aria-label="Perfil oficial INEGI 2020">{Object.entries(dimensionLabels).map(([dimension,label])=>{
+        const values=v.aggregateIndicators.filter(i=>i.dimension===dimension);if(!values.length)return null;
+        return <details key={dimension}><summary>{label}</summary>{values.map(i=><p key={i.code}>{i.name}: {display(i.value)} · {i.status==='NOT_AGGREGATED'?'Sin agregado metodológicamente admisible':'Suma de unidades completas seleccionadas'}{i.reasonCode?` · ${i.reasonCode}`:''}</p>)}</details>;
+      })}</div>
+      <details><summary>Derivaciones reproducibles</summary>{v.derivedIndicators.map(i=><p key={i.name}>{i.name}: {i.value} · {i.formula}</p>)}</details>
+      <details><summary>Procedencia INEGI</summary><p>{v.provenanceSummary.productName} · {v.provenanceSummary.censusSourceUrl}</p><p>Release: {v.release.releaseId} · Catálogo: {v.catalog.catalogVersion}</p><p>Importación: {v.provenanceSummary.completedAt} · Huella censal: {v.provenanceSummary.censusSha256}</p></details>
+      <ul>{v.limitations.map((w,i)=><li key={i}>{w}</li>)}</ul>
+    </div>;
+  }
   if (result.multiunit) return <div className="space-y-3 text-xs" data-testid="scince-multiunit-result">
     <p>REQUIERE REVISIÓN PPC · {result.geographyType === "INDIVIDUAL" ? "Entorno de un punto" : result.geographyType === "CORRIDOR" ? "Consulta sobre corredor" : "Consulta sobre área"}</p>
     <p>Dataset: {result.multiunit.dataset.datasetId} · {result.multiunit.dataset.year} · {result.multiunit.dataset.version}</p>
@@ -114,7 +138,7 @@ export function ScinceHumanContextPanel(props: Props) {
   const [freshnessMessage, setFreshnessMessage] = useState<string | null>(null);
   useEffect(()=>{
     const publish=(area:unknown)=>window.dispatchEvent(new CustomEvent('ceipol:scince-area-preview', {detail:{projectId:props.projectId,source:props.canonicalGeography,area}}));
-    publish(state.result?.multiunit?.scinceAnalysisArea ?? null);
+    publish(state.result?.compactSnapshot?.analysisArea ?? state.result?.multiunit?.scinceAnalysisArea ?? null);
     return ()=>{publish(null);};
   },[props.projectId,props.canonicalGeography,state.result]);
   const snapshot = props.analysis?.scinceCanonicalSnapshot;

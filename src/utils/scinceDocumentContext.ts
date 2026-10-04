@@ -2,12 +2,16 @@ import type { ScinceCanonicalSnapshot, ScinceSnapshotFreshness } from "@/types/s
 import type { InstitutionalReportInput } from "@/utils/institutionalReportPublicationContract";
 
 export type ScinceDocumentContext =
-  | { publicationStatus: "PUBLISHABLE"; territorialFreshness: "CURRENT"; snapshot: ScinceCanonicalSnapshot; reason: null }
+  | { publicationStatus: "PUBLISHABLE"; territorialFreshness: "CURRENT"; snapshot: ScinceCanonicalSnapshot; reason: null;
+      compactVerification?: {contentFingerprint:string;profileFingerprint:string;selectedObservationSetFingerprint:string;
+        ppcReview:import('../types/scinceCompactSnapshot').ScinceCompactSnapshotV2['ppcReview']}; }
   | { publicationStatus: "NOT_PUBLISHABLE_STALE" | "NOT_PUBLISHABLE_INVALID" | "NOT_PUBLISHABLE_MISSING";
-      territorialFreshness: Exclude<ScinceSnapshotFreshness, "CURRENT">; snapshot: null; reason: string };
+      territorialFreshness: Exclude<ScinceSnapshotFreshness, "CURRENT">; snapshot: null; reason: string;
+      clientPreparation?:import('../types/scinceCompactSnapshot').ScinceReviewView;
+      clientDocumentIdentity?: {dataset:ScinceCanonicalSnapshot['dataset'];summary:string[];limitations:string[];provenance:unknown} };
 
 export function excludedScinceDocumentContext(status: Exclude<ScinceSnapshotFreshness, "CURRENT">,
-  reason: string): ScinceDocumentContext {
+  reason: string): Extract<ScinceDocumentContext,{snapshot:null}> {
   return { publicationStatus: `NOT_PUBLISHABLE_${status}`, territorialFreshness: status, snapshot: null, reason };
 }
 

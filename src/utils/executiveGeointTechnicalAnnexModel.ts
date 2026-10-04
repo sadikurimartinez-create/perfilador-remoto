@@ -403,7 +403,14 @@ export function buildExecutiveGeointTechnicalAnnexModel(
       };
     });
 
-  const scinceFacts = scinceDocumentFacts(institutionalInput.scinceContext);
+  // Keep complete source text while bounding a single physical table row. The
+  // existing PDF renderer deliberately refuses rows taller than a page.
+  const scinceFacts = scinceDocumentFacts(institutionalInput.scinceContext).flatMap(fact=>{
+    if(fact.value.length<=800)return [fact];
+    const parts=Array.from(fact.value),rows:Array<{label:string;value:string}>=[];
+    for(let offset=0;offset<parts.length;offset+=800)rows.push({label:offset===0?fact.label:`${fact.label} (continuación ${offset/800+1})`,value:parts.slice(offset,offset+800).join('')});
+    return rows;
+  });
   const scinceLimitations = scinceDocumentLimitations(institutionalInput.scinceContext);
   const incidenceVisualRecords = institutionalInput.visualProducts
     .filter(item => ["INCIDENT_TYPE_DISTRIBUTION", "TEMPORAL_EVOLUTION"].includes(item.kind) && selectedIds.has(item.visualId))

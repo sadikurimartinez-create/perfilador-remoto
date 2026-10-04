@@ -8,7 +8,9 @@ import { deserializeCanonicalGeographyFromFirestore, type CanonicalProjectGeogra
   type FirestoreSafeCanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 import { isValidScinceCanonicalSnapshot, evaluateScinceSnapshotFreshness, isScinceSnapshotPublishable } from "@/utils/scinceCanonicalSnapshot";
 import type { ScinceCanonicalSnapshot } from "@/types/scinceCanonicalSnapshot";
-import { excludedScinceDocumentContext, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
+import { excludedScinceDocumentContext,scinceDocumentSummary, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
+import {isScinceCompactSnapshotV2,buildScinceReviewView} from '../utils/scinceCompactSnapshot';
+import {materializeScinceContextWithPinnedRepository,projectMaterializedScinceDocument} from './scinceContextMaterializationService';
 
 export interface ScincePersistedDocumentSource {
   id: string;
@@ -22,10 +24,12 @@ type Dependencies = {
   authorize: typeof authorizeInstitutionalProjectAccess;
   readRelease: typeof getCurrentScinceRelease;
   readProject: (projectId: string) => Promise<ScincePersistedDocumentSource | null>;
+  materialize: typeof materializeScinceContextWithPinnedRepository;
 };
 const defaults: Dependencies = {
   authorize: authorizeInstitutionalProjectAccess,
   readRelease:getCurrentScinceRelease,
+  materialize:materializeScinceContextWithPinnedRepository,
   async readProject(projectId) {
     const document = await getInstitutionalAdminDb().collection("projects").doc(projectId).get();
     return document.exists ? { ...document.data(), id: document.id } : null;
@@ -45,7 +49,7 @@ function canonical(raw: unknown): CanonicalProjectGeography | null {
 
 /** Single admission point. Read-only, authorized, and recomputed for each document generation. */
 export async function resolveScinceDocumentPublication(input: {
-  projectId: string; sessionToken: unknown; reportGeography: CanonicalProjectGeography | null;
+  projectId: string; sessionToken: unknown; reportGeography: CanonicalProjectGeography | null; transportOnly?:boolean;
 }, overrides: Partial<Dependencies> = {}): Promise<ScinceDocumentContext> {
   const deps = { ...defaults, ...overrides };
   try {
@@ -57,6 +61,29 @@ export async function resolveScinceDocumentPublication(input: {
       project.status === "ARCHIVADO" || project.estado === "ARCHIVADO")
       return excludedScinceDocumentContext("INVALID", "SCINCE_DOCUMENT_PROJECT_UNAVAILABLE");
     const snapshot = project.iaAnalysis?.scinceCanonicalSnapshot;
+    if ((snapshot as any)?.schemaVersion==='SCINCE_COMPACT_SNAPSHOT_V2') {
+      if(!isScinceCompactSnapshotV2(snapshot))return excludedScinceDocumentContext('INVALID','SCINCE_DOCUMENT_COMPACT_INVALID');
+      const review=project.iaAnalysis?.scinceCanonicalIncorporation,ppc=snapshot.ppcReview;
+      if(ppc.status!=='INCORPORATED' || ppc.decision!=='INCORPORATED' || ppc.reviewedContentFingerprint!==snapshot.audit.contentFingerprint ||
+        !ppc.institutionalUserId || !ppc.incorporatedAt || review?.decision!=='INCORPORATED' ||
+        review.incorporatedBy?.institutionalUserId!==ppc.institutionalUserId || review.incorporatedAt!==ppc.incorporatedAt)
+        return excludedScinceDocumentContext('INVALID','SCINCE_DOCUMENT_HUMAN_REVIEW_REQUIRED');
+      const current=canonical(project.canonicalGeography),release=await deps.readRelease(snapshot.datasetIdentity.datasetId);
+      if(!release)return excludedScinceDocumentContext('INVALID','SCINCE_DOCUMENT_RELEASE_UNAVAILABLE');
+      const binding={snapshot,currentNormalizationRelease:release,expectedProjectId:access.projectId,currentCanonicalGeography:current};
+      const fresh=evaluateScinceSnapshotFreshness(binding);
+      if(fresh.territorialFreshness!=='CURRENT')return excludedScinceDocumentContext(fresh.territorialFreshness,fresh.reason);
+      if(snapshot.freshness.status!=='CURRENT' || !scinceRadiusConfigurationMatches(snapshot.analysisArea.configuration))
+        return excludedScinceDocumentContext('STALE','SCINCE_DOCUMENT_STALE_OR_RADIUS_CHANGED');
+      if(evaluateScinceSnapshotFreshness({...binding,currentCanonicalGeography:input.reportGeography}).territorialFreshness!=='CURRENT')
+        return excludedScinceDocumentContext('STALE','SCINCE_DOCUMENT_REPORT_GEOGRAPHY_CHANGED');
+      if(input.transportOnly)return {...excludedScinceDocumentContext('INVALID','SCINCE_SERVER_GENERATION_REQUIRED'),clientPreparation:buildScinceReviewView(snapshot)};
+      const result=await deps.materialize(snapshot,'REPORT',{...access,project:{...access.project,canonicalGeography:project.canonicalGeography}});
+      if(result.materialization!=='PASS')return excludedScinceDocumentContext('INVALID',result.code);
+      const context:ScinceDocumentContext={publicationStatus:'PUBLISHABLE',territorialFreshness:'CURRENT',reason:null,
+        snapshot:projectMaterializedScinceDocument(snapshot,result.context),compactVerification:{...result.context.verification,ppcReview:structuredClone(ppc)}};
+      return context;
+    }
     if (snapshot && typeof snapshot === "object" && (snapshot as any).schemaVersion === "SCINCE_CANONICAL_SNAPSHOT_V2") {
       const review=project.iaAnalysis?.scinceCanonicalIncorporation;
       if ((snapshot as any).multiunit?.humanReviewStatus!=="INCORPORATED" || review?.decision!=="INCORPORATED" ||
@@ -77,6 +104,12 @@ export async function resolveScinceDocumentPublication(input: {
     // Do not mix an admitted current observation with a report assembled for an older geography.
     const reportBinding = { ...binding, currentCanonicalGeography: input.reportGeography };
     if (!isScinceSnapshotPublishable(reportBinding)) return excludedScinceDocumentContext("STALE", "SCINCE_DOCUMENT_REPORT_GEOGRAPHY_CHANGED");
+    if(input.transportOnly && (snapshot as ScinceCanonicalSnapshot).multiunit) {
+      const s=snapshot as ScinceCanonicalSnapshot;
+      return {...excludedScinceDocumentContext('INVALID','SCINCE_SERVER_GENERATION_REQUIRED'),clientDocumentIdentity:{dataset:structuredClone(s.dataset),
+        summary:scinceDocumentSummary({publicationStatus:'PUBLISHABLE',territorialFreshness:'CURRENT',snapshot:s,reason:null}),
+        limitations:structuredClone(s.limitations),provenance:structuredClone(s.multiunit!.dataset.provenance)}};
+    }
     return { publicationStatus: "PUBLISHABLE", territorialFreshness: "CURRENT",
       snapshot: structuredClone(snapshot as ScinceCanonicalSnapshot), reason: null };
   } catch {

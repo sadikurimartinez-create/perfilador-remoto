@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
-import { buildInstitutionalGenerationModels } from "@/utils/institutionalGenerationModels";
+import { buildInstitutionalGenerationModels,prepareInstitutionalGenerationIntent } from "@/utils/institutionalGenerationModels";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -1013,6 +1013,12 @@ export async function exportToWord(
 ) {
   let authorizedSource: Awaited<ReturnType<typeof getAuthorizedInstitutionalReportSource>> | null = null;
   const isInstitutionalExport = options.exportMode === "INSTITUTIONAL";
+  if(isInstitutionalExport && options.reportKind==='EXECUTIVE_GEOINT' && typeof window!=='undefined') {
+    const input=prepareInstitutionalGenerationIntent(String(payload?.projectId || payload?.id || ''),options.downloadFormat || 'DOCX');
+    const result=await invokeInstitutionalReportBoundary('GENERATE',input);
+    for(const [kind,blob] of Object.entries(result.artifacts))saveAs(blob,result.manifest.artifacts[kind].filename);
+    return result.manifest;
+  }
   if (isInstitutionalExport && options.reportKind === "EXECUTIVE_GEOINT_TECHNICAL_ANNEX") throw new Error("EXECUTIVE_GEOINT_TECHNICAL_ANNEX_BLOCKED:COMPLETE_PACKAGE_REQUIRED_USE_DRAFT_FOR_ISOLATED_EXPORT");
   if (isInstitutionalExport && options.reportKind !== "EXECUTIVE_GEOINT" && options.reportKind !== "EXECUTIVE_GEOINT_TECHNICAL_ANNEX") {
     throw new Error("EXECUTIVE_GEOINT_BLOCKED:SEMANTIC_REPORT_KIND_REQUIRED");

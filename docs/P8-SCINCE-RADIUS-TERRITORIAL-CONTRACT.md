@@ -211,3 +211,7 @@ SAFE_TO_STAGE=YES para estos archivos concretos tras revisión humana, aislando
 el baseline previo. SAFE_TO_DEPLOY_PREVIEW=NO para habilitar operación SCINCE
 institucional hasta aprobar radios y certificar PostGIS. P8_SCINCE_RADIUS_READY=YES
 exclusivamente para la implementación/validación offline solicitada.
+
+## Adenda Compact Snapshot V2 bajo ADR-021
+
+La representación compacta, su materialización verificable y los gates PPC/documentales se rigen por [P8-SCINCE-COMPACT-SNAPSHOT-V2-CONTRACT](P8-SCINCE-COMPACT-SNAPSHOT-V2-CONTRACT.md). Cambia la representación y el transporte; conserva geometría canónica, selección espacial, radios gobernados, 222 indicadores oficiales 2020, provenance y ausencia de prorrateo. Los paquetes históricos permanecen inmutables, sin migración automática. Esta referencia complementa las certificaciones históricas anteriores.

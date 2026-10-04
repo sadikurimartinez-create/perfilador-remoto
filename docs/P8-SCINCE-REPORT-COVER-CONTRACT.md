@@ -93,3 +93,7 @@ No se sustituye esa validación por inspección de XML ni por el PDF propio.
 No se ejecutaron migraciones, reimportación, operaciones live ni comandos Git
 de escritura. La implementación funcional no implica autorización de despliegue
 ni cierre de la certificación visual DOCX/PDF completa.
+
+## Adenda Compact Snapshot V2 bajo ADR-021
+
+La representación compacta, su materialización verificable y los gates PPC/documentales se rigen por [P8-SCINCE-COMPACT-SNAPSHOT-V2-CONTRACT](P8-SCINCE-COMPACT-SNAPSHOT-V2-CONTRACT.md). Cambia la representación y el transporte; conserva geometría canónica, selección espacial, radios gobernados, 222 indicadores oficiales 2020, provenance y ausencia de prorrateo. Los paquetes históricos permanecen inmutables, sin migración automática. Esta referencia complementa las certificaciones históricas anteriores.

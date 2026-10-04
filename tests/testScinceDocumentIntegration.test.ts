@@ -29,6 +29,13 @@ jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("@/services/institutionalProjectAccessService", () => ({ authorizeInstitutionalProjectAccess: jest.fn() }));
 jest.mock("@/lib/firebaseAdmin", () => ({ getInstitutionalAdminDb: jest.fn() }));
 jest.mock("next/headers", () => ({ cookies: jest.fn() }));
+jest.mock('@/services/institutionalReportSourceService',()=>({resolveAuthorizedInstitutionalReportSource:jest.fn()}));
+jest.mock('@/services/institutionalReportPackageService',()=>({rebuildAuthorizedInstitutionalPackage:jest.fn(),InstitutionalReportPackageService:jest.fn()}));
+jest.mock('@/services/institutionalReportAdminRepository',()=>({AdminInstitutionalReportPackageRepository:jest.fn(),AdminInstitutionalReportPackageStorage:jest.fn()}));
+jest.mock('@/services/institutionalVisualAuthorityService',()=>({materializeAuthorizedVisualSnapshot:jest.fn(),verifyAuthorizedVisualBytes:jest.fn()}));
+jest.mock('@/services/institutionalReportDecisionBoundary',()=>({executeInstitutionalReportDecision:jest.fn()}));
+jest.mock('@/services/institutionalSessionIdentityService',()=>({resolveInstitutionalSessionIdentity:jest.fn()}));
+jest.mock('@/services/institutionalAuthorizationProjectionService',()=>({validAuthorizationId:(id:unknown)=>typeof id==='string' && /^[A-Za-z0-9_-]+$/.test(id)}));
 
 const geography: CanonicalProjectGeography = { geographyId: "P1:INDIVIDUAL", type: "INDIVIDUAL",
   geometry: { type: "Point", coordinates: [-102.291, 21.881] }, source: "MAP_VECTOR",
@@ -230,7 +237,7 @@ test("DOCX admission happens before both document models and is recorded in the 
   const end = source.indexOf("async function hydrateTechnicalAnnexVisualAssets", start);
   const generation = readFileSync(resolve(__dirname, "../src/utils/institutionalGenerationModels.ts"), "utf8");
   expect(source.slice(start, end)).toContain("await buildInstitutionalGenerationModels");
-  expect(generation).toContain("await integrateScinceDocumentContextForReport(institutionalReportInput, getScinceDocumentContext)");
+  expect(generation).toContain("await integrateScinceDocumentContextForReport(institutionalReportInput, serverAdmission ?? getScinceDocumentContext)");
   expect(generation.indexOf("await integrateScinceDocumentContextForReport")).toBeLessThan(generation.indexOf("const documentModel ="));
   const service = readFileSync(resolve(__dirname, "../src/services/scinceDocumentPublicationService.ts"), "utf8");
   expect(service).not.toMatch(/setDoc|updateDoc|\.set\(|\.update\(|resolveInegiTerritory|\bquery\(/);
@@ -242,3 +249,38 @@ test("DOCX admission happens before both document models and is recorded in the 
 // Composition-only fixtures are explicit drafts; final guards are tested in PRE-P7.
 const renderExecutiveGeointWordDocument = (model: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointWordDocumentDraft>[1] = {}) => renderExecutiveGeointWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });
 const renderExecutiveGeointTechnicalAnnexWordDocument = (model: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[0], options: Parameters<typeof renderExecutiveGeointTechnicalAnnexWordDocumentDraft>[1] = {}) => renderExecutiveGeointTechnicalAnnexWordDocumentDraft(model, { ...options, exportMode: "DRAFT" });
+
+import {POST} from '../src/app/api/institutional/reports/route';
+import {resolveAuthorizedInstitutionalReportSource} from '../src/services/institutionalReportSourceService';
+import {rebuildAuthorizedInstitutionalPackage,InstitutionalReportPackageService} from '../src/services/institutionalReportPackageService';
+import {AdminInstitutionalReportPackageRepository} from '../src/services/institutionalReportAdminRepository';
+function generationRequest(input:any) {return new Request('https://preview.example/api/institutional/reports',{method:'POST',headers:{origin:'https://preview.example','content-type':'application/json'},body:JSON.stringify({operation:'GENERATE',input})});}
+test('V2.5 route reconstructs final models from authorized source and returns artifacts only',async()=>{
+  const source:any={projectId:'P1',project:{iaAnalysis:{scinceCanonicalSnapshot:{schemaVersion:'SCINCE_COMPACT_SNAPSHOT_V2'}}},action:'GENERATE_REPORT'};
+  const rebuilt:any={projectId:'P1',generationContext:{server:true,rawIndicators:['SERVER_ONLY']},reportBlob:new Blob(['DOCX']),annexBlob:new Blob(['ANNEX']),pdfArtifacts:{executive:new Blob(['PDF']),annex:new Blob(['PDF ANNEX'])}};
+  jest.mocked(resolveAuthorizedInstitutionalReportSource).mockResolvedValue(source);
+  jest.mocked(rebuildAuthorizedInstitutionalPackage).mockResolvedValue(rebuilt);
+  const persist=jest.fn(async()=>({projectId:'P1',state:'GENERATED'}));
+  jest.mocked(InstitutionalReportPackageService).mockImplementation(()=>({persistGeneratedPackage:persist}) as any);
+  const response=await POST(generationRequest({projectId:'P1',contract:'SERVER_DOCUMENT_GENERATION_V1',format:'ALL'}));
+  expect(response.status).toBe(200);expect(rebuildAuthorizedInstitutionalPackage).toHaveBeenCalledWith(source,expect.objectContaining({admit:expect.any(Function),visuals:expect.any(Function)}));
+  expect(AdminInstitutionalReportPackageRepository).toHaveBeenCalledWith(rebuilt.generationContext);expect(persist).toHaveBeenCalledWith(rebuilt);
+  const json=await response.json();expect(Object.keys(json).sort()).toEqual(['artifacts','manifest']);
+  expect(Object.keys(json.artifacts).sort()).toEqual(['executivePdf','executiveReport','technicalAnnex','technicalAnnexPdf']);
+  expect(JSON.stringify(json)).not.toMatch(/generationContext|rawIndicators|SERVER_ONLY/);
+});
+test.each(['generationContext','reportBlob','annexBlob','catalog','profile','release'])('V2.5 route rejects forged client %s in minimal intent',async key=>{
+  jest.mocked(resolveAuthorizedInstitutionalReportSource).mockResolvedValue({projectId:'P1',project:{},action:'GENERATE_REPORT'} as any);
+  const response=await POST(generationRequest({projectId:'P1',contract:'SERVER_DOCUMENT_GENERATION_V1',format:'DOCX',[key]:{forged:true}}));
+  expect(response.status).toBe(403);expect(rebuildAuthorizedInstitutionalPackage).not.toHaveBeenCalled();
+});
+test('V2.5 route denies generation without GENERATE_REPORT before rebuilding',async()=>{
+  jest.mocked(resolveAuthorizedInstitutionalReportSource).mockRejectedValue(new Error('EXPLICIT_GENERATE_REPORT_GRANT_REQUIRED'));
+  expect((await POST(generationRequest({projectId:'P1',contract:'SERVER_DOCUMENT_GENERATION_V1',format:'DOCX'}))).status).toBe(403);
+  expect(rebuildAuthorizedInstitutionalPackage).not.toHaveBeenCalled();
+});
+test('V2.5 historical client generation contract cannot bypass Compact server authority',async()=>{
+  jest.mocked(resolveAuthorizedInstitutionalReportSource).mockResolvedValue({projectId:'P1',project:{iaAnalysis:{scinceCanonicalSnapshot:{schemaVersion:'SCINCE_COMPACT_SNAPSHOT_V2'}}}} as any);
+  expect((await POST(generationRequest({projectId:'P1',generationContext:{forged:true}}))).status).toBe(403);
+  expect(rebuildAuthorizedInstitutionalPackage).not.toHaveBeenCalled();
+});

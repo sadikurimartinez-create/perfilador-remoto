@@ -2,7 +2,7 @@ jest.mock('@/lib/scinceObservationRepository',()=>({...jest.requireActual('@/lib
 import {execFileSync} from 'child_process';
 import {join,resolve} from 'path';
 import {getPool} from '../src/lib/db';
-import {resolveInegiMultiunit,SCINCE_MULTIUNIT_SQL} from '../src/lib/inegiMultiunitResolver';
+import {resolveInegiLegacyMultiunit as resolveInegiMultiunit,SCINCE_MULTIUNIT_SQL} from '../src/lib/inegiMultiunitResolver';
 import {SCINCE_ANALYSIS_AREA_SQL,assertScinceProjectionDomain} from '../src/lib/scinceAnalysisArea';
 import {readScinceRadiusConfiguration} from '../src/lib/scinceRadiusConfiguration';
 import {resolveScinceCanonicalContext} from '../src/services/scinceCanonicalContextService';

@@ -12,7 +12,14 @@ import { integrateScinceDocumentContextForReport } from "./scinceDocumentContext
 
 /** Existing P2→P5 model construction shared by generation and authoritative revalidation.
  * This function does not acquire image assets or introduce another report engine. */
-export async function buildInstitutionalGenerationModels(payload: any, projectName: string, reportNumber?: string, user?: any, fixedGeneratedAt?: string) {
+export function prepareInstitutionalGenerationIntent(projectId:string,format:'DOCX'|'PDF'|'ALL'='DOCX') {
+  if(!projectId || !['DOCX','PDF','ALL'].includes(format))throw new Error('REPORT_GENERATION_INTENT_INVALID');
+  return {projectId,contract:'SERVER_DOCUMENT_GENERATION_V1' as const,format};
+}
+export async function buildInstitutionalGenerationModels(payload: any, projectName: string, reportNumber?: string, user?: any, fixedGeneratedAt?: string,
+  serverAdmission?: Parameters<typeof integrateScinceDocumentContextForReport>[1]) {
+  if(typeof window!=='undefined' && payload.iaAnalysis?.scinceCanonicalSnapshot?.schemaVersion==='SCINCE_COMPACT_SNAPSHOT_V2')
+    throw new Error('SCINCE_SERVER_GENERATION_REQUIRED');
   const basePayload = {
     ...payload,
     denueAnalyticalCartographicProductResult: undefined,
@@ -28,7 +35,9 @@ export async function buildInstitutionalGenerationModels(payload: any, projectNa
     } : undefined,
   };
   let institutionalReportInput = buildInstitutionalReportInput(basePayload, { generatedAt: fixedGeneratedAt });
-  institutionalReportInput = await integrateScinceDocumentContextForReport(institutionalReportInput, getScinceDocumentContext);
+  institutionalReportInput = await integrateScinceDocumentContextForReport(institutionalReportInput, serverAdmission ?? getScinceDocumentContext);
+  if(payload.iaAnalysis?.scinceCanonicalSnapshot?.schemaVersion==='SCINCE_COMPACT_SNAPSHOT_V2' && institutionalReportInput.scinceContext?.publicationStatus!=='PUBLISHABLE')
+    throw new Error('SCINCE_COMPACT_REPORT_REJECTED');
   const generatedAt = institutionalReportInput.generatedAt;
   const numeroExpediente = payload.numeroExpediente || reportNumber;
   const projectId = payload.projectId || institutionalReportInput.projectId;

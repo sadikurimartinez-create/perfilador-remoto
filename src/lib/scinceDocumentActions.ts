@@ -8,7 +8,7 @@ import { excludedScinceDocumentContext, type ScinceDocumentContext } from "@/uti
 export async function getScinceDocumentContext(projectId: string,
   reportGeography: CanonicalProjectGeography | null): Promise<ScinceDocumentContext> {
   try {
-    return await resolveScinceDocumentPublication({ projectId, reportGeography,
+    return await resolveScinceDocumentPublication({ projectId, reportGeography, transportOnly:true,
       sessionToken: cookies().get("ceipol_session")?.value });
   } catch {
     return excludedScinceDocumentContext("INVALID", "SCINCE_DOCUMENT_ADMISSION_UNAVAILABLE");

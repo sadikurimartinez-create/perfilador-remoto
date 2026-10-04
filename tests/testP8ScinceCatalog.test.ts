@@ -6,7 +6,7 @@ import {join,resolve} from 'path';
 import {readFileSync} from 'fs';
 import {createHash} from 'crypto';
 import {catalog,catalogFingerprint,NORMALIZATION_VERSION,parseTypedValue,normalizeRow,validateHeader,legacyCounts} from '../src/lib/scinceCatalogCore.cjs';
-import {resolveInegiMultiunit,SCINCE_MULTIUNIT_SQL} from '../src/lib/inegiMultiunitResolver';
+import {resolveInegiLegacyMultiunit as resolveInegiMultiunit,SCINCE_MULTIUNIT_SQL} from '../src/lib/inegiMultiunitResolver';
 import {SCINCE_ANALYSIS_AREA_SQL} from '../src/lib/scinceAnalysisArea';
 import {SCINCE_RELEASE_SQL,SCINCE_OBSERVATIONS_SQL,readScinceRelease,readScinceObservations} from '../src/lib/scinceObservationRepository';
 import {buildScinceCanonicalSnapshot,evaluateScinceSnapshotFreshness,isValidScinceCanonicalSnapshot} from '../src/utils/scinceCanonicalSnapshot';

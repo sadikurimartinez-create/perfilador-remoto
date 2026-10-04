@@ -27,6 +27,8 @@ import { renderExecutiveGeointTechnicalAnnexWordDocument } from "@/utils/executi
 import { assertInstitutionalDocxPhysicalParity, renderInstitutionalPdfFromDocx, institutionalAnnexRequiredVisualIds } from "@/utils/institutionalPdfRenderer";
 import { Packer } from "docx";
 import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
+import { getScinceDocumentContext } from '@/lib/scinceDocumentActions';
+type ScinceAdmission=Parameters<typeof buildInstitutionalGenerationModels>[5];
 
 export type InstitutionalReportPackageState = "GENERATING" | "GENERATED" | "FAILED" | "CERTIFIED" | "PUBLISHED";
 export type InstitutionalReportArtifactState = "PENDING" | "STORED" | "FAILED";
@@ -397,7 +399,7 @@ export async function buildInstitutionalPackageLineage(authorized: AuthorizedIns
 }
 
 /** Recompute from the server-authorized projection, rather than trusting client seals. */
-async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitutionalReportSource, input: any) {
+async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitutionalReportSource, input: any,admit:ScinceAdmission) {
   const context = input.generationContext;
   if (context?.projectId !== authorized.projectId || context?.numeroExpediente !== input.numeroExpediente ||
     context?.generatedAt !== input.generatedAt || context?.institutionalReportInput?.projectId !== authorized.projectId ||
@@ -409,7 +411,8 @@ async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitu
   if (!supplied || canonicalSemanticValue(supplied) !== canonicalSemanticValue(await buildInstitutionalPackageLineage(authorized, context))) throw new Error("REPORT_PACKAGE_LINEAGE_MISMATCH");
   const payload = await enrichInstitutionalPayloadWithCrimeIncidenceVisuals({ ...authorized.project,
     projectId: authorized.projectId, expedienteId: authorized.projectId, personaPerfiladora: authorized.actor.displayName });
-  const expected = await buildInstitutionalGenerationModels(payload, authorized.project.nombre || "Expediente", authorized.project.numeroExpediente, authorized.actor, input.generatedAt);
+  const expected = await buildInstitutionalGenerationModels(payload, authorized.project.nombre || "Expediente", authorized.project.numeroExpediente, authorized.actor, input.generatedAt,
+    admit);
   const same = (a: unknown, b: unknown, code: string) => { if (canonicalSemanticValue(a) !== canonicalSemanticValue(b)) throw new Error(`REPORT_PACKAGE_LINEAGE_MISMATCH:${code}`); };
   same(expected.institutionalReportInput, context.institutionalReportInput, "P2_INPUT");
   same(expected.executiveModel, context.executiveModel, "P4_MODEL");
@@ -439,6 +442,47 @@ async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitu
       state: "GENERATED", certified: false, published: false });
     if (await sha256Blob(kind === "EXECUTIVE_REPORT" ? input.pdfArtifacts.executive : input.pdfArtifacts.annex) !== pdf.parity.pdfSha256) throw new Error("REPORT_PACKAGE_LINEAGE_MISMATCH:P6_PDF_BYTES");
   }
+}
+
+/** Same generation/models/renderers as historical packages; caller supplies only an authorized source. */
+export async function rebuildAuthorizedInstitutionalPackage(source:AuthorizedInstitutionalReportSource,
+  overrides:{models?:(payload:any,generatedAt:string)=>Promise<any>;visuals?:(models:any,generatedAt:string)=>Promise<any>;now?:()=>string;admit?:ScinceAdmission}={}) {
+  if(typeof window!=='undefined' || source.action!=='GENERATE_REPORT')throw new Error('REPORT_SERVER_AUTHORITY_REQUIRED');
+  if(!overrides.visuals || (!overrides.models && !overrides.admit))throw new Error('REPORT_SERVER_DEPENDENCIES_REQUIRED');
+  const generatedAt=(overrides.now ?? (()=>new Date().toISOString()))();
+  const payload=await enrichInstitutionalPayloadWithCrimeIncidenceVisuals({...source.project,projectId:source.projectId,expedienteId:source.projectId,
+    personaPerfiladora:source.actor.displayName,sourceAuthority:{projectId:source.projectId,sourceFingerprint:source.sourceFingerprint,action:source.action}});
+  const models=overrides.models ? await overrides.models(payload,generatedAt) : await buildInstitutionalGenerationModels(payload,
+    source.project.nombre || 'Expediente',source.project.numeroExpediente,source.actor,generatedAt,overrides.admit);
+  if(models.projectId!==source.projectId)throw new Error('REPORT_PACKAGE_IDENTITY_CONFLICT');
+  const compact=source.project.iaAnalysis?.scinceCanonicalSnapshot?.schemaVersion==='SCINCE_COMPACT_SNAPSHOT_V2';
+  if(compact && (models.institutionalReportInput.scinceContext?.publicationStatus!=='PUBLISHABLE' || !models.institutionalReportInput.scinceContext.compactVerification))
+    throw new Error('SCINCE_COMPACT_REPORT_REJECTED');
+  const visual=await overrides.visuals(models,generatedAt);
+  const context:any={...models,...visual,sourceAuthority:payload.sourceAuthority};
+  context.documentModel.visualPlacements=context.documentModel.visualPlacements.map((p:any)=>({...p,assetState:context.visualAssetsById[p.visualId]?.data?'ASSET_RENDERED':'ASSET_MISSING'}));
+  context.documentModel.semanticIntegrity=reconcileMaterializedDocument(context.documentModel,context.visualAssetsById);
+  const report=renderExecutiveGeointWordDocument(context.documentModel,{visualAssetsById:context.visualAssetsById,institutionalLogos:context.institutionalLogos});
+  context.documentModel.semanticIntegrity=reconcileDocumentSemanticAudit(context.documentModel.semanticIntegrity,report.renderAudit,context.documentModel.sections,context.documentModel.visualPlacements);
+  assertReconciledDocumentSemanticAudit(context.documentModel.semanticIntegrity);
+  const audit=context.principalTerritorialMapSpec?.denueRenderAudit;
+  const annex=buildExecutiveGeointTechnicalAnnexModel(context.institutionalReportInput,context.executiveModel,context.visualComposition,context.documentModel,{
+    denueContextualSummary:audit?{contextualUniverseCount:audit.denueAvailableCount,contextualDisplayedCount:audit.denueRenderedCount,
+      selectionPolicy:audit.displayPolicy,methodology:'B.4/B.5 governed contextual cartography',limitations:audit.disclosures,sourceReferences:audit.sourceReferences,traceabilityIds:audit.traceabilityIds}:null});
+  context.annexModel=annex;
+  const annexRender=renderExecutiveGeointTechnicalAnnexWordDocument(annex,{visualAssetsById:context.visualAssetsById,institutionalLogos:context.institutionalLogos});
+  assertReconciledDocumentSemanticAudit(annex.technicalMetadata.semanticIntegrity);
+  const reportBlob=new Blob([new Uint8Array(await Packer.toBuffer(report.document))],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const annexBlob=new Blob([new Uint8Array(await Packer.toBuffer(annexRender.document))],{type:reportBlob.type});
+  const common={projectId:source.projectId,numeroExpediente:source.project.numeroExpediente,semanticIntegrity:context.documentModel.semanticIntegrity,
+    state:'GENERATED' as const,certified:false as const,published:false as const};
+  const executive=await renderInstitutionalPdfFromDocx(new Uint8Array(await reportBlob.arrayBuffer()),{...common,kind:'EXECUTIVE_REPORT',documentModel:context.documentModel,
+    requiredVisualIds:context.documentModel.semanticIntegrity.requiredVisualIds,renderedVisualIds:report.renderAudit.renderedVisualIds,missingVisualAssetIds:report.renderAudit.missingVisualAssetIds});
+  const technical=await renderInstitutionalPdfFromDocx(new Uint8Array(await annexBlob.arrayBuffer()),{...common,kind:'TECHNICAL_ANNEX',documentModel:annex,
+    requiredVisualIds:institutionalAnnexRequiredVisualIds(annex,context.documentModel.semanticIntegrity.requiredVisualIds),renderedVisualIds:annexRender.renderAudit.renderedVisualIds,missingVisualAssetIds:annexRender.renderAudit.missingVisualAssetIds});
+  context.lineage=await buildInstitutionalPackageLineage(source,context);
+  return {projectId:source.projectId,numeroExpediente:source.project.numeroExpediente,generatedAt,generatedBy:source.actor,generationContext:context,reportBlob,annexBlob,
+    pdfArtifacts:{executive:executive.blob,annex:technical.blob,parity:{status:'PASS' as const,sourceDocxHashes:[executive.parity.sourceDocxSha256,technical.parity.sourceDocxSha256]}}};
 }
 
 export async function buildInstitutionalSnapshotHash(context: any): Promise<string> {
@@ -501,7 +545,8 @@ export class InstitutionalReportPackageService {
     private readonly repository: InstitutionalReportPackageRepository = new FirestoreInstitutionalReportPackageRepository(),
     private readonly storage: InstitutionalReportPackageStorage = new FirebaseInstitutionalReportPackageStorage(),
     private readonly now: () => string = () => new Date().toISOString(),
-    private readonly authorizeGeneration: (projectId: string) => Promise<AuthorizedInstitutionalReportSource> = getAuthorizedInstitutionalReportSource
+    private readonly authorizeGeneration: (projectId: string) => Promise<AuthorizedInstitutionalReportSource> = getAuthorizedInstitutionalReportSource,
+    private readonly scinceAdmission:ScinceAdmission=getScinceDocumentContext
   ) {}
 
   async persistGeneratedPackage(input: {
@@ -526,7 +571,7 @@ export class InstitutionalReportPackageService {
         authority?.projectId !== input.projectId || authority?.action !== "GENERATE_REPORT" ||
         authority?.sourceFingerprint !== authorized.sourceFingerprint) throw new Error("REPORT_PACKAGE_SOURCE_AUTHORIZATION_REQUIRED");
       if (input.numeroExpediente !== authorized.project.numeroExpediente) throw new Error("REPORT_PACKAGE_IDENTITY_CONFLICT");
-      await validateInstitutionalPackageLineage(authorized, input);
+      await validateInstitutionalPackageLineage(authorized, input,this.scinceAdmission);
       return resolveActor(authorized.actor);
     });
     const [snapshotHash, reportHash, annexHash, mapSpecHash] = await runReportPackageStage(

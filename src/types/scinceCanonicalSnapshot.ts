@@ -2,6 +2,7 @@ import type { ScinceCanonicalContextResult } from "@/types/scinceCanonicalContex
 import type { CanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 
 export const SCINCE_CANONICAL_SNAPSHOT_VERSION = "SCINCE_CANONICAL_SNAPSHOT_V1";
+export type ScinceResolvedSnapshot = ScinceCanonicalSnapshot | import('./scinceCompactSnapshot').ScinceCompactSnapshotV2;
 export type ScinceCanonicalSuccess = Extract<ScinceCanonicalContextResult, { success: true }>;
 
 export interface ScinceCanonicalSnapshot {

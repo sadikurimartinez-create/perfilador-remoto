@@ -11,6 +11,9 @@ export type ScinceCanonicalContextResult =
       geographyFingerprint: string; spatialMode: "CANONICAL_POINT" | "CANONICAL_LINE" | "CANONICAL_AREA";
       queryCoordinate: { lat: number; lng: number } | null;
       multiunit?: import("./scinceMultiunit").ScinceMultiunitObservation;
+      // V2.2 carries compact content without enabling historical UI/PPC materialization.
+      compactSnapshot?: import('./scinceCompactSnapshot').ScinceCompactSnapshotV2;
+      reviewView?: import('./scinceCompactSnapshot').ScinceReviewView;
       datasetId: string | null; datasetYear: number | null; datasetVersion: string | null;
       geographicLevel: InegiTerritorialResult["geographicLevel"] | null;
       demographicGeographicLevel: "AGEB" | "MANZANA" | null; sourceRowKey: string | null;

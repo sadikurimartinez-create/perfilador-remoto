@@ -1,4 +1,7 @@
 import "server-only";
+import {buildScinceReviewView} from '@/utils/scinceCompactSnapshot';
+import {isValidScinceResolvedObservation} from '@/utils/scinceMultiunitValidation';
+import {fingerprintScinceCoverageGeography} from '@/utils/scinceCanonicalCoverage';
 import { resolveInegiMultiunit } from "@/lib/inegiMultiunitResolver";
 import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
 import { authorizeInstitutionalProjectAccess } from "@/services/institutionalProjectAccessService";
@@ -36,6 +39,18 @@ export async function resolveScinceCanonicalContext(input: { projectId: unknown 
     try { resolved = await deps.resolveMultiunit(access.projectId, canonical); } catch { return reject("SCINCE_CANONICAL_DATA_UNAVAILABLE"); }
     if (!resolved.success) return reject(resolved.code);
     const m = resolved.observation;
+    if(!isValidScinceResolvedObservation(m))return reject('SCINCE_CANONICAL_DATA_UNAVAILABLE');
+    if(m.schemaVersion==='SCINCE_COMPACT_SNAPSHOT_V2') {
+      const fingerprint=canonical.type==='INDIVIDUAL'?fingerprintScinceCanonicalPoint(canonical):fingerprintScinceCoverageGeography(canonical);
+      if(m.projectBinding.projectId!==access.projectId || m.geographyBinding.geographyId!==canonical.geographyId ||
+        m.geographyBinding.geographyType!==canonical.type || m.geographyBinding.geographyFingerprint!==fingerprint)return reject('SCINCE_CANONICAL_DATA_UNAVAILABLE');
+      return {success:true,projectId:access.projectId,geographyId:canonical.geographyId,geographyType:canonical.type,
+        geographyFingerprint:m.geographyBinding.geographyFingerprint,
+        spatialMode:canonical.type==='INDIVIDUAL'?'CANONICAL_POINT':canonical.type==='CORRIDOR'?'CANONICAL_LINE':'CANONICAL_AREA',queryCoordinate:null,
+        datasetId:m.datasetIdentity.datasetId,datasetYear:m.datasetIdentity.referenceYear,datasetVersion:m.datasetIdentity.version,
+        geographicLevel:null,demographicGeographicLevel:null,sourceRowKey:null,demographics:null,provenance:null,
+        limitations:[...m.officialBaseProfile2020.limitations],compactSnapshot:m,reviewView:buildScinceReviewView(m)};
+    }
     return {success:true,projectId:access.projectId,geographyId:canonical.geographyId,
       geographyType:canonical.type,geographyFingerprint:m.geographyBinding.geographyFingerprint,
       spatialMode:canonical.type === "INDIVIDUAL" ? "CANONICAL_POINT" : canonical.type === "CORRIDOR" ? "CANONICAL_LINE" : "CANONICAL_AREA", queryCoordinate:null,

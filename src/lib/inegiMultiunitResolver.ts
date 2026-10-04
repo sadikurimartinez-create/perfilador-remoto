@@ -1,4 +1,8 @@
 import 'server-only';
+import {createHash} from 'crypto';
+import {catalog} from './scinceCatalogCore.cjs';
+import {createScinceCompactSnapshotV2,buildScinceCompactProfile,fingerprintScinceCompactObservation,fingerprintScinceCompactColumnOrder,fingerprintScinceCompactIndicatorOrder} from '../utils/scinceCompactSnapshot';
+import type {ScinceCompactSnapshotV2,ScinceCompactObservation,ScinceCompactTerritorialUnit} from '../types/scinceCompactSnapshot';
 import {readScinceRelease,readScinceObservations} from './scinceObservationRepository';
 import {catalogIndicators,buildOfficialBaseProfile2020,isValidOfficialBaseProfile2020} from '../utils/scinceOfficialProfile';
 import {readScinceRadiusConfiguration,isValidScinceRadiusConfiguration} from './scinceRadiusConfiguration';
@@ -21,8 +25,10 @@ export const SCINCE_MULTIUNIT_LIMIT = 500;
 export const SCINCE_QUERY_TIMEOUT_MS = 8000;
 type Client = { query: (...args: any[]) => Promise<any>; release?: () => void };
 type Source = { connect: () => Promise<Client> };
-type Resolution = { success: true; observation: ScinceMultiunitObservation } | { success: false; code: 'SCINCE_CANONICAL_GEOGRAPHY_INVALID' | 'SCINCE_CANONICAL_DATA_UNAVAILABLE' | 'MULTIUNIT_QUERY_LIMIT_EXCEEDED' | 'SCINCE_QUERY_TIMEOUT' | 'SCINCE_RADIUS_CONFIGURATION_REQUIRED' };
-const cache = new Map<string, { expires: number; observation: ScinceMultiunitObservation }>();
+export type ScinceResolvedObservation = ScinceMultiunitObservation | ScinceCompactSnapshotV2;
+type Resolution = { success: true; observation: ScinceResolvedObservation } | { success: false; code: 'SCINCE_CANONICAL_GEOGRAPHY_INVALID' | 'SCINCE_CANONICAL_DATA_UNAVAILABLE' | 'MULTIUNIT_QUERY_LIMIT_EXCEEDED' | 'SCINCE_QUERY_TIMEOUT' | 'SCINCE_RADIUS_CONFIGURATION_REQUIRED' };
+type LegacyResolution = {success:true;observation:ScinceMultiunitObservation} | Extract<Resolution,{success:false}>;
+const cache = new Map<string, { expires: number; observation: ScinceResolvedObservation }>();
 type ScinceDiagnosticStage = 'CONFIG' | 'DATABASE_CONNECT' | 'DATASET' | 'RELEASE' | 'ANALYSIS_AREA' | 'SPATIAL_SELECTION' | 'OBSERVATIONS' | 'OFFICIAL_PROFILE' | 'PAYLOAD' | 'COMPLETE';
 const scinceDiagnosticCodes = [
   'SCINCE_SNAPSHOT_PAYLOAD_LIMIT', 'SCINCE_UNSUPPORTED_NORMALIZATION_RELEASE',
@@ -78,7 +84,7 @@ LEFT JOIN public.inegi_territorial_demographics d ON d.dataset_id=g.dataset_id
 ORDER BY g.geographic_level,g.source_cvegeo,d.source_row_key`;
 
 /** One read-only PostGIS snapshot, no migration, no point surrogate, no repairs. */
-export async function resolveInegiSourceCoverage(projectId: string, geography: CanonicalProjectGeography, injected?: Source, radiusConfig?: ScinceRadiusConfiguration): Promise<Resolution> {
+async function resolveCoverage(projectId: string, geography: CanonicalProjectGeography, injected: Source | undefined, radiusConfig: ScinceRadiusConfiguration | undefined, compactOutput: boolean): Promise<Resolution> {
   const fail = (code: Extract<Resolution,{success:false}>['code']): Resolution => ({success:false,code});
   const origin = readScinceCanonicalGeography(geography);
   let canonical = origin;
@@ -103,7 +109,7 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
     const identity = JSON.stringify([d.datasetId,d.year,d.version,d.provenance.geographySha256,d.provenance.censusSha256]);
     stage = 'RELEASE';
     const normalizationRelease=await readScinceRelease(client,d.datasetId);
-    const key = JSON.stringify([projectId,fingerprint,identity,radiusConfig ?? null,normalizationRelease]);
+    const key = JSON.stringify([projectId,fingerprint,identity,radiusConfig ?? null,normalizationRelease,compactOutput]);
     const hit = !injected ? cache.get(key) : null;
     if (hit && hit.expires > Date.now()) { await client.query('COMMIT'); return {success:true,observation:structuredClone(hit.observation)}; }
     stage = 'ANALYSIS_AREA';
@@ -127,6 +133,7 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
     const units: Parameters<typeof buildScinceCanonicalCoverage>[0]['territorialUnits'] = [];
     const details: ScinceUnitDetail[] = [];
     const sourceGeometryIds = new Map<string,string>();
+    const unitIdentities = new Map<string,{geographyId:string;geometryFingerprint:string}>();
     for (const row of raw) {
       const geometry = JSON.parse(row.geometry);
       const unit = validateScinceCoverageGeometry({mode:'POLYGON',geometry,crs:row.srid,
@@ -135,6 +142,12 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
         unitIdentity:unit.status === 'VALID' ? unit.geometryIdentity : '',intersects:row.intersects,touches:row.touches,
         coversGU:row.covers_gu,coversUG:row.covers_ug,equals:row.equals,relate:row.relate});
       if (relation.status !== 'RELATED') throw new Error('INVALID_UNIT_RELATION');
+      if(unit.status!=='VALID')throw new Error('INVALID_UNIT_RELATION');
+      const unitKey=JSON.stringify([row.geographic_level,row.source_cvegeo]);
+      const unitIdentity={geographyId:String(row.geography_id),geometryFingerprint:createHash('sha256').update(unit.geometryIdentity).digest('hex')};
+      const previousIdentity=unitIdentities.get(unitKey);
+      if(previousIdentity && JSON.stringify(previousIdentity)!==JSON.stringify(unitIdentity))throw new Error('CONFLICTING_UNIT_DETAIL');
+      unitIdentities.set(unitKey,unitIdentity);
       const r = relation.relation;
       const ids: string[] = [];
       if (row.source_row_key && ['MANZANA','AGEB'].includes(row.geographic_level)) {
@@ -196,6 +209,7 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
       observation.estimatedCurrentProfile=null;
       observation.limitations.push('Perfil del entorno territorial definido por área analítica; censo oficial sin actualización temporal ni atribución individual.');
     }
+    let finalObservation:ScinceResolvedObservation=observation;
     if(normalizationRelease) {
       stage = 'OBSERVATIONS';
       const observations=await readScinceObservations(client,normalizationRelease,context.sourceRows);
@@ -209,14 +223,50 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
         observation.officialBaseProfile=structuredClone(observation.derivedSociodemographicProfile);
       }
       if(!isValidOfficialBaseProfile2020(observation))throw new Error('SCINCE_PROFILE_INVALID');
+      if(compactOutput) {
+        if(!scinceAnalysisArea || d.year!==2020)throw new Error('SCINCE_PROFILE_INVALID');
+        const compactObservations:ScinceCompactObservation[]=context.sourceRows.map(row=>{
+          const values=new Map(observations.filter(o=>o.sourceReference===row.observationId).map(o=>[o.variableCode,o.rawValue]));
+          const rawValues=row.usage==='ENUMERATION_ONLY'?null:catalog.variables.map(v=>{
+            if(!values.has(v.variableCode))throw new Error('SCINCE_INCOMPLETE_OBSERVATION_SET');
+            return values.get(v.variableCode) ?? null;
+          });
+          const compact={geographicLevel:row.demographicGeographicLevel,sourceRowKey:row.sourceRowKey,geographicCode:row.geographicCode,
+            relationToAnalysis:row.relationToAnalysis,usage:row.usage,rawValues};
+          return {...compact,observationFingerprint:fingerprintScinceCompactObservation(compact)};
+        });
+        const partition={selectedObservationIndexes:context.sourceRows.flatMap((row,i)=>refs.includes(row.observationId)?[i]:[]),
+          sameLevel:true as const,disjointInteriors:disjoint,aggregationMethod:'FULL_DISJOINT_SOURCE_UNITS_ONLY' as const};
+        const territorialUnits:ScinceCompactTerritorialUnit[]=observation.unitDetails.map(detail=>{
+          const unit=context.territorialUnits.find(u=>u.geographicLevel===detail.unitType&&u.geographicCode===detail.inegiCode);
+          const identity=unitIdentities.get(JSON.stringify([detail.unitType,detail.inegiCode]));
+          if(!unit || !identity)throw new Error('CONFLICTING_UNIT_DETAIL');
+          return {geographicLevel:detail.unitType,geographicCode:detail.inegiCode,geographicName:detail.name,...identity,
+            coverageRelation:detail.relation,intersectionType:detail.intersectionType,coverageMetrics:detail.coverageMetric,
+            observationIndexes:context.sourceRows.flatMap((row,i)=>unit.sourceRowIds.includes(row.observationId)?[i]:[])};
+        });
+        finalObservation=createScinceCompactSnapshotV2({schemaVersion:'SCINCE_COMPACT_SNAPSHOT_V2',encodingVersion:'SCINCE_RAW_COLUMN_VECTOR_V1',
+          projectBinding:{projectId},geographyBinding:{...observation.geographyBinding,geometry:observation.geometry,fingerprintVersion:fingerprint.split(':')[0]},
+          datasetIdentity:{datasetId:d.datasetId,referenceYear:2020,version:d.version},
+          releaseIdentity:{releaseId:normalizationRelease.releaseId,observationSetFingerprint:normalizationRelease.observationSetFingerprint},
+          catalogIdentity:{catalogVersion:normalizationRelease.catalogVersion,catalogFingerprint:normalizationRelease.catalogFingerprint,
+            columnOrderFingerprint:fingerprintScinceCompactColumnOrder(),indicatorOrderFingerprint:fingerprintScinceCompactIndicatorOrder()},
+          normalizationIdentity:{normalizationVersion:normalizationRelease.normalizationVersion},
+          sourceIdentity:{source:observation.source,normalizer:observation.normalizer,provenance:d.provenance},
+          analysisArea:scinceAnalysisArea,topology:facts,territorialUnits,observations:compactObservations,partitionEvidence:partition,
+          officialBaseProfile2020:buildScinceCompactProfile(compactObservations,partition,observation.limitations),
+          ppcReview:{status:'REQUIRES_PPC_REVIEW',decision:null,institutionalUserId:null,incorporatedAt:null},
+          freshness:{status:'CURRENT',evaluatedAt:observation.queryTimestamp,reasonCode:null},
+          audit:{acquiredAt:observation.queryTimestamp,observedAt:null,contractVersion:'SCINCE_COMPACT_CONTRACT_V1',materializerVersion:'SCINCE_COMPACT_CODEC_V1'}});
+      }
       stage = 'PAYLOAD';
-      payloadBytes = Buffer.byteLength(JSON.stringify(observation),'utf8');
+      payloadBytes = Buffer.byteLength(JSON.stringify(finalObservation),'utf8');
       if(payloadBytes>800000)throw new Error('SCINCE_SNAPSHOT_PAYLOAD_LIMIT');
     } else {observation.limitations.push('Dataset histórico: catálogo y observaciones tipadas todavía no enriquecidos.');}
     stage = 'COMPLETE';
     await client.query('COMMIT');
-    if (!injected) { for (const [k,v] of cache) if(v.expires<=Date.now())cache.delete(k);if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{expires:Date.now()+60000,observation:structuredClone(observation)}); }
-    return {success:true,observation};
+    if (!injected) { for (const [k,v] of cache) if(v.expires<=Date.now())cache.delete(k);if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{expires:Date.now()+60000,observation:structuredClone(finalObservation)}); }
+    return {success:true,observation:finalObservation};
   } catch(error) {
     logScinceResolverDiagnostic(stage, error, unitCount, payloadBytes);
     try { await client?.query('ROLLBACK'); } catch { /* keep original failure */ }
@@ -224,9 +274,22 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
   } finally { client?.release?.(); }
 }
 
+/** Explicit archived-contract entry; never used to expand a compact result. */
+export async function resolveInegiSourceCoverage(projectId:string,geography:CanonicalProjectGeography,injected?:Source,radiusConfig?:ScinceRadiusConfiguration):Promise<LegacyResolution> {
+  const result=await resolveCoverage(projectId,geography,injected,radiusConfig,false);
+  if(!result.success)return result;
+  if(result.observation.schemaVersion!=='SCINCE_PRODUCTIVE_COVERAGE_V2')return {success:false,code:'SCINCE_CANONICAL_DATA_UNAVAILABLE'};
+  return {success:true,observation:result.observation};
+}
+export async function resolveInegiLegacyMultiunit(projectId:string,geography:CanonicalProjectGeography,injected?:Source,configuration?:ScinceRadiusConfiguration):Promise<LegacyResolution> {
+  const config=configuration ?? readScinceRadiusConfiguration();
+  if(!isValidScinceRadiusConfiguration(config))return {success:false,code:'SCINCE_RADIUS_CONFIGURATION_REQUIRED'};
+  return resolveInegiSourceCoverage(projectId,geography,injected,config);
+}
+
 /** Productive entry: configuration is required for every modality. Source coverage is retained for archived-contract regression only. */
 export async function resolveInegiMultiunit(projectId:string, geography:CanonicalProjectGeography, injected?:Source, configuration?:ScinceRadiusConfiguration):Promise<Resolution> {
   const config=configuration ?? readScinceRadiusConfiguration();
   if (!isValidScinceRadiusConfiguration(config)) { logScinceResolverDiagnostic('CONFIG', null); return {success:false,code:'SCINCE_RADIUS_CONFIGURATION_REQUIRED'}; }
-  return resolveInegiSourceCoverage(projectId,geography,injected,config);
+  return resolveCoverage(projectId,geography,injected,config,true);
 }
