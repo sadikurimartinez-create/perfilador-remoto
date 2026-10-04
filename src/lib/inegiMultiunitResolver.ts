@@ -23,6 +23,32 @@ type Client = { query: (...args: any[]) => Promise<any>; release?: () => void };
 type Source = { connect: () => Promise<Client> };
 type Resolution = { success: true; observation: ScinceMultiunitObservation } | { success: false; code: 'SCINCE_CANONICAL_GEOGRAPHY_INVALID' | 'SCINCE_CANONICAL_DATA_UNAVAILABLE' | 'MULTIUNIT_QUERY_LIMIT_EXCEEDED' | 'SCINCE_QUERY_TIMEOUT' | 'SCINCE_RADIUS_CONFIGURATION_REQUIRED' };
 const cache = new Map<string, { expires: number; observation: ScinceMultiunitObservation }>();
+type ScinceDiagnosticStage = 'CONFIG' | 'DATABASE_CONNECT' | 'DATASET' | 'RELEASE' | 'ANALYSIS_AREA' | 'SPATIAL_SELECTION' | 'OBSERVATIONS' | 'OFFICIAL_PROFILE' | 'PAYLOAD' | 'COMPLETE';
+const scinceDiagnosticCodes = [
+  'SCINCE_SNAPSHOT_PAYLOAD_LIMIT', 'SCINCE_UNSUPPORTED_NORMALIZATION_RELEASE',
+  'SCINCE_INCOMPLETE_OBSERVATION_SET', 'SCINCE_INVALID_OBSERVATION_SET',
+  'SCINCE_INVALID_OBSERVATION', 'SCINCE_TYPED_RAW_MISMATCH', 'SCINCE_PROFILE_INVALID',
+  'SCINCE_PROJECTION_DOMAIN_UNSUPPORTED', 'SCINCE_ANALYSIS_AREA_CONTAINMENT_FAILED',
+  'SCINCE_ANALYSIS_AREA_INVALID', 'SCINCE_MULTIUNIT_QUERY_LIMIT_EXCEEDED', 'SCINCE_QUERY_TIMEOUT',
+  'DATABASE_CONFIGURATION_ERROR', '42P01', '42501', '57014',
+  'INVALID_UNIT_RELATION', 'INVALID_METRIC', 'CONFLICTING_UNIT_DETAIL', 'SCINCE_COVERAGE_CONTRACT_INVALID',
+] as const;
+/** Only literal codes and aggregate sizes may leave this diagnostic boundary. */
+function logScinceResolverDiagnostic(stage: ScinceDiagnosticStage, error: unknown, unitCount: number | null = null, payloadBytes: number | null = null): void {
+  try {
+    const own = (key: string): unknown => error && typeof error === 'object' ? Object.getOwnPropertyDescriptor(error, key)?.value : undefined;
+    const sqlCode = own('code'), message = own('message');
+    const recognized = scinceDiagnosticCodes.find(code => code === sqlCode) ?? scinceDiagnosticCodes.find(code => code === message);
+    const configurationError = [
+      'DATABASE_CONFIGURATION_ERROR: DATABASE_URL is required.',
+      'DATABASE_CONFIGURATION_ERROR: DATABASE_URL must use the PostgreSQL protocol.',
+      'DATABASE_CONFIGURATION_ERROR: DATABASE_URL is structurally invalid.',
+    ].some(messageLiteral => messageLiteral === message);
+    const integer = (value: number | null) => Number.isSafeInteger(value) && value! >= 0 ? value : null;
+    console.error({event:'SCINCE_RESOLVER_DIAGNOSTIC',stage,code:recognized ?? (configurationError ? 'DATABASE_CONFIGURATION_ERROR' : 'UNKNOWN_SANITIZED'),
+      unitCount:integer(unitCount),payloadBytes:integer(payloadBytes)});
+  } catch { /* Diagnostics must never change the public result or expose the original error. */ }
+}
 
 export const SCINCE_MULTIUNIT_SQL = `
 WITH analysis AS (SELECT ST_SetSRID(ST_GeomFromGeoJSON($1),4326) AS geom),
@@ -59,23 +85,28 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
   if (!canonical || canonical.type === 'INDIVIDUAL' && !radiusConfig) return fail('SCINCE_CANONICAL_GEOGRAPHY_INVALID');
   let fingerprint: string;
   try { fingerprint = canonical.type==='INDIVIDUAL'?fingerprintScinceCanonicalPoint(canonical):fingerprintScinceCoverageGeography(canonical); } catch { return fail('SCINCE_CANONICAL_GEOGRAPHY_INVALID'); }
-  if (!injected && !process.env.DATABASE_URL?.trim()) return fail('SCINCE_CANONICAL_DATA_UNAVAILABLE');
+  if (!injected && !process.env.DATABASE_URL?.trim()) { logScinceResolverDiagnostic('CONFIG', {code:'DATABASE_CONFIGURATION_ERROR'}); return fail('SCINCE_CANONICAL_DATA_UNAVAILABLE'); }
   let client: Client | undefined;
+  let stage: ScinceDiagnosticStage = 'DATABASE_CONNECT';
+  let unitCount: number | null = null, payloadBytes: number | null = null;
   try {
     client = await (injected ?? getPool()).connect();
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query(`SET LOCAL statement_timeout = '${SCINCE_QUERY_TIMEOUT_MS}ms'`);
+    stage = 'DATASET';
     const dataset = await latestReadyDataset(client as any);
-    if (!dataset) { await client.query('ROLLBACK'); return fail('SCINCE_CANONICAL_DATA_UNAVAILABLE'); }
+    if (!dataset) { await client.query('ROLLBACK'); logScinceResolverDiagnostic(stage, null); return fail('SCINCE_CANONICAL_DATA_UNAVAILABLE'); }
     const d: ScinceCoverageDataset = { datasetId:dataset.dataset_id, year:dataset.reference_year, version:dataset.version,
       provenance:{productName:dataset.product_name,geographySourceUrl:dataset.geography_source_url,censusSourceUrl:dataset.census_source_url,
         geographySha256:dataset.geography_sha256,censusSha256:dataset.census_sha256,
         importedAt:new Date(dataset.imported_at).toISOString(),completedAt:new Date(dataset.completed_at).toISOString()} };
     const identity = JSON.stringify([d.datasetId,d.year,d.version,d.provenance.geographySha256,d.provenance.censusSha256]);
+    stage = 'RELEASE';
     const normalizationRelease=await readScinceRelease(client,d.datasetId);
     const key = JSON.stringify([projectId,fingerprint,identity,radiusConfig ?? null,normalizationRelease]);
     const hit = !injected ? cache.get(key) : null;
     if (hit && hit.expires > Date.now()) { await client.query('COMMIT'); return {success:true,observation:structuredClone(hit.observation)}; }
+    stage = 'ANALYSIS_AREA';
     const scinceAnalysisArea = radiusConfig ? await calculateScinceAnalysisArea(client,canonical,fingerprint,radiusConfig) : undefined;
     if (scinceAnalysisArea) canonical=readScinceCanonicalGeography(scinceAnalysisArea.geometry)!;
     const json = JSON.stringify(canonical.geometry);
@@ -87,9 +118,11 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
     const mode = canonical.type as 'CORRIDOR'|'POLYGON';
     const analysis = validateScinceCoverageGeometry({mode,geometry:canonical.geometry,crs:4326,topology});
     if (analysis.status !== 'VALID') { await client.query('ROLLBACK'); return fail('SCINCE_CANONICAL_GEOGRAPHY_INVALID'); }
+    stage = 'SPATIAL_SELECTION';
     const raw = (await client.query(SCINCE_MULTIUNIT_SQL,[json,d.datasetId,SCINCE_MULTIUNIT_LIMIT+1])).rows;
-    if (raw.length > SCINCE_MULTIUNIT_LIMIT) { await client.query('ROLLBACK'); return fail('MULTIUNIT_QUERY_LIMIT_EXCEEDED'); }
-    if (!raw.length) { await client.query('COMMIT'); return fail('SCINCE_CANONICAL_DATA_UNAVAILABLE'); }
+    unitCount = raw.length;
+    if (raw.length > SCINCE_MULTIUNIT_LIMIT) { await client.query('ROLLBACK'); logScinceResolverDiagnostic(stage, {code:'SCINCE_MULTIUNIT_QUERY_LIMIT_EXCEEDED'}, unitCount); return fail('MULTIUNIT_QUERY_LIMIT_EXCEEDED'); }
+    if (!raw.length) { await client.query('COMMIT'); logScinceResolverDiagnostic(stage, null, unitCount); return fail('SCINCE_CANONICAL_DATA_UNAVAILABLE'); }
     const sourceRows: ScinceCoverageSourceRow[] = [];
     const units: Parameters<typeof buildScinceCanonicalCoverage>[0]['territorialUnits'] = [];
     const details: ScinceUnitDetail[] = [];
@@ -164,7 +197,9 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
       observation.limitations.push('Perfil del entorno territorial definido por área analítica; censo oficial sin actualización temporal ni atribución individual.');
     }
     if(normalizationRelease) {
+      stage = 'OBSERVATIONS';
       const observations=await readScinceObservations(client,normalizationRelease,context.sourceRows);
+      stage = 'OFFICIAL_PROFILE';
       observation.officialBaseProfile2020=buildOfficialBaseProfile2020(observation,normalizationRelease,observations);
       observation.indicators=catalogIndicators(observations);
       observation.aggregates=observation.officialBaseProfile2020.admissibleAggregates;
@@ -174,12 +209,16 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
         observation.officialBaseProfile=structuredClone(observation.derivedSociodemographicProfile);
       }
       if(!isValidOfficialBaseProfile2020(observation))throw new Error('SCINCE_PROFILE_INVALID');
-      if(Buffer.byteLength(JSON.stringify(observation),'utf8')>800000)throw new Error('SCINCE_SNAPSHOT_PAYLOAD_LIMIT');
+      stage = 'PAYLOAD';
+      payloadBytes = Buffer.byteLength(JSON.stringify(observation),'utf8');
+      if(payloadBytes>800000)throw new Error('SCINCE_SNAPSHOT_PAYLOAD_LIMIT');
     } else {observation.limitations.push('Dataset histórico: catálogo y observaciones tipadas todavía no enriquecidos.');}
+    stage = 'COMPLETE';
     await client.query('COMMIT');
     if (!injected) { for (const [k,v] of cache) if(v.expires<=Date.now())cache.delete(k);if(cache.size>=100)cache.delete(cache.keys().next().value!);cache.set(key,{expires:Date.now()+60000,observation:structuredClone(observation)}); }
     return {success:true,observation};
   } catch(error) {
+    logScinceResolverDiagnostic(stage, error, unitCount, payloadBytes);
     try { await client?.query('ROLLBACK'); } catch { /* keep original failure */ }
     return fail((error as any)?.code==='57014'?'SCINCE_QUERY_TIMEOUT':'SCINCE_CANONICAL_DATA_UNAVAILABLE');
   } finally { client?.release?.(); }
@@ -188,6 +227,6 @@ export async function resolveInegiSourceCoverage(projectId: string, geography: C
 /** Productive entry: configuration is required for every modality. Source coverage is retained for archived-contract regression only. */
 export async function resolveInegiMultiunit(projectId:string, geography:CanonicalProjectGeography, injected?:Source, configuration?:ScinceRadiusConfiguration):Promise<Resolution> {
   const config=configuration ?? readScinceRadiusConfiguration();
-  if (!isValidScinceRadiusConfiguration(config)) return {success:false,code:'SCINCE_RADIUS_CONFIGURATION_REQUIRED'};
+  if (!isValidScinceRadiusConfiguration(config)) { logScinceResolverDiagnostic('CONFIG', null); return {success:false,code:'SCINCE_RADIUS_CONFIGURATION_REQUIRED'}; }
   return resolveInegiSourceCoverage(projectId,geography,injected,config);
 }
