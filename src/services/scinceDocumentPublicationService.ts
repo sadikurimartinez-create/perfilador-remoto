@@ -1,4 +1,6 @@
 import "server-only";
+import {randomUUID} from 'crypto';
+import {logReportDiagnostic} from './scinceContextMaterializationService';
 import {getCurrentScinceRelease} from '../lib/scinceObservationRepository';
 import {scinceRadiusConfigurationMatches} from "../lib/scinceRadiusConfiguration";
 import { readScinceCanonicalGeography } from "@/utils/scinceQueryGeometry";
@@ -8,7 +10,7 @@ import { deserializeCanonicalGeographyFromFirestore, type CanonicalProjectGeogra
   type FirestoreSafeCanonicalProjectGeography } from "@/utils/canonicalProjectGeography";
 import { isValidScinceCanonicalSnapshot, evaluateScinceSnapshotFreshness, isScinceSnapshotPublishable } from "@/utils/scinceCanonicalSnapshot";
 import type { ScinceCanonicalSnapshot } from "@/types/scinceCanonicalSnapshot";
-import { excludedScinceDocumentContext,scinceDocumentSummary, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
+import { excludedScinceDocumentContext as excludedContext,scinceDocumentSummary, type ScinceDocumentContext } from "@/utils/scinceDocumentContext";
 import {isScinceCompactSnapshotV2,buildScinceReviewView} from '../utils/scinceCompactSnapshot';
 import {materializeScinceContextWithPinnedRepository,projectMaterializedScinceDocument} from './scinceContextMaterializationService';
 
@@ -49,9 +51,15 @@ function canonical(raw: unknown): CanonicalProjectGeography | null {
 
 /** Single admission point. Read-only, authorized, and recomputed for each document generation. */
 export async function resolveScinceDocumentPublication(input: {
-  projectId: string; sessionToken: unknown; reportGeography: CanonicalProjectGeography | null; transportOnly?:boolean;
+  projectId: string; sessionToken: unknown; reportGeography: CanonicalProjectGeography | null; transportOnly?:boolean; diagnosticCorrelationId?:string;
 }, overrides: Partial<Dependencies> = {}): Promise<ScinceDocumentContext> {
   const deps = { ...defaults, ...overrides };
+  let correlationId=input.diagnosticCorrelationId ?? 'diagnostic-unavailable';
+  if(input.diagnosticCorrelationId===undefined){try{correlationId=randomUUID();}catch{/* Keep the constant, non-sensitive fallback. */}}
+  const excludedScinceDocumentContext:typeof excludedContext=(status,reason)=>{
+    logReportDiagnostic(correlationId,'SCINCE_ADMISSION',reason);
+    return excludedContext(status,reason);
+  };
   try {
     const access = await deps.authorize({ projectId: input.projectId, sessionToken: input.sessionToken, action: "GENERATE_REPORT" });
     if (!access.allowed) return excludedScinceDocumentContext("INVALID", "SCINCE_DOCUMENT_ACCESS_DENIED");
@@ -78,7 +86,10 @@ export async function resolveScinceDocumentPublication(input: {
       if(evaluateScinceSnapshotFreshness({...binding,currentCanonicalGeography:input.reportGeography}).territorialFreshness!=='CURRENT')
         return excludedScinceDocumentContext('STALE','SCINCE_DOCUMENT_REPORT_GEOGRAPHY_CHANGED');
       if(input.transportOnly)return {...excludedScinceDocumentContext('INVALID','SCINCE_SERVER_GENERATION_REQUIRED'),clientPreparation:buildScinceReviewView(snapshot)};
-      const result=await deps.materialize(snapshot,'REPORT',{...access,project:{...access.project,canonicalGeography:project.canonicalGeography}});
+      const materializationAccess={...access,project:{...access.project,canonicalGeography:project.canonicalGeography}};
+      const result=await (deps.materialize===materializeScinceContextWithPinnedRepository
+        ? deps.materialize(snapshot,'REPORT',materializationAccess,code=>logReportDiagnostic(correlationId,'SCINCE_MATERIALIZATION',code))
+        : deps.materialize(snapshot,'REPORT',materializationAccess));
       if(result.materialization!=='PASS')return excludedScinceDocumentContext('INVALID',result.code);
       const context:ScinceDocumentContext={publicationStatus:'PUBLISHABLE',territorialFreshness:'CURRENT',reason:null,
         snapshot:projectMaterializedScinceDocument(snapshot,result.context),compactVerification:{...result.context.verification,ppcReview:structuredClone(ppc)}};

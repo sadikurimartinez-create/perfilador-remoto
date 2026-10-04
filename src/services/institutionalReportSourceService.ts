@@ -15,6 +15,7 @@ export interface AuthorizedInstitutionalReportSource {
   action: "GENERATE_REPORT";
 }
 type Dependencies = {
+  diagnosticStage?: (stage: 'REPORT_SOURCE_AUTHORIZATION'|'REPORT_SOURCE_PROJECT_READ'|'REPORT_SOURCE_PROJECT_AVAILABILITY'|'REPORT_SOURCE_GEOGRAPHY_RECONCILIATION'|'REPORT_SOURCE_INPUT_PROJECTION'|'REPORT_SOURCE_EVIDENCE_NORMALIZATION'|'REPORT_SOURCE_SERIALIZATION')=>void;
   authorize: typeof authorizeInstitutionalProjectAccess;
   readProject: (id: string) => Promise<Record<string, any> | null>;
 };
@@ -39,14 +40,21 @@ function serialized(value: unknown): string {
 export async function resolveAuthorizedInstitutionalReportSource(input: { projectId: unknown; sessionToken: unknown },
   overrides: Partial<Dependencies> = {}): Promise<AuthorizedInstitutionalReportSource> {
   const deps = { ...defaults, ...overrides };
+  const stage=(value:Parameters<NonNullable<Dependencies['diagnosticStage']>>[0])=>{try{deps.diagnosticStage?.(value);}catch{/* Diagnostics cannot affect source resolution. */}};
+  stage('REPORT_SOURCE_AUTHORIZATION');
   const access = await deps.authorize({ projectId: input.projectId, sessionToken: input.sessionToken, action: "GENERATE_REPORT" });
   if (!access.allowed) throw new Error(`INSTITUTIONAL_REPORT_ACCESS_DENIED:${access.code}`);
+  stage('REPORT_SOURCE_PROJECT_READ');
   const stored = await deps.readProject(access.projectId);
+  stage('REPORT_SOURCE_PROJECT_AVAILABILITY');
   if (!stored || stored.id !== access.projectId || (stored.deleted !== undefined && stored.deleted !== false) ||
     stored.status === "ARCHIVADO" || stored.estado === "ARCHIVADO") throw new Error("INSTITUTIONAL_REPORT_SOURCE_UNAVAILABLE");
+  stage('REPORT_SOURCE_GEOGRAPHY_RECONCILIATION');
   if(Array.isArray(stored.institutionalGeographicEntityIds) && stored.canonicalGeography?.sourceRefs?.some((reference:any)=>!stored.institutionalGeographicEntityIds.includes(reference.id)))throw new Error('INSTITUTIONAL_GEOGRAPHY_RECONFIRMATION_REQUIRED');
+  stage('REPORT_SOURCE_INPUT_PROJECTION');
   const project = projectPersistedInstitutionalInputs(stored).project;
   if (project.canonicalGeography) project.canonicalGeography = deserializeCanonicalGeographyFromFirestore(project.canonicalGeography);
+  stage('REPORT_SOURCE_EVIDENCE_NORMALIZATION');
   const album = (project.album || []).map((photo: any) => {
     const normalized = normalizeInstitutionalBaseEvidence({ ...photo,
       expedienteId: photo.expedienteId || photo.projectId || access.projectId,
@@ -64,6 +72,7 @@ export async function resolveAuthorizedInstitutionalReportSource(input: { projec
     geographyType: project.canonicalGeography?.type });
   project.album = project.photoEvidence;
   // Return only JSON-serializable persisted data; no cache or client state is consulted.
+  stage('REPORT_SOURCE_SERIALIZATION');
   const sourceFingerprint = `sha256:${createHash("sha256").update(serialized(stored)).digest("hex")}`;
   return { projectId: access.projectId, project: JSON.parse(serialized(project)),
     actor: { uid: `user:${access.actor.institutionalUserId}`, displayName: access.actor.username },

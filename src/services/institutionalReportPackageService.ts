@@ -29,6 +29,8 @@ import { Packer } from "docx";
 import { invokeInstitutionalReportBoundary } from "@/utils/institutionalReportBoundaryTransport";
 import { getScinceDocumentContext } from '@/lib/scinceDocumentActions';
 type ScinceAdmission=Parameters<typeof buildInstitutionalGenerationModels>[5];
+type PackageDiagnosticStage='PACKAGE_REAUTHORIZATION'|'PACKAGE_SOURCE_AUTHORITY'|'PACKAGE_LINEAGE_VALIDATION'|'PACKAGE_LINEAGE_INPUT_COMPARISON'|'PACKAGE_HASHING'|'PACKAGE_RESERVATION'|'PACKAGE_DOCX_STORAGE'|'PACKAGE_PDF_STORAGE'|'PACKAGE_MANIFEST_UPDATE'|'PACKAGE_FINALIZATION'|'PACKAGE_IDEMPOTENCY';
+type PackageDiagnostic=(stage:PackageDiagnosticStage)=>void;
 
 export type InstitutionalReportPackageState = "GENERATING" | "GENERATED" | "FAILED" | "CERTIFIED" | "PUBLISHED";
 export type InstitutionalReportArtifactState = "PENDING" | "STORED" | "FAILED";
@@ -399,7 +401,7 @@ export async function buildInstitutionalPackageLineage(authorized: AuthorizedIns
 }
 
 /** Recompute from the server-authorized projection, rather than trusting client seals. */
-async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitutionalReportSource, input: any,admit:ScinceAdmission) {
+async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitutionalReportSource, input: any,admit:ScinceAdmission,diagnosticStage?:PackageDiagnostic) {
   const context = input.generationContext;
   if (context?.projectId !== authorized.projectId || context?.numeroExpediente !== input.numeroExpediente ||
     context?.generatedAt !== input.generatedAt || context?.institutionalReportInput?.projectId !== authorized.projectId ||
@@ -414,7 +416,9 @@ async function validateInstitutionalPackageLineage(authorized: AuthorizedInstitu
   const expected = await buildInstitutionalGenerationModels(payload, authorized.project.nombre || "Expediente", authorized.project.numeroExpediente, authorized.actor, input.generatedAt,
     admit);
   const same = (a: unknown, b: unknown, code: string) => { if (canonicalSemanticValue(a) !== canonicalSemanticValue(b)) throw new Error(`REPORT_PACKAGE_LINEAGE_MISMATCH:${code}`); };
+  diagnosticStage?.('PACKAGE_LINEAGE_INPUT_COMPARISON');
   same(expected.institutionalReportInput, context.institutionalReportInput, "P2_INPUT");
+  diagnosticStage?.('PACKAGE_LINEAGE_VALIDATION');
   same(expected.executiveModel, context.executiveModel, "P4_MODEL");
   same(expected.principalTerritorialMapSpec, context.principalTerritorialMapSpec, "P3_MAP");
   expected.documentModel.visualPlacements = expected.documentModel.visualPlacements.map(placement => ({ ...placement,
@@ -546,7 +550,8 @@ export class InstitutionalReportPackageService {
     private readonly storage: InstitutionalReportPackageStorage = new FirebaseInstitutionalReportPackageStorage(),
     private readonly now: () => string = () => new Date().toISOString(),
     private readonly authorizeGeneration: (projectId: string) => Promise<AuthorizedInstitutionalReportSource> = getAuthorizedInstitutionalReportSource,
-    private readonly scinceAdmission:ScinceAdmission=getScinceDocumentContext
+    private readonly scinceAdmission:ScinceAdmission=getScinceDocumentContext,
+    private readonly diagnosticStage?:PackageDiagnostic
   ) {}
 
   async persistGeneratedPackage(input: {
@@ -563,17 +568,24 @@ export class InstitutionalReportPackageService {
     if (typeof window !== "undefined" && this.repository instanceof FirestoreInstitutionalReportPackageRepository && this.storage instanceof FirebaseInstitutionalReportPackageStorage) {
       return invokeInstitutionalReportBoundary("GENERATE", input);
     }
+    const stage:PackageDiagnostic=value=>{try{this.diagnosticStage?.(value);}catch{/* Diagnostics cannot affect package generation. */}};
+    stage('PACKAGE_RESERVATION');
     const packageId = input.packageId || createInstitutionalReportPackageId();
     const actor = await runReportPackageStage("RESOLVE_ACTOR", async () => {
+      stage('PACKAGE_REAUTHORIZATION');
       const authorized = await this.authorizeGeneration(input.projectId);
+      stage('PACKAGE_SOURCE_AUTHORITY');
       const authority = input.generationContext?.sourceAuthority;
       if (authorized.action !== "GENERATE_REPORT" || authorized.projectId !== input.projectId ||
         authority?.projectId !== input.projectId || authority?.action !== "GENERATE_REPORT" ||
         authority?.sourceFingerprint !== authorized.sourceFingerprint) throw new Error("REPORT_PACKAGE_SOURCE_AUTHORIZATION_REQUIRED");
       if (input.numeroExpediente !== authorized.project.numeroExpediente) throw new Error("REPORT_PACKAGE_IDENTITY_CONFLICT");
-      await validateInstitutionalPackageLineage(authorized, input,this.scinceAdmission);
+      stage('PACKAGE_LINEAGE_VALIDATION');
+      await validateInstitutionalPackageLineage(authorized, input,this.scinceAdmission,stage);
+      stage('PACKAGE_SOURCE_AUTHORITY');
       return resolveActor(authorized.actor);
     });
+    stage('PACKAGE_HASHING');
     const [snapshotHash, reportHash, annexHash, mapSpecHash] = await runReportPackageStage(
       "BUILD_SNAPSHOT_HASHES",
       () => Promise.all([
@@ -591,6 +603,7 @@ export class InstitutionalReportPackageService {
     if (input.pdfArtifacts?.parity.status === "PASS" && (input.pdfArtifacts.parity.sourceDocxHashes[0] !== reportHash || input.pdfArtifacts.parity.sourceDocxHashes[1] !== annexHash)) {
       throw new Error("REPORT_PACKAGE_PDF_SOURCE_HASH_MISMATCH");
     }
+    stage('PACKAGE_RESERVATION');
     let manifest = await runReportPackageStage("RESERVE_PACKAGE", () =>
       this.repository.reserve(input.projectId, packageId, (version) => {
         const filenames = buildVersionedReportPackageFilenames(input.numeroExpediente, version);
@@ -642,6 +655,7 @@ export class InstitutionalReportPackageService {
       })
     );
 
+    stage('PACKAGE_IDEMPOTENCY');
     if (manifest.snapshotHash !== snapshotHash
       || manifest.artifacts.executiveReport.sha256 !== reportHash
       || manifest.artifacts.technicalAnnex.sha256 !== annexHash
@@ -652,32 +666,40 @@ export class InstitutionalReportPackageService {
     if (manifest.state === "GENERATED") return manifest;
 
     try {
+      stage('PACKAGE_DOCX_STORAGE');
       await runReportPackageStage("STORE_EXECUTIVE_REPORT", () =>
         this.storage.storeImmutable(manifest.artifacts.executiveReport.storagePath, input.reportBlob, {
           sha256: reportHash, packageId, version: manifest.version, kind: "EXECUTIVE_REPORT",
         })
       );
+      stage('PACKAGE_MANIFEST_UPDATE');
       manifest = await runReportPackageStage("SAVE_EXECUTIVE_REPORT_STATE", () =>
         this.repository.saveArtifact(input.projectId, packageId, "executiveReport", { ...manifest.artifacts.executiveReport, state: "STORED" }, this.now())
       );
+      stage('PACKAGE_DOCX_STORAGE');
       await runReportPackageStage("STORE_TECHNICAL_ANNEX", () =>
         this.storage.storeImmutable(manifest.artifacts.technicalAnnex.storagePath, input.annexBlob, {
           sha256: annexHash, packageId, version: manifest.version, kind: "TECHNICAL_ANNEX",
         })
       );
+      stage('PACKAGE_MANIFEST_UPDATE');
       manifest = await runReportPackageStage("SAVE_TECHNICAL_ANNEX_STATE", () =>
         this.repository.saveArtifact(input.projectId, packageId, "technicalAnnex", { ...manifest.artifacts.technicalAnnex, state: "STORED" }, this.now())
       );
       if (input.pdfArtifacts) {
+        stage('PACKAGE_PDF_STORAGE');
         if (input.pdfArtifacts.parity.status !== "PASS" || !input.pdfArtifacts.executive || !input.pdfArtifacts.annex) {
           throw new Error("REPORT_PACKAGE_PDF_FAILED:COMPLETE_PRODUCT_NOT_READY");
         }
         for (const [key, blob] of [["executivePdf", input.pdfArtifacts.executive], ["technicalAnnexPdf", input.pdfArtifacts.annex]] as const) {
+          stage('PACKAGE_PDF_STORAGE');
           const artifact = manifest.artifacts[key]!;
           await this.storage.storeImmutable(artifact.storagePath, blob, { sha256: artifact.sha256, packageId, version: manifest.version, kind: artifact.kind });
+          stage('PACKAGE_MANIFEST_UPDATE');
           manifest = await this.repository.saveArtifact(input.projectId, packageId, key, { ...artifact, state: "STORED" }, this.now());
         }
       }
+      stage('PACKAGE_FINALIZATION');
       return await runReportPackageStage("MARK_GENERATED", () =>
         this.repository.markGenerated(input.projectId, packageId, this.now())
       );
