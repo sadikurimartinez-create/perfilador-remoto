@@ -344,6 +344,24 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
       ]
     );
 
+    // Empty spatial results still belong to the queried corpus. Resolve its
+    // registry identity independently; never choose among multiple datasets.
+    let datasetProvenance = observedPostgisProvenance(result.rows);
+    if (result.rows.length === 0) {
+      const registry = await client.query(`
+        SELECT DISTINCT i.dataset_id, d.dataset_name, d.dataset_version,
+          d.source_organization, d.temporal_start, d.temporal_end
+        FROM incidencia_estadistica i
+        LEFT JOIN crime_incidence_datasets d
+          ON d.id = i.dataset_id AND d.provenance_status = 'VERIFIED'
+        LIMIT 2
+      `);
+      datasetProvenance = registry.rows.length === 1 && registry.rows[0].dataset_id
+        ? observedPostgisProvenance(registry.rows)
+        : { datasetName: null, datasetVersion: null, sourceOrganization: null,
+            temporalStart: null, temporalEnd: null };
+    }
+
     const data = result.rows.map((row: any) => ({
       INCIDENTE: row.incidente,
       FECHA: row.fecha,
@@ -370,7 +388,7 @@ export async function queryPostgisCrimeIncidence(input: CrimeQueryInput): Promis
       coverageStatus,
       data,
       bibliografia: "",
-      datasetProvenance: observedPostgisProvenance(result.rows),
+      datasetProvenance,
       lineage: buildCrimeQueryLineage({
         dataset: "incidencia_estadistica",
         querySource: "POSTGIS",
